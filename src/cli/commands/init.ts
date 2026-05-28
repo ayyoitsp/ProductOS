@@ -94,7 +94,7 @@ export function initCommand(): Command {
       console.log();
       console.log(pc.bold("Next:"));
       console.log(`  1. ${pc.bold("Edit productos/env.yaml")} — set the right setup commands and healthcheck URL for your stack.`);
-      console.log("  2. Verify the env config works: `productos env up` then `productos env check`");
+      console.log("  2. Verify the env config works: `productos env up` (uses default env: `local`)");
       console.log("  3. In another terminal: `productos serve` (vet UI on localhost:" + readConfig(paths).ui_port + ")");
       console.log("  4. Open Claude Code in this repo. Say: \"do a ProductOS pass on this codebase\"");
       console.log("     — Claude reads the code, proposes Truth claims, drives the live env to validate each,");

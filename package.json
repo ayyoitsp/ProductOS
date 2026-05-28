@@ -1,6 +1,6 @@
 {
   "name": "productos",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Product correctness management for AI-native teams. Reads your codebase via your AI runtime, proposes Truth claims with executable tests, validates them live, keeps them fresh.",
   "type": "module",
   "license": "Apache-2.0",

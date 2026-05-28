@@ -4,7 +4,7 @@ A product-driven operational substrate for AI-native organizations.
 
 ProductOS coordinates AI agents around **product correctness** — declarative claims about what your product does, verified end-to-end by your AI runtime driving your actual dev stack, and kept fresh as the code evolves.
 
-> **Status:** v0.0.2 — walking skeleton. Claude Code adapter only; Jest test generation only. The AI runtime (Claude) drives the live env via `productos env up/check/reset/down`. Codex / Cursor / Devin adapters and browser-mode Playwright support are fast-follow.
+> **Status:** v0.0.3 — walking skeleton. Claude Code adapter only; Jest test generation only. The AI runtime (Claude) drives the live env via `productos env up/check/reset/down [name]`. Multi-env support is in (local + external/read-only envs like staging). Codex / Cursor / Devin adapters and browser-mode Playwright support are fast-follow.
 
 ## How it works
 
@@ -77,10 +77,11 @@ npm test
 productos init <runtime>             # 'claude' supported
 productos init <runtime> --update    # refresh skill files
 productos init <runtime> --uninstall # remove ProductOS from the runtime
-productos env up                     # run env.yaml setup commands + healthcheck
-productos env check                  # run only the healthcheck
-productos env reset                  # run reset_per_run commands
-productos env down                   # run teardown commands
+productos env list                   # list configured environments
+productos env up [name]              # run setup + healthcheck (default: default_env, e.g. 'local')
+productos env check [name]           # healthcheck only
+productos env reset [name]           # reset_per_run (refused if env is read_only)
+productos env down [name]            # teardown (refused if env is read_only)
 productos serve [--mcp] [--ui]       # default: vet UI on http://localhost:7878
 productos truth list|show|reject|validate <id>
 productos test generate              # materialize validated Truth → productos/tests/

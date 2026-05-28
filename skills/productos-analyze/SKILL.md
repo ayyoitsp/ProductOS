@@ -1,7 +1,7 @@
 ---
 name: productos-analyze
 description: Use when the user asks to analyze a codebase for ProductOS — to propose Product Truth claims (executable behavior contracts), drive the live dev environment to validate each one, and record the outcomes. Triggers on requests like "do a ProductOS pass", "scan this codebase and propose ProductOS truth", "validate T-0042", "vet this feature for ProductOS". You (the AI runtime) drive the user's live code via shell — ProductOS is the structural backend that holds Truth + env config + outcomes.
-version: 0.0.2
+version: 0.0.3
 ---
 
 # ProductOS — Analyze Skill
@@ -81,56 +81,77 @@ If you have to fall back to anything below `data-testid`, mark the test scope no
 
 ### Step 1 — Always start with `productos_get_env`
 
-This returns the env config (or tells you it's missing — in which case stop and ask the user to run `productos init claude` + edit `productos/env.yaml`).
+This returns:
+- The env config you'll be driving (default env unless the user asked for a specific one — `productos_get_env({ name: "staging" })`)
+- `all_envs`: list of every configured env name
+- `default_env`: which one is used by default
+- `cli_helpers`: the exact `productos env <cmd>` strings for this env (with `name` baked in). If the env is `read_only`, the `reset` and `down` helpers are `null` — respect that.
 
-### Step 2 — Make sure the env is up
+If the env response is `configured: false`, **stop**: tell the user to run `productos init claude` and edit `productos/env.yaml` for their stack.
+
+### Step 2 — Pick the right env, then make sure it's up
+
+**Default:** use the default env. The user usually means "local."
+
+**Multi-env disambiguation:** if `all_envs` has more than one entry and the user didn't say which, **ask before validating** — running validation against `staging` when the user meant `local` is at best wasteful, at worst destructive. Sample question: *"You have envs `local` (default), `staging`, and `ci`. Should I validate against `local`?"*
+
+**Bring the env up:**
 
 ```bash
-productos env check    # exit 0 if healthy
+productos env check <name>    # exit 0 if healthy
 ```
 
 If non-zero:
 
 ```bash
-productos env up       # runs setup commands + healthcheck
+productos env up <name>       # runs setup commands + healthcheck
 ```
 
-If `env up` fails, **read the output and tell the user what to fix.** Don't proceed to validation — the env config is wrong or the user's stack has an issue.
+`<name>` is the env's identifier (matches `cli_helpers.up` in the get_env response). If `env up` fails, **read the output and tell the user what to fix** — don't try to paper over a broken env config.
+
+### Step 2.5 — Respect `external` and `read_only` flags
+
+- `external: true` means ProductOS doesn't own this env (e.g. staging). The setup commands are usually empty (`[]`). Don't try to start services there — they're already running. Just confirm reachability via healthcheck.
+- `read_only: true` means **do not call `productos env reset <name>` or `productos env down <name>`**. The CLI will refuse anyway, but don't even propose it. Per-test reset isn't available; design tests that don't require it (idempotent, or use fresh fixtures inline).
+- If the user has both a `local` and a `read_only` env and the test you're proposing is destructive, validate against `local` only. Mention this in your proposal notes.
 
 ### Step 3 — For each claim, write the test and run it
 
-The env config has a `staging_dir` (default: `productos/tests/proposed/`). Write your proposed test there:
+The env config response has a `staging_dir` (default: `productos/tests/proposed/`). Write your proposed test there:
 
 ```bash
 # After productos_propose_truth returns T-0042:
 write productos/tests/proposed/T-0042.test.ts with the test source
 ```
 
-Then run it. For Jest (TS/JS):
+Then run it. **Apply the env's `test_env` vars when invoking the test runner**, so the test hits the right URL/auth:
 
 ```bash
-npx jest productos/tests/proposed/T-0042.test.ts
+# If env.test_env = { BASE_URL: "http://localhost:3000" }
+BASE_URL=http://localhost:3000 npx jest productos/tests/proposed/T-0042.test.ts
 ```
 
 For Playwright:
 
 ```bash
-npx playwright test productos/tests/proposed/T-0042.spec.ts
+BASE_URL=http://localhost:3000 npx playwright test productos/tests/proposed/T-0042.spec.ts
 ```
 
 For pytest:
 
 ```bash
-pytest productos/tests/proposed/test_T_0042.py
+BASE_URL=http://localhost:3000 pytest productos/tests/proposed/test_T_0042.py
 ```
 
 ### Step 4 — Optional reset between tests
 
-If the env config has `reset_per_run`, run it between tests to keep state clean:
+If the env has `reset_per_run` **and is not read_only**, run it between tests to keep state clean:
 
 ```bash
-productos env reset
+productos env reset <name>
 ```
+
+(`cli_helpers.reset` will be `null` if the env is read-only — skip this step.)
 
 ### Step 5 — Record the outcome
 
@@ -217,7 +238,7 @@ test waiting for your approval.
 Sometimes the env config is incomplete, the user's machine is missing something, or services are misbehaving. Don't try to validate in that case — surface the problem clearly:
 
 ```
-I tried to bring up the env via `productos env up` but it failed:
+I tried to bring up the `local` env via `productos env up local` but it failed:
 
   > docker compose up -d postgres
   Error: port 5432 already in use
@@ -234,3 +255,13 @@ env, I'll start.
 ```
 
 The user fixes it, then asks you to retry.
+
+## Picking between envs — quick rules
+
+| Situation | Use |
+| --- | --- |
+| User says nothing about envs | The default env (almost always `local`) |
+| User says "validate against staging" | `staging` (external, read-only) |
+| User asks for the planning-feature loop (planned Truth → code lands → refresh) | Always `local` — feature work is iterative and needs reset |
+| Test is destructive (deletes data, mutates global state) | `local` only. Don't even propose running against external read-only envs |
+| Multiple envs exist and the user hasn't picked | Ask. Default to default_env if pushed, but ask first |

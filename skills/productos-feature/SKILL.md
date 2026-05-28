@@ -1,7 +1,7 @@
 ---
 name: productos-feature
 description: Use when the user is planning a new feature before writing code — to decompose the feature description into proposed Product Truth claims (intended behavior) that get stored as status=planned. Triggers on "I'm planning a [feature]", "let's spec a new [feature] in productos", "vet this feature plan". Surfaces ambiguities as questions, not assumptions. Once code lands, ProductOS will compare planned Truth against the analyzer's reading of the implementation and surface drift.
-version: 0.0.2
+version: 0.0.3
 ---
 
 # ProductOS — Feature Planning Skill

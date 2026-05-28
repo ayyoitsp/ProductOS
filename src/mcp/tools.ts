@@ -15,7 +15,7 @@ import {
   writeTruth,
 } from "../core/truth.js";
 import { nextTruthId } from "../core/ids.js";
-import { readEnvConfig } from "../core/env.js";
+import { readEnvConfig, resolveEnv } from "../core/env.js";
 import { readConfig } from "../core/config.js";
 
 export interface McpTool {
@@ -237,33 +237,45 @@ const recordOutcome: McpTool = {
 
 // -- get_env ----------------------------------------------------------------
 
-const GetEnvInput = z.object({});
+const GetEnvInput = z.object({
+  name: z
+    .string()
+    .optional()
+    .describe("Optional env name (e.g. 'local', 'staging'). Omit to get the default env."),
+});
 
 const getEnv: McpTool = {
   name: "productos_get_env",
   description:
-    "Get the user's dev-environment configuration (productos/env.yaml). Use this to know how to bring up the live stack before validating a Truth claim. Returns setup commands, healthcheck details, reset commands, and the staging_dir where you should write proposed tests. To actually drive the env, shell out to: `productos env up`, `productos env check`, `productos env reset`, `productos env down`.",
+    "Get a dev-environment configuration from productos/env.yaml. Pass `name` for a specific env (e.g. 'staging'); omit it to get the default env. Returns the env's setup commands, healthcheck details, reset commands, test_env vars, and external/read_only flags. ALSO returns the list of all configured envs and which is default. To actually drive the env, shell out to `productos env <cmd> [name]` (up | check | reset | down). Respect read_only — never run reset or teardown against a read_only env.",
   inputSchema: zodToInputSchema(GetEnvInput),
-  handler: async (_raw, paths) => {
-    const env = readEnvConfig(paths);
-    const config = readConfig(paths);
-    if (!env) {
+  handler: async (raw, paths) => {
+    const args = GetEnvInput.parse(raw);
+    const config = readEnvConfig(paths);
+    const projectConfig = readConfig(paths);
+    if (!config) {
       return {
         configured: false,
         message:
           "No productos/env.yaml — ask the user to run `productos init claude` first, then edit env.yaml for their stack.",
-        stack: config.stack,
+        stack: projectConfig.stack,
       };
     }
+    const { name, env } = resolveEnv(config, args.name);
     return {
       configured: true,
+      env_name: name,
       env,
-      stack: config.stack,
+      default_env: config.default_env,
+      all_envs: Object.keys(config.envs),
+      staging_dir: config.staging_dir,
+      stack: projectConfig.stack,
       cli_helpers: {
-        up: "productos env up",
-        check: "productos env check",
-        reset: "productos env reset",
-        down: "productos env down",
+        list: "productos env list",
+        up: `productos env up ${name}`,
+        check: `productos env check ${name}`,
+        reset: env.read_only ? null : `productos env reset ${name}`,
+        down: env.read_only ? null : `productos env down ${name}`,
       },
     };
   },

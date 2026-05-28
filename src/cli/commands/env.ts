@@ -3,73 +3,105 @@ import { spawn } from "node:child_process";
 import pc from "picocolors";
 import { resolvePathsOrThrow } from "../../core/paths.js";
 import {
+  Env,
   EnvCommand,
   EnvConfig,
   HealthCheck,
   readEnvConfig,
+  resolveEnv,
+  resolveRecord,
+  resolveEnvVars,
 } from "../../core/env.js";
 
 export function envCommand(): Command {
-  const cmd = new Command("env").description("Drive the dev environment (used by Claude during validation)");
+  const cmd = new Command("env").description("Drive a dev environment (used by Claude during validation)");
 
   cmd
-    .command("up")
-    .description("Run setup commands, then run healthcheck")
-    .action(async () => {
-      const env = loadOrExit();
+    .command("list")
+    .description("List configured environments")
+    .action(() => {
+      const config = loadOrExit();
+      for (const [name, env] of Object.entries(config.envs)) {
+        const def = name === config.default_env ? pc.green(" (default)") : "";
+        const tags: string[] = [];
+        if (env.external) tags.push("external");
+        if (env.read_only) tags.push("read-only");
+        const tagStr = tags.length ? pc.dim(` [${tags.join(", ")}]`) : "";
+        console.log(`  ${pc.cyan(name)}${def}${tagStr}  ${env.description ?? ""}`);
+      }
+    });
+
+  cmd
+    .command("up [name]")
+    .description("Run setup commands + healthcheck for the named env (default: default_env)")
+    .action(async (name?: string) => {
+      const config = loadOrExit();
+      const { name: resolved, env } = resolveEnv(config, name);
+      console.log(pc.dim(`env: ${resolved}`));
       for (const c of env.setup) await runSequential(c);
       if (env.healthcheck) {
         if (!(await waitForHealthcheck(env.healthcheck))) {
           console.error(pc.red(`✗ healthcheck did not pass after ${env.healthcheck.retries} retries`));
           process.exit(1);
         }
-        console.log(pc.green("✓"), "env up and healthy");
+        console.log(pc.green("✓"), `${resolved} up and healthy`);
       } else {
-        console.log(pc.green("✓"), "env up (no healthcheck configured)");
+        console.log(pc.green("✓"), `${resolved} up (no healthcheck configured)`);
       }
     });
 
   cmd
-    .command("check")
-    .description("Run only the healthcheck")
-    .action(async () => {
-      const env = loadOrExit();
+    .command("check [name]")
+    .description("Run only the healthcheck for the named env")
+    .action(async (name?: string) => {
+      const config = loadOrExit();
+      const { name: resolved, env } = resolveEnv(config, name);
       if (!env.healthcheck) {
-        console.log(pc.yellow("!"), "no healthcheck configured in env.yaml");
+        console.log(pc.yellow("!"), `no healthcheck configured for env "${resolved}"`);
         return;
       }
       const ok = await waitForHealthcheck(env.healthcheck);
-      if (ok) console.log(pc.green("✓"), "env healthy");
+      if (ok) console.log(pc.green("✓"), `${resolved} healthy`);
       else {
-        console.error(pc.red("✗"), "env not healthy");
+        console.error(pc.red("✗"), `${resolved} not healthy`);
         process.exit(1);
       }
     });
 
   cmd
-    .command("reset")
-    .description("Run reset_per_run commands (between validation runs)")
-    .action(async () => {
-      const env = loadOrExit();
+    .command("reset [name]")
+    .description("Run reset_per_run commands for the named env")
+    .action(async (name?: string) => {
+      const config = loadOrExit();
+      const { name: resolved, env } = resolveEnv(config, name);
+      if (env.read_only) {
+        console.error(pc.red("✗"), `env "${resolved}" is read_only — refusing to reset`);
+        process.exit(1);
+      }
       if (env.reset_per_run.length === 0) {
-        console.log(pc.dim("(no reset_per_run commands configured)"));
+        console.log(pc.dim(`(no reset_per_run commands configured for ${resolved})`));
         return;
       }
       for (const c of env.reset_per_run) await runSequential(c);
-      console.log(pc.green("✓"), "env reset");
+      console.log(pc.green("✓"), `${resolved} reset`);
     });
 
   cmd
-    .command("down")
-    .description("Run teardown commands")
-    .action(async () => {
-      const env = loadOrExit();
+    .command("down [name]")
+    .description("Run teardown commands for the named env")
+    .action(async (name?: string) => {
+      const config = loadOrExit();
+      const { name: resolved, env } = resolveEnv(config, name);
+      if (env.read_only) {
+        console.error(pc.red("✗"), `env "${resolved}" is read_only — refusing to tear down`);
+        process.exit(1);
+      }
       if (env.teardown.length === 0) {
-        console.log(pc.dim("(no teardown commands configured)"));
+        console.log(pc.dim(`(no teardown commands configured for ${resolved})`));
         return;
       }
       for (const c of env.teardown) await runSequential(c);
-      console.log(pc.green("✓"), "env down");
+      console.log(pc.green("✓"), `${resolved} down`);
     });
 
   return cmd;
@@ -93,7 +125,7 @@ function runSequential(c: EnvCommand): Promise<void> {
       shell: true,
       stdio: "inherit",
       cwd: c.cwd,
-      env: { ...process.env, ...c.env },
+      env: { ...process.env, ...(c.env ? resolveRecord(c.env) : {}) },
     });
     const timer = setTimeout(() => {
       child.kill("SIGTERM");
@@ -123,7 +155,8 @@ async function tryHealthcheck(hc: HealthCheck): Promise<boolean> {
     try {
       const ac = new AbortController();
       const t = setTimeout(() => ac.abort(), hc.timeout_seconds * 1000);
-      const r = await fetch(hc.url, { signal: ac.signal });
+      const headers = hc.headers ? resolveRecord(hc.headers) : undefined;
+      const r = await fetch(resolveEnvVars(hc.url), { signal: ac.signal, headers });
       clearTimeout(t);
       return r.status === hc.expect_status;
     } catch {

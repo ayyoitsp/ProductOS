@@ -12,7 +12,7 @@ const program = new Command();
 program
   .name("productos")
   .description("Product correctness management for AI-native teams")
-  .version("0.0.2");
+  .version("0.0.3");
 
 program.addCommand(initCommand());
 program.addCommand(serveCommand());

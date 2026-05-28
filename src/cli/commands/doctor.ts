@@ -66,23 +66,30 @@ export function doctorCommand(): Command {
       const envFile = envConfigFile(paths);
       if (fs.existsSync(envFile)) {
         try {
-          const env = readEnvConfig(paths);
-          if (env) {
-            ok(`env.yaml readable; ${env.setup.length} setup command(s), healthcheck ${env.healthcheck ? "configured" : "missing"}`);
-            // 7. Healthcheck
-            if (env.healthcheck?.url) {
-              try {
-                const r = await fetch(env.healthcheck.url, { method: "GET" });
-                if (r.status === env.healthcheck.expect_status) {
-                  ok(`Env healthy: ${env.healthcheck.url} returned ${r.status}`);
-                } else {
-                  warn(`Env healthcheck mismatch: ${env.healthcheck.url} returned ${r.status}, expected ${env.healthcheck.expect_status} — run \`productos env up\``);
+          const config = readEnvConfig(paths);
+          if (config) {
+            const envCount = Object.keys(config.envs).length;
+            ok(`env.yaml readable; ${envCount} env(s) configured, default=${config.default_env}`);
+            // 7. Healthcheck each env (best-effort, short timeout)
+            for (const [name, env] of Object.entries(config.envs)) {
+              const tag = env.external ? " [external]" : env.read_only ? " [read-only]" : "";
+              if (env.healthcheck?.url) {
+                try {
+                  const ac = new AbortController();
+                  const t = setTimeout(() => ac.abort(), 2000);
+                  const r = await fetch(env.healthcheck.url, { signal: ac.signal });
+                  clearTimeout(t);
+                  if (r.status === env.healthcheck.expect_status) {
+                    ok(`Env "${name}" healthy${tag}: ${env.healthcheck.url} returned ${r.status}`);
+                  } else {
+                    warn(`Env "${name}" healthcheck mismatch${tag}: returned ${r.status}, expected ${env.healthcheck.expect_status}`);
+                  }
+                } catch (e) {
+                  warn(`Env "${name}" not healthy${tag}: ${env.healthcheck.url} unreachable (${(e as Error).message})`);
                 }
-              } catch (e) {
-                warn(`Env not healthy: ${env.healthcheck.url} unreachable (${(e as Error).message}) — run \`productos env up\``);
+              } else {
+                warn(`Env "${name}" has no healthcheck${tag}`);
               }
-            } else {
-              warn("env.yaml has no healthcheck — Claude won't know if the env is up");
             }
           }
         } catch (e) {
