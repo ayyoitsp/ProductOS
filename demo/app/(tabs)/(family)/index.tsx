@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { FlatList, Pressable, RefreshControl, StyleSheet } from "react-native";
+import { FlatList, Image, Pressable, RefreshControl, StyleSheet } from "react-native";
 import { Link, useFocusEffect, useRouter } from "expo-router";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { Surface, Text, View } from "@/components/Themed";
@@ -7,6 +7,7 @@ import { formatMoney } from "@/db";
 import { getAllBalances, listKids } from "@/db/operations";
 import { onDataChange } from "@/db/events";
 import { Kid } from "@/db/schema";
+import { avatarSource } from "@/constants/Avatars";
 import Colors from "@/constants/Colors";
 import { useColorScheme } from "@/components/useColorScheme";
 
@@ -60,20 +61,29 @@ export default function FamilyScreen() {
             </Text>
           </View>
         }
-        renderItem={({ item }) => (
-          <Link href={`/kid/${item.id}`} asChild>
-            <Pressable>
-              <Surface style={[styles.card, { borderLeftColor: item.color, borderLeftWidth: 6 }]}>
-                <View style={[styles.dot, { backgroundColor: item.color }]} />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.name}>{item.name}</Text>
-                  <Text style={[styles.balanceLabel, { color: Colors[cs].muted }]}>Balance</Text>
-                </View>
-                <Text style={styles.balance}>{formatMoney(balances[item.id] ?? 0)}</Text>
-              </Surface>
-            </Pressable>
-          </Link>
-        )}
+        renderItem={({ item }) => {
+          const avatar = avatarSource(item.avatar);
+          return (
+            <Link href={`/kid/${item.id}`} asChild>
+              <Pressable>
+                <Surface style={[styles.card, { borderLeftColor: item.color, borderLeftWidth: 6 }]}>
+                  <View style={[styles.avatarBubble, { backgroundColor: item.color }]}>
+                    {avatar ? (
+                      <Image source={avatar} style={styles.avatarImage} resizeMode="contain" />
+                    ) : (
+                      <FontAwesome name="user" size={24} color="#fff" />
+                    )}
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.name}>{item.name}</Text>
+                    <Text style={[styles.balanceLabel, { color: Colors[cs].muted }]}>Balance</Text>
+                  </View>
+                  <Text style={styles.balance}>{formatMoney(balances[item.id] ?? 0)}</Text>
+                </Surface>
+              </Pressable>
+            </Link>
+          );
+        }}
         ListFooterComponent={
           <Pressable onPress={() => router.push("/add-kid")} style={styles.addBtn}>
             <FontAwesome name="plus-circle" size={20} color={Colors[cs].tint} />
@@ -89,7 +99,15 @@ const styles = StyleSheet.create({
   screen: { flex: 1 },
   list: { padding: 16, gap: 12, flexGrow: 1 },
   card: { flexDirection: "row", alignItems: "center", gap: 14 },
-  dot: { width: 14, height: 14, borderRadius: 7 },
+  avatarBubble: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+  avatarImage: { width: 48, height: 48 },
   name: { fontSize: 18, fontWeight: "600" },
   balanceLabel: { fontSize: 12, marginTop: 2 },
   balance: { fontSize: 22, fontWeight: "700" },

@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 import {
   FlatList,
+  Image,
   Pressable,
   RefreshControl,
   StyleSheet,
@@ -10,6 +11,7 @@ import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { Surface, Text, View } from "@/components/Themed";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import Colors from "@/constants/Colors";
+import { avatarSource } from "@/constants/Avatars";
 import { useColorScheme } from "@/components/useColorScheme";
 import { formatMoney } from "@/db";
 import { emitDataChange } from "@/db/events";
@@ -96,8 +98,19 @@ export default function KidScreen() {
         }
         ListHeaderComponent={
           <Surface style={[styles.balanceCard, { borderLeftColor: kid.color, borderLeftWidth: 6 }]}>
-            <Text style={[styles.balanceLabel, { color: Colors[cs].muted }]}>Current balance</Text>
-            <Text style={styles.balance}>{formatMoney(balance)}</Text>
+            <View style={styles.balanceTop}>
+              <View style={[styles.avatarBubble, { backgroundColor: kid.color }]}>
+                {avatarSource(kid.avatar) ? (
+                  <Image source={avatarSource(kid.avatar)!} style={styles.avatarImage} resizeMode="contain" />
+                ) : (
+                  <FontAwesome name="user" size={36} color="#fff" />
+                )}
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.balanceLabel, { color: Colors[cs].muted }]}>Current balance</Text>
+                <Text style={styles.balance}>{formatMoney(balance)}</Text>
+              </View>
+            </View>
             <View style={styles.actions}>
               <Pressable
                 onPress={() => router.push(`/adjust/${kid.id}?direction=credit`)}
@@ -185,6 +198,16 @@ const styles = StyleSheet.create({
   screen: { flex: 1 },
   list: { padding: 16, gap: 10 },
   balanceCard: { gap: 6 },
+  balanceTop: { flexDirection: "row", alignItems: "center", gap: 16 },
+  avatarBubble: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+  avatarImage: { width: 64, height: 64 },
   balanceLabel: { fontSize: 12, textTransform: "uppercase", letterSpacing: 1 },
   balance: { fontSize: 42, fontWeight: "800" },
   actions: { flexDirection: "row", gap: 8, marginTop: 12 },

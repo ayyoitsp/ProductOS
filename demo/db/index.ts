@@ -9,6 +9,12 @@ export async function getDb(): Promise<SQLite.SQLiteDatabase> {
   if (_db) return _db;
   const db = await SQLite.openDatabaseAsync(DB_NAME);
   await db.execAsync(SQL_INIT);
+  // Migrations: add columns that may be missing on older DBs.
+  try {
+    await db.execAsync("ALTER TABLE kids ADD COLUMN avatar TEXT");
+  } catch {
+    // Column already exists — ignore.
+  }
   // Seed default settings if missing.
   for (const [key, value] of Object.entries(DEFAULT_SETTINGS)) {
     await db.runAsync(

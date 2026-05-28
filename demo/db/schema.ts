@@ -7,6 +7,7 @@ export interface Kid {
   id: number;
   name: string;
   color: string;
+  avatar: string | null;
   created_at: string;
 }
 
@@ -49,6 +50,7 @@ CREATE TABLE IF NOT EXISTS kids (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL,
   color TEXT NOT NULL,
+  avatar TEXT,
   created_at TEXT NOT NULL
 );
 

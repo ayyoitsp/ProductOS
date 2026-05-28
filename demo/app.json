@@ -4,10 +4,12 @@
     "slug": "family-wallet",
     "version": "0.1.0",
     "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
     "scheme": "familywallet",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
+      "image": "./assets/images/icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#fff7ed"
     },
@@ -19,6 +21,7 @@
       "package": "com.productos.familywallet",
       "edgeToEdgeEnabled": true,
       "adaptiveIcon": {
+        "foregroundImage": "./assets/images/icon.png",
         "backgroundColor": "#fff7ed"
       }
     },
@@ -32,6 +35,13 @@
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "5ab7d8f2-de27-4573-90b6-0832186e5cb8"
+      }
+    },
+    "owner": "ayyoitsp"
   }
 }

@@ -20,26 +20,30 @@ export async function getKid(id: number): Promise<Kid | null> {
   return db.getFirstAsync<Kid>("SELECT * FROM kids WHERE id = ?", [id]);
 }
 
-export async function createKid(name: string, color: string): Promise<number> {
+export async function createKid(
+  name: string,
+  color: string,
+  avatar: string | null = null
+): Promise<number> {
   const db = await getDb();
   const r = await db.runAsync(
-    "INSERT INTO kids (name, color, created_at) VALUES (?, ?, ?)",
-    [name.trim(), color, nowIso()]
+    "INSERT INTO kids (name, color, avatar, created_at) VALUES (?, ?, ?, ?)",
+    [name.trim(), color, avatar, nowIso()]
   );
   return r.lastInsertRowId;
 }
 
 export async function updateKid(
   id: number,
-  patch: Partial<Pick<Kid, "name" | "color">>
+  patch: Partial<Pick<Kid, "name" | "color" | "avatar">>
 ): Promise<void> {
   const db = await getDb();
   const cur = await db.getFirstAsync<Kid>("SELECT * FROM kids WHERE id = ?", [id]);
   if (!cur) return;
   const next = { ...cur, ...patch };
   await db.runAsync(
-    "UPDATE kids SET name = ?, color = ? WHERE id = ?",
-    [next.name.trim(), next.color, id]
+    "UPDATE kids SET name = ?, color = ?, avatar = ? WHERE id = ?",
+    [next.name.trim(), next.color, next.avatar, id]
   );
 }
 
