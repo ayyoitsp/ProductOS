@@ -4,7 +4,7 @@ import path from "node:path";
 import os from "node:os";
 import pc from "picocolors";
 import { resolvePathsOrThrow } from "../core/paths.js";
-import { readConfig } from "../core/config.js";
+import { readConfig, resolveTruthVerificationByok } from "../core/config.js";
 import {
   listAreas,
   listFeatures,
@@ -96,16 +96,17 @@ export async function startUiServer(): Promise<void> {
           writeTracking(paths, t);
         }
 
-        // BYOK fast-path: if enabled, try to auto-process the feedback inline.
-        // The queue entry stays as the authoritative artifact either way.
-        if (config.byok.enabled) {
-          const result = await processFeedback(entry, paths, config.byok);
+        // Truth-verification handler: queue (default) or byok (auto-process inline).
+        // The queue entry is the authoritative artifact in both cases.
+        if (config.operations.truth_verification.handler === "byok") {
+          const byok = resolveTruthVerificationByok(config);
+          const result = await processFeedback(entry, paths, byok);
           const saved = readFeedbackById(paths, id);
           if (saved && result.kind === "applied") {
             saved.frontmatter.state = "processed";
             saved.frontmatter.resolved_at = new Date().toISOString();
             saved.frontmatter.resolved_by = "byok";
-            saved.body = `${saved.body.trim()}\n\n---\n**Auto-processed via BYOK (${config.byok.provider} ${config.byok.model}).** Edits applied: ${result.ops.join(", ")}\n\n${result.summary}`;
+            saved.body = `${saved.body.trim()}\n\n---\n**Auto-processed via BYOK (${byok.provider} ${byok.model}).** Edits applied: ${result.ops.join(", ")}\n\n${result.summary}`;
             writeFeedback(paths, saved);
             return json(res, { ok: true, id, byok: { kind: "applied", ops: result.ops, summary: result.summary } });
           }
@@ -117,7 +118,6 @@ export async function startUiServer(): Promise<void> {
             return json(res, { ok: true, id, byok: { kind: "needs_review", reason: result.reason } });
           }
           if (result.kind === "error") {
-            // leave entry open; surface the error to the client without losing the feedback
             return json(res, { ok: true, id, byok: { kind: "error", message: result.message } });
           }
         }

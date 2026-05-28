@@ -4,7 +4,7 @@ import os from "node:os";
 import { Command } from "commander";
 import pc from "picocolors";
 import { findRepoRoot, pathsFor } from "../../core/paths.js";
-import { readConfig } from "../../core/config.js";
+import { readConfig, resolveTruthVerificationByok } from "../../core/config.js";
 import { envConfigFile, readEnvConfig } from "../../core/env.js";
 import { listAreas, listFeatures, productsRoot } from "../../core/product.js";
 
@@ -59,13 +59,16 @@ export function doctorCommand(): Command {
         try {
           const c = readConfig(paths);
           ok(`Config readable; stack=${c.stack.language}`);
-          // 5b. BYOK
-          if (c.byok.enabled) {
-            const keyPresent = !!process.env[c.byok.api_key_env];
-            if (keyPresent) ok(`BYOK enabled: ${c.byok.provider}/${c.byok.model} (key from ${c.byok.api_key_env})`);
-            else warn(`BYOK enabled but ${c.byok.api_key_env} is not set — auto-processing will fail`);
+          // 5b. Operations
+          ok(`Code scanning handler: ${c.operations.code_scanning.handler}`);
+          const tvh = c.operations.truth_verification.handler;
+          if (tvh === "byok") {
+            const byok = resolveTruthVerificationByok(c);
+            const keyPresent = !!process.env[byok.api_key_env];
+            if (keyPresent) ok(`Truth verification: BYOK ${byok.provider}/${byok.model} (key from ${byok.api_key_env})`);
+            else warn(`Truth verification: BYOK ${byok.provider}/${byok.model} but ${byok.api_key_env} is not set — auto-processing will fail`);
           } else {
-            ok("BYOK disabled — feedback queues for Claude/native handling");
+            ok(`Truth verification: queue (Claude processes via MCP in a later session)`);
           }
         } catch (e) {
           fail(`Config malformed: ${(e as Error).message}`);

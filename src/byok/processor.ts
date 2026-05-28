@@ -57,9 +57,6 @@ export async function processFeedback(
   paths: ProductosPaths,
   byok: ByokConfig
 ): Promise<ProcessResult> {
-  if (!byok.enabled) {
-    return { kind: "error", message: "byok not enabled" };
-  }
   const apiKey = process.env[byok.api_key_env];
   if (!apiKey) {
     return {

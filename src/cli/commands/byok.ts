@@ -1,64 +1,63 @@
 import { Command } from "commander";
 import pc from "picocolors";
 import { resolvePathsOrThrow } from "../../core/paths.js";
-import { readConfig, writeConfig } from "../../core/config.js";
+import { readConfig, resolveTruthVerificationByok, writeConfig } from "../../core/config.js";
 
+/**
+ * Backwards-compatible BYOK command, post-configure refactor.
+ *
+ * Since per-operation handler selection now lives in `operations.truth_verification`,
+ * this command is mostly a status / quick-toggle shortcut. For full
+ * provider/key/model setup, point users at `productos configure`.
+ */
 export function byokCommand(): Command {
-  const cmd = new Command("byok").description("Manage the BYOK (bring-your-own-key) feedback auto-processor");
+  const cmd = new Command("byok").description("Quick toggle + status for BYOK truth-verification (full setup: productos configure)");
 
   cmd
     .command("status")
-    .description("Show current BYOK config and whether the key env var is set")
+    .description("Show the truth-verification handler config and whether the API key env var is set")
     .action(() => {
       const paths = resolvePathsOrThrow();
       const config = readConfig(paths);
-      const byok = config.byok;
-      const keyPresent = !!process.env[byok.api_key_env];
-      console.log(pc.bold("BYOK config:"));
-      console.log(`  enabled:        ${byok.enabled ? pc.green("true") : pc.dim("false")}`);
-      console.log(`  provider:       ${byok.provider}`);
-      console.log(`  model:          ${byok.model}`);
-      console.log(`  api_key_env:    ${byok.api_key_env}  ${keyPresent ? pc.green("(set)") : pc.red("(not set)")}`);
-      console.log(`  max_steps:      ${byok.max_steps}`);
-      console.log();
-      if (byok.enabled && keyPresent) {
-        console.log(pc.green("✓"), "BYOK is enabled and ready — POST /api/feedback will try to auto-process incoming entries.");
-      } else if (byok.enabled && !keyPresent) {
-        console.log(pc.yellow("!"), `BYOK is enabled but the key env var is empty. Set ${byok.api_key_env}=… in the shell that runs \`productos serve\`.`);
+      const handler = config.operations.truth_verification.handler;
+      console.log(pc.bold("Truth verification:"), handler);
+      if (handler === "byok") {
+        const byok = resolveTruthVerificationByok(config);
+        const keyPresent = !!process.env[byok.api_key_env];
+        console.log(`  provider:    ${byok.provider}`);
+        console.log(`  model:       ${byok.model}`);
+        console.log(`  api_key_env: ${byok.api_key_env}  ${keyPresent ? pc.green("(set)") : pc.red("(not set)")}`);
+        console.log(`  max_steps:   ${byok.max_steps}`);
+        console.log();
+        if (keyPresent) console.log(pc.green("✓"), "BYOK ready — POST /api/feedback will try to auto-process.");
+        else console.log(pc.yellow("!"), `Key not set. Set ${byok.api_key_env}=… in the shell that runs \`productos serve\`.`);
       } else {
-        console.log(pc.dim("BYOK is disabled. Feedback queues in productos/feedback/ for Claude to process via MCP."));
+        console.log(pc.dim("\nFeedback queues in productos/feedback/ for Claude to process later via MCP."));
+        console.log(pc.dim("To switch: `productos configure truth-verification` or `productos byok enable`."));
       }
     });
 
   cmd
     .command("enable")
-    .description("Enable BYOK auto-processing")
-    .option("--provider <provider>", "anthropic | openai | google | openrouter")
-    .option("--model <model>", "Model id (e.g. claude-sonnet-4-6, gpt-4o)")
-    .option("--api-key-env <env>", "Env var name that holds the API key (e.g. ANTHROPIC_API_KEY)")
-    .action((opts: { provider?: string; model?: string; apiKeyEnv?: string }) => {
+    .description("Flip truth-verification handler to BYOK. For full provider/key/model setup, use `productos configure`.")
+    .action(() => {
       const paths = resolvePathsOrThrow();
       const config = readConfig(paths);
-      config.byok.enabled = true;
-      if (opts.provider) config.byok.provider = opts.provider as never;
-      if (opts.model) config.byok.model = opts.model;
-      if (opts.apiKeyEnv) config.byok.api_key_env = opts.apiKeyEnv;
+      config.operations.truth_verification.handler = "byok";
       writeConfig(paths, config);
-      console.log(pc.green("✓"), `BYOK enabled (provider=${config.byok.provider}, model=${config.byok.model}, key from ${config.byok.api_key_env})`);
-      if (!process.env[config.byok.api_key_env]) {
-        console.log(pc.yellow("!"), `Note: ${config.byok.api_key_env} is not set in this shell. Set it before running \`productos serve\`.`);
-      }
+      console.log(pc.green("✓"), "Truth verification set to BYOK.");
+      console.log(pc.dim("Run `productos configure truth-verification` to set provider/model/key, or `productos byok status` to inspect."));
     });
 
   cmd
     .command("disable")
-    .description("Disable BYOK auto-processing (feedback queues only)")
+    .description("Revert truth-verification to queue-only")
     .action(() => {
       const paths = resolvePathsOrThrow();
       const config = readConfig(paths);
-      config.byok.enabled = false;
+      config.operations.truth_verification.handler = "queue";
       writeConfig(paths, config);
-      console.log(pc.green("✓"), "BYOK disabled");
+      console.log(pc.green("✓"), "Truth verification reverted to queue-only.");
     });
 
   return cmd;
