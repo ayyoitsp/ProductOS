@@ -101,6 +101,8 @@ export function initCommand(): Command {
       console.log("     — Claude reads your code, proposes features + behaviors,");
       console.log("       drives the live env to gather evidence, and writes the markup directly into productos/products/.");
       console.log("     You review the rendered site, approve behaviors with `productos product verify`, and commit the diff.");
+      console.log();
+      console.log(pc.dim("Optional: `productos configure` — pick how code scanning works (Claude / Codex / Manual) and how feedback is processed (queue / BYOK auto-process)."));
     });
 }
 
