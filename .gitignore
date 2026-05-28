@@ -4,6 +4,9 @@ dist/
 *.tsbuildinfo
 .npm/
 .pnpm-store/
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
 
 # Python
 __pycache__/

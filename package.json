@@ -1,0 +1,45 @@
+{
+  "name": "productos",
+  "version": "0.0.1",
+  "description": "Product correctness management for AI-native teams. Reads your codebase via your AI runtime, proposes Truth claims with executable tests, validates them live, keeps them fresh.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/ayyoitsp/ProductOS",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ayyoitsp/ProductOS.git"
+  },
+  "bin": {
+    "productos": "./bin/productos.js"
+  },
+  "main": "./dist/cli/index.js",
+  "files": [
+    "bin",
+    "dist",
+    "skills",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc && cp -R src/ui/static dist/ui/static",
+    "dev": "tsx src/cli/index.ts",
+    "start": "node bin/productos.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "commander": "^12.1.0",
+    "gray-matter": "^4.0.3",
+    "picocolors": "^1.1.1",
+    "yaml": "^2.6.1",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}
