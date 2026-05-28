@@ -1,26 +1,78 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, TextInput } from "react-native";
-import { useRouter } from "expo-router";
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
+import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { Surface, Text, View } from "@/components/Themed";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import Colors, { KID_COLORS } from "@/constants/Colors";
 import { useColorScheme } from "@/components/useColorScheme";
-import { createKid } from "@/db/operations";
+import { createKid, deleteKid, getKid, updateKid } from "@/db/operations";
 
 export default function AddKidScreen() {
   const cs = useColorScheme() ?? "light";
   const router = useRouter();
+  const { id } = useLocalSearchParams<{ id?: string }>();
+  const editingId = id ? Number(id) : null;
+  const isEdit = editingId !== null && Number.isFinite(editingId);
+
   const [name, setName] = useState("");
   const [color, setColor] = useState(KID_COLORS[0]!);
+  const [loaded, setLoaded] = useState(!isEdit);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  useEffect(() => {
+    if (!isEdit) return;
+    (async () => {
+      const k = await getKid(editingId!);
+      if (k) {
+        setName(k.name);
+        setColor(k.color);
+      }
+      setLoaded(true);
+    })();
+  }, [isEdit, editingId]);
 
   async function save() {
     const trimmed = name.trim();
     if (!trimmed) return;
-    await createKid(trimmed, color);
-    router.back();
+    if (isEdit) {
+      await updateKid(editingId!, { name: trimmed, color });
+      router.back();
+    } else {
+      await createKid(trimmed, color);
+      router.back();
+    }
   }
+
+  async function doDelete() {
+    if (!isEdit) return;
+    setConfirmDelete(false);
+    await deleteKid(editingId!);
+    router.dismissAll();
+    router.replace("/");
+  }
+
+  if (!loaded) return null;
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
+      <Stack.Screen
+        options={{
+          title: isEdit ? "Edit kid" : "Add a kid",
+          headerRight: isEdit
+            ? () => (
+                <Pressable
+                  onPress={() => setConfirmDelete(true)}
+                  hitSlop={10}
+                  style={{ paddingRight: 16 }}
+                >
+                  <FontAwesome name="trash" size={20} color={Colors[cs].debit} />
+                </Pressable>
+              )
+            : undefined,
+        }}
+      />
+
       <Surface>
         <Text style={styles.label}>Name</Text>
         <TextInput
@@ -29,7 +81,7 @@ export default function AddKidScreen() {
           onChangeText={setName}
           placeholder="e.g. Ada"
           placeholderTextColor={Colors[cs].muted}
-          autoFocus
+          autoFocus={!isEdit}
         />
       </Surface>
 
@@ -58,9 +110,19 @@ export default function AddKidScreen() {
         disabled={!name.trim()}
       >
         <Text style={{ color: name.trim() ? "#fff" : Colors[cs].muted, fontWeight: "700", fontSize: 16 }}>
-          Add kid
+          {isEdit ? "Save changes" : "Add kid"}
         </Text>
       </Pressable>
+
+      <ConfirmDialog
+        visible={confirmDelete}
+        title="Delete kid?"
+        message={`This removes ${name || "this kid"} and all their transactions. This cannot be undone.`}
+        confirmLabel="Delete"
+        destructive
+        onConfirm={doDelete}
+        onCancel={() => setConfirmDelete(false)}
+      />
     </ScrollView>
   );
 }

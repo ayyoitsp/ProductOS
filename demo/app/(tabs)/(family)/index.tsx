@@ -5,7 +5,7 @@ import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { Surface, Text, View } from "@/components/Themed";
 import { formatMoney } from "@/db";
 import { getAllBalances, listKids } from "@/db/operations";
-import { applyInterestIfDue } from "@/db/interest";
+import { onDataChange } from "@/db/events";
 import { Kid } from "@/db/schema";
 import Colors from "@/constants/Colors";
 import { useColorScheme } from "@/components/useColorScheme";
@@ -18,7 +18,6 @@ export default function FamilyScreen() {
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
-    await applyInterestIfDue();
     const [k, b] = await Promise.all([listKids(), getAllBalances()]);
     setKids(k);
     setBalances(b);
@@ -31,7 +30,9 @@ export default function FamilyScreen() {
   );
 
   useEffect(() => {
-    load();
+    return onDataChange(() => {
+      load();
+    });
   }, [load]);
 
   return (

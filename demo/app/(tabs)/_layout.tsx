@@ -15,12 +15,11 @@ export default function TabLayout() {
       screenOptions={{
         tabBarActiveTintColor: Colors[cs].tint,
         tabBarStyle: { backgroundColor: Colors[cs].surface, borderTopColor: Colors[cs].border },
-        headerStyle: { backgroundColor: Colors[cs].surface },
-        headerTitleStyle: { color: Colors[cs].text },
+        headerShown: false,
       }}
     >
       <Tabs.Screen
-        name="index"
+        name="(family)"
         options={{ title: "Family", tabBarIcon: ({ color }) => <TabIcon name="users" color={color} /> }}
       />
       <Tabs.Screen

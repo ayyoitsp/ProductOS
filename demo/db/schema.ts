@@ -20,7 +20,7 @@ export interface Task {
   created_at: string;
 }
 
-export type TxType = "task" | "interest" | "adjustment" | "spend";
+export type TxType = "task" | "interest" | "earn" | "spend" | "adjustment";
 
 export interface Transaction {
   id: number;

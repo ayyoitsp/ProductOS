@@ -47,6 +47,31 @@ export async function applyInterestIfDue(): Promise<{ applied: boolean; credited
   return { applied: true, credited };
 }
 
+/**
+ * Apply interest unconditionally — no enabled / day-of-week / last-applied checks.
+ * Used by the Settings "Apply interest now" button. Still updates last_applied so
+ * the automatic pass won't double-credit today.
+ */
+export async function applyInterestNow(): Promise<{ credited: number }> {
+  const cfg = await getInterestConfig();
+  const balances = await getAllBalances();
+  let credited = 0;
+  for (const [kidIdStr, balance] of Object.entries(balances)) {
+    if (balance <= 0) continue;
+    const interest = Math.round((balance * cfg.rate_pct) / 100);
+    if (interest <= 0) continue;
+    await addTransaction(
+      Number(kidIdStr),
+      interest,
+      `Interest (${cfg.rate_pct}%)`,
+      "interest"
+    );
+    credited++;
+  }
+  await setInterestConfig({ last_applied: todayKey() });
+  return { credited };
+}
+
 const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 export function dayLabel(d: number): string {
   return DAY_LABELS[d] ?? "?";

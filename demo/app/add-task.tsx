@@ -7,26 +7,50 @@ import {
   Switch,
   TextInput,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
+import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { Surface, Text, View } from "@/components/Themed";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import Colors from "@/constants/Colors";
 import { useColorScheme } from "@/components/useColorScheme";
-import { parseMoney } from "@/db";
-import { createTask, listKids } from "@/db/operations";
-import { Kid } from "@/db/schema";
+import { formatMoney, parseMoney } from "@/db";
+import {
+  createTask,
+  deleteTask,
+  updateTask,
+} from "@/db/operations";
+import { Task } from "@/db/schema";
+import { getDb } from "@/db";
 
 export default function AddTaskScreen() {
   const cs = useColorScheme() ?? "light";
   const router = useRouter();
+  const { id } = useLocalSearchParams<{ id?: string }>();
+  const editingId = id ? Number(id) : null;
+  const isEdit = editingId !== null && Number.isFinite(editingId);
+
   const [name, setName] = useState("");
   const [amount, setAmount] = useState("");
-  const [kids, setKids] = useState<Kid[]>([]);
-  const [assignedTo, setAssignedTo] = useState<number | null>(null);
   const [recurring, setRecurring] = useState(true);
+  const [loaded, setLoaded] = useState(!isEdit);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   useEffect(() => {
-    listKids().then(setKids);
-  }, []);
+    if (!isEdit) return;
+    (async () => {
+      const db = await getDb();
+      const t = await db.getFirstAsync<Task>(
+        "SELECT * FROM tasks WHERE id = ?",
+        [editingId]
+      );
+      if (t) {
+        setName(t.name);
+        setAmount(formatMoney(t.amount_cents).replace("$", ""));
+        setRecurring(t.recurring === 1);
+      }
+      setLoaded(true);
+    })();
+  }, [isEdit, editingId]);
 
   async function save() {
     const trimmed = name.trim();
@@ -36,12 +60,48 @@ export default function AddTaskScreen() {
       Alert.alert("Invalid amount", "Enter an amount greater than zero.");
       return;
     }
-    await createTask(trimmed, cents, assignedTo, recurring);
+    if (isEdit) {
+      await updateTask(editingId!, {
+        name: trimmed,
+        amount_cents: cents,
+        recurring: recurring ? 1 : 0,
+      });
+    } else {
+      await createTask(trimmed, cents, recurring);
+    }
     router.back();
   }
 
+  async function doDelete() {
+    if (!isEdit) return;
+    setConfirmDelete(false);
+    await deleteTask(editingId!);
+    router.back();
+  }
+
+  if (!loaded) return null;
+
+  const valid = name.trim().length > 0 && !!amount;
+
   return (
     <ScrollView contentContainerStyle={styles.container}>
+      <Stack.Screen
+        options={{
+          title: isEdit ? "Edit task" : "New task",
+          headerRight: isEdit
+            ? () => (
+                <Pressable
+                  onPress={() => setConfirmDelete(true)}
+                  hitSlop={10}
+                  style={{ paddingRight: 16 }}
+                >
+                  <FontAwesome name="trash" size={20} color={Colors[cs].debit} />
+                </Pressable>
+              )
+            : undefined,
+        }}
+      />
+
       <Surface>
         <Text style={styles.label}>Task</Text>
         <TextInput
@@ -50,7 +110,7 @@ export default function AddTaskScreen() {
           onChangeText={setName}
           placeholder="e.g. Unload the dishwasher"
           placeholderTextColor={Colors[cs].muted}
-          autoFocus
+          autoFocus={!isEdit}
         />
       </Surface>
 
@@ -64,43 +124,6 @@ export default function AddTaskScreen() {
           placeholderTextColor={Colors[cs].muted}
           inputMode="decimal"
         />
-      </Surface>
-
-      <Surface>
-        <Text style={styles.label}>For</Text>
-        <View style={styles.row}>
-          <Pressable onPress={() => setAssignedTo(null)}>
-            <View
-              style={[
-                styles.chip,
-                {
-                  backgroundColor: assignedTo == null ? Colors[cs].tint : Colors[cs].surfaceMuted,
-                  borderColor: assignedTo == null ? Colors[cs].tint : Colors[cs].border,
-                },
-              ]}
-            >
-              <Text style={{ color: assignedTo == null ? "#fff" : Colors[cs].text, fontWeight: "600" }}>Anyone</Text>
-            </View>
-          </Pressable>
-          {kids.map((k) => {
-            const on = assignedTo === k.id;
-            return (
-              <Pressable key={k.id} onPress={() => setAssignedTo(k.id)}>
-                <View
-                  style={[
-                    styles.chip,
-                    {
-                      backgroundColor: on ? k.color : Colors[cs].surfaceMuted,
-                      borderColor: on ? k.color : Colors[cs].border,
-                    },
-                  ]}
-                >
-                  <Text style={{ color: on ? "#fff" : Colors[cs].text, fontWeight: "600" }}>{k.name}</Text>
-                </View>
-              </Pressable>
-            );
-          })}
-        </View>
       </Surface>
 
       <Surface>
@@ -119,20 +142,30 @@ export default function AddTaskScreen() {
         onPress={save}
         style={[
           styles.button,
-          { backgroundColor: name.trim() && amount ? Colors[cs].tint : Colors[cs].surfaceMuted },
+          { backgroundColor: valid ? Colors[cs].tint : Colors[cs].surfaceMuted },
         ]}
-        disabled={!name.trim() || !amount}
+        disabled={!valid}
       >
         <Text
           style={{
-            color: name.trim() && amount ? "#fff" : Colors[cs].muted,
+            color: valid ? "#fff" : Colors[cs].muted,
             fontWeight: "700",
             fontSize: 16,
           }}
         >
-          Add task
+          {isEdit ? "Save changes" : "Add task"}
         </Text>
       </Pressable>
+
+      <ConfirmDialog
+        visible={confirmDelete}
+        title="Delete task?"
+        message={`Remove "${name}"? This cannot be undone.`}
+        confirmLabel="Delete"
+        destructive
+        onConfirm={doDelete}
+        onCancel={() => setConfirmDelete(false)}
+      />
     </ScrollView>
   );
 }
@@ -149,8 +182,6 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     fontSize: 18,
   },
-  row: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 12 },
   rowBetween: { flexDirection: "row", alignItems: "center", gap: 12 },
-  chip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8 },
   button: { padding: 14, borderRadius: 12, alignItems: "center" },
 });

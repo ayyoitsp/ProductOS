@@ -29,9 +29,18 @@ export async function createKid(name: string, color: string): Promise<number> {
   return r.lastInsertRowId;
 }
 
-export async function renameKid(id: number, name: string): Promise<void> {
+export async function updateKid(
+  id: number,
+  patch: Partial<Pick<Kid, "name" | "color">>
+): Promise<void> {
   const db = await getDb();
-  await db.runAsync("UPDATE kids SET name = ? WHERE id = ?", [name.trim(), id]);
+  const cur = await db.getFirstAsync<Kid>("SELECT * FROM kids WHERE id = ?", [id]);
+  if (!cur) return;
+  const next = { ...cur, ...patch };
+  await db.runAsync(
+    "UPDATE kids SET name = ?, color = ? WHERE id = ?",
+    [next.name.trim(), next.color, id]
+  );
 }
 
 export async function deleteKid(id: number): Promise<void> {
@@ -74,28 +83,27 @@ export async function listActiveTasks(): Promise<Task[]> {
 export async function createTask(
   name: string,
   amount_cents: number,
-  assigned_to_kid_id: number | null,
   recurring: boolean
 ): Promise<number> {
   const db = await getDb();
   const r = await db.runAsync(
-    "INSERT INTO tasks (name, amount_cents, assigned_to_kid_id, recurring, active, created_at) VALUES (?, ?, ?, ?, 1, ?)",
-    [name.trim(), amount_cents, assigned_to_kid_id, recurring ? 1 : 0, nowIso()]
+    "INSERT INTO tasks (name, amount_cents, assigned_to_kid_id, recurring, active, created_at) VALUES (?, ?, NULL, ?, 1, ?)",
+    [name.trim(), amount_cents, recurring ? 1 : 0, nowIso()]
   );
   return r.lastInsertRowId;
 }
 
 export async function updateTask(
   id: number,
-  patch: Partial<Pick<Task, "name" | "amount_cents" | "assigned_to_kid_id" | "recurring">>
+  patch: Partial<Pick<Task, "name" | "amount_cents" | "recurring">>
 ): Promise<void> {
   const db = await getDb();
   const cur = await db.getFirstAsync<Task>("SELECT * FROM tasks WHERE id = ?", [id]);
   if (!cur) return;
   const next = { ...cur, ...patch };
   await db.runAsync(
-    "UPDATE tasks SET name = ?, amount_cents = ?, assigned_to_kid_id = ?, recurring = ? WHERE id = ?",
-    [next.name, next.amount_cents, next.assigned_to_kid_id, next.recurring, id]
+    "UPDATE tasks SET name = ?, amount_cents = ?, recurring = ? WHERE id = ?",
+    [next.name, next.amount_cents, next.recurring, id]
   );
 }
 
@@ -106,13 +114,19 @@ export async function deleteTask(id: number): Promise<void> {
 
 export async function completeTask(
   taskId: number,
-  kidId: number
+  kidId: number,
+  opts?: { amount_cents?: number; name?: string; comment?: string }
 ): Promise<{ task: Task; tx: Transaction }> {
   const db = await getDb();
   const task = await db.getFirstAsync<Task>("SELECT * FROM tasks WHERE id = ?", [taskId]);
   if (!task) throw new Error("Task not found");
 
-  const txId = await addTransaction(kidId, task.amount_cents, `Task: ${task.name}`, "task", taskId);
+  const name = (opts?.name?.trim() || task.name);
+  const comment = opts?.comment?.trim();
+  const reason = comment ? `${name} — ${comment}` : name;
+  const amount = opts?.amount_cents ?? task.amount_cents;
+
+  const txId = await addTransaction(kidId, amount, reason, "task", taskId);
   const tx = (await db.getFirstAsync<Transaction>(
     "SELECT * FROM transactions WHERE id = ?",
     [txId]

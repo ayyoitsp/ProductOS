@@ -1,6 +1,5 @@
 import { useCallback, useState } from "react";
 import {
-  Alert,
   FlatList,
   Pressable,
   RefreshControl,
@@ -9,11 +8,12 @@ import {
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { Surface, Text, View } from "@/components/Themed";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import Colors from "@/constants/Colors";
 import { useColorScheme } from "@/components/useColorScheme";
 import { formatMoney } from "@/db";
+import { emitDataChange } from "@/db/events";
 import {
-  deleteKid,
   deleteTransaction,
   getBalance,
   getKid,
@@ -31,6 +31,7 @@ export default function KidScreen() {
   const [balance, setBalance] = useState(0);
   const [txs, setTxs] = useState<Transaction[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [confirmingTx, setConfirmingTx] = useState<Transaction | null>(null);
 
   const load = useCallback(async () => {
     if (!Number.isFinite(kidId)) return;
@@ -50,40 +51,13 @@ export default function KidScreen() {
     }, [load])
   );
 
-  function handleDeleteKid() {
-    Alert.alert(
-      "Delete kid?",
-      `This removes ${kid?.name ?? "this kid"} and all their transactions. This cannot be undone.`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            await deleteKid(kidId);
-            router.back();
-          },
-        },
-      ]
-    );
-  }
-
-  function handleDeleteTx(tx: Transaction) {
-    Alert.alert(
-      "Delete transaction?",
-      `${tx.reason} (${formatMoney(tx.amount_cents)})`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            await deleteTransaction(tx.id);
-            await load();
-          },
-        },
-      ]
-    );
+  async function doDeleteTx() {
+    if (!confirmingTx) return;
+    const id = confirmingTx.id;
+    setConfirmingTx(null);
+    await deleteTransaction(id);
+    emitDataChange();
+    await load();
   }
 
   if (!kid) return null;
@@ -94,8 +68,13 @@ export default function KidScreen() {
         options={{
           title: kid.name,
           headerRight: () => (
-            <Pressable onPress={handleDeleteKid} hitSlop={10}>
-              <FontAwesome name="trash" size={20} color={Colors[cs].debit} />
+            <Pressable
+              onPress={() => router.push(`/add-kid?id=${kid.id}`)}
+              hitSlop={10}
+              style={{ flexDirection: "row", alignItems: "center", gap: 6, paddingRight: 16 }}
+            >
+              <FontAwesome name="pencil" size={18} color={Colors[cs].tint} />
+              <Text style={{ color: Colors[cs].tint, fontWeight: "600" }}>Edit</Text>
             </Pressable>
           ),
         }}
@@ -121,10 +100,22 @@ export default function KidScreen() {
             <Text style={styles.balance}>{formatMoney(balance)}</Text>
             <View style={styles.actions}>
               <Pressable
-                onPress={() => router.push(`/adjust/${kid.id}`)}
-                style={[styles.actionBtn, { borderColor: Colors[cs].border }]}
+                onPress={() => router.push(`/adjust/${kid.id}?direction=credit`)}
+                style={[
+                  styles.actionBtn,
+                  { backgroundColor: Colors[cs].credit, borderColor: Colors[cs].credit },
+                ]}
               >
-                <Text style={{ color: Colors[cs].text, fontWeight: "600" }}>+ / − Adjust</Text>
+                <Text style={{ color: "#fff", fontWeight: "700" }}>+ Earn</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => router.push(`/adjust/${kid.id}?direction=debit`)}
+                style={[
+                  styles.actionBtn,
+                  { backgroundColor: Colors[cs].debit, borderColor: Colors[cs].debit },
+                ]}
+              >
+                <Text style={{ color: "#fff", fontWeight: "700" }}>− Spend</Text>
               </Pressable>
             </View>
           </Surface>
@@ -135,26 +126,45 @@ export default function KidScreen() {
           </View>
         }
         renderItem={({ item }) => (
-          <Pressable onLongPress={() => handleDeleteTx(item)}>
-            <Surface style={styles.txRow}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.txReason}>{item.reason}</Text>
-                <Text style={[styles.txMeta, { color: Colors[cs].muted }]}>
-                  {fmtDate(item.created_at)} · {item.type}
-                </Text>
-              </View>
-              <Text
-                style={[
-                  styles.txAmount,
-                  { color: item.amount_cents >= 0 ? Colors[cs].credit : Colors[cs].debit },
-                ]}
-              >
-                {item.amount_cents >= 0 ? "+" : ""}
-                {formatMoney(item.amount_cents)}
+          <Surface style={styles.txRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.txReason}>{item.reason}</Text>
+              <Text style={[styles.txMeta, { color: Colors[cs].muted }]}>
+                {fmtDate(item.created_at)}
               </Text>
-            </Surface>
-          </Pressable>
+            </View>
+            <Text
+              style={[
+                styles.txAmount,
+                { color: item.amount_cents >= 0 ? Colors[cs].credit : Colors[cs].debit },
+              ]}
+            >
+              {item.amount_cents >= 0 ? "+" : ""}
+              {formatMoney(item.amount_cents)}
+            </Text>
+            <Pressable
+              onPress={() => setConfirmingTx(item)}
+              hitSlop={8}
+              style={styles.txDeleteBtn}
+            >
+              <FontAwesome name="trash-o" size={16} color={Colors[cs].muted} />
+            </Pressable>
+          </Surface>
         )}
+      />
+
+      <ConfirmDialog
+        visible={confirmingTx !== null}
+        title="Delete transaction?"
+        message={
+          confirmingTx
+            ? `${confirmingTx.reason} (${confirmingTx.amount_cents >= 0 ? "+" : ""}${formatMoney(confirmingTx.amount_cents)})`
+            : undefined
+        }
+        confirmLabel="Delete"
+        destructive
+        onConfirm={doDeleteTx}
+        onCancel={() => setConfirmingTx(null)}
       />
     </View>
   );
@@ -183,4 +193,5 @@ const styles = StyleSheet.create({
   txReason: { fontSize: 15, fontWeight: "600" },
   txMeta: { fontSize: 11, marginTop: 2 },
   txAmount: { fontSize: 17, fontWeight: "700" },
+  txDeleteBtn: { paddingLeft: 14, paddingVertical: 8 },
 });

@@ -6,7 +6,7 @@ import {
   StyleSheet,
   TextInput,
 } from "react-native";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { Surface, Text, View } from "@/components/Themed";
 import Colors from "@/constants/Colors";
 import { useColorScheme } from "@/components/useColorScheme";
@@ -16,10 +16,15 @@ import { addTransaction } from "@/db/operations";
 export default function AdjustScreen() {
   const cs = useColorScheme() ?? "light";
   const router = useRouter();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, direction: rawDir } = useLocalSearchParams<{
+    id: string;
+    direction?: string;
+  }>();
   const kidId = Number(id);
+  const direction: "credit" | "debit" = rawDir === "debit" ? "debit" : "credit";
+  const isEarn = direction === "credit";
+  const accent = isEarn ? Colors[cs].credit : Colors[cs].debit;
 
-  const [direction, setDirection] = useState<"credit" | "debit">("credit");
   const [amount, setAmount] = useState("");
   const [reason, setReason] = useState("");
 
@@ -29,42 +34,16 @@ export default function AdjustScreen() {
       Alert.alert("Invalid amount", "Enter an amount greater than zero.");
       return;
     }
-    const signed = direction === "credit" ? cents : -cents;
-    const r = reason.trim() || (direction === "credit" ? "Adjustment (credit)" : "Spend");
-    const type = direction === "debit" ? "spend" : "adjustment";
+    const signed = isEarn ? cents : -cents;
+    const r = reason.trim() || (isEarn ? "Earned" : "Spent");
+    const type = isEarn ? "earn" : "spend";
     await addTransaction(kidId, signed, r, type);
     router.back();
   }
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <Surface>
-        <Text style={styles.label}>Direction</Text>
-        <View style={styles.row}>
-          {(["credit", "debit"] as const).map((d) => {
-            const on = direction === d;
-            const color = d === "credit" ? Colors[cs].credit : Colors[cs].debit;
-            return (
-              <Pressable key={d} onPress={() => setDirection(d)} style={{ flex: 1 }}>
-                <View
-                  style={[
-                    styles.chip,
-                    {
-                      backgroundColor: on ? color : Colors[cs].surfaceMuted,
-                      borderColor: on ? color : Colors[cs].border,
-                      alignItems: "center",
-                    },
-                  ]}
-                >
-                  <Text style={{ color: on ? "#fff" : Colors[cs].text, fontWeight: "700" }}>
-                    {d === "credit" ? "+ Add money" : "− Spend"}
-                  </Text>
-                </View>
-              </Pressable>
-            );
-          })}
-        </View>
-      </Surface>
+      <Stack.Screen options={{ title: isEarn ? "Add money" : "Spend money" }} />
 
       <Surface>
         <Text style={styles.label}>Amount</Text>
@@ -85,7 +64,7 @@ export default function AdjustScreen() {
           style={[styles.input, { color: Colors[cs].text, borderColor: Colors[cs].border }]}
           value={reason}
           onChangeText={setReason}
-          placeholder={direction === "credit" ? "e.g. Birthday gift" : "e.g. Movie ticket"}
+          placeholder={isEarn ? "e.g. Birthday gift" : "e.g. Movie ticket"}
           placeholderTextColor={Colors[cs].muted}
         />
       </Surface>
@@ -94,12 +73,12 @@ export default function AdjustScreen() {
         onPress={save}
         style={[
           styles.button,
-          { backgroundColor: amount ? Colors[cs].tint : Colors[cs].surfaceMuted },
+          { backgroundColor: amount ? accent : Colors[cs].surfaceMuted },
         ]}
         disabled={!amount}
       >
         <Text style={{ color: amount ? "#fff" : Colors[cs].muted, fontWeight: "700", fontSize: 16 }}>
-          Save
+          {isEarn ? "Add money" : "Spend money"}
         </Text>
       </Pressable>
     </ScrollView>
@@ -109,8 +88,6 @@ export default function AdjustScreen() {
 const styles = StyleSheet.create({
   container: { padding: 16, gap: 12 },
   label: { fontSize: 16, fontWeight: "600" },
-  row: { flexDirection: "row", gap: 8, marginTop: 12 },
-  chip: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12 },
   input: {
     marginTop: 8,
     borderWidth: 1,
