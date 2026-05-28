@@ -13,6 +13,7 @@ import {
   readConfig,
   writeConfig,
 } from "../../core/config.js";
+import { envConfigFile, starterEnvYaml } from "../../core/env.js";
 
 const SUPPORTED_RUNTIMES = ["claude"] as const;
 
@@ -68,17 +69,36 @@ export function initCommand(): Command {
         );
       }
 
-      // 4. Add productos/.local/ to .gitignore
-      ensureGitignore(repoRoot);
-      console.log(pc.green("✓"), "Added `productos/.local/` to .gitignore");
+      // 4. Scaffold productos/env.yaml if missing
+      const envFile = envConfigFile(paths);
+      if (!fs.existsSync(envFile)) {
+        const hasDocker =
+          fs.existsSync(path.join(repoRoot, "docker-compose.yml")) ||
+          fs.existsSync(path.join(repoRoot, "docker-compose.yaml")) ||
+          fs.existsSync(path.join(repoRoot, "compose.yaml"));
+        const stack = readConfig(paths).stack;
+        fs.writeFileSync(envFile, starterEnvYaml({ language: stack.language, hasDocker }), "utf-8");
+        console.log(
+          pc.green("✓"),
+          `Wrote ${path.relative(process.cwd(), envFile)} — ${pc.bold("edit this!")} It tells Claude how to bring up your dev stack.`
+        );
+      } else {
+        console.log(pc.yellow("→"), `${path.relative(process.cwd(), envFile)} already exists`);
+      }
 
-      // 5. Next steps
+      // 5. Add productos/.local/ and productos/tests/proposed/ to .gitignore
+      ensureGitignore(repoRoot);
+      console.log(pc.green("✓"), "Added gitignore entries for productos local-only state");
+
+      // 6. Next steps
       console.log();
       console.log(pc.bold("Next:"));
-      console.log("  • Open Claude Code in this repo");
-      console.log("  • Say: \"scan this codebase and propose ProductOS truth\"");
-      console.log(`  • Open ${pc.cyan("http://localhost:" + readConfig(paths).ui_port)} when proposals arrive`);
-      console.log(`  • Run ${pc.bold("productos serve")} in another terminal to start the vet UI`);
+      console.log(`  1. ${pc.bold("Edit productos/env.yaml")} — set the right setup commands and healthcheck URL for your stack.`);
+      console.log("  2. Verify the env config works: `productos env up` then `productos env check`");
+      console.log("  3. In another terminal: `productos serve` (vet UI on localhost:" + readConfig(paths).ui_port + ")");
+      console.log("  4. Open Claude Code in this repo. Say: \"do a ProductOS pass on this codebase\"");
+      console.log("     — Claude reads the code, proposes Truth claims, drives the live env to validate each,");
+      console.log("       and reports outcomes. You review and approve in the vet UI.");
     });
 }
 
@@ -102,13 +122,15 @@ function detectStack(repoRoot: string): { language: "typescript" | "javascript" 
 
 function ensureGitignore(repoRoot: string): void {
   const gi = path.join(repoRoot, ".gitignore");
-  const line = "productos/.local/";
+  const wanted = ["productos/.local/", "productos/tests/proposed/"];
   if (!fs.existsSync(gi)) {
-    fs.writeFileSync(gi, `${line}\n`);
+    fs.writeFileSync(gi, `# ProductOS local-only state\n${wanted.join("\n")}\n`);
     return;
   }
   const content = fs.readFileSync(gi, "utf-8");
-  if (content.split("\n").some((l) => l.trim() === line)) return;
+  const existing = new Set(content.split("\n").map((l) => l.trim()));
+  const missing = wanted.filter((w) => !existing.has(w));
+  if (missing.length === 0) return;
   const sep = content.endsWith("\n") ? "" : "\n";
-  fs.appendFileSync(gi, `${sep}\n# ProductOS local-only state\n${line}\n`);
+  fs.appendFileSync(gi, `${sep}\n# ProductOS local-only state\n${missing.join("\n")}\n`);
 }

@@ -5,16 +5,18 @@ import { truthCommand } from "./commands/truth.js";
 import { testCommand } from "./commands/test.js";
 import { gapsCommand } from "./commands/gaps.js";
 import { doctorCommand } from "./commands/doctor.js";
+import { envCommand } from "./commands/env.js";
 
 const program = new Command();
 
 program
   .name("productos")
   .description("Product correctness management for AI-native teams")
-  .version("0.0.1");
+  .version("0.0.2");
 
 program.addCommand(initCommand());
 program.addCommand(serveCommand());
+program.addCommand(envCommand());
 program.addCommand(truthCommand());
 program.addCommand(testCommand());
 program.addCommand(gapsCommand());

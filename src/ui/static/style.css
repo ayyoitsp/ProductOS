@@ -93,10 +93,19 @@ pre {
 .actions button.danger:hover { border-color: var(--red); }
 .actions button:disabled { opacity: 0.5; cursor: wait; }
 
-.live-result { margin-top: 14px; padding: 12px 16px; border-radius: 8px; }
-.live-result.pass { background: rgba(46, 204, 113, 0.1); border: 1px solid rgba(46, 204, 113, 0.3); }
-.live-result.fail { background: rgba(255, 77, 79, 0.1); border: 1px solid rgba(255, 77, 79, 0.3); }
-.live-result .result-line { font-weight: 600; font-size: 13px; margin-bottom: 6px; }
-.live-result.pass .result-line { color: var(--green); }
-.live-result.fail .result-line { color: var(--red); }
-.live-result .detail { font-family: var(--mono); font-size: 12px; color: var(--dim); }
+.run-chip {
+  font-size: 11px; padding: 2px 8px; border-radius: 999px;
+  border: 1px solid transparent; font-family: var(--mono);
+}
+.run-chip.run-pass { color: var(--green); border-color: rgba(46, 204, 113, 0.4); }
+.run-chip.run-fail { color: var(--red); border-color: rgba(255, 77, 79, 0.4); }
+.run-chip.run-skip { color: var(--dim); border-color: #2a3042; }
+.run-chip.run-none { color: var(--dim); border-color: #2a3042; }
+
+.ask-claude {
+  color: var(--dim); font-size: 12px; margin-left: auto; font-style: italic;
+}
+.ask-claude code {
+  background: var(--surface-2); padding: 1px 6px; border-radius: 4px;
+  font-family: var(--mono); font-style: normal; color: var(--text);
+}

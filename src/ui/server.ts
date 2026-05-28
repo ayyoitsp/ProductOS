@@ -6,17 +6,12 @@ import pc from "picocolors";
 import { resolvePathsOrThrow } from "../core/paths.js";
 import { readConfig } from "../core/config.js";
 import { listTruth, readTruth, writeTruth, nowIso } from "../core/truth.js";
-import { writeTrace } from "../core/trace.js";
-import { runApiReplay } from "../validation/api_replay.js";
+import { readEnvConfig } from "../core/env.js";
 
 const STATIC_DIR = resolveStaticDir();
 
 function resolveStaticDir(): string {
   const here = path.dirname(fileURLToPath(import.meta.url));
-  // compiled: dist/ui/server.js → ./static
-  const compiled = path.join(here, "static");
-  if (fs.existsSync(compiled)) return compiled;
-  // dev (tsx): src/ui/server.ts → ./static
   return path.join(here, "static");
 }
 
@@ -48,21 +43,6 @@ export async function startUiServer(): Promise<void> {
         if (!doc) return json(res, { error: "not found" }, 404);
         return json(res, doc);
       }
-      if (req.method === "POST" && url.pathname.match(/^\/api\/truth\/[^/]+\/run-live$/)) {
-        const id = url.pathname.split("/")[3]!;
-        const doc = readTruth(paths, id);
-        if (!doc) return json(res, { error: "not found" }, 404);
-        if (doc.frontmatter.type !== "api-behavior") {
-          return json(
-            res,
-            { error: `live-run only supports api-behavior in MVP; this is ${doc.frontmatter.type}` },
-            400
-          );
-        }
-        const trace = await runApiReplay(doc, config);
-        writeTrace(paths, trace);
-        return json(res, trace);
-      }
       if (req.method === "POST" && url.pathname.match(/^\/api\/truth\/[^/]+\/validate$/)) {
         const id = url.pathname.split("/")[3]!;
         const doc = readTruth(paths, id);
@@ -81,6 +61,10 @@ export async function startUiServer(): Promise<void> {
         writeTruth(paths, doc);
         return json(res, { ok: true, id, status: "rejected" });
       }
+      if (req.method === "GET" && url.pathname === "/api/env") {
+        const env = readEnvConfig(paths);
+        return json(res, { configured: !!env, env });
+      }
       json(res, { error: "not found" }, 404);
     } catch (e) {
       json(res, { error: (e as Error).message }, 500);
@@ -89,7 +73,9 @@ export async function startUiServer(): Promise<void> {
 
   server.listen(port, () => {
     console.log(pc.green("✓"), `Vet UI: ${pc.cyan(`http://localhost:${port}`)}`);
-    console.log(pc.dim(`  watching ${path.relative(process.cwd(), paths.truthDir)}/ for new proposals`));
+    console.log(pc.dim(`  Truth in ${path.relative(process.cwd(), paths.truthDir)}/`));
+    console.log(pc.dim(`  Validation runs are driven by Claude (it reads productos/env.yaml,`));
+    console.log(pc.dim(`  brings up the env, runs the proposed test, records the outcome via MCP).`));
   });
 }
 

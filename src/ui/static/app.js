@@ -33,11 +33,18 @@ function renderCard(doc) {
   const el = document.createElement("article");
   el.className = "card";
   el.dataset.id = f.id;
+
+  const lastRun = f.last_test_run;
+  const runChip = lastRun
+    ? `<span class="run-chip run-${lastRun.result}">${lastRun.result === "pass" ? "✓" : lastRun.result === "fail" ? "✗" : "—"} live ${lastRun.result}</span>`
+    : `<span class="run-chip run-none">not yet validated by Claude</span>`;
+
   el.innerHTML = `
     <div class="card-header">
       <span class="id">${f.id}</span>
       <span class="type">${f.type}</span>
       <span class="status ${f.status}">● ${f.status}</span>
+      ${runChip}
       <span style="margin-left:auto;color:var(--dim);font-size:11px;">${f.scope?.feature ? "feature: " + escapeHtml(f.scope.feature) : ""}</span>
     </div>
     <div class="claim">${escapeHtml(f.claim)}</div>
@@ -51,31 +58,28 @@ function renderCard(doc) {
         ? `<details><summary>Proposed test (${f.proposed_test.framework})</summary><pre>${escapeHtml(f.proposed_test.source)}</pre></details>`
         : ""
     }
+    ${
+      lastRun && lastRun.detail
+        ? `<details ${lastRun.result === "fail" ? "open" : ""}><summary>Last live run output (${lastRun.at})</summary><pre>${escapeHtml(lastRun.detail)}</pre></details>`
+        : ""
+    }
     <div class="actions">
-      <button class="primary run">▶ Run live</button>
-      <button class="validate">✓ Validate</button>
+      <button class="primary validate">✓ Validate</button>
       <button class="danger reject">✗ Reject</button>
+      <span class="ask-claude">Need a re-run? Tell Claude: "<code>validate ${f.id}</code>" — it'll drive your live env and report back.</span>
     </div>
-    <div class="live-result-slot"></div>
   `;
 
-  el.querySelector(".run").addEventListener("click", async (e) => {
-    const btn = e.currentTarget;
-    btn.disabled = true; btn.textContent = "Running…";
-    const slot = el.querySelector(".live-result-slot");
-    slot.innerHTML = "";
-    try {
-      const r = await fetch(`/api/truth/${f.id}/run-live`, { method: "POST" });
-      const trace = await r.json();
-      slot.appendChild(renderTrace(trace));
-    } catch (err) {
-      slot.innerHTML = `<div class="live-result fail"><div class="result-line">Error</div><div class="detail">${escapeHtml(err.message)}</div></div>`;
-    } finally {
-      btn.disabled = false; btn.textContent = "▶ Run live";
-    }
-  });
-
   el.querySelector(".validate").addEventListener("click", async () => {
+    if (!lastRun || lastRun.result !== "pass") {
+      if (!confirm(
+        lastRun
+          ? `${f.id} last live run was ${lastRun.result.toUpperCase()}. Validate anyway?`
+          : `${f.id} has not been live-validated by Claude yet. Validate without evidence?`
+      )) {
+        return;
+      }
+    }
     await fetch(`/api/truth/${f.id}/validate`, { method: "POST" });
     load();
   });
@@ -85,26 +89,6 @@ function renderCard(doc) {
     load();
   });
   return el;
-}
-
-function renderTrace(trace) {
-  const div = document.createElement("div");
-  div.className = `live-result ${trace.result}`;
-  const pass = trace.result === "pass";
-  const reqLine = trace.request ? `${trace.request.method} ${trace.request.url}` : "";
-  const resLine = trace.response
-    ? `→ ${trace.response.status}  (${trace.response.latency_ms ?? "?"}ms)`
-    : "";
-  div.innerHTML = `
-    <div class="result-line">${pass ? "✓ Pass" : "✗ Fail"}</div>
-    <div class="detail">${escapeHtml(reqLine)}  ${escapeHtml(resLine)}</div>
-    ${!pass && trace.failure_detail ? `<div class="detail" style="margin-top:6px;color:var(--red)">${escapeHtml(trace.failure_detail)}</div>` : ""}
-    <details style="margin-top:8px">
-      <summary>response body</summary>
-      <pre>${escapeHtml(JSON.stringify(trace.response?.body, null, 2) ?? "")}</pre>
-    </details>
-  `;
-  return div;
 }
 
 function escapeHtml(s) {

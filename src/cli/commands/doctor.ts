@@ -5,6 +5,7 @@ import { Command } from "commander";
 import pc from "picocolors";
 import { findRepoRoot, pathsFor } from "../../core/paths.js";
 import { readConfig } from "../../core/config.js";
+import { envConfigFile, readEnvConfig } from "../../core/env.js";
 
 export function doctorCommand(): Command {
   return new Command("doctor")
@@ -53,22 +54,42 @@ export function doctorCommand(): Command {
       if (fs.existsSync(paths.configFile)) {
         try {
           const c = readConfig(paths);
-          ok(`Config readable; stack=${c.stack.language}/${c.stack.test_framework}, target=${c.default_target}`);
-          // 6. Target reachable
-          const t = c.targets[c.default_target];
-          if (t?.url) {
-            try {
-              const r = await fetch(t.url, { method: "GET" });
-              ok(`Target ${t.url} reachable (status ${r.status})`);
-            } catch (e) {
-              warn(`Target ${t.url} unreachable (${(e as Error).message}) — start your dev server before live-validating`);
-            }
-          }
+          ok(`Config readable; stack=${c.stack.language}/${c.stack.test_framework}`);
         } catch (e) {
           fail(`Config malformed: ${(e as Error).message}`);
         }
       } else {
         warn(`No config at ${path.relative(process.cwd(), paths.configFile)} — run: productos init claude`);
+      }
+
+      // 6. env.yaml readable
+      const envFile = envConfigFile(paths);
+      if (fs.existsSync(envFile)) {
+        try {
+          const env = readEnvConfig(paths);
+          if (env) {
+            ok(`env.yaml readable; ${env.setup.length} setup command(s), healthcheck ${env.healthcheck ? "configured" : "missing"}`);
+            // 7. Healthcheck
+            if (env.healthcheck?.url) {
+              try {
+                const r = await fetch(env.healthcheck.url, { method: "GET" });
+                if (r.status === env.healthcheck.expect_status) {
+                  ok(`Env healthy: ${env.healthcheck.url} returned ${r.status}`);
+                } else {
+                  warn(`Env healthcheck mismatch: ${env.healthcheck.url} returned ${r.status}, expected ${env.healthcheck.expect_status} — run \`productos env up\``);
+                }
+              } catch (e) {
+                warn(`Env not healthy: ${env.healthcheck.url} unreachable (${(e as Error).message}) — run \`productos env up\``);
+              }
+            } else {
+              warn("env.yaml has no healthcheck — Claude won't know if the env is up");
+            }
+          }
+        } catch (e) {
+          fail(`env.yaml malformed: ${(e as Error).message}`);
+        }
+      } else {
+        warn(`No env.yaml at ${path.relative(process.cwd(), envFile)} — run: productos init claude`);
       }
     });
 }

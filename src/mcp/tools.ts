@@ -15,6 +15,8 @@ import {
   writeTruth,
 } from "../core/truth.js";
 import { nextTruthId } from "../core/ids.js";
+import { readEnvConfig } from "../core/env.js";
+import { readConfig } from "../core/config.js";
 
 export interface McpTool {
   name: string;
@@ -195,12 +197,20 @@ const RecordOutcomeInput = z.object({
   truth_id: z.string().regex(/^T-\d+$/),
   result: z.enum(["pass", "fail", "skip"]),
   detail: z.string().optional(),
+  captured_output: z
+    .string()
+    .optional()
+    .describe("Truncated stdout/stderr from the test run; helps debug failures"),
+  test_file: z
+    .string()
+    .optional()
+    .describe("Path to the test file Claude actually ran (e.g. productos/tests/proposed/T-XXXX.test.ts)"),
 });
 
 const recordOutcome: McpTool = {
   name: "productos_record_outcome",
   description:
-    "Record the outcome of a test run against a Truth claim. Updates last_test_run on the Truth frontmatter; a fail on a validated Truth bumps status to 'contested'.",
+    "Record the outcome of validating a Truth claim. Call this AFTER you (Claude) ran the proposed test against the live env. Updates last_test_run on the Truth frontmatter; a fail on a validated Truth bumps status to 'contested'. Include captured_output so failures are debuggable from the vet UI.",
   inputSchema: zodToInputSchema(RecordOutcomeInput),
   handler: async (raw, paths) => {
     const args = RecordOutcomeInput.parse(raw);
@@ -209,13 +219,53 @@ const recordOutcome: McpTool = {
     doc.frontmatter.last_test_run = {
       at: nowIso(),
       result: args.result,
-      detail: args.detail,
+      detail:
+        [args.detail, args.captured_output ? `--- output ---\n${args.captured_output}` : null]
+          .filter(Boolean)
+          .join("\n\n") || undefined,
     };
+    if (args.test_file) {
+      doc.frontmatter.test_file = args.test_file;
+    }
     if (args.result === "fail" && doc.frontmatter.status === "validated") {
       doc.frontmatter.status = "contested";
     }
     writeTruth(paths, doc);
     return { ok: true, id: args.truth_id, status: doc.frontmatter.status };
+  },
+};
+
+// -- get_env ----------------------------------------------------------------
+
+const GetEnvInput = z.object({});
+
+const getEnv: McpTool = {
+  name: "productos_get_env",
+  description:
+    "Get the user's dev-environment configuration (productos/env.yaml). Use this to know how to bring up the live stack before validating a Truth claim. Returns setup commands, healthcheck details, reset commands, and the staging_dir where you should write proposed tests. To actually drive the env, shell out to: `productos env up`, `productos env check`, `productos env reset`, `productos env down`.",
+  inputSchema: zodToInputSchema(GetEnvInput),
+  handler: async (_raw, paths) => {
+    const env = readEnvConfig(paths);
+    const config = readConfig(paths);
+    if (!env) {
+      return {
+        configured: false,
+        message:
+          "No productos/env.yaml — ask the user to run `productos init claude` first, then edit env.yaml for their stack.",
+        stack: config.stack,
+      };
+    }
+    return {
+      configured: true,
+      env,
+      stack: config.stack,
+      cli_helpers: {
+        up: "productos env up",
+        check: "productos env check",
+        reset: "productos env reset",
+        down: "productos env down",
+      },
+    };
   },
 };
 
@@ -345,6 +395,7 @@ export const tools: McpTool[] = [
   getTruth,
   recordOutcome,
   recordSync,
+  getEnv,
   getCoverageGaps,
   getProductGaps,
 ];

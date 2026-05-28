@@ -1,7 +1,7 @@
 ---
 name: productos-feature
 description: Use when the user is planning a new feature before writing code — to decompose the feature description into proposed Product Truth claims (intended behavior) that get stored as status=planned. Triggers on "I'm planning a [feature]", "let's spec a new [feature] in productos", "vet this feature plan". Surfaces ambiguities as questions, not assumptions. Once code lands, ProductOS will compare planned Truth against the analyzer's reading of the implementation and surface drift.
-version: 0.0.1
+version: 0.0.2
 ---
 
 # ProductOS — Feature Planning Skill
@@ -85,6 +85,10 @@ You **ask the user** before proposing. Once they answer (e.g., "logged-in only; 
 8. `ui-flow` — User on /wishlist sees their saved products; clicking "remove" makes the product disappear immediately
 
 All with `status: planned`, no `code_ref`. Each `proposed_test` writes the test as if the endpoints/selectors existed (and the user accepts that assumption — the test will only run after the code lands).
+
+## Validation is not run on planned Truth
+
+Planned Truth has no code yet, so there's nothing to validate against. Once the code lands, the user runs `productos truth refresh feature <name>` and the `productos-analyze` skill takes over — re-reads the implementation, compares it to the planned claims, and live-validates each one against the dev env (per `productos/env.yaml`).
 
 ## After proposing
 
