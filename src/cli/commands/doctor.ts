@@ -6,10 +6,11 @@ import pc from "picocolors";
 import { findRepoRoot, pathsFor } from "../../core/paths.js";
 import { readConfig } from "../../core/config.js";
 import { envConfigFile, readEnvConfig } from "../../core/env.js";
+import { listAreas, listFeatures, productsRoot } from "../../core/product.js";
 
 export function doctorCommand(): Command {
   return new Command("doctor")
-    .description("Check ProductOS install, runtime detection, and reachability")
+    .description("Check ProductOS install, runtime detection, env reachability, and product-truth state")
     .action(async () => {
       const ok = (msg: string) => console.log(pc.green("✓"), msg);
       const warn = (msg: string) => console.log(pc.yellow("!"), msg);
@@ -21,20 +22,23 @@ export function doctorCommand(): Command {
       else fail(`Claude Code not detected at ${claudeDir}`);
 
       // 2. Skills installed
-      const skills = ["productos-analyze", "productos-feature"];
-      for (const s of skills) {
+      for (const s of ["productos-analyze", "productos-feature"]) {
         const p = path.join(claudeDir, "skills", s, "SKILL.md");
         if (fs.existsSync(p)) ok(`Skill installed: ${s}`);
         else warn(`Skill missing: ${s}  (run: productos init claude)`);
       }
 
-      // 3. MCP registered (in either project or user settings)
+      // 3. MCP registered
       const projSettings = path.join(process.cwd(), ".claude", "settings.json");
       const userSettings = path.join(claudeDir, "settings.json");
       const settingsCheck = (p: string) => {
         if (!fs.existsSync(p)) return null;
-        const s = JSON.parse(fs.readFileSync(p, "utf-8"));
-        return s.mcpServers?.productos ? p : null;
+        try {
+          const s = JSON.parse(fs.readFileSync(p, "utf-8"));
+          return s.mcpServers?.productos ? p : null;
+        } catch {
+          return null;
+        }
       };
       const where = settingsCheck(projSettings) ?? settingsCheck(userSettings);
       if (where) ok(`MCP server registered in ${where}`);
@@ -48,21 +52,31 @@ export function doctorCommand(): Command {
       }
       const paths = pathsFor(repoRoot);
       if (fs.existsSync(paths.root)) ok(`productos/ scaffolded at ${path.relative(process.cwd(), paths.root) || "."}`);
-      else warn(`productos/ not scaffolded (run: productos init claude)`);
+      else warn("productos/ not scaffolded (run: productos init claude)");
 
-      // 5. Config readable
+      // 5. Config
       if (fs.existsSync(paths.configFile)) {
         try {
           const c = readConfig(paths);
-          ok(`Config readable; stack=${c.stack.language}/${c.stack.test_framework}`);
+          ok(`Config readable; stack=${c.stack.language}`);
         } catch (e) {
           fail(`Config malformed: ${(e as Error).message}`);
         }
       } else {
-        warn(`No config at ${path.relative(process.cwd(), paths.configFile)} — run: productos init claude`);
+        warn(`No config at ${path.relative(process.cwd(), paths.configFile)}`);
       }
 
-      // 6. env.yaml readable
+      // 6. Product truth state
+      if (fs.existsSync(productsRoot(paths))) {
+        const areas = listAreas(paths);
+        const features = listFeatures(paths);
+        const totalBehaviors = features.reduce((s, f) => s + f.frontmatter.behaviors.length, 0);
+        ok(`Product truth: ${areas.length} area(s), ${features.length} feature(s), ${totalBehaviors} behavior(s)`);
+      } else {
+        warn("productos/products/ not scaffolded");
+      }
+
+      // 7. env.yaml + healthcheck per env
       const envFile = envConfigFile(paths);
       if (fs.existsSync(envFile)) {
         try {
@@ -70,7 +84,6 @@ export function doctorCommand(): Command {
           if (config) {
             const envCount = Object.keys(config.envs).length;
             ok(`env.yaml readable; ${envCount} env(s) configured, default=${config.default_env}`);
-            // 7. Healthcheck each env (best-effort, short timeout)
             for (const [name, env] of Object.entries(config.envs)) {
               const tag = env.external ? " [external]" : env.read_only ? " [read-only]" : "";
               if (env.healthcheck?.url) {
@@ -96,7 +109,7 @@ export function doctorCommand(): Command {
           fail(`env.yaml malformed: ${(e as Error).message}`);
         }
       } else {
-        warn(`No env.yaml at ${path.relative(process.cwd(), envFile)} — run: productos init claude`);
+        warn(`No env.yaml at ${path.relative(process.cwd(), envFile)}`);
       }
     });
 }

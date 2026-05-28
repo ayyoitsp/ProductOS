@@ -1,20 +1,18 @@
 import { z } from "zod";
 import { ProductosPaths } from "../core/paths.js";
 import {
-  ClaimType,
-  Fixture,
-  ProposedTest,
-  Scope,
-  TruthFrontmatter,
-  TruthStatus,
-} from "../core/types.js";
-import {
-  listTruth,
+  Behavior,
+  BehaviorStatus,
+  Evidence,
+  EvidenceKind,
+  FeatureFrontmatter,
+  FeatureStatus,
+  listAreas,
+  listFeatures,
   nowIso,
-  readTruth,
-  writeTruth,
-} from "../core/truth.js";
-import { nextTruthId } from "../core/ids.js";
+  readFeatureById,
+  writeFeature,
+} from "../core/product.js";
 import { readEnvConfig, resolveEnv } from "../core/env.js";
 import { readConfig } from "../core/config.js";
 
@@ -25,229 +23,258 @@ export interface McpTool {
   handler: (args: unknown, paths: ProductosPaths) => Promise<unknown>;
 }
 
-// -- propose_truth ----------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Reading product truth
 
-const ProposeTruthInput = z.object({
-  claim: z.string().min(20, "Claim must be at least 20 characters — make it specific"),
-  type: ClaimType,
-  code_ref: z
-    .array(z.string())
-    .min(1, "code_ref must cite at least one file (the falsifiability gate)"),
-  proposed_test: ProposedTest,
-  fixtures: z.array(Fixture).default([]),
-  scope: Scope.optional(),
-  proposed_by: z.string().default("ai-runtime"),
+const ListFeaturesInput = z.object({
+  area: z.string().optional(),
+  status: FeatureStatus.optional(),
 });
 
-const proposeTruth: McpTool = {
-  name: "productos_propose_truth",
+const listFeaturesTool: McpTool = {
+  name: "productos_list_features",
   description:
-    "Propose a Product Truth claim about existing code, paired with the executable test that verifies it. Each proposal MUST cite the code refs (file:lines) it was derived from. Sets status='proposed' — never set status=validated; only humans validate via the vet UI.",
-  inputSchema: zodToInputSchema(ProposeTruthInput),
+    "List all features in product truth, optionally filtered by area (e.g. 'auth') or status. Use this when you need to know what features exist before proposing or updating. Returns id, title, status, area, behavior count.",
+  inputSchema: zodToInputSchema(ListFeaturesInput),
   handler: async (raw, paths) => {
-    const args = ProposeTruthInput.parse(raw);
-    const id = nextTruthId(paths);
-    const fm = TruthFrontmatter.parse({
-      id,
-      claim: args.claim,
-      type: args.type,
-      status: "proposed",
-      scope: args.scope,
-      code_ref: args.code_ref,
-      proposed_test: args.proposed_test,
-      fixtures: args.fixtures,
-      proposed_by: args.proposed_by,
-      proposed_at: nowIso(),
-      sync: {},
-      contested_by: [],
-    });
-    writeTruth(paths, { frontmatter: fm, body: "" });
+    const args = ListFeaturesInput.parse(raw);
+    let features = listFeatures(paths);
+    if (args.area) features = features.filter((f) => f.frontmatter.id.startsWith(args.area + "/"));
+    if (args.status) features = features.filter((f) => f.frontmatter.status === args.status);
     return {
-      ok: true,
-      id,
-      next_step:
-        "Truth queued. Tell the user to open the vet UI to live-validate.",
-    };
-  },
-};
-
-// -- propose_planned_truth --------------------------------------------------
-
-const ProposePlannedTruthInput = z.object({
-  claim: z.string().min(20),
-  type: ClaimType,
-  proposed_test: ProposedTest,
-  fixtures: z.array(Fixture).default([]),
-  scope: Scope,
-  proposed_by: z.string().default("ai-runtime"),
-  notes: z.string().optional(),
-});
-
-const proposePlannedTruth: McpTool = {
-  name: "productos_propose_planned_truth",
-  description:
-    "Propose a planned Product Truth claim for a feature being designed but not yet implemented. Sets status='planned' with no code_ref (will be populated when code lands and productos truth refresh runs). Use when the user is decomposing a feature description into intended behavior.",
-  inputSchema: zodToInputSchema(ProposePlannedTruthInput),
-  handler: async (raw, paths) => {
-    const args = ProposePlannedTruthInput.parse(raw);
-    const id = nextTruthId(paths);
-    const fm = TruthFrontmatter.parse({
-      id,
-      claim: args.claim,
-      type: args.type,
-      status: "planned",
-      scope: args.scope,
-      code_ref: [],
-      proposed_test: args.proposed_test,
-      fixtures: args.fixtures,
-      proposed_by: args.proposed_by,
-      proposed_at: nowIso(),
-      sync: {},
-      contested_by: [],
-    });
-    writeTruth(paths, {
-      frontmatter: fm,
-      body: args.notes ? args.notes.trim() : "",
-    });
-    return { ok: true, id, status: "planned" };
-  },
-};
-
-// -- propose_contested_truth ------------------------------------------------
-
-const ContestedEvidence = z.object({
-  source: z.string(),
-  url: z.string().optional(),
-  summary: z.string(),
-  observed_at: z.string().optional(),
-});
-
-const ProposeContestedTruthInput = z.object({
-  truth_id: z.string().regex(/^T-\d+$/),
-  evidence: ContestedEvidence,
-});
-
-const proposeContestedTruth: McpTool = {
-  name: "productos_propose_contested_truth",
-  description:
-    "Flag an existing validated Truth as contested by external evidence (customer report, support ticket, observability alert). Sets status='contested' and appends the evidence to contested_by. Use after reading from the user's support/observability MCP and finding feedback that contradicts a validated claim.",
-  inputSchema: zodToInputSchema(ProposeContestedTruthInput),
-  handler: async (raw, paths) => {
-    const args = ProposeContestedTruthInput.parse(raw);
-    const doc = readTruth(paths, args.truth_id);
-    if (!doc) throw new Error(`truth ${args.truth_id} not found`);
-    doc.frontmatter.status = "contested";
-    doc.frontmatter.contested_by = [
-      ...doc.frontmatter.contested_by,
-      args.evidence,
-    ];
-    writeTruth(paths, doc);
-    return { ok: true, id: args.truth_id, status: "contested" };
-  },
-};
-
-// -- list_truth -------------------------------------------------------------
-
-const ListTruthInput = z.object({
-  status: TruthStatus.optional(),
-  feature: z.string().optional(),
-});
-
-const listTruthTool: McpTool = {
-  name: "productos_list_truth",
-  description:
-    "List Product Truth claims, optionally filtered by status (planned, proposed, validated, stale, rejected, contested) or by feature.",
-  inputSchema: zodToInputSchema(ListTruthInput),
-  handler: async (raw, paths) => {
-    const args = ListTruthInput.parse(raw);
-    const docs = listTruth(paths, args);
-    return {
-      count: docs.length,
-      truth: docs.map((d) => ({
-        id: d.frontmatter.id,
-        claim: d.frontmatter.claim,
-        type: d.frontmatter.type,
-        status: d.frontmatter.status,
-        scope: d.frontmatter.scope,
-        code_ref: d.frontmatter.code_ref,
+      count: features.length,
+      features: features.map((f) => ({
+        id: f.frontmatter.id,
+        title: f.frontmatter.title,
+        status: f.frontmatter.status,
+        owners: f.frontmatter.owners,
+        behavior_count: f.frontmatter.behaviors.length,
       })),
     };
   },
 };
 
-// -- get_truth --------------------------------------------------------------
-
-const GetTruthInput = z.object({ id: z.string().regex(/^T-\d+$/) });
-
-const getTruth: McpTool = {
-  name: "productos_get_truth",
-  description: "Fetch a single Truth claim by ID including its proposed_test and full frontmatter.",
-  inputSchema: zodToInputSchema(GetTruthInput),
-  handler: async (raw, paths) => {
-    const args = GetTruthInput.parse(raw);
-    const doc = readTruth(paths, args.id);
-    if (!doc) throw new Error(`truth ${args.id} not found`);
-    return doc;
+const listAreasTool: McpTool = {
+  name: "productos_list_areas",
+  description:
+    "List all product areas (top-level groupings of features in productos/products/). Each area corresponds to a directory and a README.md describing the area's overall purpose.",
+  inputSchema: zodToInputSchema(z.object({})),
+  handler: async (_raw, paths) => {
+    const areas = listAreas(paths);
+    return {
+      count: areas.length,
+      areas: areas.map((a) => ({ slug: a.slug, title: a.title, feature_count: a.features.length })),
+    };
   },
 };
 
-// -- record_outcome ---------------------------------------------------------
-
-const RecordOutcomeInput = z.object({
-  truth_id: z.string().regex(/^T-\d+$/),
-  result: z.enum(["pass", "fail", "skip"]),
-  detail: z.string().optional(),
-  captured_output: z
-    .string()
-    .optional()
-    .describe("Truncated stdout/stderr from the test run; helps debug failures"),
-  test_file: z
-    .string()
-    .optional()
-    .describe("Path to the test file Claude actually ran (e.g. productos/tests/proposed/T-XXXX.test.ts)"),
+const GetFeatureInput = z.object({
+  id: z.string().describe("Feature id like 'auth/signup' — the slash-delimited path under productos/products/"),
 });
 
-const recordOutcome: McpTool = {
-  name: "productos_record_outcome",
+const getFeatureTool: McpTool = {
+  name: "productos_get_feature",
   description:
-    "Record the outcome of validating a Truth claim. Call this AFTER you (Claude) ran the proposed test against the live env. Updates last_test_run on the Truth frontmatter; a fail on a validated Truth bumps status to 'contested'. Include captured_output so failures are debuggable from the vet UI.",
-  inputSchema: zodToInputSchema(RecordOutcomeInput),
+    "Fetch a single feature including all its behaviors, owners, code refs, related features, and narrative body. Use this to consult product truth before proposing changes, or to read the current state of a feature before updating it.",
+  inputSchema: zodToInputSchema(GetFeatureInput),
   handler: async (raw, paths) => {
-    const args = RecordOutcomeInput.parse(raw);
-    const doc = readTruth(paths, args.truth_id);
-    if (!doc) throw new Error(`truth ${args.truth_id} not found`);
-    doc.frontmatter.last_test_run = {
-      at: nowIso(),
-      result: args.result,
-      detail:
-        [args.detail, args.captured_output ? `--- output ---\n${args.captured_output}` : null]
-          .filter(Boolean)
-          .join("\n\n") || undefined,
+    const args = GetFeatureInput.parse(raw);
+    const f = readFeatureById(paths, args.id);
+    if (!f) throw new Error(`Feature "${args.id}" not found in productos/products/`);
+    return {
+      id: f.frontmatter.id,
+      title: f.frontmatter.title,
+      status: f.frontmatter.status,
+      owners: f.frontmatter.owners,
+      implements: f.frontmatter.implements,
+      related: f.frontmatter.related,
+      behaviors: f.frontmatter.behaviors,
+      body: f.body,
     };
-    if (args.test_file) {
-      doc.frontmatter.test_file = args.test_file;
-    }
-    if (args.result === "fail" && doc.frontmatter.status === "validated") {
-      doc.frontmatter.status = "contested";
-    }
-    writeTruth(paths, doc);
-    return { ok: true, id: args.truth_id, status: doc.frontmatter.status };
   },
 };
 
-// -- get_env ----------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Writing product truth
+
+const ProposeFeatureInput = z.object({
+  id: z.string().regex(/^[a-z0-9][a-z0-9/_-]*\/[a-z0-9][a-z0-9_-]*$/, "Must be area/slug, e.g. 'auth/signup'"),
+  title: z.string().min(1),
+  status: FeatureStatus.default("shipped"),
+  owners: z.array(z.string()).default([]),
+  implements: z.array(z.string()).default([]),
+  related: z.array(z.string()).default([]),
+  behaviors: z.array(Behavior).default([]),
+  body: z.string().default(""),
+  proposed_by: z.string().default("ai-runtime"),
+});
+
+const proposeFeature: McpTool = {
+  name: "productos_propose_feature",
+  description:
+    "Create or replace a feature in product truth. For NEW features (no existing file), use this. For UPDATES to an existing feature, prefer `productos_update_feature` (preserves existing body content) or `productos_add_behavior` (just adds one behavior). For planned features (no code yet), set status='planned' and leave `implements: []`.",
+  inputSchema: zodToInputSchema(ProposeFeatureInput),
+  handler: async (raw, paths) => {
+    const args = ProposeFeatureInput.parse(raw);
+    const fm = FeatureFrontmatter.parse({
+      id: args.id,
+      title: args.title,
+      status: args.status,
+      owners: args.owners,
+      implements: args.implements,
+      related: args.related,
+      behaviors: args.behaviors,
+      proposed_by: args.proposed_by,
+      proposed_at: nowIso(),
+    });
+    writeFeature(paths, { frontmatter: fm, body: args.body, filepath: "", url_path: "/" + args.id });
+    return { ok: true, id: args.id, url: `/` + args.id, path: `productos/products/${args.id}.md` };
+  },
+};
+
+const UpdateFeatureInput = z.object({
+  id: z.string(),
+  title: z.string().optional(),
+  status: FeatureStatus.optional(),
+  owners: z.array(z.string()).optional(),
+  implements: z.array(z.string()).optional(),
+  related: z.array(z.string()).optional(),
+  body: z.string().optional(),
+});
+
+const updateFeature: McpTool = {
+  name: "productos_update_feature",
+  description:
+    "Update metadata or body of an existing feature without touching behaviors. To modify behaviors, use `productos_add_behavior`, `productos_update_behavior`, or `productos_remove_behavior`. Any field you omit is left unchanged.",
+  inputSchema: zodToInputSchema(UpdateFeatureInput),
+  handler: async (raw, paths) => {
+    const args = UpdateFeatureInput.parse(raw);
+    const doc = readFeatureById(paths, args.id);
+    if (!doc) throw new Error(`Feature "${args.id}" not found`);
+    if (args.title !== undefined) doc.frontmatter.title = args.title;
+    if (args.status !== undefined) doc.frontmatter.status = args.status;
+    if (args.owners !== undefined) doc.frontmatter.owners = args.owners;
+    if (args.implements !== undefined) doc.frontmatter.implements = args.implements;
+    if (args.related !== undefined) doc.frontmatter.related = args.related;
+    if (args.body !== undefined) doc.body = args.body;
+    writeFeature(paths, doc);
+    return { ok: true, id: args.id };
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Behaviors
+
+const AddBehaviorInput = z.object({
+  feature_id: z.string(),
+  behavior: Behavior,
+});
+
+const addBehavior: McpTool = {
+  name: "productos_add_behavior",
+  description:
+    "Add a new behavior to an existing feature. Behaviors are atomic claims about what the feature DOES — each has a kebab-case id (unique within the feature), a claim sentence, a status (planned/proposed/verified/etc.), and a list of evidence. Use status='proposed' when you've identified the claim from code but haven't verified it; 'verified' only after the human approves (or after a configured policy auto-verifies).",
+  inputSchema: zodToInputSchema(AddBehaviorInput),
+  handler: async (raw, paths) => {
+    const args = AddBehaviorInput.parse(raw);
+    const doc = readFeatureById(paths, args.feature_id);
+    if (!doc) throw new Error(`Feature "${args.feature_id}" not found`);
+    if (doc.frontmatter.behaviors.some((b) => b.id === args.behavior.id)) {
+      throw new Error(`Behavior "${args.behavior.id}" already exists on ${args.feature_id}. Use update_behavior to modify.`);
+    }
+    doc.frontmatter.behaviors.push(args.behavior);
+    writeFeature(paths, doc);
+    return { ok: true, feature_id: args.feature_id, behavior_id: args.behavior.id };
+  },
+};
+
+const UpdateBehaviorInput = z.object({
+  feature_id: z.string(),
+  behavior_id: z.string(),
+  claim: z.string().optional(),
+  status: BehaviorStatus.optional(),
+  last_verified: z.string().optional(),
+  verified_by: z.string().optional(),
+  notes: z.string().optional(),
+});
+
+const updateBehavior: McpTool = {
+  name: "productos_update_behavior",
+  description:
+    "Update an existing behavior's claim, status, notes, or verification timestamp. Use this to mark behaviors as verified after the human approves, or to flag them stale when code referenced changes. To add evidence, use `productos_attach_evidence`. To replace evidence wholesale, set the behavior anew with `productos_remove_behavior` + `productos_add_behavior`.",
+  inputSchema: zodToInputSchema(UpdateBehaviorInput),
+  handler: async (raw, paths) => {
+    const args = UpdateBehaviorInput.parse(raw);
+    const doc = readFeatureById(paths, args.feature_id);
+    if (!doc) throw new Error(`Feature "${args.feature_id}" not found`);
+    const b = doc.frontmatter.behaviors.find((bb) => bb.id === args.behavior_id);
+    if (!b) throw new Error(`Behavior "${args.behavior_id}" not found on ${args.feature_id}`);
+    if (args.claim !== undefined) b.claim = args.claim;
+    if (args.status !== undefined) b.status = args.status;
+    if (args.last_verified !== undefined) b.last_verified = args.last_verified;
+    if (args.verified_by !== undefined) b.verified_by = args.verified_by;
+    if (args.notes !== undefined) b.notes = args.notes;
+    writeFeature(paths, doc);
+    return { ok: true, feature_id: args.feature_id, behavior_id: args.behavior_id, status: b.status };
+  },
+};
+
+const RemoveBehaviorInput = z.object({
+  feature_id: z.string(),
+  behavior_id: z.string(),
+});
+
+const removeBehavior: McpTool = {
+  name: "productos_remove_behavior",
+  description: "Remove a behavior from a feature. Prefer setting status='deprecated' when retiring a behavior whose history matters; remove only when the claim was wrong or never shipped.",
+  inputSchema: zodToInputSchema(RemoveBehaviorInput),
+  handler: async (raw, paths) => {
+    const args = RemoveBehaviorInput.parse(raw);
+    const doc = readFeatureById(paths, args.feature_id);
+    if (!doc) throw new Error(`Feature "${args.feature_id}" not found`);
+    const before = doc.frontmatter.behaviors.length;
+    doc.frontmatter.behaviors = doc.frontmatter.behaviors.filter((b) => b.id !== args.behavior_id);
+    if (doc.frontmatter.behaviors.length === before)
+      throw new Error(`Behavior "${args.behavior_id}" not found on ${args.feature_id}`);
+    writeFeature(paths, doc);
+    return { ok: true };
+  },
+};
+
+const AttachEvidenceInput = z.object({
+  feature_id: z.string(),
+  behavior_id: z.string(),
+  evidence: Evidence,
+});
+
+const attachEvidence: McpTool = {
+  name: "productos_attach_evidence",
+  description:
+    "Attach one piece of evidence (code reference, screenshot path, narrative observation, response capture, etc.) to a specific behavior. Evidence is what lets the human review the behavior and decide ✓ verified vs ✗ contested. Different claim shapes want different evidence: API behaviors → response captures; UI behaviors → screenshots or trace paths; data invariants → query + result; side effects → log/event captures; everything benefits from a code ref so reviewers can navigate to source.",
+  inputSchema: zodToInputSchema(AttachEvidenceInput),
+  handler: async (raw, paths) => {
+    const args = AttachEvidenceInput.parse(raw);
+    const doc = readFeatureById(paths, args.feature_id);
+    if (!doc) throw new Error(`Feature "${args.feature_id}" not found`);
+    const b = doc.frontmatter.behaviors.find((bb) => bb.id === args.behavior_id);
+    if (!b) throw new Error(`Behavior "${args.behavior_id}" not found on ${args.feature_id}`);
+    b.evidence.push({ ...args.evidence, captured_at: args.evidence.captured_at ?? nowIso() });
+    writeFeature(paths, doc);
+    return { ok: true, evidence_count: b.evidence.length };
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Env (unchanged)
 
 const GetEnvInput = z.object({
-  name: z
-    .string()
-    .optional()
-    .describe("Optional env name (e.g. 'local', 'staging'). Omit to get the default env."),
+  name: z.string().optional(),
 });
 
 const getEnv: McpTool = {
   name: "productos_get_env",
   description:
-    "Get a dev-environment configuration from productos/env.yaml. Pass `name` for a specific env (e.g. 'staging'); omit it to get the default env. Returns the env's setup commands, healthcheck details, reset commands, test_env vars, and external/read_only flags. ALSO returns the list of all configured envs and which is default. To actually drive the env, shell out to `productos env <name> <action>` (up | check | reset | down). Respect read_only — never run reset or teardown against a read_only env.",
+    "Get a dev-environment configuration from productos/env.yaml. Pass `name` for a specific env (e.g. 'staging'); omit it to get the default env. Returns setup commands, healthcheck details, reset commands, test_env vars, external/read_only flags, and CLI helper strings. To actually drive the env, shell out to `productos env <name> <action>` (up | check | reset | down). Respect read_only — never run reset or teardown against a read_only env.",
   inputSchema: zodToInputSchema(GetEnvInput),
   handler: async (raw, paths) => {
     const args = GetEnvInput.parse(raw);
@@ -256,8 +283,7 @@ const getEnv: McpTool = {
     if (!config) {
       return {
         configured: false,
-        message:
-          "No productos/env.yaml — ask the user to run `productos init claude` first, then edit env.yaml for their stack.",
+        message: "No productos/env.yaml — ask the user to run `productos init claude` first.",
         stack: projectConfig.stack,
       };
     }
@@ -268,7 +294,6 @@ const getEnv: McpTool = {
       env,
       default_env: config.default_env,
       all_envs: Object.keys(config.envs),
-      staging_dir: config.staging_dir,
       stack: projectConfig.stack,
       cli_helpers: {
         list: "productos env list",
@@ -281,144 +306,64 @@ const getEnv: McpTool = {
   },
 };
 
-// -- record_sync ------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Gaps (derived; read-only)
 
-const RecordSyncInput = z.object({
-  truth_id: z.string().regex(/^T-\d+$/),
-  provider: z.string(),
-  external_id: z.string(),
-  url: z.string().optional(),
-  state: z.string().optional(),
-});
-
-const recordSync: McpTool = {
-  name: "productos_record_sync",
+const getGaps: McpTool = {
+  name: "productos_get_gaps",
   description:
-    "Record that a Truth has been synced to an external ticketing system (Linear, Jira, GitHub Issues, etc.). The runtime is responsible for the actual sync via its own ecosystem MCPs; this tool just records the resulting mapping into the Truth's frontmatter so it travels with the claim across branches.",
-  inputSchema: zodToInputSchema(RecordSyncInput),
-  handler: async (raw, paths) => {
-    const args = RecordSyncInput.parse(raw);
-    const doc = readTruth(paths, args.truth_id);
-    if (!doc) throw new Error(`truth ${args.truth_id} not found`);
-    doc.frontmatter.sync = {
-      ...doc.frontmatter.sync,
-      [args.provider]: {
-        external_id: args.external_id,
-        url: args.url,
-        state: args.state,
-        synced_at: nowIso(),
-      },
-    };
-    writeTruth(paths, doc);
-    return { ok: true, id: args.truth_id, provider: args.provider };
-  },
-};
-
-// -- get_coverage_gaps ------------------------------------------------------
-
-const GetCoverageGapsInput = z.object({
-  scope: z.string().optional(),
-});
-
-const getCoverageGaps: McpTool = {
-  name: "productos_get_coverage_gaps",
-  description:
-    "Return internal coverage gaps: Truth without tests, Truth with failing tests, stale Truth (code changed since last validation). These are engineering-task gaps — outbound candidates for ticketing.",
-  inputSchema: zodToInputSchema(GetCoverageGapsInput),
+    "Return gaps in product truth: features marked 'planned' but with no implements path; behaviors with status 'proposed' (awaiting human verification); behaviors with status 'stale' or 'contested'; features with no behaviors at all. Use this to find what needs attention.",
+  inputSchema: zodToInputSchema(z.object({})),
   handler: async (_raw, paths) => {
-    const docs = listTruth(paths);
-    const gaps: Array<{
-      kind: string;
-      truth_id: string;
-      claim: string;
-      detail?: string;
-    }> = [];
-    for (const d of docs) {
-      const f = d.frontmatter;
-      if (f.status === "stale") {
-        gaps.push({
-          kind: "staleness",
-          truth_id: f.id,
-          claim: f.claim,
-          detail: "Code referenced by this Truth has changed since validation",
-        });
+    const features = listFeatures(paths);
+    const gaps: Array<{ kind: string; feature_id: string; behavior_id?: string; detail?: string }> = [];
+    for (const f of features) {
+      const fm = f.frontmatter;
+      if (fm.status === "planned" && fm.implements.length === 0) {
+        gaps.push({ kind: "planned_no_implementation", feature_id: fm.id, detail: "Planned feature with no code path linked yet" });
       }
-      if (f.status === "contested") {
-        gaps.push({
-          kind: "contested",
-          truth_id: f.id,
-          claim: f.claim,
-          detail:
-            f.contested_by.length > 0
-              ? `Contested by: ${f.contested_by.map((c) => c.summary).join("; ")}`
-              : "Marked contested",
-        });
+      if (fm.behaviors.length === 0) {
+        gaps.push({ kind: "no_behaviors", feature_id: fm.id, detail: "Feature has no behaviors documented" });
       }
-      if (f.status === "validated" && !f.test_file) {
-        gaps.push({
-          kind: "no_test",
-          truth_id: f.id,
-          claim: f.claim,
-          detail: "Validated but no materialized test (run `productos test generate`)",
-        });
-      }
-      if (f.last_test_run?.result === "fail") {
-        gaps.push({
-          kind: "failing_test",
-          truth_id: f.id,
-          claim: f.claim,
-          detail: f.last_test_run.detail,
-        });
+      for (const b of fm.behaviors) {
+        if (b.status === "proposed") {
+          gaps.push({ kind: "awaiting_verification", feature_id: fm.id, behavior_id: b.id, detail: "Proposed; awaiting human verification" });
+        }
+        if (b.status === "stale") {
+          gaps.push({ kind: "stale", feature_id: fm.id, behavior_id: b.id, detail: "Code referenced changed since last verification" });
+        }
+        if (b.status === "contested") {
+          gaps.push({ kind: "contested", feature_id: fm.id, behavior_id: b.id, detail: b.notes });
+        }
+        if (b.status === "verified" && b.evidence.length === 0) {
+          gaps.push({ kind: "verified_no_evidence", feature_id: fm.id, behavior_id: b.id, detail: "Verified but no evidence attached" });
+        }
       }
     }
     return { count: gaps.length, gaps };
   },
 };
 
-// -- get_product_gaps -------------------------------------------------------
-
-const GetProductGapsInput = z.object({});
-
-const getProductGaps: McpTool = {
-  name: "productos_get_product_gaps",
-  description:
-    "Return product-level gaps: contested Truth (validated claims that external feedback contradicts). Inbound from the user's support/observability MCPs. Typically translates to product decisions, not engineering tickets.",
-  inputSchema: zodToInputSchema(GetProductGapsInput),
-  handler: async (_raw, paths) => {
-    const docs = listTruth(paths, { status: "contested" });
-    return {
-      count: docs.length,
-      gaps: docs.map((d) => ({
-        truth_id: d.frontmatter.id,
-        claim: d.frontmatter.claim,
-        evidence: d.frontmatter.contested_by,
-      })),
-    };
-  },
-};
-
-// -- registry ---------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Registry
 
 export const tools: McpTool[] = [
-  proposeTruth,
-  proposePlannedTruth,
-  proposeContestedTruth,
-  listTruthTool,
-  getTruth,
-  recordOutcome,
-  recordSync,
+  listAreasTool,
+  listFeaturesTool,
+  getFeatureTool,
+  proposeFeature,
+  updateFeature,
+  addBehavior,
+  updateBehavior,
+  removeBehavior,
+  attachEvidence,
   getEnv,
-  getCoverageGaps,
-  getProductGaps,
+  getGaps,
 ];
 
-// -- helpers ----------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Helpers
 
-/**
- * Render a zod schema as a JSON-Schema-ish object for the MCP tool definition.
- * We do this by hand rather than pulling in `zod-to-json-schema` so we keep
- * deps light. Covers the shapes we actually use.
- */
 function zodToInputSchema(schema: z.ZodObject<z.ZodRawShape>): Record<string, unknown> {
   const shape = schema.shape;
   const properties: Record<string, unknown> = {};
@@ -431,7 +376,6 @@ function zodToInputSchema(schema: z.ZodObject<z.ZodRawShape>): Record<string, un
 }
 
 function zodFieldToJsonSchema(def: z.ZodTypeAny): Record<string, unknown> {
-  // Unwrap optional/default/effects to get the inner type.
   let inner: z.ZodTypeAny = def;
   while (
     inner instanceof z.ZodOptional ||
@@ -441,13 +385,15 @@ function zodFieldToJsonSchema(def: z.ZodTypeAny): Record<string, unknown> {
     if (inner instanceof z.ZodEffects) inner = inner.innerType();
     else inner = inner._def.innerType;
   }
-  if (inner instanceof z.ZodString) return { type: "string", description: (def as { description?: string }).description };
+  if (inner instanceof z.ZodString) {
+    const s: Record<string, unknown> = { type: "string" };
+    if (def.description) s.description = def.description;
+    return s;
+  }
   if (inner instanceof z.ZodNumber) return { type: "number" };
   if (inner instanceof z.ZodBoolean) return { type: "boolean" };
-  if (inner instanceof z.ZodEnum)
-    return { type: "string", enum: inner.options };
-  if (inner instanceof z.ZodArray)
-    return { type: "array", items: zodFieldToJsonSchema(inner.element) };
+  if (inner instanceof z.ZodEnum) return { type: "string", enum: inner.options };
+  if (inner instanceof z.ZodArray) return { type: "array", items: zodFieldToJsonSchema(inner.element) };
   if (inner instanceof z.ZodObject) {
     const props: Record<string, unknown> = {};
     const req: string[] = [];
@@ -460,6 +406,9 @@ function zodFieldToJsonSchema(def: z.ZodTypeAny): Record<string, unknown> {
   }
   if (inner instanceof z.ZodRecord) {
     return { type: "object", additionalProperties: zodFieldToJsonSchema(inner.valueSchema) };
+  }
+  if (inner instanceof z.ZodUnion) {
+    return { oneOf: inner.options.map((o: z.ZodTypeAny) => zodFieldToJsonSchema(o)) };
   }
   if (inner instanceof z.ZodUnknown) return {};
   return {};

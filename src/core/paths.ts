@@ -5,17 +5,14 @@ export interface ProductosPaths {
   repoRoot: string;
   root: string;             // <repo>/productos
   configFile: string;       // <repo>/productos/config.yaml
-  truthDir: string;         // <repo>/productos/truth
-  tracesDir: string;        // <repo>/productos/traces
-  fixturesDir: string;      // <repo>/productos/fixtures
-  testsDir: string;         // <repo>/productos/tests
-  localDir: string;         // <repo>/productos/.local
+  productsDir: string;      // <repo>/productos/products
+  evidenceDir: string;      // <repo>/productos/evidence
+  localDir: string;         // <repo>/productos/.local (gitignored)
   cacheDir: string;         // <repo>/productos/.local/cache
   blobsDir: string;         // <repo>/productos/.local/blobs
-  runtimeDb: string;        // <repo>/productos/.local/runtime.db
 }
 
-/** Walk up from `start` to find a directory containing a `productos/` folder. */
+/** Walk up from `start` to find a directory containing a `productos/` folder, or a .git repo. */
 export function findRepoRoot(start: string = process.cwd()): string | null {
   let dir = path.resolve(start);
   while (true) {
@@ -33,28 +30,16 @@ export function pathsFor(repoRoot: string): ProductosPaths {
     repoRoot,
     root,
     configFile: path.join(root, "config.yaml"),
-    truthDir: path.join(root, "truth"),
-    tracesDir: path.join(root, "traces"),
-    fixturesDir: path.join(root, "fixtures"),
-    testsDir: path.join(root, "tests"),
+    productsDir: path.join(root, "products"),
+    evidenceDir: path.join(root, "evidence"),
     localDir: path.join(root, ".local"),
     cacheDir: path.join(root, ".local", "cache"),
     blobsDir: path.join(root, ".local", "blobs"),
-    runtimeDb: path.join(root, ".local", "runtime.db"),
   };
 }
 
 export function ensureDirs(p: ProductosPaths): void {
-  for (const d of [
-    p.root,
-    p.truthDir,
-    p.tracesDir,
-    p.fixturesDir,
-    p.testsDir,
-    p.localDir,
-    p.cacheDir,
-    p.blobsDir,
-  ]) {
+  for (const d of [p.root, p.productsDir, p.evidenceDir, p.localDir, p.cacheDir, p.blobsDir]) {
     fs.mkdirSync(d, { recursive: true });
   }
 }

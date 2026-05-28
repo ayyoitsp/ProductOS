@@ -9,7 +9,7 @@ import { resolvePathsOrThrow } from "../core/paths.js";
 
 export async function startMcpServer(): Promise<void> {
   const server = new Server(
-    { name: "productos", version: "0.0.3" },
+    { name: "productos", version: "0.1.0" },
     { capabilities: { tools: {} } }
   );
 

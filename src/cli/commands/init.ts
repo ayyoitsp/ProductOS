@@ -14,13 +14,14 @@ import {
   writeConfig,
 } from "../../core/config.js";
 import { envConfigFile, starterEnvYaml } from "../../core/env.js";
+import { ensureProductsDirs, topReadmePath, areaReadmePath, featureFilePath } from "../../core/product.js";
 
 const SUPPORTED_RUNTIMES = ["claude"] as const;
 
 export function initCommand(): Command {
   return new Command("init")
     .description("Install ProductOS into an AI runtime and scaffold productos/ in this repo")
-    .argument("<runtime>", `Runtime to install into: ${SUPPORTED_RUNTIMES.join(" | ")}`)
+    .argument("<runtime>", `Runtime: ${SUPPORTED_RUNTIMES.join(" | ")}`)
     .option("--update", "Refresh skill files (overwrite existing)")
     .option("--uninstall", "Remove ProductOS from the runtime")
     .action(async (runtime: string, opts: { update?: boolean; uninstall?: boolean }) => {
@@ -36,7 +37,7 @@ export function initCommand(): Command {
         return;
       }
 
-      // 1. Install skills + register MCP in the runtime
+      // 1. Install skills + register MCP
       const install = installClaudeSkills({ update: opts.update });
       for (const s of install.installed) {
         console.log(pc.green("✓"), `Installed skill: ~/.claude/skills/${s}/`);
@@ -46,30 +47,21 @@ export function initCommand(): Command {
       }
       console.log(pc.green("✓"), `MCP server registered in ${install.mcpRegisteredAt}`);
 
-      // 2. Scaffold productos/ in the repo
+      // 2. Scaffold productos/ + productos/products/
       const repoRoot = findRepoRoot(process.cwd()) ?? process.cwd();
       const paths = pathsFor(repoRoot);
       ensureDirs(paths);
-      console.log(pc.green("✓"), `Created ${path.relative(process.cwd(), paths.root)}/ (truth/, traces/, fixtures/, tests/)`);
+      ensureProductsDirs(paths);
 
-      // 3. Write config if it doesn't exist
+      // 3. Write config if missing
       if (!fs.existsSync(paths.configFile)) {
         const stack = detectStack(repoRoot);
         const config = defaultConfigFor({ stack });
         writeConfig(paths, config);
-        console.log(
-          pc.green("✓"),
-          `Wrote ${path.relative(process.cwd(), paths.configFile)} (stack: ${stack.language}/${stack.test_framework})`
-        );
-      } else {
-        const config = readConfig(paths);
-        console.log(
-          pc.yellow("→"),
-          `${path.relative(process.cwd(), paths.configFile)} already exists (stack: ${config.stack.language}/${config.stack.test_framework})`
-        );
+        console.log(pc.green("✓"), `Wrote ${rel(paths.configFile)} (stack: ${stack.language})`);
       }
 
-      // 4. Scaffold productos/env.yaml if missing
+      // 4. Scaffold env.yaml
       const envFile = envConfigFile(paths);
       if (!fs.existsSync(envFile)) {
         const hasDocker =
@@ -78,27 +70,37 @@ export function initCommand(): Command {
           fs.existsSync(path.join(repoRoot, "compose.yaml"));
         const stack = readConfig(paths).stack;
         fs.writeFileSync(envFile, starterEnvYaml({ language: stack.language, hasDocker }), "utf-8");
-        console.log(
-          pc.green("✓"),
-          `Wrote ${path.relative(process.cwd(), envFile)} — ${pc.bold("edit this!")} It tells Claude how to bring up your dev stack.`
-        );
-      } else {
-        console.log(pc.yellow("→"), `${path.relative(process.cwd(), envFile)} already exists`);
+        console.log(pc.green("✓"), `Wrote ${rel(envFile)} — ${pc.bold("edit this!")} It tells Claude how to bring up your dev stack.`);
       }
 
-      // 5. Add productos/.local/ and productos/tests/proposed/ to .gitignore
-      ensureGitignore(repoRoot);
-      console.log(pc.green("✓"), "Added gitignore entries for productos local-only state");
+      // 5. Scaffold top-level README + an example area + an example feature
+      const topReadme = topReadmePath(paths);
+      if (!fs.existsSync(topReadme)) {
+        fs.writeFileSync(topReadme, EXAMPLE_TOP_README, "utf-8");
+        console.log(pc.green("✓"), `Wrote ${rel(topReadme)}`);
+      }
+      const exampleAreaReadme = areaReadmePath(paths, "example");
+      if (!fs.existsSync(exampleAreaReadme)) {
+        fs.mkdirSync(path.dirname(exampleAreaReadme), { recursive: true });
+        fs.writeFileSync(exampleAreaReadme, EXAMPLE_AREA_README, "utf-8");
+        const exampleFeature = featureFilePath(paths, "example/hello");
+        fs.writeFileSync(exampleFeature, EXAMPLE_FEATURE, "utf-8");
+        console.log(pc.green("✓"), `Wrote ${rel(exampleAreaReadme)} and ${rel(exampleFeature)} — ${pc.dim("delete these once you have real product truth")}`);
+      }
 
-      // 6. Next steps
+      // 6. gitignore
+      ensureGitignore(repoRoot);
+      console.log(pc.green("✓"), "Added gitignore entries for productos/.local/");
+
+      // 7. Next steps
       console.log();
       console.log(pc.bold("Next:"));
       console.log(`  1. ${pc.bold("Edit productos/env.yaml")} — set the right setup commands and healthcheck URL for your stack.`);
-      console.log("  2. Verify the env config works: `productos env up` (uses default env: `local`)");
-      console.log("  3. In another terminal: `productos serve` (vet UI on localhost:" + readConfig(paths).ui_port + ")");
-      console.log("  4. Open Claude Code in this repo. Say: \"do a ProductOS pass on this codebase\"");
-      console.log("     — Claude reads the code, proposes Truth claims, drives the live env to validate each,");
-      console.log("       and reports outcomes. You review and approve in the vet UI.");
+      console.log("  2. In another terminal: `productos serve` — opens your product-truth site at http://localhost:" + readConfig(paths).ui_port);
+      console.log("  3. Open Claude Code in this repo. Say: `do a ProductOS pass on this codebase`");
+      console.log("     — Claude reads your code, proposes features + behaviors,");
+      console.log("       drives the live env to gather evidence, and writes the markup directly into productos/products/.");
+      console.log("     You review the rendered site, approve behaviors with `productos product verify`, and commit the diff.");
     });
 }
 
@@ -122,7 +124,7 @@ function detectStack(repoRoot: string): { language: "typescript" | "javascript" 
 
 function ensureGitignore(repoRoot: string): void {
   const gi = path.join(repoRoot, ".gitignore");
-  const wanted = ["productos/.local/", "productos/tests/proposed/"];
+  const wanted = ["productos/.local/"];
   if (!fs.existsSync(gi)) {
     fs.writeFileSync(gi, `# ProductOS local-only state\n${wanted.join("\n")}\n`);
     return;
@@ -134,3 +136,94 @@ function ensureGitignore(repoRoot: string): void {
   const sep = content.endsWith("\n") ? "" : "\n";
   fs.appendFileSync(gi, `${sep}\n# ProductOS local-only state\n${missing.join("\n")}\n`);
 }
+
+function rel(fp: string): string {
+  return path.relative(process.cwd(), fp);
+}
+
+const EXAMPLE_TOP_README = `---
+title: Product Truth
+---
+
+# Product Truth
+
+This directory contains the **product truth** for this codebase. Each subdirectory under
+\`productos/products/\` is a **product area** (e.g. \`auth/\`, \`checkout/\`); each \`.md\` file
+inside an area is a **feature**, with structured *behaviors* (atomic claims about what the
+feature does) declared in its frontmatter and supporting prose in the body.
+
+Run \`productos serve\` and open http://localhost:7878 to browse this as a website.
+
+When designing a new feature, **consult these files first**. When shipping a feature,
+**update them in the same PR** so the diff captures both the code change and the
+behavior change in one place.
+`;
+
+const EXAMPLE_AREA_README = `---
+title: Example area
+---
+
+# Example area
+
+This is a placeholder area generated by \`productos init\`. Delete it once you have a
+real first area (e.g. \`auth/\`, \`onboarding/\`, \`checkout/\`).
+
+An *area* groups related features. You decide the granularity — start coarse, split when
+an area gets unwieldy.
+`;
+
+const EXAMPLE_FEATURE = `---
+id: example/hello
+title: Hello world example
+status: shipped
+owners: [you]
+implements:
+  - README.md
+related: []
+behaviors:
+  - id: greeting-renders
+    claim: 'The home page shows the text "Hello, world".'
+    status: verified
+    last_verified: 2026-05-28
+    verified_by: example
+    evidence:
+      - kind: code
+        ref: "README.md:1"
+        description: "Hardcoded in the README for the example"
+      - kind: narrative
+        body: "This is what the frontmatter behavior list looks like. Replace this with real claims about a real feature."
+    notes: |
+      This is the smallest possible feature: one behavior with one claim and a
+      mixture of code-reference + narrative evidence. Real features will have
+      multiple behaviors and richer evidence (screenshots, API traces, etc.).
+---
+
+# Hello world example
+
+This is a placeholder feature. Delete it (and the parent \`example/\` area) once you've
+written your first real feature.
+
+## How to structure a real feature
+
+A feature file is a Markdown document with YAML frontmatter:
+
+- **\`id\`**: \`area/slug\` — must match the file location (\`productos/products/<area>/<slug>.md\`).
+- **\`title\`**: human-readable name.
+- **\`status\`**: \`planned\` | \`shipped\` | \`deprecated\`.
+- **\`owners\`**: who maintains this feature.
+- **\`implements\`**: code paths that implement it.
+- **\`related\`**: other feature ids that interact with this one.
+- **\`behaviors\`**: a list of atomic claims (see below).
+
+Each **behavior** has:
+
+- **\`id\`**: kebab-case, unique within the feature.
+- **\`claim\`**: a single sentence describing what the product does.
+- **\`status\`**: \`planned\` | \`proposed\` | \`verified\` | \`stale\` | \`contested\` | \`deprecated\`.
+- **\`evidence\`**: list of artifacts (code refs, screenshots, API traces, narrative observations) that justify the claim.
+- **\`notes\`**: free-form context, gotchas, design rationale.
+
+The body of the markdown file (this section, below the frontmatter) is for narrative
+that doesn't fit neatly into structured fields: UX notes, design rationale, known
+caveats, screenshots in context, etc.
+`;

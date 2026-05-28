@@ -1,114 +1,105 @@
 ---
 name: productos-feature
-description: Use when the user is planning a new feature before writing code — to decompose the feature description into proposed Product Truth claims (intended behavior) that get stored as status=planned. Triggers on "I'm planning a [feature]", "let's spec a new [feature] in productos", "vet this feature plan". Surfaces ambiguities as questions, not assumptions. Once code lands, ProductOS will compare planned Truth against the analyzer's reading of the implementation and surface drift.
-version: 0.0.3
+description: Use when the user is planning a new feature or change before writing code — to consult existing product truth, decompose the plan into a new productos/products/ feature file with planned behaviors, and surface ambiguity as questions. Triggers on "I'm planning a [feature]", "let's spec a new [feature] in productos", "vet this plan against the product". Stored as status=planned in the markdown tree. Once code lands, the productos-analyze skill takes over to verify the implementation against the plan.
+version: 0.1.0
 ---
 
 # ProductOS — Feature Planning Skill
 
-The user is planning a **new feature** that doesn't yet exist in code. Your job is to decompose their feature description into proposed Truth claims — *intended behavior* — stored as `status: planned`. Once the code lands, the `productos-analyze` skill will re-run on the implementation and compare against your planned claims to surface drift.
+The user is planning a **new feature** or a change to an existing one, before writing code. Your job is to:
 
-This is the **upstream** loop. Planned Truth is what makes "did we build what we intended" a question with a real answer.
+1. **Consult existing product truth** to understand what the system already does (avoid duplication, identify integration points).
+2. **Decompose the plan** into a feature markdown file with planned behaviors.
+3. **Surface ambiguity** in the plan as questions to the user — *do not assume reasonable defaults*. The whole point of planning in product truth is to make decisions explicit.
+4. **Write the markdown** via MCP. Status `planned`, no `implements` paths yet, behavior `status: planned`.
 
-## Core principles
+Once the code lands, the `productos-analyze` skill compares the implementation against this planned truth and either confirms it matches or surfaces drift.
 
-1. **Planned Truth has no code yet, but it still must be testable.** Write the test as if the code already existed — concrete endpoints, payloads, selectors. When the code lands, the test should run.
-2. **Surface ambiguity, don't paper over it.** If the plan is unclear ("does the wishlist persist across sessions?"), ask before proposing. Don't assume.
-3. **Use the user's vocabulary.** If they say "wishlist," the claims say "wishlist," not "favorites" or "saved items."
-4. **Don't over-propose.** Aim for the load-bearing claims — usually 4–10 per feature. Over-decomposition is noise.
-5. **`status: planned` only.** Never `proposed` or `validated` from this skill.
+## Step 1 — Consult before proposing
 
-## The planned Truth shape
+Call `productos_list_areas` and `productos_list_features` to see what exists. For any area the new feature touches, call `productos_get_feature` on related features. This is mandatory:
 
-You call `productos_propose_planned_truth` (note the `planned` in the name) with:
+- Avoids duplicating existing behaviors
+- Surfaces integration points ("this new feature changes how login works → check `auth/login`")
+- Lets you reference related features in the new feature's `related:` field
+
+## Step 2 — Decompose the plan into behaviors
+
+Read the user's feature description and list the surfaces it likely touches: API endpoints, UI pages/components, data shapes, side effects, error handling. Draft 4-12 behaviors covering the load-bearing parts. Over-decomposition is noise; under-decomposition hides decisions.
+
+## Step 3 — Identify ambiguities and ask
+
+A claim is ambiguous if it leaves a real decision unspoken:
+
+- Data shape ("does the response include the updated wishlist or just an ack?")
+- Persistence ("per-session, per-device, per-account?")
+- Error paths ("what does removing a missing item return?")
+- Authorization ("is this admin-only?")
+- Limits ("max items? rate limit?")
+
+Ask the user before proposing. Don't assume sensible defaults — surfacing decisions is the entire job.
+
+## Step 4 — Propose the feature
+
+Once decisions are made, write the feature via `productos_propose_feature`:
 
 ```json
 {
-  "claim": "POST /api/wishlist with valid auth and a productId adds the product to the user's wishlist and returns 200 with the updated wishlist",
-  "type": "api-behavior",
-  "scope": { "feature": "wishlist" },
-  "proposed_test": {
-    "framework": "jest",
-    "source": "test('add to wishlist returns updated list', async () => {\n  const res = await request(app)\n    .post('/api/wishlist')\n    .set(authHeaders)\n    .send({ productId: 'p-123' });\n  expect(res.status).toBe(200);\n  expect(res.body.items).toContainEqual(\n    expect.objectContaining({ productId: 'p-123' }));\n});\n"
-  },
-  "fixtures": [
-    { "type": "user", "ref": "fixtures/users/default.json" }
+  "id": "wishlist/manage",
+  "title": "Wishlist add/remove",
+  "status": "planned",
+  "owners": ["peter"],
+  "implements": [],
+  "related": ["auth/login", "products/catalog"],
+  "behaviors": [
+    {
+      "id": "add-to-wishlist",
+      "claim": "POST /api/wishlist with valid auth and a productId adds the product to the user's wishlist and returns 200 with the updated wishlist",
+      "status": "planned",
+      "evidence": []
+    },
+    {
+      "id": "duplicate-adds-idempotent",
+      "claim": "POST /api/wishlist with a productId already in the wishlist returns 200 and the wishlist still contains the product exactly once",
+      "status": "planned",
+      "evidence": []
+    }
   ],
-  "notes": "Assumes the endpoint exists at /api/wishlist and returns the wishlist object with an `items` array. Confirm the response shape with the user if they have a strong preference."
+  "body": "## Background\n\nUsers asked for a wishlist (15 requests in last quarter's user research...).\n\n## UX\n\nThe wishlist tab lives in the user menu. Adding from a product page uses the heart icon.\n\n## Out of scope\n\n- Cross-device sync: deferred to phase 2.\n- Wishlist sharing: deferred."
 }
 ```
 
-## How to work through a feature description
+Conventions:
 
-1. **Read the user's feature description carefully.** Don't fill in gaps.
-2. **List the surfaces** the feature will likely touch: API endpoints, UI pages/components, data shapes, side effects, error handling.
-3. **For each surface, draft 1–3 candidate claims** at the intended-behavior level.
-4. **Identify ambiguities** in each claim. A claim is ambiguous if:
-   - The data shape isn't specified
-   - The persistence model isn't clear (per-session? per-device? per-account?)
-   - Error paths aren't specified
-   - Authorization rules aren't specified
-   - Quantitative limits aren't specified ("max items?", "rate limit?")
-5. **Ask the user clarifying questions** for ambiguities before proposing. *Do not assume reasonable defaults.* The whole point of planned Truth is to surface these decisions.
-6. **Once clarified, propose the planned Truth claims** via `productos_propose_planned_truth`, one at a time.
-7. **Summarize what you proposed** and tell the user to open the vet UI to review the plan.
+- `status: planned` on both the feature and every behavior
+- `implements: []` — empty until code lands
+- `evidence: []` — empty until code lands
+- `body` should capture **rationale, UX notes, and explicit out-of-scope items** so the planning context survives in the markdown
 
-## Worked example
-
-User: "I'm planning a wishlist feature: users can add products to a wishlist, view it on /wishlist, remove items. Wishlist persists across sessions."
-
-You think through it:
-
-**Surfaces:**
-- API: POST /api/wishlist, GET /api/wishlist, DELETE /api/wishlist/:productId
-- UI: /wishlist page, "Add to wishlist" button on product page, wishlist badge in header
-- Data: `Wishlist` table or similar, foreign-keyed to user
-- Side effect: none obvious
-- Error handling: unauthorized (no session), missing product, duplicate adds
-
-**Ambiguities (ask first, don't assume):**
-- "Persists across sessions" — does it persist across *devices* for a logged-in user? (Probably yes if logged in. What about anonymous users?)
-- Adding a duplicate — silently ignore? Return success without modifying? Return a specific error?
-- Max items per wishlist?
-- Removing an item not in the list — 404 or 200?
-- Does the UI show "loading" state while toggling?
-
-You **ask the user** before proposing. Once they answer (e.g., "logged-in only; duplicates silently ignored; no max; removing missing returns 200; show loading state"), you propose ~6 planned Truth claims:
-
-1. `api-behavior` — Add: POST /api/wishlist with valid auth + productId returns 200 with updated wishlist
-2. `api-behavior` — Add duplicate: POST same productId twice returns 200, wishlist contains it exactly once
-3. `api-behavior` — Get: GET /api/wishlist with valid auth returns the user's wishlist items
-4. `api-behavior` — Remove: DELETE /api/wishlist/:productId with valid auth removes it, returns 200
-5. `api-behavior` — Remove missing: DELETE /api/wishlist/:productId for an item not in the list returns 200, wishlist unchanged
-6. `api-behavior` — Auth required: any /api/wishlist call without auth returns 401
-7. `ui-flow` — User on product page clicks "Add to wishlist"; button shows loading state; wishlist badge in header increments
-8. `ui-flow` — User on /wishlist sees their saved products; clicking "remove" makes the product disappear immediately
-
-All with `status: planned`, no `code_ref`. Each `proposed_test` writes the test as if the endpoints/selectors existed (and the user accepts that assumption — the test will only run after the code lands).
-
-## Validation is not run on planned Truth
-
-Planned Truth has no code yet, so there's nothing to validate against. Once the code lands, the user runs `productos truth refresh feature <name>` and the `productos-analyze` skill takes over — re-reads the implementation, compares it to the planned claims, and live-validates each one against the dev env (per `productos/env.yaml`).
-
-## After proposing
+## Step 5 — Summarize and hand off
 
 ```
-I proposed N planned Truth claims for the wishlist feature.
-
-Note these decisions you made along the way — they're encoded in the claims:
+Planned feature `wishlist/manage` with N behaviors. Decisions captured:
   - Logged-in users only (no anonymous wishlists)
   - Duplicate adds silently succeed
   - Removing a missing item returns 200, not 404
-  - UI shows loading state on add
+  - No cross-device sync in phase 1
 
-Open http://localhost:7878 to review.
+Open http://localhost:7878/wishlist/manage to review the plan.
 
-When you (or Claude) build the feature, run `productos truth refresh feature wishlist`
-to compare the implementation against this plan and surface any drift.
+When you write the code, run `productos-analyze` so it can compare your
+implementation against this planned truth and surface drift.
 ```
 
 ## When NOT to use this skill
 
-- The code already exists — use `productos-analyze` instead
-- The user is asking general design questions, not committing to ship something — Truth claims are commitments
-- The "feature" is really a refactor of existing behavior — analyze the existing first, then plan deltas
+- The code already exists → use `productos-analyze`
+- The user is asking open-ended design questions → discuss; only commit to product truth once decisions are made
+- The "feature" is really a refactor of existing behavior → analyze existing first, then plan the deltas
+
+## Don't
+
+- **Don't propose `shipped` or `verified` status.** Planning means `planned`, period.
+- **Don't fabricate evidence.** Planned behaviors have empty `evidence: []` until the code exists. `productos-analyze` populates evidence after the fact.
+- **Don't paper over ambiguity.** If a decision isn't made yet, ask. If the user defers, capture the deferral as a note in the body — but don't pick a side silently.
+- **Don't put dynamic state in the markdown.** Planned truth describes intent. Production state (counts, latencies, error rates) lives in observability, not here.

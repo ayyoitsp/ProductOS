@@ -1,8 +1,7 @@
 import { Command } from "commander";
 import { initCommand } from "./commands/init.js";
 import { serveCommand } from "./commands/serve.js";
-import { truthCommand } from "./commands/truth.js";
-import { testCommand } from "./commands/test.js";
+import { productCommand } from "./commands/product.js";
 import { gapsCommand } from "./commands/gaps.js";
 import { doctorCommand } from "./commands/doctor.js";
 import { envCommand } from "./commands/env.js";
@@ -11,14 +10,13 @@ const program = new Command();
 
 program
   .name("productos")
-  .description("Product correctness management for AI-native teams")
-  .version("0.0.3");
+  .description("Product truth for AI-native teams — structured documentation of what your product does, dynamically rendered as a viewable site.")
+  .version("0.1.0");
 
 program.addCommand(initCommand());
 program.addCommand(serveCommand());
 program.addCommand(envCommand());
-program.addCommand(truthCommand());
-program.addCommand(testCommand());
+program.addCommand(productCommand());
 program.addCommand(gapsCommand());
 program.addCommand(doctorCommand());
 
