@@ -7,9 +7,9 @@ import "react-native-reanimated";
 import { Text } from "@/components/Themed";
 import { useColorScheme } from "@/components/useColorScheme";
 import Colors from "@/constants/Colors";
-import { getDb } from "@/db";
 import { emitDataChange } from "@/db/events";
 import { applyInterestIfDue } from "@/db/interest";
+import { initStore } from "@/store";
 
 export { ErrorBoundary } from "expo-router";
 
@@ -26,11 +26,11 @@ export default function RootLayout() {
   const runningRef = useRef(false);
 
   useEffect(() => {
-    getDb()
+    initStore()
       .then(() => setDbReady(true))
       .catch((e) => {
         // eslint-disable-next-line no-console
-        console.error("DB init failed:", e);
+        console.error("Store init failed:", e);
         setDbReady(true);
       });
   }, []);
