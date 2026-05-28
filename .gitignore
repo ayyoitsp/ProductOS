@@ -1,0 +1,43 @@
+# Node / TS
+node_modules/
+dist/
+*.tsbuildinfo
+.npm/
+.pnpm-store/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local-only planning / design docs — not for the public repo
+planning/
+
+# ProductOS derived state (per-repo cache)
+.productos/cache/
+.productos/runtime.db
+.productos/runtime.db-*
+.productos/blobs/
+
+# Editors / OS
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Secrets / env
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Logs
+*.log
+logs/
