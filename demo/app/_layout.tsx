@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, AppState, StyleSheet, View } from "react-native";
 import "react-native-reanimated";
 import { Text } from "@/components/Themed";
+import { ToastProvider, useToast } from "@/components/Toast";
 import { useColorScheme } from "@/components/useColorScheme";
 import Colors from "@/constants/Colors";
 import { emitDataChange } from "@/db/events";
@@ -19,11 +20,7 @@ export const unstable_settings = {
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
-  const cs = colorScheme ?? "light";
   const [dbReady, setDbReady] = useState(false);
-  const [applying, setApplying] = useState(false);
-  const [appliedToast, setAppliedToast] = useState<{ credited: number; key: number } | null>(null);
-  const runningRef = useRef(false);
 
   useEffect(() => {
     initStore()
@@ -35,9 +32,44 @@ export default function RootLayout() {
       });
   }, []);
 
-  useEffect(() => {
-    if (!dbReady) return;
+  if (!dbReady) return null;
 
+  return (
+    <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
+      <StatusBar style={colorScheme === "dark" ? "light" : "dark"} />
+      <ToastProvider>
+        <Stack>
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen
+            name="add-kid"
+            options={{ presentation: "modal" }}
+          />
+          <Stack.Screen
+            name="add-task"
+            options={{ presentation: "modal" }}
+          />
+          <Stack.Screen
+            name="adjust/[id]"
+            options={{ presentation: "modal" }}
+          />
+        </Stack>
+        <InterestApplyRunner />
+      </ToastProvider>
+    </ThemeProvider>
+  );
+}
+
+/**
+ * Runs applyInterestIfDue at boot and on every AppState→active transition.
+ * Shows a spinner overlay during the apply and a toast on a successful credit.
+ */
+function InterestApplyRunner() {
+  const cs = useColorScheme() ?? "light";
+  const toast = useToast();
+  const [applying, setApplying] = useState(false);
+  const runningRef = useRef(false);
+
+  useEffect(() => {
     const run = async () => {
       if (runningRef.current) return;
       runningRef.current = true;
@@ -47,7 +79,9 @@ export default function RootLayout() {
         if (r.applied) {
           emitDataChange();
           if (r.credited > 0) {
-            setAppliedToast({ credited: r.credited, key: Date.now() });
+            toast.show(
+              `Interest applied — ${r.credited} kid${r.credited === 1 ? "" : "s"} credited`
+            );
           }
         }
       } catch (e) {
@@ -58,68 +92,21 @@ export default function RootLayout() {
         runningRef.current = false;
       }
     };
-
     run();
-
     const sub = AppState.addEventListener("change", (state) => {
       if (state === "active") run();
     });
     return () => sub.remove();
-  }, [dbReady]);
+  }, [toast]);
 
-  useEffect(() => {
-    if (!appliedToast) return;
-    const t = setTimeout(() => setAppliedToast(null), 3500);
-    return () => clearTimeout(t);
-  }, [appliedToast]);
-
-  if (!dbReady) return null;
-
+  if (!applying) return null;
   return (
-    <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
-      <StatusBar style={colorScheme === "dark" ? "light" : "dark"} />
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen
-          name="add-kid"
-          options={{ presentation: "modal" }}
-        />
-        <Stack.Screen
-          name="add-task"
-          options={{ presentation: "modal" }}
-        />
-        <Stack.Screen
-          name="adjust/[id]"
-          options={{ presentation: "modal" }}
-        />
-      </Stack>
-
-      {applying && (
-        <View style={styles.overlay} pointerEvents="none">
-          <View style={[styles.toast, { backgroundColor: Colors[cs].surface, borderColor: Colors[cs].border }]}>
-            <ActivityIndicator color={Colors[cs].tint} />
-            <Text style={{ color: Colors[cs].text, fontWeight: "600" }}>Applying interest…</Text>
-          </View>
-        </View>
-      )}
-
-      {!applying && appliedToast && (
-        <View style={styles.overlay} pointerEvents="none">
-          <View
-            style={[
-              styles.toast,
-              { backgroundColor: Colors[cs].credit, borderColor: Colors[cs].credit },
-            ]}
-          >
-            <Text style={{ color: "#fff", fontWeight: "700" }}>✓</Text>
-            <Text style={{ color: "#fff", fontWeight: "600" }}>
-              Interest applied — {appliedToast.credited} kid
-              {appliedToast.credited === 1 ? "" : "s"} credited
-            </Text>
-          </View>
-        </View>
-      )}
-    </ThemeProvider>
+    <View style={styles.overlay} pointerEvents="none">
+      <View style={[styles.spinner, { backgroundColor: Colors[cs].surface, borderColor: Colors[cs].border }]}>
+        <ActivityIndicator color={Colors[cs].tint} />
+        <Text style={{ color: Colors[cs].text, fontWeight: "600" }}>Applying interest…</Text>
+      </View>
+    </View>
   );
 }
 
@@ -132,7 +119,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingTop: 60,
   },
-  toast: {
+  spinner: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
@@ -140,10 +127,5 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 999,
     borderWidth: 1,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
   },
 });
