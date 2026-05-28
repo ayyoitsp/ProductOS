@@ -11,6 +11,7 @@ import {
 import { useFocusEffect, useRouter } from "expo-router";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { Surface, Text, View } from "@/components/Themed";
+import { useToast } from "@/components/Toast";
 import Colors from "@/constants/Colors";
 import { useColorScheme } from "@/components/useColorScheme";
 import { formatMoney, parseMoney } from "@/db";
@@ -24,6 +25,7 @@ import { Kid, Task } from "@/db/schema";
 export default function TasksScreen() {
   const cs = useColorScheme() ?? "light";
   const router = useRouter();
+  const toast = useToast();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [kids, setKids] = useState<Kid[]>([]);
   const [confirming, setConfirming] = useState<Task | null>(null);
@@ -77,6 +79,7 @@ export default function TasksScreen() {
       return;
     }
     const taskId = confirming.id;
+    const kid = kids.find((k) => k.id === confirmKidId);
     closeConfirm();
     await completeTask(taskId, confirmKidId, {
       amount_cents: cents,
@@ -84,6 +87,9 @@ export default function TasksScreen() {
       comment: confirmComment.trim() || undefined,
     });
     await load();
+    toast.show(
+      `${name} · ${formatMoney(cents)}${kid ? ` → ${kid.name}` : ""}`
+    );
   }
 
   return (

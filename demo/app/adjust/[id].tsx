@@ -8,14 +8,16 @@ import {
 } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { Surface, Text, View } from "@/components/Themed";
+import { useToast } from "@/components/Toast";
 import Colors from "@/constants/Colors";
 import { useColorScheme } from "@/components/useColorScheme";
-import { parseMoney } from "@/db";
+import { formatMoney, parseMoney } from "@/db";
 import { addTransaction } from "@/db/operations";
 
 export default function AdjustScreen() {
   const cs = useColorScheme() ?? "light";
   const router = useRouter();
+  const toast = useToast();
   const { id, direction: rawDir } = useLocalSearchParams<{
     id: string;
     direction?: string;
@@ -39,6 +41,7 @@ export default function AdjustScreen() {
     const type = isEarn ? "earn" : "spend";
     await addTransaction(kidId, signed, r, type);
     router.back();
+    toast.show(`${isEarn ? "+" : "−"}${formatMoney(cents)} · ${r}`);
   }
 
   return (

@@ -9,6 +9,7 @@ import {
 } from "react-native";
 import { useFocusEffect } from "expo-router";
 import { Surface, Text, View } from "@/components/Themed";
+import { useToast } from "@/components/Toast";
 import Colors from "@/constants/Colors";
 import { useColorScheme } from "@/components/useColorScheme";
 import { formatMoney } from "@/db";
@@ -26,6 +27,7 @@ const PREVIEW_BALANCES_CENTS = [100, 500, 2000, 5000, 10000, 20000];
 
 export default function SettingsScreen() {
   const cs = useColorScheme() ?? "light";
+  const toast = useToast();
   const [enabled, setEnabled] = useState(false);
   const [rateText, setRateText] = useState("5");
   const [days, setDays] = useState<number[]>([0]);
@@ -69,18 +71,18 @@ export default function SettingsScreen() {
     }
     await setInterestConfig({ enabled, rate_pct: rate, days });
     setDirty(false);
-    Alert.alert("Saved", "Interest settings updated.");
+    toast.show("Settings saved");
   }
 
   async function applyNow() {
     const r = await applyInterestNow();
     emitDataChange();
     await load();
-    Alert.alert(
-      "Applied",
+    toast.show(
       r.credited > 0
-        ? `Credited interest to ${r.credited} kid${r.credited === 1 ? "" : "s"}.`
-        : "No kids had a positive balance to credit."
+        ? `Interest applied — ${r.credited} kid${r.credited === 1 ? "" : "s"} credited`
+        : "No kids had a positive balance",
+      r.credited > 0 ? "success" : "info"
     );
   }
 
