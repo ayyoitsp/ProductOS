@@ -187,6 +187,12 @@ npm run build
 npm link     # symlinks `productos` to your PATH
 ```
 
+## The `demo/` directory
+
+`demo/` contains **Family Wallet** — a tiny Expo + React Native mobile app we use as a testbed for dogfooding ProductOS. Parents manage allowances, track tasks → balances per kid, optionally apply interest on selected days of the week. Local SQLite storage. See [`demo/README.md`](./demo/README.md) for how to run it.
+
+The app is intentionally simple but has enough real product surface — multi-tenant ledger, editable task list, unbounded interest rules, modal flows — that proposing product truth + tracking for it is non-trivial.
+
 ## License
 
 [Apache 2.0](./LICENSE)

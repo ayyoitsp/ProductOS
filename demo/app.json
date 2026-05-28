@@ -1,0 +1,37 @@
+{
+  "expo": {
+    "name": "Family Wallet",
+    "slug": "family-wallet",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "familywallet",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#fff7ed"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.productos.familywallet"
+    },
+    "android": {
+      "package": "com.productos.familywallet",
+      "edgeToEdgeEnabled": true,
+      "adaptiveIcon": {
+        "backgroundColor": "#fff7ed"
+      }
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-sqlite"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
