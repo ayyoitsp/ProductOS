@@ -10,6 +10,18 @@ export const TargetConfig = z.object({
 });
 export type TargetConfig = z.infer<typeof TargetConfig>;
 
+export const ByokProvider = z.enum(["anthropic", "openai", "google", "openrouter"]);
+export type ByokProvider = z.infer<typeof ByokProvider>;
+
+export const ByokConfig = z.object({
+  enabled: z.boolean().default(false),
+  provider: ByokProvider.default("anthropic"),
+  api_key_env: z.string().default("ANTHROPIC_API_KEY"),
+  model: z.string().default("claude-sonnet-4-6"),
+  max_steps: z.number().default(5),
+});
+export type ByokConfig = z.infer<typeof ByokConfig>;
+
 export const StackConfig = z.object({
   language: z.enum(["typescript", "javascript", "python"]).default("typescript"),
   test_framework: z
@@ -31,6 +43,7 @@ export const ProductosConfig = z.object({
   }),
   default_target: z.string().default("local-dev"),
   ui_port: z.number().default(7878),
+  byok: ByokConfig.default({}),
 });
 export type ProductosConfig = z.infer<typeof ProductosConfig>;
 

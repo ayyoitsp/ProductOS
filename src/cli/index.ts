@@ -6,6 +6,7 @@ import { feedbackCommand } from "./commands/feedback.js";
 import { gapsCommand } from "./commands/gaps.js";
 import { doctorCommand } from "./commands/doctor.js";
 import { envCommand } from "./commands/env.js";
+import { byokCommand } from "./commands/byok.js";
 
 const program = new Command();
 
@@ -19,6 +20,7 @@ program.addCommand(serveCommand());
 program.addCommand(envCommand());
 program.addCommand(productCommand());
 program.addCommand(feedbackCommand());
+program.addCommand(byokCommand());
 program.addCommand(gapsCommand());
 program.addCommand(doctorCommand());
 

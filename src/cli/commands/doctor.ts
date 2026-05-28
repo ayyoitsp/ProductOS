@@ -59,6 +59,14 @@ export function doctorCommand(): Command {
         try {
           const c = readConfig(paths);
           ok(`Config readable; stack=${c.stack.language}`);
+          // 5b. BYOK
+          if (c.byok.enabled) {
+            const keyPresent = !!process.env[c.byok.api_key_env];
+            if (keyPresent) ok(`BYOK enabled: ${c.byok.provider}/${c.byok.model} (key from ${c.byok.api_key_env})`);
+            else warn(`BYOK enabled but ${c.byok.api_key_env} is not set — auto-processing will fail`);
+          } else {
+            ok("BYOK disabled — feedback queues for Claude/native handling");
+          }
         } catch (e) {
           fail(`Config malformed: ${(e as Error).message}`);
         }

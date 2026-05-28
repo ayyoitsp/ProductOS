@@ -22,9 +22,11 @@ import {
   FeedbackEntry,
   listFeedback,
   newFeedbackId,
+  readFeedbackById,
   writeFeedback,
   FeedbackFrontmatter,
 } from "../core/feedback.js";
+import { processFeedback } from "../byok/processor.js";
 import {
   renderArea,
   renderFeature,
@@ -92,6 +94,32 @@ export async function startUiServer(): Promise<void> {
             note: `Feedback ${id}: ${text.slice(0, 100)}`,
           });
           writeTracking(paths, t);
+        }
+
+        // BYOK fast-path: if enabled, try to auto-process the feedback inline.
+        // The queue entry stays as the authoritative artifact either way.
+        if (config.byok.enabled) {
+          const result = await processFeedback(entry, paths, config.byok);
+          const saved = readFeedbackById(paths, id);
+          if (saved && result.kind === "applied") {
+            saved.frontmatter.state = "processed";
+            saved.frontmatter.resolved_at = new Date().toISOString();
+            saved.frontmatter.resolved_by = "byok";
+            saved.body = `${saved.body.trim()}\n\n---\n**Auto-processed via BYOK (${config.byok.provider} ${config.byok.model}).** Edits applied: ${result.ops.join(", ")}\n\n${result.summary}`;
+            writeFeedback(paths, saved);
+            return json(res, { ok: true, id, byok: { kind: "applied", ops: result.ops, summary: result.summary } });
+          }
+          if (saved && result.kind === "needs_review") {
+            saved.frontmatter.state = "claimed";
+            saved.frontmatter.resolved_by = "byok";
+            saved.body = `${saved.body.trim()}\n\n---\n**BYOK flagged for human review:** ${result.reason}`;
+            writeFeedback(paths, saved);
+            return json(res, { ok: true, id, byok: { kind: "needs_review", reason: result.reason } });
+          }
+          if (result.kind === "error") {
+            // leave entry open; surface the error to the client without losing the feedback
+            return json(res, { ok: true, id, byok: { kind: "error", message: result.message } });
+          }
         }
 
         return json(res, { ok: true, id, path: path.relative(paths.repoRoot, fp) });
