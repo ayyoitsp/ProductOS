@@ -52,8 +52,10 @@ productos init claude
 $EDITOR productos/env.yaml
 
 # 4. Sanity-check the env config
-productos env up
+productos env up           # uses default env (usually 'local')
 productos env check        # ✓ if your stack is reachable
+# or, with an explicit name:
+productos env local up
 
 # 5. Start the vet UI in another terminal
 productos serve            # vet UI on http://localhost:7878
@@ -78,10 +80,11 @@ productos init <runtime>             # 'claude' supported
 productos init <runtime> --update    # refresh skill files
 productos init <runtime> --uninstall # remove ProductOS from the runtime
 productos env list                   # list configured environments
-productos env up [name]              # run setup + healthcheck (default: default_env, e.g. 'local')
-productos env check [name]           # healthcheck only
-productos env reset [name]           # reset_per_run (refused if env is read_only)
-productos env down [name]            # teardown (refused if env is read_only)
+productos env [name]                 # show one env's details
+productos env [name] up              # run setup + healthcheck (name optional → default env)
+productos env [name] check           # healthcheck only
+productos env [name] reset           # reset_per_run (refused if env is read_only)
+productos env [name] down            # teardown (refused if env is read_only)
 productos serve [--mcp] [--ui]       # default: vet UI on http://localhost:7878
 productos truth list|show|reject|validate <id>
 productos test generate              # materialize validated Truth → productos/tests/

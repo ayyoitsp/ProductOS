@@ -132,8 +132,10 @@ export function starterEnvYaml(opts: {
 
   return `# productos/env.yaml
 # Defines one or more environments Claude can drive when validating Truth.
-# Each env has its own setup/healthcheck/reset commands. Use \`productos env <cmd> [name]\`
-# to drive a specific env, e.g. \`productos env up local\` or \`productos env check staging\`.
+# Each env has its own setup/healthcheck/reset commands. Use \`productos env <name> <cmd>\`
+# to drive a specific env, e.g. \`productos env local up\` or \`productos env staging check\`.
+# Name comes before the action: "on the local env, do up". You can also omit the name to
+# use the default env (\`productos env up\` is the same as \`productos env <default_env> up\`).
 
 version: 1
 

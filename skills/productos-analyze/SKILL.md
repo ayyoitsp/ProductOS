@@ -25,14 +25,14 @@ You are the brain. ProductOS is the structural backend (storage, MCP tools, env 
 
 ```
    1. Call productos_get_env             → know how to drive the dev stack
-   2. Shell: `productos env check`       → is the env already up?
-      If not: `productos env up`          → start services + healthcheck
+   2. Shell: `productos env <name> check` → is the env already up?
+      If not: `productos env <name> up`   → start services + healthcheck
    3. For each candidate claim:
         a. Read the relevant code thoroughly
         b. Decide: what claim, what test, what fixtures?
         c. Call productos_propose_truth   → returns the assigned T-XXXX id
         d. Write the proposed test into env.staging_dir/T-XXXX.test.ts
-        e. Shell: `productos env reset`   → (optional) fresh state
+        e. Shell: `productos env <name> reset` → (optional) fresh state
         f. Shell: run the test in the user's stack (npx jest path, pytest path, etc.)
         g. Observe stdout/stderr — pass or fail?
         h. Call productos_record_outcome(id, pass|fail, captured_output, test_file)
@@ -98,21 +98,23 @@ If the env response is `configured: false`, **stop**: tell the user to run `prod
 **Bring the env up:**
 
 ```bash
-productos env check <name>    # exit 0 if healthy
+productos env <name> check    # exit 0 if healthy
 ```
 
 If non-zero:
 
 ```bash
-productos env up <name>       # runs setup commands + healthcheck
+productos env <name> up       # runs setup commands + healthcheck
 ```
 
-`<name>` is the env's identifier (matches `cli_helpers.up` in the get_env response). If `env up` fails, **read the output and tell the user what to fix** — don't try to paper over a broken env config.
+(Name comes first — `env staging check` reads as "on the staging env, do a check." If you omit the name, ProductOS uses the default env.)
+
+`<name>` is the env's identifier (use `cli_helpers.up` from the get_env response — it has the name baked in). If `env up` fails, **read the output and tell the user what to fix** — don't try to paper over a broken env config.
 
 ### Step 2.5 — Respect `external` and `read_only` flags
 
 - `external: true` means ProductOS doesn't own this env (e.g. staging). The setup commands are usually empty (`[]`). Don't try to start services there — they're already running. Just confirm reachability via healthcheck.
-- `read_only: true` means **do not call `productos env reset <name>` or `productos env down <name>`**. The CLI will refuse anyway, but don't even propose it. Per-test reset isn't available; design tests that don't require it (idempotent, or use fresh fixtures inline).
+- `read_only: true` means **do not call `productos env <name> reset` or `productos env <name> down`**. The CLI will refuse anyway, but don't even propose it. Per-test reset isn't available; design tests that don't require it (idempotent, or use fresh fixtures inline).
 - If the user has both a `local` and a `read_only` env and the test you're proposing is destructive, validate against `local` only. Mention this in your proposal notes.
 
 ### Step 3 — For each claim, write the test and run it
@@ -148,7 +150,7 @@ BASE_URL=http://localhost:3000 pytest productos/tests/proposed/test_T_0042.py
 If the env has `reset_per_run` **and is not read_only**, run it between tests to keep state clean:
 
 ```bash
-productos env reset <name>
+productos env <name> reset
 ```
 
 (`cli_helpers.reset` will be `null` if the env is read-only — skip this step.)
@@ -238,7 +240,7 @@ test waiting for your approval.
 Sometimes the env config is incomplete, the user's machine is missing something, or services are misbehaving. Don't try to validate in that case — surface the problem clearly:
 
 ```
-I tried to bring up the `local` env via `productos env up local` but it failed:
+I tried to bring up the `local` env via `productos env local up` but it failed:
 
   > docker compose up -d postgres
   Error: port 5432 already in use

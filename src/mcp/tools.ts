@@ -247,7 +247,7 @@ const GetEnvInput = z.object({
 const getEnv: McpTool = {
   name: "productos_get_env",
   description:
-    "Get a dev-environment configuration from productos/env.yaml. Pass `name` for a specific env (e.g. 'staging'); omit it to get the default env. Returns the env's setup commands, healthcheck details, reset commands, test_env vars, and external/read_only flags. ALSO returns the list of all configured envs and which is default. To actually drive the env, shell out to `productos env <cmd> [name]` (up | check | reset | down). Respect read_only — never run reset or teardown against a read_only env.",
+    "Get a dev-environment configuration from productos/env.yaml. Pass `name` for a specific env (e.g. 'staging'); omit it to get the default env. Returns the env's setup commands, healthcheck details, reset commands, test_env vars, and external/read_only flags. ALSO returns the list of all configured envs and which is default. To actually drive the env, shell out to `productos env <name> <action>` (up | check | reset | down). Respect read_only — never run reset or teardown against a read_only env.",
   inputSchema: zodToInputSchema(GetEnvInput),
   handler: async (raw, paths) => {
     const args = GetEnvInput.parse(raw);
@@ -272,10 +272,10 @@ const getEnv: McpTool = {
       stack: projectConfig.stack,
       cli_helpers: {
         list: "productos env list",
-        up: `productos env up ${name}`,
-        check: `productos env check ${name}`,
-        reset: env.read_only ? null : `productos env reset ${name}`,
-        down: env.read_only ? null : `productos env down ${name}`,
+        up: `productos env ${name} up`,
+        check: `productos env ${name} check`,
+        reset: env.read_only ? null : `productos env ${name} reset`,
+        down: env.read_only ? null : `productos env ${name} down`,
       },
     };
   },
