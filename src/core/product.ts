@@ -6,106 +6,56 @@ import { z } from "zod";
 import { ProductosPaths } from "./paths.js";
 
 /**
- * Product Truth is structured documentation about what the product DOES.
- * It is the single artifact peter wants ProductOS to manage:
+ * Product Truth lives in productos/products/<area>/<feature>.md.
+ * It is implementation-neutral: claims are written in product language,
+ * not in API/endpoint/file terms.
  *
- *   - It is version-controlled, diffable in PRs, reviewed alongside code
- *   - When designing a new feature, you consult this to understand the system
- *   - When shipping a feature, you update this in the same PR
- *   - It can be rendered as a viewable website (rendered dynamically, not committed)
+ * Operational metadata (which files implement the feature, which code
+ * lines back which behavior, who last verified what) lives in a sidecar
+ * at productos/tracking/<area>/<feature>.yaml — see tracking.ts.
  *
- * The artifact is a tree of markdown files under productos/products/:
- *   productos/products/<area>/<feature>.md
- *   productos/products/<area>/README.md      (area index)
- *   productos/products/README.md             (top-level overview)
+ * The two files are linked by feature_id and behavior id. Together they
+ * compose what an operator sees on the rendered site, but they are
+ * editable independently:
  *
- * Each feature file has:
- *   - YAML frontmatter declaring structured behaviors (the atomic claims)
- *   - Markdown body for narrative prose, screenshots, caveats, UX notes
+ *   - Product truth changes are documentation changes (PR reviewed for
+ *     correctness of the claim).
+ *   - Tracking changes are operational (verification stamps, code-ref
+ *     refresh, history); high-traffic but lower-stakes.
  */
 
-export const BehaviorStatus = z.enum([
-  "planned",     // intended, code not yet there
-  "proposed",    // code exists, claim proposed, not yet verified
-  "verified",    // human (or trusted policy) confirmed claim holds
-  "stale",       // code referenced changed since last verification
-  "contested",   // evidence contradicts the claim
-  "deprecated",  // explicitly retired
-]);
-export type BehaviorStatus = z.infer<typeof BehaviorStatus>;
-
-export const FeatureStatus = z.enum([
-  "planned",
-  "shipped",
-  "deprecated",
-]);
+export const FeatureStatus = z.enum(["planned", "shipped", "deprecated"]);
 export type FeatureStatus = z.infer<typeof FeatureStatus>;
-
-export const EvidenceKind = z.enum([
-  "code",          // a file:lines reference into the codebase
-  "response",      // a captured API response (path to JSON blob)
-  "screenshot",    // a PNG capture of UI state
-  "trace",         // a multi-step recording (Playwright trace, narrative, etc.)
-  "narrative",     // free-form prose written by Claude or a human
-  "test-result",   // a test pass/fail capture
-  "query",         // a DB query + result
-]);
-export type EvidenceKind = z.infer<typeof EvidenceKind>;
-
-export const Evidence = z.object({
-  kind: EvidenceKind,
-  ref: z.string().optional(),         // file:lines or external URL
-  path: z.string().optional(),        // path to a blob inside productos/.local/blobs or productos/evidence
-  captured_at: dateLike().optional(),
-  captured_by: z.string().optional(),
-  description: z.string().optional(),
-  body: z.string().optional(),        // for narrative kind: the inline prose
-});
-export type Evidence = z.infer<typeof Evidence>;
 
 export const Behavior = z.object({
   id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/, "Behavior ids must be kebab-case"),
   claim: z.string().min(10),
-  status: BehaviorStatus.default("proposed"),
-  last_verified: dateLike().optional(),
-  verified_by: z.string().optional(),
-  evidence: z.array(Evidence).default([]),
   notes: z.string().optional(),
 });
 export type Behavior = z.infer<typeof Behavior>;
 
 export const FeatureFrontmatter = z.object({
-  id: z.string().regex(/^[a-z0-9][a-z0-9/_-]*$/, "Feature ids are slash-delimited, kebab-case, e.g. auth/signup"),
+  id: z.string().regex(/^[a-z0-9][a-z0-9/_-]*\/[a-z0-9][a-z0-9_-]*$/, "Must be area/slug"),
   title: z.string(),
   status: FeatureStatus.default("shipped"),
-  owners: z.array(z.string()).default([]),
-  implements: z.array(z.string()).default([]),    // code paths the feature lives in
-  related: z.array(z.string()).default([]),        // other feature ids
+  description: z.string().optional(),
   behaviors: z.array(Behavior).default([]),
-  proposed_by: z.string().optional(),
-  proposed_at: dateLike().optional(),
 });
 export type FeatureFrontmatter = z.infer<typeof FeatureFrontmatter>;
 
 export interface FeatureDocument {
   frontmatter: FeatureFrontmatter;
   body: string;
-  filepath: string;          // absolute path to the .md file
-  url_path: string;          // route like /auth/signup
+  filepath: string;
+  url_path: string;
 }
 
 export interface AreaDocument {
-  slug: string;              // e.g. "auth"
+  slug: string;
   title: string;
-  body: string;              // README.md content
+  body: string;
   features: FeatureDocument[];
   filepath: string;
-}
-
-function dateLike() {
-  return z.union([z.string(), z.date()]).transform((v) =>
-    v instanceof Date ? v.toISOString() : v
-  );
 }
 
 // ---------------------------------------------------------------------------
@@ -116,7 +66,6 @@ export function productsRoot(paths: ProductosPaths): string {
 }
 
 export function featureFilePath(paths: ProductosPaths, id: string): string {
-  // id like "auth/signup" → productos/products/auth/signup.md
   return path.join(productsRoot(paths), `${id}.md`);
 }
 
@@ -139,8 +88,12 @@ export function readFeature(filepath: string): FeatureDocument {
   const raw = fs.readFileSync(filepath, "utf-8");
   const parsed = matter(raw);
   const frontmatter = FeatureFrontmatter.parse(parsed.data);
-  const url_path = "/" + frontmatter.id;
-  return { frontmatter, body: parsed.content.trim(), filepath, url_path };
+  return {
+    frontmatter,
+    body: parsed.content.trim(),
+    filepath,
+    url_path: "/" + frontmatter.id,
+  };
 }
 
 export function readFeatureById(paths: ProductosPaths, id: string): FeatureDocument | null {
@@ -149,7 +102,6 @@ export function readFeatureById(paths: ProductosPaths, id: string): FeatureDocum
   return readFeature(fp);
 }
 
-/** Walk productos/products/ for all feature files (.md, excluding README.md). */
 export function listFeatures(paths: ProductosPaths): FeatureDocument[] {
   const root = productsRoot(paths);
   if (!fs.existsSync(root)) return [];
@@ -160,7 +112,6 @@ export function listFeatures(paths: ProductosPaths): FeatureDocument[] {
     try {
       out.push(readFeature(file));
     } catch (e) {
-      // Skip malformed files but warn on stderr.
       process.stderr.write(`productos: ${path.relative(paths.repoRoot, file)} failed to parse: ${(e as Error).message}\n`);
     }
   });
@@ -168,7 +119,6 @@ export function listFeatures(paths: ProductosPaths): FeatureDocument[] {
   return out;
 }
 
-/** Walk productos/products/ for all areas (top-level directories). */
 export function listAreas(paths: ProductosPaths): AreaDocument[] {
   const root = productsRoot(paths);
   if (!fs.existsSync(root)) return [];
@@ -211,8 +161,7 @@ export function writeFeature(paths: ProductosPaths, doc: FeatureDocument): void 
   const fp = featureFilePath(paths, doc.frontmatter.id);
   fs.mkdirSync(path.dirname(fp), { recursive: true });
   const fm = YAML.stringify(doc.frontmatter, { lineWidth: 0, blockQuote: "literal" });
-  const content = `---\n${fm}---\n\n${doc.body.trim()}\n`;
-  fs.writeFileSync(fp, content, "utf-8");
+  fs.writeFileSync(fp, `---\n${fm}---\n\n${doc.body.trim()}\n`, "utf-8");
 }
 
 export function writeAreaReadme(
@@ -228,7 +177,6 @@ export function writeAreaReadme(
 }
 
 // ---------------------------------------------------------------------------
-// Helpers
 
 function walk(dir: string, fn: (file: string) => void): void {
   for (const entry of fs.readdirSync(dir)) {

@@ -1,17 +1,22 @@
+import os from "node:os";
 import path from "node:path";
 import { Command } from "commander";
 import pc from "picocolors";
 import { resolvePathsOrThrow } from "../../core/paths.js";
 import {
-  FeatureFrontmatter,
   listAreas,
   listFeatures,
   readFeatureById,
-  writeFeature,
 } from "../../core/product.js";
+import {
+  emptyTrackingFor,
+  readTracking,
+  recordTransition,
+  writeTracking,
+} from "../../core/tracking.js";
 
 export function productCommand(): Command {
-  const cmd = new Command("product").description("Inspect and manage product truth (features and behaviors)");
+  const cmd = new Command("product").description("Inspect product truth and update tracking (verify/contest)");
 
   cmd
     .command("list")
@@ -22,32 +27,26 @@ export function productCommand(): Command {
       const paths = resolvePathsOrThrow();
       if (opts.areas) {
         const areas = listAreas(paths);
-        if (areas.length === 0) {
-          console.log(pc.dim("(no areas — run `productos init claude` to scaffold)"));
-          return;
-        }
         for (const a of areas) {
           console.log(`  ${pc.cyan(a.slug)}  ${pc.dim(`(${a.features.length} feature${a.features.length === 1 ? "" : "s"})`)}  ${a.title}`);
         }
+        if (!areas.length) console.log(pc.dim("(no areas)"));
         return;
       }
       let features = listFeatures(paths);
       if (opts.area) features = features.filter((f) => f.frontmatter.id.startsWith(opts.area + "/"));
-      if (features.length === 0) {
-        console.log(pc.dim(`(no features${opts.area ? ` in ${opts.area}` : ""})`));
-        return;
-      }
       for (const f of features) {
-        const status = formatStatus(f.frontmatter.status);
-        const beh = f.frontmatter.behaviors.length;
-        console.log(`  ${pc.cyan(f.frontmatter.id)}  ${status}  ${pc.dim(`${beh} behavior${beh === 1 ? "" : "s"}`)}  ${f.frontmatter.title}`);
+        const t = readTracking(paths, f.frontmatter.id);
+        const verified = Object.values(t?.behaviors ?? {}).filter((b) => b.status === "verified").length;
+        const total = f.frontmatter.behaviors.length;
+        console.log(`  ${pc.cyan(f.frontmatter.id)}  ${formatStatus(f.frontmatter.status)}  ${pc.dim(`${verified}/${total} verified`)}  ${f.frontmatter.title}`);
       }
-      console.log(pc.dim(`\n${features.length} feature${features.length === 1 ? "" : "s"}`));
+      if (!features.length) console.log(pc.dim(`(no features${opts.area ? ` in ${opts.area}` : ""})`));
     });
 
   cmd
     .command("show <id>")
-    .description("Show a single feature in detail")
+    .description("Show a single feature with its tracking")
     .action((id: string) => {
       const paths = resolvePathsOrThrow();
       const f = readFeatureById(paths, id);
@@ -55,79 +54,64 @@ export function productCommand(): Command {
         console.error(pc.red(`Feature "${id}" not found`));
         process.exit(1);
       }
+      const t = readTracking(paths, id);
       const fm = f.frontmatter;
       console.log(pc.bold(fm.title), pc.dim(`(${fm.id})`));
-      console.log(pc.dim(`status: ${fm.status}  ·  ${fm.behaviors.length} behavior(s)`));
-      if (fm.owners.length) console.log(pc.dim(`owners: ${fm.owners.join(", ")}`));
-      if (fm.implements.length) {
-        console.log(pc.bold("Implements:"));
-        for (const p of fm.implements) console.log("  -", p);
+      console.log(pc.dim(`status: ${fm.status}`));
+      if (fm.description) console.log(pc.dim(fm.description.split("\n")[0]));
+      if (t?.implements?.length) {
+        console.log(pc.bold("Implemented in:"));
+        for (const p of t.implements) console.log("  -", p);
       }
-      if (fm.related.length) console.log(pc.dim(`related: ${fm.related.join(", ")}`));
       console.log();
       if (fm.behaviors.length) {
         console.log(pc.bold("Behaviors:"));
         for (const b of fm.behaviors) {
-          console.log(`  ${pc.cyan(b.id)}  ${formatBehaviorStatus(b.status)}`);
+          const tb = t?.behaviors[b.id];
+          const status = tb?.status ?? "unverified";
+          console.log(`  ${pc.cyan(b.id)}  ${formatBehaviorStatus(status)}`);
           console.log(`    ${b.claim}`);
-          if (b.evidence.length) {
-            console.log(pc.dim(`    evidence: ${b.evidence.map((e) => e.kind).join(", ")}`));
-          }
-          if (b.last_verified) console.log(pc.dim(`    last verified ${b.last_verified}${b.verified_by ? ` by ${b.verified_by}` : ""}`));
+          if (tb?.code_refs?.length) console.log(pc.dim(`    code: ${tb.code_refs.join(", ")}`));
+          if (tb?.last_verified) console.log(pc.dim(`    last verified ${tb.last_verified}${tb.verified_by ? ` by ${tb.verified_by}` : ""}`));
         }
       }
-      if (f.body) {
-        console.log();
-        console.log(pc.bold("Notes:"));
-        console.log(indent(f.body, "  "));
-      }
       console.log();
-      console.log(pc.dim(`source: ${path.relative(process.cwd(), f.filepath)}`));
+      console.log(pc.dim(`product:  ${path.relative(process.cwd(), f.filepath)}`));
+      if (t) console.log(pc.dim(`tracking: productos/tracking/${id}.yaml`));
     });
 
   cmd
     .command("verify <feature_id> <behavior_id>")
-    .description("Mark a behavior as verified (records who & when)")
+    .description("Mark a behavior verified (writes to tracking sidecar, records history)")
     .action((featureId: string, behaviorId: string) => {
       const paths = resolvePathsOrThrow();
-      const doc = readFeatureById(paths, featureId);
-      if (!doc) {
-        console.error(pc.red(`Feature "${featureId}" not found`));
-        process.exit(1);
-      }
-      const b = doc.frontmatter.behaviors.find((bb) => bb.id === behaviorId);
-      if (!b) {
+      const f = readFeatureById(paths, featureId);
+      if (!f) { console.error(pc.red(`Feature "${featureId}" not found`)); process.exit(1); }
+      if (!f.frontmatter.behaviors.find((b) => b.id === behaviorId)) {
         console.error(pc.red(`Behavior "${behaviorId}" not found on ${featureId}`));
         process.exit(1);
       }
-      b.status = "verified";
-      b.last_verified = new Date().toISOString();
-      b.verified_by = process.env.USER ?? "cli-user";
-      writeFeature(paths, doc);
+      const t = readTracking(paths, featureId) ?? emptyTrackingFor(featureId);
+      recordTransition(t, behaviorId, "verified", os.userInfo().username || "cli", { status: "verified", setVerified: true });
+      writeTracking(paths, t);
       console.log(pc.green("✓"), `${featureId}#${behaviorId} verified`);
     });
 
   cmd
     .command("contest <feature_id> <behavior_id>")
-    .description("Mark a behavior as contested (claim disagrees with reality)")
-    .option("--reason <reason>", "One-line reason; appended to behavior notes")
+    .description("Mark a behavior contested (writes to tracking sidecar)")
+    .option("--reason <reason>", "Optional reason recorded in history")
     .action((featureId: string, behaviorId: string, opts: { reason?: string }) => {
       const paths = resolvePathsOrThrow();
-      const doc = readFeatureById(paths, featureId);
-      if (!doc) {
-        console.error(pc.red(`Feature "${featureId}" not found`));
-        process.exit(1);
-      }
-      const b = doc.frontmatter.behaviors.find((bb) => bb.id === behaviorId);
-      if (!b) {
+      const f = readFeatureById(paths, featureId);
+      if (!f) { console.error(pc.red(`Feature "${featureId}" not found`)); process.exit(1); }
+      if (!f.frontmatter.behaviors.find((b) => b.id === behaviorId)) {
         console.error(pc.red(`Behavior "${behaviorId}" not found on ${featureId}`));
         process.exit(1);
       }
-      b.status = "contested";
-      if (opts.reason) {
-        b.notes = (b.notes ? b.notes + "\n\n" : "") + `Contested: ${opts.reason}`;
-      }
-      writeFeature(paths, doc);
+      const t = readTracking(paths, featureId) ?? emptyTrackingFor(featureId);
+      recordTransition(t, behaviorId, "contested", os.userInfo().username || "cli", { status: "contested", note: opts.reason });
+      writeTracking(paths, t);
       console.log(pc.yellow("!"), `${featureId}#${behaviorId} contested`);
     });
 
@@ -147,10 +131,6 @@ function formatBehaviorStatus(s: string): string {
   if (s === "planned") return pc.blue("● planned");
   if (s === "stale") return pc.yellow("● stale");
   if (s === "contested") return pc.red("● contested");
-  if (s === "deprecated") return pc.dim("● deprecated");
+  if (s === "deprecated" || s === "unverified") return pc.dim(`● ${s}`);
   return s;
-}
-
-function indent(s: string, prefix: string): string {
-  return s.split("\n").map((l) => prefix + l).join("\n");
 }

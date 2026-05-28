@@ -1,208 +1,149 @@
 ---
 name: productos-analyze
-description: Use when the user asks to analyze a codebase for ProductOS — to consult existing product truth, propose new features + behaviors, attach evidence (code refs, screenshots, traces, narratives), and update productos/products/ markdown directly. Triggers on requests like "do a ProductOS pass", "scan this codebase and propose product truth", "verify feature X", "update productos for the wishlist work I just did". Your output is markdown files under productos/products/, not tests.
+description: Use when peter asks to analyze a codebase for ProductOS — to consult existing product truth, propose features and behaviors in product-language markdown, record implementation in the tracking sidecar, and process open feedback queue entries. Triggers on "do a ProductOS pass", "scan the codebase and propose product truth", "process feedback", "update tracking for the wishlist work". Your outputs are markdown files in productos/products/ + YAML sidecars in productos/tracking/, and you mark feedback entries processed when you handle them.
 version: 0.1.0
 ---
 
 # ProductOS — Analyze Skill
 
-ProductOS holds the **product truth** for this codebase: a tree of markdown files under `productos/products/` describing what the product does, with structured behaviors and supporting evidence. The site at `productos serve` (http://localhost:7878) renders this as a navigable website.
+ProductOS holds the **product truth** for this codebase as a tree of markdown files under `productos/products/`. **Implementation tracking is separate** — it lives in YAML sidecars under `productos/tracking/`. **Feedback** (free-form notes from humans or external sources) lives as queue entries under `productos/feedback/`.
 
-Your job is to **consult, propose, and update product truth in this markdown tree** — not to write tests. Tests are one possible kind of evidence, but the core artifact is the markdown.
+Your job is to consult, propose, update, and process these three things via MCP. You do not write tests; you do not run tests as the validation core.
 
-## The core mental model
+## The split
 
 ```
-productos/products/
-  <area>/                   ← e.g. auth/, wishlist/, checkout/
-    README.md               ← area overview
-    <feature>.md            ← e.g. signup.md, password-reset.md
-      • YAML frontmatter declares behaviors (atomic claims) + metadata
-      • Markdown body holds prose: UX notes, design rationale, caveats
+productos/products/<area>/<feature>.md       ← PRODUCT TRUTH
+  - claims: what the user does, what the user sees, in product language
+  - no API/endpoint/file references in the claim text
+  - status (planned | shipped | deprecated), title, description
+  - body: prose, UX notes, design rationale, screenshots
+
+productos/tracking/<area>/<feature>.yaml     ← IMPLEMENTATION + VERIFICATION
+  - implements: [code paths]
+  - per-behavior: code_refs, status (planned|proposed|verified|stale|contested|deprecated),
+                  last_verified, verified_by, full transition history
+
+productos/feedback/<id>.md                   ← FEEDBACK QUEUE
+  - one file per submission (from the browser, CLI, or external sources)
+  - frontmatter: state (open|claimed|processed), target (feature/behavior)
+  - body: free-form prose
 ```
 
-A **feature** is a markdown file. A **behavior** is one structured entry inside that file's `behaviors:` frontmatter — an atomic claim about what the feature does, with evidence and a status (planned / proposed / verified / stale / contested / deprecated).
+**The two files link by feature_id and behavior id, but they're edited independently.** A PR that changes product truth is documentation work; a PR that updates tracking (new verification stamp, new code_refs) is operational.
 
-## Three things you do
+## What you do — three modes
 
-### 1. Consult (before proposing or planning anything)
+### Mode A: Consult (always first)
 
-Call `productos_list_areas` and `productos_list_features` to understand what exists. Call `productos_get_feature(id)` for any area you're about to touch. This is **mandatory** for the planning case — the whole point of product truth is that you read it first.
+Before proposing anything, call:
+- `productos_list_areas` + `productos_list_features` — see what exists
+- `productos_get_feature(id)` for any area you're about to touch — returns truth + tracking joined
 
-### 2. Propose (when code exists but isn't yet documented in product truth)
+Skipping this leads to duplication and inconsistency.
 
-For each surface in the codebase you're analyzing:
+### Mode B: Propose / update product truth + tracking
 
-a. Read the code thoroughly (don't synthesize claims you can't cite).
-b. Decide: is this an *existing feature* that needs an update, or a *new feature*?
-c. Read the existing `<area>/<feature>.md` if one exists — don't duplicate.
-d. Propose or update via MCP:
-   - **New feature**: `productos_propose_feature` with `id`, `title`, `status`, `implements`, and initial behaviors.
-   - **Existing feature, new behavior**: `productos_add_behavior(feature_id, behavior)`.
-   - **Existing behavior, new evidence**: `productos_attach_evidence(feature_id, behavior_id, evidence)`.
-e. Set behavior `status: proposed` — never `verified`. Only humans verify.
+For each surface in the codebase:
 
-### 3. Verify (when the user asks you to check the live env against documented claims)
+1. Read the code. Don't propose claims you can't cite.
+2. Decide: existing feature (update) or new (propose)?
+3. **Write the claim in product language**. Not `POST /api/auth/signup returns 409`. Yes `When a user submits the signup form with an already-registered email, they see "this email is already registered"`. The endpoint is an implementation detail.
+4. **Write product truth via MCP:**
+   - New feature → `productos_propose_feature` with `id`, `title`, `description`, `behaviors`. Each behavior has `id`, `claim`, optional `notes`. **That's all** that goes in product truth.
+   - Existing feature, new behavior → `productos_add_behavior(feature_id, behavior)`.
+   - Reword a claim → `productos_update_behavior(feature_id, behavior_id, claim?)`.
+5. **Write tracking via MCP (separate call):**
+   - `productos_update_tracking(feature_id, implements?, behavior_id?, code_refs?, status?)`
+   - For a brand-new behavior: status='proposed' so the human knows to verify it.
+   - For tracking the file paths that implement a feature: set `implements`.
+   - For tying code lines to a behavior: set `behavior_id` + `code_refs`.
+   - Never set status='verified' — only humans verify (via the website's ✓ Verify button or `productos product verify`).
 
-For each behavior the user wants verified:
-1. Read the claim and current evidence.
-2. Ensure the env is up: `productos env <name> check`; if not, `productos env <name> up`.
-3. Gather fresh evidence — see "Evidence" below for what to capture per claim type.
-4. Attach the evidence via `productos_attach_evidence`.
-5. Do NOT call `productos_update_behavior(status: verified)`. The human reviews the evidence on the rendered site and verifies via `productos product verify <feature_id> <behavior_id>`.
+### Mode C: Process the feedback queue
 
-## Feature shape
+When peter asks "process feedback" (or you notice open entries):
 
-When you call `productos_propose_feature` or `productos_add_behavior`, the resulting markdown looks like:
+1. `productos_list_feedback({ state: "open" })` — get the queue
+2. For each entry:
+   a. `productos_claim_feedback(id)` — mark it `claimed`
+   b. Read the body; figure out what edit it's asking for
+   c. Make the edit using the appropriate MCP tool:
+      - "the claim wording is wrong" → `productos_update_behavior`
+      - "this isn't true" → `productos_update_tracking(status: "contested")`
+      - "we need a behavior for X" → `productos_add_behavior`
+      - "this code path also matters" → `productos_update_tracking(code_refs)`
+   d. `productos_mark_feedback_processed(id, resolution_note)` — close it out
+3. Summarize what you did. The user reviews the diff (changes to product truth + tracking + the processed feedback entries) and commits.
+
+## Falsifiability gate
+
+Before each `propose_feature` / `add_behavior`:
+
+- [ ] Can I name specific code file(s)+lines I read that demonstrate this claim?
+- [ ] Is the claim written in product language, not implementation language?
+- [ ] Is the claim a single observable thing, not bundled?
+- [ ] Would a non-engineer reading the rendered site understand it?
+
+The code refs go in tracking, not in the claim text. If you can't think of a product-language version of a claim, the claim is at the wrong level — it's an implementation detail, not a behavior.
+
+## Worked example
+
+You read `src/api/auth/signup.ts`. There's:
+- A handler that rejects duplicate emails with 409
+- A welcome email enqueued on success
+
+You write **product truth** (`productos/products/auth/signup.md`):
 
 ```yaml
----
 id: auth/signup
 title: User signup
 status: shipped
-owners: [peter]
+description: Users create accounts with email + password.
+behaviors:
+  - id: duplicate-email-rejected
+    claim: "When a user submits the signup form with an email that already has an account, they see an inline 'this email is already registered' message and no new account is created."
+    notes: "Intentional UX choice — a specific message helps users vs. a generic 'invalid input'."
+  - id: welcome-email-on-signup
+    claim: "After a user successfully creates an account, they receive a welcome email at the address they registered with."
+```
+
+You write **tracking** (separately, `productos/tracking/auth/signup.yaml`):
+
+```yaml
+feature_id: auth/signup
 implements:
   - src/api/auth/signup.ts
   - src/pages/signup.tsx
-related: [auth/login]
 behaviors:
-  - id: duplicate-email
-    claim: "POST /api/auth/signup with an existing email returns 409 with body.error.code = 'duplicate_email'"
-    status: proposed                 # ← set by you; humans flip to verified
-    evidence:
-      - kind: code
-        ref: "src/api/auth/signup.ts:23-67"
-      - kind: response
-        path: "productos/evidence/auth-signup-dup-email.json"
-        description: "Captured from local env on 2026-05-28"
-    notes: "Intentional separation from 400 so the client can show a friendly error."
-  - id: welcome-email
-    claim: "Successful signup enqueues a welcome email"
+  duplicate-email-rejected:
+    code_refs: ["src/api/auth/signup.ts:23-67"]
+    status: proposed                 # awaiting human verification
+  welcome-email-on-signup:
+    code_refs: ["src/api/auth/signup.ts:80", "src/email/welcome.ts:1-30"]
     status: proposed
-    evidence:
-      - kind: code
-        ref: "src/api/auth/signup.ts:80"
-      - kind: code
-        ref: "email/welcome.ts:1-30"
----
-
-# User signup
-
-Signup uses email + password. Email must be unique.
-
-## UX
-
-The signup page lives at `/signup`. Fields: email, password, confirm password.
-
-## Known caveats
-
-- Email verification is NOT enforced before account becomes usable.
 ```
 
-Headers and prose in the body are rendered as-is on the feature's page.
+You don't run tests. You don't verify the behaviors. You give the human enough to look at the rendered site, click into the cited code, and decide.
 
-## Evidence — what to attach per claim type
+## Don't
 
-The kinds available: `code` | `response` | `screenshot` | `trace` | `narrative` | `test-result` | `query`.
-
-Pick the kinds that genuinely *justify the claim*. The human reviewing the rendered site has to be able to decide ✓ verified or ✗ contested from what you attached — so attach enough.
-
-| Claim shape | Minimum evidence | Stronger evidence |
-| --- | --- | --- |
-| **API response invariant** (status code, body shape) | `code` ref to handler | `response` capture (real request + response) saved as JSON in `productos/evidence/` |
-| **UI element exists / labels / structure** | `code` ref to component | `screenshot` of the page in the relevant state |
-| **Multi-step flow** | `code` refs + `narrative` walking through the steps | `trace` (Playwright trace, recording, etc.) |
-| **Data invariant** (DB rows always have X) | `code` ref to migration/model | `query` evidence with the actual SQL and result |
-| **Side effect** (email sent, queue job enqueued) | `code` ref to the call site + the side-effect handler | `narrative` capture of the live event firing |
-| **Performance / latency** | `code` ref + a `narrative` describing measurement method | `trace` with timings |
-
-Two evidence types worth special call-outs:
-
-- **`narrative`** is free-form prose Claude (or a human) wrote. Use the `body` field on the evidence object for the prose. Good for "I navigated to /wishlist, added 3 items, refreshed, all 3 were still there." When code refs don't tell the whole story, narrative + code = a complete picture.
-- **`screenshot`** lives at `productos/evidence/<filename>.png`. You take it (via dev-browser or whatever your runtime exposes), save it to that path, then attach the path. The vet UI renders it inline. *If you don't have screenshot capability, fall back to narrative + code.*
-
-## Driving the env (when you need to gather live evidence)
-
-Same pattern as before:
-
-```bash
-productos env <name> check       # is the env reachable?
-productos env <name> up          # bring it up if not
-# ... gather evidence (curl, dev-browser, etc.) ...
-productos env <name> reset       # optional, if not read_only
-```
-
-Get the env config via `productos_get_env({ name })`. Respect `external` (don't try to start services on staging) and `read_only` (no destructive ops).
-
-For API behaviors, the canonical "gather evidence" pattern is:
-
-```bash
-# capture a real request/response
-curl -s -X POST ${BASE_URL}/api/auth/signup \
-  -H 'content-type: application/json' \
-  -d '{"email":"taken@example.com","password":"pw"}' \
-  -o productos/evidence/auth-signup-dup-email.json -w '%{http_code}\n'
-```
-
-Then attach:
-
-```
-productos_attach_evidence({
-  feature_id: "auth/signup",
-  behavior_id: "duplicate-email",
-  evidence: {
-    kind: "response",
-    path: "productos/evidence/auth-signup-dup-email.json",
-    description: "Status 409, body.error.code = duplicate_email, captured 2026-05-28 against local"
-  }
-})
-```
-
-## Falsifiability gate (mandatory before any propose call)
-
-Before each `productos_propose_feature` / `productos_add_behavior` / `productos_attach_evidence` call:
-
-- [ ] Can I name the specific code file(s)+lines that demonstrate this behavior?
-- [ ] Did I actually READ that code, not just see its imports?
-- [ ] Is the claim a single observable thing, or am I bundling multiple behaviors?
-- [ ] Would a reviewer reading the rendered site agree with the claim + evidence?
-
-If any answer is no → don't propose. Tighten the claim or read more code first.
-
-## How to work through a codebase
-
-1. **Consult first.** `productos_list_areas` + `productos_list_features` so you know what's already documented.
-2. **Detect the architecture.** Read `package.json`, frameworks, etc.
-3. **Enumerate surfaces.** Pages, API routes, components, schemas. Group by area (auth, billing, profile, etc.).
-4. **For each surface, decide: existing feature or new?** Call `productos_get_feature(id)` if existing.
-5. **Propose or update.** One behavior at a time. Cite code. Attach the cheapest sufficient evidence (code ref + narrative is often enough on first pass).
-6. **Gather live evidence** where it adds real signal (API response captures, screenshots of UI states) — not for every claim, only the ones that benefit.
-7. **Summarize:** "Proposed N features across M areas. Added K behaviors to existing features. Vet at http://localhost:7878."
-
-## Common pitfalls — don't
-
-- **Don't write tests.** This skill is for product truth markdown, not test files.
-- **Don't propose `verified` status.** Humans verify via the rendered site or `productos product verify`.
-- **Don't claim behavior you didn't read.** Imports aren't evidence; read the function.
-- **Don't bundle multiple claims into one behavior.** "Signup works" is too coarse — split into duplicate-email, welcome-email, password-stored-hashed, etc.
-- **Don't propose features whose `id` doesn't match where the file lives.** `id: auth/signup` must live at `productos/products/auth/signup.md`.
-- **Don't gather evidence you can't justify.** A screenshot of an unrelated page isn't evidence; a narrative that just restates the claim isn't evidence. Each piece should make a reviewer more confident the claim holds.
-
-## When the env can't be brought up
-
-Same advice as before: surface the error clearly, don't try to validate without a working env. But for many propose-only flows you don't need the env at all — code refs alone are sufficient evidence for first-pass propose. Only bring up the env when you need to capture live evidence (API responses, screenshots, traces).
+- **Don't put endpoints / file refs / status / verification in product truth.** Those go in tracking.
+- **Don't set status='verified'.** Humans do that.
+- **Don't write claims in implementation language.** "POST /api/X returns 409" is wrong; "user sees 'already registered'" is right.
+- **Don't propose claims you can't cite.** Imports aren't evidence; read the function.
+- **Don't process feedback you don't understand.** If a feedback entry is ambiguous, leave a resolution_note explaining and ask the user for clarification rather than guessing.
 
 ## After working
 
 ```
-I proposed N features and K behaviors across M areas:
-  - auth/  (3 features, 11 behaviors)
-  - wishlist/  (1 feature, 4 behaviors)
-  ...
+I proposed N features across M areas and recorded tracking for K behaviors.
+I also processed J open feedback entries (P→processed, Q→ambiguous, awaiting your input).
 
-Most behaviors are `proposed` with code refs as evidence. For five of them
-I also captured live API response evidence (saved to productos/evidence/).
+Open http://localhost:7878 to review:
+  - Product truth diffs are in productos/products/
+  - Tracking updates are in productos/tracking/
+  - Processed feedback is in productos/feedback/ (state: processed)
 
-Open http://localhost:7878 to review. Use `productos product verify <feature> <behavior>`
-to mark behaviors verified once you've reviewed the evidence.
+Verify behaviors you agree with via the ✓ Verify button or `productos product verify`.
 ```

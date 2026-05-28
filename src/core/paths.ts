@@ -6,13 +6,13 @@ export interface ProductosPaths {
   root: string;             // <repo>/productos
   configFile: string;       // <repo>/productos/config.yaml
   productsDir: string;      // <repo>/productos/products
-  evidenceDir: string;      // <repo>/productos/evidence
+  trackingDir: string;      // <repo>/productos/tracking
+  feedbackDir: string;      // <repo>/productos/feedback
   localDir: string;         // <repo>/productos/.local (gitignored)
-  cacheDir: string;         // <repo>/productos/.local/cache
-  blobsDir: string;         // <repo>/productos/.local/blobs
+  cacheDir: string;
+  blobsDir: string;
 }
 
-/** Walk up from `start` to find a directory containing a `productos/` folder, or a .git repo. */
 export function findRepoRoot(start: string = process.cwd()): string | null {
   let dir = path.resolve(start);
   while (true) {
@@ -31,7 +31,8 @@ export function pathsFor(repoRoot: string): ProductosPaths {
     root,
     configFile: path.join(root, "config.yaml"),
     productsDir: path.join(root, "products"),
-    evidenceDir: path.join(root, "evidence"),
+    trackingDir: path.join(root, "tracking"),
+    feedbackDir: path.join(root, "feedback"),
     localDir: path.join(root, ".local"),
     cacheDir: path.join(root, ".local", "cache"),
     blobsDir: path.join(root, ".local", "blobs"),
@@ -39,7 +40,7 @@ export function pathsFor(repoRoot: string): ProductosPaths {
 }
 
 export function ensureDirs(p: ProductosPaths): void {
-  for (const d of [p.root, p.productsDir, p.evidenceDir, p.localDir, p.cacheDir, p.blobsDir]) {
+  for (const d of [p.root, p.productsDir, p.trackingDir, p.feedbackDir, p.localDir, p.cacheDir, p.blobsDir]) {
     fs.mkdirSync(d, { recursive: true });
   }
 }
