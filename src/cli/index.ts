@@ -8,6 +8,7 @@ import { doctorCommand } from "./commands/doctor.js";
 import { envCommand } from "./commands/env.js";
 import { byokCommand } from "./commands/byok.js";
 import { configureCommand } from "./commands/configure.js";
+import { testCommand } from "./commands/test.js";
 
 const program = new Command();
 
@@ -24,6 +25,7 @@ program.addCommand(feedbackCommand());
 program.addCommand(byokCommand());
 program.addCommand(configureCommand());
 program.addCommand(gapsCommand());
+program.addCommand(testCommand());
 program.addCommand(doctorCommand());
 
 await program.parseAsync(process.argv);
