@@ -74,9 +74,15 @@ sequenceDiagram
     Claude->>ProductOS: propose 4 behaviors with claims + test cases<br/>+ code-consistency analysis<br/>+ test-coverage analysis
     ProductOS-->>PM: 4 behaviors shown in site<br/>(Unverified · per-behavior evidence badges)
 
-    PM->>ProductOS: open product-truth site
-    Note over PM,ProductOS: 60 sec per behavior — keyboard-friendly
-    PM->>ProductOS: accept/edit/reject each behavior<br/>markdown content committed
+    Note over PM,ProductOS: Vet — either surface, same MCP tools
+    alt In Claude Code (inline, no context switch)
+        Claude->>PM: present behavior 1: claim + evidence
+        PM->>Claude: Y/N/E/S per behavior
+    else In product-truth site (batch / deep)
+        PM->>ProductOS: open localhost:7878
+        PM->>ProductOS: accept/edit/reject each behavior
+    end
+    ProductOS->>ProductOS: markdown content committed; state in DB
 
     Note over Builder,ProductOS: Consume intent
     Builder->>ProductOS: read Contract via MCP<br/>(or as exported packet)
@@ -90,8 +96,14 @@ sequenceDiagram
     ProductOS->>ProductOS: receive test results from CI<br/>per-stable_id status<br/>resolves test_failed drift / opens new
     ProductOS->>ProductOS: recompute Derived state<br/>(Verified · Contested · Orphan · Uncertain)
 
-    PM->>ProductOS: reopen site post-merge
-    ProductOS-->>PM: 3 Verified · 1 Verified (new)<br/>feature complete
+    alt PM checks status in site
+        PM->>ProductOS: reopen localhost:7878
+        ProductOS-->>PM: visual grid of per-behavior badges
+    else PM checks status in Claude Code
+        PM->>Claude: "what's the status on this feature?"
+        Claude->>ProductOS: read derived state via MCP
+        Claude-->>PM: text rollup: 3 Verified · 1 Verified (new)
+    end
 
     Note over PM: Felt-value moment:<br/>intent conveyed faithfully, validated automatically
 ```

@@ -6,16 +6,16 @@
 
 ## 1. Who uses ProductOS
 
-The v0.1 user is a **product-lead person willing to install Claude Code as a one-time setup**. They have the repo checked out locally, live in a browser (the product-truth site) for daily authoring and validation, and use Claude Code's skill system to drive analysis ("propose behaviors for this feature," "align my existing tests"). The "developer" exists too, but downstream — they're the *builder* who consumes the spec ProductOS produces, often Claude in agent mode running the actual codebase changes.
+The v0.1 user is a **product-lead person willing to install Claude Code as a one-time setup**. They have the repo checked out locally. They author intent and validate the build through **two co-equal surfaces**: the product-truth site at `localhost:7878` (browser) and the Claude/text skill flow inside Claude Code (terminal). Both surfaces call the same MCP tools and produce the same DB state — the PM picks whichever fits the moment. The "developer" exists too, but downstream — they're the *builder* who consumes the spec ProductOS produces, often Claude in agent mode running the actual codebase changes.
 
 | Persona | Cadence | Primary surface |
 | --- | --- | --- |
-| **Product lead (v0.1 primary)** | Daily during feature cycles | Product-truth site (authoring + validation). Claude Code session for analyzer-skill prompts |
+| **Product lead (v0.1 primary)** | Daily during feature cycles | **Either**: product-truth site (batch review, deep inspection of behaviors + evidence) **or** Claude Code session (inline vet — skill presents behavior, PM types Y/N/E). PM picks per moment |
 | **Builder (engineer or Claude in agent mode)** | Per feature | Reads the Contract spec via MCP (or as a packet). Writes code + tests. CI surfaces results back to ProductOS |
 | **Eng lead / reviewer** | Weekly | Site Drift view, `productos gaps` for coverage gaps and orphans |
 | **Wider team (as the corpus grows)** | Occasional | Site read-mode for "what does our product do?" |
 
-The product-lead person is the v0.1 wedge. The site is their daily surface; the CLI is a one-time install + serve step they barely interact with after setup. As the team grows, more people read the corpus; the authoring lock stays light.
+The product-lead person is the v0.1 wedge. **Site is for batch review and deep inspection; Claude/text is for inline vetting without context switching.** Both are first-class. The CLI is a one-time install + serve step they barely interact with after setup. As the team grows, more people read the corpus; the authoring lock stays light.
 
 ---
 
@@ -80,15 +80,30 @@ Pick a feature you're about to change (or one you want to protect from regressio
 
 The skill walks the relevant code paths, proposes **3-5 behaviors** for that feature with claims + test cases in product language, and writes them to `productos/products/checkout/index.md`. Not 30 Contracts. Not the whole codebase. One feature, a handful of behaviors, sized for a 60-second vet.
 
-### Minute 6 — Vet in the site
+### Minute 6 — Vet (pick a surface)
 
-Open http://localhost:7878. The feature page shows the 3-5 proposed behaviors, each with an **Unverified** badge. For each:
+The PM has two co-equal vet surfaces. Either works; pick whichever fits the moment.
 
-- **Read the claim.** Is this what the product is supposed to do?
-- **Accept**, **edit**, or **reject**. Keyboard-friendly; one click per behavior.
-- The skill may also have run code-consistency and test-coverage analyses — if those signals are present, you'll see them next to the claim (e.g. "Code: looks consistent" / "Tests: covered by `src/checkout.test.ts:42`").
+**Surface A — In Claude Code (inline, no context switch).** The skill presents each proposed behavior one at a time:
 
-A typical first vet: under 5 minutes. The feature now has product-language Truth committed in the repo.
+```
+Behavior 1 of 4: checkout/guest-flow
+Claim: A guest user can complete checkout without creating an account.
+Code-consistency: looks consistent (src/checkout.ts:42)
+Test-coverage: no existing test covers this
+Test cases: 1. Guest reaches confirmation page  2. Order persists with guest email
+[Y]accept  [N]reject  [E]edit  [S]skip
+```
+
+PM types `Y`, `N`, `E`, or `S` per behavior. Writes go through the same MCP tools the site uses.
+
+**Surface B — In the product-truth site** (`http://localhost:7878`). Visual grid of the 4 proposed behaviors with **Unverified** badges. Per behavior:
+
+- Read the claim. Is this what the product is supposed to do?
+- Accept, edit, or reject. Keyboard-friendly; one click per behavior.
+- Code-consistency and test-coverage analyses show as evidence badges next to the claim ("Code: looks consistent" / "Tests: covered by `src/checkout.test.ts:42`").
+
+Either surface, a typical first vet is under 5 minutes. The feature now has product-language Truth committed in the repo.
 
 ### Minute 10 — Hand off to the builder
 
