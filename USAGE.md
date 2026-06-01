@@ -6,14 +6,16 @@
 
 ## 1. Who uses ProductOS
 
+The v0.1 user is a **product-lead person willing to install Claude Code as a one-time setup**. They have the repo checked out locally, live in a browser (the product-truth site) for daily authoring and validation, and use Claude Code's skill system to drive analysis ("propose behaviors for this feature," "align my existing tests"). The "developer" exists too, but downstream — they're the *builder* who consumes the spec ProductOS produces, often Claude in agent mode running the actual codebase changes.
+
 | Persona | Cadence | Primary surface |
 | --- | --- | --- |
-| **Founder / early team lead** | Heavy at adoption, then weekly | CLI + Context/Contract files in editor |
-| **Day-to-day engineer (human + agent)** | Continuous | Claude Code / Cursor / Codex (transparent — agent pulls verified Truth) |
-| **Product / business lead** | Weekly | Product-truth site (read mode); Context files |
-| **Eng lead / on-call** | Weekly | `productos gaps`, product-truth site Drift view |
+| **Product lead (v0.1 primary)** | Daily during feature cycles | Product-truth site (authoring + validation). Claude Code session for analyzer-skill prompts |
+| **Builder (engineer or Claude in agent mode)** | Per feature | Reads the Contract spec via MCP (or as a packet). Writes code + tests. CI surfaces results back to ProductOS |
+| **Eng lead / reviewer** | Weekly | Site Drift view, `productos gaps` for coverage gaps and orphans |
+| **Wider team (as the corpus grows)** | Occasional | Site read-mode for "what does our product do?" |
 
-The day-to-day engineer is the **silent majority of usage**. They mostly never type `productos` directly — the value reaches them through their runtime pulling verified Contracts. If we get that one flow right, ProductOS works.
+The product-lead person is the v0.1 wedge. The site is their daily surface; the CLI is a one-time install + serve step they barely interact with after setup. As the team grows, more people read the corpus; the authoring lock stays light.
 
 ---
 
@@ -56,85 +58,82 @@ The loop is what makes the spec come alive. Without it, ProductOS is a folder of
 
 ## 3. Adoption journey
 
-### Minute 1 — Install + init
+ProductOS adoption is **scoped to an in-flight feature, not the whole codebase.** You don't model your product upfront; you protect one feature you're already working on, feel the value, then grow the corpus feature-by-feature.
+
+### Minute 1 — Install (one-time, ~3 minutes)
 
 ```
 $ npm i -g productos
 $ cd my-app
 $ productos init claude
 ✓ Skill installed, MCP registered, productos/ scaffolded
+$ productos serve     # leave running in a terminal tab
 ```
 
-### Hour 1 — Fill in Product Context
+That's the entire dev-shaped setup. From here, daily work happens in Claude Code + the product-truth site at http://localhost:7878.
 
-Open `productos/context/` and write:
+### Minute 5 — First scoped pass on a real feature
 
-- `goals.md` — what does this product change about its users' lives?
-- `principles.md` — design principles that constrain every feature decision
-- `personas.md` — who are we building for?
-- `non-goals.md` — what we explicitly don't do
-- `voice.md` — brand voice / tone
+Pick a feature you're about to change (or one you want to protect from regression). In Claude Code:
 
-This is the **first thing Claude reads** before proposing anything. A weak Context means weak Contracts. A 30-minute investment here pays off across every analyzer session.
+> *"Run ProductOS feature scope on the checkout flow."*
 
-You can also ask Claude to **propose Context** from the codebase + your README — then vet what it produces.
+The skill walks the relevant code paths, proposes **3-5 behaviors** for that feature with claims + test cases in product language, and writes them to `productos/products/checkout/index.md`. Not 30 Contracts. Not the whole codebase. One feature, a handful of behaviors, sized for a 60-second vet.
 
-### Hour 1.5 — First analyzer pass
+### Minute 6 — Vet in the site
 
-```
-$ productos serve     # (in another terminal)
-```
+Open http://localhost:7878. The feature page shows the 3-5 proposed behaviors, each with an **Unverified** badge. For each:
 
-Then in Claude Code:
+- **Read the claim.** Is this what the product is supposed to do?
+- **Accept**, **edit**, or **reject**. Keyboard-friendly; one click per behavior.
+- The skill may also have run code-consistency and test-coverage analyses — if those signals are present, you'll see them next to the claim (e.g. "Code: looks consistent" / "Tests: covered by `src/checkout.test.ts:42`").
 
-> do a ProductOS pass on this codebase
+A typical first vet: under 5 minutes. The feature now has product-language Truth committed in the repo.
 
-Claude reads your Context first, then walks the code, proposing 20-40 Contracts as Unverified state in `productos/products/<area>/<feature>.md`.
+### Minute 10 — Hand off to the builder
 
-### Hour 2 — Vet the proposals
+The builder is either you, another dev, or **Claude in agent mode** in the same Claude Code session. They read the Contract directly via MCP (no separate packet needed in v0.1; the markdown is the packet). They implement, write tests against the declared test cases, and push.
 
-Open the product-truth site at http://localhost:7878. Browse Features by Area. For each:
+### Minute 20+ — Validate post-build
 
-- Read the proposed claims
-- Edit wording where it's off (writes back to markdown, will commit)
-- Accept as Verified (state flip in DB, no commit)
-- Reject ones that are wrong (state → rejected)
-- Note Drift if Claude misread the code
+CI runs the tests. Results flow back via `productos test record` (or the MCP equivalent). You reopen the site:
 
-A medium codebase: 30-45 minutes.
+- Behaviors with passing tests: **Verified** (green)
+- Behaviors with failing tests: **Contested** (red — needs attention before merge)
+- Behaviors with no tests received: **Orphan** (yellow — the builder may have cherry-picked; check)
 
-### End of session — Commit
+This is the **felt-value moment**: you shipped a feature *knowing the product intent was conveyed faithfully* (the builder read your declared behaviors) *and you can validate it happened* (test signals + AI-derived code-consistency signals on the same dashboard).
 
-```
-$ git add productos/
-$ git commit -m "Initial ProductOS pass: 32 Contracts verified"
-```
+### Day 1+ — Grow the corpus feature-by-feature
 
-Note: the commit captures Context + Contract markdown (content). Verification state lives in the DB and was already updated through the session.
+Every subsequent feature you scope adds 3-5 more behaviors. There's no "model the whole product" ceremony. After a month of normal feature work, you naturally have 30-60 verified behaviors — built up at the moments where they were actually cared about.
 
-### Day 1+ — Use Contracts as the spec for everything downstream
+The implementer flow each cycle:
 
-The Contract's claim + numbered test cases are the spec. The team:
+- Reads test cases in the site to know what acceptance looks like
+- Aligns existing tests when present (`productos test align` — proposes mappings so existing tests adopt declared cases without duplication)
+- Writes runnable tests against the test cases that aren't already covered
+- Encodes each test case's stable id (e.g. `auth/signup#duplicate-email/1`) in the test name so CI results map back
+- Posts test results back to ProductOS from CI
 
-- Reads test cases in the product-truth site to know what acceptance looks like
-- Writes runnable tests against those cases in their normal test framework when implementing features
-- Encodes each test case's stable id (e.g. `auth/signup#duplicate-email/1`) in the test name so CI results map back to the Contract
-- Posts test results back to ProductOS from CI via `productos test record` (or MCP / HTTP) so Verification stays live
-- Exports the implementation packet (`productos packet export <feature_id>`) when handing work off to a ticket tracker or an agent
+In v0.1 ProductOS does not auto-generate runnable test files for every behavior. The scaffolder (`productos test scaffold`) emits skeletons for net-new cases — useful at unit/integration/api level, mostly a forcing function at e2e where the harness depends on your stack. For most existing repos, **align is the dominant flow**; scaffolding is the tail case.
 
-In v0.1 ProductOS does not generate runnable test files — the implementer writes them. Skill-driven test generation lands in future.
+### When to add Strategy (optional)
+
+`productos/context/*.md` — goals, design principles, personas, non-goals, voice — is available from day 1, but not required. Add it when you have enough features that cross-cutting consistency matters (typically after 5-10 features). When you do, the analyzer skill reads Strategy first and uses it to constrain every behavior it proposes thereafter.
 
 ### Week 1 — The flywheel starts
 
-Claude finishes a change to the auth flow. Via the analyzer skill it:
+Claude finishes a change to the auth flow. Via the analyzer skill:
 
-1. Re-reads Product Context
+1. Re-reads Product Context (if filled in)
 2. Reads its Contract changes against the modified code
-3. Proposes new Contracts (Unverified) and proposes Contests on Contracts the change might have broken
+3. Produces fresh code-consistency + test-coverage evidence on the affected Contracts
+4. Proposes new Contracts (Unverified) for behaviors the change introduced, and surfaces drift events for Contracts the change might have broken
 
 You open the site, accept the new ones, address the contested ones. 5 minutes.
 
-The corpus grows; agents working in that area now see the new verified Truth in context, and don't break it.
+The corpus grows; Claude in any subsequent session sees the verified Contracts as context, and doesn't break them.
 
 ### Month 1 — Gaps become the team's pulse
 

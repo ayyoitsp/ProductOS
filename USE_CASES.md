@@ -6,50 +6,50 @@
 
 | Flow | When it runs | Primary actor |
 | --- | --- | --- |
-| **1. Onboarding** | Once, when a team adopts ProductOS on an existing codebase | Founder / team lead doing the setup |
-| **2. Feature development** | Every new feature — idea → packet → implementation → verified Truth | PM (planning), Engineer or AI Agent (implementation) |
+| **1. Scoped onboarding** | First feature a team protects with ProductOS — usually one already in flight | Product lead (with Claude Code as the analyzer) |
+| **2. Feature development** | Every new feature — idea → spec → implementation → validation | PM (authors intent), Builder (engineer or Claude in agent mode) |
 | **3. Test result ingestion** | Every CI run — how the user's test results feed back into ProductOS's view of Truth | The user's CI |
 
-Onboarding produces the initial Verified corpus. Feature development is the everyday loop that grows the corpus. Test result ingestion is the live link that lets a test pass or fail in the user's CI move the Contract's Verification state without anyone touching the product-truth site.
+Scoped onboarding produces the **first** Verified slice — one feature, 3-5 behaviors. Not the whole codebase. Feature development is the everyday loop that grows the corpus feature-by-feature, on the cadence of real work. Test result ingestion is the live link that lets a test pass or fail in the user's CI move the Contract's derived Verification state without anyone touching the product-truth site.
 
 ---
 
-## Flow 1 — Onboarding
+## Flow 1 — Scoped onboarding
 
-A team adopts ProductOS on their existing codebase. They install the skill, fill in Product Context, run a first analyzer pass, vet what Claude proposes, and commit the result. Outcome: a Verified Product Truth they can hand to any AI runtime as context.
+A product-lead person adopts ProductOS on their existing codebase. They install Claude Code + ProductOS once, then **scope the first pass to a single in-flight feature** — not the whole codebase. Goal: a small slice of Verified Product Truth (3-5 behaviors) for the one feature they're already invested in. Strategy/Context is **optional** and deferred until they have enough features to justify cross-cutting principles.
 
 ```mermaid
 flowchart TD
-    A[productos init claude] --> B[Skill installed, MCP registered, productos/ scaffolded]
-    B --> C[User fills in productos/context/*.md<br/>goals · principles · personas · non-goals · voice]
-    C --> D[productos serve<br/>MCP + product-truth site]
-    D --> E[In Claude Code:<br/>'do a ProductOS pass on this codebase']
+    A[productos init claude<br/>~3 min one-time setup] --> B[Skill installed, MCP registered<br/>productos/ scaffolded]
+    B --> C[productos serve<br/>localhost:7878]
+    C --> D[Pick one in-flight feature<br/>e.g. checkout flow]
+    D --> E[In Claude Code:<br/>'Run ProductOS feature scope on the checkout flow']
 
-    E --> F[Claude reads Context first]
-    F --> G[Claude walks the codebase]
-    G --> H[Claude proposes Contracts via MCP<br/>claim + numbered test cases<br/>Lifecycle: Implemented · Verification: Unverified]
+    E --> F[Skill walks ONLY the relevant code paths<br/>NOT the whole codebase]
+    F --> G[Skill proposes 3-5 behaviors<br/>+ code-consistency analysis per behavior<br/>+ test-coverage analysis if tests exist<br/>Lifecycle: Implemented · Verification: Unverified]
 
-    H --> I[User opens http://localhost:7878]
-    I --> J{For each proposed Contract}
-    J -->|claim is right| K[Accept as Verified<br/>DB state flip · no commit]
-    J -->|claim needs work| L[Edit claim / test cases<br/>writes to markdown]
-    J -->|claim is wrong| M[Reject<br/>state flip · no commit]
+    G --> H[PM opens http://localhost:7878]
+    H --> I{For each proposed behavior<br/>~60 seconds each}
+    I -->|claim is right| K[Accept<br/>DB state · no commit]
+    I -->|claim needs work| L[Edit claim / test cases inline<br/>writes to markdown]
+    I -->|claim is wrong| M[Reject<br/>DB state · no commit]
     K --> N[Continue to next]
     L --> N
     M --> N
-    N --> J
+    N --> I
 
-    J -->|all reviewed| O[git add productos/<br/>git commit]
-    O --> P[Initial Verified Product Truth lives in the repo]
+    I -->|all reviewed| O[git add productos/products/checkout/<br/>git commit]
+    O --> P[First Verified slice lives in the repo<br/>3-5 behaviors · one feature · 5-10 minutes total]
+    P --> Q[Strategy/Context optional<br/>add later when ≥5 features exist]
 ```
 
-**What ships at the end of onboarding:**
+**What ships at the end of scoped onboarding:**
 
-- `productos/context/*.md` — durable product framing (committed)
-- `productos/products/<area>/<feature>.md` — vetted Contracts with claims + numbered test cases (committed)
-- Per-Contract Verification state recorded in the local DB (gitignored)
+- `productos/products/<area>/<feature>.md` — vetted Contracts for **one feature**, with claims + numbered test cases (committed)
+- Per-Contract Verification state + Evidence (code-consistency, test-coverage) recorded in the local DB (gitignored, regenerable)
+- Strategy/Context files exist as empty templates in `productos/context/*.md` but **don't need to be filled in for the loop to work**
 
-**Time budget for a medium codebase:** 30-45 minutes of HITL vetting after Context is filled in.
+**Time budget:** 5-10 minutes from `productos init` to first Verified slice. The whole point is making the first feature cheap — *the corpus grows from real feature work, not a one-time modeling ceremony*.
 
 ---
 
@@ -57,57 +57,53 @@ flowchart TD
 
 The everyday loop. A feature idea travels through clarification (Contracts), handoff (implementation packet), execution (code + tests), drift check (pre-PR), and re-verification.
 
+The cycle is **PM authors intent → builder consumes → PM validates.** The builder is often Claude in agent mode in the same Claude Code session, sometimes a human dev, sometimes a contractor.
+
 ```mermaid
 sequenceDiagram
     autonumber
-    actor User as PM / User
-    participant Claude as Claude<br/>(in IDE)
+    actor PM as Product lead
+    participant Claude as Claude Code
     participant ProductOS
-    participant Tracker as Ticket tracker<br/>(Linear / Jira / GH Issues)
-    actor Impl as Implementer<br/>(engineer or agent)
+    actor Builder as Builder<br/>(Claude agent / engineer)
 
-    User->>Claude: "I'm planning a wishlist feature..."
-    Claude->>ProductOS: read Product Context
-    Claude->>User: surface clarifying questions<br/>(persists across sessions? max size?)
-    User->>Claude: answers
+    Note over PM,Claude: Author intent
+    PM->>Claude: "Scope ProductOS on the wishlist feature"
+    Claude->>ProductOS: read Product Context (if present)
+    Claude->>Claude: walk wishlist code paths
+    Claude->>ProductOS: propose 4 behaviors with claims + test cases<br/>+ code-consistency analysis<br/>+ test-coverage analysis
+    ProductOS-->>PM: 4 behaviors shown in site<br/>(Unverified · per-behavior evidence badges)
 
-    Claude->>ProductOS: propose 6 Contracts<br/>Lifecycle: Planned<br/>claims + test cases
-    User->>ProductOS: open product-truth site<br/>vet each Contract<br/>accept/edit/reject
-    ProductOS->>ProductOS: commit Contract markdown<br/>(content edits)
+    PM->>ProductOS: open product-truth site
+    Note over PM,ProductOS: 60 sec per behavior — keyboard-friendly
+    PM->>ProductOS: accept/edit/reject each behavior<br/>markdown content committed
 
-    User->>ProductOS: productos packet export wishlist/add-item
-    ProductOS-->>User: implementation packet<br/>(markdown: claims + test cases as acceptance criteria<br/>+ Context + implementation pointers)
+    Note over Builder,ProductOS: Consume intent
+    Builder->>ProductOS: read Contract via MCP<br/>(or as exported packet)
+    Builder->>Builder: implement code
+    Builder->>ProductOS: productos test align<br/>(map existing tests to behaviors)
+    ProductOS-->>Builder: 3 of 4 covered by existing tests<br/>1 needs a new test
+    Builder->>Builder: write the missing test<br/>(or productos test scaffold for net-new)
+    Builder->>Builder: push branch · CI runs
 
-    User->>Claude: "Take this packet, create a Linear ticket"
-    Claude->>Tracker: create ticket via user's Linear MCP<br/>body = packet (includes feature_id for traceability)
-    Tracker-->>Claude: ticket id
+    Note over ProductOS: Validate post-build
+    ProductOS->>ProductOS: receive test results from CI<br/>per-stable_id status<br/>resolves test_failed drift / opens new
+    ProductOS->>ProductOS: recompute Derived state<br/>(Verified · Contested · Orphan · Uncertain)
 
-    Impl->>Tracker: pick up ticket
-    Impl->>Impl: implement code + write runnable tests<br/>using test cases as the spec
-    Impl->>Impl: run the test suite locally
-    Impl->>ProductOS: productos product refresh feature wishlist
-    ProductOS->>ProductOS: Lifecycle: Planned → Implemented<br/>Verification: Unverified
+    PM->>ProductOS: reopen site post-merge
+    ProductOS-->>PM: 3 Verified · 1 Verified (new)<br/>feature complete
 
-    Impl->>Claude: "scan my branch for drift"
-    Claude->>ProductOS: productos-drift skill<br/>code_change + conflict analyzers
-    Claude->>ProductOS: self-heal cosmetic / mechanical changes
-    Claude->>ProductOS: emit Drift events for load-bearing changes
-    Claude-->>Impl: summary: 3 self-healed, 1 escalated
-
-    Impl->>ProductOS: open product-truth site<br/>vet the 1 escalated Contract
-    ProductOS->>ProductOS: Verification: Verified (human provenance)
-
-    Impl->>Tracker: open PR<br/>code change + Contract content edits visible together
+    Note over PM: Felt-value moment:<br/>intent conveyed faithfully, validated automatically
 ```
 
 **What ships at the end of each feature cycle:**
 
-- New Contracts with Lifecycle = `Implemented` and Verification = `Verified`
-- The Contract content (claims, test cases, notes) reflects what shipped
-- A trail of `human` and `self-heal:*` Verifications in the local DB
-- The ticket body carries the packet (with the feature_id embedded) so anyone reading the ticket can find the Contract
+- New Contracts with Lifecycle = `Implemented` and derived Verification = `Verified` (or `Contested` / `Orphan` if signals say so)
+- The Contract content (claims, test cases, notes) reflects what shipped — committed to the repo
+- Evidence trail in the local DB: per-stable_id test results, code-consistency analyses with reasoning, test-coverage analyses
+- The markdown is the packet — no separate handoff artifact required in v0.1 (Claude reads it directly via MCP)
 
-**Drift outside this flow:** the Contracts produced here become the baseline for the *next* PR's drift scan. The drift loop is what keeps Truth honest as code evolves.
+**Drift outside this flow:** the Contracts produced here become the baseline for the *next* PR. As code evolves, the analyzer skill (re-run on demand) produces fresh code-consistency + test-coverage evidence, opening drift events when reality moves away from the claim. The drift loop is what keeps Truth honest as code evolves.
 
 ---
 
@@ -187,8 +183,8 @@ The 80% case for any non-greenfield codebase is **mapping existing tests to test
 
 ## How the flows reinforce each other
 
-- **Onboarding** seeds the corpus and teaches the team what a good Contract looks like.
-- **Feature development** uses the corpus as context (Claude pulls Verified Contracts during the feature pass) and grows it (new Contracts get added).
-- **Test result ingestion** lets the team's existing CI move Verification state automatically — ProductOS receives status events without owning the runner or parsing framework-specific output.
+- **Scoped onboarding** seeds the corpus with one feature the team actually cares about — and teaches them what a good Contract looks like in the process.
+- **Feature development** uses the corpus as context (Claude pulls Verified Contracts during the feature pass) and grows it (new Contracts get added per cycle).
+- **Test result ingestion** lets the team's existing CI move derived Verification state automatically — ProductOS receives status events without owning the runner or parsing framework-specific output.
 
-The whole system is one tight loop: Context constrains what Contracts can claim → Contracts hold claims + test cases → the implementer writes code and tests against them → drift surfaces what changed (from code analysis or from the CI's test results) → humans vet only what genuinely needs judgment. Self-heal handles the rest.
+The whole system is one tight loop: PM authors intent (claims + test cases) → builder consumes intent via MCP → builder writes code + tests against the test cases → CI runs and posts results back → ProductOS recomputes derived state per behavior (Verified / Contested / Orphan / Uncertain) using test results + AI-derived code-consistency + AI-derived test-coverage evidence → PM validates the feature shipped as intended. Self-heal handles the cosmetic / mechanical changes; humans vet only what genuinely needs judgment.

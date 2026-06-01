@@ -41,21 +41,25 @@ ProductOS fills the missing layer: **a human-validated product correctness graph
 
 The full terminology lives in [`OVERVIEW.md`](OVERVIEW.md); the shortlist:
 
-- **Product Context** — upstream framing (goals, design principles, personas, non-goals, voice). The first thing read before proposing anything.
-- **Product Contracts** — individual claims about how the product behaves. The atomic artifact.
-- **Product Truth** — the corpus: the entire verified collection of Contracts.
-- **Product Evidence** — text-only refs (code, narrative, generated tests) that back each Contract.
-- **Product Verification** — the HITL iteration loop where humans review and accept Contracts via the product-truth site.
-- **Product Drift** — divergence signals (code changes, test failures, contests, expirations).
+- **Product Context** — upstream framing (goals, design principles, personas, non-goals, voice). The first thing read before proposing anything. Optional in v0.1; load-bearing as the corpus grows.
+- **Product Contracts** — individual claims about how the product behaves. The atomic artifact, authored in product language.
+- **Product Truth** — the corpus: all Product Contracts as committed markdown. Survives if ProductOS is removed.
+- **Product Evidence** — signals that inform whether reality matches Truth: test results from CI, AI-derived code-consistency analyses, AI-derived test-coverage analyses, human acceptance. Lives in the DB layer.
+- **Derived Verification state** — per Contract: Verified / Contested / Orphan / Uncertain / Unverified. Pure function over Truth + Evidence.
+- **Product Drift** — divergence signals (code changes, test failures, code-consistency flags, contests, expirations).
 - **Product Correctness** — the aggregate quality of Truth.
+
+**Three architectural layers:** Truth (committed markdown, PM-authoritative), Evidence (DB, signals about reality), Derived state (pure function over both). Each layer has a clean role. Remove ProductOS and you keep Truth; Evidence is regenerable.
 
 Behaviors are atomic; Features group them; Areas group Features.
 
-Contract states have two orthogonal axes: **Lifecycle** (`Planned` → `Implemented` → `Deprecated`) and **Verification** (only when Implemented: `Unverified` ↔ `Verified` ↔ `Contested`).
+Contract states have two orthogonal axes: **Lifecycle** (`Planned` → `Implemented` → `Deprecated`) and **Verification** (only when Implemented: derived from Evidence into one of `Unverified`, `Verified`, `Contested`, `Orphan`, `Uncertain`).
 
 ## Who this is for
 
 Two customer personas. They start in different places but converge on the same need: **a verified Product Truth that AI runtimes can act on safely.**
+
+> **The v0.1 wedge persona:** A **product-lead person** inside either of the teams below, willing to install Claude Code as a one-time setup. They live in the browser (the product-truth site), use Claude Code's skill system to drive analysis on a scoped feature, and hand off the resulting spec to a builder — often Claude in agent mode. The eng-side surfaces (CLI, MCP, receive interface) are plumbing they don't think about after install.
 
 ### Persona 1 — AI-native team
 
