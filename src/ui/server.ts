@@ -26,9 +26,12 @@ import {
   writeFeedback,
   FeedbackFrontmatter,
 } from "../core/feedback.js";
+import { listContext, readContext } from "../core/context.js";
 import { processFeedback } from "../byok/processor.js";
 import {
   renderArea,
+  renderContextDoc,
+  renderContextIndex,
   renderFeature,
   renderFeedbackQueue,
   renderHome,
@@ -135,24 +138,47 @@ export async function startUiServer(): Promise<void> {
         return json(res, { product: f, tracking: readTracking(paths, id) });
       }
       if (p === "/api/feedback") return json(res, listFeedback(paths).map((f) => f.frontmatter));
+      if (p === "/api/context") return json(res, listContext(paths).map((d) => ({ name: d.name, title: d.title, order: d.order })));
+      if (p.startsWith("/api/context/")) {
+        const name = p.slice("/api/context/".length);
+        const doc = readContext(paths, name);
+        if (!doc) return json(res, { error: "not found" }, 404);
+        return json(res, doc);
+      }
 
       // ---- Site rendering ----
       const areas = listAreas(paths);
+      const contextDocs = listContext(paths);
       const openFeedbackCount = listFeedback(paths, { state: "open" }).length;
+      const sb = (activeId?: string) =>
+        renderSidebar(areas, contextDocs, activeId, openFeedbackCount);
 
       if (p === "/" || p === "") {
         const fp = topReadmePath(paths);
         const readme = fs.existsSync(fp) ? fs.readFileSync(fp, "utf-8") : undefined;
         const body = renderHome(areas, readme);
-        const sidebar = renderSidebar(areas, "_root", openFeedbackCount);
-        return html(res, renderShell("Product Truth", body, sidebar));
+        return html(res, renderShell("Product Truth", body, sb("_root")));
       }
 
       if (p === "/_feedback" || p === "/_feedback/") {
         const entries = listFeedback(paths);
         const body = renderFeedbackQueue(entries);
-        const sidebar = renderSidebar(areas, "_feedback", openFeedbackCount);
-        return html(res, renderShell("Feedback queue", body, sidebar));
+        return html(res, renderShell("Feedback queue", body, sb("_feedback")));
+      }
+
+      if (p === "/_context" || p === "/_context/") {
+        const body = renderContextIndex(contextDocs);
+        return html(res, renderShell("Strategy", body, sb()));
+      }
+
+      const ctxMatch = p.match(/^\/_context\/([^/]+)\/?$/);
+      if (ctxMatch) {
+        const name = ctxMatch[1]!;
+        const doc = readContext(paths, name);
+        if (doc) {
+          const body = renderContextDoc(doc, contextDocs);
+          return html(res, renderShell(doc.title, body, sb(`_context:${name}`)));
+        }
       }
 
       const areaMatch = p.match(/^\/([^/]+)\/?$/);
@@ -161,8 +187,7 @@ export async function startUiServer(): Promise<void> {
         const area = areas.find((a) => a.slug === slug);
         if (area) {
           const body = renderArea(area);
-          const sidebar = renderSidebar(areas, undefined, openFeedbackCount);
-          return html(res, renderShell(area.title, body, sidebar));
+          return html(res, renderShell(area.title, body, sb()));
         }
       }
 
@@ -174,13 +199,11 @@ export async function startUiServer(): Promise<void> {
           const area = areas.find((a) => a.slug === featMatch[1]);
           const tracking = readTracking(paths, id);
           const body = renderFeature(f, area, tracking);
-          const sidebar = renderSidebar(areas, id, openFeedbackCount);
-          return html(res, renderShell(f.frontmatter.title, body, sidebar));
+          return html(res, renderShell(f.frontmatter.title, body, sb(id)));
         }
       }
 
-      const sidebar = renderSidebar(areas, undefined, openFeedbackCount);
-      html(res, renderShell("Not found", `<div class="empty-state">No product truth at <code>${p}</code>.</div>`, sidebar), 404);
+      html(res, renderShell("Not found", `<div class="empty-state">No product truth at <code>${p}</code>.</div>`, sb()), 404);
     } catch (e) {
       res.writeHead(500, { "content-type": "text/plain" });
       res.end(`server error: ${(e as Error).message}`);
