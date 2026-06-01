@@ -27,10 +27,26 @@ import { ProductosPaths } from "./paths.js";
 export const FeatureStatus = z.enum(["planned", "shipped", "deprecated"]);
 export type FeatureStatus = z.infer<typeof FeatureStatus>;
 
+export const TestCase = z.object({
+  id: z.number().int().positive(),
+  description: z.string().min(3),
+  given: z.string().optional(),
+  when: z.string().optional(),
+  then: z.string().optional(),
+  steps: z.string().optional(),
+  deprecated: z.boolean().optional(),
+  deprecated_reason: z.string().optional(),
+  replaced_by: z.number().int().positive().optional(),
+});
+export type TestCase = z.infer<typeof TestCase>;
+
 export const Behavior = z.object({
   id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/, "Behavior ids must be kebab-case"),
   claim: z.string().min(10),
   notes: z.string().optional(),
+  test_cases: z.array(TestCase).default([]),
+  deprecated: z.boolean().optional(),
+  deprecated_reason: z.string().optional(),
 });
 export type Behavior = z.infer<typeof Behavior>;
 

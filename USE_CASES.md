@@ -151,6 +151,7 @@ flowchart LR
 
 **The contract with the user's stack:**
 
+- **Agnostic about execution, opinionated about scaffolding.** ProductOS doesn't run tests or parse runner output. It *does* render test stubs in the user's framework on demand — `productos test scaffold <feature_id>` emits jest / vitest / playwright / pytest files with the stable id baked into each test name and the test case `given`/`when`/`then` (or `steps`) as comments. Stubs throw on entry; the implementer fills in setup + assertions and runs them in their normal CI.
 - **One tiny receive interface.** ProductOS accepts a list of `{stable_id, status, timestamp}` tuples (with optional `message` / `run_id` for context). Same payload across MCP, CLI (`productos test record < results.json`), and HTTP. No parsing of framework-specific outputs in ProductOS itself.
 - **Connectors are optional convenience.** A jest reporter, pytest plugin, or JUnit-XML converter can wrap the call so the user doesn't write glue. None are required — anything that emits the payload works. Connectors ship as separate packages on the user's normal package manager.
 - **Stable id is the only convention.** Format: `<area>/<feature>#<behavior>/<test_case_id>` — e.g. `auth/signup#duplicate-email/1`. The implementer puts it where their framework carries it through to the result (test name is the easiest path; some frameworks support tags or metadata).

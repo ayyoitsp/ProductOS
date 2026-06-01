@@ -33,6 +33,12 @@ import {
   readContext,
   writeContext,
 } from "../core/context.js";
+import {
+  scaffoldTests,
+  SupportedFramework,
+} from "../core/test-scaffold.js";
+import fs from "node:fs";
+import path from "node:path";
 
 export interface McpTool {
   name: string;
@@ -521,6 +527,81 @@ const getGaps: McpTool = {
 };
 
 // ===========================================================================
+// TEST SCAFFOLDING (emit framework-native test stubs from Contract test_cases)
+// ===========================================================================
+//
+// ProductOS is agnostic about how tests run, but opinionated about scaffolding:
+// each test stub carries the stable id in its name so CI results map back to
+// the Contract. Stubs throw on entry — the implementer fills in setup +
+// assertions. Deprecated test cases are skipped.
+
+const SCAFFOLD_FRAMEWORKS = ["jest", "vitest", "playwright", "pytest"] as const;
+
+const ScaffoldTestsInput = z.object({
+  feature_id: z.string().describe("Feature id, e.g. 'wishlist/add-item'"),
+  framework: z
+    .enum(SCAFFOLD_FRAMEWORKS)
+    .optional()
+    .describe("Override stack.test_framework from productos/config.yaml"),
+  write: z
+    .boolean()
+    .optional()
+    .describe("If true, write the file to disk; if false (default), just return the content for review"),
+  out: z.string().optional().describe("Output path (default: derived from feature id + framework)"),
+  force: z.boolean().optional().describe("Overwrite an existing file (only matters with write=true)"),
+});
+
+const scaffoldTestsTool: McpTool = {
+  name: "productos_scaffold_tests",
+  description:
+    "Render framework-native test stubs from a Feature's behaviors + test_cases. Each generated test has the stable id (`<area>/<feature>#<behavior>/<case>`) in its name so the receive-only test result interface can map CI results back. Stubs throw on entry — the implementer fills in setup + assertions. Deprecated test cases are skipped. Default behavior: returns the rendered content WITHOUT writing — pass write=true to commit to disk.",
+  inputSchema: zodToInputSchema(ScaffoldTestsInput),
+  handler: async (raw, paths) => {
+    const args = ScaffoldTestsInput.parse(raw);
+    const feature = readFeatureById(paths, args.feature_id);
+    if (!feature) throw new Error(`Feature not found: ${args.feature_id}`);
+    const config = readConfig(paths);
+    const framework = (args.framework ?? config.stack.test_framework) as SupportedFramework;
+    const activeCount = feature.frontmatter.behaviors
+      .filter((b) => !b.deprecated)
+      .reduce((n, b) => n + b.test_cases.filter((tc) => !tc.deprecated).length, 0);
+    if (activeCount === 0) {
+      throw new Error(
+        `Feature ${args.feature_id} has no active test_cases. Add test_cases under each behavior before scaffolding.`
+      );
+    }
+
+    const result = scaffoldTests(feature, framework);
+
+    if (!args.write) {
+      return {
+        framework,
+        filename: result.filename,
+        content: result.content,
+        active_test_cases: activeCount,
+        written: false,
+        note: "Preview only. Re-call with write=true to commit to disk.",
+      };
+    }
+
+    const outPath = path.resolve(paths.repoRoot, args.out ?? result.filename);
+    if (fs.existsSync(outPath) && !args.force) {
+      throw new Error(
+        `Refusing to overwrite ${path.relative(paths.repoRoot, outPath)} — pass force=true to replace.`
+      );
+    }
+    fs.mkdirSync(path.dirname(outPath), { recursive: true });
+    fs.writeFileSync(outPath, result.content, "utf-8");
+    return {
+      framework,
+      filename: path.relative(paths.repoRoot, outPath),
+      active_test_cases: activeCount,
+      written: true,
+    };
+  },
+};
+
+// ===========================================================================
 // Registry
 
 export const tools: McpTool[] = [
@@ -549,6 +630,8 @@ export const tools: McpTool[] = [
   // env + gaps
   getEnv,
   getGaps,
+  // test scaffolding
+  scaffoldTestsTool,
 ];
 
 // ---------------------------------------------------------------------------
