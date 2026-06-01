@@ -151,7 +151,7 @@ flowchart LR
 
 **The contract with the user's stack:**
 
-- **Agnostic about execution, opinionated about scaffolding.** ProductOS doesn't run tests or parse runner output. It *does* render test stubs in the user's framework on demand — `productos test scaffold <feature_id>` emits jest / vitest / playwright / pytest files with the stable id baked into each test name and the test case `given`/`when`/`then` (or `steps`) as comments. Stubs throw on entry; the implementer fills in setup + assertions and runs them in their normal CI.
+- **Coverage management, not test generation.** ProductOS organizes coverage around verified behaviors: it *maps* the user's existing tests onto test cases (`productos test align`), *surfaces* which cases are uncovered (`productos test coverage`), and *receives* results from CI through the same stable id. Scaffolding new test files is a supporting feature for net-new cases — not the headline.
 - **One tiny receive interface.** ProductOS accepts a list of `{stable_id, status, timestamp}` tuples (with optional `message` / `run_id` for context). Same payload across MCP, CLI (`productos test record < results.json`), and HTTP. No parsing of framework-specific outputs in ProductOS itself.
 - **Connectors are optional convenience.** A jest reporter, pytest plugin, or JUnit-XML converter can wrap the call so the user doesn't write glue. None are required — anything that emits the payload works. Connectors ship as separate packages on the user's normal package manager.
 - **Stable id is the only convention.** Format: `<area>/<feature>#<behavior>/<test_case_id>` — e.g. `auth/signup#duplicate-email/1`. The implementer puts it where their framework carries it through to the result (test name is the easiest path; some frameworks support tags or metadata).
@@ -171,6 +171,17 @@ flowchart LR
 - The stable id is the only thing crossing the boundary in both directions: implementer writes it into the test, results flow back referencing it.
 - Verification is live — no separate "re-verify" step, no manual sweep. The Contract reads as Verified at any moment when nothing currently contests it.
 - Connectors absorb the awkwardness of producing the payload for popular runners. They're convenience, not a requirement.
+
+**Scaffolding new test files (supporting feature, not the headline):**
+
+For behaviors with no existing test coverage, `productos test scaffold <feature_id>` emits a framework-native skeleton (jest / vitest / playwright / pytest) with the stable id baked into each test name and the `given`/`when`/`then` (or `steps`) as comments. The stub fails loudly until the implementer fills in setup + assertions.
+
+The labor savings vary by test layer:
+
+- **Unit / integration / api:** the skeleton is most of the work. The implementer drops in assertions and is done.
+- **End-to-end:** the skeleton is 5% of the work — harness setup (browser, fixtures, page objects) is the rest. The scaffold here is a forcing function for coverage (the empty file sits red until you address it), not a labor saver.
+
+The 80% case for any non-greenfield codebase is **mapping existing tests to test cases**, not scaffolding from scratch. `productos test align` is the primary entry point; scaffolding is the tail case for genuinely-net-new behaviors.
 
 ---
 
