@@ -348,6 +348,8 @@ Seven kinds in MVP, split by trigger pattern:
 
 **One analyzer skill, multiple evidence outputs.** The same skill that proposes Contracts also produces code-consistency and test-coverage signals when re-run on an existing Contract. Both signals are evidence (with reasoning attached), not Truth — they inform Derived state but can't mark a Contract Verified by themselves.
 
+**Two co-equal PM surfaces — site and Claude/text.** The product-truth site (`localhost:7878`) and the Claude Code skill flow are both first-class authoring + validation surfaces in v0.1. The site is for batch review and deep inspection of behaviors + evidence; the Claude/text flow is for inline vetting one behavior at a time without leaving the Claude Code session. Both call the same MCP tools and produce the same DB writes — the PM picks whichever fits the moment. No "real" surface; no canonical surface. The choice is contextual.
+
 **MVP first iteration:** the `productos-drift` skill — a Claude-driven, local, pre-PR scan that uses the user's existing runtime session. The skill walks the branch diff, runs the `code_change` and `conflict` analyzers, self-heals what it can, and escalates the rest as Drift events.
 
 **Deferred:** a CI PR bot packaging the same analyzers for headless use (requires BYOK; lands later).
