@@ -14,6 +14,7 @@ import {
   recordTransition,
   writeTracking,
 } from "../core/tracking.js";
+import { getStrategy } from "../core/context.js";
 
 /**
  * Result of trying to auto-process a feedback entry with BYOK.
@@ -33,6 +34,9 @@ export type ProcessResult =
   | { kind: "error"; message: string };
 
 const SYSTEM_PROMPT = `You are auto-processing a feedback note about a codebase's Product Truth.
+
+You will be given the project's STRATEGY (overarching goals, design principles, personas, non-goals, voice) BEFORE the feedback. Strategy constrains every edit you propose. If the feedback would violate a strategy principle, call request_human_review and name the principle — don't quietly apply an edit that contradicts it.
+
 
 Product Truth is a tree of markdown files describing what the product DOES, in product language (what the user does / what the user sees) — not in API/file terms. Each feature has structured "behaviors" (atomic claims). Implementation details (file paths, code refs, verification status) live in a separate tracking sidecar.
 
@@ -73,7 +77,8 @@ export async function processFeedback(
   }
 
   const targetCtx = buildTargetContext(entry, paths);
-  const userPrompt = buildUserPrompt(entry, targetCtx);
+  const strategy = getStrategy(paths);
+  const userPrompt = buildUserPrompt(entry, targetCtx, strategy);
 
   let reviewReason: string | undefined;
   const ops: string[] = [];
@@ -237,8 +242,16 @@ function buildTargetContext(entry: FeedbackEntry, paths: ProductosPaths): Target
   };
 }
 
-function buildUserPrompt(entry: FeedbackEntry, ctx: TargetContext): string {
+function buildUserPrompt(entry: FeedbackEntry, ctx: TargetContext, strategy: string): string {
   const parts: string[] = [];
+  if (strategy.trim()) {
+    parts.push("# Project strategy (read first — constrains every edit)");
+    parts.push("");
+    parts.push(strategy);
+    parts.push("");
+    parts.push("---");
+    parts.push("");
+  }
   parts.push(`# Feedback entry ${entry.frontmatter.id}`);
   parts.push(
     `Submitted by **${entry.frontmatter.created_by}** via **${entry.frontmatter.source}** at ${entry.frontmatter.created_at}.`

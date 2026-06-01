@@ -15,6 +15,7 @@ import {
 } from "../../core/config.js";
 import { envConfigFile, starterEnvYaml } from "../../core/env.js";
 import { ensureProductsDirs, topReadmePath, areaReadmePath, featureFilePath } from "../../core/product.js";
+import { contextFilePath } from "../../core/context.js";
 
 const SUPPORTED_RUNTIMES = ["claude"] as const;
 
@@ -71,6 +72,21 @@ export function initCommand(): Command {
         const stack = readConfig(paths).stack;
         fs.writeFileSync(envFile, starterEnvYaml({ language: stack.language, hasDocker }), "utf-8");
         console.log(pc.green("✓"), `Wrote ${rel(envFile)} — ${pc.bold("edit this!")} It tells Claude how to bring up your dev stack.`);
+      }
+
+      // 5a. Scaffold productos/context/ with empty templates the user fills in
+      const contextReadme = path.join(paths.contextDir, "README.md");
+      if (!fs.existsSync(contextReadme)) {
+        fs.mkdirSync(paths.contextDir, { recursive: true });
+        fs.writeFileSync(contextReadme, CONTEXT_README, "utf-8");
+        for (const [name, content] of Object.entries(CONTEXT_TEMPLATES)) {
+          const fp = contextFilePath(paths, name);
+          if (!fs.existsSync(fp)) fs.writeFileSync(fp, content, "utf-8");
+        }
+        console.log(
+          pc.green("✓"),
+          `Scaffolded ${rel(paths.contextDir)}/ (${Object.keys(CONTEXT_TEMPLATES).length} starter files) — ${pc.bold("fill these in!")} They constrain every feature.`
+        );
       }
 
       // 5. Scaffold top-level README + an example area + an example feature
@@ -154,12 +170,117 @@ This directory contains the **product truth** for this codebase. Each subdirecto
 inside an area is a **feature**, with structured *behaviors* (atomic claims about what the
 feature does) declared in its frontmatter and supporting prose in the body.
 
+Above features sits **strategy** (\`productos/context/\`) — overarching goals, design
+principles, personas, non-goals, and voice. Read those first; features must respect them.
+
 Run \`productos serve\` and open http://localhost:7878 to browse this as a website.
 
-When designing a new feature, **consult these files first**. When shipping a feature,
-**update them in the same PR** so the diff captures both the code change and the
-behavior change in one place.
+When designing a new feature, **consult \`context/\` first**. When shipping a feature,
+**update product truth + tracking in the same PR** so the diff captures both the code
+change and the behavior change in one place.
 `;
+
+const CONTEXT_README = `---
+title: Strategy
+order: 0
+---
+
+# Strategy
+
+The overarching layer above features. Everything here constrains every feature decision below.
+
+- **goals.md** — what we're trying to achieve
+- **principles.md** — what we always (or never) do
+- **personas.md** — who we're building for
+- **non-goals.md** — what we explicitly don't do
+- **voice.md** — how the product speaks
+
+Each file is markdown. Each \`## heading\` becomes an anchorable id, so features can cite e.g. \`principles#numbers-feel-rewarding\` in their notes.
+
+Edit these freely. The \`productos-analyze\` skill reads every file in this directory before proposing or updating any feature.
+`;
+
+const CONTEXT_TEMPLATES: Record<string, string> = {
+  goals: `---
+title: Product goals
+order: 1
+---
+
+# Product goals
+
+What outcomes is the product trying to drive? Aim for 3-7 goals. Make them concrete enough that a stranger could read them and tell whether a feature serves them.
+
+## (Example) Reduce friction in weekly chore conversations
+
+Today parents and kids negotiate chores every Sunday. The product should reduce that negotiation to <5 min/week, by making the rules and amounts pre-decided.
+
+(Delete the example and add your real goals.)
+`,
+  principles: `---
+title: Design principles
+order: 2
+---
+
+# Design principles
+
+What does the product always do? What does it never do? Aim for 5-15 principles, each one a concrete rule that can settle a design argument.
+
+## (Example) Numbers feel rewarding, never punishing
+
+Credits use green; debits use muted neutral. Balance never appears in red. Animations on increases; none on decreases.
+
+## (Example) Parents stay in control
+
+Kids can suggest; parents approve. No path where a kid credits themselves.
+
+(Delete the examples and write your real principles.)
+`,
+  personas: `---
+title: Personas
+order: 3
+---
+
+# Personas
+
+Who are we building for? 2-5 personas, each one a concrete person you can picture, with their context and what they care about.
+
+## (Example) Sarah — mom of two ages 8 and 10
+
+Works full-time, wants kids to internalize saving without lectures. Tracks chores on a whiteboard today.
+
+(Delete the example and write your real personas.)
+`,
+  "non-goals": `---
+title: Non-goals
+order: 4
+---
+
+# Non-goals
+
+What does the product explicitly NOT do? Naming non-goals prevents scope creep and makes tradeoffs visible.
+
+## (Example) Real bank account integration
+
+This is play money. We won't connect to ACH, Plaid, or anything similar. If a user wants real money mechanics, this isn't the product.
+
+(Delete the example and write your real non-goals.)
+`,
+  voice: `---
+title: Voice & tone
+order: 5
+---
+
+# Voice & tone
+
+How does the product speak? Word-level conventions, tone in success/error states, level of formality.
+
+## (Example) Celebrate wins; never shame losses
+
+Spend transactions are neutral, not negative. Empty states are encouraging, not nagging.
+
+(Delete the example and write your real voice rules.)
+`,
+};
 
 const EXAMPLE_AREA_README = `---
 title: Example area

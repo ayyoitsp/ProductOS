@@ -6,6 +6,7 @@ import {
 } from "../core/product.js";
 import { BehaviorStatus, BehaviorTracking, FeatureTracking } from "../core/tracking.js";
 import { FeedbackEntry } from "../core/feedback.js";
+import { ContextDocument } from "../core/context.js";
 
 const SHELL_CSS = `
 :root {
@@ -126,6 +127,9 @@ article.prose img { max-width: 100%; border-radius: 8px; }
 .empty-state { color: var(--dim); padding: 24px; }
 .feedback-section { margin-top: 40px; padding-top: 24px; border-top: 1px solid var(--surface-3); }
 .feedback-section h2 { margin-top: 0; }
+article.prose.context h2 { scroll-margin-top: 80px; }
+article.prose.context .anchor { color: var(--dim); text-decoration: none; font-weight: 400; margin-right: 6px; }
+article.prose.context .anchor:hover { color: var(--accent); }
 `;
 
 const APP_JS = `
@@ -208,22 +212,92 @@ export function renderShell(title: string, body: string, sidebar: string): strin
 </html>`;
 }
 
-export function renderSidebar(areas: AreaDocument[], activeId?: string, openCount = 0): string {
+export function renderSidebar(
+  areas: AreaDocument[],
+  contextDocs: ContextDocument[],
+  activeId?: string,
+  openCount = 0
+): string {
   const parts: string[] = [
     `<a href="/" class="${activeId === "_root" ? "active" : ""}">📖 Overview</a>`,
-    `<a href="/_feedback">💬 Feedback queue${openCount ? ` <span style="color:var(--yellow);font-family:var(--mono);font-size:11px;">(${openCount})</span>` : ""}</a>`,
-    `<h2>Areas</h2>`,
+    `<a href="/_feedback" class="${activeId === "_feedback" ? "active" : ""}">💬 Feedback queue${openCount ? ` <span style="color:var(--yellow);font-family:var(--mono);font-size:11px;">(${openCount})</span>` : ""}</a>`,
   ];
-  for (const area of areas) {
-    parts.push(`<div class="area">`);
-    parts.push(`<div class="area-title"><a href="/${area.slug}/">${escape(area.title)}</a></div>`);
-    for (const f of area.features) {
-      const active = activeId === f.frontmatter.id ? " active" : "";
-      parts.push(`<a class="feat${active}" href="${escape(f.url_path)}">${escape(f.frontmatter.title)}</a>`);
+  if (contextDocs.length) {
+    parts.push(`<h2>Strategy</h2>`);
+    for (const doc of contextDocs) {
+      const active = activeId === `_context:${doc.name}` ? " active" : "";
+      parts.push(`<a class="feat${active}" href="/_context/${escape(doc.name)}">${escape(doc.title)}</a>`);
     }
-    parts.push(`</div>`);
+  }
+  if (areas.length) {
+    parts.push(`<h2>Areas</h2>`);
+    for (const area of areas) {
+      parts.push(`<div class="area">`);
+      parts.push(`<div class="area-title"><a href="/${area.slug}/">${escape(area.title)}</a></div>`);
+      for (const f of area.features) {
+        const active = activeId === f.frontmatter.id ? " active" : "";
+        parts.push(`<a class="feat${active}" href="${escape(f.url_path)}">${escape(f.frontmatter.title)}</a>`);
+      }
+      parts.push(`</div>`);
+    }
   }
   return parts.join("\n");
+}
+
+export function renderContextDoc(doc: ContextDocument, all: ContextDocument[]): string {
+  // Anchor every h2 heading by slug so other docs can cite e.g. `principles#numbers-feel-rewarding`.
+  // marked emits <h2>X</h2>; we post-process to inject ids.
+  const html = String(marked.parse(doc.body)).replace(
+    /<h2>([\s\S]*?)<\/h2>/g,
+    (_match, inner: string) => {
+      const slug = slugify(stripTags(inner));
+      return `<h2 id="${slug}"><a href="#${slug}" class="anchor">#</a> ${inner}</h2>`;
+    }
+  );
+  return `
+    <div class="crumb"><a href="/">Overview</a> · Strategy</div>
+    <header class="feature">
+      <h1>${escape(doc.title)}</h1>
+      <div class="meta"><span class="pill">${doc.name}</span></div>
+    </header>
+    <article class="prose context">${html}</article>
+  `;
+}
+
+export function renderContextIndex(docs: ContextDocument[]): string {
+  if (docs.length === 0) {
+    return `
+      <header class="feature"><h1>Strategy</h1></header>
+      <div class="empty-state">No strategy documents yet. Run <code>productos init claude</code> — it scaffolds empty <code>productos/context/*.md</code> files for goals, principles, personas, etc.</div>
+    `;
+  }
+  const cards = docs
+    .map(
+      (d) => `
+      <a href="/_context/${escape(d.name)}" style="display:block;background:var(--surface);border:1px solid var(--surface-3);border-radius:12px;padding:18px 20px;text-decoration:none;color:var(--text);margin:10px 0;">
+        <div style="font-weight:600;font-size:15px;color:var(--accent);">${escape(d.title)}</div>
+        <div style="color:var(--dim);font-size:12px;margin-top:6px;font-family:var(--mono);">${escape(d.name)}.md</div>
+      </a>`
+    )
+    .join("\n");
+  return `
+    <header class="feature"><h1>Strategy</h1></header>
+    <article class="prose"><p>The overarching layer above features — goals, design principles, personas, non-goals, voice. Read these before proposing or vetting any feature; they constrain every decision below.</p></article>
+    ${cards}
+  `;
+}
+
+function slugify(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, "")
+    .trim()
+    .replace(/\s+/g, "-")
+    .slice(0, 80);
+}
+
+function stripTags(s: string): string {
+  return s.replace(/<[^>]+>/g, "");
 }
 
 export function renderHome(areas: AreaDocument[], topReadme?: string): string {

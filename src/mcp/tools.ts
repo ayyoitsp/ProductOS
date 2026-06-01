@@ -27,6 +27,12 @@ import {
 } from "../core/feedback.js";
 import { readEnvConfig, resolveEnv } from "../core/env.js";
 import { readConfig } from "../core/config.js";
+import {
+  getStrategy,
+  listContext,
+  readContext,
+  writeContext,
+} from "../core/context.js";
 
 export interface McpTool {
   name: string;
@@ -34,6 +40,76 @@ export interface McpTool {
   inputSchema: Record<string, unknown>;
   handler: (args: unknown, paths: ProductosPaths) => Promise<unknown>;
 }
+
+// ===========================================================================
+// CONTEXT (the overarching layer above features — goals, principles, personas)
+// ===========================================================================
+//
+// READ THIS BEFORE TOUCHING PRODUCT TRUTH. Context constrains every feature
+// decision below it. When proposing features, surface relevant principles in
+// the notes. When feedback would violate a principle, flag for human review
+// instead of silently applying.
+
+const listContextTool: McpTool = {
+  name: "productos_list_context",
+  description:
+    "List all overarching context documents (goals, principles, personas, non-goals, voice, etc.) under productos/context/. ALWAYS call this before proposing or updating features — context constrains every feature decision below it. Returns name, title, and order for each document.",
+  inputSchema: zodToInputSchema(z.object({})),
+  handler: async (_raw, paths) => {
+    const docs = listContext(paths);
+    return {
+      count: docs.length,
+      docs: docs.map((d) => ({ name: d.name, title: d.title, order: d.order })),
+    };
+  },
+};
+
+const GetContextInput = z.object({
+  name: z.string().describe("Document name (filename without .md), e.g. 'principles' or 'goals'"),
+});
+
+const getContextTool: McpTool = {
+  name: "productos_get_context",
+  description:
+    "Read one overarching context document by name (e.g. 'principles', 'goals'). Returns the full markdown body plus title/order. Use this when you need to deeply consult a specific category before proposing a feature in that area.",
+  inputSchema: zodToInputSchema(GetContextInput),
+  handler: async (raw, paths) => {
+    const args = GetContextInput.parse(raw);
+    const doc = readContext(paths, args.name);
+    if (!doc) throw new Error(`Context document "${args.name}" not found`);
+    return { name: doc.name, title: doc.title, order: doc.order, body: doc.body };
+  },
+};
+
+const getStrategyTool: McpTool = {
+  name: "productos_get_strategy",
+  description:
+    "Convenience: returns all context documents (goals + principles + personas + non-goals + voice + whatever else exists) concatenated as one markdown blob. Use when you want the full overarching context loaded for a single LLM turn — typically before a multi-feature proposal pass, or when checking whether a piece of feedback respects existing principles.",
+  inputSchema: zodToInputSchema(z.object({})),
+  handler: async (_raw, paths) => {
+    const body = getStrategy(paths);
+    return { body, has_content: body.length > 0 };
+  },
+};
+
+const ProposeContextInput = z.object({
+  name: z.string().regex(/^[a-z][a-z0-9-]*$/, "Use kebab-case, e.g. 'principles' or 'non-goals'"),
+  title: z.string().optional(),
+  order: z.number().optional(),
+  body: z.string().min(20, "Body should be more than a sentence — context is the durable upstream layer, take a moment"),
+});
+
+const proposeContext: McpTool = {
+  name: "productos_propose_context",
+  description:
+    "Create or replace a context document. Use sparingly — context evolves slowly and edits should be human-reviewed. Use kebab-case for `name` (e.g. 'principles', 'non-goals'). Body is markdown; structure with `## headings` so individual items become anchorable.",
+  inputSchema: zodToInputSchema(ProposeContextInput),
+  handler: async (raw, paths) => {
+    const args = ProposeContextInput.parse(raw);
+    writeContext(paths, args);
+    return { ok: true, name: args.name };
+  },
+};
 
 // ===========================================================================
 // PRODUCT TRUTH (the markdown — what the product does, implementation-neutral)
@@ -448,6 +524,11 @@ const getGaps: McpTool = {
 // Registry
 
 export const tools: McpTool[] = [
+  // context (overarching — read first)
+  listContextTool,
+  getContextTool,
+  getStrategyTool,
+  proposeContext,
   // product truth
   listAreasTool,
   listFeaturesTool,
