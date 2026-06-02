@@ -37,6 +37,10 @@ import {
   scaffoldTests,
   SupportedFramework,
 } from "../core/test-scaffold.js";
+import {
+  recordTestResults,
+  RecordTestResultsInput,
+} from "../core/test-results.js";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -602,6 +606,29 @@ const scaffoldTestsTool: McpTool = {
 };
 
 // ===========================================================================
+// TEST RESULT INGESTION (receive-only — ProductOS doesn't run or parse tests)
+// ===========================================================================
+//
+// One tiny payload shape: { stable_id, status, timestamp, message?, run_id?, source? }
+// per test result. Anything that can call this MCP tool (or the matching CLI
+// shim / HTTP endpoint) works — Jest reporter, pytest plugin, GitHub Action,
+// bash one-liner. Unmapped stable ids are dropped silently. Deprecated cases
+// are recorded for forensics but don't open drift events. Active cases:
+// pass resolves any open test_failed drift; fail/error opens one.
+
+const recordTestResultsTool: McpTool = {
+  name: "productos_record_test_results",
+  description:
+    "Receive a batch of test results from the user's CI. Payload is a list of `{stable_id, status, timestamp?, message?, run_id?, source?}` tuples. Status ∈ {pass, fail, skip, error}. Stable id format: `<area>/<feature>#<behavior>/<test_case_id>` (e.g. `auth/signup#duplicate-email/1`). Unmapped ids are dropped silently. Deprecated test cases or behaviors are recorded in last_run state but do NOT open `test_failed` drift. Active cases: a fail/error opens a `test_failed` drift for that stable_id; a subsequent pass on the same stable_id resolves it. ProductOS does not parse framework-specific output formats — translation is the caller's responsibility (or a connector's). Same payload also accepted via CLI (`productos test record`) and HTTP (`POST /api/test-results`).",
+  inputSchema: zodToInputSchema(RecordTestResultsInput),
+  handler: async (raw, paths) => {
+    const args = RecordTestResultsInput.parse(raw);
+    const summary = recordTestResults(paths, args);
+    return summary;
+  },
+};
+
+// ===========================================================================
 // Registry
 
 export const tools: McpTool[] = [
@@ -630,8 +657,9 @@ export const tools: McpTool[] = [
   // env + gaps
   getEnv,
   getGaps,
-  // test scaffolding
+  // test scaffolding + receive
   scaffoldTestsTool,
+  recordTestResultsTool,
 ];
 
 // ---------------------------------------------------------------------------

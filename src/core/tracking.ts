@@ -42,12 +42,48 @@ export const HistoryEntry = z.object({
 });
 export type HistoryEntry = z.infer<typeof HistoryEntry>;
 
+export const TestRunStatus = z.enum(["pass", "fail", "skip", "error"]);
+export type TestRunStatus = z.infer<typeof TestRunStatus>;
+
+export const TestCaseRun = z.object({
+  status: TestRunStatus,
+  last_run_at: dateLike(),
+  last_run_message: z.string().optional(),
+  last_run_id: z.string().optional(),
+  last_run_source: z.string().optional(),
+});
+export type TestCaseRun = z.infer<typeof TestCaseRun>;
+
+export const DriftKind = z.enum([
+  "test_failed",
+  "code_change",
+  "code_inconsistent",
+  "test_uncovered",
+  "conflict",
+  "expired",
+  "feedback",
+]);
+export type DriftKind = z.infer<typeof DriftKind>;
+
+export const DriftEvent = z.object({
+  kind: DriftKind,
+  opened_at: dateLike(),
+  resolved_at: dateLike().optional(),
+  resolved_reason: z.string().optional(),
+  context: z.record(z.string(), z.any()).optional(),
+});
+export type DriftEvent = z.infer<typeof DriftEvent>;
+
 export const BehaviorTracking = z.object({
   code_refs: z.array(z.string()).default([]),
   status: BehaviorStatus.default("proposed"),
   last_verified: dateLike().optional(),
   verified_by: z.string().optional(),
   history: z.array(HistoryEntry).default([]),
+  /** Per-test-case last-run state, keyed by string-form test_case_id ("1", "2", ...). */
+  test_case_runs: z.record(z.string(), TestCaseRun).default({}),
+  /** Append-only drift events for this behavior. Open events have no `resolved_at`. */
+  drift_events: z.array(DriftEvent).default([]),
 });
 export type BehaviorTracking = z.infer<typeof BehaviorTracking>;
 
