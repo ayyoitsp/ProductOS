@@ -26,6 +26,7 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsx src/cli/index.ts",
+    "dev:serve": "tsx watch src/cli/index.ts serve --ui",
     "start": "node bin/productos.js",
     "typecheck": "tsc --noEmit"
   },
