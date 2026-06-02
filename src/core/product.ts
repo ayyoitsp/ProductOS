@@ -27,6 +27,9 @@ import { ProductosPaths } from "./paths.js";
 export const FeatureStatus = z.enum(["planned", "shipped", "deprecated"]);
 export type FeatureStatus = z.infer<typeof FeatureStatus>;
 
+export const TestCaseLevel = z.enum(["unit", "integration", "api", "e2e"]);
+export type TestCaseLevel = z.infer<typeof TestCaseLevel>;
+
 export const TestCase = z.object({
   id: z.number().int().positive(),
   description: z.string().min(3),
@@ -34,6 +37,12 @@ export const TestCase = z.object({
   when: z.string().optional(),
   then: z.string().optional(),
   steps: z.string().optional(),
+  /** Which testing layer this case is best run at. Drives template choice in the scaffolder. */
+  level: TestCaseLevel.optional(),
+  /** Free-form hint about the harness shape (e.g. "supertest", "playwright-webServer"). */
+  harness_hint: z.string().optional(),
+  /** Pointer to an existing test that already covers this case (file path or file:line). Set by `productos test align`. */
+  coverage_ref: z.string().optional(),
   deprecated: z.boolean().optional(),
   deprecated_reason: z.string().optional(),
   replaced_by: z.number().int().positive().optional(),
