@@ -109,13 +109,30 @@ h3 { font-size: 16px; margin: 22px 0 10px; color: var(--dim); }
 .status-orphan { color: #d39a3e; border-color: rgba(211,154,62,0.45); }
 .status-uncertain { color: #c39bff; border-color: rgba(195,155,255,0.45); }
 
-.evidence { margin-top: 12px; padding: 10px 12px; background: var(--surface-2); border-radius: 6px; font-size: 12px; color: var(--dim); }
-.evidence .ev-row { display: flex; gap: 8px; align-items: baseline; margin: 4px 0; }
-.evidence .ev-label { color: var(--dim); width: 84px; flex-shrink: 0; }
+.evidence { margin-top: 14px; padding: 12px 14px; background: var(--surface-2); border-radius: 8px; font-size: 13px; color: var(--dim); }
+.evidence .ev-row { display: flex; gap: 12px; align-items: flex-start; margin: 6px 0; }
+.evidence .ev-label { color: var(--dim); width: 84px; flex-shrink: 0; text-transform: uppercase; font-size: 10.5px; letter-spacing: 0.06em; padding-top: 3px; }
+.evidence .ev-empty { color: var(--dim); font-style: italic; font-size: 12.5px; }
 .evidence .ev-pass { color: var(--green); }
 .evidence .ev-fail { color: var(--red); }
 .evidence .ev-skip { color: var(--dim); }
-.evidence code { font-size: 11px; }
+.evidence .ev-pending { color: var(--yellow); }
+.evidence code { font-size: 11.5px; background: var(--surface); padding: 1px 5px; border-radius: 3px; }
+
+.tc-list { display: flex; flex-direction: column; gap: 10px; flex: 1; }
+.tc { background: var(--surface); border: 1px solid var(--surface-3); border-radius: 6px; padding: 10px 12px; }
+.tc-head { display: flex; gap: 10px; align-items: center; font-size: 11.5px; }
+.tc-id { font-family: var(--mono); color: var(--dim); }
+.tc-level { font-family: var(--mono); font-size: 10.5px; padding: 1px 6px; border-radius: 3px; background: var(--surface-2); border: 1px solid var(--surface-3); color: var(--accent); }
+.tc-status { font-family: var(--mono); font-size: 11px; }
+.tc-when { font-family: var(--mono); font-size: 10.5px; color: var(--dim); margin-left: 4px; }
+.tc-desc { color: var(--text); margin: 6px 0 2px; font-size: 13px; }
+.tc-detail { margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--surface-3); font-size: 12px; color: var(--text); }
+.tc-line { display: flex; gap: 10px; margin: 2px 0; }
+.tc-key { font-family: var(--mono); font-size: 10.5px; color: var(--accent); text-transform: uppercase; letter-spacing: 0.06em; width: 50px; flex-shrink: 0; padding-top: 1px; }
+.tc-steps { margin: 4px 0 0; font-family: var(--mono); font-size: 11.5px; white-space: pre-wrap; background: var(--surface-2); padding: 6px 10px; border-radius: 4px; }
+.tc-coverage { margin-top: 6px; font-size: 11.5px; color: var(--dim); }
+.tc-coverage code { font-size: 10.5px; }
 
 .rollup { display: flex; gap: 12px; margin: 12px 0 20px; flex-wrap: wrap; }
 .rollup .chip { background: var(--surface); border: 1px solid var(--surface-3); border-radius: 999px; padding: 4px 12px; font-size: 12px; font-family: var(--mono); color: var(--dim); }
@@ -604,20 +621,13 @@ function renderBehaviorEvidence(b: Behavior, t: BehaviorTracking | undefined): s
   const runs = t?.test_case_runs ?? {};
   const drifts = (t?.drift_events ?? []).filter((d) => !d.resolved_at);
   const cases = b.test_cases ?? [];
-  if (cases.length === 0 && drifts.length === 0) return "";
 
+  // ALWAYS render the test cases section — even when empty. Silent absence
+  // ("hey, where are my test cases?") was a real reported problem. Make the
+  // gap visible so the PM knows there's no scaffolding yet.
   const rows: string[] = [];
-  if (cases.length > 0) {
-    const caseLines = cases.map((tc) => {
-      const run = runs[String(tc.id)];
-      const dep = tc.deprecated ? " <span style=\"color:var(--dim)\">(deprecated)</span>" : "";
-      if (!run) return `      <li>case ${tc.id}: <span class="ev-skip">no result yet</span>${dep} — ${escape(tc.description)}</li>`;
-      const cls = run.status === "pass" ? "ev-pass" : run.status === "fail" || run.status === "error" ? "ev-fail" : "ev-skip";
-      const when = String(run.last_run_at).slice(0, 19).replace("T", " ");
-      return `      <li>case ${tc.id}: <span class="${cls}">${run.status}</span> <code>${when}</code>${dep} — ${escape(tc.description)}</li>`;
-    });
-    rows.push(`<div class="ev-row"><span class="ev-label">Tests</span><ul style="margin:0;padding-left:18px;">${caseLines.join("\n")}</ul></div>`);
-  }
+  rows.push(renderTestCasesBlock(cases, runs));
+
   if (drifts.length > 0) {
     const driftLines = drifts.map((d) => {
       const when = String(d.opened_at).slice(0, 19).replace("T", " ");
@@ -627,6 +637,51 @@ function renderBehaviorEvidence(b: Behavior, t: BehaviorTracking | undefined): s
     rows.push(`<div class="ev-row"><span class="ev-label">Open drift</span><ul style="margin:0;padding-left:18px;">${driftLines.join("\n")}</ul></div>`);
   }
   return `<div class="evidence">${rows.join("\n")}</div>`;
+}
+
+function renderTestCasesBlock(
+  cases: Behavior["test_cases"],
+  runs: NonNullable<BehaviorTracking["test_case_runs"]>
+): string {
+  if (cases.length === 0) {
+    return `<div class="ev-row"><span class="ev-label">Test cases</span><span class="ev-empty">No test cases yet — this behavior is a wish, not testable. Re-run productos-feature or productos-analyze to propose 1-3 cases per behavior.</span></div>`;
+  }
+  const caseBlocks = cases.map((tc) => {
+    const run = runs[String(tc.id)];
+    const statusBadge = (() => {
+      if (tc.deprecated) return `<span class="tc-status ev-skip">deprecated</span>`;
+      if (!run) return `<span class="tc-status ev-pending">no result yet</span>`;
+      const cls = run.status === "pass" ? "ev-pass" : run.status === "fail" || run.status === "error" ? "ev-fail" : "ev-skip";
+      const when = String(run.last_run_at).slice(0, 19).replace("T", " ");
+      return `<span class="tc-status ${cls}">${run.status}</span> <code class="tc-when">${when}</code>`;
+    })();
+    const levelBadge = tc.level ? `<span class="tc-level">${tc.level}</span>` : "";
+    const coverageLine = tc.coverage_ref ? `<div class="tc-coverage">↳ covered by <code>${escape(tc.coverage_ref)}</code></div>` : "";
+    const detail = renderTestCaseDetail(tc);
+    return `
+      <div class="tc">
+        <div class="tc-head">
+          <span class="tc-id">case ${tc.id}</span>
+          ${levelBadge}
+          ${statusBadge}
+        </div>
+        <div class="tc-desc">${escape(tc.description)}</div>
+        ${detail}
+        ${coverageLine}
+      </div>`;
+  });
+  return `<div class="ev-row"><span class="ev-label">Test cases</span><div class="tc-list">${caseBlocks.join("\n")}</div></div>`;
+}
+
+function renderTestCaseDetail(tc: Behavior["test_cases"][number]): string {
+  const lines: string[] = [];
+  if (tc.given) lines.push(`<div class="tc-line"><span class="tc-key">given</span>${escape(tc.given)}</div>`);
+  if (tc.when) lines.push(`<div class="tc-line"><span class="tc-key">when</span>${escape(tc.when)}</div>`);
+  if (tc.then) lines.push(`<div class="tc-line"><span class="tc-key">then</span>${escape(tc.then)}</div>`);
+  if (lines.length === 0 && tc.steps) {
+    lines.push(`<pre class="tc-steps">${escape(tc.steps.trim())}</pre>`);
+  }
+  return lines.length ? `<div class="tc-detail">${lines.join("")}</div>` : "";
 }
 
 function renderFeedbackForm(featureId: string, behaviorId?: string): string {
