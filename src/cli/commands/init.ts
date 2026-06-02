@@ -5,7 +5,6 @@ import { Command } from "commander";
 import { installClaudeSkills, uninstallClaudeSkills } from "../../adapters/claude.js";
 import {
   ensureDirs,
-  findRepoRoot,
   pathsFor,
 } from "../../core/paths.js";
 import {
@@ -49,7 +48,30 @@ export function initCommand(): Command {
       console.log(pc.green("✓"), `MCP server registered in ${install.mcpRegisteredAt}`);
 
       // 2. Scaffold productos/ + productos/products/
-      const repoRoot = findRepoRoot(process.cwd()) ?? process.cwd();
+      //
+      // `init` always scaffolds at the CURRENT working directory — never walks
+      // up to find an existing project. Walking up is what `serve` / `configure` /
+      // every other command does (they expect a project to already exist).
+      // `init` is different: it CREATES a project where you are.
+      //
+      // If a parent directory already contains a productos/ project, warn — the
+      // user might have meant to run from there. Continue anyway; if they really
+      // want CWD they get it, and if not they can `rm -rf productos/` and re-run.
+      const repoRoot = process.cwd();
+      const parentWithProject = findExistingProjectAbove(repoRoot);
+      if (parentWithProject) {
+        console.log(
+          pc.yellow("⚠"),
+          `Note: an existing ProductOS project lives at ${pc.bold(parentWithProject)}.`
+        );
+        console.log(
+          pc.dim("   Scaffolding a new project here instead (cwd: " + repoRoot + ").")
+        );
+        console.log(
+          pc.dim("   If you meant to operate on the parent project, cancel now and `cd` there first.")
+        );
+        console.log();
+      }
       const paths = pathsFor(repoRoot);
       ensureDirs(paths);
       ensureProductsDirs(paths);
@@ -111,15 +133,32 @@ export function initCommand(): Command {
       // 7. Next steps
       console.log();
       console.log(pc.bold("Next:"));
-      console.log(`  1. ${pc.bold("Edit productos/env.yaml")} — set the right setup commands and healthcheck URL for your stack.`);
-      console.log("  2. In another terminal: `productos serve` — opens your product-truth site at http://localhost:" + readConfig(paths).ui_port);
-      console.log("  3. Open Claude Code in this repo. Say: `do a ProductOS pass on this codebase`");
-      console.log("     — Claude reads your code, proposes features + behaviors,");
-      console.log("       drives the live env to gather evidence, and writes the markup directly into productos/products/.");
-      console.log("     You review the rendered site, approve behaviors with `productos product verify`, and commit the diff.");
+      console.log(`  1. ${pc.dim("(optional)")} ${pc.bold("productos configure")} — pick handlers; defaults work for most v0.1 users.`);
+      console.log(`  2. ${pc.dim("(optional)")} Fill in productos/context/*.md (goals, principles, etc.) ${pc.dim("— skippable in v0.1")}.`);
+      console.log("  3. In another terminal: `productos serve` — opens your product-truth site at http://localhost:" + readConfig(paths).ui_port);
+      console.log(`  4. Open Claude Code in this repo. Pick ${pc.bold("one in-flight feature")} and say:`);
+      console.log(`        ${pc.cyan("\"Scope ProductOS on the <feature> flow\"")}`);
+      console.log("     The productos-feature skill walks just that feature's code paths and proposes 3-5");
+      console.log("     behaviors with claims + test cases in product language.");
+      console.log(`  5. Vet either inline in Claude Code (${pc.cyan('"Use productos-vet on <feature>"')}) or in the site.`);
+      console.log(`  6. Map existing tests with ${pc.cyan('"Align my tests to <feature>"')} (productos-align skill).`);
+      console.log("  7. Implement + push. CI posts results back via `productos test record`.");
       console.log();
-      console.log(pc.dim("Optional: `productos configure` — pick how code scanning works (Claude / Codex / Manual) and how feedback is processed (queue / BYOK auto-process)."));
+      console.log(pc.dim("The v0.1 wedge is scoped to one feature, not the whole codebase — grow the corpus feature-by-feature."));
     });
+}
+
+function findExistingProjectAbove(start: string): string | null {
+  let dir = path.resolve(start);
+  const parent0 = path.dirname(dir);
+  if (parent0 === dir) return null;
+  dir = parent0;
+  while (true) {
+    if (fs.existsSync(path.join(dir, "productos", "config.yaml"))) return dir;
+    const parent = path.dirname(dir);
+    if (parent === dir) return null;
+    dir = parent;
+  }
 }
 
 function detectStack(repoRoot: string): { language: "typescript" | "javascript" | "python"; test_framework: "jest" | "vitest" | "pytest" | "playwright"; test_command: string } {
