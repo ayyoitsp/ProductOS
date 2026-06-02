@@ -1,14 +1,25 @@
 ---
 name: productos-analyze
-description: Use when peter asks to analyze a codebase for ProductOS — to consult existing product truth, propose features and behaviors in product-language markdown, record implementation in the tracking sidecar, and process open feedback queue entries. Triggers on "do a ProductOS pass", "scan the codebase and propose product truth", "process feedback", "update tracking for the wishlist work". Your outputs are markdown files in productos/products/ + YAML sidecars in productos/tracking/, and you mark feedback entries processed when you handle them.
-version: 0.1.0
+description: Use for a BROAD pass across the whole codebase (or a large area) — proposing many features and behaviors at once from existing code. Also used to process the open feedback queue. Triggers on "do a ProductOS pass on this codebase", "scan the codebase and propose product truth", "process feedback", "broad analyze pass". For a SINGLE in-flight feature, use `productos-feature` instead — that's the v0.1 PM wedge. After this skill writes proposals, recommend the user run `productos-vet` (or open localhost:7878) to walk them interactively.
+version: 0.2.0
 ---
 
-# ProductOS — Analyze Skill
+# ProductOS — Analyze Skill (BROAD pass)
 
 ProductOS holds the **product truth** for this codebase as a tree of markdown files under `productos/products/`. **Implementation tracking is separate** — it lives in YAML sidecars under `productos/tracking/`. **Feedback** (free-form notes from humans or external sources) lives as queue entries under `productos/feedback/`.
 
 Your job is to consult, propose, update, and process these three things via MCP. You do not write tests; you do not run tests as the validation core.
+
+## When to use this skill vs other ProductOS skills
+
+| You want to... | Use this skill |
+|---|---|
+| Do a broad pass across the whole codebase, propose many features at once | **`productos-analyze`** (you are here) |
+| Scope on ONE in-flight feature, propose 3-5 behaviors for it | `productos-feature` (the v0.1 PM wedge) |
+| Walk proposed behaviors one at a time and accept/reject inline | `productos-vet` |
+| Map existing tests in the user's repo to declared test cases | `productos-align` |
+
+If the user said "analyze the X feature" (singular), they probably want `productos-feature`, not this skill. Confirm before running a broad pass.
 
 ## The split
 
@@ -136,14 +147,28 @@ You don't run tests. You don't verify the behaviors. You give the human enough t
 
 ## After working
 
+You MUST end by explicitly handing the user off to a vetting surface. Don't leave proposed behaviors sitting Unverified without telling them what to do next. Two co-equal options — recommend both:
+
 ```
 I proposed N features across M areas and recorded tracking for K behaviors.
 I also processed J open feedback entries (P→processed, Q→ambiguous, awaiting your input).
 
-Open http://localhost:7878 to review:
-  - Product truth diffs are in productos/products/
-  - Tracking updates are in productos/tracking/
-  - Processed feedback is in productos/feedback/ (state: processed)
+The behaviors are Unverified — you need to vet them. Two co-equal options:
 
-Verify behaviors you agree with via the ✓ Verify button or `productos product verify`.
+  In Claude Code (inline, single-keystroke responses, no context switch):
+    "Use productos-vet to walk these"
+    (or scope it: "Use productos-vet on auth/signup")
+
+  In the product-truth site:
+    Open http://localhost:7878 — accept/edit/reject per behavior with buttons
+
+Both surfaces use the same MCP tools and produce the same DB state.
+Pick whichever fits the moment.
+
+Files to review:
+  - Product truth diffs:        productos/products/<area>/<feature>.md
+  - Tracking sidecar updates:   productos/tracking/<area>/<feature>.yaml
+  - Processed feedback:         productos/feedback/<id>.md (state: processed)
 ```
+
+The previous version of this skill ended with "verify via the ✓ Verify button or `productos product verify`" — that's incomplete. With v0.1, `productos-vet` is the canonical inline vetting flow and the site is the canonical visual flow. Both must be surfaced.
