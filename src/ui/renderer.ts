@@ -78,7 +78,15 @@ aside .area .feat { padding-left: 12px; color: var(--dim); font-size: 12.5px; }
 aside .area .feat.active { color: var(--accent); }
 
 main { padding: 36px 48px; max-width: 920px; min-width: 0; }
-header.feature { margin-bottom: 28px; padding-bottom: 20px; border-bottom: 1px solid var(--surface-3); }
+header.feature { margin-bottom: 24px; }
+header.feature .feature-title-row { display: flex; align-items: baseline; gap: 16px; margin-bottom: 4px; }
+header.feature .feature-title-row h1 { margin: 0; flex: 0 0 auto; }
+header.feature .feature-title-row .feature-id { color: var(--dim); font-family: var(--mono); font-size: 13px; flex: 1 1 auto; }
+header.feature .feature-title-row .feature-status { flex: 0 0 auto; }
+
+.section-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 32px 0 12px; }
+.section-head h2 { margin: 0; }
+.section-head .rollup { margin: 0; }
 .crumb { color: var(--dim); font-size: 12px; margin-bottom: 8px; }
 .crumb a { color: var(--dim); text-decoration: none; }
 .crumb a:hover { color: var(--text); }
@@ -96,8 +104,9 @@ h3 { font-size: 16px; margin: 22px 0 10px; color: var(--dim); }
   background: var(--surface); border: 1px solid var(--surface-3); border-radius: 12px;
   padding: 18px 22px; margin: 14px 0;
 }
-.behavior .head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
-.behavior .bid { font-family: var(--mono); font-size: 12px; color: var(--accent); }
+.behavior .head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; justify-content: space-between; }
+.behavior .head .bid { font-family: var(--mono); font-size: 12px; color: var(--accent); flex: 1 1 auto; }
+.behavior .head .status { flex: 0 0 auto; }
 .behavior .status {
   font-size: 11px; padding: 2px 10px; border-radius: 999px; border: 1px solid transparent; font-family: var(--mono);
 }
@@ -700,12 +709,14 @@ export function renderFeature(
   }
 
   const surfacesBlock = surfaces.length
-    ? `<h2>Surfaces</h2>${rollup}<div class="surfaces">${surfaces.map((s) => renderSurfaceWithBehaviors(f.id, s, anchored.get(s.id) ?? [], tracking)).join("\n")}</div>`
+    ? `<div class="section-head"><h2>Surfaces</h2>${rollup}</div><div class="surfaces">${surfaces.map((s) => renderSurfaceWithBehaviors(f.id, s, anchored.get(s.id) ?? [], tracking)).join("\n")}</div>`
     : "";
   const unanchoredHeading = surfaces.length ? "Rules & invariants" : "Behaviors";
+  // When there are no surfaces, the rollup hasn't been shown yet — surface it on the Behaviors head.
+  const unanchoredRollup = !surfaces.length ? rollup : "";
   const behaviorBlocks = f.behaviors.length
     ? (unanchored.length > 0
-        ? `<h2>${escape(unanchoredHeading)}</h2>${!surfaces.length ? rollup : ""}${unanchored.map((b) => renderBehavior(f.id, b, tracking?.behaviors[b.id])).join("\n")}`
+        ? `<div class="section-head"><h2>${escape(unanchoredHeading)}</h2>${unanchoredRollup}</div>${unanchored.map((b) => renderBehavior(f.id, b, tracking?.behaviors[b.id])).join("\n")}`
         : "")
     : `<div class="empty-state">No behaviors documented yet for this feature.</div>`;
 
@@ -718,16 +729,15 @@ export function renderFeature(
   return `
     ${crumb}
     <header class="feature">
-      <h1>${escape(f.title)}</h1>
-      <div class="meta">
-        <span class="pill ${f.status}">${f.status}</span>
-        <span style="color:var(--dim)">id:</span>
-        <code style="font-size:12px">${escape(f.id)}</code>
+      <div class="feature-title-row">
+        <h1>${escape(f.title)}</h1>
+        <code class="feature-id">${escape(f.id)}</code>
+        <span class="feature-status pill ${f.status}">${f.status}</span>
       </div>
-      ${affectedByBlock}
       ${implBlock}
     </header>
     ${description}
+    ${affectedByBlock}
     ${surfacesBlock}
     ${behaviorBlocks}
     ${bodyHtml}
@@ -839,7 +849,11 @@ function renderBehavior(
   const headPills = isDeprecated
     ? `<span class="status status-deprecated">● deprecated</span>`
     : `<span class="status status-${d.state}">● ${d.state}</span>`;
-  const reasonLine = !isDeprecated && d.reason ? `<div class="reason">${escape(d.reason)}</div>` : "";
+  // Hide the reason when it just restates the badge ("no human has accepted
+  // this Contract yet" is redundant with the Unverified badge). For Contested
+  // / Orphan / Uncertain the reason carries actual signal so keep it.
+  const reasonIsRedundant = d.state === "unverified";
+  const reasonLine = !isDeprecated && d.reason && !reasonIsRedundant ? `<div class="reason">${escape(d.reason)}</div>` : "";
   const deprecatedReason = isDeprecated && b.deprecated_reason ? `<div class="reason">${escape(b.deprecated_reason)}</div>` : "";
 
   const actions = isDeprecated
