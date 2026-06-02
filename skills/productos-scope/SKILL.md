@@ -71,6 +71,34 @@ sketch: |
 
 Surfaces are **optional** — features that are pure invariants/rules (a tax calculation, a balance constraint) don't have screens. Leave `surfaces` empty in that case.
 
+### 3a-bis. Deterministic scope rule (apply BEFORE listing behaviors)
+
+When a user action in one feature mutates state in another (kid completes a task → balance changes; interest accrual → balance changes; spend → balance changes), **the behavior belongs to the feature whose user-facing trigger fires.** Not the feature whose state is mutated.
+
+| Trigger | Behavior owned by |
+|---|---|
+| Parent submits + Earn form | `wallet/earn` (or wherever the form lives) |
+| Parent submits − Spend form | `wallet/spend` |
+| Kid taps "Complete" on a task card | `tasks/complete-task` |
+| Cron / settings change for interest | `wallet/interest` |
+| Viewing the balance | `wallet/kid-balance` (display + invariant rules) |
+
+The affected feature (here, `wallet/kid-balance`) does NOT redundantly own those mutation behaviors. Instead, it lists the triggering features under `affected_by`:
+
+```yaml
+id: wallet/kid-balance
+title: Kid balance
+affected_by:
+  - wallet/earn
+  - wallet/spend
+  - tasks/complete-task
+  - wallet/interest
+```
+
+Renders as an "Affected by:" pill row in the site, linking to each triggering feature. The PM can see at a glance "this balance changes via these other features" without us duplicating the trigger behaviors here.
+
+**User override.** If the user has a strong preference about where a behavior should live ("I want all balance-mutation behaviors gathered inside wallet/kid-balance"), respect it — capture the user's chosen organization verbatim. The deterministic rule is the *default* when no preference is stated; it stops the skill from asking the PM unanswerable scope questions, but it isn't an enforcement gate.
+
 ### 3b. Decompose into 3-5 behaviors
 
 Each behavior is one falsifiable claim about what the product does. Aim for 3-5, not 10. If you find more, the feature is probably two features.

@@ -105,6 +105,18 @@ export const FeatureFrontmatter = z.object({
    *  named elements. Behaviors anchor to these by id. Optional — omit for features
    *  that are pure invariants (no UI). */
   surfaces: z.array(Surface).default([]),
+  /**
+   * Other features whose user-facing triggers cause this feature's state to change.
+   *
+   * Deterministic rule: a behavior belongs to the feature whose trigger fires.
+   * When that behavior also mutates the state of a DIFFERENT feature (e.g. a kid
+   * completing a task mutates the wallet balance), the affected feature lists the
+   * triggering feature here — rather than duplicating the behavior in both places.
+   *
+   * Format: feature_ids (e.g. ["tasks/complete-task", "wallet/interest"]).
+   * Renders as an "Affected by:" pill row on the feature page.
+   */
+  affected_by: z.array(z.string()).default([]),
   behaviors: z.array(Behavior).default([]),
 });
 export type FeatureFrontmatter = z.infer<typeof FeatureFrontmatter>;

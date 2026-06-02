@@ -161,6 +161,12 @@ h3 { font-size: 16px; margin: 22px 0 10px; color: var(--dim); }
 .behavior .anchor-strip .interaction { font-family: var(--mono); padding: 1px 6px; border-radius: 3px; background: var(--surface-2); color: var(--text); font-size: 10.5px; }
 .behavior .anchor-strip .element-ref code { font-family: var(--mono); font-size: 11px; color: var(--accent); background: var(--surface-2); padding: 1px 5px; border-radius: 3px; }
 
+.affected-by { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 12px; }
+.affected-by-label { font-size: 11.5px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.06em; }
+.affected-by-pill { background: var(--surface-2); border: 1px solid var(--surface-3); border-radius: 999px; padding: 3px 10px; text-decoration: none; font-size: 11.5px; color: var(--accent); }
+.affected-by-pill:hover { border-color: var(--accent); background: var(--surface); }
+.affected-by-pill code { font-family: var(--mono); font-size: 11px; color: inherit; background: transparent; padding: 0; }
+
 .rollup { display: flex; gap: 12px; margin: 12px 0 20px; flex-wrap: wrap; }
 .rollup .chip { background: var(--surface); border: 1px solid var(--surface-3); border-radius: 999px; padding: 4px 12px; font-size: 12px; font-family: var(--mono); color: var(--dim); }
 .rollup .chip strong { color: var(--text); margin-right: 4px; }
@@ -569,6 +575,8 @@ export function renderFeature(
     ? `<h2>Notes</h2><article class="prose">${marked.parse(feature.body) as string}</article>`
     : "";
 
+  const affectedByBlock = renderAffectedBy(f.affected_by ?? []);
+
   return `
     ${crumb}
     <header class="feature">
@@ -578,6 +586,7 @@ export function renderFeature(
         <span style="color:var(--dim)">id:</span>
         <code style="font-size:12px">${escape(f.id)}</code>
       </div>
+      ${affectedByBlock}
       ${implBlock}
     </header>
     ${description}
@@ -586,6 +595,17 @@ export function renderFeature(
     ${bodyHtml}
     ${renderFeedbackSection(f.id, undefined, "Feedback on this feature")}
   `;
+}
+
+function renderAffectedBy(featureIds: string[]): string {
+  if (featureIds.length === 0) return "";
+  const pills = featureIds
+    .map(
+      (id) =>
+        `<a class="affected-by-pill" href="/${escape(id)}"><code>${escape(id)}</code></a>`
+    )
+    .join("");
+  return `<div class="affected-by"><span class="affected-by-label">Affected by:</span>${pills}</div>`;
 }
 
 function renderSurfaceWithBehaviors(
