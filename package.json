@@ -25,6 +25,7 @@
   },
   "scripts": {
     "build": "tsc",
+    "watch": "tsc --watch --preserveWatchOutput",
     "dev": "tsx src/cli/index.ts",
     "dev:serve": "tsx watch src/cli/index.ts serve --ui",
     "start": "node bin/productos.js",
