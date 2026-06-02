@@ -486,9 +486,11 @@ export function renderFeature(
     ? `<article class="prose"><p>${escape(f.description)}</p></article>`
     : "";
 
-  const implBlock = tracking?.implements?.length
-    ? `<div class="meta" style="margin-top:8px;"><span style="color:var(--dim)">Implemented in:</span> ${tracking.implements.map((p) => `<code style="font-size:12px">${escape(p)}</code>`).join(" ")}</div>`
-    : "";
+  // Implementation paths intentionally NOT rendered. The product-truth site
+  // is product-language-only; code references live in `productos/tracking/`
+  // (still committed, still queryable, still used by the analyzer / drift
+  // skills) but shouldn't compete with the claim for the reader's attention.
+  const implBlock = "";
 
   const rollup = renderFeatureRollup(f.behaviors, tracking);
   const behaviorBlocks = f.behaviors.length
@@ -548,10 +550,10 @@ function renderBehavior(featureId: string, b: Behavior, t: BehaviorTracking | un
   const verifiedLine = t?.last_verified
     ? `<div class="verified-line">Last accepted ${escape(t.last_verified)}${t.verified_by ? " by " + escape(t.verified_by) : ""}</div>`
     : "";
-  const impl =
-    t?.code_refs?.length
-      ? `<div class="impl"><span class="impl-label">Code:</span>${t.code_refs.map((r) => ` <code>${escape(r)}</code>`).join("")}</div>`
-      : "";
+  // Per-behavior code refs intentionally NOT rendered (same reason as the
+  // feature-level implBlock — product language only). Data persists in
+  // productos/tracking/<area>/<feature>.yaml for the analyzer / drift skills.
+  const impl = "";
   const notes = b.notes ? `<div class="notes">${escape(b.notes)}</div>` : "";
   const evidence = renderBehaviorEvidence(b, t);
   const isDeprecated = b.deprecated === true;

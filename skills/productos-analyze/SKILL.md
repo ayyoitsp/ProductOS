@@ -87,6 +87,35 @@ When peter asks "process feedback" (or you notice open entries):
    d. `productos_mark_feedback_processed(id, resolution_note)` — close it out
 3. Summarize what you did. The user reviews the diff (changes to product truth + tracking + the processed feedback entries) and commits.
 
+### Mode D: Surface gaps (do this BEFORE handing off to vet)
+
+Reading code only shows you what *exists*. The product person's question is often the opposite: **what's missing?** A welcome email is implemented but is there a path for *resending* it? Signup catches duplicate emails — what about whitespace-padded duplicates? `alice@example.com` and `alice@example.com  `? Etc.
+
+After proposing the behaviors that come from the code you read, **end with a "Potential gaps" list** — 3-7 questions a product person might ask about behavior that should probably exist but you couldn't find. Frame each gap as a *question*, not a claim:
+
+- "Can a user reset their password if they forgot it?"
+- "Does the welcome email include the user's first name, or is it generic?"
+- "What happens if the user signs up while logged in from a different account?"
+- "Is there rate-limiting on signup to prevent enumeration attacks?"
+- "Is the duplicate-email message accessible to screen readers?"
+
+Don't propose Contracts for these. Don't write tracking. Just *list them as open questions* in your final summary so the human decides which deserve a behavior, which are non-goals, and which are misunderstandings on your part.
+
+The list comes from reading the code in light of:
+
+| Lens | Example gap questions |
+|---|---|
+| **Error paths** | What does the code do on network failure? Timeout? Partial state? |
+| **Edge inputs** | Empty / whitespace / Unicode / very long inputs? |
+| **Concurrency** | What if two users do this simultaneously? Same user from two devices? |
+| **Authorization** | Who can do this? Logged-out? Other org? Other roles? |
+| **Lifecycle** | What about *un*-doing this? *Re*-doing it? |
+| **Observability** | Is there a way for support to verify this happened? |
+| **Accessibility** | Keyboard, screen reader, color-only signals? |
+| **Strategy fit** | Does this respect every Design Principle in productos/context/? |
+
+Use whichever lens makes sense for the feature in front of you. Don't enumerate all of them every time.
+
 ## Falsifiability gate
 
 Before each `propose_feature` / `add_behavior`:
@@ -147,11 +176,17 @@ You don't run tests. You don't verify the behaviors. You give the human enough t
 
 ## After working
 
-You MUST end by explicitly handing the user off to a vetting surface. Don't leave proposed behaviors sitting Unverified without telling them what to do next. Two co-equal options — recommend both:
+You MUST end by explicitly handing the user off to a vetting surface AND listing the gap questions you surfaced. Don't leave proposed behaviors sitting Unverified without telling them what to do next. Two co-equal options — recommend both:
 
 ```
 I proposed N features across M areas and recorded tracking for K behaviors.
 I also processed J open feedback entries (P→processed, Q→ambiguous, awaiting your input).
+
+Potential gaps (questions to consider, no Contracts written for these):
+  1. <gap question 1>
+  2. <gap question 2>
+  3. <gap question 3>
+  ...
 
 The behaviors are Unverified — you need to vet them. Two co-equal options:
 
