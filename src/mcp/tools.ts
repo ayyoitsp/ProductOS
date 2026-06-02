@@ -606,6 +606,48 @@ const scaffoldTestsTool: McpTool = {
 };
 
 // ===========================================================================
+// TEST CASE COVERAGE_REF (set by `align` after mapping existing tests)
+// ===========================================================================
+//
+// When `productos test align` matches an existing test to a declared test
+// case, it writes a `coverage_ref` on the case so derived state knows the
+// case is covered even before any test_result has been received.
+
+const SetCoverageRefInput = z.object({
+  feature_id: z.string().describe("Feature id, e.g. 'auth/signup'"),
+  behavior_id: z.string().describe("Behavior id within the feature"),
+  test_case_id: z.number().int().positive().describe("Test case numeric id"),
+  coverage_ref: z
+    .string()
+    .min(1)
+    .describe("Path to the existing test (e.g. 'tests/auth/signup.test.ts' or 'tests/auth/signup.test.ts:42'). Empty/null to clear."),
+});
+
+const setCoverageRefTool: McpTool = {
+  name: "productos_set_coverage_ref",
+  description:
+    "Set the `coverage_ref` on a single test case in a Contract — used by `productos test align` after mapping an existing test in the user's repo to a declared case. The coverage_ref is a free-form pointer (file path or file:line) to the existing test. Once set, derived state treats the case as covered even before any test_result has been received via the receive interface. Pass an empty string to clear. Writes to the markdown frontmatter.",
+  inputSchema: zodToInputSchema(SetCoverageRefInput),
+  handler: async (raw, paths) => {
+    const args = SetCoverageRefInput.parse(raw);
+    const feature = readFeatureById(paths, args.feature_id);
+    if (!feature) throw new Error(`Feature not found: ${args.feature_id}`);
+    const behavior = feature.frontmatter.behaviors.find((b) => b.id === args.behavior_id);
+    if (!behavior) throw new Error(`Behavior not found: ${args.behavior_id}`);
+    const tc = behavior.test_cases.find((c) => c.id === args.test_case_id);
+    if (!tc) throw new Error(`Test case ${args.test_case_id} not found`);
+    if (args.coverage_ref.length === 0) {
+      delete (tc as Record<string, unknown>).coverage_ref;
+    } else {
+      tc.coverage_ref = args.coverage_ref;
+    }
+    const { writeFeature } = await import("../core/product.js");
+    writeFeature(paths, feature);
+    return { ok: true, feature_id: args.feature_id, behavior_id: args.behavior_id, test_case_id: args.test_case_id, coverage_ref: tc.coverage_ref };
+  },
+};
+
+// ===========================================================================
 // TEST RESULT INGESTION (receive-only — ProductOS doesn't run or parse tests)
 // ===========================================================================
 //
@@ -657,8 +699,9 @@ export const tools: McpTool[] = [
   // env + gaps
   getEnv,
   getGaps,
-  // test scaffolding + receive
+  // test scaffolding + align + receive
   scaffoldTestsTool,
+  setCoverageRefTool,
   recordTestResultsTool,
 ];
 
