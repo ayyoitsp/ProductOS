@@ -72,7 +72,8 @@ For each feature, **identify the Surfaces first** — screens, pages, modals the
   | `[Label ▼]` | Dropdown |
   | `[✓]` / `[ ]` | Checkbox |
   | `(•)` / `( )` | Radio |
-  | `▢` / `▦` | Card / list item |
+  | `→ Name` | Card / list item / row (preferred — reads as a right-arrow click target) |
+  | `▢` / `▦` | Legacy card markers (use `→` in new sketches) |
   | `┌─┐ │ └─┘` | Box outlines |
 
   Use the element's `label` verbatim inside `[ ... ]` or `<...>` so the renderer can wrap it as a clickable link when `leads_to` is set.

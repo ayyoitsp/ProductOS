@@ -575,22 +575,20 @@ function decorateSketch(sketch: string, elements: Element[]): string {
   if (cardEl && cardEl.leads_to) {
     const target = resolveLeadsTo(cardEl.leads_to);
     if (target) {
-      // Match: card glyph + whitespace + content, stopping at either an existing
-      // anchor (so we don't nest), two-or-more spaces (column gap), or EOL.
-      // Use [\s\S] cautiously — we restrict via the negative-lookahead set.
+      // Recognize three glyphs as card/row markers: → (preferred), ▢, ▦.
+      // Match: glyph + whitespace + content, stopping at an existing anchor
+      // (so we don't nest), two-or-more spaces (column gap), or EOL.
       html = html.replace(
-        /(▢|▦)(\s+)([^\n│]*?)(?=<a\s|\s{2,}|│|$)/g,
+        /(→|▢|▦)(\s+)([^\n│]*?)(?=<a\s|\s{2,}|│|$)/g,
         (_m, icon: string, ws: string, content: string) =>
           `<a class="sketch-anchor sketch-card-row" href="${escape(target)}" title="goes to ${escape(cardEl.leads_to!)}"><span class="sketch-card-glyph">${icon}</span>${ws}<span class="sketch-card-text">${content}</span></a>`
       );
     }
   }
 
-  // Always give the card glyph a visible color, even when the row isn't a link
-  // (e.g. there's no card-kind element with leads_to). Skip if already wrapped
-  // above by checking that the preceding char isn't part of an HTML tag.
+  // Color the card glyph (→ / ▢ / ▦) even when the row isn't a link.
   html = html.replace(
-    /(?<!<[^>]*)(▢|▦)/g,
+    /(?<!<[^>]*)(→|▢|▦)/g,
     '<span class="sketch-card-glyph">$1</span>'
   );
 
