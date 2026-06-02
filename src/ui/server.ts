@@ -29,6 +29,10 @@ import {
 import { listContext, readContext } from "../core/context.js";
 import { processFeedback } from "../byok/processor.js";
 import {
+  recordTestResults,
+  RecordTestResultsInput,
+} from "../core/test-results.js";
+import {
   renderArea,
   renderContextDoc,
   renderContextIndex,
@@ -126,6 +130,21 @@ export async function startUiServer(): Promise<void> {
         }
 
         return json(res, { ok: true, id, path: path.relative(paths.repoRoot, fp) });
+      }
+
+      // ---- POST: receive test results from CI ----
+      if (req.method === "POST" && p === "/api/test-results") {
+        try {
+          const body = await readJson(req);
+          const input = RecordTestResultsInput.parse({
+            results: Array.isArray(body) ? body : body.results,
+            default_source: Array.isArray(body) ? undefined : body.default_source,
+          });
+          const summary = recordTestResults(paths, input);
+          return json(res, summary);
+        } catch (e) {
+          return json(res, { error: (e as Error).message }, 400);
+        }
       }
 
       // ---- JSON API ----
