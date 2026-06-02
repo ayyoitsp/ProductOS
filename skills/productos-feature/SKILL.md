@@ -84,9 +84,34 @@ If the lifecycle is `shipped`, also call `productos_update_tracking` with the co
 
 Never set `status: "verified"` — only the human does that, via the site or the `productos-vet` skill.
 
-### 6. Hand off cleanly
+### 6. Surface potential gaps
 
-Tell the user where to vet:
+Reading code only shows what *is*. The product question is often the opposite: **what's missing?** Before handing off to vet, list 3-7 questions a product person might ask about behavior that should probably exist but you couldn't find. Frame each as a *question*, not a claim:
+
+- "Can a guest user *recover* their cart if they accidentally close the tab?"
+- "Is there rate-limiting on the order endpoint to prevent abuse?"
+- "Does the confirmation page handle a slow tax calc gracefully?"
+- "Is the guest email validated for syntax before order creation?"
+- "What if the guest later signs up with the same email — does the order migrate?"
+
+Don't propose Contracts for these. Don't write tracking. *List them as open questions in the handoff* so the human decides which deserve a behavior, which are non-goals, and which are misunderstandings.
+
+Lenses to draw from (pick whichever fit the feature):
+
+| Lens | Example questions |
+|---|---|
+| **Error paths** | What happens on network failure? Timeout? Partial state? |
+| **Edge inputs** | Empty / whitespace / Unicode / extreme values? |
+| **Concurrency** | Two users doing this simultaneously? Same user, two devices? |
+| **Authorization** | Logged-out? Wrong role? Cross-tenant? |
+| **Lifecycle** | What about *un*-doing? *Re*-doing? Mid-flight cancellation? |
+| **Observability** | Can support verify this happened? |
+| **Accessibility** | Keyboard? Screen reader? Color-only signals? |
+| **Strategy fit** | Does every Design Principle still hold? |
+
+### 7. Hand off cleanly
+
+Tell the user where to vet AND surface the gap questions:
 
 ```
 I proposed N behaviors for <feature_id>. Vet them either:
@@ -96,6 +121,11 @@ I proposed N behaviors for <feature_id>. Vet them either:
 
   In the product-truth site:
     Open http://localhost:7878/<feature_id>
+
+Potential gaps (questions, no Contracts written):
+  1. <gap question 1>
+  2. <gap question 2>
+  ...
 ```
 
 ## Worked example — in-flight protection
