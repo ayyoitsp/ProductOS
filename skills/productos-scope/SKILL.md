@@ -1,10 +1,10 @@
 ---
-name: productos-feature
-description: Use when the user wants to scope ProductOS on one in-flight feature (the v0.1 wedge) — either pre-code planning OR retrofit on a feature that already exists. Reads the relevant code paths, proposes 3-5 behaviors with claims + test_cases in product language, and writes them to productos/products/<area>/<feature>.md as Unverified. Surfaces ambiguities as questions before writing. Triggers on "scope productos on the X flow", "run a productos feature scope on Y", "I'm planning a Z feature", "let's spec X in productos". The 80% v0.1 entry point.
+name: productos-scope
+description: Use when the user wants to scope ProductOS on ONE in-flight feature (the v0.1 wedge) — either pre-code planning OR retrofit on a feature that already exists. Reads the relevant code paths, proposes 3-5 behaviors with claims + test_cases in product language, and writes them to productos/products/<area>/<feature>.md as Unverified. Surfaces ambiguities as questions before writing. Triggers on "scope productos on the X flow", "scope X with productos", "I'm planning a Y feature", "let's spec X in productos". The 80% v0.1 entry point. (For a broad pass across the whole codebase, use `productos-fullscan` instead.)
 version: 0.1.0
 ---
 
-# ProductOS — Feature Scope Skill
+# ProductOS — Scope Skill (one feature at a time)
 
 The v0.1 entry point. The user — typically a product lead — wants to scope ProductOS on **one feature**. You produce a small, vettable slice: 3-5 behaviors with claims + numbered test_cases, written in product language, committed to `productos/products/<area>/<feature>.md`.
 
@@ -222,7 +222,7 @@ That last note is gold. Surface code-vs-intent gaps the moment you see them.
 
 ## Don't
 
-- **Don't model the whole codebase.** This is feature scope. If the user wants a full pass, they ask for `productos-analyze` instead.
+- **Don't model the whole codebase.** This is single-feature scope. If the user wants a full pass, they ask for `productos-fullscan` instead.
 - **Don't propose 20 behaviors.** 3-5 is the target. More and the user can't vet in a sitting.
 - **Don't write claims in implementation language.** "POST /api/X returns 409" → wrong. "User sees 'already registered'" → right.
 - **Don't set status='verified'.** Humans do that.

@@ -733,7 +733,7 @@ function renderTestCasesBlock(
   runs: NonNullable<BehaviorTracking["test_case_runs"]>
 ): string {
   if (cases.length === 0) {
-    return `<div class="ev-row"><span class="ev-label">Test cases</span><span class="ev-empty">No test cases yet — this behavior is a wish, not testable. Re-run productos-feature or productos-analyze to propose 1-3 cases per behavior.</span></div>`;
+    return `<div class="ev-row"><span class="ev-label">Test cases</span><span class="ev-empty">No test cases yet — this behavior is a wish, not testable. Re-run productos-scope or productos-fullscan to propose 1-3 cases per behavior.</span></div>`;
   }
   const caseBlocks = cases.map((tc) => {
     const run = runs[String(tc.id)];

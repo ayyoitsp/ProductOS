@@ -138,7 +138,7 @@ export function initCommand(): Command {
       console.log("  3. In another terminal: `productos serve` — opens your product-truth site at http://localhost:" + readConfig(paths).ui_port);
       console.log(`  4. Open Claude Code in this repo. Pick ${pc.bold("one in-flight feature")} and say:`);
       console.log(`        ${pc.cyan("\"Scope ProductOS on the <feature> flow\"")}`);
-      console.log("     The productos-feature skill walks just that feature's code paths and proposes 3-5");
+      console.log("     The productos-scope skill walks just that feature's code paths and proposes 3-5");
       console.log("     behaviors with claims + test cases in product language.");
       console.log(`  5. Vet either inline in Claude Code (${pc.cyan('"Use productos-vet on <feature>"')}) or in the site.`);
       console.log(`  6. Map existing tests with ${pc.cyan('"Align my tests to <feature>"')} (productos-align skill).`);
@@ -236,7 +236,7 @@ The overarching layer above features. Everything here constrains every feature d
 
 Each file is markdown. Each \`## heading\` becomes an anchorable id, so features can cite e.g. \`principles#numbers-feel-rewarding\` in their notes.
 
-Edit these freely. The \`productos-analyze\` skill reads every file in this directory before proposing or updating any feature.
+Edit these freely. The \`productos-scope\` and \`productos-fullscan\` skills read every file in this directory before proposing or updating any feature.
 `;
 
 const CONTEXT_TEMPLATES: Record<string, string> = {

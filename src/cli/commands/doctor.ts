@@ -22,10 +22,18 @@ export function doctorCommand(): Command {
       else fail(`Claude Code not detected at ${claudeDir}`);
 
       // 2. Skills installed
-      for (const s of ["productos-analyze", "productos-feature"]) {
+      for (const s of ["productos-fullscan", "productos-scope", "productos-vet", "productos-align"]) {
         const p = path.join(claudeDir, "skills", s, "SKILL.md");
         if (fs.existsSync(p)) ok(`Skill installed: ${s}`);
         else warn(`Skill missing: ${s}  (run: productos init claude)`);
+      }
+      // Old skill names (pre-rename) — warn if still present so the user
+      // can clean them up; they'll never be invoked again by Claude Code.
+      for (const old of ["productos-analyze", "productos-feature"]) {
+        const p = path.join(claudeDir, "skills", old);
+        if (fs.existsSync(p)) {
+          warn(`Stale skill present: ${old}  (renamed — safe to remove: rm -rf ${p})`);
+        }
       }
 
       // 3. MCP registered
