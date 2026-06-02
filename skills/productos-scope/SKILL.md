@@ -1,12 +1,12 @@
 ---
 name: productos-scope
-description: Use when the user wants to scope ProductOS on ONE in-flight feature (the v0.1 wedge) — either pre-code planning OR retrofit on a feature that already exists. Reads the relevant code paths, proposes 3-5 behaviors with claims + test_cases in product language, and writes them to productos/products/<area>/<feature>.md as Unverified. Surfaces ambiguities as questions before writing. Triggers on "scope productos on the X flow", "scope X with productos", "I'm planning a Y feature", "let's spec X in productos". The 80% v0.1 entry point. (For a broad pass across the whole codebase, use `productos-fullscan` instead.)
+description: Use when the user wants to scope ProductOS on ONE in-flight feature (the v0.1 wedge) — either pre-code planning OR retrofit on a feature that already exists. Reads the relevant code paths, proposes COMPREHENSIVE COVERAGE of behaviors with claims + test_cases in product language (however many the feature actually has — don't artificially cap), plus surfaces and their elements, and writes them to productos/products/<area>/<feature>.md as Unverified. Surfaces ambiguities and discrepancies as observations (not blocking questions) before writing. Triggers on "scope productos on the X flow", "scope X with productos", "I'm planning a Y feature", "let's spec X in productos". The 80% v0.1 entry point. (For a broad pass across the whole codebase, use `productos-fullscan` instead.)
 version: 0.1.0
 ---
 
 # ProductOS — Scope Skill (one feature at a time)
 
-The v0.1 entry point. The user — typically a product lead — wants to scope ProductOS on **one feature**. You produce a small, vettable slice: 3-5 behaviors with claims + numbered test_cases, written in product language, committed to `productos/products/<area>/<feature>.md`.
+The v0.1 entry point. The user — typically a product lead — wants to scope ProductOS on **one feature**. You produce **comprehensive coverage** of that feature: every distinct behavior the code exhibits, every surface the user sees, every interactive element. Behaviors are claims + numbered test_cases, written in product language, committed to `productos/products/<area>/<feature>.md`. Don't cap the count artificially — a feature has however many behaviors it has. If you find yourself writing 15 behaviors, that's fine; if 3 is enough, that's fine too. The size of the slice should match the size of the feature.
 
 You do **not** model the whole codebase. The wedge is scoped to one feature the user already cares about — usually one in flight (about to change) or one they want to protect from regression.
 
@@ -116,9 +116,13 @@ Renders as an "Affected by:" pill row in the site, linking to each triggering fe
 
 **User override.** If the user has a strong preference about where a behavior should live ("I want all balance-mutation behaviors gathered inside wallet/kid-balance"), respect it — capture the user's chosen organization verbatim. The deterministic rule is the *default* when no preference is stated; it stops the skill from asking the PM unanswerable scope questions, but it isn't an enforcement gate.
 
-### 3b. Decompose into 3-5 behaviors
+### 3b. Decompose into behaviors (comprehensive — no artificial cap)
 
-Each behavior is one falsifiable claim about what the product does. Aim for 3-5, not 10. If you find more, the feature is probably two features.
+Each behavior is one falsifiable claim about what the product does. **Write every distinct behavior the code exhibits.** If a feature genuinely has 12 behaviors, write 12. Don't fold distinct claims into one to hit a count, and don't pad a simple feature to look more comprehensive than it is.
+
+Heuristic: a behavior is one falsifiable claim. If two claims could be true/false independently, they're two behaviors. If the only way to distinguish them is implementation detail, it's one behavior.
+
+The volume isn't a vetting concern — `productos-review` walks them one at a time at the user's pace; they can quit and resume.
 
 For each behavior:
 
@@ -166,7 +170,7 @@ If the lifecycle is `shipped`, also call `productos_update_tracking` with the co
 - `implements: ["src/checkout/index.ts", ...]`
 - per-behavior: `code_refs: ["src/checkout/index.ts:42-78"]`, `status: "proposed"` (awaiting human acceptance)
 
-Never set `status: "verified"` — only the human does that, via the site or the `productos-vet` skill.
+Never set `status: "verified"` — only the human does that, via the site or the `productos-review` skill.
 
 ### 6. Surface potential gaps
 
@@ -201,7 +205,7 @@ Tell the user where to vet AND surface the gap questions:
 I proposed N behaviors for <feature_id>. Vet them either:
 
   In Claude Code (inline, no context switch):
-    "Use productos-vet on <feature_id>"
+    "Use productos-review on <feature_id>"
 
   In the product-truth site:
     Open http://localhost:7878/<feature_id>
@@ -263,7 +267,7 @@ Then call `productos_update_tracking` with `implements` and `code_refs`.
 Then tell the user:
 
 > Proposed 2 behaviors for `checkout/index`. Vet them either:
->   • In Claude Code: "Use productos-vet on checkout/index"
+>   • In Claude Code: "Use productos-review on checkout/index"
 >   • In the site: http://localhost:7878/checkout/index
 >
 > Note: I read the tax-rounding code (`src/checkout/tax.ts:34`). It currently uses `Math.round`, NOT banker's rounding. The claim reflects your stated intent; you'll want to fix the code before accepting this Contract — or it'll come back as `Contested` once tests run against it.
@@ -273,7 +277,7 @@ That last note is gold. Surface code-vs-intent gaps the moment you see them.
 ## Don't
 
 - **Don't model the whole codebase.** This is single-feature scope. If the user wants a full pass, they ask for `productos-fullscan` instead.
-- **Don't propose 20 behaviors.** 3-5 is the target. More and the user can't vet in a sitting.
+- **Don't artificially cap or pad behavior count.** Write every distinct behavior the code exhibits. If a feature has 12 distinct claims, write 12. `productos-review` walks them at the user's pace.
 - **Don't write claims in implementation language.** "POST /api/X returns 409" → wrong. "User sees 'already registered'" → right.
 - **Don't set status='verified'.** Humans do that.
 - **Don't paper over ambiguity.** If a decision isn't made, ask. If the user defers, capture in body.

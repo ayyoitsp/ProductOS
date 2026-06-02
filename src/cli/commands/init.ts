@@ -142,9 +142,10 @@ export function initCommand(): Command {
       console.log("  3. In another terminal: `productos serve` — opens your product-truth site at http://localhost:" + readConfig(paths).ui_port);
       console.log(`  4. Open Claude Code in this repo. Pick ${pc.bold("one in-flight feature")} and say:`);
       console.log(`        ${pc.cyan("\"Scope ProductOS on the <feature> flow\"")}`);
-      console.log("     The productos-scope skill walks just that feature's code paths and proposes 3-5");
-      console.log("     behaviors with claims + test cases in product language.");
-      console.log(`  5. Vet either inline in Claude Code (${pc.cyan('"Use productos-vet on <feature>"')}) or in the site.`);
+      console.log("     The productos-scope skill walks that feature's code paths and proposes comprehensive");
+      console.log("     coverage: surfaces, elements, and behaviors with claims + test cases in product language.");
+      console.log(`  5. Review either inline in Claude Code (${pc.cyan('"Use productos-review on <feature>"')}) or in the site.`);
+      console.log(`     For surgical edits later (add a leads_to, rename, etc.): ${pc.cyan('"Use productos-edit ..."')}.`);
       console.log(`  6. Map existing tests with ${pc.cyan('"Align my tests to <feature>"')} (productos-align skill).`);
       console.log("  7. Implement + push. CI posts results back via `productos test record`.");
       console.log();

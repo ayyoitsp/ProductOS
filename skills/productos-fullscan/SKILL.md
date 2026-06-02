@@ -1,6 +1,6 @@
 ---
 name: productos-fullscan
-description: Use for a FULL SCAN across the whole codebase (or a large area) — proposing many features and behaviors at once from existing code. Also used to process the open feedback queue. Triggers on "do a ProductOS fullscan", "scan the codebase and propose product truth", "process feedback", "full ProductOS pass". For a SINGLE in-flight feature, use `productos-scope` instead — that's the v0.1 PM wedge. After this skill writes proposals, recommend the user run `productos-vet` (or open localhost:7878) to walk them interactively.
+description: Use for a FULL SCAN across the whole codebase (or a large area) — proposing many features and behaviors at once from existing code. Also used to process the open feedback queue. Triggers on "do a ProductOS fullscan", "scan the codebase and propose product truth", "process feedback", "full ProductOS pass". For a SINGLE in-flight feature, use `productos-scope` instead — that's the v0.1 PM wedge. After this skill writes proposals, recommend the user run `productos-review` (or open localhost:7878) to walk them interactively.
 version: 0.1.0
 ---
 
@@ -16,7 +16,7 @@ Your job is to consult, propose, update, and process these three things via MCP.
 |---|---|
 | Do a full scan across the whole codebase, propose many features at once | **`productos-fullscan`** (you are here) |
 | Scope on ONE in-flight feature, propose 3-5 behaviors for it | `productos-scope` (the v0.1 PM wedge) |
-| Walk proposed behaviors one at a time and accept/reject inline | `productos-vet` |
+| Walk proposed behaviors one at a time and accept/reject inline | `productos-review` |
 | Map existing tests in the user's repo to declared test cases | `productos-align` |
 
 If the user said "analyze/scope the X feature" (singular), they probably want `productos-scope`, not this skill. Confirm before running a broad pass.
@@ -256,8 +256,8 @@ Potential gaps (questions to consider, no Contracts written for these):
 The behaviors are Unverified — you need to vet them. Two co-equal options:
 
   In Claude Code (inline, single-keystroke responses, no context switch):
-    "Use productos-vet to walk these"
-    (or scope it: "Use productos-vet on auth/signup")
+    "Use productos-review to walk these"
+    (or scope it: "Use productos-review on auth/signup")
 
   In the product-truth site:
     Open http://localhost:7878 — accept/edit/reject per behavior with buttons
@@ -271,4 +271,4 @@ Files to review:
   - Processed feedback:         productos/feedback/<id>.md (state: processed)
 ```
 
-The previous version of this skill ended with "verify via the ✓ Verify button or `productos product verify`" — that's incomplete. With v0.1, `productos-vet` is the canonical inline vetting flow and the site is the canonical visual flow. Both must be surfaced.
+The previous version of this skill ended with "verify via the ✓ Verify button or `productos product verify`" — that's incomplete. With v0.1, `productos-review` is the canonical inline vetting flow and the site is the canonical visual flow. Both must be surfaced.
