@@ -61,9 +61,29 @@ For each surface in the codebase:
 2. Decide: existing feature (update) or new (propose)?
 3. **Write the claim in product language**. Not `POST /api/auth/signup returns 409`. Yes `When a user submits the signup form with an already-registered email, they see "this email is already registered"`. The endpoint is an implementation detail.
 4. **Write product truth via MCP:**
-   - New feature → `productos_propose_feature` with `id`, `title`, `description`, `behaviors`. Each behavior has `id`, `claim`, optional `notes`. **That's all** that goes in product truth.
+   - New feature → `productos_propose_feature` with `id`, `title`, `description`, `behaviors`. Each behavior has `id`, `claim`, optional `notes`, **and `test_cases`** — a numbered list of concrete scenarios that demonstrate the claim.
    - Existing feature, new behavior → `productos_add_behavior(feature_id, behavior)`.
    - Reword a claim → `productos_update_behavior(feature_id, behavior_id, claim?)`.
+
+   **Every behavior MUST have at least 1 test case.** A behavior without test cases is just a wish — the PM can't tell what evidence would falsify it; the align skill has nothing to map existing tests against; the receive interface has nothing to flip Verification on. Aim for 1-3 test cases per behavior, structured as:
+
+   ```yaml
+   test_cases:
+     - id: 1
+       description: "Standard happy path — short product-language summary"
+       level: api  # one of: unit | integration | api | e2e
+       given: "an existing user with email alice@example.com"
+       when: "POST /api/auth/signup with email alice@example.com"
+       then: "response is 409 with body.error.code = 'duplicate_email'"
+     - id: 2
+       description: "Edge case — short summary"
+       level: unit
+       steps: |
+         1. (use steps as a freeform alternative when given/when/then is awkward)
+         2. ...
+   ```
+
+   Pick `level` based on the existing test culture — if there's a Jest unit test suite, lean unit/integration; if there's Playwright, e2e is fair game. Default to whatever the codebase already uses.
 5. **Write tracking via MCP (separate call):**
    - `productos_update_tracking(feature_id, implements?, behavior_id?, code_refs?, status?)`
    - For a brand-new behavior: status='proposed' so the human knows to verify it.
