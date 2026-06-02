@@ -2,6 +2,7 @@ import { marked } from "marked";
 import {
   AreaDocument,
   Behavior,
+  Element,
   FeatureDocument,
   Surface,
 } from "../core/product.js";
@@ -149,6 +150,17 @@ h3 { font-size: 16px; margin: 22px 0 10px; color: var(--dim); }
   background: var(--surface-2); border: 1px solid var(--surface-3); border-radius: 6px;
   padding: 12px 14px; margin: 8px 0; overflow-x: auto; white-space: pre;
 }
+/* Sketch element decorations — purely visual, no layout impact (use inline). */
+.surface-sketch .sketch-button { color: var(--accent); font-weight: 600; }
+.surface-sketch .sketch-input { color: var(--dim); }
+.surface-sketch .sketch-checkbox { color: var(--accent); }
+.surface-sketch .sketch-dropdown { color: var(--accent); }
+.surface-sketch .sketch-textlink { color: var(--blue); }
+.surface-sketch a.sketch-link {
+  color: var(--accent); text-decoration: underline; text-decoration-style: dotted;
+  text-underline-offset: 2px; text-decoration-thickness: 1px;
+}
+.surface-sketch a.sketch-link:hover { background: var(--surface-3); border-radius: 2px; }
 .surface-elements { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
 .surface-element { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 3px 10px; background: var(--surface-2); border: 1px solid var(--surface-3); border-radius: 999px; color: var(--text); }
 .surface-element .el-kind { font-family: var(--mono); font-size: 10px; color: var(--accent); text-transform: uppercase; letter-spacing: 0.06em; background: var(--surface); padding: 1px 6px; border-radius: 3px; border: 1px solid var(--surface-3); }
@@ -461,6 +473,83 @@ export function renderContextIndex(docs: ContextDocument[]): string {
   `;
 }
 
+/**
+ * Render an ASCII surface sketch with:
+ *   - Visual highlighting for [ Button ] and <Link> patterns
+ *   - Clickable navigation for any element whose label appears in the sketch
+ *     AND has a `leads_to` set (same-page #surface-<id> anchor, cross-feature
+ *     /area/feature page, or cross-feature + anchor)
+ */
+function decorateSketch(sketch: string, elements: Element[]): string {
+  const cleaned = sketch.replace(/^\n+|\n+$/g, "");
+  let html = escape(cleaned);
+
+  // 1. Wrap each element's label as a link if leads_to is set. Done BEFORE the
+  //    generic [..]/<..> styling so the link styling wraps the inner text and
+  //    the bracket coloring still applies to the outer brackets.
+  for (const el of elements) {
+    if (!el.leads_to || !el.label) continue;
+    const target = resolveLeadsTo(el.leads_to);
+    if (!target) continue;
+    // Replace EVERY occurrence of the (already-escaped) label inside the
+    // sketch. Word-boundary-ish to avoid breaking inside other words. Global
+    // so repeating UI elements (e.g. an Edit link on every row of a list) all
+    // become clickable, since there's one element declaration for the kind.
+    const labelEsc = escape(el.label);
+    const re = new RegExp(`(?<![A-Za-z0-9_-])${escapeRegex(labelEsc)}(?![A-Za-z0-9_-])`, "g");
+    html = html.replace(
+      re,
+      `<a class="sketch-link" href="${escape(target)}" title="goes to ${escape(el.leads_to)}">${labelEsc}</a>`
+    );
+  }
+
+  // 2. Style [Label] patterns as buttons. Skip if [ contains only underscores
+  //    (those are input fields) or special chars like ▼ (dropdowns).
+  html = html.replace(
+    /\[(\s*[^\[\]\n][^\[\]\n]*?\s*)\]/g,
+    (match, inner: string) => {
+      const trimmed = inner.trim();
+      // Inputs: all underscores
+      if (/^_+$/.test(trimmed)) return `<span class="sketch-input">${match}</span>`;
+      // Checkboxes: " " or "✓" or "x"/"X"
+      if (/^[\s✓✗xX]$/.test(trimmed)) return `<span class="sketch-checkbox">${match}</span>`;
+      // Dropdowns: ends with ▼
+      if (/▼$/.test(trimmed)) return `<span class="sketch-dropdown">${match}</span>`;
+      return `<span class="sketch-button">${match}</span>`;
+    }
+  );
+
+  // 3. Style <Label> patterns as links (visual only — does not affect existing
+  //    <a class="sketch-link"> wrappers from step 1, since those use real `<a>`
+  //    tags which won't match the literal `&lt;..&gt;` we look for here).
+  //    NOTE: we look for the escaped form &lt;..&gt; because the whole string
+  //    was already html-escaped in step 1.
+  html = html.replace(
+    /&lt;([^&\n]{1,40}?)&gt;/g,
+    (_match, inner: string) => `<span class="sketch-textlink">&lt;${inner}&gt;</span>`
+  );
+
+  return html;
+}
+
+function resolveLeadsTo(leadsTo: string): string | null {
+  // "feature_id#surface-id" — cross-feature + surface anchor
+  const hashIdx = leadsTo.indexOf("#");
+  if (hashIdx > 0 && leadsTo.includes("/", 0)) {
+    const feat = leadsTo.slice(0, hashIdx);
+    const sid = leadsTo.slice(hashIdx + 1);
+    return `/${feat}#surface-${sid}`;
+  }
+  // "area/feature" — cross-feature page
+  if (leadsTo.includes("/")) return `/${leadsTo}`;
+  // "surface-id" — same-page anchor
+  return `#surface-${leadsTo}`;
+}
+
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function slugify(s: string): string {
   return s
     .toLowerCase()
@@ -630,7 +719,7 @@ function renderSurfaceWithBehaviors(
           .join("")}</div>`
       : "";
   const sketchBlock = s.sketch
-    ? `<pre class="surface-sketch">${escape(s.sketch.replace(/^\n+|\n+$/g, ""))}</pre>`
+    ? `<pre class="surface-sketch">${decorateSketch(s.sketch, s.elements)}</pre>`
     : "";
   const pathLine = s.path
     ? `<span class="surface-path-wrap"><span class="surface-path-arrow">→</span><code class="surface-path">${escape(s.path)}</code></span>`
