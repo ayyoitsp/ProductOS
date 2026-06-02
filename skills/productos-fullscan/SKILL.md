@@ -60,8 +60,8 @@ For each feature, **identify the Surfaces first** — screens, pages, modals the
 - `id`: kebab-case (`cart-page`, `checkout-form`, `profile-modal`)
 - `title`: human label ("Cart", "Checkout")
 - `path`: route or selector when applicable (`/cart`, `modal:edit-profile`)
-- `sketch`: an **ASCII rough layout** (~6-15 lines, box-drawing characters `┌─┐│└┘` for boxes, `[Label]` for buttons, `[___]` for inputs). Not pixel-perfect; gives the PM a mental anchor.
-- `elements`: array of `{ id, kind, label?, notes? }` — buttons, inputs, links, lists, modals, etc. `kind` is freeform but stick to common conventions.
+- `sketch`: an **ASCII rough layout** of INTERFACE STRUCTURE only — not design. ~6-15 lines, box-drawing characters `┌─┐│└┘` for boxes, `[Label]` for buttons, `[___]` for inputs. *Don't describe colors, fonts, typography, brand styling, spacing, or visual polish — those are design decisions that change. ProductOS captures interface (what's there, where it sits, what it does), not design (how it looks).*
+- `elements`: array of `{ id, kind, label?, notes? }` — buttons, inputs, links, lists, modals, etc. `kind` is freeform but stick to common conventions. **Don't put styling/color/visual-design notes in `notes`** — only role, trigger, what's shown, what makes the element unique among similar ones.
 
 Surfaces are **optional** — features that are pure invariants (a tax calculation, a balance constraint) leave the `surfaces` array empty.
 
