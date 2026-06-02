@@ -153,7 +153,12 @@ Call `productos_propose_feature` with:
 - `status: shipped` if the code exists; `planned` if pre-code
 - `description` (short paragraph)
 - `behaviors` array, each with `id`, `claim`, optional `notes`, and `test_cases` array
-- `body` for rationale, decisions captured, out-of-scope
+- `body` (the markdown after the frontmatter) is **OPTIONAL** and stays SHORT. Use it for product-language context that doesn't fit in the description — a sentence or two on who/when/why-this-feature-exists. **Don't write:**
+  - Implementation rationale ("Why derived, not stored?", "Why this column?", "Why this algorithm?") — engineering discussion belongs in code comments / ADRs / PR descriptions, not the product spec
+  - Out-of-scope sections that catalog what isn't here — the absence of behaviors IS the scope; surfaces/behaviors are the canonical statement of what's covered, and `affected_by` already names what triggers from elsewhere
+  - Design discussion (colors, fonts, animations) — ProductOS captures interface, not design
+  - Lists of related features ("see also wallet/spend") — `affected_by` and feature links cover that
+  Default to writing nothing in the body. If you can't summarize the feature in description + behaviors + surfaces alone, that's a signal the feature is doing too much.
 
 If the lifecycle is `shipped`, also call `productos_update_tracking` with the code paths you read:
 
