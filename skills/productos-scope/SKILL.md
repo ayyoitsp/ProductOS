@@ -63,7 +63,8 @@ For each surface:
   | `[Label ▼]` | Dropdown / select |
   | `[✓]` / `[ ]` | Checkbox |
   | `(•)` / `( )` | Radio button |
-  | `▢` or `▦` | Card / list item |
+  | `→ Name` | Card / list item / row (preferred — reads as a right-arrow click target) |
+  | `▢` or `▦` | Card / list item (legacy — `→` is preferred) |
   | `┌─┐ │ └─┘` | Box / container outlines |
 
   Use the labels in the sketch verbatim — when the renderer matches an element's `label` to text inside `[ ... ]` or `<...>`, it can wrap it as a clickable link (if `leads_to` is set on the element).
