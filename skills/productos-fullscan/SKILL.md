@@ -1,10 +1,10 @@
 ---
-name: productos-analyze
-description: Use for a BROAD pass across the whole codebase (or a large area) — proposing many features and behaviors at once from existing code. Also used to process the open feedback queue. Triggers on "do a ProductOS pass on this codebase", "scan the codebase and propose product truth", "process feedback", "broad analyze pass". For a SINGLE in-flight feature, use `productos-feature` instead — that's the v0.1 PM wedge. After this skill writes proposals, recommend the user run `productos-vet` (or open localhost:7878) to walk them interactively.
+name: productos-fullscan
+description: Use for a FULL SCAN across the whole codebase (or a large area) — proposing many features and behaviors at once from existing code. Also used to process the open feedback queue. Triggers on "do a ProductOS fullscan", "scan the codebase and propose product truth", "process feedback", "full ProductOS pass". For a SINGLE in-flight feature, use `productos-scope` instead — that's the v0.1 PM wedge. After this skill writes proposals, recommend the user run `productos-vet` (or open localhost:7878) to walk them interactively.
 version: 0.1.0
 ---
 
-# ProductOS — Analyze Skill (BROAD pass)
+# ProductOS — Fullscan Skill (BROAD codebase pass)
 
 ProductOS holds the **product truth** for this codebase as a tree of markdown files under `productos/products/`. **Implementation tracking is separate** — it lives in YAML sidecars under `productos/tracking/`. **Feedback** (free-form notes from humans or external sources) lives as queue entries under `productos/feedback/`.
 
@@ -14,12 +14,12 @@ Your job is to consult, propose, update, and process these three things via MCP.
 
 | You want to... | Use this skill |
 |---|---|
-| Do a broad pass across the whole codebase, propose many features at once | **`productos-analyze`** (you are here) |
-| Scope on ONE in-flight feature, propose 3-5 behaviors for it | `productos-feature` (the v0.1 PM wedge) |
+| Do a full scan across the whole codebase, propose many features at once | **`productos-fullscan`** (you are here) |
+| Scope on ONE in-flight feature, propose 3-5 behaviors for it | `productos-scope` (the v0.1 PM wedge) |
 | Walk proposed behaviors one at a time and accept/reject inline | `productos-vet` |
 | Map existing tests in the user's repo to declared test cases | `productos-align` |
 
-If the user said "analyze the X feature" (singular), they probably want `productos-feature`, not this skill. Confirm before running a broad pass.
+If the user said "analyze/scope the X feature" (singular), they probably want `productos-scope`, not this skill. Confirm before running a broad pass.
 
 ## The split
 

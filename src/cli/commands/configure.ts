@@ -94,7 +94,7 @@ async function runSection(section: SectionId, config: ProductosConfig): Promise<
 
 async function configureCodeScanning(config: ProductosConfig): Promise<void> {
   p.log.info(
-    "Code scanning is how ProductOS analyzes your codebase to propose features, behaviors, and tracking. Today: Claude Code (via the productos-analyze skill + MCP). Codex/Cursor/Devin adapters are coming."
+    "Code scanning is how ProductOS analyzes your codebase to propose features, behaviors, and tracking. Today: Claude Code (via the productos-fullscan / productos-scope skills + MCP). Codex/Cursor/Devin adapters are coming."
   );
 
   const handler = await p.select<CodeScanningHandler>({
