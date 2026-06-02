@@ -70,6 +70,55 @@ export async function startUiServer(): Promise<void> {
         return json(res, { ok: true });
       }
 
+      // ---- POST: reject a behavior (marks as deprecated in markdown) ----
+      if (req.method === "POST" && p === "/api/reject") {
+        const body = await readJson(req);
+        const featureId = String(body.feature ?? "");
+        const behaviorId = String(body.behavior ?? "");
+        const reason = body.reason ? String(body.reason) : undefined;
+        if (!featureId || !behaviorId) return json(res, { error: "feature and behavior required" }, 400);
+        const feat = readFeatureById(paths, featureId);
+        if (!feat) return json(res, { error: "feature not found" }, 404);
+        const idx = feat.frontmatter.behaviors.findIndex((b) => b.id === behaviorId);
+        if (idx < 0) return json(res, { error: "behavior not found" }, 404);
+
+        feat.frontmatter.behaviors[idx]!.deprecated = true;
+        if (reason) feat.frontmatter.behaviors[idx]!.deprecated_reason = reason;
+        const { writeFeature } = await import("../core/product.js");
+        writeFeature(paths, feat);
+
+        const t = readTracking(paths, featureId) ?? emptyTrackingFor(featureId);
+        recordTransition(t, behaviorId, "deprecated", os.userInfo().username || "vet-ui", {
+          status: "deprecated",
+          note: reason,
+        });
+        writeTracking(paths, t);
+        return json(res, { ok: true });
+      }
+
+      // ---- POST: edit a behavior's claim or notes inline ----
+      if (req.method === "POST" && p === "/api/edit-behavior") {
+        const body = await readJson(req);
+        const featureId = String(body.feature ?? "");
+        const behaviorId = String(body.behavior ?? "");
+        if (!featureId || !behaviorId) return json(res, { error: "feature and behavior required" }, 400);
+        const feat = readFeatureById(paths, featureId);
+        if (!feat) return json(res, { error: "feature not found" }, 404);
+        const beh = feat.frontmatter.behaviors.find((b) => b.id === behaviorId);
+        if (!beh) return json(res, { error: "behavior not found" }, 404);
+        if (typeof body.claim === "string" && body.claim.trim().length >= 10) beh.claim = body.claim.trim();
+        if (typeof body.notes === "string") beh.notes = body.notes.trim() || undefined;
+        const { writeFeature } = await import("../core/product.js");
+        writeFeature(paths, feat);
+
+        const t = readTracking(paths, featureId) ?? emptyTrackingFor(featureId);
+        recordTransition(t, behaviorId, "edited", os.userInfo().username || "vet-ui", {
+          note: "claim/notes edited via vet UI",
+        });
+        writeTracking(paths, t);
+        return json(res, { ok: true });
+      }
+
       // ---- POST: feedback (or contest, which is a feedback subtype) ----
       if (req.method === "POST" && p === "/api/feedback") {
         const body = await readJson(req);
