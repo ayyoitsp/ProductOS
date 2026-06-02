@@ -36,6 +36,14 @@ export const Element = z.object({
   kind: z.string().min(1),
   label: z.string().optional(),
   notes: z.string().optional(),
+  /**
+   * If this element navigates the user to another Surface, name it here.
+   * Can be a Surface.id within the same feature (e.g. "checkout-page") or a
+   * full feature id (e.g. "wallet/transactions") for cross-feature jumps.
+   * The renderer wraps this element's label in the sketch as a clickable
+   * link to the target.
+   */
+  leads_to: z.string().optional(),
 });
 export type Element = z.infer<typeof Element>;
 

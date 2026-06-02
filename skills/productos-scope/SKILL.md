@@ -51,8 +51,24 @@ For each surface:
 - `id`: kebab-case (e.g. `cart-page`, `checkout-form`, `confirmation-modal`)
 - `title`: human-readable ("Cart", "Checkout", "Confirmation")
 - `path`: route or selector if applicable (`/cart`, `/checkout`, `modal:profile-edit`). Omit for screens that don't have a URL.
-- `sketch`: an **ASCII rough layout** of INTERFACE STRUCTURE only — not design. Show where things are positioned relative to each other and what kind of element they are. Use box-drawing characters (`┌─┐│└┘`) for boxes, `[Label]` for buttons, `[___]` for inputs, `▢` for icons/list items, etc. ~6-15 lines per sketch. *Don't describe colors, fonts, typography, brand styling, spacing, or visual polish in the sketch or notes — those are design decisions that change. ProductOS captures interface (what's there, where it sits, what it does), not design (how it looks).*
-- `elements`: named interactive items on the screen. Each element has `id` (kebab-case), `kind` (button, input, link, toggle, stepper, list, modal-trigger, etc. — freeform), `label` (human label), optional `notes`. **Don't put styling/color/visual-design notes in `notes`** — only things like *role*, *what triggers it*, *what it shows*, *what makes it unique among similar elements*.
+- `sketch`: an **ASCII rough layout** of INTERFACE STRUCTURE only — not design. Show where things are positioned relative to each other and what kind of element they are. ~6-15 lines per sketch. *Don't describe colors, fonts, typography, brand styling, spacing, or visual polish — those are design decisions that change. ProductOS captures interface (what's there, where it sits, what it does), not design (how it looks).*
+
+  **Element conventions in the sketch** (the renderer styles these so they pop visually):
+
+  | Pattern | What it represents |
+  |---|---|
+  | `[ Label ]` | Button or CTA |
+  | `<Label>` | Link / navigation target |
+  | `[__________]` or `[Type here]` | Input field |
+  | `[Label ▼]` | Dropdown / select |
+  | `[✓]` / `[ ]` | Checkbox |
+  | `(•)` / `( )` | Radio button |
+  | `▢` or `▦` | Card / list item |
+  | `┌─┐ │ └─┘` | Box / container outlines |
+
+  Use the labels in the sketch verbatim — when the renderer matches an element's `label` to text inside `[ ... ]` or `<...>`, it can wrap it as a clickable link (if `leads_to` is set on the element).
+- `elements`: named interactive items on the screen. Each element has `id` (kebab-case), `kind` (button, input, link, toggle, stepper, list, modal-trigger, etc. — freeform), `label` (human label, matching what's in the sketch verbatim), optional `notes`. **Don't put styling/color/visual-design notes in `notes`** — only things like *role*, *what triggers it*, *what it shows*, *what makes it unique among similar elements*.
+- `elements[].leads_to`: **OPTIONAL**. If this element navigates to another Surface, name it: either a `Surface.id` within the same feature (`"checkout-page"`) or a full feature id (`"wallet/transactions"`). The renderer wraps this element's label in the sketch as a clickable link to the target. Set this for navigation triggers (CTAs that go to another screen, links to another feature, etc.); leave blank for in-place actions like Submit or +/− steppers.
 
 Example sketch:
 

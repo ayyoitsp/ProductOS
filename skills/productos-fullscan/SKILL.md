@@ -60,8 +60,25 @@ For each feature, **identify the Surfaces first** — screens, pages, modals the
 - `id`: kebab-case (`cart-page`, `checkout-form`, `profile-modal`)
 - `title`: human label ("Cart", "Checkout")
 - `path`: route or selector when applicable (`/cart`, `modal:edit-profile`)
-- `sketch`: an **ASCII rough layout** of INTERFACE STRUCTURE only — not design. ~6-15 lines, box-drawing characters `┌─┐│└┘` for boxes, `[Label]` for buttons, `[___]` for inputs. *Don't describe colors, fonts, typography, brand styling, spacing, or visual polish — those are design decisions that change. ProductOS captures interface (what's there, where it sits, what it does), not design (how it looks).*
-- `elements`: array of `{ id, kind, label?, notes? }` — buttons, inputs, links, lists, modals, etc. `kind` is freeform but stick to common conventions. **Don't put styling/color/visual-design notes in `notes`** — only role, trigger, what's shown, what makes the element unique among similar ones.
+- `sketch`: an **ASCII rough layout** of INTERFACE STRUCTURE only — not design. ~6-15 lines. *Don't describe colors, fonts, typography, brand styling, spacing, or visual polish — those are design decisions that change.*
+
+  **Element conventions in the sketch:**
+
+  | Pattern | What it represents |
+  |---|---|
+  | `[ Label ]` | Button |
+  | `<Label>` | Link |
+  | `[__________]` | Input |
+  | `[Label ▼]` | Dropdown |
+  | `[✓]` / `[ ]` | Checkbox |
+  | `(•)` / `( )` | Radio |
+  | `▢` / `▦` | Card / list item |
+  | `┌─┐ │ └─┘` | Box outlines |
+
+  Use the element's `label` verbatim inside `[ ... ]` or `<...>` so the renderer can wrap it as a clickable link when `leads_to` is set.
+
+- `elements`: array of `{ id, kind, label?, notes?, leads_to? }` — buttons, inputs, links, lists, modals, etc. **Don't put styling/color/visual-design notes in `notes`** — only role, trigger, what's shown, what makes the element unique.
+- `elements[].leads_to`: optional Surface id (same feature) or full feature id (cross-feature) when this element triggers navigation. Renderer wraps the matching label in the sketch as a clickable link. Leave blank for in-place actions.
 
 Surfaces are **optional** — features that are pure invariants (a tax calculation, a balance constraint) leave the `surfaces` array empty.
 
