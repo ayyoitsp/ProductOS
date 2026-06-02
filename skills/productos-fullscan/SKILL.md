@@ -65,6 +65,23 @@ For each feature, **identify the Surfaces first** — screens, pages, modals the
 
 Surfaces are **optional** — features that are pure invariants (a tax calculation, a balance constraint) leave the `surfaces` array empty.
 
+**Deterministic scope rule** (apply when deciding which feature owns a behavior):
+
+A behavior belongs to the feature whose **user-facing trigger** fires — not the feature whose state is mutated. If feature B's trigger causes feature A's state to change, the behavior lives in B, and A lists B under `affected_by`:
+
+```yaml
+id: wallet/kid-balance
+affected_by:
+  - wallet/earn
+  - wallet/spend
+  - tasks/complete-task     # task completion is a tasks/ trigger that mutates balance
+  - wallet/interest
+```
+
+`affected_by` renders as an "Affected by:" pill row in the site so the PM sees at a glance which other features feed into this one. The triggering features keep the behaviors; no duplication.
+
+**User override.** If the user states a preference about where behaviors should live ("group all balance mutations inside wallet/kid-balance"), respect it. The rule is the *default* when no preference is stated; it isn't an enforcement gate.
+
 Then, for each behavior-bearing code path:
 
 1. Read the code. Don't propose claims you can't cite.
