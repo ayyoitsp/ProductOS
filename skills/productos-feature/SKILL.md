@@ -42,13 +42,47 @@ Identify the code paths relevant to the feature in question. Examples:
 
 **Read narrowly.** This is a feature scope, not a codebase scan. If the relevant code is more than ~10 files, ask the user to confirm scope before proceeding.
 
-### 3. Decompose into 3-5 behaviors
+### 3a. Map the surfaces FIRST
+
+Before behaviors, identify the **screens / pages / modals** the feature surfaces in the product. Read route definitions, page components, modal triggers — anywhere the feature presents UI.
+
+For each surface:
+
+- `id`: kebab-case (e.g. `cart-page`, `checkout-form`, `confirmation-modal`)
+- `title`: human-readable ("Cart", "Checkout", "Confirmation")
+- `path`: route or selector if applicable (`/cart`, `/checkout`, `modal:profile-edit`). Omit for screens that don't have a URL.
+- `sketch`: an **ASCII rough layout** (not pixel-perfect). Show the high-level structure + key interactive elements. Use box-drawing characters (`┌─┐│└┘`) for boxes, `[Label]` for buttons, `[___]` for inputs, `▢` for icons/list items, etc. ~6-15 lines per sketch. Don't try to be precise; *give the PM a mental anchor for the screen*.
+- `elements`: named interactive items on the screen. Each element has `id` (kebab-case), `kind` (button, input, link, toggle, stepper, list, modal-trigger, etc. — freeform), `label` (human label), optional `notes`.
+
+Example sketch:
+
+```
+sketch: |
+  ┌────────────────────────────────────┐
+  │  Cart                              │
+  ├────────────────────────────────────┤
+  │  ▢ Apple Juice    × 1  $4.99  [-][+] │
+  │  ▢ Banana Bread   × 2  $7.98  [-][+] │
+  │                                    │
+  │  Total: $12.97                     │
+  │                      [ Checkout ]→ │
+  └────────────────────────────────────┘
+```
+
+Surfaces are **optional** — features that are pure invariants/rules (a tax calculation, a balance constraint) don't have screens. Leave `surfaces` empty in that case.
+
+### 3b. Decompose into 3-5 behaviors
 
 Each behavior is one falsifiable claim about what the product does. Aim for 3-5, not 10. If you find more, the feature is probably two features.
 
 For each behavior:
 
 - **Claim:** in product language — "When a guest user clicks Checkout, they reach the confirmation page without being asked to create an account." Not "POST /api/checkout returns 200."
+- **Anchor (when applicable):** if the behavior is triggered by an interaction on a Surface, set:
+  - `surface`: the Surface.id (e.g. `cart-page`)
+  - `element`: the Element.id (e.g. `checkout-cta`) — optional
+  - `interaction`: what action (`click`, `submit`, `view`, `load`, `input`, `tap`, etc.) — freeform, optional
+  Rules / invariants that aren't tied to a screen leave these blank.
 - **Notes (optional):** non-obvious context, links to principles
 - **Test cases:** numbered list of concrete scenarios that demonstrate the claim
   - Each case has `id` (1, 2, 3, ...), `description`, and either `given`/`when`/`then` blocks or freeform `steps`

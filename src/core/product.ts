@@ -27,6 +27,36 @@ import { ProductosPaths } from "./paths.js";
 export const FeatureStatus = z.enum(["planned", "shipped", "deprecated"]);
 export type FeatureStatus = z.infer<typeof FeatureStatus>;
 
+/**
+ * An interactive element within a Surface (button, input, link, etc.).
+ * `kind` is freeform but conventional values are documented in the skill prompt.
+ */
+export const Element = z.object({
+  id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/, "Element ids must be kebab-case"),
+  kind: z.string().min(1),
+  label: z.string().optional(),
+  notes: z.string().optional(),
+});
+export type Element = z.infer<typeof Element>;
+
+/**
+ * A screen / page / modal / view within a Feature. Carries an ASCII
+ * `sketch` for rough visual reference (NOT pixel-perfect — just enough
+ * to show layout + interactions) and a list of named elements.
+ *
+ * Behaviors anchor to a Surface (and optionally an Element + interaction)
+ * via the `surface` / `element` / `interaction` fields on Behavior.
+ */
+export const Surface = z.object({
+  id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/, "Surface ids must be kebab-case"),
+  title: z.string().min(1),
+  path: z.string().optional(),
+  sketch: z.string().optional(),
+  notes: z.string().optional(),
+  elements: z.array(Element).default([]),
+});
+export type Surface = z.infer<typeof Surface>;
+
 export const TestCaseLevel = z.enum(["unit", "integration", "api", "e2e"]);
 export type TestCaseLevel = z.infer<typeof TestCaseLevel>;
 
@@ -53,6 +83,13 @@ export const Behavior = z.object({
   id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/, "Behavior ids must be kebab-case"),
   claim: z.string().min(10),
   notes: z.string().optional(),
+  /** Anchor to a Surface within the same feature (by Surface.id). Optional —
+   *  rule/invariant behaviors that don't live on a screen leave it blank. */
+  surface: z.string().optional(),
+  /** Anchor to an Element within the referenced Surface (by Element.id). Optional. */
+  element: z.string().optional(),
+  /** What user action triggers this behavior. Freeform: click, submit, view, load, input, etc. Optional. */
+  interaction: z.string().optional(),
   test_cases: z.array(TestCase).default([]),
   deprecated: z.boolean().optional(),
   deprecated_reason: z.string().optional(),
@@ -64,6 +101,10 @@ export const FeatureFrontmatter = z.object({
   title: z.string(),
   status: FeatureStatus.default("shipped"),
   description: z.string().optional(),
+  /** Screens / pages / modals the feature surfaces in the product. ASCII sketches +
+   *  named elements. Behaviors anchor to these by id. Optional — omit for features
+   *  that are pure invariants (no UI). */
+  surfaces: z.array(Surface).default([]),
   behaviors: z.array(Behavior).default([]),
 });
 export type FeatureFrontmatter = z.infer<typeof FeatureFrontmatter>;

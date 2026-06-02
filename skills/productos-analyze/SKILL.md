@@ -55,13 +55,23 @@ Skipping this leads to duplication and inconsistency.
 
 ### Mode B: Propose / update product truth + tracking
 
-For each surface in the codebase:
+For each feature, **identify the Surfaces first** — screens, pages, modals the user actually sees. Read route definitions, page components, modal triggers. Each Surface has:
+
+- `id`: kebab-case (`cart-page`, `checkout-form`, `profile-modal`)
+- `title`: human label ("Cart", "Checkout")
+- `path`: route or selector when applicable (`/cart`, `modal:edit-profile`)
+- `sketch`: an **ASCII rough layout** (~6-15 lines, box-drawing characters `┌─┐│└┘` for boxes, `[Label]` for buttons, `[___]` for inputs). Not pixel-perfect; gives the PM a mental anchor.
+- `elements`: array of `{ id, kind, label?, notes? }` — buttons, inputs, links, lists, modals, etc. `kind` is freeform but stick to common conventions.
+
+Surfaces are **optional** — features that are pure invariants (a tax calculation, a balance constraint) leave the `surfaces` array empty.
+
+Then, for each behavior-bearing code path:
 
 1. Read the code. Don't propose claims you can't cite.
 2. Decide: existing feature (update) or new (propose)?
 3. **Write the claim in product language**. Not `POST /api/auth/signup returns 409`. Yes `When a user submits the signup form with an already-registered email, they see "this email is already registered"`. The endpoint is an implementation detail.
 4. **Write product truth via MCP:**
-   - New feature → `productos_propose_feature` with `id`, `title`, `description`, `behaviors`. Each behavior has `id`, `claim`, optional `notes`, **and `test_cases`** — a numbered list of concrete scenarios that demonstrate the claim.
+   - New feature → `productos_propose_feature` with `id`, `title`, `description`, `surfaces`, and `behaviors`. Each behavior has `id`, `claim`, optional `notes`, optional anchor (`surface` / `element` / `interaction`), **and `test_cases`** — a numbered list of concrete scenarios that demonstrate the claim.
    - Existing feature, new behavior → `productos_add_behavior(feature_id, behavior)`.
    - Reword a claim → `productos_update_behavior(feature_id, behavior_id, claim?)`.
 
