@@ -95,10 +95,13 @@ h2 { font-size: 19px; margin: 32px 0 12px; }
 h3 { font-size: 16px; margin: 22px 0 10px; color: var(--dim); }
 
 .meta { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; color: var(--dim); font-size: 12px; }
-.meta .pill { padding: 2px 10px; border-radius: 999px; font-family: var(--mono); font-size: 11px; border: 1px solid var(--surface-3); }
-.meta .pill.planned { color: var(--blue); border-color: rgba(79,140,255,0.4); }
-.meta .pill.shipped { color: var(--green); border-color: rgba(46,204,113,0.4); }
-.meta .pill.deprecated { color: var(--dim); }
+
+/* Unified pill/chip — used by feature status, behavior derived state, etc.
+   Unscoped so it works in headers, behavior cards, anywhere. */
+.pill { padding: 2px 10px; border-radius: 999px; font-family: var(--mono); font-size: 11px; border: 1px solid var(--surface-3); color: var(--text); background: transparent; display: inline-block; line-height: 1.5; }
+.pill.planned { color: var(--blue); border-color: rgba(79,140,255,0.4); }
+.pill.shipped { color: var(--green); border-color: rgba(46,204,113,0.4); }
+.pill.deprecated { color: var(--dim); }
 
 .behavior {
   background: var(--surface); border: 1px solid var(--surface-3); border-radius: 12px;
@@ -107,8 +110,10 @@ h3 { font-size: 16px; margin: 22px 0 10px; color: var(--dim); }
 .behavior .head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; justify-content: space-between; }
 .behavior .head .bid { font-family: var(--mono); font-size: 12px; color: var(--accent); flex: 1 1 auto; }
 .behavior .head .status { flex: 0 0 auto; }
+/* Derived-state pill for behavior cards. Same chip shape as .pill above. */
 .behavior .status {
-  font-size: 11px; padding: 2px 10px; border-radius: 999px; border: 1px solid transparent; font-family: var(--mono);
+  font-size: 11px; padding: 2px 10px; border-radius: 999px; border: 1px solid var(--surface-3);
+  font-family: var(--mono); display: inline-block; line-height: 1.5;
 }
 .status-verified { color: var(--green); border-color: rgba(46,204,113,0.4); }
 .status-proposed { color: var(--yellow); border-color: rgba(245,197,24,0.4); }
@@ -847,8 +852,8 @@ function renderBehavior(
   const evidence = renderBehaviorEvidence(b, t);
   const isDeprecated = b.deprecated === true;
   const headPills = isDeprecated
-    ? `<span class="status status-deprecated">● deprecated</span>`
-    : `<span class="status status-${d.state}">● ${d.state}</span>`;
+    ? `<span class="status status-deprecated">deprecated</span>`
+    : `<span class="status status-${d.state}">${d.state}</span>`;
   // Hide the reason when it just restates the badge ("no human has accepted
   // this Contract yet" is redundant with the Unverified badge). For Contested
   // / Orphan / Uncertain the reason carries actual signal so keep it.
