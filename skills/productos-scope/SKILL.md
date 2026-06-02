@@ -51,8 +51,8 @@ For each surface:
 - `id`: kebab-case (e.g. `cart-page`, `checkout-form`, `confirmation-modal`)
 - `title`: human-readable ("Cart", "Checkout", "Confirmation")
 - `path`: route or selector if applicable (`/cart`, `/checkout`, `modal:profile-edit`). Omit for screens that don't have a URL.
-- `sketch`: an **ASCII rough layout** (not pixel-perfect). Show the high-level structure + key interactive elements. Use box-drawing characters (`┌─┐│└┘`) for boxes, `[Label]` for buttons, `[___]` for inputs, `▢` for icons/list items, etc. ~6-15 lines per sketch. Don't try to be precise; *give the PM a mental anchor for the screen*.
-- `elements`: named interactive items on the screen. Each element has `id` (kebab-case), `kind` (button, input, link, toggle, stepper, list, modal-trigger, etc. — freeform), `label` (human label), optional `notes`.
+- `sketch`: an **ASCII rough layout** of INTERFACE STRUCTURE only — not design. Show where things are positioned relative to each other and what kind of element they are. Use box-drawing characters (`┌─┐│└┘`) for boxes, `[Label]` for buttons, `[___]` for inputs, `▢` for icons/list items, etc. ~6-15 lines per sketch. *Don't describe colors, fonts, typography, brand styling, spacing, or visual polish in the sketch or notes — those are design decisions that change. ProductOS captures interface (what's there, where it sits, what it does), not design (how it looks).*
+- `elements`: named interactive items on the screen. Each element has `id` (kebab-case), `kind` (button, input, link, toggle, stepper, list, modal-trigger, etc. — freeform), `label` (human label), optional `notes`. **Don't put styling/color/visual-design notes in `notes`** — only things like *role*, *what triggers it*, *what it shows*, *what makes it unique among similar elements*.
 
 Example sketch:
 

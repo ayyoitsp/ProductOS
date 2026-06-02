@@ -151,12 +151,15 @@ h3 { font-size: 16px; margin: 22px 0 10px; color: var(--dim); }
 .surface-element { font-size: 11.5px; padding: 3px 8px; background: var(--surface-2); border: 1px solid var(--surface-3); border-radius: 4px; color: var(--text); }
 .surface-element code { font-family: var(--mono); font-size: 10.5px; color: var(--accent); background: transparent; padding: 0; }
 .surface-notes { margin-top: 10px; color: var(--dim); font-size: 12.5px; padding: 8px 10px; background: var(--surface-2); border-radius: 4px; }
+.surface-behaviors { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--surface-3); display: flex; flex-direction: column; gap: 12px; }
+.surface-behaviors .behavior { margin: 0; }
 
 .behavior .anchor-strip { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--dim); margin: 4px 0 8px; flex-wrap: wrap; }
 .behavior .anchor-strip a { color: var(--accent); text-decoration: none; font-family: var(--mono); }
 .behavior .anchor-strip a:hover { text-decoration: underline; }
 .behavior .anchor-strip .arr { color: var(--surface-3); }
 .behavior .anchor-strip .interaction { font-family: var(--mono); padding: 1px 6px; border-radius: 3px; background: var(--surface-2); color: var(--text); font-size: 10.5px; }
+.behavior .anchor-strip .element-ref code { font-family: var(--mono); font-size: 11px; color: var(--accent); background: var(--surface-2); padding: 1px 5px; border-radius: 3px; }
 
 .rollup { display: flex; gap: 12px; margin: 12px 0 20px; flex-wrap: wrap; }
 .rollup .chip { background: var(--surface); border: 1px solid var(--surface-3); border-radius: 999px; padding: 4px 12px; font-size: 12px; font-family: var(--mono); color: var(--dim); }
@@ -533,10 +536,33 @@ export function renderFeature(
   // skills) but shouldn't compete with the claim for the reader's attention.
   const implBlock = "";
 
-  const surfacesBlock = renderSurfaces(f.surfaces ?? [], f.behaviors);
+  const surfaces = f.surfaces ?? [];
   const rollup = renderFeatureRollup(f.behaviors, tracking);
+
+  // Partition behaviors by surface anchor: anchored ones live inside their
+  // surface card; un-anchored ones (rules/invariants) get a "Rules & Invariants"
+  // section after surfaces.
+  const surfaceIds = new Set(surfaces.map((s) => s.id));
+  const anchored = new Map<string, Behavior[]>();
+  const unanchored: Behavior[] = [];
+  for (const b of f.behaviors) {
+    if (b.surface && surfaceIds.has(b.surface)) {
+      const arr = anchored.get(b.surface) ?? [];
+      arr.push(b);
+      anchored.set(b.surface, arr);
+    } else {
+      unanchored.push(b);
+    }
+  }
+
+  const surfacesBlock = surfaces.length
+    ? `<h2>Surfaces</h2>${rollup}<div class="surfaces">${surfaces.map((s) => renderSurfaceWithBehaviors(f.id, s, anchored.get(s.id) ?? [], tracking)).join("\n")}</div>`
+    : "";
+  const unanchoredHeading = surfaces.length ? "Rules & invariants" : "Behaviors";
   const behaviorBlocks = f.behaviors.length
-    ? `<h2>Behaviors</h2>${rollup}${f.behaviors.map((b) => renderBehavior(f.id, b, tracking?.behaviors[b.id])).join("\n")}`
+    ? (unanchored.length > 0
+        ? `<h2>${escape(unanchoredHeading)}</h2>${!surfaces.length ? rollup : ""}${unanchored.map((b) => renderBehavior(f.id, b, tracking?.behaviors[b.id])).join("\n")}`
+        : "")
     : `<div class="empty-state">No behaviors documented yet for this feature.</div>`;
 
   const bodyHtml = feature.body
@@ -562,52 +588,54 @@ export function renderFeature(
   `;
 }
 
-function renderSurfaces(surfaces: Surface[], behaviors: Behavior[]): string {
-  if (surfaces.length === 0) return "";
-  // Count behaviors anchored to each surface so each card shows its behavior count.
-  const behaviorsBySurface = new Map<string, Behavior[]>();
-  for (const b of behaviors) {
-    if (!b.surface) continue;
-    const arr = behaviorsBySurface.get(b.surface) ?? [];
-    arr.push(b);
-    behaviorsBySurface.set(b.surface, arr);
-  }
-  const cards = surfaces.map((s) => {
-    const anchored = behaviorsBySurface.get(s.id) ?? [];
-    const elementsLine =
-      s.elements.length > 0
-        ? `<div class="surface-elements">${s.elements
-            .map(
-              (e) =>
-                `<span class="surface-element" title="${escape(e.kind)}"><code>${escape(e.id)}</code>${e.label ? ` — ${escape(e.label)}` : ""}</span>`
-            )
-            .join("")}</div>`
-        : "";
-    const sketchBlock = s.sketch
-      ? `<pre class="surface-sketch">${escape(s.sketch.replace(/^\n+|\n+$/g, ""))}</pre>`
+function renderSurfaceWithBehaviors(
+  featureId: string,
+  s: Surface,
+  anchoredBehaviors: Behavior[],
+  tracking: FeatureTracking | null
+): string {
+  const elementsLine =
+    s.elements.length > 0
+      ? `<div class="surface-elements">${s.elements
+          .map(
+            (e) =>
+              `<span class="surface-element" title="${escape(e.kind)}"><code>${escape(e.id)}</code>${e.label ? ` — ${escape(e.label)}` : ""}</span>`
+          )
+          .join("")}</div>`
       : "";
-    const pathLine = s.path
-      ? `<code class="surface-path">${escape(s.path)}</code>`
+  const sketchBlock = s.sketch
+    ? `<pre class="surface-sketch">${escape(s.sketch.replace(/^\n+|\n+$/g, ""))}</pre>`
+    : "";
+  const pathLine = s.path
+    ? `<code class="surface-path">${escape(s.path)}</code>`
+    : "";
+  const count = anchoredBehaviors.length;
+  const countLine =
+    count > 0
+      ? `<span class="surface-count">${count} behavior${count === 1 ? "" : "s"}</span>`
+      : `<span class="surface-count surface-count-empty">no behaviors anchored</span>`;
+
+  const nestedBehaviors =
+    count > 0
+      ? `<div class="surface-behaviors">${anchoredBehaviors
+          .map((b) => renderBehavior(featureId, b, tracking?.behaviors[b.id], { nestedInSurface: true }))
+          .join("\n")}</div>`
       : "";
-    const behaviorCount = anchored.length;
-    const countLine =
-      behaviorCount > 0
-        ? `<span class="surface-count">${behaviorCount} behavior${behaviorCount === 1 ? "" : "s"}</span>`
-        : `<span class="surface-count surface-count-empty">no behaviors anchored</span>`;
-    return `
-      <section class="surface" id="surface-${escape(s.id)}">
-        <div class="surface-head">
-          <h3>${escape(s.title)}</h3>
-          ${pathLine}
-          ${countLine}
-        </div>
-        ${sketchBlock}
-        ${elementsLine}
-        ${s.notes ? `<div class="surface-notes">${escape(s.notes)}</div>` : ""}
-      </section>`;
-  });
-  return `<h2>Surfaces</h2><div class="surfaces">${cards.join("\n")}</div>`;
+
+  return `
+    <section class="surface" id="surface-${escape(s.id)}">
+      <div class="surface-head">
+        <h3>${escape(s.title)}</h3>
+        ${pathLine}
+        ${countLine}
+      </div>
+      ${sketchBlock}
+      ${elementsLine}
+      ${s.notes ? `<div class="surface-notes">${escape(s.notes)}</div>` : ""}
+      ${nestedBehaviors}
+    </section>`;
 }
+
 
 function renderFeatureRollup(behaviors: Behavior[], tracking: FeatureTracking | null): string {
   const counts: Record<DerivedVerification, number> = {
@@ -634,7 +662,12 @@ function renderFeatureRollup(behaviors: Behavior[], tracking: FeatureTracking | 
   return `<div class="rollup">${chips.join("")}</div>`;
 }
 
-function renderBehavior(featureId: string, b: Behavior, t: BehaviorTracking | undefined): string {
+function renderBehavior(
+  featureId: string,
+  b: Behavior,
+  t: BehaviorTracking | undefined,
+  opts: { nestedInSurface?: boolean } = {}
+): string {
   const d = derivedVerification(b, t ?? null);
   const claim = escape(b.claim);
   const verifiedLine = t?.last_verified
@@ -671,7 +704,7 @@ function renderBehavior(featureId: string, b: Behavior, t: BehaviorTracking | un
         </div>
       </div>`;
 
-  const anchorStrip = renderBehaviorAnchor(b);
+  const anchorStrip = renderBehaviorAnchor(b, { hideSurfaceName: opts.nestedInSurface === true });
   return `
     <article class="behavior" id="${escape(b.id)}" data-feature="${escape(featureId)}" data-behavior="${escape(b.id)}">
       <div class="head">
@@ -692,17 +725,24 @@ function renderBehavior(featureId: string, b: Behavior, t: BehaviorTracking | un
   `;
 }
 
-function renderBehaviorAnchor(b: Behavior): string {
+function renderBehaviorAnchor(
+  b: Behavior,
+  opts: { hideSurfaceName?: boolean } = {}
+): string {
   if (!b.surface) return "";
-  const parts: string[] = [`<a href="#surface-${escape(b.surface)}">${escape(b.surface)}</a>`];
+  const parts: string[] = [];
+  if (!opts.hideSurfaceName) {
+    parts.push(`<a href="#surface-${escape(b.surface)}">${escape(b.surface)}</a>`);
+  }
   if (b.element) {
-    parts.push(`<span class="arr">›</span>`);
-    parts.push(`<a href="#surface-${escape(b.surface)}">${escape(b.element)}</a>`);
+    if (parts.length > 0) parts.push(`<span class="arr">›</span>`);
+    parts.push(`<span class="element-ref"><code>${escape(b.element)}</code></span>`);
   }
   if (b.interaction) {
-    parts.push(`<span class="arr">·</span>`);
+    if (parts.length > 0) parts.push(`<span class="arr">·</span>`);
     parts.push(`<span class="interaction">${escape(b.interaction)}</span>`);
   }
+  if (parts.length === 0) return "";
   return `<div class="anchor-strip">${parts.join(" ")}</div>`;
 }
 
