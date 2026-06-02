@@ -28,7 +28,7 @@ productos/products/<area>/<feature>.md       ← PRODUCT TRUTH
   - claims: what the user does, what the user sees, in product language
   - no API/endpoint/file references in the claim text
   - status (planned | shipped | deprecated), title, description
-  - body: prose, UX notes, design rationale, screenshots
+  - body: OPTIONAL short product-language context (a sentence or two). DEFAULT TO NOTHING. Never put implementation rationale ("why derived not stored"), out-of-scope catalogs, design discussion, or related-feature lists in the body. Surfaces + behaviors + description ARE the spec.
 
 productos/tracking/<area>/<feature>.yaml     ← IMPLEMENTATION + VERIFICATION
   - implements: [code paths]

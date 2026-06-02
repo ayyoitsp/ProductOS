@@ -725,8 +725,10 @@ export function renderFeature(
         : "")
     : `<div class="empty-state">No behaviors documented yet for this feature.</div>`;
 
-  const bodyHtml = feature.body
-    ? `<h2>Notes</h2><article class="prose">${marked.parse(feature.body) as string}</article>`
+  // Feature body renders inline with the description as a combined overview
+  // block at the top — not as a separate "Notes" h2 down below.
+  const overviewBody = feature.body
+    ? `<article class="prose feature-overview">${marked.parse(feature.body) as string}</article>`
     : "";
 
   const affectedByBlock = renderAffectedBy(f.affected_by ?? []);
@@ -742,10 +744,10 @@ export function renderFeature(
       ${implBlock}
     </header>
     ${description}
+    ${overviewBody}
     ${affectedByBlock}
     ${surfacesBlock}
     ${behaviorBlocks}
-    ${bodyHtml}
     ${renderFeedbackSection(f.id, undefined, "Feedback on this feature")}
   `;
 }
