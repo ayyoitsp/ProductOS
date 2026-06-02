@@ -1,7 +1,7 @@
 ---
 name: productos-feature
 description: Use when the user wants to scope ProductOS on one in-flight feature (the v0.1 wedge) — either pre-code planning OR retrofit on a feature that already exists. Reads the relevant code paths, proposes 3-5 behaviors with claims + test_cases in product language, and writes them to productos/products/<area>/<feature>.md as Unverified. Surfaces ambiguities as questions before writing. Triggers on "scope productos on the X flow", "run a productos feature scope on Y", "I'm planning a Z feature", "let's spec X in productos". The 80% v0.1 entry point.
-version: 0.2.0
+version: 0.1.0
 ---
 
 # ProductOS — Feature Scope Skill
