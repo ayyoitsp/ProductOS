@@ -34,13 +34,13 @@ import {
 } from "../core/test-results.js";
 import {
   renderArea,
-  renderContextDoc,
   renderContextIndex,
   renderFeature,
   renderFeedbackQueue,
   renderHome,
   renderShell,
   renderSidebar,
+  visibleAreas,
 } from "./renderer.js";
 
 export async function startUiServer(): Promise<void> {
@@ -224,7 +224,7 @@ export async function startUiServer(): Promise<void> {
       if (p === "/" || p === "") {
         const fp = topReadmePath(paths);
         const readme = fs.existsSync(fp) ? fs.readFileSync(fp, "utf-8") : undefined;
-        const body = renderHome(areas, readme);
+        const body = renderHome(visibleAreas(areas), readme);
         return html(res, renderShell("Product Truth", body, sb("_root")));
       }
 
@@ -236,17 +236,18 @@ export async function startUiServer(): Promise<void> {
 
       if (p === "/_context" || p === "/_context/") {
         const body = renderContextIndex(contextDocs);
-        return html(res, renderShell("Strategy", body, sb()));
+        return html(res, renderShell("Strategy", body, sb("_context")));
       }
 
+      // Per-doc URLs now redirect into the single-page Strategy view with an
+      // anchor. Preserves old links (e.g. `productos/context/principles.md`
+      // referenced from a Contract note) without breaking them.
       const ctxMatch = p.match(/^\/_context\/([^/]+)\/?$/);
       if (ctxMatch) {
         const name = ctxMatch[1]!;
-        const doc = readContext(paths, name);
-        if (doc) {
-          const body = renderContextDoc(doc, contextDocs);
-          return html(res, renderShell(doc.title, body, sb(`_context:${name}`)));
-        }
+        res.writeHead(302, { Location: `/_context#${encodeURIComponent(name)}` });
+        res.end();
+        return;
       }
 
       const areaMatch = p.match(/^\/([^/]+)\/?$/);

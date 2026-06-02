@@ -11,18 +11,34 @@ import { derivedVerification, DerivedVerification } from "../core/derived-state.
 
 const SHELL_CSS = `
 :root {
-  --bg: #0f1115;
-  --surface: #161922;
-  --surface-2: #1d2230;
-  --surface-3: #232838;
-  --text: #e6e8ee;
-  --dim: #8a93a6;
-  --accent: #4f8cff;
-  --green: #2ecc71;
-  --yellow: #f5c518;
-  --red: #ff4d4f;
-  --blue: #4f8cff;
+  /* Light mode (default) */
+  --bg: #fbfbfc;
+  --surface: #ffffff;
+  --surface-2: #f3f4f7;
+  --surface-3: #e4e6eb;
+  --text: #1f2329;
+  --dim: #6b7280;
+  --accent: #2563eb;
+  --green: #16a34a;
+  --yellow: #ca8a04;
+  --red: #dc2626;
+  --blue: #2563eb;
   --mono: ui-monospace, "JetBrains Mono", "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root.system-theme {
+    --bg: #0f1115;
+    --surface: #161922;
+    --surface-2: #1d2230;
+    --surface-3: #232838;
+    --text: #e6e8ee;
+    --dim: #8a93a6;
+    --accent: #4f8cff;
+    --green: #2ecc71;
+    --yellow: #f5c518;
+    --red: #ff4d4f;
+    --blue: #4f8cff;
+  }
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; }
@@ -35,13 +51,18 @@ aside {
   background: var(--surface); border-right: 1px solid var(--surface-3);
   padding: 24px 16px; overflow-y: auto; max-height: 100vh; position: sticky; top: 0;
 }
-aside h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--dim); margin: 24px 0 8px; }
-aside a { color: var(--text); text-decoration: none; display: block; padding: 4px 8px; border-radius: 6px; font-size: 13px; }
+aside h2 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--dim); margin: 24px 0 8px; padding: 0 8px; }
+aside a { color: var(--text); text-decoration: none; display: block; padding: 5px 10px; border-radius: 6px; font-size: 13px; }
 aside a:hover { background: var(--surface-2); color: var(--accent); }
 aside a.active { background: var(--surface-2); color: var(--accent); }
-aside .area { margin: 6px 0 14px; }
-aside .area > .area-title { font-weight: 600; padding: 4px 8px; color: var(--text); }
-aside .area .feat { padding-left: 14px; }
+aside .area { margin: 4px 0 12px; }
+aside .area > .area-title { font-weight: 600; padding: 5px 10px; color: var(--text); font-size: 13px; display: flex; align-items: center; gap: 6px; }
+aside .area > .area-title::before { content: "▸"; color: var(--dim); font-size: 10px; }
+aside .area > .area-title a { padding: 0; color: var(--text); }
+aside .area > .area-title a:hover { background: transparent; }
+aside .area .feat-list { border-left: 2px solid var(--surface-3); margin-left: 17px; padding-left: 4px; margin-top: 2px; }
+aside .area .feat { padding-left: 12px; color: var(--dim); font-size: 12.5px; }
+aside .area .feat.active { color: var(--accent); }
 
 main { padding: 36px 48px; max-width: 920px; min-width: 0; }
 header.feature { margin-bottom: 28px; padding-bottom: 20px; border-bottom: 1px solid var(--surface-3); }
@@ -265,31 +286,42 @@ export function renderShell(title: string, body: string, sidebar: string): strin
 </html>`;
 }
 
+/**
+ * Filter out the scaffolded "example" area once there are real (non-example)
+ * areas. Until the user has real content, the example helps; after, it's noise.
+ */
+export function visibleAreas(areas: AreaDocument[]): AreaDocument[] {
+  const real = areas.filter((a) => a.slug !== "example");
+  return real.length > 0 ? real : areas;
+}
+
 export function renderSidebar(
   areas: AreaDocument[],
   contextDocs: ContextDocument[],
   activeId?: string,
   openCount = 0
 ): string {
+  const visible = visibleAreas(areas);
   const parts: string[] = [
     `<a href="/" class="${activeId === "_root" ? "active" : ""}">📖 Overview</a>`,
     `<a href="/_feedback" class="${activeId === "_feedback" ? "active" : ""}">💬 Feedback queue${openCount ? ` <span style="color:var(--yellow);font-family:var(--mono);font-size:11px;">(${openCount})</span>` : ""}</a>`,
   ];
   if (contextDocs.length) {
-    parts.push(`<h2>Strategy</h2>`);
-    for (const doc of contextDocs) {
-      const active = activeId === `_context:${doc.name}` ? " active" : "";
-      parts.push(`<a class="feat${active}" href="/_context/${escape(doc.name)}">${escape(doc.title)}</a>`);
-    }
+    const active = activeId === "_context" ? " active" : "";
+    parts.push(`<a class="${active}" href="/_context">🧭 Strategy</a>`);
   }
-  if (areas.length) {
+  if (visible.length) {
     parts.push(`<h2>Areas</h2>`);
-    for (const area of areas) {
+    for (const area of visible) {
       parts.push(`<div class="area">`);
       parts.push(`<div class="area-title"><a href="/${area.slug}/">${escape(area.title)}</a></div>`);
-      for (const f of area.features) {
-        const active = activeId === f.frontmatter.id ? " active" : "";
-        parts.push(`<a class="feat${active}" href="${escape(f.url_path)}">${escape(f.frontmatter.title)}</a>`);
+      if (area.features.length > 0) {
+        parts.push(`<div class="feat-list">`);
+        for (const f of area.features) {
+          const active = activeId === f.frontmatter.id ? " active" : "";
+          parts.push(`<a class="feat${active}" href="${escape(f.url_path)}">${escape(f.frontmatter.title)}</a>`);
+        }
+        parts.push(`</div>`);
       }
       parts.push(`</div>`);
     }
@@ -324,19 +356,38 @@ export function renderContextIndex(docs: ContextDocument[]): string {
       <div class="empty-state">No strategy documents yet. Run <code>productos init claude</code> — it scaffolds empty <code>productos/context/*.md</code> files for goals, principles, personas, etc.</div>
     `;
   }
-  const cards = docs
-    .map(
-      (d) => `
-      <a href="/_context/${escape(d.name)}" style="display:block;background:var(--surface);border:1px solid var(--surface-3);border-radius:12px;padding:18px 20px;text-decoration:none;color:var(--text);margin:10px 0;">
-        <div style="font-weight:600;font-size:15px;color:var(--accent);">${escape(d.title)}</div>
-        <div style="color:var(--dim);font-size:12px;margin-top:6px;font-family:var(--mono);">${escape(d.name)}.md</div>
-      </a>`
-    )
-    .join("\n");
+
+  // Combine all context docs into ONE page with section anchors per doc.
+  // Each doc becomes an h2 (doc.name as anchor); each doc's own h2 headings
+  // become h3 inside it so the hierarchy is consistent and items remain
+  // citeable as e.g. `principles#numbers-feel-rewarding`.
+  const tocLines = docs.map(
+    (d) => `<a href="#${escape(d.name)}" style="display:inline-block;margin-right:14px;font-size:13px;color:var(--accent);text-decoration:none;">${escape(d.title)}</a>`
+  );
+  const sections = docs.map((d) => {
+    // Render the doc's body, but bump every h2 → h3 (since the doc title is now an h2)
+    // and add anchor ids derived from the heading text, prefixed with the doc name
+    // so cross-doc refs like `principles#numbers-feel-rewarding` work.
+    const bodyHtml = String(marked.parse(d.body))
+      .replace(/<h2>([\s\S]*?)<\/h2>/g, (_m, inner: string) => {
+        const slug = slugify(stripTags(inner));
+        return `<h3 id="${escape(d.name)}-${slug}"><a href="#${escape(d.name)}-${slug}" class="anchor">#</a> ${inner}</h3>`;
+      });
+    return `
+      <section>
+        <h2 id="${escape(d.name)}"><a href="#${escape(d.name)}" class="anchor">#</a> ${escape(d.title)}</h2>
+        ${bodyHtml}
+      </section>`;
+  });
+
   return `
-    <header class="feature"><h1>Strategy</h1></header>
+    <header class="feature">
+      <h1>Strategy</h1>
+      <div class="meta"><span class="pill">${docs.length} document${docs.length === 1 ? "" : "s"}</span></div>
+    </header>
     <article class="prose"><p>The overarching layer above features — goals, design principles, personas, non-goals, voice. Read these before proposing or vetting any feature; they constrain every decision below.</p></article>
-    ${cards}
+    <nav class="strategy-toc" style="margin:18px 0 28px;padding:10px 14px;background:var(--surface-2);border-radius:8px;">${tocLines.join("")}</nav>
+    <article class="prose context">${sections.join("\n")}</article>
   `;
 }
 
