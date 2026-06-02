@@ -140,9 +140,7 @@ h3 { font-size: 16px; margin: 22px 0 10px; color: var(--dim); }
 .surface { background: var(--surface); border: 1px solid var(--surface-3); border-radius: 10px; padding: 16px 18px; }
 .surface-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
 .surface-head h3 { font-size: 16px; margin: 0; color: var(--text); }
-.surface-path-wrap { display: inline-flex; align-items: center; gap: 4px; }
-.surface-path-arrow { color: var(--dim); font-size: 11px; }
-.surface-path { font-family: var(--mono); font-size: 11.5px; color: var(--dim); background: var(--surface-2); padding: 1px 6px; border-radius: 3px; }
+/* surface-path-wrap / .surface-path styles removed — path is not rendered. */
 .surface-count { font-size: 11.5px; color: var(--dim); margin-left: auto; }
 .surface-count-empty { color: var(--yellow); font-style: italic; }
 .surface-sketch {
@@ -157,11 +155,25 @@ h3 { font-size: 16px; margin: 22px 0 10px; color: var(--dim); }
 .surface-sketch .sketch-dropdown { color: var(--accent); }
 .surface-sketch .sketch-textlink { color: var(--blue); }
 /* Whole-pattern anchor wrap: the brackets themselves are part of the clickable
-   region, so the button reads as a real button. Hover highlights the entire
-   bracketed block. */
-.surface-sketch a.sketch-anchor { text-decoration: none; cursor: pointer; }
-.surface-sketch a.sketch-anchor:hover span { background: rgba(37, 99, 235, 0.12); border-radius: 3px; }
-.surface-sketch a.sketch-anchor:hover .sketch-button { color: var(--accent); filter: brightness(1.1); }
+   region, so the button reads as a real button. The at-rest treatment uses a
+   subtle dotted underline so it's visibly clickable even before hover. */
+.surface-sketch a.sketch-anchor {
+  text-decoration: underline; text-decoration-style: dotted;
+  text-decoration-thickness: 1px; text-underline-offset: 3px;
+  text-decoration-color: rgba(37, 99, 235, 0.45);
+  cursor: pointer;
+}
+.surface-sketch a.sketch-anchor:hover { background: rgba(37, 99, 235, 0.12); border-radius: 3px; text-decoration-style: solid; }
+.surface-sketch a.sketch-anchor:hover .sketch-button { filter: brightness(1.15); }
+.surface-sketch a.sketch-anchor:hover .sketch-textlink { filter: brightness(1.15); }
+
+/* Card / list-item rows. The ▢ or ▦ symbol is colored distinctively so the
+   card pattern is identifiable even without a leads_to. When leads_to is set,
+   the row is wrapped in sketch-anchor (above) and the whole row becomes
+   click-targetable; sketch-card-text gets a subtle treatment too. */
+.surface-sketch .sketch-card-glyph { color: var(--accent); font-weight: 600; }
+.surface-sketch a.sketch-card-row .sketch-card-text { color: var(--text); }
+.surface-sketch a.sketch-card-row:hover .sketch-card-glyph { filter: brightness(1.2); }
 /* element-pill row removed — sketch is the canonical element view now */
 .surface-notes { margin-top: 10px; color: var(--dim); font-size: 12.5px; padding: 8px 10px; background: var(--surface-2); border-radius: 4px; }
 .surface-behaviors { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--surface-3); display: flex; flex-direction: column; gap: 12px; }
@@ -537,6 +549,37 @@ function decorateSketch(sketch: string, elements: Element[]): string {
     }
   );
 
+  // Card / list-item rows. The convention is a leading ▢ or ▦ symbol followed
+  // by space + content. When a card-kind element on this surface has `leads_to`,
+  // wrap the card row (from the symbol up to whitespace gap, end of line, or
+  // start of another inline element like a link) in a clickable anchor —
+  // clicking the kid card row navigates to the kid-detail surface or whatever
+  // `leads_to` points at.
+  const cardEl = elements.find(
+    (e) => (e.kind === "card" || e.kind === "list-item" || e.kind === "row") && e.leads_to
+  );
+  if (cardEl && cardEl.leads_to) {
+    const target = resolveLeadsTo(cardEl.leads_to);
+    if (target) {
+      // Match: card glyph + whitespace + content, stopping at either an existing
+      // anchor (so we don't nest), two-or-more spaces (column gap), or EOL.
+      // Use [\s\S] cautiously — we restrict via the negative-lookahead set.
+      html = html.replace(
+        /(▢|▦)(\s+)([^\n│]*?)(?=<a\s|\s{2,}|│|$)/g,
+        (_m, icon: string, ws: string, content: string) =>
+          `<a class="sketch-anchor sketch-card-row" href="${escape(target)}" title="goes to ${escape(cardEl.leads_to!)}"><span class="sketch-card-glyph">${icon}</span>${ws}<span class="sketch-card-text">${content}</span></a>`
+      );
+    }
+  }
+
+  // Always give the card glyph a visible color, even when the row isn't a link
+  // (e.g. there's no card-kind element with leads_to). Skip if already wrapped
+  // above by checking that the preceding char isn't part of an HTML tag.
+  html = html.replace(
+    /(?<!<[^>]*)(▢|▦)/g,
+    '<span class="sketch-card-glyph">$1</span>'
+  );
+
   return html;
 }
 
@@ -718,9 +761,10 @@ function renderSurfaceWithBehaviors(
   const sketchBlock = s.sketch
     ? `<pre class="surface-sketch">${decorateSketch(s.sketch, s.elements)}</pre>`
     : "";
-  const pathLine = s.path
-    ? `<span class="surface-path-wrap"><span class="surface-path-arrow">→</span><code class="surface-path">${escape(s.path)}</code></span>`
-    : "";
+  // Surface.path (route / URL) is intentionally NOT rendered in the header
+  // — it's a routing-implementation detail the PM doesn't read. Data persists
+  // in markdown for engineers who need to locate the code.
+  const pathLine = "";
   const count = anchoredBehaviors.length;
   const countLine =
     count > 0
