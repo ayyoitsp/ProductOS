@@ -1,7 +1,7 @@
 ---
 name: productos-analyze
 description: Use for a BROAD pass across the whole codebase (or a large area) — proposing many features and behaviors at once from existing code. Also used to process the open feedback queue. Triggers on "do a ProductOS pass on this codebase", "scan the codebase and propose product truth", "process feedback", "broad analyze pass". For a SINGLE in-flight feature, use `productos-feature` instead — that's the v0.1 PM wedge. After this skill writes proposals, recommend the user run `productos-vet` (or open localhost:7878) to walk them interactively.
-version: 0.2.0
+version: 0.1.0
 ---
 
 # ProductOS — Analyze Skill (BROAD pass)
