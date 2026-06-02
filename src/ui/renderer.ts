@@ -156,14 +156,13 @@ h3 { font-size: 16px; margin: 22px 0 10px; color: var(--dim); }
 .surface-sketch .sketch-checkbox { color: var(--accent); }
 .surface-sketch .sketch-dropdown { color: var(--accent); }
 .surface-sketch .sketch-textlink { color: var(--blue); }
-.surface-sketch a.sketch-link {
-  color: var(--accent); text-decoration: underline; text-decoration-style: dotted;
-  text-underline-offset: 2px; text-decoration-thickness: 1px;
-}
-.surface-sketch a.sketch-link:hover { background: var(--surface-3); border-radius: 2px; }
-.surface-elements { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
-.surface-element { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 3px 10px; background: var(--surface-2); border: 1px solid var(--surface-3); border-radius: 999px; color: var(--text); }
-.surface-element .el-kind { font-family: var(--mono); font-size: 10px; color: var(--accent); text-transform: uppercase; letter-spacing: 0.06em; background: var(--surface); padding: 1px 6px; border-radius: 3px; border: 1px solid var(--surface-3); }
+/* Whole-pattern anchor wrap: the brackets themselves are part of the clickable
+   region, so the button reads as a real button. Hover highlights the entire
+   bracketed block. */
+.surface-sketch a.sketch-anchor { text-decoration: none; cursor: pointer; }
+.surface-sketch a.sketch-anchor:hover span { background: rgba(37, 99, 235, 0.12); border-radius: 3px; }
+.surface-sketch a.sketch-anchor:hover .sketch-button { color: var(--accent); filter: brightness(1.1); }
+/* element-pill row removed — sketch is the canonical element view now */
 .surface-notes { margin-top: 10px; color: var(--dim); font-size: 12.5px; padding: 8px 10px; background: var(--surface-2); border-radius: 4px; }
 .surface-behaviors { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--surface-3); display: flex; flex-direction: column; gap: 12px; }
 .surface-behaviors .behavior { margin: 0; }
@@ -475,58 +474,67 @@ export function renderContextIndex(docs: ContextDocument[]): string {
 
 /**
  * Render an ASCII surface sketch with:
- *   - Visual highlighting for [ Button ] and <Link> patterns
- *   - Clickable navigation for any element whose label appears in the sketch
- *     AND has a `leads_to` set (same-page #surface-<id> anchor, cross-feature
- *     /area/feature page, or cross-feature + anchor)
+ *   - Visual highlighting for [ Button ], <Link>, [_input_], etc.
+ *   - Clickable navigation for any element with `leads_to` set, where the
+ *     ENTIRE bracket pattern (not just the inner text) is the click target.
  */
 function decorateSketch(sketch: string, elements: Element[]): string {
   const cleaned = sketch.replace(/^\n+|\n+$/g, "");
-  let html = escape(cleaned);
+  const escaped = escape(cleaned);
 
-  // 1. Wrap each element's label as a link if leads_to is set. Done BEFORE the
-  //    generic [..]/<..> styling so the link styling wraps the inner text and
-  //    the bracket coloring still applies to the outer brackets.
+  // Build a label → leads_to map for O(1) lookups when matching patterns.
+  // Keyed by lowercased label so "Edit" matches "<Edit>" or "[ Edit ]".
+  type LinkInfo = { target: string; leadsTo: string };
+  const linkByLabel = new Map<string, LinkInfo>();
   for (const el of elements) {
     if (!el.leads_to || !el.label) continue;
     const target = resolveLeadsTo(el.leads_to);
-    if (!target) continue;
-    // Replace EVERY occurrence of the (already-escaped) label inside the
-    // sketch. Word-boundary-ish to avoid breaking inside other words. Global
-    // so repeating UI elements (e.g. an Edit link on every row of a list) all
-    // become clickable, since there's one element declaration for the kind.
-    const labelEsc = escape(el.label);
-    const re = new RegExp(`(?<![A-Za-z0-9_-])${escapeRegex(labelEsc)}(?![A-Za-z0-9_-])`, "g");
-    html = html.replace(
-      re,
-      `<a class="sketch-link" href="${escape(target)}" title="goes to ${escape(el.leads_to)}">${labelEsc}</a>`
-    );
+    if (target) linkByLabel.set(el.label.toLowerCase(), { target, leadsTo: el.leads_to });
   }
 
-  // 2. Style [Label] patterns as buttons. Skip if [ contains only underscores
-  //    (those are input fields) or special chars like ▼ (dropdowns).
+  const lookupLink = (innerText: string): LinkInfo | null => {
+    const t = innerText.toLowerCase().trim();
+    if (linkByLabel.has(t)) return linkByLabel.get(t)!;
+    // Fallback: contains/contained-by match for buttons like "+ Add a kid"
+    // where the sketch text "+ Add a kid" contains the label "Add a kid".
+    for (const [label, info] of linkByLabel) {
+      if (t.includes(label) || label.includes(t)) return info;
+    }
+    return null;
+  };
+
+  // Pattern decoration. The ENTIRE bracket pattern becomes the click target
+  // when it matches an element with leads_to — so the brackets themselves
+  // light up on hover, not just the inner text. This makes the sketch read
+  // like a real interface: you click the button, not the label.
+  let html = escaped;
+
   html = html.replace(
     /\[(\s*[^\[\]\n][^\[\]\n]*?\s*)\]/g,
     (match, inner: string) => {
       const trimmed = inner.trim();
-      // Inputs: all underscores
-      if (/^_+$/.test(trimmed)) return `<span class="sketch-input">${match}</span>`;
-      // Checkboxes: " " or "✓" or "x"/"X"
-      if (/^[\s✓✗xX]$/.test(trimmed)) return `<span class="sketch-checkbox">${match}</span>`;
-      // Dropdowns: ends with ▼
-      if (/▼$/.test(trimmed)) return `<span class="sketch-dropdown">${match}</span>`;
-      return `<span class="sketch-button">${match}</span>`;
+      let cls = "sketch-button";
+      if (/^_+$/.test(trimmed)) cls = "sketch-input";
+      else if (/^[\s✓✗xX]$/.test(trimmed)) cls = "sketch-checkbox";
+      else if (/▼$/.test(trimmed)) cls = "sketch-dropdown";
+
+      const link = lookupLink(trimmed);
+      const styled = `<span class="${cls}">${match}</span>`;
+      return link
+        ? `<a class="sketch-anchor" href="${escape(link.target)}" title="goes to ${escape(link.leadsTo)}">${styled}</a>`
+        : styled;
     }
   );
 
-  // 3. Style <Label> patterns as links (visual only — does not affect existing
-  //    <a class="sketch-link"> wrappers from step 1, since those use real `<a>`
-  //    tags which won't match the literal `&lt;..&gt;` we look for here).
-  //    NOTE: we look for the escaped form &lt;..&gt; because the whole string
-  //    was already html-escaped in step 1.
   html = html.replace(
     /&lt;([^&\n]{1,40}?)&gt;/g,
-    (_match, inner: string) => `<span class="sketch-textlink">&lt;${inner}&gt;</span>`
+    (_match, inner: string) => {
+      const link = lookupLink(inner);
+      const styled = `<span class="sketch-textlink">&lt;${inner}&gt;</span>`;
+      return link
+        ? `<a class="sketch-anchor" href="${escape(link.target)}" title="goes to ${escape(link.leadsTo)}">${styled}</a>`
+        : styled;
+    }
   );
 
   return html;
@@ -544,10 +552,6 @@ function resolveLeadsTo(leadsTo: string): string | null {
   if (leadsTo.includes("/")) return `/${leadsTo}`;
   // "surface-id" — same-page anchor
   return `#surface-${leadsTo}`;
-}
-
-function escapeRegex(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function slugify(s: string): string {
@@ -705,19 +709,12 @@ function renderSurfaceWithBehaviors(
   anchoredBehaviors: Behavior[],
   tracking: FeatureTracking | null
 ): string {
-  const elementsLine =
-    s.elements.length > 0
-      ? `<div class="surface-elements">${s.elements
-          .map((e) => {
-            // PM-facing: prominent kind badge + label. The technical id
-            // (used by behaviors to reference the element via `element: <id>`)
-            // is tucked into a tooltip for engineers who need it.
-            const label = e.label ?? e.id;
-            const tooltip = e.label ? `id: ${e.id}` : `id: ${e.id}`;
-            return `<span class="surface-element" title="${escape(tooltip)}"><span class="el-kind">${escape(e.kind)}</span> ${escape(label)}</span>`;
-          })
-          .join("")}</div>`
-      : "";
+  // Element pills below the sketch are intentionally NOT rendered — the sketch
+  // itself, decorated by decorateSketch() with kind-aware styling and
+  // leads_to-aware clickability, is the canonical element view. The element
+  // declarations still live in the markdown so behaviors can anchor via
+  // `element: <id>` — they just don't render as a separate redundant list.
+  const elementsLine = "";
   const sketchBlock = s.sketch
     ? `<pre class="surface-sketch">${decorateSketch(s.sketch, s.elements)}</pre>`
     : "";
