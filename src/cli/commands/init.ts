@@ -39,11 +39,15 @@ export function initCommand(): Command {
 
       // 1. Install skills + register MCP
       const install = installClaudeSkills({ update: opts.update });
+      const verb = install.symlinked ? "Linked" : "Installed";
       for (const s of install.installed) {
-        console.log(pc.green("✓"), `Installed skill: ~/.claude/skills/${s}/`);
+        console.log(pc.green("✓"), `${verb} skill: ~/.claude/skills/${s}/`);
       }
       if (install.installed.length === 0) {
         console.log(pc.yellow("→"), "Skills already installed (use --update to refresh)");
+      }
+      if (install.symlinked && install.installed.length > 0) {
+        console.log(pc.dim("   (dev install detected — skills are symlinked, so edits in skills/ are live immediately)"));
       }
       console.log(pc.green("✓"), `MCP server registered in ${install.mcpRegisteredAt}`);
 
