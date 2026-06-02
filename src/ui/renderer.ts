@@ -4,9 +4,10 @@ import {
   Behavior,
   FeatureDocument,
 } from "../core/product.js";
-import { BehaviorStatus, BehaviorTracking, FeatureTracking } from "../core/tracking.js";
+import { BehaviorTracking, FeatureTracking } from "../core/tracking.js";
 import { FeedbackEntry } from "../core/feedback.js";
 import { ContextDocument } from "../core/context.js";
+import { derivedVerification, DerivedVerification } from "../core/derived-state.js";
 
 const SHELL_CSS = `
 :root {
@@ -73,6 +74,31 @@ h3 { font-size: 16px; margin: 22px 0 10px; color: var(--dim); }
 .status-contested { color: var(--red); border-color: rgba(255,77,79,0.4); }
 .status-deprecated { color: var(--dim); }
 .status-unverified { color: var(--dim); border-color: var(--surface-3); }
+.status-orphan { color: #d39a3e; border-color: rgba(211,154,62,0.45); }
+.status-uncertain { color: #c39bff; border-color: rgba(195,155,255,0.45); }
+
+.evidence { margin-top: 12px; padding: 10px 12px; background: var(--surface-2); border-radius: 6px; font-size: 12px; color: var(--dim); }
+.evidence .ev-row { display: flex; gap: 8px; align-items: baseline; margin: 4px 0; }
+.evidence .ev-label { color: var(--dim); width: 84px; flex-shrink: 0; }
+.evidence .ev-pass { color: var(--green); }
+.evidence .ev-fail { color: var(--red); }
+.evidence .ev-skip { color: var(--dim); }
+.evidence code { font-size: 11px; }
+
+.rollup { display: flex; gap: 12px; margin: 12px 0 20px; flex-wrap: wrap; }
+.rollup .chip { background: var(--surface); border: 1px solid var(--surface-3); border-radius: 999px; padding: 4px 12px; font-size: 12px; font-family: var(--mono); color: var(--dim); }
+.rollup .chip strong { color: var(--text); margin-right: 4px; }
+.rollup .chip.verified strong { color: var(--green); }
+.rollup .chip.contested strong { color: var(--red); }
+.rollup .chip.orphan strong { color: #d39a3e; }
+.rollup .chip.uncertain strong { color: #c39bff; }
+.rollup .chip.unverified strong { color: var(--yellow); }
+
+.behavior .reason { font-size: 11px; color: var(--dim); font-style: italic; margin-top: 2px; }
+.edit-form { display: none; margin-top: 10px; }
+.edit-form.open { display: block; }
+.edit-form textarea { width: 100%; min-height: 70px; background: var(--surface-2); color: var(--text); border: 1px solid var(--surface-3); border-radius: 6px; padding: 8px 10px; font: inherit; font-size: 13px; resize: vertical; }
+.edit-form .row { display: flex; gap: 8px; margin-top: 6px; }
 
 .behavior .claim { font-size: 15px; line-height: 1.55; margin: 6px 0 12px; }
 .behavior .verified-line { color: var(--dim); font-size: 12px; margin: 6px 0; }
@@ -160,8 +186,35 @@ document.addEventListener('click', async (e) => {
   if (a === 'verify') {
     btn.disabled = true;
     await action('/api/verify', { feature: featureId, behavior: behaviorId });
-    toast(behaviorId + ' verified');
+    toast(behaviorId + ' accepted');
     setTimeout(() => location.reload(), 400);
+  } else if (a === 'reject') {
+    const reason = prompt('Reason for rejecting "' + behaviorId + '"? (will be saved as deprecated_reason)') || '';
+    if (reason === '') return;
+    btn.disabled = true;
+    await action('/api/reject', { feature: featureId, behavior: behaviorId, reason });
+    toast(behaviorId + ' rejected');
+    setTimeout(() => location.reload(), 400);
+  } else if (a === 'edit-toggle') {
+    const form = btn.closest('.behavior').querySelector('.edit-form');
+    form.classList.toggle('open');
+    if (form.classList.contains('open')) form.querySelector('textarea[name=claim]').focus();
+  } else if (a === 'edit-cancel') {
+    btn.closest('.edit-form').classList.remove('open');
+  } else if (a === 'edit-save') {
+    const form = btn.closest('.edit-form');
+    const claim = form.querySelector('textarea[name=claim]').value.trim();
+    const notes = form.querySelector('textarea[name=notes]').value.trim();
+    if (claim.length < 10) { toast('claim too short'); return; }
+    btn.disabled = true;
+    const res = await action('/api/edit-behavior', { feature: featureId, behavior: behaviorId, claim, notes });
+    if (res.ok) {
+      toast(behaviorId + ' updated');
+      setTimeout(() => location.reload(), 400);
+    } else {
+      toast('error: ' + (res.error || 'failed'));
+      btn.disabled = false;
+    }
   } else if (a === 'contest') {
     const form = btn.closest('.behavior').querySelector('.feedback-form');
     form.classList.add('open');
@@ -368,8 +421,9 @@ export function renderFeature(
     ? `<div class="meta" style="margin-top:8px;"><span style="color:var(--dim)">Implemented in:</span> ${tracking.implements.map((p) => `<code style="font-size:12px">${escape(p)}</code>`).join(" ")}</div>`
     : "";
 
+  const rollup = renderFeatureRollup(f.behaviors, tracking);
   const behaviorBlocks = f.behaviors.length
-    ? `<h2>Behaviors</h2>${f.behaviors.map((b) => renderBehavior(f.id, b, tracking?.behaviors[b.id])).join("\n")}`
+    ? `<h2>Behaviors</h2>${rollup}${f.behaviors.map((b) => renderBehavior(f.id, b, tracking?.behaviors[b.id])).join("\n")}`
     : `<div class="empty-state">No behaviors documented yet for this feature.</div>`;
 
   const bodyHtml = feature.body
@@ -394,35 +448,114 @@ export function renderFeature(
   `;
 }
 
+function renderFeatureRollup(behaviors: Behavior[], tracking: FeatureTracking | null): string {
+  const counts: Record<DerivedVerification, number> = {
+    verified: 0,
+    contested: 0,
+    orphan: 0,
+    uncertain: 0,
+    unverified: 0,
+  };
+  let deprecated = 0;
+  for (const b of behaviors) {
+    if (b.deprecated) { deprecated += 1; continue; }
+    const d = derivedVerification(b, tracking?.behaviors[b.id] ?? null);
+    counts[d.state] += 1;
+  }
+  const chips: string[] = [];
+  const order: DerivedVerification[] = ["verified", "contested", "orphan", "uncertain", "unverified"];
+  for (const k of order) {
+    if (counts[k] === 0) continue;
+    chips.push(`<span class="chip ${k}"><strong>${counts[k]}</strong>${k}</span>`);
+  }
+  if (deprecated > 0) chips.push(`<span class="chip"><strong>${deprecated}</strong>deprecated</span>`);
+  if (chips.length === 0) return "";
+  return `<div class="rollup">${chips.join("")}</div>`;
+}
+
 function renderBehavior(featureId: string, b: Behavior, t: BehaviorTracking | undefined): string {
-  const status: BehaviorStatus | "unverified" = t?.status ?? "unverified";
+  const d = derivedVerification(b, t ?? null);
   const claim = escape(b.claim);
   const verifiedLine = t?.last_verified
-    ? `<div class="verified-line">Last verified ${escape(t.last_verified)}${t.verified_by ? " by " + escape(t.verified_by) : ""}</div>`
+    ? `<div class="verified-line">Last accepted ${escape(t.last_verified)}${t.verified_by ? " by " + escape(t.verified_by) : ""}</div>`
     : "";
   const impl =
     t?.code_refs?.length
       ? `<div class="impl"><span class="impl-label">Code:</span>${t.code_refs.map((r) => ` <code>${escape(r)}</code>`).join("")}</div>`
       : "";
   const notes = b.notes ? `<div class="notes">${escape(b.notes)}</div>` : "";
+  const evidence = renderBehaviorEvidence(b, t);
+  const isDeprecated = b.deprecated === true;
+  const headPills = isDeprecated
+    ? `<span class="status status-deprecated">● deprecated</span>`
+    : `<span class="status status-${d.state}">● ${d.state}</span>`;
+  const reasonLine = !isDeprecated && d.reason ? `<div class="reason">${escape(d.reason)}</div>` : "";
+  const deprecatedReason = isDeprecated && b.deprecated_reason ? `<div class="reason">${escape(b.deprecated_reason)}</div>` : "";
+
+  const actions = isDeprecated
+    ? `<div class="actions"><span style="color:var(--dim);font-size:12px;">deprecated — kept for history</span></div>`
+    : `<div class="actions">
+        <button class="primary" data-action="verify" data-feature="${escape(featureId)}" data-behavior="${escape(b.id)}">✓ Accept</button>
+        <button data-action="edit-toggle">✎ Edit</button>
+        <button class="danger" data-action="reject" data-feature="${escape(featureId)}" data-behavior="${escape(b.id)}">✗ Reject</button>
+        <button data-action="contest" data-feature="${escape(featureId)}" data-behavior="${escape(b.id)}">! Contest</button>
+        <button data-action="feedback-toggle">💬 Feedback</button>
+      </div>
+      <div class="edit-form" data-feature="${escape(featureId)}" data-behavior="${escape(b.id)}">
+        <textarea name="claim" placeholder="Claim (what the product does, in product language)">${escape(b.claim)}</textarea>
+        <textarea name="notes" placeholder="Optional notes / why this exists / non-obvious context">${escape(b.notes ?? "")}</textarea>
+        <div class="row">
+          <button class="primary" data-action="edit-save" data-feature="${escape(featureId)}" data-behavior="${escape(b.id)}">Save</button>
+          <button data-action="edit-cancel">Cancel</button>
+        </div>
+      </div>`;
+
   return `
     <article class="behavior" id="${escape(b.id)}" data-feature="${escape(featureId)}" data-behavior="${escape(b.id)}">
       <div class="head">
         <span class="bid">${escape(b.id)}</span>
-        <span class="status status-${status}">● ${status}</span>
+        ${headPills}
       </div>
       <div class="claim">${claim}</div>
+      ${reasonLine}
+      ${deprecatedReason}
       ${verifiedLine}
       ${notes}
+      ${evidence}
       ${impl}
-      <div class="actions">
-        <button class="primary" data-action="verify" data-feature="${escape(featureId)}" data-behavior="${escape(b.id)}">✓ Verify</button>
-        <button class="danger" data-action="contest" data-feature="${escape(featureId)}" data-behavior="${escape(b.id)}">! Contest</button>
-        <button data-action="feedback-toggle">💬 Feedback</button>
-      </div>
+      ${actions}
       ${renderFeedbackForm(featureId, b.id)}
     </article>
   `;
+}
+
+function renderBehaviorEvidence(b: Behavior, t: BehaviorTracking | undefined): string {
+  const runs = t?.test_case_runs ?? {};
+  const drifts = (t?.drift_events ?? []).filter((d) => !d.resolved_at);
+  const cases = b.test_cases ?? [];
+  if (cases.length === 0 && drifts.length === 0) return "";
+
+  const rows: string[] = [];
+  if (cases.length > 0) {
+    const caseLines = cases.map((tc) => {
+      const run = runs[String(tc.id)];
+      const dep = tc.deprecated ? " <span style=\"color:var(--dim)\">(deprecated)</span>" : "";
+      if (!run) return `      <li>case ${tc.id}: <span class="ev-skip">no result yet</span>${dep} — ${escape(tc.description)}</li>`;
+      const cls = run.status === "pass" ? "ev-pass" : run.status === "fail" || run.status === "error" ? "ev-fail" : "ev-skip";
+      const when = String(run.last_run_at).slice(0, 19).replace("T", " ");
+      return `      <li>case ${tc.id}: <span class="${cls}">${run.status}</span> <code>${when}</code>${dep} — ${escape(tc.description)}</li>`;
+    });
+    rows.push(`<div class="ev-row"><span class="ev-label">Tests</span><ul style="margin:0;padding-left:18px;">${caseLines.join("\n")}</ul></div>`);
+  }
+  if (drifts.length > 0) {
+    const driftLines = drifts.map((d) => {
+      const when = String(d.opened_at).slice(0, 19).replace("T", " ");
+      const ctx = d.context?.message ? ` — ${escape(String(d.context.message))}` : "";
+      return `      <li><span class="ev-fail">${d.kind}</span> opened <code>${when}</code>${ctx}</li>`;
+    });
+    rows.push(`<div class="ev-row"><span class="ev-label">Open drift</span><ul style="margin:0;padding-left:18px;">${driftLines.join("\n")}</ul></div>`);
+  }
+  return `<div class="evidence">${rows.join("\n")}</div>`;
 }
 
 function renderFeedbackForm(featureId: string, behaviorId?: string): string {
