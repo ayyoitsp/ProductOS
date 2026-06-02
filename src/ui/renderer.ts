@@ -51,6 +51,17 @@ aside {
   background: var(--surface); border-right: 1px solid var(--surface-3);
   padding: 24px 16px; overflow-y: auto; max-height: 100vh; position: sticky; top: 0;
 }
+aside .sidebar-top { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+aside .sidebar-top .brand { flex: 1; }
+aside .sidebar-top .refresh {
+  background: transparent; border: 1px solid var(--surface-3); color: var(--dim);
+  width: 30px; height: 30px; border-radius: 6px; cursor: pointer; font-size: 14px;
+  padding: 0; display: flex; align-items: center; justify-content: center;
+  font-family: var(--mono);
+}
+aside .sidebar-top .refresh:hover { color: var(--accent); border-color: var(--accent); }
+aside .sidebar-top .refresh.spinning { animation: spin 0.6s linear; }
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 aside h2 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--dim); margin: 24px 0 8px; padding: 0 8px; }
 aside a { color: var(--text); text-decoration: none; display: block; padding: 5px 10px; border-radius: 6px; font-size: 13px; }
 aside a:hover { background: var(--surface-2); color: var(--accent); }
@@ -204,7 +215,11 @@ document.addEventListener('click', async (e) => {
   const featureId = btn.dataset.feature;
   const behaviorId = btn.dataset.behavior;
 
-  if (a === 'verify') {
+  if (a === 'refresh') {
+    btn.classList.add('spinning');
+    location.reload();
+    return;
+  } else if (a === 'verify') {
     btn.disabled = true;
     await action('/api/verify', { feature: featureId, behavior: behaviorId });
     toast(behaviorId + ' accepted');
@@ -303,7 +318,10 @@ export function renderSidebar(
 ): string {
   const visible = visibleAreas(areas);
   const parts: string[] = [
-    `<a href="/" class="${activeId === "_root" ? "active" : ""}">📖 Overview</a>`,
+    `<div class="sidebar-top">
+      <a href="/" class="brand ${activeId === "_root" ? "active" : ""}">📖 Overview</a>
+      <button class="refresh" data-action="refresh" title="Reload — picks up markdown/tracking edits from disk">↻</button>
+    </div>`,
     `<a href="/_feedback" class="${activeId === "_feedback" ? "active" : ""}">💬 Feedback queue${openCount ? ` <span style="color:var(--yellow);font-family:var(--mono);font-size:11px;">(${openCount})</span>` : ""}</a>`,
   ];
   if (contextDocs.length) {
