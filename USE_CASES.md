@@ -23,7 +23,7 @@ flowchart TD
     A[productos init claude<br/>~3 min one-time setup] --> B[Skill installed, MCP registered<br/>productos/ scaffolded]
     B --> C[productos serve<br/>localhost:7878]
     C --> D[Pick one in-flight feature<br/>e.g. checkout flow]
-    D --> E[In Claude Code:<br/>'Run ProductOS feature scope on the checkout flow']
+    D --> E[In Claude Code:<br/>'Scope ProductOS on the checkout flow'<br/>(triggers productos-scope skill)]
 
     E --> F[Skill walks ONLY the relevant code paths<br/>NOT the whole codebase]
     F --> G[Skill proposes 3-5 behaviors<br/>+ code-consistency analysis per behavior<br/>+ test-coverage analysis if tests exist<br/>Lifecycle: Implemented · Verification: Unverified]

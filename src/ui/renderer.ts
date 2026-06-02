@@ -139,6 +139,8 @@ h3 { font-size: 16px; margin: 22px 0 10px; color: var(--dim); }
 .surface { background: var(--surface); border: 1px solid var(--surface-3); border-radius: 10px; padding: 16px 18px; }
 .surface-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
 .surface-head h3 { font-size: 16px; margin: 0; color: var(--text); }
+.surface-path-wrap { display: inline-flex; align-items: center; gap: 4px; }
+.surface-path-arrow { color: var(--dim); font-size: 11px; }
 .surface-path { font-family: var(--mono); font-size: 11.5px; color: var(--dim); background: var(--surface-2); padding: 1px 6px; border-radius: 3px; }
 .surface-count { font-size: 11.5px; color: var(--dim); margin-left: auto; }
 .surface-count-empty { color: var(--yellow); font-style: italic; }
@@ -148,8 +150,8 @@ h3 { font-size: 16px; margin: 22px 0 10px; color: var(--dim); }
   padding: 12px 14px; margin: 8px 0; overflow-x: auto; white-space: pre;
 }
 .surface-elements { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
-.surface-element { font-size: 11.5px; padding: 3px 8px; background: var(--surface-2); border: 1px solid var(--surface-3); border-radius: 4px; color: var(--text); }
-.surface-element code { font-family: var(--mono); font-size: 10.5px; color: var(--accent); background: transparent; padding: 0; }
+.surface-element { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 3px 10px; background: var(--surface-2); border: 1px solid var(--surface-3); border-radius: 999px; color: var(--text); }
+.surface-element .el-kind { font-family: var(--mono); font-size: 10px; color: var(--accent); text-transform: uppercase; letter-spacing: 0.06em; background: var(--surface); padding: 1px 6px; border-radius: 3px; border: 1px solid var(--surface-3); }
 .surface-notes { margin-top: 10px; color: var(--dim); font-size: 12.5px; padding: 8px 10px; background: var(--surface-2); border-radius: 4px; }
 .surface-behaviors { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--surface-3); display: flex; flex-direction: column; gap: 12px; }
 .surface-behaviors .behavior { margin: 0; }
@@ -617,17 +619,21 @@ function renderSurfaceWithBehaviors(
   const elementsLine =
     s.elements.length > 0
       ? `<div class="surface-elements">${s.elements
-          .map(
-            (e) =>
-              `<span class="surface-element" title="${escape(e.kind)}"><code>${escape(e.id)}</code>${e.label ? ` — ${escape(e.label)}` : ""}</span>`
-          )
+          .map((e) => {
+            // PM-facing: prominent kind badge + label. The technical id
+            // (used by behaviors to reference the element via `element: <id>`)
+            // is tucked into a tooltip for engineers who need it.
+            const label = e.label ?? e.id;
+            const tooltip = e.label ? `id: ${e.id}` : `id: ${e.id}`;
+            return `<span class="surface-element" title="${escape(tooltip)}"><span class="el-kind">${escape(e.kind)}</span> ${escape(label)}</span>`;
+          })
           .join("")}</div>`
       : "";
   const sketchBlock = s.sketch
     ? `<pre class="surface-sketch">${escape(s.sketch.replace(/^\n+|\n+$/g, ""))}</pre>`
     : "";
   const pathLine = s.path
-    ? `<code class="surface-path">${escape(s.path)}</code>`
+    ? `<span class="surface-path-wrap"><span class="surface-path-arrow">→</span><code class="surface-path">${escape(s.path)}</code></span>`
     : "";
   const count = anchoredBehaviors.length;
   const countLine =
