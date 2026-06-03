@@ -84,6 +84,32 @@ header.feature .feature-title-row h1 { margin: 0; flex: 0 0 auto; }
 header.feature .feature-title-row .feature-id { color: var(--dim); font-family: var(--mono); font-size: 13px; flex: 1 1 auto; }
 header.feature .feature-title-row .feature-status { flex: 0 0 auto; }
 
+/* AI assistant pane — sticky at the bottom of a feature page. */
+.ai-assist-pane {
+  position: sticky; bottom: 0; z-index: 10;
+  background: var(--surface); border: 1px solid var(--surface-3); border-top-width: 2px;
+  border-radius: 12px 12px 0 0;
+  padding: 14px 18px 16px;
+  margin: 32px -48px -36px;
+  box-shadow: 0 -4px 16px rgba(0,0,0,0.04);
+}
+.ai-assist-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 8px; flex-wrap: wrap; }
+.ai-assist-title { font-weight: 600; font-size: 14px; color: var(--text); }
+.ai-assist-hint { color: var(--dim); font-size: 12px; flex: 1; }
+.ai-assist-input {
+  width: 100%; min-height: 50px; max-height: 200px;
+  background: var(--surface-2); color: var(--text);
+  border: 1px solid var(--surface-3); border-radius: 6px;
+  padding: 8px 12px; font: inherit; font-size: 13px; resize: vertical;
+}
+.ai-assist-input:focus { outline: none; border-color: var(--accent); }
+.ai-assist-actions { display: flex; gap: 12px; margin-top: 8px; align-items: center; }
+.ai-assist-actions button { padding: 6px 16px; }
+.ai-assist-status { color: var(--dim); font-size: 12px; flex: 1; }
+.ai-assist-status.success { color: var(--green); }
+.ai-assist-status.warning { color: var(--yellow); }
+.ai-assist-status.error { color: var(--red); }
+
 /* Interactive UX preview at the very top of a feature page (before description). */
 .ux-preview-h2 { margin: 24px 0 12px; }
 .ux-preview { background: var(--surface); border: 1px solid var(--surface-3); border-radius: 12px; padding: 16px 18px; margin: 8px 0 28px; }
@@ -368,6 +394,42 @@ document.addEventListener('click', async (e) => {
   if (a === 'refresh') {
     btn.classList.add('spinning');
     location.reload();
+    return;
+  } else if (a === 'ai-submit') {
+    const pane = btn.closest('.ai-assist-pane');
+    const ta = pane.querySelector('.ai-assist-input');
+    const text = ta.value.trim();
+    const status = pane.querySelector('.ai-assist-status');
+    status.className = 'ai-assist-status';
+    if (!text) { status.textContent = 'Type a request first.'; return; }
+    btn.disabled = true;
+    status.textContent = 'Submitting…';
+    const res = await action('/api/feedback', {
+      feature: featureId, body: text, action: 'feedback',
+    });
+    if (res.ok) {
+      if (res.byok && res.byok.kind === 'applied') {
+        status.className = 'ai-assist-status success';
+        status.textContent = '✓ Applied: ' + (res.byok.summary || res.byok.ops.join(', '));
+        ta.value = '';
+        setTimeout(() => location.reload(), 1200);
+      } else if (res.byok && res.byok.kind === 'needs_review') {
+        status.className = 'ai-assist-status warning';
+        status.textContent = '⚠ BYOK flagged for human review (' + res.byok.reason + ') — queued.';
+        ta.value = '';
+      } else if (res.byok && res.byok.kind === 'error') {
+        status.className = 'ai-assist-status error';
+        status.textContent = '✗ BYOK error (' + res.byok.message + ') — but queued for Claude on next session.';
+      } else {
+        status.className = 'ai-assist-status success';
+        status.textContent = '✓ Queued for Claude (no BYOK configured — run productos configure to enable inline LLM edits).';
+        ta.value = '';
+      }
+    } else {
+      status.className = 'ai-assist-status error';
+      status.textContent = '✗ Error: ' + (res.error || 'failed');
+    }
+    btn.disabled = false;
     return;
   } else if (a === 'verify') {
     btn.disabled = true;
@@ -920,6 +982,23 @@ export function renderFeature(
     ${surfacesBlock}
     ${behaviorBlocks}
     ${renderFeedbackSection(f.id, undefined, "Feedback on this feature")}
+    ${renderAiAssistPane(f.id)}
+  `;
+}
+
+function renderAiAssistPane(featureId: string): string {
+  return `
+    <section class="ai-assist-pane" data-feature="${escape(featureId)}">
+      <div class="ai-assist-head">
+        <span class="ai-assist-title">🤖 Ask AI to edit this feature</span>
+        <span class="ai-assist-hint">Describe the change in plain English. If BYOK is configured (productos configure), it will apply directly. Otherwise it queues for Claude to apply on next session.</span>
+      </div>
+      <textarea class="ai-assist-input" placeholder="e.g. 'Set leads_to on the kid-card element to wallet/kid-detail' or 'Add a Search box to the family screen sketch'"></textarea>
+      <div class="ai-assist-actions">
+        <button class="primary" data-action="ai-submit" data-feature="${escape(featureId)}">Submit</button>
+        <span class="ai-assist-status"></span>
+      </div>
+    </section>
   `;
 }
 
