@@ -111,9 +111,9 @@ Then, for each behavior-bearing code path:
 2. Decide: existing feature (update) or new (propose)?
 3. **Write the claim in product language**. Not `POST /api/auth/signup returns 409`. Yes `When a user submits the signup form with an already-registered email, they see "this email is already registered"`. The endpoint is an implementation detail.
 4. **Write product truth via MCP:**
-   - New feature → `productos_propose_feature` with `id`, `title`, `description`, `ux`, and `behaviors`. Each behavior has `id`, `claim`, optional `notes`, optional anchor (`ux` / `element` / `interaction`), **and `test_cases`** — a numbered list of concrete scenarios that demonstrate the claim.
-   - Existing feature, new behavior → `productos_add_behavior(feature_id, behavior)`.
-   - Reword a claim → `productos_update_behavior(feature_id, behavior_id, claim?)`.
+   - New feature → `productos_propose_feature` writes a **draft** to productos/drafts/<id>.md. Pass `id`, `title`, `description`, `ux`, and `behaviors`. Each behavior has `id`, `claim`, optional `notes`, optional anchor (`ux` / `element` / `interaction`), **and `test_cases`**. The human runs `productos review <id>` to inspect, trim, edit, and promote it to products/. After a fullscan, tell the user to run `productos review` to walk the new drafts.
+   - Existing feature, new behavior → `productos_add_behavior(feature_id, behavior)`. Writes directly (no draft step) since the human already signed off on the feature.
+   - Reword a claim → `productos_update_behavior(feature_id, behavior_id, claim?)`. Same — writes directly.
 
    **Every behavior MUST have at least 1 test case.** A behavior without test cases is just a wish — the PM can't tell what evidence would falsify it; the align skill has nothing to map existing tests against; the receive interface has nothing to flip Verification on. Aim for 1-3 test cases per behavior, structured as:
 

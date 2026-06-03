@@ -192,38 +192,16 @@ const getFeatureTool: McpTool = {
   },
 };
 
+/**
+ * NEW features always start as drafts. Live Product Truth is only created
+ * by a human running `productos review <id>`, which promotes the draft.
+ *
+ * Edits to an EXISTING feature use productos_update_feature /
+ * productos_update_behavior / productos_add_behavior — those write to
+ * products/ directly because the human already signed off when the feature
+ * was promoted.
+ */
 const ProposeFeatureInput = z.object({
-  id: z.string().regex(/^[a-z0-9][a-z0-9/_-]*\/[a-z0-9][a-z0-9_-]*$/, "Must be area/slug, e.g. 'auth/signup'"),
-  title: z.string().min(1),
-  status: FeatureStatus.default("shipped"),
-  description: z.string().optional(),
-  behaviors: z.array(Behavior).default([]),
-  body: z.string().default(""),
-});
-
-const proposeFeature: McpTool = {
-  name: "productos_propose_feature",
-  description:
-    "Create or replace a feature's PRODUCT TRUTH file (claims, description, prose). Use this for incremental edits to existing features. For NEW features that haven't been reviewed by a human yet, prefer productos_write_draft_feature — it lands in productos/drafts/ and waits for `productos review` to promote it. To add code refs / implementation paths / verification status, use productos_update_tracking — those don't belong in product truth. Claims should be written in product language (what the user does, what the user sees), not in API/file/endpoint terms.",
-  inputSchema: zodToInputSchema(ProposeFeatureInput),
-  handler: async (raw, paths) => {
-    const args = ProposeFeatureInput.parse(raw);
-    const fm = FeatureFrontmatter.parse({
-      id: args.id,
-      title: args.title,
-      status: args.status,
-      description: args.description,
-      behaviors: args.behaviors,
-    });
-    writeFeature(paths, { frontmatter: fm, body: args.body, filepath: "", url_path: "/" + args.id });
-    return { ok: true, id: args.id };
-  },
-};
-
-// ---------------------------------------------------------------------------
-// Drafts — proposals waiting for `productos review` to promote them.
-
-const WriteDraftFeatureInput = z.object({
   id: z.string().regex(/^[a-z0-9][a-z0-9/_-]*\/[a-z0-9][a-z0-9_-]*$/, "Must be area/slug, e.g. 'auth/signup'"),
   title: z.string().min(1),
   status: FeatureStatus.default("planned"),
@@ -234,18 +212,18 @@ const WriteDraftFeatureInput = z.object({
   body: z.string().default(""),
 });
 
-const writeDraftFeature: McpTool = {
-  name: "productos_write_draft_feature",
+const proposeFeature: McpTool = {
+  name: "productos_propose_feature",
   description:
-    "Write a NEW feature draft to productos/drafts/<id>.md. The draft is NOT live Product Truth yet — a human runs `productos review <id>` to inspect, trim, edit, and promote it. Use this from a scope/scan flow to propose a fresh feature for human approval. Refuses if a canonical or draft for the id already exists.",
-  inputSchema: zodToInputSchema(WriteDraftFeatureInput),
+    "Propose a NEW feature. Writes a draft to productos/drafts/<id>.md and tells the human to run `productos review <id>` — they inspect, trim, edit, and promote it to productos/products/. The draft is NOT live Product Truth until promoted. To EDIT an existing feature (already in products/), use productos_update_feature / productos_update_behavior / productos_add_behavior instead — those skip the review step because the human already signed off when the feature was first promoted. Refuses if a canonical or draft for the id already exists. Claims must be in product language (what the user does, what the user sees), not in API/file/endpoint terms.",
+  inputSchema: zodToInputSchema(ProposeFeatureInput),
   handler: async (raw, paths) => {
-    const args = WriteDraftFeatureInput.parse(raw);
+    const args = ProposeFeatureInput.parse(raw);
     if (readFeatureById(paths, args.id)) {
-      throw new Error(`Feature ${args.id} already exists in products/ — edit it directly via productos_update_feature / productos_update_behavior, don't draft.`);
+      throw new Error(`Feature ${args.id} already exists in products/. Use productos_update_feature / productos_update_behavior / productos_add_behavior to edit it — don't repropose.`);
     }
     if (readDraftById(paths, args.id)) {
-      throw new Error(`A draft for ${args.id} already exists. Ask the user to run \`productos review ${args.id}\` or discard the existing draft first.`);
+      throw new Error(`A draft for ${args.id} already exists. Ask the user to run \`productos review ${args.id}\` (or discard the existing draft) before reproposing.`);
     }
     const fm = FeatureFrontmatter.parse({
       id: args.id,
@@ -758,7 +736,6 @@ export const tools: McpTool[] = [
   updateBehavior,
   removeBehavior,
   // drafts (proposals awaiting `productos review`)
-  writeDraftFeature,
   listDraftsTool,
   // tracking
   getTracking,

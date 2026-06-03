@@ -176,16 +176,16 @@ Don't pick silently. Surface ambiguity:
 
 Wait for answers. The answers go into the claim text or the notes — explicit, captured forever.
 
-### 5. Write the feature draft (NOT live product truth)
+### 5. Propose the feature (writes a draft, not live truth)
 
-Call `productos_write_draft_feature` — NOT `productos_propose_feature`. New features land in `productos/drafts/<id>.md` and wait for the human to run `productos review <id>` in their terminal. That command shows them the draft, lets them trim behaviors/UX views or open the file in `$EDITOR`, then promotes it to `productos/products/<id>.md` (or discards it).
+Call `productos_propose_feature`. NEW features always land in `productos/drafts/<id>.md` and wait for the human to run `productos review <id>` in their terminal. That command shows them the draft, lets them trim behaviors/UX views or open the file in `$EDITOR`, then promotes it to `productos/products/<id>.md` (or discards it).
 
-Why drafts instead of writing canonical truth directly:
+Why drafts:
 - Scope is the highest-leverage moment of capture; the human MUST sign off before it becomes Product Truth others cite.
-- The draft surface is shared with the BYOK `productos scan` runner — same review UX, regardless of who proposed the feature.
-- A draft you wrote stays harmless if the human walks away — it isn't crawled by `productos serve`, doesn't affect gap reports.
+- Same review UX as the BYOK `productos scan` runner — one path for new features regardless of who proposed.
+- A draft is harmless if the human walks away — `productos serve` doesn't render it, gap reports ignore it.
 
-Pass to `productos_write_draft_feature`:
+Pass to `productos_propose_feature`:
 
 - `id` like `checkout/index` or `wishlist/manage`
 - `title` in product language
@@ -201,7 +201,7 @@ Pass to `productos_write_draft_feature`:
   - Lists of related features ("see also wallet/spend") — `affected_by` and feature links cover that
   Default to writing nothing in the body. If you can't summarize the feature in description + behaviors + surfaces alone, that's a signal the feature is doing too much.
 
-**Edits to an existing feature** still use `productos_propose_feature` / `productos_update_behavior` / `productos_add_behavior` directly — drafts are only for NEW features that the human hasn't seen yet.
+**Edits to an EXISTING feature** (already in products/) use `productos_update_feature` / `productos_update_behavior` / `productos_add_behavior` directly — those skip review because the human already signed off when the feature was first promoted. `productos_propose_feature` refuses to re-propose an existing id.
 
 Tracking (code refs, status) is set AFTER the draft is promoted. If the lifecycle is `shipped`, you can call `productos_update_tracking` once the draft is accepted:
 
