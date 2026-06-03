@@ -69,7 +69,20 @@ For each surface:
 
   Use the labels in the sketch verbatim — when the renderer matches an element's `label` to text inside `[ ... ]` or `<...>`, it can wrap it as a clickable link (if `leads_to` is set on the element).
 - `elements`: named interactive items on the screen. Each element has `id` (kebab-case), `kind` (button, input, link, toggle, stepper, list, modal-trigger, etc. — freeform), `label` (human label, matching what's in the sketch verbatim), optional `notes`. **Don't put styling/color/visual-design notes in `notes`** — only things like *role*, *what triggers it*, *what it shows*, *what makes it unique among similar elements*.
-- `elements[].leads_to`: **OPTIONAL**. If this element navigates to another Surface, name it: either a `Surface.id` within the same feature (`"checkout-page"`) or a full feature id (`"wallet/transactions"`). The renderer wraps this element's label in the sketch as a clickable link to the target. Set this for navigation triggers (CTAs that go to another screen, links to another feature, etc.); leave blank for in-place actions like Submit or +/− steppers.
+- `elements[].leads_to`: **OPTIONAL — only set on elements that NAVIGATE** (CTAs that go to another screen, links to another feature, "see all" / "next" / "back" buttons). **Do not set on in-place actions** like Submit, +/− steppers, trash/delete buttons, toggles. The format is strict:
+
+  | Value | Means |
+  |---|---|
+  | `checkout-page` | Same-feature Surface anchor (a `Surface.id` declared in THIS feature) — renders as `#surface-checkout-page` |
+  | `wallet/transactions` | Cross-feature page nav (an `area/feature` id) — renders as `/wallet/transactions` |
+  | `wallet/balance#kid-view` | Cross-feature + surface anchor — renders as `/wallet/balance#surface-kid-view` |
+
+  **NEVER write:**
+  - `/add-kid` — leading slash is a path-shape, not a feature id. (The renderer strips it defensively but it's wrong.)
+  - `https://...` — an external URL is invalid.
+  - `add-kid-page.html` — file extensions are wrong.
+
+  If you don't know where the element navigates, leave `leads_to` blank — the element is rendered visually but not clickable.
 
 Example sketch:
 
