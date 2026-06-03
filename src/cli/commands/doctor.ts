@@ -4,7 +4,7 @@ import os from "node:os";
 import { Command } from "commander";
 import pc from "picocolors";
 import { findRepoRoot, pathsFor } from "../../core/paths.js";
-import { readConfig, resolveTruthVerificationByok } from "../../core/config.js";
+import { ByokProvider, readConfig, resolveTruthVerificationByok } from "../../core/config.js";
 import { envConfigFile, readEnvConfig } from "../../core/env.js";
 import { listAreas, listFeatures, productsRoot } from "../../core/product.js";
 
@@ -67,14 +67,37 @@ export function doctorCommand(): Command {
         try {
           const c = readConfig(paths);
           ok(`Config readable; stack=${c.stack.language}`);
+
+          // 5a. BYOK providers — single-glance panel: every registered
+          // provider + whether its key env var is set in this shell.
+          const registered = Object.keys(c.byok.providers) as ByokProvider[];
+          if (registered.length === 0) {
+            warn("BYOK providers: none registered (run: productos configure byok)");
+          } else {
+            console.log(pc.bold("  BYOK providers:"));
+            for (const id of registered) {
+              const reg = c.byok.providers[id]!;
+              const set = !!process.env[reg.api_key_env];
+              const activeBadge = id === c.byok.active ? pc.cyan(" (active)") : "";
+              const status = set ? pc.green("✓ set") : pc.red("✗ not set");
+              console.log(
+                `    - ${id}${activeBadge}: ${reg.default_model} via ${reg.api_key_env}  ${status}`
+              );
+            }
+          }
+
           // 5b. Operations
           ok(`Code scanning handler: ${c.operations.code_scanning.handler}`);
           const tvh = c.operations.truth_verification.handler;
           if (tvh === "byok") {
-            const byok = resolveTruthVerificationByok(c);
-            const keyPresent = !!process.env[byok.api_key_env];
-            if (keyPresent) ok(`Truth verification: BYOK ${byok.provider}/${byok.model} (key from ${byok.api_key_env})`);
-            else warn(`Truth verification: BYOK ${byok.provider}/${byok.model} but ${byok.api_key_env} is not set — auto-processing will fail`);
+            try {
+              const byok = resolveTruthVerificationByok(c);
+              const keyPresent = !!process.env[byok.api_key_env];
+              if (keyPresent) ok(`Truth verification: BYOK ${byok.provider}/${byok.model} (key from ${byok.api_key_env})`);
+              else warn(`Truth verification: BYOK ${byok.provider}/${byok.model} but ${byok.api_key_env} is not set — auto-processing will fail`);
+            } catch (e) {
+              fail(`Truth verification: ${(e as Error).message}`);
+            }
           } else {
             ok(`Truth verification: queue (Claude processes via MCP in a later session)`);
           }
