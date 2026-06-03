@@ -1,6 +1,6 @@
 ---
 name: productos-scope
-description: Use when the user wants to scope ProductOS on ONE in-flight feature (the v0.1 wedge) — either pre-code planning OR retrofit on a feature that already exists. Reads the relevant code paths, proposes COMPREHENSIVE COVERAGE of behaviors with claims + test_cases in product language (however many the feature actually has — don't artificially cap), plus surfaces and their elements, and writes them to productos/products/<area>/<feature>.md as Unverified. Surfaces ambiguities and discrepancies as observations (not blocking questions) before writing. Triggers on "scope productos on the X flow", "scope X with productos", "I'm planning a Y feature", "let's spec X in productos". The 80% v0.1 entry point. (For a broad pass across the whole codebase, use `productos-fullscan` instead.)
+description: Use when the user wants to scope ProductOS on ONE in-flight feature (the v0.1 wedge) — either pre-code planning OR retrofit on a feature that already exists. Reads the relevant code paths, proposes COMPREHENSIVE COVERAGE of behaviors with claims + test_cases in product language (however many the feature actually has — don't artificially cap), plus UX views and their elements, and writes them to productos/products/<area>/<feature>.md as Unverified. Surfaces ambiguities and discrepancies as observations (not blocking questions) before writing. Triggers on "scope productos on the X flow", "scope X with productos", "I'm planning a Y feature", "let's spec X in productos". The 80% v0.1 entry point. (For a broad pass across the whole codebase, use `productos-fullscan` instead.)
 version: 0.1.0
 ---
 
@@ -87,7 +87,7 @@ For each surface:
 
   | Value | Means |
   |---|---|
-  | `checkout-page` | Same-feature Surface anchor (a `Surface.id` declared in THIS feature) — renders as `#surface-checkout-page` |
+  | `checkout-page` | Same-feature UX anchor (a `UxView.id` declared in THIS feature) — renders as `#surface-checkout-page` |
   | `wallet/transactions` | Cross-feature page nav (an `area/feature` id) — renders as `/wallet/transactions` |
   | `wallet/balance#kid-view` | Cross-feature + surface anchor — renders as `/wallet/balance#surface-kid-view` |
 
@@ -113,7 +113,7 @@ sketch: |
   └────────────────────────────────────┘
 ```
 
-Surfaces are **optional** — features that are pure invariants/rules (a tax calculation, a balance constraint) don't have screens. Leave `surfaces` empty in that case.
+UX is **optional** — features that are pure invariants/rules (a tax calculation, a balance constraint) don't have screens. Leave `ux` empty in that case.
 
 ### 3a-bis. Deterministic scope rule (apply BEFORE listing behaviors)
 
@@ -154,8 +154,8 @@ The volume isn't a vetting concern — `productos-review` walks them one at a ti
 For each behavior:
 
 - **Claim:** in product language — "When a guest user clicks Checkout, they reach the confirmation page without being asked to create an account." Not "POST /api/checkout returns 200."
-- **Anchor (when applicable):** if the behavior is triggered by an interaction on a Surface, set:
-  - `surface`: the Surface.id (e.g. `cart-page`)
+- **Anchor (when applicable):** if the behavior is triggered by an interaction on a UX view, set:
+  - `ux`: the UxView.id (e.g. `cart-page`)
   - `element`: the Element.id (e.g. `checkout-cta`) — optional
   - `interaction`: what action (`click`, `submit`, `view`, `load`, `input`, `tap`, etc.) — freeform, optional
   Rules / invariants that aren't tied to a screen leave these blank.

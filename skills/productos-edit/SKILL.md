@@ -13,7 +13,7 @@ The user knows exactly what they want changed. You apply it. No walkthrough, no 
 | You want to... | Use this skill |
 |---|---|
 | Apply a specific named edit ("add leads_to to X", "rename id Y to Z") | **`productos-edit`** (you are here) |
-| Walk through behaviors/surfaces/elements one at a time accepting or editing each | `productos-review` |
+| Walk through behaviors / UX views / elements one at a time accepting or editing each | `productos-review` |
 | Propose a brand-new feature from code | `productos-scope` |
 | Broad codebase pass | `productos-fullscan` |
 | Map existing tests to declared cases | `productos-align` |
@@ -31,10 +31,10 @@ If the user's instruction can't be acted on without more decisions ("make this f
 | `status` | `planned \| shipped \| deprecated` | |
 | `description` | string | Short product-language summary |
 | `affected_by` | string[] | Feature ids whose triggers mutate this feature's state |
-| `surfaces` | Surface[] | See below |
+| `ux` | UxView[] | See below |
 | `behaviors` | Behavior[] | See below |
 
-### Surface
+### UX view
 
 | Field | Type | Notes |
 |---|---|---|
@@ -62,7 +62,7 @@ If the user's instruction can't be acted on without more decisions ("make this f
 | `id` | kebab-case string | Stable — test case stable ids embed it |
 | `claim` | string | Product-language falsifiable claim. Min 10 chars |
 | `notes` | string | Optional brief context. NO engineering rationale |
-| `surface` | string | Optional — anchor to a Surface.id in the same feature |
+| `ux` | string | Optional — anchor to a UxView.id in the same feature |
 | `element` | string | Optional — anchor to an Element.id within the referenced surface |
 | `interaction` | string | Optional — freeform: `click`, `submit`, `view`, `load`, `input`, `tap`, etc. |
 | `test_cases` | TestCase[] | Required — at least 1 per behavior |
@@ -117,9 +117,9 @@ If ambiguous, ask ONE clarifying question. If the user is vague ("make this bett
 **For everything else, use the Edit tool on the markdown file directly:**
 
 - Element `leads_to`, `kind`, `label`, `notes`, `id`
-- Surface fields, sketches, elements list
+- UX-view fields, sketches, elements list
 - Feature `affected_by`, `title`, `status`, `description`
-- Behavior `surface`, `element`, `interaction` anchors
+- Behavior `ux`, `element`, `interaction` anchors
 
 When using the Edit tool: read the file first, locate the YAML block, make a focused replacement, preserve indentation and surrounding structure.
 
@@ -131,7 +131,7 @@ Sanity-check the edit:
 - `leads_to` in one of the three valid forms
 - `level` in {unit, integration, api, e2e} if set
 - `test_case.id` not reused or renumbered (stable ids are immutable)
-- Behavior `surface`/`element` refs exist on the feature
+- Behavior `ux`/`element` refs exist on the feature
 - Behavior `claim` ≥ 10 chars
 
 If the edit breaks an existing reference (e.g. renaming an element id that behaviors anchor to), warn the user and offer to update the dependents too.
@@ -177,7 +177,7 @@ You: read the surface's sketch, add a line like `│  [Search…________________
 
 ## Don't
 
-- **Don't propose new features, surfaces, elements, or behaviors.** That's `productos-scope`. If the user asks for "a new behavior in wallet/family" — judgment call: if it's clearly defined (specific claim + anchor + test cases), apply it; if it's vague, route to `productos-scope`.
+- **Don't propose new features, UX views, elements, or behaviors.** That's `productos-scope`. If the user asks for "a new behavior in wallet/family" — judgment call: if it's clearly defined (specific claim + anchor + test cases), apply it; if it's vague, route to `productos-scope`.
 - **Don't open a browser.** All edits are markdown + MCP.
 - **Don't write code.** Spec edits only.
 - **Don't bundle unrelated edits.** If the user asks for one thing, do that one thing.

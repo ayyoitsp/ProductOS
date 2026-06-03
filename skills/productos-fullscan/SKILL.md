@@ -28,7 +28,7 @@ productos/products/<area>/<feature>.md       ← PRODUCT TRUTH
   - claims: what the user does, what the user sees, in product language
   - no API/endpoint/file references in the claim text
   - status (planned | shipped | deprecated), title, description
-  - body: OPTIONAL short product-language context (a sentence or two). DEFAULT TO NOTHING. Never put implementation rationale ("why derived not stored"), out-of-scope catalogs, design discussion, or related-feature lists in the body. Surfaces + behaviors + description ARE the spec.
+  - body: OPTIONAL short product-language context (a sentence or two). DEFAULT TO NOTHING. Never put implementation rationale ("why derived not stored"), out-of-scope catalogs, design discussion, or related-feature lists in the body. UX + behaviors + description ARE the spec.
 
 productos/tracking/<area>/<feature>.yaml     ← IMPLEMENTATION + VERIFICATION
   - implements: [code paths]
@@ -55,7 +55,7 @@ Skipping this leads to duplication and inconsistency.
 
 ### Mode B: Propose / update product truth + tracking
 
-For each feature, **identify the Surfaces first** — screens, pages, modals the user actually sees. Read route definitions, page components, modal triggers. Each Surface has:
+For each feature, **identify the UX views first** — screens, pages, modals the user actually sees. Read route definitions, page components, modal triggers. Each UX view has:
 
 - `id`: kebab-case (`cart-page`, `checkout-form`, `profile-modal`)
 - `title`: human label ("Cart", "Checkout")
@@ -80,13 +80,13 @@ For each feature, **identify the Surfaces first** — screens, pages, modals the
 
 - `elements`: array of `{ id, kind, label?, notes?, leads_to? }` — buttons, inputs, links, lists, modals, etc. **Don't put styling/color/visual-design notes in `notes`** — only role, trigger, what's shown, what makes the element unique.
 - `elements[].leads_to`: **REQUIRED on every navigation element (card rows, CTAs, links, tabs); OMITTED on in-place actions (Submit, +/−, trash/delete, toggles, inputs).** No middle ground. For destinations not yet scoped, name them speculatively (e.g. `kid-detail`) — the renderer best-effort-resolves to `/{currentArea}/{value}`; the URL may 404 until you scope that destination, but the row IS clickable. Three valid forms:
-  - `checkout-page` — same-feature Surface anchor (Surface.id from THIS feature)
+  - `checkout-page` — same-feature UX anchor (UxView.id from THIS feature)
   - `wallet/transactions` — cross-feature page (area/feature id)
   - `wallet/balance#kid-view` — cross-feature + surface anchor
 
   **NEVER write** leading `/` (e.g. `/add-kid`), `https://...`, or filenames. **Don't set on in-place actions** (Submit, +/− steppers, trash/delete, toggles). If unsure, leave blank — the element will render visually but won't be clickable.
 
-Surfaces are **optional** — features that are pure invariants (a tax calculation, a balance constraint) leave the `surfaces` array empty.
+UX is **optional** — features that are pure invariants (a tax calculation, a balance constraint) leave the `ux` array empty.
 
 **Deterministic scope rule** (apply when deciding which feature owns a behavior):
 
@@ -111,7 +111,7 @@ Then, for each behavior-bearing code path:
 2. Decide: existing feature (update) or new (propose)?
 3. **Write the claim in product language**. Not `POST /api/auth/signup returns 409`. Yes `When a user submits the signup form with an already-registered email, they see "this email is already registered"`. The endpoint is an implementation detail.
 4. **Write product truth via MCP:**
-   - New feature → `productos_propose_feature` with `id`, `title`, `description`, `surfaces`, and `behaviors`. Each behavior has `id`, `claim`, optional `notes`, optional anchor (`surface` / `element` / `interaction`), **and `test_cases`** — a numbered list of concrete scenarios that demonstrate the claim.
+   - New feature → `productos_propose_feature` with `id`, `title`, `description`, `ux`, and `behaviors`. Each behavior has `id`, `claim`, optional `notes`, optional anchor (`ux` / `element` / `interaction`), **and `test_cases`** — a numbered list of concrete scenarios that demonstrate the claim.
    - Existing feature, new behavior → `productos_add_behavior(feature_id, behavior)`.
    - Reword a claim → `productos_update_behavior(feature_id, behavior_id, claim?)`.
 

@@ -761,7 +761,7 @@ export type SurfaceIndex = Map<string, string>;
 export function buildSurfaceIndex(features: FeatureDocument[]): SurfaceIndex {
   const idx: SurfaceIndex = new Map();
   for (const f of features) {
-    for (const s of f.frontmatter.surfaces ?? []) {
+    for (const s of f.frontmatter.ux ?? []) {
       // First-write-wins on collisions; same-feature lookups happen separately
       // via the surfaceIdsInFeature set so this only affects cross-feature
       // resolution of ambiguous ids.
@@ -791,7 +791,7 @@ export function renderFeature(
   // skills) but shouldn't compete with the claim for the reader's attention.
   const implBlock = "";
 
-  const surfaces = f.surfaces ?? [];
+  const surfaces = f.ux ?? [];
   const rollup = renderFeatureRollup(f.behaviors, tracking);
 
   // Partition behaviors by surface anchor: anchored ones live inside their
@@ -812,7 +812,7 @@ export function renderFeature(
 
   const surfaceIdSet = new Set(surfaces.map((s) => s.id));
   const surfacesBlock = surfaces.length
-    ? `<div class="section-head"><h2>Surfaces</h2>${rollup}</div><div class="surfaces">${surfaces.map((s) => renderSurfaceWithBehaviors(f.id, s, anchored.get(s.id) ?? [], tracking, surfaceIdSet, surfaceIndex)).join("\n")}</div>`
+    ? `<div class="section-head"><h2>UX</h2>${rollup}</div><div class="surfaces">${surfaces.map((s) => renderSurfaceWithBehaviors(f.id, s, anchored.get(s.id) ?? [], tracking, surfaceIdSet, surfaceIndex)).join("\n")}</div>`
     : "";
   const unanchoredHeading = surfaces.length ? "Rules & invariants" : "Behaviors";
   // When there are no surfaces, the rollup hasn't been shown yet — surface it on the Behaviors head.
