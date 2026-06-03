@@ -1,39 +1,70 @@
 import fs from "node:fs";
 import path from "node:path";
-import os from "node:os";
-import { spawn } from "node:child_process";
+import readline from "node:readline/promises";
 import { Command } from "commander";
 import pc from "picocolors";
 import * as p from "@clack/prompts";
-import matter from "gray-matter";
-import YAML from "yaml";
 import { resolvePathsOrThrow, ProductosPaths } from "../../core/paths.js";
+import { readConfig, resolveTruthVerificationByok, ResolvedByok } from "../../core/config.js";
 import {
   FeatureDocument,
-  FeatureFrontmatter,
   featureFilePath,
   listFeatures,
   readFeatureById,
   writeFeature,
 } from "../../core/product.js";
+import { editFeatureTurn } from "../../byok/edit.js";
+import type { ModelMessage } from "ai";
 
 /**
- * Interactive review/edit for a feature.
+ * Conversational, feature-scoped REPL.
  *
- * The file at productos/products/<id>.md IS the feature. There's no draft
- * layer. Review opens it, lets the human trim behaviors/UX views or open
- * the file in $EDITOR, and writes changes back to the same file. Git is
- * the commit boundary — re-run review as often as you want before
- * committing.
+ * Each turn we re-render the feature (title, status, UX sketches, behaviors)
+ * and prompt the user for natural-language input. BYOK applies the change
+ * via tools that mutate an in-memory clone. The file isn't written until
+ * the user runs `/save`. `/quit` warns on unsaved changes.
  *
- * If no feature_id is given, list features sorted by recent edits.
+ * Slash commands: /save /quit /help /reset
+ *
+ * Requires BYOK to be configured. Without it, we error with a hint to run
+ * `productos configure byok` — the trim menu has been retired because the
+ * AI editor covers it and a half-functional fallback would be confusing.
  */
 export function reviewCommand(): Command {
   return new Command("review")
-    .description("Interactively review and edit a feature in productos/products/")
+    .description("Open a conversational REPL to edit a feature in plain English (uses your registered BYOK provider)")
     .argument("[feature_id]", "Feature id like 'wallet/add-kid'. If omitted, pick from a list.")
     .action(async (featureIdArg: string | undefined) => {
       const paths = resolvePathsOrThrow();
+      const config = readConfig(paths);
+
+      let byok: ResolvedByok;
+      try {
+        byok = resolveTruthVerificationByok(config);
+      } catch {
+        // truth_verification might be 'queue' (not 'byok') — fall back to
+        // the active provider directly so review still works without
+        // flipping truth-verification semantics.
+        const active = config.byok.active;
+        const reg = config.byok.providers[active];
+        if (!reg) {
+          console.error(pc.red("✗"), "No BYOK provider registered.");
+          console.error(pc.dim("Run `productos configure byok` to register a provider, then re-run review."));
+          process.exit(1);
+        }
+        byok = {
+          provider: active,
+          api_key_env: reg.api_key_env,
+          model: reg.default_model,
+          max_steps: config.byok.max_steps,
+        };
+      }
+
+      if (!process.env[byok.api_key_env]) {
+        console.error(pc.red("✗"), `${byok.api_key_env} is not set in this shell.`);
+        console.error(pc.dim("Export the key and re-run review."));
+        process.exit(1);
+      }
 
       let featureId = featureIdArg;
       if (!featureId) {
@@ -42,11 +73,7 @@ export function reviewCommand(): Command {
           console.log(pc.dim("No features yet. Run `productos scan <area/slug> \"<hint>\"` to create one, or ask Claude to scope a feature."));
           return;
         }
-        // Sort by mtime, most recent first — "what did I just touch" UX.
-        const withMtime = features.map((f) => ({
-          f,
-          mtime: fs.statSync(f.filepath).mtimeMs,
-        }));
+        const withMtime = features.map((f) => ({ f, mtime: fs.statSync(f.filepath).mtimeMs }));
         withMtime.sort((a, b) => b.mtime - a.mtime);
 
         const picked = await p.select<string>({
@@ -71,139 +98,132 @@ export function reviewCommand(): Command {
         process.exit(1);
       }
 
-      await interactiveReview(paths, feature);
+      console.log("");
+      console.log(pc.dim(`Reviewing via ${byok.provider}/${byok.model}. Type plain English. Slash commands: /save /quit /reset /help`));
+      await repl(paths, byok, feature);
     });
 }
 
-async function interactiveReview(paths: ProductosPaths, featureIn: FeatureDocument): Promise<void> {
-  // Working copy — kept in memory until the user saves it.
+async function repl(paths: ProductosPaths, byok: ResolvedByok, featureIn: FeatureDocument): Promise<void> {
   let feature = featureIn;
+  const initial = featureIn;
   let dirty = false;
+  let history: ModelMessage[] = [];
 
-  while (true) {
-    printFeature(feature);
-
-    const choice = await p.select<string>({
-      message: dirty ? pc.yellow("Unsaved changes. What next?") : "What next?",
-      options: [
-        { value: "behaviors", label: "Trim behaviors", hint: `${feature.frontmatter.behaviors.length} declared` },
-        { value: "ux", label: "Trim UX views", hint: `${feature.frontmatter.ux.length} declared` },
-        { value: "editor", label: "Open in $EDITOR (full file)" },
-        ...(dirty
-          ? [{ value: "save", label: pc.green("Save changes") }]
-          : []),
-        { value: "quit", label: dirty ? pc.dim("Quit without saving") : "Quit" },
-      ],
-    });
-    if (p.isCancel(choice) || choice === "quit") {
-      if (dirty) {
-        const confirmed = await p.confirm({
-          message: "Discard unsaved changes?",
-          initialValue: false,
-        });
-        if (p.isCancel(confirmed) || !confirmed) continue;
-      }
-      return;
-    }
-
-    if (choice === "behaviors") {
-      const next = await trimBehaviors(feature);
-      if (next !== feature) { feature = next; dirty = true; }
-    } else if (choice === "ux") {
-      const next = await trimUx(feature);
-      if (next !== feature) { feature = next; dirty = true; }
-    } else if (choice === "editor") {
-      const edited = await editInEditor(paths, feature);
-      if (edited) { feature = edited; dirty = true; }
-    } else if (choice === "save") {
-      writeFeature(paths, feature);
-      dirty = false;
-      console.log(pc.green("✓"), `Saved ${path.relative(paths.repoRoot, feature.filepath || featureFilePath(paths, feature.frontmatter.id))}`);
-    }
-  }
-}
-
-async function trimBehaviors(feature: FeatureDocument): Promise<FeatureDocument> {
-  if (feature.frontmatter.behaviors.length === 0) {
-    p.log.info("No behaviors to trim.");
-    return feature;
-  }
-  const kept = await p.multiselect<string>({
-    message: "Keep which behaviors? (uncheck to drop)",
-    initialValues: feature.frontmatter.behaviors.map((b) => b.id),
-    options: feature.frontmatter.behaviors.map((b) => ({
-      value: b.id,
-      label: b.id,
-      hint: oneLine(b.claim),
-    })),
-    required: false,
-  });
-  if (p.isCancel(kept)) return feature;
-  if (kept.length === feature.frontmatter.behaviors.length) return feature;
-  const next: FeatureDocument = { ...feature, frontmatter: { ...feature.frontmatter } };
-  next.frontmatter.behaviors = feature.frontmatter.behaviors.filter((b) => kept.includes(b.id));
-  return next;
-}
-
-async function trimUx(feature: FeatureDocument): Promise<FeatureDocument> {
-  if (feature.frontmatter.ux.length === 0) {
-    p.log.info("No UX views to trim.");
-    return feature;
-  }
-  const kept = await p.multiselect<string>({
-    message: "Keep which UX views? (uncheck to drop)",
-    initialValues: feature.frontmatter.ux.map((u) => u.id),
-    options: feature.frontmatter.ux.map((u) => ({
-      value: u.id,
-      label: u.id,
-      hint: oneLine(u.title),
-    })),
-    required: false,
-  });
-  if (p.isCancel(kept)) return feature;
-  if (kept.length === feature.frontmatter.ux.length) return feature;
-  const next: FeatureDocument = { ...feature, frontmatter: { ...feature.frontmatter } };
-  next.frontmatter.ux = feature.frontmatter.ux.filter((u) => kept.includes(u.id));
-  // Any behaviors that anchored to a dropped UX view now dangle — clear
-  // the anchor so the schema stays clean.
-  const remainingIds = new Set(next.frontmatter.ux.map((u) => u.id));
-  next.frontmatter.behaviors = next.frontmatter.behaviors.map((b) =>
-    b.surface && !remainingIds.has(b.surface) ? { ...b, surface: undefined, element: undefined } : b
-  );
-  return next;
-}
-
-async function editInEditor(paths: ProductosPaths, feature: FeatureDocument): Promise<FeatureDocument | null> {
-  const editor = process.env.EDITOR || process.env.VISUAL || "vi";
-  const tmp = path.join(os.tmpdir(), `productos-review-${feature.frontmatter.id.replace(/[\/]/g, "-")}-${Date.now()}.md`);
-  const fmStr = YAML.stringify(feature.frontmatter, { lineWidth: 0, blockQuote: "literal" });
-  fs.writeFileSync(tmp, `---\n${fmStr}---\n\n${feature.body.trim()}\n`, "utf-8");
-
-  await new Promise<void>((resolve, reject) => {
-    const child = spawn(editor, [tmp], { stdio: "inherit" });
-    child.on("exit", (code) => (code === 0 ? resolve() : reject(new Error(`editor exited ${code}`))));
-    child.on("error", reject);
-  }).catch((e) => {
-    p.log.error(`Editor failed: ${(e as Error).message}`);
-  });
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  rl.on("close", () => {}); // we control exit explicitly
 
   try {
-    const raw = fs.readFileSync(tmp, "utf-8");
-    const parsed = matter(raw);
-    const fm = FeatureFrontmatter.parse(parsed.data);
-    fs.unlinkSync(tmp);
-    return { ...feature, frontmatter: fm, body: parsed.content.trim() };
-  } catch (e) {
-    p.log.error(`Couldn't parse edited file: ${(e as Error).message}`);
-    p.log.warn(`Your edits are preserved at ${path.relative(paths.repoRoot, tmp)} — fix the YAML and re-run review.`);
-    return null;
+    while (true) {
+      renderFeature(feature);
+      const prompt = dirty ? pc.yellow("You> ") : pc.cyan("You> ");
+      const input = (await rl.question(prompt)).trim();
+      if (!input) continue;
+
+      if (input.startsWith("/")) {
+        const result = await handleSlash(input, { paths, feature, dirty, initial });
+        if (result.kind === "exit") return;
+        if (result.kind === "replace") {
+          feature = result.feature;
+          dirty = result.dirty;
+          history = [];
+        }
+        continue;
+      }
+
+      // Natural-language turn → BYOK
+      console.log(pc.dim(`(thinking via ${byok.provider}/${byok.model}…)`));
+      const turn = await editFeatureTurn({
+        feature, userMessage: input, history, paths, byok,
+      });
+
+      if (turn.kind === "error") {
+        console.log(pc.red("✗ "), turn.message);
+        continue;
+      }
+      if (turn.kind === "question") {
+        console.log("");
+        console.log(pc.bold("AI> ") + turn.assistantText);
+        history = turn.history;
+        continue;
+      }
+
+      feature = turn.feature;
+      history = turn.history;
+      dirty = true;
+      console.log("");
+      console.log(pc.green("✓ ") + (turn.assistantText || turn.ops.join(", ")));
+      console.log(pc.dim(`   ops: ${turn.ops.join(", ")}`));
+    }
+  } finally {
+    rl.close();
   }
+}
+
+type SlashResult =
+  | { kind: "continue" }
+  | { kind: "exit" }
+  | { kind: "replace"; feature: FeatureDocument; dirty: boolean };
+
+async function handleSlash(
+  input: string,
+  ctx: { paths: ProductosPaths; feature: FeatureDocument; dirty: boolean; initial: FeatureDocument }
+): Promise<SlashResult> {
+  const [cmd] = input.slice(1).split(/\s+/, 1);
+  const c = cmd.toLowerCase();
+
+  if (c === "save") {
+    writeFeature(ctx.paths, ctx.feature);
+    console.log(pc.green("✓ "), `Saved ${path.relative(ctx.paths.repoRoot, ctx.feature.filepath || featureFilePath(ctx.paths, ctx.feature.frontmatter.id))}`);
+    return { kind: "replace", feature: ctx.feature, dirty: false };
+  }
+
+  if (c === "quit" || c === "q" || c === "exit") {
+    if (ctx.dirty) {
+      const confirmed = await p.confirm({ message: "You have unsaved changes. Quit anyway?", initialValue: false });
+      if (p.isCancel(confirmed) || !confirmed) return { kind: "continue" };
+    }
+    return { kind: "exit" };
+  }
+
+  if (c === "reset") {
+    if (ctx.dirty) {
+      const confirmed = await p.confirm({ message: "Reset will discard unsaved changes — proceed?", initialValue: false });
+      if (p.isCancel(confirmed) || !confirmed) return { kind: "continue" };
+    }
+    const reloaded = readFeatureById(ctx.paths, ctx.initial.frontmatter.id);
+    if (!reloaded) {
+      console.log(pc.red("✗ "), "Original feature is gone from disk — nothing to reset to.");
+      return { kind: "continue" };
+    }
+    console.log(pc.green("✓ "), "Reset to on-disk version.");
+    return { kind: "replace", feature: reloaded, dirty: false };
+  }
+
+  if (c === "help" || c === "h" || c === "?") {
+    console.log("");
+    console.log(pc.bold("Commands:"));
+    console.log("  /save              Write changes to disk");
+    console.log("  /reset             Discard changes and reload from disk");
+    console.log("  /quit              Exit (warns on unsaved changes)");
+    console.log("  /help              This message");
+    console.log("");
+    console.log(pc.dim("Anything else you type is sent to the AI editor. Examples:"));
+    console.log(pc.dim("  drop the second behavior"));
+    console.log(pc.dim("  the leads_to on save-btn should point to confirmation-page"));
+    console.log(pc.dim("  add a behavior for the empty state when no kids exist"));
+    console.log(pc.dim("  set the status to shipped"));
+    return { kind: "continue" };
+  }
+
+  console.log(pc.red("✗ "), `Unknown command: /${c}. Try /help.`);
+  return { kind: "continue" };
 }
 
 // ---------------------------------------------------------------------------
 // Pretty printer
 
-function printFeature(feature: FeatureDocument): void {
+function renderFeature(feature: FeatureDocument): void {
   const fm = feature.frontmatter;
   console.log("");
   console.log(pc.bold(pc.cyan(fm.title)) + pc.dim(`  ${fm.id}`));
@@ -212,24 +232,28 @@ function printFeature(feature: FeatureDocument): void {
     console.log("");
     console.log("  " + fm.description.split("\n").join("\n  "));
   }
-
   if (fm.affected_by.length > 0) {
     console.log("");
     console.log(pc.bold("  Affected by:"), fm.affected_by.join(", "));
   }
-
   if (fm.ux.length > 0) {
     console.log("");
     console.log(pc.bold("  UX views:"));
     for (const u of fm.ux) {
       console.log(`    ${pc.cyan(u.id)} — ${u.title}` + (u.path ? pc.dim(`  (${u.path})`) : ""));
+      if (u.sketch) {
+        const indented = u.sketch.split("\n").map((l) => "      " + l).join("\n");
+        console.log(pc.dim(indented));
+      }
       if (u.elements.length > 0) {
-        const summary = u.elements.map((e) => `${e.id}:${e.kind}` + (e.leads_to ? `→${e.leads_to}` : "")).join(", ");
+        const summary = u.elements.map((e) => {
+          const lead = e.leads_to ? pc.dim(`→${e.leads_to}`) : "";
+          return `${e.id}:${e.kind}${lead}`;
+        }).join(", ");
         console.log(pc.dim(`      elements: ${summary}`));
       }
     }
   }
-
   if (fm.behaviors.length > 0) {
     console.log("");
     console.log(pc.bold("  Behaviors:"));

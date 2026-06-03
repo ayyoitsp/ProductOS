@@ -1,142 +1,117 @@
 ---
 name: productos-review
-description: Use when the user wants to walk through and accept/reject/edit ProductOS content inline in the Claude Code session — without switching to the product-truth site. Reviews not just behaviors but also UX views, Elements, and affected_by relationships, one at a time, with single-keystroke responses (Y/N/E/S/Q). Triggers on "review the X feature", "review my productos", "let's go through X", "walk me through the unverified behaviors", "review the UX in X". Site and Claude/text are co-equal review surfaces (UX views) in v0.1 — this is the in-terminal one.
-version: 0.1.0
+description: Use when the user wants to review and edit a ProductOS feature conversationally inside Claude Code. You re-render the feature (title, status, UX sketches, behaviors) at every meaningful turn, then take natural-language requests and apply them via MCP tools. Equivalent to `productos review` in the terminal — same scope (one feature at a time), same model (edit the live products/<id>.md), same operations. Triggers on "review the X feature", "let's go through X", "walk me through wallet/add-kid", "open X for editing".
+version: 0.2.0
 ---
 
-# ProductOS — Review Skill (interactive walkthrough in Claude/text)
+# ProductOS — Review Skill (conversational, in Claude Code)
 
-The user wants to walk through ProductOS content for a feature (or across features) one item at a time, with single-keystroke responses, without leaving Claude Code.
+You're the conversational analog of `productos review` in the terminal. The user wants to look at one feature, talk about it in plain English, and have you apply changes via MCP tools. The file at `productos/products/<id>.md` is the live feature — you edit it directly, the user commits via git when satisfied.
 
-**Scope is everything in a feature — not just behaviors.** You walk through:
+This skill is **scoped to one feature at a time** and **driven by natural language**, not a fixed menu.
 
-1. **UX views** — their ASCII sketches, titles, element lists
-2. **Elements** — each interactive item: id, kind, label, leads_to (does this navigate? where to?)
-3. **Behaviors** — claims, anchors (surface/element/interaction), test cases
-4. **affected_by** — cross-feature trigger references
+## Triggers
 
-The site (`localhost:7878`) does the same thing visually. Both call the same MCP tools and produce the same DB state. The user picks whichever fits the moment.
+- "Review wallet/add-kid" / "open wallet/add-kid for editing"
+- "Walk me through the checkout flow feature"
+- "Let's go through tasks/complete-task"
+
+If the user doesn't name a feature: call `productos_list_features` and ask which one. Don't pick for them.
 
 ## Process
 
-### 1. Pick the scope
+### 1. Open the feature: render it cleanly
 
-If the user names a feature → scope to that feature.
-If they don't → list candidates from `productos_get_gaps({ type: "unverified" })` plus any features with newly-added surfaces or elements that haven't been reviewed yet.
+Call `productos_get_feature(id, include_tracking: false)`. Render it in a compact, scannable form — title + status, UX views with ASCII sketches, behaviors with claim + anchor. Don't dump raw YAML.
 
-```
-ProductOS has unreviewed content across 3 features:
-  • wallet/kid-balance   2 surfaces · 5 elements · 4 unverified behaviors
-  • checkout/flow        1 surface · 3 elements · 2 unverified behaviors
-  • auth/signup          1 unverified behavior
-
-Which scope? (feature_id, "all", or skip)
-```
-
-### 2. Walk the scope, in order
-
-For each feature, walk content in this order: **UX → Elements → Behaviors → affected_by**.
-
-**For each UX view:**
+Example render:
 
 ```
-UX 1 of 2: wallet/kid-balance / family-screen
-─────────────────────────────────────────────────
-Title:  Family
-Path:   /family
+Add a kid                                                    wallet/add-kid
+status: shipped
 
-Sketch:
-  ┌──────────────────────────────┐
-  │  Family                      │
-  │  → Mia      $12.50           │
-  │  → Leo       $4.00           │
-  │                              │
-  │  [ + Add a kid ]             │
-  └──────────────────────────────┘
+Parent adds a kid to the family from the family settings.
 
-Elements (will be walked next):
-  kid-card · → Mia, → Leo  (no leads_to set)
-  add-kid-button · [ + Add a kid ]  (no leads_to set)
+UX views:
+  family-settings — Family settings  (/family)
+    ┌──────────────────────────────┐
+    │  Family                      │
+    │  → Mia      $12.50           │
+    │  → Leo       $4.00           │
+    │  [ + Add a kid ]             │
+    └──────────────────────────────┘
+    elements: add-kid-btn:button→add-kid-modal, kid-card:card→wallet/kid-detail
 
-[Y] accept  [E] edit sketch/title  [N] reject  [S] skip  [Q] quit
+Behaviors:
+  open-modal  [family-settings.add-kid-btn tap]
+    Tapping + Add a kid opens a modal where the parent enters the kid's name and avatar.
+  submit-modal  [add-kid-modal.confirm-btn submit]
+    On confirm, a new kid is added with $0 balance and the modal closes.
+
+What would you like to change?
 ```
 
-**For each Element:**
+After every successful edit, **re-render the feature** so the user always sees current state. Don't make them scroll up.
+
+### 2. Take natural-language requests, apply via MCP tools
+
+The user might say:
+- "drop the second behavior" → `productos_remove_behavior(feature_id, behavior_id)`
+- "the leads_to on save-btn should point to confirmation-page" → load the UX view, update the element, write back with `productos_update_feature` (the feature update tools don't yet have element-level granularity, so re-propose the UX view via the proposal flow — see §3)
+- "add a behavior for the empty-state when there are no kids" → ask one clarifying question if needed (where does it anchor?), then `productos_add_behavior(feature_id, { id, claim, surface?, element?, interaction?, test_cases: [] })`
+- "rename this to 'Add a child'" → `productos_update_feature(id, { title: "Add a child" })`
+- "set the status to shipped" → `productos_update_feature(id, { status: "shipped" })`
+- "what other features anchor to family-settings?" → `productos_list_features`, filter, report — no edit
+
+If the request is ambiguous, **ask ONE clarifying question** and wait. Don't pick silently.
+
+### 3. Tools you actually have
+
+The MCP surface for edits to an existing feature:
+
+- `productos_update_feature({ id, title?, status?, description?, body? })` — top-level fields
+- `productos_add_behavior({ feature_id, behavior })` — full Behavior object
+- `productos_update_behavior({ feature_id, behavior_id, claim?, notes? })` — partial
+- `productos_remove_behavior({ feature_id, behavior_id })`
+
+For UX views and elements: today the MCP doesn't have element-level write tools yet, so for UX edits, re-read the feature, mutate the ux array locally, and call `productos_update_feature` with the full body if needed. (Future work: add `productos_add_or_replace_ux` and `_element` tools. If the user asks for a UX edit and the surface feels missing, say so honestly: "I can do this via a full-feature rewrite but I don't have a clean element-level tool yet — want me to proceed?")
+
+### 4. Stay in scope
+
+- One feature per session of this skill. If the user says "actually let's look at X instead", close the loop on the current feature first ("anything else here?") then open X.
+- Never set tracking status to `verified` — humans do that elsewhere.
+- Never invent behaviors or claims the user didn't ask for. If you notice something missing, ask: "I notice X isn't covered — should I add a behavior for it?"
+- Product language only. Don't write "POST /api/x returns 409" — write "the user sees an error".
+
+### 5. Closing out
+
+When the user signals they're done ("looks good", "ship it", "/quit"):
 
 ```
-Element 1 of 5: wallet/kid-balance / family-screen / kid-card
-─────────────────────────────────────────────────────────────
-Kind:       card
-Label:      Kid card
-Leads to:   (not set — clicking will not navigate)
-Used in:    UX family-screen (3 instances: → Mia, → Leo, → Ada)
+Done. Edits applied to productos/products/<id>.md.
 
-[Y] accept  [E] edit (kind / label / leads_to)  [N] reject  [S] skip  [Q] quit
+Changes this session:
+  - Removed behavior X
+  - Updated behavior Y's claim
+  - Set status to shipped
+
+Commit when ready:
+  git add productos/products/<id>.md
+  git commit -m "review: <feature_id>"
 ```
-
-When the user picks `E` on an element, offer common edits:
-- `leads_to` — most common edit; ask "where does this navigate to?" Accept a UxView.id, area/feature, or area/feature#surface form.
-- `kind` — change button → cta, link → button, etc.
-- `label` — rename
-- `id` — rename (warn: this breaks behavior anchors that reference the old id)
-
-**For each Behavior:**
-
-(Same as the original vet flow — claim, evidence, test cases, anchor, Y/N/E/S.)
-
-**For affected_by (one prompt per feature):**
-
-```
-affected_by for wallet/kid-balance
-─────────────────────────────────
-Currently:
-  • wallet/earn
-  • wallet/spend
-
-Other features that might affect this one (Claude's reading of the codebase):
-  • tasks/complete-task — task completion increments balance
-  • wallet/interest — interest accrual changes balance
-
-[Y] add suggested  [E] edit list manually  [S] skip  [Q] quit
-```
-
-### 3. Summarize at the end
-
-```
-Reviewed N items across M features:
-  UX:          A accepted, B edited
-  Elements:    C accepted, D edited (leads_to set on D items)
-  Behaviors:   E accepted, F edited, G rejected
-  affected_by: H updated
-
-Markdown changes ready to commit:
-  productos/products/wallet/kid-balance.md
-  ...
-
-Tracking changes (DB-only, no commit needed):
-  N acceptance events
-
-Next steps:
-  • If you set new leads_to on elements, the sketch is now clickable
-  • Run `productos test align <feature_id>` to map existing tests to behaviors
-  • Or implement code + tests for accepted behaviors and post results via
-    `productos test record`
-```
-
-## Rules
-
-- **Walk in a fixed order** — UX views, then Elements, then Behaviors, then affected_by. Don't jump around; the order matters because elements anchor to surfaces, behaviors anchor to elements, and affected_by depends on the feature being well-formed.
-- **One item at a time.** Single decision per exchange.
-- **Respect Q.** If the user quits, stop cleanly. The next session can resume from where they left off.
-- **For UX-view edits**, offer to update both `title` and `sketch` — most edits are sketch tweaks.
-- **For Element edits**, lead with `leads_to` — that's the most-frequently-missed field on first-pass scopes and the one that makes the sketch clickable.
-- **Never auto-accept.** Even for items that look obviously correct.
 
 ## Don't
 
-- **Don't open a browser.** User picked Claude/text.
-- **Don't bulk-flip.** No "accept all the elements." Each one gets its moment.
-- **Don't skip evidence on behaviors.** Surface what the system knows; if there's no test result, say so.
-- **Don't write code.** Review is judgment over markdown. Code changes are downstream.
-- **Don't propose NEW surfaces/elements/behaviors.** That's `productos-scope`. Review is for what already exists.
-- **Don't try to ALSO be productos-edit.** If the user wants a specific surgical edit ("add leads_to to X"), suggest they use `productos-edit` instead. Review is the interactive walk; edit is the targeted directive.
+- **Don't dump raw YAML at the user.** They're not editing YAML — they're describing changes in English.
+- **Don't open the browser.** They picked Claude/text.
+- **Don't show a fixed menu.** This isn't `productos review`'s terminal multiselect — this is conversation.
+- **Don't propose NEW features.** That's `productos-scope`. Review is for what already exists.
+- **Don't mix in verification.** "Verified" is a separate concept. Review is just edit on the live file. Git is the commit boundary.
+- **Don't bulk-apply.** Each request is one logical change. If the user says "fix all the leads_to that look wrong", first list what you'd change and ask for sign-off.
+
+## Don't do this in this skill — defer instead
+
+- **Surgical, scripted edits** (e.g. "add `leads_to: foo/bar` to element X on surface Y") → use `productos-edit`.
+- **Scope a NEW feature** → use `productos-scope`.
+- **Broad codebase pass** → use `productos-fullscan`.
+- **Map tests to behaviors** → use `productos-align`.
