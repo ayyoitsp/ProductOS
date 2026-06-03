@@ -504,9 +504,14 @@ export function renderContextIndex(docs: ContextDocument[]): string {
  *   - Clickable navigation for any element with `leads_to` set, where the
  *     ENTIRE bracket pattern (not just the inner text) is the click target.
  */
-function decorateSketch(sketch: string, elements: Element[]): string {
+function decorateSketch(sketch: string, elements: Element[], featureId: string, surfaceIdsInFeature: Set<string>): string {
   const cleaned = sketch.replace(/^\n+|\n+$/g, "");
-  const escaped = escape(cleaned);
+  // Normalize row markers — the AI uses different glyphs (•, ▢, ▦, ▶, ◇, *)
+  // depending on its mood. Convert all of them to → before rendering so the
+  // PM always sees a consistent right-arrow row icon regardless of what got
+  // written into the markdown.
+  const normalized = cleaned.replace(/^(\s*│?\s*)([•▢▦▶◇▷□*])(\s+)/gm, "$1→$3");
+  const escaped = escape(normalized);
 
   // Build a label → leads_to map for O(1) lookups when matching patterns.
   // Keyed by lowercased label so "Edit" matches "<Edit>" or "[ Edit ]".
@@ -514,7 +519,7 @@ function decorateSketch(sketch: string, elements: Element[]): string {
   const linkByLabel = new Map<string, LinkInfo>();
   for (const el of elements) {
     if (!el.leads_to || !el.label) continue;
-    const target = resolveLeadsTo(el.leads_to);
+    const target = resolveLeadsToSmart(el.leads_to, featureId, surfaceIdsInFeature);
     if (target) linkByLabel.set(el.label.toLowerCase(), { target, leadsTo: el.leads_to });
   }
 
@@ -573,7 +578,7 @@ function decorateSketch(sketch: string, elements: Element[]): string {
     (e) => (e.kind === "card" || e.kind === "list-item" || e.kind === "row") && e.leads_to
   );
   if (cardEl && cardEl.leads_to) {
-    const target = resolveLeadsTo(cardEl.leads_to);
+    const target = resolveLeadsToSmart(cardEl.leads_to, featureId, surfaceIdsInFeature);
     if (target) {
       // Recognize three glyphs as card/row markers: → (preferred), ▢, ▦.
       // Match: glyph + whitespace + content, stopping at an existing anchor
@@ -593,6 +598,46 @@ function decorateSketch(sketch: string, elements: Element[]): string {
   );
 
   return html;
+}
+
+/**
+ * Smart leads_to resolution that knows the current feature.
+ *
+ * The previous bug: `leads_to: add-kid` was always treated as a same-page anchor
+ * (#surface-add-kid) — even if the user MEANT a feature called `wallet/add-kid`.
+ * Now: if the bare value matches a Surface.id ON THIS FEATURE, it's a same-page
+ * anchor. Otherwise, we assume the user meant a sibling feature in the same
+ * area and resolve to `/<area>/<value>`. Slashes still mean cross-feature.
+ */
+function resolveLeadsToSmart(
+  leadsTo: string,
+  featureId: string,
+  surfaceIdsInFeature: Set<string>
+): string | null {
+  let s = leadsTo.trim();
+  if (!s) return null;
+  if (/^https?:\/\//i.test(s)) return null;
+  if (s.startsWith("/")) s = s.slice(1);
+  s = s.replace(/\/+$/, "");
+  if (!s) return null;
+
+  // Cross-feature + surface anchor: "area/feature#surface-id"
+  const hashIdx = s.indexOf("#");
+  if (hashIdx > 0 && s.slice(0, hashIdx).includes("/")) {
+    const feat = s.slice(0, hashIdx);
+    const sid = s.slice(hashIdx + 1);
+    return `/${feat}#surface-${sid}`;
+  }
+  // Cross-feature page: contains a slash, no hash
+  if (s.includes("/")) return `/${s}`;
+  // No slash. If it matches a Surface.id on the CURRENT feature, same-page anchor.
+  if (surfaceIdsInFeature.has(s)) return `#surface-${s}`;
+  // Otherwise assume the user meant a sibling feature in the same area.
+  // Pull the area from the current feature id ("wallet/family" → "wallet").
+  const area = featureId.includes("/") ? featureId.split("/")[0] : null;
+  if (area) return `/${area}/${s}`;
+  // No area context — fall back to same-page anchor (best guess).
+  return `#surface-${s}`;
 }
 
 function resolveLeadsTo(leadsTo: string): string | null {
@@ -723,8 +768,9 @@ export function renderFeature(
     }
   }
 
+  const surfaceIdSet = new Set(surfaces.map((s) => s.id));
   const surfacesBlock = surfaces.length
-    ? `<div class="section-head"><h2>Surfaces</h2>${rollup}</div><div class="surfaces">${surfaces.map((s) => renderSurfaceWithBehaviors(f.id, s, anchored.get(s.id) ?? [], tracking)).join("\n")}</div>`
+    ? `<div class="section-head"><h2>Surfaces</h2>${rollup}</div><div class="surfaces">${surfaces.map((s) => renderSurfaceWithBehaviors(f.id, s, anchored.get(s.id) ?? [], tracking, surfaceIdSet)).join("\n")}</div>`
     : "";
   const unanchoredHeading = surfaces.length ? "Rules & invariants" : "Behaviors";
   // When there are no surfaces, the rollup hasn't been shown yet — surface it on the Behaviors head.
@@ -777,7 +823,8 @@ function renderSurfaceWithBehaviors(
   featureId: string,
   s: Surface,
   anchoredBehaviors: Behavior[],
-  tracking: FeatureTracking | null
+  tracking: FeatureTracking | null,
+  surfaceIdsInFeature: Set<string>
 ): string {
   // Element pills below the sketch are intentionally NOT rendered — the sketch
   // itself, decorated by decorateSketch() with kind-aware styling and
@@ -786,7 +833,7 @@ function renderSurfaceWithBehaviors(
   // `element: <id>` — they just don't render as a separate redundant list.
   const elementsLine = "";
   const sketchBlock = s.sketch
-    ? `<pre class="surface-sketch">${decorateSketch(s.sketch, s.elements)}</pre>`
+    ? `<pre class="surface-sketch">${decorateSketch(s.sketch, s.elements, featureId, surfaceIdsInFeature)}</pre>`
     : "";
   // Surface.path (route / URL) is intentionally NOT rendered in the header
   // — it's a routing-implementation detail the PM doesn't read. Data persists
