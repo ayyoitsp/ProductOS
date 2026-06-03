@@ -15,22 +15,43 @@ export function byokCommand(): Command {
 
   cmd
     .command("status")
-    .description("Show the truth-verification handler config and whether the API key env var is set")
+    .description("Show registered BYOK providers, truth-verification handler config, and whether each API key env var is set")
     .action(() => {
       const paths = resolvePathsOrThrow();
       const config = readConfig(paths);
+
+      const registered = Object.keys(config.byok.providers);
+      console.log(pc.bold("Registered providers:"));
+      if (registered.length === 0) {
+        console.log(pc.dim("  (none — run `productos configure byok`)"));
+      } else {
+        for (const id of registered) {
+          const reg = config.byok.providers[id as keyof typeof config.byok.providers]!;
+          const set = !!process.env[reg.api_key_env];
+          const activeBadge = id === config.byok.active ? pc.cyan(" (active)") : "";
+          console.log(
+            `  - ${id}${activeBadge}: ${reg.default_model} via ${reg.api_key_env}  ${set ? pc.green("(set)") : pc.red("(not set)")}`
+          );
+        }
+      }
+      console.log();
+
       const handler = config.operations.truth_verification.handler;
       console.log(pc.bold("Truth verification:"), handler);
       if (handler === "byok") {
-        const byok = resolveTruthVerificationByok(config);
-        const keyPresent = !!process.env[byok.api_key_env];
-        console.log(`  provider:    ${byok.provider}`);
-        console.log(`  model:       ${byok.model}`);
-        console.log(`  api_key_env: ${byok.api_key_env}  ${keyPresent ? pc.green("(set)") : pc.red("(not set)")}`);
-        console.log(`  max_steps:   ${byok.max_steps}`);
-        console.log();
-        if (keyPresent) console.log(pc.green("✓"), "BYOK ready — POST /api/feedback will try to auto-process.");
-        else console.log(pc.yellow("!"), `Key not set. Set ${byok.api_key_env}=… in the shell that runs \`productos serve\`.`);
+        try {
+          const byok = resolveTruthVerificationByok(config);
+          const keyPresent = !!process.env[byok.api_key_env];
+          console.log(`  provider:    ${byok.provider}`);
+          console.log(`  model:       ${byok.model}`);
+          console.log(`  api_key_env: ${byok.api_key_env}  ${keyPresent ? pc.green("(set)") : pc.red("(not set)")}`);
+          console.log(`  max_steps:   ${byok.max_steps}`);
+          console.log();
+          if (keyPresent) console.log(pc.green("✓"), "BYOK ready — POST /api/feedback will try to auto-process.");
+          else console.log(pc.yellow("!"), `Key not set. Set ${byok.api_key_env}=… in the shell that runs \`productos serve\`.`);
+        } catch (e) {
+          console.log(pc.red("✗"), (e as Error).message);
+        }
       } else {
         console.log(pc.dim("\nFeedback queues in productos/feedback/ for Claude to process later via MCP."));
         console.log(pc.dim("To switch: `productos configure truth-verification` or `productos byok enable`."));
