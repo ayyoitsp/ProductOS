@@ -7,6 +7,7 @@ export interface ProductosPaths {
   configFile: string;       // <repo>/productos/config.yaml
   contextDir: string;       // <repo>/productos/context
   productsDir: string;      // <repo>/productos/products
+  draftsDir: string;        // <repo>/productos/drafts (proposed features awaiting `productos review`)
   trackingDir: string;      // <repo>/productos/tracking
   feedbackDir: string;      // <repo>/productos/feedback
   localDir: string;         // <repo>/productos/.local (gitignored)
@@ -33,6 +34,7 @@ export function pathsFor(repoRoot: string): ProductosPaths {
     configFile: path.join(root, "config.yaml"),
     contextDir: path.join(root, "context"),
     productsDir: path.join(root, "products"),
+    draftsDir: path.join(root, "drafts"),
     trackingDir: path.join(root, "tracking"),
     feedbackDir: path.join(root, "feedback"),
     localDir: path.join(root, ".local"),
@@ -42,7 +44,7 @@ export function pathsFor(repoRoot: string): ProductosPaths {
 }
 
 export function ensureDirs(p: ProductosPaths): void {
-  for (const d of [p.root, p.contextDir, p.productsDir, p.trackingDir, p.feedbackDir, p.localDir, p.cacheDir, p.blobsDir]) {
+  for (const d of [p.root, p.contextDir, p.productsDir, p.draftsDir, p.trackingDir, p.feedbackDir, p.localDir, p.cacheDir, p.blobsDir]) {
     fs.mkdirSync(d, { recursive: true });
   }
 }

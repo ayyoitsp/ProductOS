@@ -12,8 +12,9 @@ import {
   Behavior,
   FeatureFrontmatter,
   UxView,
+  readDraftById,
   readFeatureById,
-  writeFeature,
+  writeDraft,
 } from "../core/product.js";
 import { getStrategy } from "../core/context.js";
 
@@ -128,7 +129,7 @@ export async function runScan(
     }),
     propose_feature: tool({
       description:
-        "Write the proposed feature to disk. Call ONCE at the end of your scan. Fails if the feature already exists. The spec must match the FeatureFrontmatter schema.",
+        "Write the proposed feature as a DRAFT (productos/drafts/<id>.md). Call ONCE at the end of your scan. The human reviews + promotes the draft via `productos review`. Fails if the feature already exists in products/ or a draft already exists.",
       inputSchema: z.object({
         id: z.string().describe("area/slug, e.g. wallet/add-kid"),
         title: z.string().min(1),
@@ -151,7 +152,10 @@ export async function runScan(
           return { ok: false, error: `id must match the scan target ${featureId}` };
         }
         if (readFeatureById(paths, args.id)) {
-          return { ok: false, error: `feature ${args.id} already exists — refusing to overwrite` };
+          return { ok: false, error: `feature ${args.id} already exists in products/ — refusing to overwrite. Edit it directly or delete the canonical first.` };
+        }
+        if (readDraftById(paths, args.id)) {
+          return { ok: false, error: `a draft for ${args.id} already exists — run \`productos review ${args.id}\` first, or delete the draft.` };
         }
         try {
           const fm = FeatureFrontmatter.parse({
@@ -163,7 +167,7 @@ export async function runScan(
             behaviors: (args.behaviors ?? []).map((b) => Behavior.parse(b)),
             affected_by: args.affected_by ?? [],
           });
-          writeFeature(paths, {
+          writeDraft(paths, {
             frontmatter: fm,
             body: "",
             filepath: "",
@@ -171,7 +175,7 @@ export async function runScan(
           });
           proposedId = args.id;
           ops.push(`propose_feature(${args.id})`);
-          return { ok: true };
+          return { ok: true, note: "Draft written. Run `productos review` to promote." };
         } catch (e) {
           return { ok: false, error: (e as Error).message };
         }
