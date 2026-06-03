@@ -4,7 +4,7 @@ import os from "node:os";
 import { Command } from "commander";
 import pc from "picocolors";
 import { findRepoRoot, pathsFor } from "../../core/paths.js";
-import { ByokProvider, readConfig, resolveTruthVerificationByok } from "../../core/config.js";
+import { ByokProvider, readConfig, resolveCodeScanningByok, resolveTruthVerificationByok } from "../../core/config.js";
 import { envConfigFile, readEnvConfig } from "../../core/env.js";
 import { listAreas, listFeatures, productsRoot } from "../../core/product.js";
 
@@ -87,7 +87,19 @@ export function doctorCommand(): Command {
           }
 
           // 5b. Operations
-          ok(`Code scanning handler: ${c.operations.code_scanning.handler}`);
+          const csh = c.operations.code_scanning.handler;
+          if (csh === "byok") {
+            try {
+              const csByok = resolveCodeScanningByok(c);
+              const keyPresent = !!process.env[csByok.api_key_env];
+              if (keyPresent) ok(`Code scanning: BYOK ${csByok.provider}/${csByok.model} (key from ${csByok.api_key_env})`);
+              else warn(`Code scanning: BYOK ${csByok.provider}/${csByok.model} but ${csByok.api_key_env} is not set — productos scan will fail`);
+            } catch (e) {
+              fail(`Code scanning: ${(e as Error).message}`);
+            }
+          } else {
+            ok(`Code scanning handler: ${csh}`);
+          }
           const tvh = c.operations.truth_verification.handler;
           if (tvh === "byok") {
             try {

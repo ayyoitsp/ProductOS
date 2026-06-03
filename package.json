@@ -39,6 +39,7 @@
     "@modelcontextprotocol/sdk": "^1.0.4",
     "ai": "^6.0.192",
     "commander": "^12.1.0",
+    "globby": "^16.2.0",
     "gray-matter": "^4.0.3",
     "marked": "^18.0.4",
     "picocolors": "^1.1.1",

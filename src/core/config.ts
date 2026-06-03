@@ -99,7 +99,7 @@ export function defaultModelFor(provider: ByokProvider): string {
  * etc.) picks one of these. When more areas land (drift detection, ticket
  * sync, etc.) they reuse the same shape.
  */
-export const CodeScanningHandler = z.enum(["claude", "codex", "manual"]);
+export const CodeScanningHandler = z.enum(["claude", "codex", "byok", "manual"]);
 export type CodeScanningHandler = z.infer<typeof CodeScanningHandler>;
 export const TruthVerificationHandler = z.enum(["queue", "byok"]);
 export type TruthVerificationHandler = z.infer<typeof TruthVerificationHandler>;
@@ -115,6 +115,7 @@ export const OperationByokOverride = z.object({
 
 export const CodeScanningConfig = z.object({
   handler: CodeScanningHandler.default("claude"),
+  byok: OperationByokOverride.optional(),
 });
 
 export const TruthVerificationConfig = z.object({
@@ -179,19 +180,22 @@ export function defaultConfigFor(opts: {
 }
 
 /**
- * Resolve the effective BYOK config for a truth-verification operation that
- * has handler='byok'. Operation-level overrides take precedence; if the
- * override picks a provider, model falls back to that provider's
- * `default_model`. Throws if the selected provider isn't registered.
+ * Resolve a BYOK config for a given operation. Operation-level override
+ * takes precedence; otherwise the registry's active provider is used.
+ * Model falls back to that provider's `default_model`. Throws if the
+ * selected provider isn't registered.
  */
-export function resolveTruthVerificationByok(config: ProductosConfig): ResolvedByok {
-  const op = config.operations.truth_verification;
-  const ov = op.byok ?? {};
+function resolveByokFor(
+  config: ProductosConfig,
+  opName: string,
+  override: { provider?: ByokProvider; model?: string } | undefined
+): ResolvedByok {
+  const ov = override ?? {};
   const provider = ov.provider ?? config.byok.active;
   const reg = config.byok.providers[provider];
   if (!reg) {
     throw new Error(
-      `BYOK provider "${provider}" is selected for truth_verification but not registered in byok.providers. Run \`productos configure byok\` to add it.`
+      `BYOK provider "${provider}" is selected for ${opName} but not registered in byok.providers. Run \`productos configure byok\` to add it.`
     );
   }
   return {
@@ -200,4 +204,12 @@ export function resolveTruthVerificationByok(config: ProductosConfig): ResolvedB
     model: ov.model ?? reg.default_model,
     max_steps: config.byok.max_steps,
   };
+}
+
+export function resolveTruthVerificationByok(config: ProductosConfig): ResolvedByok {
+  return resolveByokFor(config, "truth_verification", config.operations.truth_verification.byok);
+}
+
+export function resolveCodeScanningByok(config: ProductosConfig): ResolvedByok {
+  return resolveByokFor(config, "code_scanning", config.operations.code_scanning.byok);
 }
