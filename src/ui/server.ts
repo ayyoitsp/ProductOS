@@ -33,6 +33,7 @@ import {
   RecordTestResultsInput,
 } from "../core/test-results.js";
 import {
+  buildSurfaceIndex,
   renderArea,
   renderContextIndex,
   renderFeature,
@@ -267,7 +268,10 @@ export async function startUiServer(): Promise<void> {
         if (f) {
           const area = areas.find((a) => a.slug === featMatch[1]);
           const tracking = readTracking(paths, id);
-          const body = renderFeature(f, area, tracking);
+          // Build a corpus-wide surface→feature index so leads_to can resolve
+          // bare surface ids to whichever feature owns them.
+          const surfaceIndex = buildSurfaceIndex(listFeatures(paths));
+          const body = renderFeature(f, area, tracking, surfaceIndex);
           return html(res, renderShell(f.frontmatter.title, body, sb(id)));
         }
       }

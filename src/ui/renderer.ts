@@ -504,7 +504,7 @@ export function renderContextIndex(docs: ContextDocument[]): string {
  *   - Clickable navigation for any element with `leads_to` set, where the
  *     ENTIRE bracket pattern (not just the inner text) is the click target.
  */
-function decorateSketch(sketch: string, elements: Element[], featureId: string, surfaceIdsInFeature: Set<string>): string {
+function decorateSketch(sketch: string, elements: Element[], featureId: string, surfaceIdsInFeature: Set<string>, surfaceIndex: SurfaceIndex): string {
   const cleaned = sketch.replace(/^\n+|\n+$/g, "");
   // Normalize row markers — the AI uses different glyphs (•, ▢, ▦, ▶, ◇, *)
   // depending on its mood. Convert all of them to → before rendering so the
@@ -519,7 +519,7 @@ function decorateSketch(sketch: string, elements: Element[], featureId: string, 
   const linkByLabel = new Map<string, LinkInfo>();
   for (const el of elements) {
     if (!el.leads_to || !el.label) continue;
-    const target = resolveLeadsToSmart(el.leads_to, featureId, surfaceIdsInFeature);
+    const target = resolveLeadsToSmart(el.leads_to, featureId, surfaceIdsInFeature, surfaceIndex);
     if (target) linkByLabel.set(el.label.toLowerCase(), { target, leadsTo: el.leads_to });
   }
 
@@ -574,11 +574,16 @@ function decorateSketch(sketch: string, elements: Element[], featureId: string, 
   // start of another inline element like a link) in a clickable anchor —
   // clicking the kid card row navigates to the kid-detail surface or whatever
   // `leads_to` points at.
-  const cardEl = elements.find(
-    (e) => (e.kind === "card" || e.kind === "list-item" || e.kind === "row") && e.leads_to
-  );
+  // Loose match — the AI uses many kind names: kid-card, list-item, row,
+  // result-row, transaction-card, etc. Any kind containing one of these
+  // substrings (case-insensitive) qualifies if leads_to is set.
+  const cardEl = elements.find((e) => {
+    if (!e.leads_to) return false;
+    const k = (e.kind ?? "").toLowerCase();
+    return k.includes("card") || k.includes("row") || k.includes("item") || k.includes("list");
+  });
   if (cardEl && cardEl.leads_to) {
-    const target = resolveLeadsToSmart(cardEl.leads_to, featureId, surfaceIdsInFeature);
+    const target = resolveLeadsToSmart(cardEl.leads_to, featureId, surfaceIdsInFeature, surfaceIndex);
     if (target) {
       // Recognize three glyphs as card/row markers: → (preferred), ▢, ▦.
       // Match: glyph + whitespace + content, stopping at an existing anchor
@@ -601,18 +606,30 @@ function decorateSketch(sketch: string, elements: Element[], featureId: string, 
 }
 
 /**
- * Smart leads_to resolution that knows the current feature.
+ * leads_to resolution. Always returns SOMETHING (never null for non-empty
+ * valid input) so rows + elements always wrap as clickable. If the destination
+ * doesn't actually exist yet, the click 404s and the PM discovers they need
+ * to create the surface — that's better than silently not-clicking.
  *
- * The previous bug: `leads_to: add-kid` was always treated as a same-page anchor
- * (#surface-add-kid) — even if the user MEANT a feature called `wallet/add-kid`.
- * Now: if the bare value matches a Surface.id ON THIS FEATURE, it's a same-page
- * anchor. Otherwise, we assume the user meant a sibling feature in the same
- * area and resolve to `/<area>/<value>`. Slashes still mean cross-feature.
+ * Resolution priority (first match wins):
+ *
+ *   1. Empty / `https://...` → null (don't link external URLs).
+ *   2. `feature#surface` (explicit) → `/<feature>#surface-<id>`.
+ *   3. `area/feature` → `/<area>/<feature>` (cross-feature page).
+ *   4. Bare `surface-id` that matches a Surface.id ON CURRENT FEATURE →
+ *      `#surface-<id>` (same-page anchor jump).
+ *   5. Bare `surface-id` that matches a Surface.id ELSEWHERE in the corpus →
+ *      `/<owning-feature>#surface-<id>` (cross-feature surface link).
+ *   6. Bare value that matches nothing → assume sibling feature in the
+ *      current area: `/<currentArea>/<value>` (best-effort guess).
+ *
+ * Defensive normalization: strip leading `/`, trim whitespace, drop trailing slash.
  */
 function resolveLeadsToSmart(
   leadsTo: string,
   featureId: string,
-  surfaceIdsInFeature: Set<string>
+  surfaceIdsInFeature: Set<string>,
+  surfaceIndex: SurfaceIndex
 ): string | null {
   let s = leadsTo.trim();
   if (!s) return null;
@@ -621,22 +638,25 @@ function resolveLeadsToSmart(
   s = s.replace(/\/+$/, "");
   if (!s) return null;
 
-  // Cross-feature + surface anchor: "area/feature#surface-id"
+  // Cross-feature + surface anchor
   const hashIdx = s.indexOf("#");
-  if (hashIdx > 0 && s.slice(0, hashIdx).includes("/")) {
-    const feat = s.slice(0, hashIdx);
+  if (hashIdx > 0) {
+    const beforeHash = s.slice(0, hashIdx);
     const sid = s.slice(hashIdx + 1);
-    return `/${feat}#surface-${sid}`;
+    if (beforeHash.includes("/") && sid) return `/${beforeHash}#surface-${sid}`;
+    if (!beforeHash && sid) return `#surface-${sid}`;
   }
-  // Cross-feature page: contains a slash, no hash
+
+  // Cross-feature page (has slash, no #)
   if (s.includes("/")) return `/${s}`;
-  // No slash. If it matches a Surface.id on the CURRENT feature, same-page anchor.
+
+  // Bare value resolution
   if (surfaceIdsInFeature.has(s)) return `#surface-${s}`;
-  // Otherwise assume the user meant a sibling feature in the same area.
-  // Pull the area from the current feature id ("wallet/family" → "wallet").
+  const owningFeature = surfaceIndex.get(s);
+  if (owningFeature) return `/${owningFeature}#surface-${s}`;
+  // Best-effort guess: sibling feature in the current area
   const area = featureId.includes("/") ? featureId.split("/")[0] : null;
   if (area) return `/${area}/${s}`;
-  // No area context — fall back to same-page anchor (best guess).
   return `#surface-${s}`;
 }
 
@@ -730,10 +750,32 @@ export function renderArea(area: AreaDocument): string {
   `;
 }
 
+/**
+ * Map from `surface-id` → `feature-id` covering every surface across the
+ * entire corpus. Built by the UI server once per request and passed in so
+ * leads_to can resolve a bare surface id to whichever feature actually owns
+ * that surface (not to a guessed sibling feature page).
+ */
+export type SurfaceIndex = Map<string, string>;
+
+export function buildSurfaceIndex(features: FeatureDocument[]): SurfaceIndex {
+  const idx: SurfaceIndex = new Map();
+  for (const f of features) {
+    for (const s of f.frontmatter.surfaces ?? []) {
+      // First-write-wins on collisions; same-feature lookups happen separately
+      // via the surfaceIdsInFeature set so this only affects cross-feature
+      // resolution of ambiguous ids.
+      if (!idx.has(s.id)) idx.set(s.id, f.frontmatter.id);
+    }
+  }
+  return idx;
+}
+
 export function renderFeature(
   feature: FeatureDocument,
   area: AreaDocument | undefined,
-  tracking: FeatureTracking | null
+  tracking: FeatureTracking | null,
+  surfaceIndex: SurfaceIndex = new Map()
 ): string {
   const f = feature.frontmatter;
   const crumb = area
@@ -770,7 +812,7 @@ export function renderFeature(
 
   const surfaceIdSet = new Set(surfaces.map((s) => s.id));
   const surfacesBlock = surfaces.length
-    ? `<div class="section-head"><h2>Surfaces</h2>${rollup}</div><div class="surfaces">${surfaces.map((s) => renderSurfaceWithBehaviors(f.id, s, anchored.get(s.id) ?? [], tracking, surfaceIdSet)).join("\n")}</div>`
+    ? `<div class="section-head"><h2>Surfaces</h2>${rollup}</div><div class="surfaces">${surfaces.map((s) => renderSurfaceWithBehaviors(f.id, s, anchored.get(s.id) ?? [], tracking, surfaceIdSet, surfaceIndex)).join("\n")}</div>`
     : "";
   const unanchoredHeading = surfaces.length ? "Rules & invariants" : "Behaviors";
   // When there are no surfaces, the rollup hasn't been shown yet — surface it on the Behaviors head.
@@ -824,7 +866,8 @@ function renderSurfaceWithBehaviors(
   s: Surface,
   anchoredBehaviors: Behavior[],
   tracking: FeatureTracking | null,
-  surfaceIdsInFeature: Set<string>
+  surfaceIdsInFeature: Set<string>,
+  surfaceIndex: SurfaceIndex
 ): string {
   // Element pills below the sketch are intentionally NOT rendered — the sketch
   // itself, decorated by decorateSketch() with kind-aware styling and
@@ -833,7 +876,7 @@ function renderSurfaceWithBehaviors(
   // `element: <id>` — they just don't render as a separate redundant list.
   const elementsLine = "";
   const sketchBlock = s.sketch
-    ? `<pre class="surface-sketch">${decorateSketch(s.sketch, s.elements, featureId, surfaceIdsInFeature)}</pre>`
+    ? `<pre class="surface-sketch">${decorateSketch(s.sketch, s.elements, featureId, surfaceIdsInFeature, surfaceIndex)}</pre>`
     : "";
   // Surface.path (route / URL) is intentionally NOT rendered in the header
   // — it's a routing-implementation detail the PM doesn't read. Data persists
