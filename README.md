@@ -132,6 +132,8 @@ productos doctor                     # check install, runtime, env, product-trut
 | `productos_propose_feature` | Create a NEW feature at productos/products/ — human runs `productos review <id>` to edit interactively |
 | `productos_update_feature` | Update metadata/body of an existing feature |
 | `productos_add_behavior` / `_update_behavior` / `_remove_behavior` | Modify individual behaviors on an existing feature |
+| `productos_add_or_replace_ux` / `_update_ux` / `_remove_ux` | Manage UX views (screens, modals) with ASCII sketches |
+| `productos_add_or_replace_element` / `_remove_element` | Manage interactive elements within a UX view (buttons, inputs, links, cards) |
 | `productos_attach_evidence` | Add evidence (code ref, response capture, screenshot, narrative, trace) to a behavior |
 | `productos_get_env` | Read dev-env config (services, healthcheck, etc.) |
 | `productos_get_gaps` | Find behaviors awaiting verification, stale, contested, etc. |

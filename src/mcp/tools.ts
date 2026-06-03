@@ -2,6 +2,7 @@ import { z } from "zod";
 import { ProductosPaths } from "../core/paths.js";
 import {
   Behavior,
+  Element,
   FeatureFrontmatter,
   FeatureStatus,
   UxView,
@@ -171,7 +172,7 @@ const GetFeatureInput = z.object({
 const getFeatureTool: McpTool = {
   name: "productos_get_feature",
   description:
-    "Fetch a single feature's product truth (claims, description, prose body) and optionally its tracking sidecar (code refs, behavior verification status, history). Read this before proposing edits.",
+    "Fetch a single feature's product truth — title, status, description, UX views (with ASCII sketches + elements), behaviors (claim, anchor, test_cases), affected_by relationships, and the prose body. Optionally returns the tracking sidecar (code refs, verification status, history). Read this before proposing edits or rendering the feature back to the user.",
   inputSchema: zodToInputSchema(GetFeatureInput),
   handler: async (raw, paths) => {
     const args = GetFeatureInput.parse(raw);
@@ -182,7 +183,9 @@ const getFeatureTool: McpTool = {
       title: f.frontmatter.title,
       status: f.frontmatter.status,
       description: f.frontmatter.description,
+      ux: f.frontmatter.ux,
       behaviors: f.frontmatter.behaviors,
+      affected_by: f.frontmatter.affected_by,
       body: f.body,
       tracking: args.include_tracking ? readTracking(paths, args.id) : undefined,
     };
@@ -291,12 +294,15 @@ const UpdateBehaviorInput = z.object({
   behavior_id: z.string(),
   claim: z.string().optional(),
   notes: z.string().optional(),
+  surface: z.string().optional().describe("UX view id to anchor to (within this feature). Pass empty string to clear."),
+  element: z.string().optional().describe("Element id within the anchored UX view. Pass empty string to clear."),
+  interaction: z.string().optional().describe("Interaction word (tap, submit, view, load, etc). Pass empty string to clear."),
 });
 
 const updateBehavior: McpTool = {
   name: "productos_update_behavior",
   description:
-    "Update a behavior's claim or notes. To update verification status or code refs, use productos_update_tracking — that data lives in the sidecar, not product truth.",
+    "Update a behavior's claim, notes, or anchor (surface/element/interaction). To update verification status or code refs, use productos_update_tracking — that data lives in the sidecar, not product truth.",
   inputSchema: zodToInputSchema(UpdateBehaviorInput),
   handler: async (raw, paths) => {
     const args = UpdateBehaviorInput.parse(raw);
@@ -306,6 +312,9 @@ const updateBehavior: McpTool = {
     if (!b) throw new Error(`Behavior "${args.behavior_id}" not found on ${args.feature_id}`);
     if (args.claim !== undefined) b.claim = args.claim;
     if (args.notes !== undefined) b.notes = args.notes;
+    if (args.surface !== undefined) b.surface = args.surface || undefined;
+    if (args.element !== undefined) b.element = args.element || undefined;
+    if (args.interaction !== undefined) b.interaction = args.interaction || undefined;
     writeFeature(paths, doc);
     return { ok: true };
   },
@@ -333,6 +342,144 @@ const removeBehavior: McpTool = {
       delete tracking.behaviors[args.behavior_id];
       writeTracking(paths, tracking);
     }
+    return { ok: true };
+  },
+};
+
+// ===========================================================================
+// UX VIEWS & ELEMENTS (screens, sketches, interactive items)
+// ===========================================================================
+//
+// Element-level granularity matches the BYOK editor in src/byok/edit.ts so the
+// review skill and `productos review` REPL have identical capability.
+
+const AddOrReplaceUxInput = z.object({
+  feature_id: z.string(),
+  ux: UxView,
+});
+
+const addOrReplaceUx: McpTool = {
+  name: "productos_add_or_replace_ux",
+  description:
+    "Add a UX view to a feature, or replace one with the same id. Pass the FULL UxView (id kebab-case, title, optional path, optional sketch, optional notes, elements array). Use when adding a new screen or rewriting an existing one wholesale. For field-only edits use productos_update_ux.",
+  inputSchema: zodToInputSchema(AddOrReplaceUxInput),
+  handler: async (raw, paths) => {
+    const args = AddOrReplaceUxInput.parse(raw);
+    const doc = readFeatureById(paths, args.feature_id);
+    if (!doc) throw new Error(`Feature "${args.feature_id}" not found`);
+    const i = doc.frontmatter.ux.findIndex((u) => u.id === args.ux.id);
+    if (i >= 0) doc.frontmatter.ux[i] = args.ux;
+    else doc.frontmatter.ux.push(args.ux);
+    writeFeature(paths, doc);
+    return { ok: true, feature_id: args.feature_id, ux_id: args.ux.id, action: i >= 0 ? "replaced" : "added" };
+  },
+};
+
+const UpdateUxInput = z.object({
+  feature_id: z.string(),
+  ux_id: z.string(),
+  title: z.string().optional(),
+  sketch: z.string().optional(),
+  path: z.string().optional(),
+  notes: z.string().optional(),
+});
+
+const updateUx: McpTool = {
+  name: "productos_update_ux",
+  description:
+    "Update fields on an existing UX view by id — title, sketch, path, notes. Pass only the fields to change. To replace elements or rename the id, use productos_add_or_replace_ux. To remove the view, use productos_remove_ux.",
+  inputSchema: zodToInputSchema(UpdateUxInput),
+  handler: async (raw, paths) => {
+    const args = UpdateUxInput.parse(raw);
+    const doc = readFeatureById(paths, args.feature_id);
+    if (!doc) throw new Error(`Feature "${args.feature_id}" not found`);
+    const u = doc.frontmatter.ux.find((x) => x.id === args.ux_id);
+    if (!u) throw new Error(`UX view "${args.ux_id}" not found on ${args.feature_id}`);
+    if (args.title !== undefined) u.title = args.title;
+    if (args.sketch !== undefined) u.sketch = args.sketch;
+    if (args.path !== undefined) u.path = args.path;
+    if (args.notes !== undefined) u.notes = args.notes;
+    writeFeature(paths, doc);
+    return { ok: true };
+  },
+};
+
+const RemoveUxInput = z.object({ feature_id: z.string(), ux_id: z.string() });
+
+const removeUx: McpTool = {
+  name: "productos_remove_ux",
+  description:
+    "Remove a UX view from a feature. Behaviors anchored to it have their surface/element fields cleared so they don't dangle.",
+  inputSchema: zodToInputSchema(RemoveUxInput),
+  handler: async (raw, paths) => {
+    const args = RemoveUxInput.parse(raw);
+    const doc = readFeatureById(paths, args.feature_id);
+    if (!doc) throw new Error(`Feature "${args.feature_id}" not found`);
+    const before = doc.frontmatter.ux.length;
+    doc.frontmatter.ux = doc.frontmatter.ux.filter((u) => u.id !== args.ux_id);
+    if (doc.frontmatter.ux.length === before) throw new Error(`UX view "${args.ux_id}" not found`);
+    for (const b of doc.frontmatter.behaviors) {
+      if (b.surface === args.ux_id) {
+        b.surface = undefined;
+        b.element = undefined;
+      }
+    }
+    writeFeature(paths, doc);
+    return { ok: true };
+  },
+};
+
+const AddOrReplaceElementInput = z.object({
+  feature_id: z.string(),
+  ux_id: z.string(),
+  element: Element,
+});
+
+const addOrReplaceElement: McpTool = {
+  name: "productos_add_or_replace_element",
+  description:
+    "Add an element to a UX view, or replace one with the same id. Pass the FULL Element (id kebab-case, kind, optional label, optional notes, optional leads_to). For leads_to format: same-feature anchor like 'checkout-page', cross-feature like 'wallet/transactions', or 'wallet/balance#kid-view'. Never a leading slash or external URL.",
+  inputSchema: zodToInputSchema(AddOrReplaceElementInput),
+  handler: async (raw, paths) => {
+    const args = AddOrReplaceElementInput.parse(raw);
+    const doc = readFeatureById(paths, args.feature_id);
+    if (!doc) throw new Error(`Feature "${args.feature_id}" not found`);
+    const u = doc.frontmatter.ux.find((x) => x.id === args.ux_id);
+    if (!u) throw new Error(`UX view "${args.ux_id}" not found on ${args.feature_id}`);
+    const i = u.elements.findIndex((e) => e.id === args.element.id);
+    if (i >= 0) u.elements[i] = args.element;
+    else u.elements.push(args.element);
+    writeFeature(paths, doc);
+    return { ok: true, action: i >= 0 ? "replaced" : "added" };
+  },
+};
+
+const RemoveElementInput = z.object({
+  feature_id: z.string(),
+  ux_id: z.string(),
+  element_id: z.string(),
+});
+
+const removeElement: McpTool = {
+  name: "productos_remove_element",
+  description:
+    "Remove an element from a UX view. Behaviors that anchored to this element have their element field cleared but keep their surface anchor.",
+  inputSchema: zodToInputSchema(RemoveElementInput),
+  handler: async (raw, paths) => {
+    const args = RemoveElementInput.parse(raw);
+    const doc = readFeatureById(paths, args.feature_id);
+    if (!doc) throw new Error(`Feature "${args.feature_id}" not found`);
+    const u = doc.frontmatter.ux.find((x) => x.id === args.ux_id);
+    if (!u) throw new Error(`UX view "${args.ux_id}" not found on ${args.feature_id}`);
+    const before = u.elements.length;
+    u.elements = u.elements.filter((e) => e.id !== args.element_id);
+    if (u.elements.length === before) throw new Error(`Element "${args.element_id}" not found`);
+    for (const b of doc.frontmatter.behaviors) {
+      if (b.surface === args.ux_id && b.element === args.element_id) {
+        b.element = undefined;
+      }
+    }
+    writeFeature(paths, doc);
     return { ok: true };
   },
 };
@@ -710,6 +857,12 @@ export const tools: McpTool[] = [
   addBehavior,
   updateBehavior,
   removeBehavior,
+  // UX views + elements (parity with the CLI BYOK editor)
+  addOrReplaceUx,
+  updateUx,
+  removeUx,
+  addOrReplaceElement,
+  removeElement,
   // tracking
   getTracking,
   updateTracking,
