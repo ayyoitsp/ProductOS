@@ -84,6 +84,18 @@ header.feature .feature-title-row h1 { margin: 0; flex: 0 0 auto; }
 header.feature .feature-title-row .feature-id { color: var(--dim); font-family: var(--mono); font-size: 13px; flex: 1 1 auto; }
 header.feature .feature-title-row .feature-status { flex: 0 0 auto; }
 
+/* Interactive UX preview at the top of a feature page. */
+.ux-preview { background: var(--surface); border: 1px solid var(--surface-3); border-radius: 12px; padding: 16px 18px; margin: 8px 0 28px; }
+.ux-preview-title { font-weight: 600; font-size: 14px; color: var(--dim); margin-bottom: 8px; }
+.ux-preview-panel { display: none; }
+.ux-preview-panel.active { display: block; }
+.ux-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--surface-3); }
+.ux-tab { background: var(--surface-2); border: 1px solid var(--surface-3); border-radius: 6px; padding: 4px 12px; cursor: pointer; font: inherit; font-size: 12px; color: var(--text); }
+.ux-tab:hover { border-color: var(--accent); }
+.ux-tab.active { background: var(--accent); color: white; border-color: var(--accent); }
+.ux-jump { color: var(--accent); text-decoration: none; font-size: 12px; }
+.ux-jump:hover { text-decoration: underline; }
+
 .section-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 32px 0 12px; }
 .section-head h2 { margin: 0; }
 .section-head .rollup { margin: 0; }
@@ -296,6 +308,53 @@ function toast(msg) {
   requestAnimationFrame(() => t.classList.add('show'));
   setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 200); }, 1800);
 }
+
+// UX preview tab clicks — switch the visible panel inside .ux-preview.
+document.addEventListener('click', (e) => {
+  const tab = e.target.closest('.ux-tab');
+  if (!tab) return;
+  const targetId = tab.dataset.uxTarget;
+  if (!targetId) return;
+  const preview = tab.closest('.ux-preview');
+  if (!preview) return;
+  preview.querySelectorAll('.ux-tab').forEach((b) => b.classList.remove('active'));
+  preview.querySelectorAll('.ux-preview-panel').forEach((p) => p.classList.remove('active'));
+  tab.classList.add('active');
+  const panel = document.getElementById(targetId);
+  if (panel) panel.classList.add('active');
+});
+
+// Sketch link click handling.
+//   - Same-page anchor (#surface-X): if the target surface is also a tab in
+//     the UX preview, switch to that tab in-place instead of scrolling.
+//   - Cross-feature (/area/feature...): confirm before navigating away.
+document.addEventListener('click', (e) => {
+  const a = e.target.closest('.sketch-anchor');
+  if (!a) return;
+  const href = a.getAttribute('href') || '';
+  if (href.startsWith('#surface-')) {
+    // Try to swap the UX preview tab to this surface if it lives in one.
+    const sid = href.slice('#surface-'.length);
+    const tab = document.querySelector('.ux-preview .ux-tab[data-ux-target="ux-preview-' + sid + '"]');
+    if (tab) {
+      e.preventDefault();
+      tab.click();
+      // also scroll the preview into view so the swap is visible
+      const preview = tab.closest('.ux-preview');
+      if (preview) preview.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      return;
+    }
+    // Otherwise the default anchor jump will take them down to the UX details card.
+    return;
+  }
+  // Cross-feature: confirm before navigating away.
+  if (href.startsWith('/') && href.length > 1) {
+    const title = a.getAttribute('title') || ('Open ' + href);
+    if (!confirm(title + '?')) {
+      e.preventDefault();
+    }
+  }
+});
 
 document.addEventListener('click', async (e) => {
   const btn = e.target.closest('[data-action]');
@@ -811,8 +870,19 @@ export function renderFeature(
   }
 
   const surfaceIdSet = new Set(surfaces.map((s) => s.id));
+
+  // Interactive UX preview at the top. Shows ONE UX view sketch prominently,
+  // initially the first one. Click an element to navigate:
+  //   - Same-feature surface anchor (#surface-X) → swaps the preview to that UX
+  //   - Cross-feature (/area/feature...) → confirm dialog before navigating away
+  // Also has a small tab strip listing all UX views in this feature for
+  // explicit switching, and a "Jump to UX details ↓" link to the bottom section.
+  const uxPreviewBlock = surfaces.length
+    ? renderUxPreview(f.id, surfaces, surfaceIdSet, surfaceIndex)
+    : "";
+
   const surfacesBlock = surfaces.length
-    ? `<div class="section-head"><h2>UX</h2>${rollup}</div><div class="surfaces">${surfaces.map((s) => renderSurfaceWithBehaviors(f.id, s, anchored.get(s.id) ?? [], tracking, surfaceIdSet, surfaceIndex)).join("\n")}</div>`
+    ? `<div class="section-head"><h2 id="ux-details">UX details</h2>${rollup}</div><div class="surfaces">${surfaces.map((s) => renderSurfaceWithBehaviors(f.id, s, anchored.get(s.id) ?? [], tracking, surfaceIdSet, surfaceIndex)).join("\n")}</div>`
     : "";
   const unanchoredHeading = surfaces.length ? "Rules & invariants" : "Behaviors";
   // When there are no surfaces, the rollup hasn't been shown yet — surface it on the Behaviors head.
@@ -844,9 +914,55 @@ export function renderFeature(
     ${description}
     ${overviewBody}
     ${affectedByBlock}
+    ${uxPreviewBlock}
     ${surfacesBlock}
     ${behaviorBlocks}
     ${renderFeedbackSection(f.id, undefined, "Feedback on this feature")}
+  `;
+}
+
+/**
+ * Top-of-feature interactive UX preview. Renders one UX view's sketch in a
+ * hero container, plus a small tab strip to switch between UX views, plus
+ * a "Jump to UX details" link pointing at the lower #ux-details section.
+ *
+ * Each UX view's sketch is pre-rendered into a hidden div; the active one
+ * is shown. JS in APP_JS handles tab clicks and intercepts cross-feature
+ * sketch-anchor clicks for a confirm dialog.
+ */
+function renderUxPreview(
+  featureId: string,
+  surfaces: Surface[],
+  surfaceIdsInFeature: Set<string>,
+  surfaceIndex: SurfaceIndex
+): string {
+  if (surfaces.length === 0) return "";
+  const tabs = surfaces
+    .map(
+      (s, i) =>
+        `<button class="ux-tab${i === 0 ? " active" : ""}" data-ux-target="ux-preview-${escape(s.id)}">${escape(s.title)}</button>`
+    )
+    .join("");
+  const panels = surfaces
+    .map((s, i) => {
+      const sketch = s.sketch
+        ? `<pre class="surface-sketch">${decorateSketch(s.sketch, s.elements, featureId, surfaceIdsInFeature, surfaceIndex)}</pre>`
+        : `<div class="empty-state">No sketch.</div>`;
+      return `<div class="ux-preview-panel${i === 0 ? " active" : ""}" id="ux-preview-${escape(s.id)}">
+        <div class="ux-preview-title">${escape(s.title)}</div>
+        ${sketch}
+      </div>`;
+    })
+    .join("\n");
+  return `
+    <div class="section-head">
+      <h2>UX</h2>
+      <a class="ux-jump" href="#ux-details">Jump to UX details ↓</a>
+    </div>
+    <section class="ux-preview" data-feature-id="${escape(featureId)}">
+      ${surfaces.length > 1 ? `<div class="ux-tabs">${tabs}</div>` : ""}
+      ${panels}
+    </section>
   `;
 }
 
