@@ -48,22 +48,31 @@ export const Element = z.object({
 export type Element = z.infer<typeof Element>;
 
 /**
- * A screen / page / modal / view within a Feature. Carries an ASCII
- * `sketch` for rough visual reference (NOT pixel-perfect — just enough
- * to show layout + interactions) and a list of named elements.
+ * A UX view within a Feature — a screen, modal, drawer, section, or any
+ * other piece of user interface that has its own identity. Carries an
+ * ASCII `sketch` for rough visual reference (NOT pixel-perfect — just
+ * enough to show layout + interactions) and a list of named elements.
  *
- * Behaviors anchor to a Surface (and optionally an Element + interaction)
+ * Behaviors anchor to a UxView (and optionally an Element + interaction)
  * via the `surface` / `element` / `interaction` fields on Behavior.
+ * (`surface` is the legacy field name on Behavior; kept for backward
+ * compatibility — the new word is "UX".)
+ *
+ * Internal type name stays UxView; YAML key on Feature is `ux` (with
+ * `surfaces` accepted as a legacy alias).
  */
-export const Surface = z.object({
-  id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/, "Surface ids must be kebab-case"),
+export const UxView = z.object({
+  id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/, "UX ids must be kebab-case"),
   title: z.string().min(1),
   path: z.string().optional(),
   sketch: z.string().optional(),
   notes: z.string().optional(),
   elements: z.array(Element).default([]),
 });
-export type Surface = z.infer<typeof Surface>;
+export type UxView = z.infer<typeof UxView>;
+/** Legacy alias — same shape, kept so existing imports keep working. */
+export const Surface = UxView;
+export type Surface = UxView;
 
 export const TestCaseLevel = z.enum(["unit", "integration", "api", "e2e"]);
 export type TestCaseLevel = z.infer<typeof TestCaseLevel>;
@@ -104,15 +113,20 @@ export const Behavior = z.object({
 });
 export type Behavior = z.infer<typeof Behavior>;
 
-export const FeatureFrontmatter = z.object({
+/**
+ * Backward-compat layer: existing markdown uses `surfaces:`; new markdown
+ * uses `ux:`. If both are present, `ux` wins. Done at the preprocess level
+ * so the Zod schema only knows about `ux`.
+ */
+const FeatureFrontmatterRaw = z.object({
   id: z.string().regex(/^[a-z0-9][a-z0-9/_-]*\/[a-z0-9][a-z0-9_-]*$/, "Must be area/slug"),
   title: z.string(),
   status: FeatureStatus.default("shipped"),
   description: z.string().optional(),
-  /** Screens / pages / modals the feature surfaces in the product. ASCII sketches +
-   *  named elements. Behaviors anchor to these by id. Optional — omit for features
-   *  that are pure invariants (no UI). */
-  surfaces: z.array(Surface).default([]),
+  /** UX views in this feature — screens, modals, sections, drawers, etc.
+   *  Each is sketched (ASCII) and has named elements. Behaviors anchor to
+   *  these by id. Optional — omit for pure invariant features (no UI). */
+  ux: z.array(UxView).default([]),
   /**
    * Other features whose user-facing triggers cause this feature's state to change.
    *
@@ -127,6 +141,21 @@ export const FeatureFrontmatter = z.object({
   affected_by: z.array(z.string()).default([]),
   behaviors: z.array(Behavior).default([]),
 });
+
+/**
+ * Feature frontmatter with backward compat: accept `surfaces:` as an alias
+ * for `ux:`. If both are present, `ux` wins (preprocess applies before
+ * validation, so the schema only sees `ux`).
+ */
+export const FeatureFrontmatter = z.preprocess((raw: unknown) => {
+  if (raw && typeof raw === "object") {
+    const r = raw as Record<string, unknown>;
+    if (r.ux === undefined && r.surfaces !== undefined) {
+      return { ...r, ux: r.surfaces };
+    }
+  }
+  return raw;
+}, FeatureFrontmatterRaw);
 export type FeatureFrontmatter = z.infer<typeof FeatureFrontmatter>;
 
 export interface FeatureDocument {
