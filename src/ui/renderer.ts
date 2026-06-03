@@ -84,9 +84,11 @@ header.feature .feature-title-row h1 { margin: 0; flex: 0 0 auto; }
 header.feature .feature-title-row .feature-id { color: var(--dim); font-family: var(--mono); font-size: 13px; flex: 1 1 auto; }
 header.feature .feature-title-row .feature-status { flex: 0 0 auto; }
 
-/* Interactive UX preview at the top of a feature page. */
+/* Interactive UX preview at the very top of a feature page (before description). */
+.ux-preview-h2 { margin: 24px 0 12px; }
 .ux-preview { background: var(--surface); border: 1px solid var(--surface-3); border-radius: 12px; padding: 16px 18px; margin: 8px 0 28px; }
-.ux-preview-title { font-weight: 600; font-size: 14px; color: var(--dim); margin-bottom: 8px; }
+.ux-preview-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 8px; flex-wrap: wrap; }
+.ux-preview-title { font-weight: 600; font-size: 14px; color: var(--dim); }
 .ux-preview-panel { display: none; }
 .ux-preview-panel.active { display: block; }
 .ux-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--surface-3); }
@@ -882,7 +884,7 @@ export function renderFeature(
     : "";
 
   const surfacesBlock = surfaces.length
-    ? `<div class="section-head"><h2 id="ux-details">UX details</h2>${rollup}</div><div class="surfaces">${surfaces.map((s) => renderSurfaceWithBehaviors(f.id, s, anchored.get(s.id) ?? [], tracking, surfaceIdSet, surfaceIndex)).join("\n")}</div>`
+    ? `<div class="section-head"><h2>UX details</h2>${rollup}</div><div class="surfaces">${surfaces.map((s) => renderSurfaceWithBehaviors(f.id, s, anchored.get(s.id) ?? [], tracking, surfaceIdSet, surfaceIndex)).join("\n")}</div>`
     : "";
   const unanchoredHeading = surfaces.length ? "Rules & invariants" : "Behaviors";
   // When there are no surfaces, the rollup hasn't been shown yet — surface it on the Behaviors head.
@@ -911,10 +913,10 @@ export function renderFeature(
       </div>
       ${implBlock}
     </header>
+    ${uxPreviewBlock}
     ${description}
     ${overviewBody}
     ${affectedByBlock}
-    ${uxPreviewBlock}
     ${surfacesBlock}
     ${behaviorBlocks}
     ${renderFeedbackSection(f.id, undefined, "Feedback on this feature")}
@@ -949,16 +951,16 @@ function renderUxPreview(
         ? `<pre class="surface-sketch">${decorateSketch(s.sketch, s.elements, featureId, surfaceIdsInFeature, surfaceIndex)}</pre>`
         : `<div class="empty-state">No sketch.</div>`;
       return `<div class="ux-preview-panel${i === 0 ? " active" : ""}" id="ux-preview-${escape(s.id)}">
-        <div class="ux-preview-title">${escape(s.title)}</div>
+        <div class="ux-preview-head">
+          <span class="ux-preview-title">${escape(s.title)}</span>
+          <a class="ux-jump" href="#surface-${escape(s.id)}">Jump to ${escape(s.title)} details ↓</a>
+        </div>
         ${sketch}
       </div>`;
     })
     .join("\n");
   return `
-    <div class="section-head">
-      <h2>UX</h2>
-      <a class="ux-jump" href="#ux-details">Jump to UX details ↓</a>
-    </div>
+    <h2 class="ux-preview-h2">UX</h2>
     <section class="ux-preview" data-feature-id="${escape(featureId)}">
       ${surfaces.length > 1 ? `<div class="ux-tabs">${tabs}</div>` : ""}
       ${panels}
