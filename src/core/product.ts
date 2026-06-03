@@ -180,16 +180,8 @@ export function productsRoot(paths: ProductosPaths): string {
   return path.join(paths.root, "products");
 }
 
-export function draftsRoot(paths: ProductosPaths): string {
-  return paths.draftsDir;
-}
-
 export function featureFilePath(paths: ProductosPaths, id: string): string {
   return path.join(productsRoot(paths), `${id}.md`);
-}
-
-export function draftFilePath(paths: ProductosPaths, id: string): string {
-  return path.join(draftsRoot(paths), `${id}.md`);
 }
 
 export function areaReadmePath(paths: ProductosPaths, area: string): string {
@@ -275,83 +267,6 @@ export function listAreas(paths: ProductosPaths): AreaDocument[] {
   }
   out.sort((a, b) => a.slug.localeCompare(b.slug));
   return out;
-}
-
-// ---------------------------------------------------------------------------
-// Drafts — proposals from `productos scan` or the Claude scope skill that
-// land in productos/drafts/ and wait for `productos review` to promote them.
-
-export function readDraftById(paths: ProductosPaths, id: string): FeatureDocument | null {
-  const fp = draftFilePath(paths, id);
-  if (!fs.existsSync(fp)) return null;
-  const raw = fs.readFileSync(fp, "utf-8");
-  const parsed = matter(raw);
-  const frontmatter = FeatureFrontmatter.parse(parsed.data);
-  return { frontmatter, body: parsed.content.trim(), filepath: fp, url_path: "/" + frontmatter.id };
-}
-
-export function listDrafts(paths: ProductosPaths): FeatureDocument[] {
-  const root = draftsRoot(paths);
-  if (!fs.existsSync(root)) return [];
-  const out: FeatureDocument[] = [];
-  walk(root, (file) => {
-    if (!file.endsWith(".md")) return;
-    if (path.basename(file).toLowerCase() === "readme.md") return;
-    try {
-      const raw = fs.readFileSync(file, "utf-8");
-      const parsed = matter(raw);
-      const frontmatter = FeatureFrontmatter.parse(parsed.data);
-      out.push({
-        frontmatter,
-        body: parsed.content.trim(),
-        filepath: file,
-        url_path: "/" + frontmatter.id,
-      });
-    } catch (e) {
-      process.stderr.write(
-        `productos: draft ${path.relative(paths.repoRoot, file)} failed to parse: ${(e as Error).message}\n`
-      );
-    }
-  });
-  out.sort((a, b) => a.frontmatter.id.localeCompare(b.frontmatter.id));
-  return out;
-}
-
-export function writeDraft(paths: ProductosPaths, doc: FeatureDocument): string {
-  const fp = draftFilePath(paths, doc.frontmatter.id);
-  fs.mkdirSync(path.dirname(fp), { recursive: true });
-  const fm = YAML.stringify(doc.frontmatter, { lineWidth: 0, blockQuote: "literal" });
-  fs.writeFileSync(fp, `---\n${fm}---\n\n${doc.body.trim()}\n`, "utf-8");
-  return fp;
-}
-
-/**
- * Move a draft from productos/drafts/<id>.md to productos/products/<id>.md.
- * Refuses if the target already exists (use `force` to overwrite — that path
- * is reserved for an explicit human "I want to replace the canonical truth").
- */
-export function promoteDraft(
-  paths: ProductosPaths,
-  id: string,
-  opts: { force?: boolean } = {}
-): { from: string; to: string } {
-  const from = draftFilePath(paths, id);
-  const to = featureFilePath(paths, id);
-  if (!fs.existsSync(from)) throw new Error(`No draft at ${path.relative(paths.repoRoot, from)}`);
-  if (fs.existsSync(to) && !opts.force) {
-    throw new Error(
-      `Refusing to overwrite ${path.relative(paths.repoRoot, to)}. Pass force=true to replace.`
-    );
-  }
-  fs.mkdirSync(path.dirname(to), { recursive: true });
-  fs.renameSync(from, to);
-  return { from, to };
-}
-
-export function discardDraft(paths: ProductosPaths, id: string): void {
-  const fp = draftFilePath(paths, id);
-  if (!fs.existsSync(fp)) throw new Error(`No draft at ${path.relative(paths.repoRoot, fp)}`);
-  fs.unlinkSync(fp);
 }
 
 // ---------------------------------------------------------------------------

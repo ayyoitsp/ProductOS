@@ -17,7 +17,7 @@ import { runScan } from "../../byok/scan.js";
  */
 export function scanCommand(): Command {
   return new Command("scan")
-    .description("Run an LLM-driven scan of the codebase to propose a Product Truth feature draft (requires BYOK)")
+    .description("Run an LLM-driven scan of the codebase to create a new Product Truth feature, then drop into `productos review` (requires BYOK)")
     .argument("<feature_id>", "Feature id, e.g. wallet/add-kid")
     .argument("<hint...>", 'Freeform description, e.g. "user adds a kid via family settings"')
     .option("--no-review", "Don't drop into `productos review` after the scan; just leave the draft")
@@ -63,7 +63,7 @@ export function scanCommand(): Command {
       spin.stop("Scan complete.");
 
       if (result.kind === "proposed") {
-        console.log(pc.green("✓"), `Drafted ${result.feature_id}`);
+        console.log(pc.green("✓"), `Wrote ${result.feature_id}`);
         console.log(pc.dim(`Tool calls: ${result.ops.join(", ")}`));
         if (result.summary) {
           console.log("");
@@ -75,7 +75,7 @@ export function scanCommand(): Command {
           await chainIntoReview(result.feature_id);
         } else {
           console.log("");
-          console.log(pc.dim("Draft saved to productos/drafts/. Review with:"));
+          console.log(pc.dim("Review interactively any time:"));
           console.log(pc.dim(`  productos review ${result.feature_id}`));
         }
       } else if (result.kind === "needs_review") {

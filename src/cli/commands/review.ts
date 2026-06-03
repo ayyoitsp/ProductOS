@@ -7,179 +7,165 @@ import pc from "picocolors";
 import * as p from "@clack/prompts";
 import matter from "gray-matter";
 import YAML from "yaml";
-import { resolvePathsOrThrow } from "../../core/paths.js";
+import { resolvePathsOrThrow, ProductosPaths } from "../../core/paths.js";
 import {
-  Behavior,
   FeatureDocument,
   FeatureFrontmatter,
-  UxView,
-  discardDraft,
-  draftFilePath,
-  listDrafts,
-  promoteDraft,
-  readDraftById,
+  featureFilePath,
+  listFeatures,
   readFeatureById,
-  writeDraft,
+  writeFeature,
 } from "../../core/product.js";
 
 /**
- * Interactive review for a proposed feature draft.
+ * Interactive review/edit for a feature.
  *
- * Drafts come from either `productos scan` (BYOK) or the Claude scope skill
- * (via the MCP write_draft_feature tool). Both write to productos/drafts/.
- * This command shows the draft as formatted text, lets the human keep/drop
- * individual UX views + behaviors, optionally open the whole draft in
- * $EDITOR for free-form changes, then accept (promote to products/) or
- * discard.
+ * The file at productos/products/<id>.md IS the feature. There's no draft
+ * layer. Review opens it, lets the human trim behaviors/UX views or open
+ * the file in $EDITOR, and writes changes back to the same file. Git is
+ * the commit boundary — re-run review as often as you want before
+ * committing.
+ *
+ * If no feature_id is given, list features sorted by recent edits.
  */
 export function reviewCommand(): Command {
   return new Command("review")
-    .description("Interactively review a draft feature (from `productos scan` or the Claude scope skill) and promote it to product truth")
+    .description("Interactively review and edit a feature in productos/products/")
     .argument("[feature_id]", "Feature id like 'wallet/add-kid'. If omitted, pick from a list.")
-    .option("--accept", "Skip the interactive flow and accept the draft as-is")
-    .option("--discard", "Skip the interactive flow and discard the draft")
-    .action(async (featureIdArg: string | undefined, opts: { accept?: boolean; discard?: boolean }) => {
+    .action(async (featureIdArg: string | undefined) => {
       const paths = resolvePathsOrThrow();
-
-      const drafts = listDrafts(paths);
-      if (drafts.length === 0) {
-        console.log(pc.dim("No drafts in productos/drafts/. Run `productos scan ...` first, or ask Claude to scope a feature."));
-        return;
-      }
 
       let featureId = featureIdArg;
       if (!featureId) {
-        if (drafts.length === 1) {
-          featureId = drafts[0].frontmatter.id;
-          console.log(pc.dim(`Only one draft: ${featureId}`));
-        } else {
-          const picked = await p.select<string>({
-            message: "Which draft do you want to review?",
-            options: drafts.map((d) => ({
-              value: d.frontmatter.id,
-              label: d.frontmatter.id,
-              hint: d.frontmatter.title,
-            })),
-          });
-          if (p.isCancel(picked)) {
-            p.cancel("Canceled.");
-            return;
-          }
-          featureId = picked;
+        const features = listFeatures(paths);
+        if (features.length === 0) {
+          console.log(pc.dim("No features yet. Run `productos scan <area/slug> \"<hint>\"` to create one, or ask Claude to scope a feature."));
+          return;
         }
+        // Sort by mtime, most recent first — "what did I just touch" UX.
+        const withMtime = features.map((f) => ({
+          f,
+          mtime: fs.statSync(f.filepath).mtimeMs,
+        }));
+        withMtime.sort((a, b) => b.mtime - a.mtime);
+
+        const picked = await p.select<string>({
+          message: "Which feature do you want to review?",
+          options: withMtime.slice(0, 30).map(({ f }) => ({
+            value: f.frontmatter.id,
+            label: f.frontmatter.id,
+            hint: f.frontmatter.title,
+          })),
+        });
+        if (p.isCancel(picked)) {
+          p.cancel("Canceled.");
+          return;
+        }
+        featureId = picked;
       }
 
-      const draft = readDraftById(paths, featureId);
-      if (!draft) {
-        console.error(pc.red("✗"), `No draft at ${path.relative(paths.repoRoot, draftFilePath(paths, featureId))}`);
+      const feature = readFeatureById(paths, featureId);
+      if (!feature) {
+        console.error(pc.red("✗"), `No feature at ${path.relative(paths.repoRoot, featureFilePath(paths, featureId))}`);
+        console.error(pc.dim(`Create it: productos scan ${featureId} "<hint>"`));
         process.exit(1);
       }
 
-      if (opts.discard) {
-        discardDraft(paths, featureId);
-        console.log(pc.green("✓"), `Discarded draft for ${featureId}`);
-        return;
-      }
-      if (opts.accept) {
-        await acceptDraft(paths, draft);
-        return;
-      }
-
-      await interactiveReview(paths, draft);
+      await interactiveReview(paths, feature);
     });
 }
 
-async function interactiveReview(paths: ReturnType<typeof resolvePathsOrThrow>, draftIn: FeatureDocument): Promise<void> {
-  // Working copy — kept in memory until we save it back to the draft file.
-  let draft = draftIn;
+async function interactiveReview(paths: ProductosPaths, featureIn: FeatureDocument): Promise<void> {
+  // Working copy — kept in memory until the user saves it.
+  let feature = featureIn;
+  let dirty = false;
 
   while (true) {
-    printDraft(draft);
+    printFeature(feature);
 
     const choice = await p.select<string>({
-      message: "What next?",
+      message: dirty ? pc.yellow("Unsaved changes. What next?") : "What next?",
       options: [
-        { value: "behaviors", label: "Trim behaviors", hint: `${draft.frontmatter.behaviors.length} declared` },
-        { value: "ux", label: "Trim UX views", hint: `${draft.frontmatter.ux.length} declared` },
-        { value: "editor", label: "Open the whole draft in $EDITOR" },
-        { value: "accept", label: "Accept — promote to products/" },
-        { value: "save", label: "Save changes to the draft (don't promote yet)" },
-        { value: "discard", label: pc.red("Discard the draft") },
-        { value: "quit", label: "Quit without saving" },
+        { value: "behaviors", label: "Trim behaviors", hint: `${feature.frontmatter.behaviors.length} declared` },
+        { value: "ux", label: "Trim UX views", hint: `${feature.frontmatter.ux.length} declared` },
+        { value: "editor", label: "Open in $EDITOR (full file)" },
+        ...(dirty
+          ? [{ value: "save", label: pc.green("Save changes") }]
+          : []),
+        { value: "quit", label: dirty ? pc.dim("Quit without saving") : "Quit" },
       ],
     });
     if (p.isCancel(choice) || choice === "quit") {
-      p.cancel("Left draft unchanged.");
+      if (dirty) {
+        const confirmed = await p.confirm({
+          message: "Discard unsaved changes?",
+          initialValue: false,
+        });
+        if (p.isCancel(confirmed) || !confirmed) continue;
+      }
       return;
     }
 
     if (choice === "behaviors") {
-      draft = await trimBehaviors(draft);
+      const next = await trimBehaviors(feature);
+      if (next !== feature) { feature = next; dirty = true; }
     } else if (choice === "ux") {
-      draft = await trimUx(draft);
+      const next = await trimUx(feature);
+      if (next !== feature) { feature = next; dirty = true; }
     } else if (choice === "editor") {
-      const edited = await editInEditor(paths, draft);
-      if (edited) draft = edited;
+      const edited = await editInEditor(paths, feature);
+      if (edited) { feature = edited; dirty = true; }
     } else if (choice === "save") {
-      writeDraft(paths, draft);
-      console.log(pc.green("✓"), `Saved draft. Run \`productos review ${draft.frontmatter.id}\` again to keep reviewing.`);
-      return;
-    } else if (choice === "discard") {
-      const confirmed = await p.confirm({ message: `Really discard the draft for ${draft.frontmatter.id}?`, initialValue: false });
-      if (p.isCancel(confirmed) || !confirmed) continue;
-      discardDraft(paths, draft.frontmatter.id);
-      console.log(pc.green("✓"), `Discarded.`);
-      return;
-    } else if (choice === "accept") {
-      // Save the working copy first, then promote.
-      writeDraft(paths, draft);
-      await acceptDraft(paths, draft);
-      return;
+      writeFeature(paths, feature);
+      dirty = false;
+      console.log(pc.green("✓"), `Saved ${path.relative(paths.repoRoot, feature.filepath || featureFilePath(paths, feature.frontmatter.id))}`);
     }
   }
 }
 
-async function trimBehaviors(draft: FeatureDocument): Promise<FeatureDocument> {
-  if (draft.frontmatter.behaviors.length === 0) {
+async function trimBehaviors(feature: FeatureDocument): Promise<FeatureDocument> {
+  if (feature.frontmatter.behaviors.length === 0) {
     p.log.info("No behaviors to trim.");
-    return draft;
+    return feature;
   }
   const kept = await p.multiselect<string>({
     message: "Keep which behaviors? (uncheck to drop)",
-    initialValues: draft.frontmatter.behaviors.map((b) => b.id),
-    options: draft.frontmatter.behaviors.map((b) => ({
+    initialValues: feature.frontmatter.behaviors.map((b) => b.id),
+    options: feature.frontmatter.behaviors.map((b) => ({
       value: b.id,
-      label: `${b.id}`,
+      label: b.id,
       hint: oneLine(b.claim),
     })),
     required: false,
   });
-  if (p.isCancel(kept)) return draft;
-  const next = { ...draft, frontmatter: { ...draft.frontmatter } };
-  next.frontmatter.behaviors = draft.frontmatter.behaviors.filter((b) => kept.includes(b.id));
+  if (p.isCancel(kept)) return feature;
+  if (kept.length === feature.frontmatter.behaviors.length) return feature;
+  const next: FeatureDocument = { ...feature, frontmatter: { ...feature.frontmatter } };
+  next.frontmatter.behaviors = feature.frontmatter.behaviors.filter((b) => kept.includes(b.id));
   return next;
 }
 
-async function trimUx(draft: FeatureDocument): Promise<FeatureDocument> {
-  if (draft.frontmatter.ux.length === 0) {
+async function trimUx(feature: FeatureDocument): Promise<FeatureDocument> {
+  if (feature.frontmatter.ux.length === 0) {
     p.log.info("No UX views to trim.");
-    return draft;
+    return feature;
   }
   const kept = await p.multiselect<string>({
     message: "Keep which UX views? (uncheck to drop)",
-    initialValues: draft.frontmatter.ux.map((u) => u.id),
-    options: draft.frontmatter.ux.map((u) => ({
+    initialValues: feature.frontmatter.ux.map((u) => u.id),
+    options: feature.frontmatter.ux.map((u) => ({
       value: u.id,
-      label: `${u.id}`,
+      label: u.id,
       hint: oneLine(u.title),
     })),
     required: false,
   });
-  if (p.isCancel(kept)) return draft;
-  const next = { ...draft, frontmatter: { ...draft.frontmatter } };
-  next.frontmatter.ux = draft.frontmatter.ux.filter((u) => kept.includes(u.id));
-  // Any behaviors that anchored to a dropped UX view stay — but their
-  // `surface` reference now dangles. Clear it so the schema stays clean.
+  if (p.isCancel(kept)) return feature;
+  if (kept.length === feature.frontmatter.ux.length) return feature;
+  const next: FeatureDocument = { ...feature, frontmatter: { ...feature.frontmatter } };
+  next.frontmatter.ux = feature.frontmatter.ux.filter((u) => kept.includes(u.id));
+  // Any behaviors that anchored to a dropped UX view now dangle — clear
+  // the anchor so the schema stays clean.
   const remainingIds = new Set(next.frontmatter.ux.map((u) => u.id));
   next.frontmatter.behaviors = next.frontmatter.behaviors.map((b) =>
     b.surface && !remainingIds.has(b.surface) ? { ...b, surface: undefined, element: undefined } : b
@@ -187,11 +173,11 @@ async function trimUx(draft: FeatureDocument): Promise<FeatureDocument> {
   return next;
 }
 
-async function editInEditor(paths: ReturnType<typeof resolvePathsOrThrow>, draft: FeatureDocument): Promise<FeatureDocument | null> {
+async function editInEditor(paths: ProductosPaths, feature: FeatureDocument): Promise<FeatureDocument | null> {
   const editor = process.env.EDITOR || process.env.VISUAL || "vi";
-  const tmp = path.join(os.tmpdir(), `productos-review-${draft.frontmatter.id.replace(/[\/]/g, "-")}-${Date.now()}.md`);
-  const fmStr = YAML.stringify(draft.frontmatter, { lineWidth: 0, blockQuote: "literal" });
-  fs.writeFileSync(tmp, `---\n${fmStr}---\n\n${draft.body.trim()}\n`, "utf-8");
+  const tmp = path.join(os.tmpdir(), `productos-review-${feature.frontmatter.id.replace(/[\/]/g, "-")}-${Date.now()}.md`);
+  const fmStr = YAML.stringify(feature.frontmatter, { lineWidth: 0, blockQuote: "literal" });
+  fs.writeFileSync(tmp, `---\n${fmStr}---\n\n${feature.body.trim()}\n`, "utf-8");
 
   await new Promise<void>((resolve, reject) => {
     const child = spawn(editor, [tmp], { stdio: "inherit" });
@@ -206,40 +192,19 @@ async function editInEditor(paths: ReturnType<typeof resolvePathsOrThrow>, draft
     const parsed = matter(raw);
     const fm = FeatureFrontmatter.parse(parsed.data);
     fs.unlinkSync(tmp);
-    return { ...draft, frontmatter: fm, body: parsed.content.trim() };
+    return { ...feature, frontmatter: fm, body: parsed.content.trim() };
   } catch (e) {
-    p.log.error(`Couldn't parse edited draft: ${(e as Error).message}`);
+    p.log.error(`Couldn't parse edited file: ${(e as Error).message}`);
     p.log.warn(`Your edits are preserved at ${path.relative(paths.repoRoot, tmp)} — fix the YAML and re-run review.`);
     return null;
   }
 }
 
-async function acceptDraft(paths: ReturnType<typeof resolvePathsOrThrow>, draft: FeatureDocument): Promise<void> {
-  // If the canonical already exists, force-overwrite requires a confirm.
-  const existing = readFeatureById(paths, draft.frontmatter.id);
-  if (existing) {
-    const force = await p.confirm({
-      message: `${draft.frontmatter.id} already exists in products/. Overwrite with the draft?`,
-      initialValue: false,
-    });
-    if (p.isCancel(force) || !force) {
-      p.cancel("Canceled — draft kept in drafts/.");
-      return;
-    }
-    const { to } = promoteDraft(paths, draft.frontmatter.id, { force: true });
-    console.log(pc.green("✓"), `Replaced ${path.relative(paths.repoRoot, to)} from draft.`);
-  } else {
-    const { to } = promoteDraft(paths, draft.frontmatter.id);
-    console.log(pc.green("✓"), `Promoted draft → ${path.relative(paths.repoRoot, to)}`);
-  }
-  console.log(pc.dim("View it: productos serve"));
-}
-
 // ---------------------------------------------------------------------------
-// Pretty printer for the draft
+// Pretty printer
 
-function printDraft(draft: FeatureDocument): void {
-  const fm = draft.frontmatter;
+function printFeature(feature: FeatureDocument): void {
+  const fm = feature.frontmatter;
   console.log("");
   console.log(pc.bold(pc.cyan(fm.title)) + pc.dim(`  ${fm.id}`));
   console.log(pc.dim(`  status: ${fm.status}`));
@@ -285,7 +250,3 @@ function oneLine(s: string, max = 80): string {
   if (trimmed.length <= max) return trimmed;
   return trimmed.slice(0, max - 1) + "…";
 }
-
-// Suppress unused-warning for types that are only referenced via inference
-void Behavior;
-void UxView;

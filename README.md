@@ -129,9 +129,8 @@ productos doctor                     # check install, runtime, env, product-trut
 | --- | --- |
 | `productos_list_areas` / `productos_list_features` | Discover what already exists |
 | `productos_get_feature` | Read a feature's behaviors + body before updating |
-| `productos_propose_feature` | Propose a NEW feature — writes a draft to productos/drafts/, human runs `productos review` to promote |
-| `productos_list_drafts` | List drafts awaiting review |
-| `productos_update_feature` | Update metadata/body of an existing (already promoted) feature |
+| `productos_propose_feature` | Create a NEW feature at productos/products/ — human runs `productos review <id>` to edit interactively |
+| `productos_update_feature` | Update metadata/body of an existing feature |
 | `productos_add_behavior` / `_update_behavior` / `_remove_behavior` | Modify individual behaviors on an existing feature |
 | `productos_attach_evidence` | Add evidence (code ref, response capture, screenshot, narrative, trace) to a behavior |
 | `productos_get_env` | Read dev-env config (services, healthcheck, etc.) |
