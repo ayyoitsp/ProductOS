@@ -176,15 +176,24 @@ Don't pick silently. Surface ambiguity:
 
 Wait for answers. The answers go into the claim text or the notes — explicit, captured forever.
 
-### 5. Write product truth
+### 5. Write the feature draft (NOT live product truth)
 
-Call `productos_propose_feature` with:
+Call `productos_write_draft_feature` — NOT `productos_propose_feature`. New features land in `productos/drafts/<id>.md` and wait for the human to run `productos review <id>` in their terminal. That command shows them the draft, lets them trim behaviors/UX views or open the file in `$EDITOR`, then promotes it to `productos/products/<id>.md` (or discards it).
+
+Why drafts instead of writing canonical truth directly:
+- Scope is the highest-leverage moment of capture; the human MUST sign off before it becomes Product Truth others cite.
+- The draft surface is shared with the BYOK `productos scan` runner — same review UX, regardless of who proposed the feature.
+- A draft you wrote stays harmless if the human walks away — it isn't crawled by `productos serve`, doesn't affect gap reports.
+
+Pass to `productos_write_draft_feature`:
 
 - `id` like `checkout/index` or `wishlist/manage`
 - `title` in product language
 - `status: shipped` if the code exists; `planned` if pre-code
 - `description` (short paragraph)
-- `behaviors` array, each with `id`, `claim`, optional `notes`, and `test_cases` array
+- `ux` array — UX views with sketches + elements (see §3a)
+- `behaviors` array, each with `id`, `claim`, optional `surface`/`element`/`interaction`, optional `notes`, `test_cases` array
+- `affected_by` array — features whose triggers mutate this feature's state
 - `body` (the markdown after the frontmatter) is **OPTIONAL** and stays SHORT. Use it for product-language context that doesn't fit in the description — a sentence or two on who/when/why-this-feature-exists. **Don't write:**
   - Implementation rationale ("Why derived, not stored?", "Why this column?", "Why this algorithm?") — engineering discussion belongs in code comments / ADRs / PR descriptions, not the product spec
   - Out-of-scope sections that catalog what isn't here — the absence of behaviors IS the scope; surfaces/behaviors are the canonical statement of what's covered, and `affected_by` already names what triggers from elsewhere
@@ -192,7 +201,9 @@ Call `productos_propose_feature` with:
   - Lists of related features ("see also wallet/spend") — `affected_by` and feature links cover that
   Default to writing nothing in the body. If you can't summarize the feature in description + behaviors + surfaces alone, that's a signal the feature is doing too much.
 
-If the lifecycle is `shipped`, also call `productos_update_tracking` with the code paths you read:
+**Edits to an existing feature** still use `productos_propose_feature` / `productos_update_behavior` / `productos_add_behavior` directly — drafts are only for NEW features that the human hasn't seen yet.
+
+Tracking (code refs, status) is set AFTER the draft is promoted. If the lifecycle is `shipped`, you can call `productos_update_tracking` once the draft is accepted:
 
 - `implements: ["src/checkout/index.ts", ...]`
 - per-behavior: `code_refs: ["src/checkout/index.ts:42-78"]`, `status: "proposed"` (awaiting human acceptance)
@@ -226,18 +237,19 @@ Lenses to draw from (pick whichever fit the feature):
 
 ### 7. Hand off cleanly
 
-Tell the user where to vet AND surface the gap questions:
+Tell the user the draft is ready and surface the gap questions:
 
 ```
-I proposed N behaviors for <feature_id>. Vet them either:
+I drafted N behaviors for <feature_id>. The draft is at productos/drafts/<feature_id>.md
+— it isn't live Product Truth yet.
 
-  In Claude Code (inline, no context switch):
-    "Use productos-review on <feature_id>"
+Review it interactively in your terminal:
+  productos review <feature_id>
 
-  In the product-truth site:
-    Open http://localhost:7878/<feature_id>
+That command walks you through the UX views + behaviors, lets you trim or edit
+in $EDITOR, then promotes the draft to productos/products/.
 
-Potential gaps (questions, no Contracts written):
+Potential gaps (questions, no behaviors written for these):
   1. <gap question 1>
   2. <gap question 2>
   ...

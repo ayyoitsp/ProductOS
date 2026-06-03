@@ -4,10 +4,14 @@ import {
   Behavior,
   FeatureFrontmatter,
   FeatureStatus,
+  UxView,
   listAreas,
+  listDrafts,
   listFeatures,
   nowIso,
+  readDraftById,
   readFeatureById,
+  writeDraft,
   writeFeature,
 } from "../core/product.js";
 import {
@@ -200,7 +204,7 @@ const ProposeFeatureInput = z.object({
 const proposeFeature: McpTool = {
   name: "productos_propose_feature",
   description:
-    "Create or replace a feature's PRODUCT TRUTH file (claims, description, prose). To add code refs / implementation paths / verification status, use productos_update_tracking — those don't belong in product truth. Claims should be written in product language (what the user does, what the user sees), not in API/file/endpoint terms.",
+    "Create or replace a feature's PRODUCT TRUTH file (claims, description, prose). Use this for incremental edits to existing features. For NEW features that haven't been reviewed by a human yet, prefer productos_write_draft_feature — it lands in productos/drafts/ and waits for `productos review` to promote it. To add code refs / implementation paths / verification status, use productos_update_tracking — those don't belong in product truth. Claims should be written in product language (what the user does, what the user sees), not in API/file/endpoint terms.",
   inputSchema: zodToInputSchema(ProposeFeatureInput),
   handler: async (raw, paths) => {
     const args = ProposeFeatureInput.parse(raw);
@@ -213,6 +217,71 @@ const proposeFeature: McpTool = {
     });
     writeFeature(paths, { frontmatter: fm, body: args.body, filepath: "", url_path: "/" + args.id });
     return { ok: true, id: args.id };
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Drafts — proposals waiting for `productos review` to promote them.
+
+const WriteDraftFeatureInput = z.object({
+  id: z.string().regex(/^[a-z0-9][a-z0-9/_-]*\/[a-z0-9][a-z0-9_-]*$/, "Must be area/slug, e.g. 'auth/signup'"),
+  title: z.string().min(1),
+  status: FeatureStatus.default("planned"),
+  description: z.string().optional(),
+  ux: z.array(UxView).default([]),
+  behaviors: z.array(Behavior).default([]),
+  affected_by: z.array(z.string()).default([]),
+  body: z.string().default(""),
+});
+
+const writeDraftFeature: McpTool = {
+  name: "productos_write_draft_feature",
+  description:
+    "Write a NEW feature draft to productos/drafts/<id>.md. The draft is NOT live Product Truth yet — a human runs `productos review <id>` to inspect, trim, edit, and promote it. Use this from a scope/scan flow to propose a fresh feature for human approval. Refuses if a canonical or draft for the id already exists.",
+  inputSchema: zodToInputSchema(WriteDraftFeatureInput),
+  handler: async (raw, paths) => {
+    const args = WriteDraftFeatureInput.parse(raw);
+    if (readFeatureById(paths, args.id)) {
+      throw new Error(`Feature ${args.id} already exists in products/ — edit it directly via productos_update_feature / productos_update_behavior, don't draft.`);
+    }
+    if (readDraftById(paths, args.id)) {
+      throw new Error(`A draft for ${args.id} already exists. Ask the user to run \`productos review ${args.id}\` or discard the existing draft first.`);
+    }
+    const fm = FeatureFrontmatter.parse({
+      id: args.id,
+      title: args.title,
+      status: args.status,
+      description: args.description,
+      ux: args.ux,
+      behaviors: args.behaviors,
+      affected_by: args.affected_by,
+    });
+    writeDraft(paths, { frontmatter: fm, body: args.body, filepath: "", url_path: "/" + args.id });
+    return {
+      ok: true,
+      id: args.id,
+      next_step: `Tell the human: \`productos review ${args.id}\` to inspect, trim, and promote.`,
+    };
+  },
+};
+
+const listDraftsTool: McpTool = {
+  name: "productos_list_drafts",
+  description:
+    "List feature drafts in productos/drafts/ that are waiting for `productos review`. Returns id, title, status, and behavior/ux counts per draft. Useful for checking whether a previous scope/scan run already left a draft.",
+  inputSchema: zodToInputSchema(z.object({})),
+  handler: async (_raw, paths) => {
+    const drafts = listDrafts(paths);
+    return {
+      count: drafts.length,
+      drafts: drafts.map((d) => ({
+        id: d.frontmatter.id,
+        title: d.frontmatter.title,
+        status: d.frontmatter.status,
+        ux_count: d.frontmatter.ux.length,
+        behavior_count: d.frontmatter.behaviors.length,
+      })),
+    };
   },
 };
 
@@ -688,6 +757,9 @@ export const tools: McpTool[] = [
   addBehavior,
   updateBehavior,
   removeBehavior,
+  // drafts (proposals awaiting `productos review`)
+  writeDraftFeature,
+  listDraftsTool,
   // tracking
   getTracking,
   updateTracking,
