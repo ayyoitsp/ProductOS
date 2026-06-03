@@ -236,7 +236,7 @@ async function pickModelFor(provider: ByokProvider, currentModel: string | undef
 
 async function configureCodeScanning(config: ProductosConfig): Promise<void> {
   p.log.info(
-    "Code scanning is how ProductOS analyzes your codebase to propose features, behaviors, and tracking. Today: Claude Code (via the productos-fullscan / productos-scope skills + MCP). Codex/Cursor/Devin adapters are coming."
+    "Code scanning is how ProductOS analyzes your codebase to propose features. Claude Code: uses your existing session + skills. BYOK: productos itself runs the scan via a registered provider (productos scan ...). Codex adapter coming."
   );
 
   const handler = await p.select<CodeScanningHandler>({
@@ -244,6 +244,7 @@ async function configureCodeScanning(config: ProductosConfig): Promise<void> {
     initialValue: config.operations.code_scanning.handler,
     options: [
       { value: "claude", label: "Claude Code", hint: "uses your existing Claude Code session + skill" },
+      { value: "byok", label: "BYOK", hint: "productos scan runs an LLM-driven scan via a registered provider" },
       { value: "codex", label: "Codex (coming soon)", hint: "adapter not yet shipped — selection is recorded for when it lands" },
       { value: "manual", label: "Manual", hint: "no AI assistance — you write product truth by hand" },
     ],
@@ -253,6 +254,69 @@ async function configureCodeScanning(config: ProductosConfig): Promise<void> {
     process.exit(0);
   }
   config.operations.code_scanning.handler = handler;
+
+  if (handler === "byok") {
+    await configureCodeScanningOverride(config);
+  } else {
+    delete config.operations.code_scanning.byok;
+  }
+}
+
+async function configureCodeScanningOverride(config: ProductosConfig): Promise<void> {
+  const registered = (Object.keys(config.byok.providers) as ByokProvider[]);
+  if (registered.length === 0) {
+    p.log.warn(
+      pc.yellow("No BYOK providers registered yet. Set up at least one via the BYOK section first.")
+    );
+    await configureByokProviders(config);
+    return configureCodeScanningOverride(config);
+  }
+
+  const ov = config.operations.code_scanning.byok ?? {};
+  const currentProvider = ov.provider ?? config.byok.active;
+
+  const useActive = await p.confirm({
+    message: `Use the active provider (${PROVIDER_LABELS[config.byok.active]})?`,
+    initialValue: !ov.provider,
+  });
+  if (p.isCancel(useActive)) {
+    p.cancel("Canceled.");
+    process.exit(0);
+  }
+
+  if (useActive) {
+    delete config.operations.code_scanning.byok;
+    return;
+  }
+
+  const provider = await p.select<ByokProvider>({
+    message: "Which registered provider should code scanning use?",
+    initialValue: registered.includes(currentProvider) ? currentProvider : registered[0],
+    options: registered.map((id) => ({
+      value: id,
+      label: PROVIDER_LABELS[id],
+      hint: `default model: ${config.byok.providers[id]!.default_model}`,
+    })),
+  });
+  if (p.isCancel(provider)) {
+    p.cancel("Canceled.");
+    process.exit(0);
+  }
+
+  const overrideModel = await p.confirm({
+    message: `Override the model? (leave off to use ${config.byok.providers[provider]!.default_model})`,
+    initialValue: !!ov.model,
+  });
+  if (p.isCancel(overrideModel)) {
+    p.cancel("Canceled.");
+    process.exit(0);
+  }
+
+  const override: { provider: ByokProvider; model?: string } = { provider };
+  if (overrideModel) {
+    override.model = await pickModelFor(provider, ov.model ?? config.byok.providers[provider]!.default_model);
+  }
+  config.operations.code_scanning.byok = override;
 }
 
 // ---------------------------------------------------------------------------
@@ -363,7 +427,19 @@ function describeConfig(config: ProductosConfig): string {
   }
 
   const cs = config.operations.code_scanning;
-  lines.push(`${pc.bold("Code scanning:")}      ${labelForCodeScanning(cs.handler)}`);
+  if (cs.handler === "byok") {
+    const ov = cs.byok ?? {};
+    const provider = ov.provider ?? config.byok.active;
+    const reg = config.byok.providers[provider];
+    if (!reg) {
+      lines.push(`${pc.bold("Code scanning:")}      BYOK (${provider} — ${pc.red("provider not registered")})`);
+    } else {
+      const model = ov.model ?? reg.default_model;
+      lines.push(`${pc.bold("Code scanning:")}      BYOK (${PROVIDER_LABELS[provider]} / ${model})`);
+    }
+  } else {
+    lines.push(`${pc.bold("Code scanning:")}      ${labelForCodeScanning(cs.handler)}`);
+  }
 
   const tv = config.operations.truth_verification;
   if (tv.handler === "byok") {
@@ -387,5 +463,6 @@ function describeConfig(config: ProductosConfig): string {
 function labelForCodeScanning(h: CodeScanningHandler): string {
   if (h === "claude") return "Claude Code";
   if (h === "codex") return "Codex (waiting on adapter)";
+  if (h === "byok") return "BYOK";
   return "Manual";
 }
