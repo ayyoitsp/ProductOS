@@ -596,17 +596,29 @@ function decorateSketch(sketch: string, elements: Element[]): string {
 }
 
 function resolveLeadsTo(leadsTo: string): string | null {
+  // Normalize common malformed inputs the skill might write:
+  //   "/add-kid"  → "add-kid"           (treat as a surface id on the same page)
+  //   "https://example.com/cart"        → reject (external URL, never valid)
+  //   trailing slashes / whitespace     → strip
+  let s = leadsTo.trim();
+  if (!s) return null;
+  if (/^https?:\/\//i.test(s)) return null;
+  // Strip ONE leading slash (a common AI mistake — they write a path-shape).
+  if (s.startsWith("/")) s = s.slice(1);
+  s = s.replace(/\/+$/, "");
+  if (!s) return null;
+
   // "feature_id#surface-id" — cross-feature + surface anchor
-  const hashIdx = leadsTo.indexOf("#");
-  if (hashIdx > 0 && leadsTo.includes("/", 0)) {
-    const feat = leadsTo.slice(0, hashIdx);
-    const sid = leadsTo.slice(hashIdx + 1);
+  const hashIdx = s.indexOf("#");
+  if (hashIdx > 0 && s.includes("/")) {
+    const feat = s.slice(0, hashIdx);
+    const sid = s.slice(hashIdx + 1);
     return `/${feat}#surface-${sid}`;
   }
   // "area/feature" — cross-feature page
-  if (leadsTo.includes("/")) return `/${leadsTo}`;
+  if (s.includes("/")) return `/${s}`;
   // "surface-id" — same-page anchor
-  return `#surface-${leadsTo}`;
+  return `#surface-${s}`;
 }
 
 function slugify(s: string): string {
