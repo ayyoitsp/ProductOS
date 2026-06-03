@@ -1,10 +1,11 @@
 import { generateText, stepCountIs, tool, type LanguageModel } from "ai";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
+import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { z } from "zod";
 import YAML from "yaml";
 import { ProductosPaths } from "../core/paths.js";
-import { ByokConfig } from "../core/config.js";
+import { ResolvedByok } from "../core/config.js";
 import { FeedbackEntry } from "../core/feedback.js";
 import { readFeatureById, writeFeature, Behavior } from "../core/product.js";
 import {
@@ -59,7 +60,7 @@ Be concise. Trust the human's framing of the feedback.`;
 export async function processFeedback(
   entry: FeedbackEntry,
   paths: ProductosPaths,
-  byok: ByokConfig
+  byok: ResolvedByok
 ): Promise<ProcessResult> {
   const apiKey = process.env[byok.api_key_env];
   if (!apiKey) {
@@ -209,16 +210,14 @@ export async function processFeedback(
   }
 }
 
-function pickModel(byok: ByokConfig, apiKey: string): LanguageModel {
+function pickModel(byok: ResolvedByok, apiKey: string): LanguageModel {
   switch (byok.provider) {
     case "anthropic":
       return createAnthropic({ apiKey })(byok.model);
     case "openai":
       return createOpenAI({ apiKey })(byok.model);
     case "google":
-      throw new Error(
-        "google provider not yet wired — install @ai-sdk/google and extend src/byok/processor.ts"
-      );
+      return createGoogleGenerativeAI({ apiKey })(byok.model);
     case "openrouter":
       // OpenRouter is OpenAI-compatible; point at its base URL.
       return createOpenAI({

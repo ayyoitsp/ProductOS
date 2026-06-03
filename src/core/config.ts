@@ -14,16 +14,85 @@ export const ByokProvider = z.enum(["anthropic", "openai", "google", "openrouter
 export type ByokProvider = z.infer<typeof ByokProvider>;
 
 /**
- * Default BYOK config — operations that select handler='byok' inherit from
- * here unless they override the fields locally.
+ * One registered provider — the env var that holds its key, plus the model
+ * to use by default whenever this provider is picked. Operations can
+ * override the model per-op without re-registering the provider.
  */
-export const ByokConfig = z.object({
-  provider: ByokProvider.default("anthropic"),
-  api_key_env: z.string().default("ANTHROPIC_API_KEY"),
-  model: z.string().default("claude-sonnet-4-6"),
+export const ByokProviderConfig = z.object({
+  api_key_env: z.string(),
+  default_model: z.string(),
+});
+export type ByokProviderConfig = z.infer<typeof ByokProviderConfig>;
+
+const ByokProvidersMap = z.object({
+  anthropic: ByokProviderConfig.optional(),
+  openai: ByokProviderConfig.optional(),
+  google: ByokProviderConfig.optional(),
+  openrouter: ByokProviderConfig.optional(),
+});
+export type ByokProvidersMap = z.infer<typeof ByokProvidersMap>;
+
+/**
+ * BYOK registry: multiple providers can be configured simultaneously
+ * (each with its own key env var + default model). One is marked `active`
+ * and serves as the default for any operation set to handler='byok'.
+ * Operations can override `provider` / `model` per-op.
+ *
+ * Backwards compat: the legacy flat shape (`provider`, `api_key_env`,
+ * `model` at the top of `byok:`) is migrated into the registry by the
+ * preprocess below, so existing configs keep working without manual edits.
+ */
+const ByokConfigInner = z.object({
+  active: ByokProvider.default("anthropic"),
+  providers: ByokProvidersMap.default({}),
   max_steps: z.number().default(5),
 });
-export type ByokConfig = z.infer<typeof ByokConfig>;
+
+export const ByokConfig = z.preprocess((raw: unknown) => {
+  if (!raw || typeof raw !== "object") return raw;
+  const r = raw as Record<string, unknown>;
+  // New shape already — leave it alone.
+  if (r.providers !== undefined || r.active !== undefined) return raw;
+  // Legacy flat shape — migrate.
+  const provider = (typeof r.provider === "string" ? r.provider : "anthropic") as ByokProvider;
+  const api_key_env = (typeof r.api_key_env === "string" ? r.api_key_env : defaultKeyEnvFor(provider));
+  const default_model = (typeof r.model === "string" ? r.model : defaultModelFor(provider));
+  return {
+    active: provider,
+    providers: { [provider]: { api_key_env, default_model } },
+    max_steps: typeof r.max_steps === "number" ? r.max_steps : 5,
+  };
+}, ByokConfigInner);
+export type ByokConfig = z.infer<typeof ByokConfigInner>;
+
+/**
+ * Resolved BYOK config — the shape the processor consumes. Always has
+ * provider/api_key_env/model/max_steps filled in.
+ */
+export interface ResolvedByok {
+  provider: ByokProvider;
+  api_key_env: string;
+  model: string;
+  max_steps: number;
+}
+
+export function defaultKeyEnvFor(provider: ByokProvider): string {
+  switch (provider) {
+    case "anthropic": return "ANTHROPIC_API_KEY";
+    case "openai": return "OPENAI_API_KEY";
+    case "google": return "GOOGLE_GENERATIVE_AI_API_KEY";
+    case "openrouter": return "OPENROUTER_API_KEY";
+  }
+}
+
+export function defaultModelFor(provider: ByokProvider): string {
+  switch (provider) {
+    case "anthropic": return "claude-sonnet-4-6";
+    case "openai": return "gpt-4o";
+    case "google": return "gemini-2.0-flash";
+    case "openrouter": return "anthropic/claude-sonnet-4-6";
+  }
+}
 
 /**
  * Per-operation handler. Each operation (code scanning, truth verification,
@@ -35,9 +104,12 @@ export type CodeScanningHandler = z.infer<typeof CodeScanningHandler>;
 export const TruthVerificationHandler = z.enum(["queue", "byok"]);
 export type TruthVerificationHandler = z.infer<typeof TruthVerificationHandler>;
 
+/**
+ * Per-op override. Keys come from the registry (`byok.providers[provider]`),
+ * so we only carry provider + model here.
+ */
 export const OperationByokOverride = z.object({
   provider: ByokProvider.optional(),
-  api_key_env: z.string().optional(),
   model: z.string().optional(),
 });
 
@@ -108,16 +180,24 @@ export function defaultConfigFor(opts: {
 
 /**
  * Resolve the effective BYOK config for a truth-verification operation that
- * has handler='byok'. Operation-level overrides take precedence; defaults
- * come from the top-level byok block.
+ * has handler='byok'. Operation-level overrides take precedence; if the
+ * override picks a provider, model falls back to that provider's
+ * `default_model`. Throws if the selected provider isn't registered.
  */
-export function resolveTruthVerificationByok(config: ProductosConfig): ByokConfig {
+export function resolveTruthVerificationByok(config: ProductosConfig): ResolvedByok {
   const op = config.operations.truth_verification;
   const ov = op.byok ?? {};
-  return ByokConfig.parse({
-    provider: ov.provider ?? config.byok.provider,
-    api_key_env: ov.api_key_env ?? config.byok.api_key_env,
-    model: ov.model ?? config.byok.model,
+  const provider = ov.provider ?? config.byok.active;
+  const reg = config.byok.providers[provider];
+  if (!reg) {
+    throw new Error(
+      `BYOK provider "${provider}" is selected for truth_verification but not registered in byok.providers. Run \`productos configure byok\` to add it.`
+    );
+  }
+  return {
+    provider,
+    api_key_env: reg.api_key_env,
+    model: ov.model ?? reg.default_model,
     max_steps: config.byok.max_steps,
-  });
+  };
 }
