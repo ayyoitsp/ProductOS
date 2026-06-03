@@ -57,24 +57,39 @@ After every successful edit, **re-render the feature** so the user always sees c
 
 The user might say:
 - "drop the second behavior" → `productos_remove_behavior(feature_id, behavior_id)`
-- "the leads_to on save-btn should point to confirmation-page" → load the UX view, update the element, write back with `productos_update_feature` (the feature update tools don't yet have element-level granularity, so re-propose the UX view via the proposal flow — see §3)
+- "the leads_to on save-btn should point to confirmation-page" → fetch the current element via the feature read, then `productos_add_or_replace_element(feature_id, ux_id, { id: "save-btn", kind: "button", label: "Save", leads_to: "confirmation-page" })`
+- "tweak the family-screen sketch — add a search row" → `productos_update_ux(feature_id, ux_id, { sketch: "<updated sketch>" })`
 - "add a behavior for the empty-state when there are no kids" → ask one clarifying question if needed (where does it anchor?), then `productos_add_behavior(feature_id, { id, claim, surface?, element?, interaction?, test_cases: [] })`
 - "rename this to 'Add a child'" → `productos_update_feature(id, { title: "Add a child" })`
 - "set the status to shipped" → `productos_update_feature(id, { status: "shipped" })`
+- "drop the family-screen view entirely" → `productos_remove_ux(feature_id, "family-screen")` — behaviors that anchored to it auto-clear their surface/element
 - "what other features anchor to family-settings?" → `productos_list_features`, filter, report — no edit
 
 If the request is ambiguous, **ask ONE clarifying question** and wait. Don't pick silently.
 
-### 3. Tools you actually have
+### 3. Tools you have
 
-The MCP surface for edits to an existing feature:
+**Read:**
+- `productos_get_feature({ id })` — returns `{ id, title, status, description, ux, behaviors, affected_by, body, tracking? }`. Call this once at the start (and again after each edit before re-rendering) so the user always sees current state.
 
-- `productos_update_feature({ id, title?, status?, description?, body? })` — top-level fields
+**Feature-level:**
+- `productos_update_feature({ id, title?, status?, description?, body? })`
+
+**Behaviors:**
 - `productos_add_behavior({ feature_id, behavior })` — full Behavior object
-- `productos_update_behavior({ feature_id, behavior_id, claim?, notes? })` — partial
+- `productos_update_behavior({ feature_id, behavior_id, claim?, notes?, surface?, element?, interaction? })` — partial; pass empty string to clear an anchor field
 - `productos_remove_behavior({ feature_id, behavior_id })`
 
-For UX views and elements: today the MCP doesn't have element-level write tools yet, so for UX edits, re-read the feature, mutate the ux array locally, and call `productos_update_feature` with the full body if needed. (Future work: add `productos_add_or_replace_ux` and `_element` tools. If the user asks for a UX edit and the surface feels missing, say so honestly: "I can do this via a full-feature rewrite but I don't have a clean element-level tool yet — want me to proceed?")
+**UX views:**
+- `productos_add_or_replace_ux({ feature_id, ux })` — pass FULL UxView, id-keyed upsert
+- `productos_update_ux({ feature_id, ux_id, title?, sketch?, path?, notes? })` — partial; doesn't touch elements
+- `productos_remove_ux({ feature_id, ux_id })` — auto-clears dangling behavior anchors
+
+**Elements (inside a UX view):**
+- `productos_add_or_replace_element({ feature_id, ux_id, element })` — pass FULL Element
+- `productos_remove_element({ feature_id, ux_id, element_id })` — auto-clears dangling behavior anchors
+
+All of these write the file directly; the user commits via git.
 
 ### 4. Stay in scope
 
