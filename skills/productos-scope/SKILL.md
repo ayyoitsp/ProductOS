@@ -176,14 +176,9 @@ Don't pick silently. Surface ambiguity:
 
 Wait for answers. The answers go into the claim text or the notes — explicit, captured forever.
 
-### 5. Propose the feature (writes a draft, not live truth)
+### 5. Propose the feature
 
-Call `productos_propose_feature`. NEW features always land in `productos/drafts/<id>.md` and wait for the human to run `productos review <id>` in their terminal. That command shows them the draft, lets them trim behaviors/UX views or open the file in `$EDITOR`, then promotes it to `productos/products/<id>.md` (or discards it).
-
-Why drafts:
-- Scope is the highest-leverage moment of capture; the human MUST sign off before it becomes Product Truth others cite.
-- Same review UX as the BYOK `productos scan` runner — one path for new features regardless of who proposed.
-- A draft is harmless if the human walks away — `productos serve` doesn't render it, gap reports ignore it.
+Call `productos_propose_feature`. It writes the new feature directly to `productos/products/<id>.md`. There's no draft layer — the file IS the feature. The human runs `productos review <id>` in their terminal to interactively trim behaviors/UX views or open the file in `$EDITOR`, and commits via git when satisfied. Re-running review is always safe; it's just an editor on the live file.
 
 Pass to `productos_propose_feature`:
 
@@ -201,9 +196,9 @@ Pass to `productos_propose_feature`:
   - Lists of related features ("see also wallet/spend") — `affected_by` and feature links cover that
   Default to writing nothing in the body. If you can't summarize the feature in description + behaviors + surfaces alone, that's a signal the feature is doing too much.
 
-**Edits to an EXISTING feature** (already in products/) use `productos_update_feature` / `productos_update_behavior` / `productos_add_behavior` directly — those skip review because the human already signed off when the feature was first promoted. `productos_propose_feature` refuses to re-propose an existing id.
+**Edits to an EXISTING feature** use `productos_update_feature` / `productos_update_behavior` / `productos_add_behavior`. `productos_propose_feature` refuses to overwrite an existing id, keeping "create" vs "edit" explicit. The human can also run `productos review <id>` on any existing feature to edit it interactively.
 
-Tracking (code refs, status) is set AFTER the draft is promoted. If the lifecycle is `shipped`, you can call `productos_update_tracking` once the draft is accepted:
+If the lifecycle is `shipped`, call `productos_update_tracking` after writing the feature:
 
 - `implements: ["src/checkout/index.ts", ...]`
 - per-behavior: `code_refs: ["src/checkout/index.ts:42-78"]`, `status: "proposed"` (awaiting human acceptance)
@@ -237,17 +232,16 @@ Lenses to draw from (pick whichever fit the feature):
 
 ### 7. Hand off cleanly
 
-Tell the user the draft is ready and surface the gap questions:
+Tell the user the feature is written and surface the gap questions:
 
 ```
-I drafted N behaviors for <feature_id>. The draft is at productos/drafts/<feature_id>.md
-— it isn't live Product Truth yet.
+I wrote N behaviors for <feature_id> at productos/products/<feature_id>.md.
 
-Review it interactively in your terminal:
+Review and edit it interactively in your terminal:
   productos review <feature_id>
 
 That command walks you through the UX views + behaviors, lets you trim or edit
-in $EDITOR, then promotes the draft to productos/products/.
+in $EDITOR, and saves changes back to the same file. Commit via git when satisfied.
 
 Potential gaps (questions, no behaviors written for these):
   1. <gap question 1>

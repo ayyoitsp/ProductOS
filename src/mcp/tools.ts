@@ -6,12 +6,9 @@ import {
   FeatureStatus,
   UxView,
   listAreas,
-  listDrafts,
   listFeatures,
   nowIso,
-  readDraftById,
   readFeatureById,
-  writeDraft,
   writeFeature,
 } from "../core/product.js";
 import {
@@ -193,13 +190,14 @@ const getFeatureTool: McpTool = {
 };
 
 /**
- * NEW features always start as drafts. Live Product Truth is only created
- * by a human running `productos review <id>`, which promotes the draft.
+ * propose_feature creates a NEW feature directly at productos/products/<id>.md.
+ * The human reviews/edits it interactively via `productos review <id>` and
+ * commits via git when satisfied. Re-running review on the same file is
+ * always safe — the file is the file.
  *
  * Edits to an EXISTING feature use productos_update_feature /
- * productos_update_behavior / productos_add_behavior — those write to
- * products/ directly because the human already signed off when the feature
- * was promoted.
+ * productos_update_behavior / productos_add_behavior — propose_feature
+ * refuses to overwrite to keep the "create vs. edit" intent unambiguous.
  */
 const ProposeFeatureInput = z.object({
   id: z.string().regex(/^[a-z0-9][a-z0-9/_-]*\/[a-z0-9][a-z0-9_-]*$/, "Must be area/slug, e.g. 'auth/signup'"),
@@ -215,15 +213,12 @@ const ProposeFeatureInput = z.object({
 const proposeFeature: McpTool = {
   name: "productos_propose_feature",
   description:
-    "Propose a NEW feature. Writes a draft to productos/drafts/<id>.md and tells the human to run `productos review <id>` — they inspect, trim, edit, and promote it to productos/products/. The draft is NOT live Product Truth until promoted. To EDIT an existing feature (already in products/), use productos_update_feature / productos_update_behavior / productos_add_behavior instead — those skip the review step because the human already signed off when the feature was first promoted. Refuses if a canonical or draft for the id already exists. Claims must be in product language (what the user does, what the user sees), not in API/file/endpoint terms.",
+    "Propose a NEW feature. Writes productos/products/<id>.md and tells the human to run `productos review <id>` to inspect/trim/edit interactively. The file is the file — no draft layer; the human commits via git when satisfied and can re-run review anytime. To EDIT an existing feature, use productos_update_feature / productos_update_behavior / productos_add_behavior instead — propose_feature refuses to overwrite an existing id so 'create' vs 'edit' stays explicit. Claims must be in product language (what the user does, what the user sees), not in API/file/endpoint terms.",
   inputSchema: zodToInputSchema(ProposeFeatureInput),
   handler: async (raw, paths) => {
     const args = ProposeFeatureInput.parse(raw);
     if (readFeatureById(paths, args.id)) {
-      throw new Error(`Feature ${args.id} already exists in products/. Use productos_update_feature / productos_update_behavior / productos_add_behavior to edit it — don't repropose.`);
-    }
-    if (readDraftById(paths, args.id)) {
-      throw new Error(`A draft for ${args.id} already exists. Ask the user to run \`productos review ${args.id}\` (or discard the existing draft) before reproposing.`);
+      throw new Error(`Feature ${args.id} already exists. Use productos_update_feature / productos_update_behavior / productos_add_behavior to edit it — or have the human run \`productos review ${args.id}\` for interactive edits.`);
     }
     const fm = FeatureFrontmatter.parse({
       id: args.id,
@@ -234,31 +229,11 @@ const proposeFeature: McpTool = {
       behaviors: args.behaviors,
       affected_by: args.affected_by,
     });
-    writeDraft(paths, { frontmatter: fm, body: args.body, filepath: "", url_path: "/" + args.id });
+    writeFeature(paths, { frontmatter: fm, body: args.body, filepath: "", url_path: "/" + args.id });
     return {
       ok: true,
       id: args.id,
-      next_step: `Tell the human: \`productos review ${args.id}\` to inspect, trim, and promote.`,
-    };
-  },
-};
-
-const listDraftsTool: McpTool = {
-  name: "productos_list_drafts",
-  description:
-    "List feature drafts in productos/drafts/ that are waiting for `productos review`. Returns id, title, status, and behavior/ux counts per draft. Useful for checking whether a previous scope/scan run already left a draft.",
-  inputSchema: zodToInputSchema(z.object({})),
-  handler: async (_raw, paths) => {
-    const drafts = listDrafts(paths);
-    return {
-      count: drafts.length,
-      drafts: drafts.map((d) => ({
-        id: d.frontmatter.id,
-        title: d.frontmatter.title,
-        status: d.frontmatter.status,
-        ux_count: d.frontmatter.ux.length,
-        behavior_count: d.frontmatter.behaviors.length,
-      })),
+      next_step: `Tell the human: \`productos review ${args.id}\` to inspect and edit interactively.`,
     };
   },
 };
@@ -735,8 +710,6 @@ export const tools: McpTool[] = [
   addBehavior,
   updateBehavior,
   removeBehavior,
-  // drafts (proposals awaiting `productos review`)
-  listDraftsTool,
   // tracking
   getTracking,
   updateTracking,
