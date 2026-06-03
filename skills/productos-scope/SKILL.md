@@ -69,7 +69,21 @@ For each surface:
 
   Use the labels in the sketch verbatim — when the renderer matches an element's `label` to text inside `[ ... ]` or `<...>`, it can wrap it as a clickable link (if `leads_to` is set on the element).
 - `elements`: named interactive items on the screen. Each element has `id` (kebab-case), `kind` (button, input, link, toggle, stepper, list, modal-trigger, etc. — freeform), `label` (human label, matching what's in the sketch verbatim), optional `notes`. **Don't put styling/color/visual-design notes in `notes`** — only things like *role*, *what triggers it*, *what it shows*, *what makes it unique among similar elements*.
-- `elements[].leads_to`: **OPTIONAL — only set on elements that NAVIGATE** (CTAs that go to another screen, links to another feature, "see all" / "next" / "back" buttons). **Do not set on in-place actions** like Submit, +/− steppers, trash/delete buttons, toggles. The format is strict:
+- `elements[].leads_to`: **REQUIRED on every navigation element. OMITTED on every in-place action.** No middle ground.
+
+  **MUST set leads_to on:**
+  - Card/row elements (a list row the user can tap/click into) — even if you don't know the exact destination yet, name it speculatively (e.g. `kid-detail`, `transaction-detail`). The renderer will best-effort resolve it to `/{currentArea}/{value}`; the URL may 404 until you scope that destination feature, but the row IS clickable from day one.
+  - CTAs / buttons that navigate to another screen (Checkout, View detail, Settings)
+  - Links (`<...>` style elements like "Edit", "See all", "Back")
+  - Navigation tabs, breadcrumb crumbs, drawer triggers
+
+  **MUST NOT set leads_to on:**
+  - Submit buttons (Place Order, Save, Confirm) — they POST in place
+  - +/− steppers, trash/delete icons, toggle switches — in-place mutations
+  - Inputs, dropdowns, radios, checkboxes — not navigation
+  - Pure-display elements (balance amounts, labels, headings)
+
+  Format is strict:
 
   | Value | Means |
   |---|---|

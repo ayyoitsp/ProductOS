@@ -79,7 +79,7 @@ For each feature, **identify the Surfaces first** — screens, pages, modals the
   Use the element's `label` verbatim inside `[ ... ]` or `<...>` so the renderer can wrap it as a clickable link when `leads_to` is set.
 
 - `elements`: array of `{ id, kind, label?, notes?, leads_to? }` — buttons, inputs, links, lists, modals, etc. **Don't put styling/color/visual-design notes in `notes`** — only role, trigger, what's shown, what makes the element unique.
-- `elements[].leads_to`: **OPTIONAL — only on navigation elements**. Three valid forms:
+- `elements[].leads_to`: **REQUIRED on every navigation element (card rows, CTAs, links, tabs); OMITTED on in-place actions (Submit, +/−, trash/delete, toggles, inputs).** No middle ground. For destinations not yet scoped, name them speculatively (e.g. `kid-detail`) — the renderer best-effort-resolves to `/{currentArea}/{value}`; the URL may 404 until you scope that destination, but the row IS clickable. Three valid forms:
   - `checkout-page` — same-feature Surface anchor (Surface.id from THIS feature)
   - `wallet/transactions` — cross-feature page (area/feature id)
   - `wallet/balance#kid-view` — cross-feature + surface anchor
