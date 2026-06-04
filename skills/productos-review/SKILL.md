@@ -55,9 +55,11 @@ Does this overall flow look right? Want to change or add details, or view a part
 **The chart rules — exactly how to render:**
 
 - **Each screen is a box.** Top border carries the id (`┌─ family-list ─...─┐`). Inside: line 1 is the title, line 2+ is a wrapped one-line summary (from the UX view's `notes` field). All boxes share the same width.
-- **Internal-to-internal transitions become vertical arrows between boxes.** The action label (derived from the element's `label`, lowercased — "+ Add a kid" → "add a kid"; for unlabeled elements fall back to element id with dashes-as-spaces) goes to the right of the vertical `│` line, with `▼` just before the target box. Use `┬` on the source bottom border, `┴` on the target top border.
+- **Internal-to-internal transitions become vertical arrows between boxes.** The action label (derived from the element's `label`, lowercased — "+ Add a kid" → "add a kid", "− Spend" → "spend"; for unlabeled elements fall back to element id with dashes-as-spaces) goes to the right of the vertical `│` line, with `▼` just before the target box. Use `┬` on the source bottom border, `┴` on the target top border.
 - **Cross-feature transitions fan to the right of the source box**, one per inner row: ` ── action ──► target_id (cross-feature)`.
-- **Multi-internal-target case**: only the FIRST internal target gets the vertical arrow. Other internal targets render as right-fan with `(internal)` tag instead of `(cross-feature)`. Don't try to draw multiple internal arrows — it gets tangled.
+- **Sibling fork (one source → multiple internal targets at the next row)**: targets render side-by-side. Source bottom forks one row below: source center descends to a horizontal segment that spans to each target's center; each target gets its own vertical drop with action label and ▼.
+- **Back edges** (target sits earlier in declaration order): render as right-fan with `(internal — back)` tag instead of a backward-pointing arrow. We don't draw upward arrows.
+- **Non-rightmost-in-row boxes**: their fans render *below* the box on dedicated lines (not to the right, since the right side is occupied by the next sibling).
 - **Don't list behaviors at the summary level.** Just the flow + rules reference + affected_by.
 - End with the **guided question** ("Does this flow look right? Want to change details or view a screen?") — NOT a generic "what's off?".
 
