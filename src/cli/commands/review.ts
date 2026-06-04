@@ -100,7 +100,7 @@ export function reviewCommand(): Command {
       }
 
       console.log("");
-      console.log(pc.dim(`Reviewing via ${byok.provider}/${byok.model}. Talk freely — "what's off?", "drop the second behavior", "rename it".`));
+      console.log(pc.dim(`Reviewing via ${byok.provider}/${byok.model}.`));
       console.log(pc.dim(`/show <ux_id> for sketch + elements · /show <behavior_id> for claim + test cases · /back · /save · /quit · /help`));
       await repl(paths, byok, feature);
     });
@@ -131,7 +131,10 @@ async function repl(paths: ProductosPaths, byok: ResolvedByok, featureIn: Featur
         } else {
           const u = feature.frontmatter.ux.find((x) => x.id === focus!.id);
           if (!u) focus = undefined;
-          else renderUxDetail(u);
+          else {
+            const anchored = feature.frontmatter.behaviors.filter((b) => b.surface === u.id);
+            renderUxDetail(u, anchored);
+          }
         }
       }
       const prompt = dirty ? pc.yellow("You> ") : pc.cyan("You> ");
@@ -294,30 +297,37 @@ function renderFeature(feature: FeatureDocument): void {
     console.log("");
     console.log("  " + fm.description.split("\n").join("\n  "));
   }
+
+  if (fm.ux.length > 0) {
+    console.log("");
+    console.log(pc.bold("  UX flow:"));
+    console.log("");
+    const graph = buildFlowGraph(feature);
+    const summaries = new Map<string, string>();
+    for (const u of fm.ux) {
+      if (u.notes) summaries.set(u.id, u.notes);
+    }
+    console.log(renderFlowAscii(graph, summaries));
+  }
+
+  // Rule / invariant behaviors (no UX anchor) — list ids only as drill-in
+  // references. Don't expand their claims here.
+  const surfaceIds = new Set(fm.ux.map((u) => u.id));
+  const rules = fm.behaviors.filter((b) => !b.surface || !surfaceIds.has(b.surface));
+  if (rules.length > 0) {
+    console.log("");
+    console.log(pc.bold("  Rules & invariants:"), rules.map((r) => r.id).join(", "));
+  }
+
   if (fm.affected_by.length > 0) {
     console.log("");
     console.log(pc.bold("  Affected by:"), fm.affected_by.join(", "));
   }
-  if (fm.ux.length > 0) {
-    console.log("");
-    console.log(pc.bold("  UX flow:"));
-    const graph = buildFlowGraph(feature);
-    console.log(renderFlowAscii(graph));
-    console.log("");
-    console.log(pc.dim(`  /show <ux_id> for a sketch.`));
-  }
-  if (fm.behaviors.length > 0) {
-    console.log("");
-    console.log(pc.bold("  Behaviors:"));
-    for (const b of fm.behaviors) {
-      const anchor = b.surface ? pc.dim(`  [${b.surface}${b.element ? "." + b.element : ""}${b.interaction ? " " + b.interaction : ""}]`) : "";
-      const cases = b.test_cases.length > 0 ? pc.dim(`  (${b.test_cases.length} test ${b.test_cases.length === 1 ? "case" : "cases"})`) : "";
-      console.log(`    ${pc.cyan(b.id)}${anchor}${cases}`);
-      console.log(`      ${oneLine(b.claim, 100)}`);
-    }
-    console.log("");
-    console.log(pc.dim(`  /show <behavior_id> for notes + test cases.`));
-  }
+
+  console.log("");
+  console.log(pc.dim("  Does this overall flow look right? Want to change or add details,"));
+  console.log(pc.dim("  or view a particular UX screen and its behaviors?"));
+  console.log(pc.dim(`  (/show <ux_id> · /show <behavior_id> · /help)`));
   console.log("");
 }
 
@@ -330,7 +340,10 @@ function oneLine(s: string, max = 80): string {
 // ---------------------------------------------------------------------------
 // Drilled views — UX (sketch + elements) or Behavior (notes + test cases).
 
-function renderUxDetail(u: { id: string; title: string; path?: string; sketch?: string; notes?: string; elements: Array<{ id: string; kind: string; label?: string; notes?: string; leads_to?: string }> }): void {
+function renderUxDetail(
+  u: { id: string; title: string; path?: string; sketch?: string; notes?: string; elements: Array<{ id: string; kind: string; label?: string; notes?: string; leads_to?: string }> },
+  anchoredBehaviors: Array<{ id: string; claim: string; element?: string; interaction?: string; test_cases: Array<unknown> }> = []
+): void {
   console.log(pc.dim("  ─── focused UX: ") + pc.bold(pc.cyan(u.id)) + pc.dim(" " + "─".repeat(Math.max(0, 36 - u.id.length))));
   console.log(pc.dim(`  title: ${u.title}${u.path ? "  path: " + u.path : ""}`));
   console.log("");
@@ -355,6 +368,17 @@ function renderUxDetail(u: { id: string; title: string; path?: string; sketch?: 
   if (u.notes) {
     console.log("");
     console.log(pc.bold("  Notes:"), u.notes);
+  }
+  if (anchoredBehaviors.length > 0) {
+    console.log("");
+    console.log(pc.bold(`  Behaviors anchored here (${anchoredBehaviors.length}):`));
+    for (const b of anchoredBehaviors) {
+      const anchor = b.element ? pc.dim(` [${b.element}${b.interaction ? " " + b.interaction : ""}]`) : "";
+      const cases = b.test_cases.length > 0 ? pc.dim(`  (${b.test_cases.length} test ${b.test_cases.length === 1 ? "case" : "cases"})`) : "";
+      console.log(`    ${pc.cyan(b.id)}${anchor}${cases}`);
+      console.log(`      ${oneLine(b.claim, 100)}`);
+    }
+    console.log(pc.dim(`    /show <behavior_id> for claim + notes + test cases.`));
   }
   console.log("");
   console.log(pc.dim(`  Tip: edit the sketch, elements, or title by talking. /back to return.`));
