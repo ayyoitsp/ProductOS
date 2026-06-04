@@ -14,6 +14,7 @@ import {
   writeFeature,
 } from "../../core/product.js";
 import { editFeatureTurn } from "../../byok/edit.js";
+import { buildFlowGraph, renderAscii as renderFlowAscii } from "../../core/flowchart.js";
 import type { ModelMessage } from "ai";
 
 /**
@@ -100,16 +101,20 @@ export function reviewCommand(): Command {
 
       console.log("");
       console.log(pc.dim(`Reviewing via ${byok.provider}/${byok.model}. Talk freely — "what's off?", "drop the second behavior", "rename it".`));
-      console.log(pc.dim(`Drill into a behavior to see test cases: /show <behavior_id>. Other commands: /save /quit /reset /help`));
+      console.log(pc.dim(`/show <ux_id> for sketch + elements · /show <behavior_id> for claim + test cases · /back · /save · /quit · /help`));
       await repl(paths, byok, feature);
     });
 }
+
+type Focus =
+  | { kind: "ux"; id: string }
+  | { kind: "behavior"; id: string };
 
 async function repl(paths: ProductosPaths, byok: ResolvedByok, featureIn: FeatureDocument): Promise<void> {
   let feature = featureIn;
   const initial = featureIn;
   let dirty = false;
-  let focusedBehaviorId: string | undefined;
+  let focus: Focus | undefined;
   let history: ModelMessage[] = [];
 
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
@@ -118,13 +123,15 @@ async function repl(paths: ProductosPaths, byok: ResolvedByok, featureIn: Featur
   try {
     while (true) {
       renderFeature(feature);
-      if (focusedBehaviorId) {
-        const b = feature.frontmatter.behaviors.find((x) => x.id === focusedBehaviorId);
-        if (!b) {
-          // Behavior was removed — drop focus silently.
-          focusedBehaviorId = undefined;
+      if (focus) {
+        if (focus.kind === "behavior") {
+          const b = feature.frontmatter.behaviors.find((x) => x.id === focus!.id);
+          if (!b) focus = undefined;
+          else renderBehaviorDetail(b);
         } else {
-          renderBehaviorDetail(b);
+          const u = feature.frontmatter.ux.find((x) => x.id === focus!.id);
+          if (!u) focus = undefined;
+          else renderUxDetail(u);
         }
       }
       const prompt = dirty ? pc.yellow("You> ") : pc.cyan("You> ");
@@ -133,7 +140,7 @@ async function repl(paths: ProductosPaths, byok: ResolvedByok, featureIn: Featur
 
       if (input.startsWith("/")) {
         const result = await handleSlash(input, {
-          paths, feature, dirty, initial, focusedBehaviorId,
+          paths, feature, dirty, initial, focus,
         });
         if (result.kind === "exit") return;
         if (result.kind === "replace") {
@@ -142,7 +149,7 @@ async function repl(paths: ProductosPaths, byok: ResolvedByok, featureIn: Featur
           history = [];
         }
         if (result.kind === "focus") {
-          focusedBehaviorId = result.behaviorId;
+          focus = result.focus;
         }
         continue;
       }
@@ -150,7 +157,8 @@ async function repl(paths: ProductosPaths, byok: ResolvedByok, featureIn: Featur
       // Natural-language turn → BYOK
       console.log(pc.dim(`(thinking via ${byok.provider}/${byok.model}…)`));
       const turn = await editFeatureTurn({
-        feature, userMessage: input, history, paths, byok, focusedBehaviorId,
+        feature, userMessage: input, history, paths, byok,
+        focusedBehaviorId: focus?.kind === "behavior" ? focus.id : undefined,
       });
 
       if (turn.kind === "error") {
@@ -180,7 +188,7 @@ type SlashResult =
   | { kind: "continue" }
   | { kind: "exit" }
   | { kind: "replace"; feature: FeatureDocument; dirty: boolean }
-  | { kind: "focus"; behaviorId: string | undefined };
+  | { kind: "focus"; focus: Focus | undefined };
 
 async function handleSlash(
   input: string,
@@ -189,7 +197,7 @@ async function handleSlash(
     feature: FeatureDocument;
     dirty: boolean;
     initial: FeatureDocument;
-    focusedBehaviorId: string | undefined;
+    focus: Focus | undefined;
   }
 ): Promise<SlashResult> {
   const parts = input.slice(1).split(/\s+/);
@@ -198,23 +206,29 @@ async function handleSlash(
 
   if (c === "show" || c === "drill" || c === "focus") {
     if (!rest) {
-      console.log(pc.red("✗ "), "Usage: /show <behavior_id>");
+      console.log(pc.red("✗ "), "Usage: /show <ux_id|behavior_id>");
       return { kind: "continue" };
     }
+    // Resolve to either UX or behavior — UX takes precedence (they're rarer
+    // and the user "shows" a screen more often than a behavior).
+    const u = ctx.feature.frontmatter.ux.find((x) => x.id === rest);
+    if (u) return { kind: "focus", focus: { kind: "ux", id: rest } };
     const b = ctx.feature.frontmatter.behaviors.find((x) => x.id === rest);
-    if (!b) {
-      console.log(pc.red("✗ "), `No behavior "${rest}" on this feature. Known: ${ctx.feature.frontmatter.behaviors.map((x) => x.id).join(", ") || "(none)"}`);
-      return { kind: "continue" };
-    }
-    return { kind: "focus", behaviorId: rest };
+    if (b) return { kind: "focus", focus: { kind: "behavior", id: rest } };
+    const ids = [
+      ...ctx.feature.frontmatter.ux.map((x) => `ux:${x.id}`),
+      ...ctx.feature.frontmatter.behaviors.map((x) => `behavior:${x.id}`),
+    ];
+    console.log(pc.red("✗ "), `No UX view or behavior "${rest}". Known: ${ids.join(", ") || "(none)"}`);
+    return { kind: "continue" };
   }
 
   if (c === "back" || c === "unfocus" || c === "up") {
-    if (!ctx.focusedBehaviorId) {
+    if (!ctx.focus) {
       console.log(pc.dim("(already at the summary view)"));
       return { kind: "continue" };
     }
-    return { kind: "focus", behaviorId: undefined };
+    return { kind: "focus", focus: undefined };
   }
 
   if (c === "save") {
@@ -248,15 +262,15 @@ async function handleSlash(
   if (c === "help" || c === "h" || c === "?") {
     console.log("");
     console.log(pc.bold("Commands:"));
-    console.log("  /show <behavior>   Drill into a behavior — see notes + test cases");
-    console.log("  /back              Return to the summary view");
-    console.log("  /save              Write changes to disk");
-    console.log("  /reset             Discard changes and reload from disk");
-    console.log("  /quit              Exit (warns on unsaved changes)");
-    console.log("  /help              This message");
+    console.log("  /show <ux|behavior>   Drill into a UX view (sketch + elements) or a behavior (notes + test cases)");
+    console.log("  /back                 Return to the summary view");
+    console.log("  /save                 Write changes to disk");
+    console.log("  /reset                Discard changes and reload from disk");
+    console.log("  /quit                 Exit (warns on unsaved changes)");
+    console.log("  /help                 This message");
     console.log("");
     console.log(pc.dim("Anything else you type is sent to the AI editor. Examples:"));
-    console.log(pc.dim("  what's off with this UX?"));
+    console.log(pc.dim("  what's off with the family-settings UX?"));
     console.log(pc.dim("  drop the second behavior"));
     console.log(pc.dim("  the leads_to on save-btn should point to confirmation-page"));
     console.log(pc.dim("  add a test case for the empty state"));
@@ -286,33 +300,23 @@ function renderFeature(feature: FeatureDocument): void {
   }
   if (fm.ux.length > 0) {
     console.log("");
-    console.log(pc.bold("  UX views:"));
-    for (const u of fm.ux) {
-      console.log(`    ${pc.cyan(u.id)} — ${u.title}` + (u.path ? pc.dim(`  (${u.path})`) : ""));
-      if (u.sketch) {
-        const indented = u.sketch.split("\n").map((l) => "      " + l).join("\n");
-        console.log(pc.dim(indented));
-      }
-      if (u.elements.length > 0) {
-        const summary = u.elements.map((e) => {
-          const lead = e.leads_to ? pc.dim(`→${e.leads_to}`) : "";
-          return `${e.id}:${e.kind}${lead}`;
-        }).join(", ");
-        console.log(pc.dim(`      elements: ${summary}`));
-      }
-    }
+    console.log(pc.bold("  UX flow:"));
+    const graph = buildFlowGraph(feature);
+    console.log(renderFlowAscii(graph));
+    console.log("");
+    console.log(pc.dim(`  /show <ux_id> for a sketch.`));
   }
   if (fm.behaviors.length > 0) {
     console.log("");
     console.log(pc.bold("  Behaviors:"));
     for (const b of fm.behaviors) {
       const anchor = b.surface ? pc.dim(`  [${b.surface}${b.element ? "." + b.element : ""}${b.interaction ? " " + b.interaction : ""}]`) : "";
-      console.log(`    ${pc.cyan(b.id)}${anchor}`);
+      const cases = b.test_cases.length > 0 ? pc.dim(`  (${b.test_cases.length} test ${b.test_cases.length === 1 ? "case" : "cases"})`) : "";
+      console.log(`    ${pc.cyan(b.id)}${anchor}${cases}`);
       console.log(`      ${oneLine(b.claim, 100)}`);
-      if (b.test_cases.length > 0) {
-        console.log(pc.dim(`      test cases: ${b.test_cases.length}`));
-      }
     }
+    console.log("");
+    console.log(pc.dim(`  /show <behavior_id> for notes + test cases.`));
   }
   console.log("");
 }
@@ -324,10 +328,41 @@ function oneLine(s: string, max = 80): string {
 }
 
 // ---------------------------------------------------------------------------
-// Drilled view — full detail for one behavior (notes + test cases).
+// Drilled views — UX (sketch + elements) or Behavior (notes + test cases).
+
+function renderUxDetail(u: { id: string; title: string; path?: string; sketch?: string; notes?: string; elements: Array<{ id: string; kind: string; label?: string; notes?: string; leads_to?: string }> }): void {
+  console.log(pc.dim("  ─── focused UX: ") + pc.bold(pc.cyan(u.id)) + pc.dim(" " + "─".repeat(Math.max(0, 36 - u.id.length))));
+  console.log(pc.dim(`  title: ${u.title}${u.path ? "  path: " + u.path : ""}`));
+  console.log("");
+  if (u.sketch) {
+    const indented = u.sketch.split("\n").map((l) => "  " + l).join("\n");
+    console.log(indented);
+  } else {
+    console.log(pc.dim("  (no sketch)"));
+  }
+  console.log("");
+  if (u.elements.length === 0) {
+    console.log(pc.dim("  (no elements declared)"));
+  } else {
+    console.log(pc.bold(`  Elements (${u.elements.length}):`));
+    for (const el of u.elements) {
+      const label = el.label ? pc.dim(` "${el.label}"`) : "";
+      const lead = el.leads_to ? pc.dim(` → ${el.leads_to}`) : "";
+      console.log(`    ${pc.cyan(el.id)} ${el.kind}${label}${lead}`);
+      if (el.notes) console.log(pc.dim(`      notes: ${el.notes}`));
+    }
+  }
+  if (u.notes) {
+    console.log("");
+    console.log(pc.bold("  Notes:"), u.notes);
+  }
+  console.log("");
+  console.log(pc.dim(`  Tip: edit the sketch, elements, or title by talking. /back to return.`));
+  console.log("");
+}
 
 function renderBehaviorDetail(b: { id: string; claim: string; notes?: string; surface?: string; element?: string; interaction?: string; test_cases: Array<{ id: number; description: string; level?: string; given?: string; when?: string; then?: string; steps?: string; deprecated?: boolean }> }): void {
-  console.log(pc.dim("  ─── focused: ") + pc.bold(pc.cyan(b.id)) + pc.dim(" " + "─".repeat(Math.max(0, 40 - b.id.length))));
+  console.log(pc.dim("  ─── focused behavior: ") + pc.bold(pc.cyan(b.id)) + pc.dim(" " + "─".repeat(Math.max(0, 30 - b.id.length))));
   if (b.surface) {
     console.log(pc.dim(`  anchor: ${b.surface}${b.element ? "." + b.element : ""}${b.interaction ? " " + b.interaction : ""}`));
   }
