@@ -107,34 +107,110 @@ export function renderMermaid(graph: FlowGraph): string {
 }
 
 /**
- * Compact ASCII summary, one line per UX view, listing outbound edges.
- * For the CLI REPL and the productos-review skill.
+ * ASCII flow chart for the CLI REPL and the productos-review skill.
+ *
+ * Each internal UX view renders as a box with:
+ *   - id in the top border (so it pops visually)
+ *   - title on the first line inside
+ *   - optional one-line summary on the second line (from notes if provided
+ *     by `uxSummary`, otherwise blank)
+ *
+ * Below each box, outbound edges are listed as:
+ *   [element-id] ──→ target  (cross-feature tag if external)
+ *
+ * Boxes stack top-to-bottom, separated by a blank line.
  */
-export function renderAscii(graph: FlowGraph): string {
+export function renderAscii(
+  graph: FlowGraph,
+  uxSummary?: Map<string, string>
+): string {
   if (!graph.has_flow) return "(no UX views)";
-  const lines: string[] = [];
-  // Group edges by source UX id.
+
   const byFrom = new Map<string, FlowEdge[]>();
   for (const e of graph.edges) {
     const arr = byFrom.get(e.from_ux) ?? [];
     arr.push(e);
     byFrom.set(e.from_ux, arr);
   }
+
   const internalNodes = graph.nodes.filter((n) => !n.external);
+  const blocks: string[] = [];
+
   for (const n of internalNodes) {
-    lines.push(`  ${n.id}    ${n.title}`);
+    const summary = uxSummary?.get(n.id) ?? "";
+    blocks.push(renderUxBox(n.id, n.title, summary));
+
     const outs = byFrom.get(n.id) ?? [];
-    if (outs.length === 0) {
-      lines.push(`    (no outbound navigation)`);
-    } else {
+    if (outs.length > 0) {
+      // Two-space indent under the box.
+      const arrowLines: string[] = [];
+      // Compute max width of [element] for alignment.
+      const maxElLen = Math.max(...outs.map((e) => e.via_element.length));
       for (const e of outs) {
-        const arrow = e.external ? "→ " : "→ ";
+        const elPad = e.via_element.padEnd(maxElLen, " ");
         const tag = e.external ? " (cross-feature)" : "";
-        lines.push(`    [${e.via_element}] ${arrow}${e.to}${tag}`);
+        arrowLines.push(`    [${elPad}] ──→ ${e.to}${tag}`);
       }
+      blocks.push(arrowLines.join("\n"));
     }
   }
+
+  return blocks.join("\n\n");
+}
+
+/**
+ * Render one UX view as a box. Top border carries the id. Title and
+ * (optional) summary go inside. Box width auto-sizes to longest content
+ * line, capped at 60 chars; long summaries wrap.
+ */
+function renderUxBox(id: string, title: string, summary: string): string {
+  const MAX_WIDTH = 60;
+  // Wrap summary to fit. Title doesn't wrap (assumed short).
+  const titleLine = title;
+  const summaryLines = summary ? wrapText(summary, MAX_WIDTH - 4) : [];
+  // Inner width = longest of titleLine and any summary line, padded.
+  const innerWidth = Math.max(
+    titleLine.length,
+    ...summaryLines.map((l) => l.length),
+    id.length + 4 // make room for top border id
+  );
+  const usableWidth = Math.min(innerWidth, MAX_WIDTH - 4);
+
+  // Top border: ┌─ id ──────────┐
+  const topPad = "─".repeat(Math.max(0, usableWidth - id.length - 2));
+  const top = `  ┌─ ${id} ${topPad}─┐`;
+
+  const lines: string[] = [top];
+  lines.push(`  │ ${pad(titleLine, usableWidth + 1)}│`);
+  for (const s of summaryLines) {
+    lines.push(`  │ ${pad(s, usableWidth + 1)}│`);
+  }
+  const bottom = `  └─${"─".repeat(usableWidth + 2)}┘`;
+  lines.push(bottom);
   return lines.join("\n");
+}
+
+function pad(s: string, width: number): string {
+  if (s.length >= width) return s.slice(0, width);
+  return s + " ".repeat(width - s.length);
+}
+
+function wrapText(s: string, width: number): string[] {
+  const words = s.split(/\s+/).filter(Boolean);
+  const lines: string[] = [];
+  let cur = "";
+  for (const w of words) {
+    if (!cur) {
+      cur = w;
+    } else if (cur.length + 1 + w.length <= width) {
+      cur += " " + w;
+    } else {
+      lines.push(cur);
+      cur = w;
+    }
+  }
+  if (cur) lines.push(cur);
+  return lines;
 }
 
 function mermaidId(s: string): string {
