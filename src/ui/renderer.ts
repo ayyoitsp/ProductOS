@@ -10,6 +10,7 @@ import { BehaviorTracking, FeatureTracking } from "../core/tracking.js";
 import { FeedbackEntry } from "../core/feedback.js";
 import { ContextDocument } from "../core/context.js";
 import { derivedVerification, DerivedVerification } from "../core/derived-state.js";
+import { buildFlowGraph, renderMermaid } from "../core/flowchart.js";
 
 const SHELL_CSS = `
 :root {
@@ -109,6 +110,14 @@ header.feature .feature-title-row .feature-status { flex: 0 0 auto; }
 .ai-assist-status.success { color: var(--green); }
 .ai-assist-status.warning { color: var(--yellow); }
 .ai-assist-status.error { color: var(--red); }
+
+/* Flow chart at the top of a feature page — Mermaid graph showing UX views
+   + leads_to edges. Renders client-side via the Mermaid CDN. */
+.feature-flow { background: var(--surface); border: 1px solid var(--surface-3); border-radius: 12px; padding: 18px 20px; margin: 16px 0 20px; }
+.feature-flow h2 { margin: 0 0 12px; font-size: 14px; color: var(--dim); font-weight: 600; letter-spacing: 0.02em; text-transform: uppercase; }
+.feature-flow .mermaid { background: var(--surface-2); border-radius: 8px; padding: 16px; overflow-x: auto; }
+.feature-flow .mermaid svg { display: block; margin: 0 auto; max-width: 100%; height: auto; }
+.feature-flow .flow-empty { color: var(--dim); font-style: italic; padding: 12px; }
 
 /* Interactive UX preview at the very top of a feature page (before description). */
 .ux-preview-h2 { margin: 24px 0 12px; }
@@ -509,6 +518,14 @@ export function renderShell(title: string, body: string, sidebar: string): strin
     <aside>${sidebar}</aside>
     <main>${body}</main>
     <script>${APP_JS}</script>
+    <script type="module">
+      // Lazy-load Mermaid only if a flow chart is on the page.
+      if (document.querySelector('.feature-flow .mermaid')) {
+        import('https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs')
+          .then(m => m.default.initialize({ startOnLoad: true, theme: 'neutral', flowchart: { curve: 'basis' } }))
+          .catch(e => console.warn('mermaid load failed', e));
+      }
+    </script>
   </body>
 </html>`;
 }
@@ -941,6 +958,8 @@ export function renderFeature(
   //   - Cross-feature (/area/feature...) → confirm dialog before navigating away
   // Also has a small tab strip listing all UX views in this feature for
   // explicit switching, and a "Jump to UX details ↓" link to the bottom section.
+  const flowBlock = surfaces.length ? renderFlowBlock(feature) : "";
+
   const uxPreviewBlock = surfaces.length
     ? renderUxPreview(f.id, surfaces, surfaceIdSet, surfaceIndex)
     : "";
@@ -975,6 +994,7 @@ export function renderFeature(
       </div>
       ${implBlock}
     </header>
+    ${flowBlock}
     ${uxPreviewBlock}
     ${description}
     ${overviewBody}
@@ -1007,6 +1027,26 @@ function renderAiAssistPane(featureId: string): string {
  * hero container, plus a small tab strip to switch between UX views, plus
  * a "Jump to UX details" link pointing at the lower #ux-details section.
  *
+/**
+ * Renders a Mermaid flow chart of the feature's UX → leads_to graph.
+ * Shows up at the top of every feature page so the reader gets a map
+ * before drowning in detail. Cross-feature target nodes are styled
+ * dashed/grey and link to that feature.
+ */
+function renderFlowBlock(feature: FeatureDocument): string {
+  const graph = buildFlowGraph(feature);
+  if (!graph.has_flow) return "";
+  const src = renderMermaid(graph);
+  if (!src) return "";
+  return `
+    <section class="feature-flow">
+      <h2>Flow</h2>
+      <div class="mermaid">${escape(src)}</div>
+    </section>
+  `;
+}
+
+ /**
  * Each UX view's sketch is pre-rendered into a hidden div; the active one
  * is shown. JS in APP_JS handles tab clicks and intercepts cross-feature
  * sketch-anchor clicks for a confirm dialog.
