@@ -136,19 +136,23 @@ const MIN_BOX_INNER = 26;
 const MAX_BOX_INNER = 44;
 const LEFT_MARGIN = 2;
 const BOX_GAP_Y = 3;
+const BOX_GAP_X = 4;
 const EXT_GAP_X = 1;
+
+type FanKind = "external" | "internal-forward" | "internal-back";
 
 interface BoxLayout {
   id: string;
   title: string;
   summaryLines: string[];
-  externals: { action: string; target: string; kind?: "external" | "internal" }[];
+  externals: { action: string; target: string; kind: FanKind }[];
   innerWidth: number;
   innerLines: string[];   // padded content rows (title + summary + blanks)
   width: number;          // total box width incl. borders
   height: number;         // total box height incl. borders
   x: number;              // canvas column of left border
   y: number;              // canvas row of top border
+  rowIdx: number;         // logical row (0-based)
 }
 
 export function renderAscii(
@@ -164,122 +168,225 @@ export function renderAscii(
   const indexById = new Map<string, number>();
   internal.forEach((n, i) => indexById.set(n.id, i));
 
-  // Partition edges into three groups:
-  //   - primaryInternal: source → next-in-declaration-order target (drawn as
-  //     a vertical arrow connecting two boxes)
-  //   - sideInternal: source → some other internal target (rendered as
-  //     fan-right with "(internal)" tag; same screen still renders below
-  //     in declaration order)
-  //   - external: cross-feature (rendered as fan-right with "(cross-feature)")
-  type Fan = { action: string; target: string; kind: "external" | "internal" };
-  const primaryInternal = new Map<string, FlowEdge>(); // by source id
-  const fansByFrom = new Map<string, Fan[]>();
+  // For each source, collect its FORWARD internal targets in declaration
+  // order. Forward = target's declaration index > source's index. These
+  // become "sibling groups" — the row of children drawn side-by-side
+  // below the source.
+  const forwardTargetsBySource = new Map<string, string[]>();
   for (const e of graph.edges) {
-    const fromIdx = indexById.get(e.from_ux);
-    const toIdx = indexById.get(e.to);
-    if (fromIdx !== undefined && toIdx === fromIdx + 1 && !primaryInternal.has(e.from_ux)) {
-      // Direct down-arrow case.
-      primaryInternal.set(e.from_ux, e);
+    if (e.external) continue;
+    const sIdx = indexById.get(e.from_ux);
+    const tIdx = indexById.get(e.to);
+    if (sIdx === undefined || tIdx === undefined) continue;
+    if (tIdx <= sIdx) continue; // back edge
+    const arr = forwardTargetsBySource.get(e.from_ux) ?? [];
+    if (!arr.includes(e.to)) arr.push(e.to);
+    forwardTargetsBySource.set(e.from_ux, arr);
+  }
+
+  // 1. Assign each internal node to a row. Walking in declaration order:
+  //    when we first see a node, find the source (if any) that has this
+  //    node in its forward-targets list and has MULTIPLE such targets —
+  //    place all of that source's forward targets in this same row.
+  //    Otherwise the node gets its own row.
+  const rowOfBox = new Map<string, number>();
+  const rows: string[][] = [];
+  for (const n of internal) {
+    if (rowOfBox.has(n.id)) continue;
+
+    // Find a source that has n among its forward targets.
+    let groupedSiblings: string[] | null = null;
+    for (const [, targets] of forwardTargetsBySource) {
+      if (targets.includes(n.id) && targets.length > 1) {
+        // Only group those siblings not already placed.
+        const free = targets.filter((t) => !rowOfBox.has(t));
+        if (free.length >= 2) {
+          groupedSiblings = free;
+          break;
+        }
+      }
+    }
+
+    const row = groupedSiblings ?? [n.id];
+    const rowIdx = rows.length;
+    rows.push(row);
+    for (const id of row) rowOfBox.set(id, rowIdx);
+  }
+
+  // 2. Classify all edges into:
+  //    - rowToRow: source's row → target's row where target row = source row + 1
+  //      and source has these as its forward targets. Drawn as vertical
+  //      (or forked) arrows.
+  //    - fan: everything else (back edges, cross-feature, non-consecutive
+  //      forward edges). Rendered as right-fan with appropriate tag.
+  type RowEdge = { from: string; to: string; action: string };
+  const rowEdgesBySource = new Map<string, RowEdge[]>();
+  const fansByFrom = new Map<string, { action: string; target: string; kind: FanKind }[]>();
+  for (const e of graph.edges) {
+    const sRow = rowOfBox.get(e.from_ux);
+    const tRow = rowOfBox.get(e.to);
+    const action = actionLabel(e);
+    if (!e.external && sRow !== undefined && tRow !== undefined && tRow === sRow + 1) {
+      // Forward edge to next row — drawn as a vertical arrow.
+      const arr = rowEdgesBySource.get(e.from_ux) ?? [];
+      arr.push({ from: e.from_ux, to: e.to, action });
+      rowEdgesBySource.set(e.from_ux, arr);
       continue;
     }
-    const fan: Fan = {
-      action: actionLabel(e),
-      target: e.to,
-      kind: e.external ? "external" : "internal",
-    };
+    // Fan it.
+    let kind: FanKind;
+    if (e.external) kind = "external";
+    else {
+      const sIdx = indexById.get(e.from_ux)!;
+      const tIdx = indexById.get(e.to)!;
+      kind = tIdx > sIdx ? "internal-forward" : "internal-back";
+    }
     const arr = fansByFrom.get(e.from_ux) ?? [];
-    arr.push(fan);
+    arr.push({ action, target: e.to, kind });
     fansByFrom.set(e.from_ux, arr);
   }
 
-  // 1. First pass: figure out content for each box (pre-width).
-  type Pre = {
-    id: string;
-    title: string;
-    summary: string;
-    fans: Fan[];
-  };
+  // 3. Compute box content + a single common inner width.
+  type Pre = { id: string; title: string; summary: string; fans: { action: string; target: string; kind: FanKind }[] };
   const pre: Pre[] = internal.map((n) => ({
     id: n.id,
     title: n.title,
     summary: uxSummary?.get(n.id) ?? "",
     fans: fansByFrom.get(n.id) ?? [],
   }));
-
-  // 2. Pick one common inner width for all boxes so they align.
   const widthCandidates = pre.map((p) => {
-    const idMin = p.id.length + 6; // " {id} ─" plus borders
+    const idMin = p.id.length + 6;
     const titleLen = p.title.length;
-    // Try a soft target width to fit the longest summary word at MIN_BOX_INNER.
     const summaryWordMax = p.summary
       ? Math.max(...p.summary.split(/\s+/).map((w) => w.length))
       : 0;
     return Math.max(MIN_BOX_INNER, idMin, titleLen, summaryWordMax);
   });
-  let commonInnerWidth = Math.min(MAX_BOX_INNER, Math.max(...widthCandidates));
+  const commonInnerWidth = Math.min(MAX_BOX_INNER, Math.max(...widthCandidates));
 
-  // 3. Build BoxLayouts with that common width.
-  const boxes: BoxLayout[] = pre.map((p) => {
+  // 4. Build boxes (without final x/y).
+  const boxesById = new Map<string, BoxLayout>();
+  for (const p of pre) {
     const summaryLines = p.summary ? wrapText(p.summary, commonInnerWidth) : [];
     const contentRows: string[] = [p.title, ...summaryLines];
     const wantedH = Math.max(contentRows.length, p.fans.length);
     while (contentRows.length < wantedH) contentRows.push("");
-    return {
+    boxesById.set(p.id, {
       id: p.id,
       title: p.title,
       summaryLines,
-      externals: p.fans.map((f) => ({ action: f.action, target: f.target, kind: f.kind })),
+      externals: p.fans,
       innerWidth: commonInnerWidth,
       innerLines: contentRows,
       width: commonInnerWidth + 4,
       height: contentRows.length + 2,
       x: LEFT_MARGIN,
       y: 0,
-    };
-  });
-
-  // 2. Place boxes vertically with gap.
-  let cursorY = 0;
-  for (const b of boxes) {
-    b.y = cursorY;
-    cursorY += b.height + BOX_GAP_Y;
+      rowIdx: rowOfBox.get(p.id)!,
+    });
   }
 
-  // 3. Compute canvas size.
-  const maxRightOfBox = Math.max(...boxes.map((b) => b.x + b.width));
-  const maxExtLine = boxes.reduce((m, b) => {
-    for (const e of b.externals) {
-      const tag = e.kind === "internal" ? " (internal)" : " (cross-feature)";
-      const s = ` ── ${e.action} ──► ${e.target}${tag}`;
-      if (s.length > m) m = s.length;
-    }
-    return m;
-  }, 0);
+  // 5. Per-row width budget for fans on the rightmost box in that row.
+  function fanTag(k: FanKind): string {
+    if (k === "external") return " (cross-feature)";
+    if (k === "internal-back") return " (internal — back)";
+    return " (internal)";
+  }
+  function fanLine(f: { action: string; target: string; kind: FanKind }): string {
+    return ` ── ${f.action} ──► ${f.target}${fanTag(f.kind)}`;
+  }
 
-  const canvasWidth = maxRightOfBox + EXT_GAP_X + maxExtLine + 1;
+  // Decide which boxes can render fans to the right vs below: only the
+  // RIGHTMOST box in each row gets the fan-right slot. Other boxes' fans
+  // get rendered as dedicated lines BELOW the box so they don't overlap
+  // with the next sibling.
+  const fansBelowOf = new Map<string, { action: string; target: string; kind: FanKind }[]>();
+  for (const rowIds of rows) {
+    const rightmost = rowIds[rowIds.length - 1];
+    for (const id of rowIds) {
+      if (id === rightmost) continue;
+      const b = boxesById.get(id)!;
+      if (b.externals.length === 0) continue;
+      fansBelowOf.set(id, b.externals);
+      // Also reduce the box's "padded" inner height — those rows were padded
+      // to make room for fans to the right, but they no longer need it.
+      // Recompute innerLines based on actual content only.
+      const summaryLines = b.summaryLines;
+      const contentRows = [b.title, ...summaryLines];
+      b.innerLines = contentRows;
+      b.height = contentRows.length + 2;
+    }
+  }
+
+  // 6. Position boxes — for each row, lay siblings out horizontally;
+  //    rows stack vertically with gap. Reserve extra rows below for
+  //    "fans-below" lines that need to render under non-rightmost boxes.
+  let cursorY = 0;
+  for (const rowIds of rows) {
+    let cursorX = LEFT_MARGIN;
+    let rowH = 0;
+    let maxFansBelow = 0;
+    for (const id of rowIds) {
+      const b = boxesById.get(id)!;
+      b.x = cursorX;
+      b.y = cursorY;
+      cursorX += b.width + BOX_GAP_X;
+      if (b.height > rowH) rowH = b.height;
+      const below = fansBelowOf.get(id);
+      if (below && below.length > maxFansBelow) maxFansBelow = below.length;
+    }
+    cursorY += rowH + maxFansBelow + BOX_GAP_Y;
+  }
+
+  // 7. Compute canvas size.
+  const boxes = Array.from(boxesById.values());
+  const maxRightOfBox = Math.max(...boxes.map((b) => b.x + b.width));
+  // Fan column starts after the RIGHTMOST box in each row. For a single-box
+  // row that's that box's right edge; for multi-box rows externals go right
+  // of the last box. Compute max fan extent globally.
+  let maxFanExtent = maxRightOfBox;
+  for (const b of boxes) {
+    const startX = b.x + b.width;
+    for (const f of b.externals) {
+      const totalRight = startX + fanLine(f).length;
+      if (totalRight > maxFanExtent) maxFanExtent = totalRight;
+    }
+  }
+  const canvasWidth = maxFanExtent + EXT_GAP_X + 1;
   const canvasHeight = cursorY;
   const canvas = new Canvas(canvasWidth, canvasHeight);
 
-  // 4. Draw each box.
+  // 8. Draw boxes.
   for (const b of boxes) drawBox(canvas, b);
 
-  // 5. Draw fan edges to the right of each box.
+  // 9. Draw fan edges. Rightmost-in-row boxes fan to the right; non-rightmost
+  //    boxes (in multi-box rows) render fans on dedicated lines below the
+  //    box so they don't collide with the next sibling.
   for (const b of boxes) {
-    for (let i = 0; i < b.externals.length; i++) {
-      const e = b.externals[i];
-      const rowY = b.y + 1 + i;
-      const startX = b.x + b.width;
-      const tag = e.kind === "internal" ? " (internal)" : " (cross-feature)";
-      const line = ` ── ${e.action} ──► ${e.target}${tag}`;
-      canvas.writeText(startX, rowY, line);
+    const below = fansBelowOf.get(b.id);
+    if (below) {
+      for (let i = 0; i < below.length; i++) {
+        const rowY = b.y + b.height + i;
+        canvas.writeText(b.x + 2, rowY, fanLine(below[i]).trimStart());
+      }
+    } else {
+      for (let i = 0; i < b.externals.length; i++) {
+        const e = b.externals[i];
+        const rowY = b.y + 1 + i;
+        canvas.writeText(b.x + b.width, rowY, fanLine(e));
+      }
     }
   }
 
-  // 6. Draw primary internal vertical arrows between consecutive boxes only.
-  for (const [fromId, e] of primaryInternal) {
-    const src = boxes[indexById.get(fromId)!];
-    const tgt = boxes[indexById.get(e.to)!];
-    drawAdjacentEdge(canvas, src, tgt, actionLabel(e));
+  // 10. Draw row-to-row vertical arrows. For each source with forward edges:
+  //     - 1 target → single vertical arrow
+  //     - 2+ targets → forked arrow (source bottom center, drop one row,
+  //       horizontal segment to each target center, vertical drop to each
+  //       target top with ▼).
+  for (const [srcId, targets] of rowEdgesBySource) {
+    const src = boxesById.get(srcId)!;
+    const targetBoxes = targets.map((t) => ({ box: boxesById.get(t.to)!, action: t.action }));
+    drawForwardEdges(canvas, src, targetBoxes);
   }
 
   return canvas.toString();
@@ -353,35 +460,110 @@ function drawBox(canvas: Canvas, b: BoxLayout): void {
 }
 
 /**
- * Draw a vertical arrow between adjacent boxes (in declaration order).
- * Source bottom-middle ──→ target top-middle, with the action label
- * written to the right of the line.
+ * Draw row-to-row forward arrows.
  *
- * Non-adjacent internal edges aren't drawn in v1 — they're rendered as
- * fan-right entries with the "(internal)" tag instead, so the user can
- * see the relationship without a tangled multi-lane arrow.
+ * Single target: straight vertical from source bottom-center to target
+ * top-center, with the action label to the right of the line.
+ *
+ * Multi-target (source has 2+ children at the next row): the source's
+ * bottom-center descends one row, then a horizontal segment extends to
+ * cover all target centers, and each target gets its own vertical drop
+ * from that horizontal down to its top with ▼. Action labels go to the
+ * right of each vertical.
+ *
+ * Corner chars on the horizontal:
+ *   - leftmost target: ┌ (horizontal goes right, vertical goes down)
+ *   - rightmost target: ┐ (horizontal comes from left, vertical down)
+ *   - any other target in the middle: ┬
+ *   - source descender point: ┴ if mid-horizontal, otherwise becomes one
+ *     of the ends.
  */
-function drawAdjacentEdge(
+function drawForwardEdges(
   canvas: Canvas,
   src: BoxLayout,
-  tgt: BoxLayout,
-  action: string
+  targets: Array<{ box: BoxLayout; action: string }>
 ): void {
+  if (targets.length === 0) return;
   const srcBottom = src.y + src.height - 1;
-  const tgtTop = tgt.y;
-  if (tgtTop <= srcBottom) return;
+  const srcMidX = Math.floor(src.x + src.width / 2);
 
-  const x = Math.floor(src.x + src.width / 2);
-  // Source bottom: line continues DOWN → ┬
-  canvas.set(x, srcBottom, "┬");
-  // Target top: line approaches from ABOVE → ┴
-  canvas.set(x, tgtTop, "┴");
-  for (let y = srcBottom + 1; y < tgtTop; y++) {
-    canvas.set(x, y, "│");
+  if (targets.length === 1) {
+    const tgt = targets[0].box;
+    const tgtTop = tgt.y;
+    if (tgtTop <= srcBottom) return;
+    const x = srcMidX;
+    canvas.set(x, srcBottom, "┬");
+    canvas.set(x, tgtTop, "┴");
+    for (let y = srcBottom + 1; y < tgtTop; y++) canvas.set(x, y, "│");
+    canvas.set(x, tgtTop - 1, "▼");
+    const midY = srcBottom + Math.floor((tgtTop - srcBottom) / 2);
+    canvas.writeText(x + 2, midY, targets[0].action);
+    return;
   }
-  canvas.set(x, tgtTop - 1, "▼");
-  const midY = srcBottom + Math.floor((tgtTop - srcBottom) / 2);
-  canvas.writeText(x + 2, midY, action);
+
+  // Multi-target.
+  const horizY = srcBottom + 1;
+  const sortedTargets = targets
+    .map((t) => ({ ...t, midX: Math.floor(t.box.x + t.box.width / 2) }))
+    .sort((a, b) => a.midX - b.midX);
+  const leftX = sortedTargets[0].midX;
+  const rightX = sortedTargets[sortedTargets.length - 1].midX;
+  // Include source descender column in horizontal span (in case source is
+  // outside [leftX, rightX]).
+  const horizLeft = Math.min(leftX, srcMidX);
+  const horizRight = Math.max(rightX, srcMidX);
+
+  // Source bottom → ┬, descend one row.
+  canvas.set(srcMidX, srcBottom, "┬");
+
+  // Lay the horizontal.
+  for (let x = horizLeft; x <= horizRight; x++) {
+    canvas.set(x, horizY, "─");
+  }
+
+  // Stamp endpoint and target corner chars on the horizontal.
+  const targetMids = new Set(sortedTargets.map((t) => t.midX));
+  for (let i = 0; i < sortedTargets.length; i++) {
+    const t = sortedTargets[i];
+    let ch: string;
+    if (t.midX === horizLeft && t.midX === srcMidX) {
+      // Source descends here AND horizontal extends right AND vertical goes
+      // down → 3-way (no left). Use ┌ for now (close enough; the source
+      // descender disappears into the corner).
+      ch = "├";
+    } else if (t.midX === horizRight && t.midX === srcMidX) {
+      ch = "┤";
+    } else if (t.midX === horizLeft) {
+      ch = "┌";
+    } else if (t.midX === horizRight) {
+      ch = "┐";
+    } else if (t.midX === srcMidX) {
+      ch = "┼"; // source descends here AND vertical continues to target
+    } else {
+      ch = "┬";
+    }
+    canvas.set(t.midX, horizY, ch);
+  }
+  // If source descender is OUTSIDE all target mids, mark it too.
+  if (!targetMids.has(srcMidX)) {
+    let ch: string;
+    if (srcMidX === horizLeft) ch = "┌"; // horizontal extends right
+    else if (srcMidX === horizRight) ch = "┐"; // horizontal extends left
+    else ch = "┴"; // horizontal extends both ways, vertical goes up to source
+    canvas.set(srcMidX, horizY, ch);
+  }
+
+  // Drop verticals from horizontal to each target.
+  for (const t of sortedTargets) {
+    const tgtTop = t.box.y;
+    for (let y = horizY + 1; y < tgtTop; y++) {
+      canvas.set(t.midX, y, "│");
+    }
+    canvas.set(t.midX, tgtTop - 1, "▼");
+    canvas.set(t.midX, tgtTop, "┴");
+    const midY = horizY + Math.floor((tgtTop - horizY) / 2);
+    canvas.writeText(t.midX + 2, midY, t.action);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -389,8 +571,9 @@ function drawAdjacentEdge(
 
 function actionLabel(e: FlowEdge): string {
   if (e.via_element_label) {
-    // Strip leading + and -, lowercase. "+ Add a kid" → "add a kid".
-    return e.via_element_label.replace(/^[+\-\s]+/, "").trim().toLowerCase();
+    // Strip leading + and - and unicode minus, lowercase.
+    // "+ Add a kid" → "add a kid"; "− Spend" → "spend".
+    return e.via_element_label.replace(/^[+\-−\s]+/, "").trim().toLowerCase();
   }
   // Fall back to element id with dashes as spaces, dropping common suffixes
   // that name the WIDGET rather than the ACTION ("-button", "-link", "-cta").
