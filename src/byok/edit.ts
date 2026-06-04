@@ -11,6 +11,7 @@ import {
   Element,
   FeatureDocument,
   FeatureFrontmatter,
+  TestCase,
   UxView,
   listFeatures,
 } from "../core/product.js";
@@ -66,8 +67,9 @@ export async function editFeatureTurn(args: {
   history: ModelMessage[];
   paths: ProductosPaths;
   byok: ResolvedByok;
+  focusedBehaviorId?: string;
 }): Promise<EditTurnResult> {
-  const { feature, userMessage, history, paths, byok } = args;
+  const { feature, userMessage, history, paths, byok, focusedBehaviorId } = args;
   const apiKey = process.env[byok.api_key_env];
   if (!apiKey) {
     return { kind: "error", message: `API key env var ${byok.api_key_env} is empty or unset` };
@@ -222,7 +224,7 @@ export async function editFeatureTurn(args: {
 
     update_behavior: tool({
       description:
-        "Update fields on an existing behavior by id. Pass only the fields to change. Use for rewording the claim, retargeting the anchor, etc. To change the behavior id or test_cases, use add_or_replace_behavior.",
+        "Update fields on an existing behavior by id. Pass only the fields to change. Use for rewording the claim, retargeting the anchor, or REPLACING the test_cases array (pass the full new array; partial test-case edits aren't supported). To change the behavior id, use add_or_replace_behavior.",
       inputSchema: z.object({
         behavior_id: z.string(),
         claim: z.string().optional(),
@@ -230,8 +232,9 @@ export async function editFeatureTurn(args: {
         surface: z.string().optional(),
         element: z.string().optional(),
         interaction: z.string().optional(),
+        test_cases: z.array(TestCase).optional(),
       }),
-      execute: async (a: { behavior_id: string; claim?: string; notes?: string; surface?: string; element?: string; interaction?: string }) => {
+      execute: async (a) => {
         const b = fm.behaviors.find((x) => x.id === a.behavior_id);
         if (!b) return { ok: false, error: `no behavior ${a.behavior_id}` };
         if (a.claim !== undefined) b.claim = a.claim;
@@ -239,6 +242,7 @@ export async function editFeatureTurn(args: {
         if (a.surface !== undefined) b.surface = a.surface;
         if (a.element !== undefined) b.element = a.element;
         if (a.interaction !== undefined) b.interaction = a.interaction;
+        if (a.test_cases !== undefined) b.test_cases = a.test_cases;
         ops.push(`behavior:${a.behavior_id}:update`);
         return { ok: true };
       },
@@ -258,12 +262,19 @@ export async function editFeatureTurn(args: {
   };
 
   // First turn: bootstrap history with system context + initial feature snapshot.
+  // If a behavior is focused, prepend a per-turn nudge so the LLM weights edits
+  // toward it (but doesn't refuse global edits if the user wants one).
+  const focusNudge = focusedBehaviorId
+    ? `(The user is currently focused on behavior \`${focusedBehaviorId}\` — they probably mean that one when they say "the claim" or "the test cases".)`
+    : null;
+  const userTurn = focusNudge ? `${focusNudge}\n\n${userMessage}` : userMessage;
+
   const messages: ModelMessage[] = history.length === 0
     ? [
         ...buildBootstrapMessages(feature, paths),
-        { role: "user", content: userMessage },
+        { role: "user", content: userTurn },
       ]
-    : [...history, { role: "user", content: userMessage }];
+    : [...history, { role: "user", content: userTurn }];
 
   try {
     const result = await generateText({

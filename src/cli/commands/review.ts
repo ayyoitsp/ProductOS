@@ -99,7 +99,8 @@ export function reviewCommand(): Command {
       }
 
       console.log("");
-      console.log(pc.dim(`Reviewing via ${byok.provider}/${byok.model}. Anything goes — "what's off?", "drop the second behavior", "rename it". Slash commands: /save /quit /reset /help`));
+      console.log(pc.dim(`Reviewing via ${byok.provider}/${byok.model}. Talk freely — "what's off?", "drop the second behavior", "rename it".`));
+      console.log(pc.dim(`Drill into a behavior to see test cases: /show <behavior_id>. Other commands: /save /quit /reset /help`));
       await repl(paths, byok, feature);
     });
 }
@@ -108,25 +109,40 @@ async function repl(paths: ProductosPaths, byok: ResolvedByok, featureIn: Featur
   let feature = featureIn;
   const initial = featureIn;
   let dirty = false;
+  let focusedBehaviorId: string | undefined;
   let history: ModelMessage[] = [];
 
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-  rl.on("close", () => {}); // we control exit explicitly
+  rl.on("close", () => {});
 
   try {
     while (true) {
       renderFeature(feature);
+      if (focusedBehaviorId) {
+        const b = feature.frontmatter.behaviors.find((x) => x.id === focusedBehaviorId);
+        if (!b) {
+          // Behavior was removed — drop focus silently.
+          focusedBehaviorId = undefined;
+        } else {
+          renderBehaviorDetail(b);
+        }
+      }
       const prompt = dirty ? pc.yellow("You> ") : pc.cyan("You> ");
       const input = (await rl.question(prompt)).trim();
       if (!input) continue;
 
       if (input.startsWith("/")) {
-        const result = await handleSlash(input, { paths, feature, dirty, initial });
+        const result = await handleSlash(input, {
+          paths, feature, dirty, initial, focusedBehaviorId,
+        });
         if (result.kind === "exit") return;
         if (result.kind === "replace") {
           feature = result.feature;
           dirty = result.dirty;
           history = [];
+        }
+        if (result.kind === "focus") {
+          focusedBehaviorId = result.behaviorId;
         }
         continue;
       }
@@ -134,7 +150,7 @@ async function repl(paths: ProductosPaths, byok: ResolvedByok, featureIn: Featur
       // Natural-language turn → BYOK
       console.log(pc.dim(`(thinking via ${byok.provider}/${byok.model}…)`));
       const turn = await editFeatureTurn({
-        feature, userMessage: input, history, paths, byok,
+        feature, userMessage: input, history, paths, byok, focusedBehaviorId,
       });
 
       if (turn.kind === "error") {
@@ -163,14 +179,43 @@ async function repl(paths: ProductosPaths, byok: ResolvedByok, featureIn: Featur
 type SlashResult =
   | { kind: "continue" }
   | { kind: "exit" }
-  | { kind: "replace"; feature: FeatureDocument; dirty: boolean };
+  | { kind: "replace"; feature: FeatureDocument; dirty: boolean }
+  | { kind: "focus"; behaviorId: string | undefined };
 
 async function handleSlash(
   input: string,
-  ctx: { paths: ProductosPaths; feature: FeatureDocument; dirty: boolean; initial: FeatureDocument }
+  ctx: {
+    paths: ProductosPaths;
+    feature: FeatureDocument;
+    dirty: boolean;
+    initial: FeatureDocument;
+    focusedBehaviorId: string | undefined;
+  }
 ): Promise<SlashResult> {
-  const [cmd] = input.slice(1).split(/\s+/, 1);
-  const c = cmd.toLowerCase();
+  const parts = input.slice(1).split(/\s+/);
+  const c = (parts[0] ?? "").toLowerCase();
+  const rest = parts.slice(1).join(" ").trim();
+
+  if (c === "show" || c === "drill" || c === "focus") {
+    if (!rest) {
+      console.log(pc.red("✗ "), "Usage: /show <behavior_id>");
+      return { kind: "continue" };
+    }
+    const b = ctx.feature.frontmatter.behaviors.find((x) => x.id === rest);
+    if (!b) {
+      console.log(pc.red("✗ "), `No behavior "${rest}" on this feature. Known: ${ctx.feature.frontmatter.behaviors.map((x) => x.id).join(", ") || "(none)"}`);
+      return { kind: "continue" };
+    }
+    return { kind: "focus", behaviorId: rest };
+  }
+
+  if (c === "back" || c === "unfocus" || c === "up") {
+    if (!ctx.focusedBehaviorId) {
+      console.log(pc.dim("(already at the summary view)"));
+      return { kind: "continue" };
+    }
+    return { kind: "focus", behaviorId: undefined };
+  }
 
   if (c === "save") {
     writeFeature(ctx.paths, ctx.feature);
@@ -203,16 +248,19 @@ async function handleSlash(
   if (c === "help" || c === "h" || c === "?") {
     console.log("");
     console.log(pc.bold("Commands:"));
+    console.log("  /show <behavior>   Drill into a behavior — see notes + test cases");
+    console.log("  /back              Return to the summary view");
     console.log("  /save              Write changes to disk");
     console.log("  /reset             Discard changes and reload from disk");
     console.log("  /quit              Exit (warns on unsaved changes)");
     console.log("  /help              This message");
     console.log("");
     console.log(pc.dim("Anything else you type is sent to the AI editor. Examples:"));
+    console.log(pc.dim("  what's off with this UX?"));
     console.log(pc.dim("  drop the second behavior"));
     console.log(pc.dim("  the leads_to on save-btn should point to confirmation-page"));
-    console.log(pc.dim("  add a behavior for the empty state when no kids exist"));
-    console.log(pc.dim("  set the status to shipped"));
+    console.log(pc.dim("  add a test case for the empty state"));
+    console.log(pc.dim("  rename the feature to 'Add a child'"));
     return { kind: "continue" };
   }
 
@@ -273,4 +321,40 @@ function oneLine(s: string, max = 80): string {
   const trimmed = s.replace(/\s+/g, " ").trim();
   if (trimmed.length <= max) return trimmed;
   return trimmed.slice(0, max - 1) + "…";
+}
+
+// ---------------------------------------------------------------------------
+// Drilled view — full detail for one behavior (notes + test cases).
+
+function renderBehaviorDetail(b: { id: string; claim: string; notes?: string; surface?: string; element?: string; interaction?: string; test_cases: Array<{ id: number; description: string; level?: string; given?: string; when?: string; then?: string; steps?: string; deprecated?: boolean }> }): void {
+  console.log(pc.dim("  ─── focused: ") + pc.bold(pc.cyan(b.id)) + pc.dim(" " + "─".repeat(Math.max(0, 40 - b.id.length))));
+  if (b.surface) {
+    console.log(pc.dim(`  anchor: ${b.surface}${b.element ? "." + b.element : ""}${b.interaction ? " " + b.interaction : ""}`));
+  }
+  console.log("");
+  console.log("  " + pc.bold("claim:") + " " + b.claim);
+  if (b.notes) {
+    console.log("  " + pc.bold("notes:") + " " + b.notes.split("\n").join("\n         "));
+  }
+  console.log("");
+  if (b.test_cases.length === 0) {
+    console.log(pc.dim("  (no test cases yet)"));
+  } else {
+    console.log(pc.bold(`  Test cases (${b.test_cases.length}):`));
+    for (const tc of b.test_cases) {
+      const dep = tc.deprecated ? pc.red(" [deprecated]") : "";
+      const lvl = tc.level ? pc.dim(` (${tc.level})`) : "";
+      console.log(`    ${pc.cyan("#" + tc.id)}${lvl}${dep}  ${tc.description}`);
+      if (tc.given) console.log(pc.dim(`        given: ${tc.given}`));
+      if (tc.when) console.log(pc.dim(`        when:  ${tc.when}`));
+      if (tc.then) console.log(pc.dim(`        then:  ${tc.then}`));
+      if (tc.steps) {
+        const indented = tc.steps.split("\n").map((l) => "          " + l).join("\n");
+        console.log(pc.dim(`        steps:\n${indented}`));
+      }
+    }
+  }
+  console.log("");
+  console.log(pc.dim(`  Tip: edit the claim, notes, or test cases by talking. /back to return to the summary.`));
+  console.log("");
 }

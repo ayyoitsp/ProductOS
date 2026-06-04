@@ -5,6 +5,7 @@ import {
   Element,
   FeatureFrontmatter,
   FeatureStatus,
+  TestCase,
   UxView,
   listAreas,
   listFeatures,
@@ -297,12 +298,13 @@ const UpdateBehaviorInput = z.object({
   surface: z.string().optional().describe("UX view id to anchor to (within this feature). Pass empty string to clear."),
   element: z.string().optional().describe("Element id within the anchored UX view. Pass empty string to clear."),
   interaction: z.string().optional().describe("Interaction word (tap, submit, view, load, etc). Pass empty string to clear."),
+  test_cases: z.array(TestCase).optional().describe("Replace the FULL test_cases array. To add/remove/edit individual cases, pass the full new array (read current, mutate, send)."),
 });
 
 const updateBehavior: McpTool = {
   name: "productos_update_behavior",
   description:
-    "Update a behavior's claim, notes, or anchor (surface/element/interaction). To update verification status or code refs, use productos_update_tracking — that data lives in the sidecar, not product truth.",
+    "Update a behavior's claim, notes, anchor (surface/element/interaction), or test_cases array. To update verification status or code refs, use productos_update_tracking — that data lives in the sidecar, not product truth. To edit test cases: pass the FULL new test_cases array (read current, mutate, send back) — partial test-case edits aren't supported.",
   inputSchema: zodToInputSchema(UpdateBehaviorInput),
   handler: async (raw, paths) => {
     const args = UpdateBehaviorInput.parse(raw);
@@ -315,6 +317,7 @@ const updateBehavior: McpTool = {
     if (args.surface !== undefined) b.surface = args.surface || undefined;
     if (args.element !== undefined) b.element = args.element || undefined;
     if (args.interaction !== undefined) b.interaction = args.interaction || undefined;
+    if (args.test_cases !== undefined) b.test_cases = args.test_cases;
     writeFeature(paths, doc);
     return { ok: true };
   },
