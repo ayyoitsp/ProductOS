@@ -18,6 +18,9 @@ export interface FlowEdge {
   from_ux: string;
   /** The element on `from_ux` that triggers the navigation */
   via_element: string;
+  /** Optional human-readable label of the triggering element ("+ Add a kid"); used
+   *  to render user-meaningful action names ("add a kid") instead of element ids. */
+  via_element_label?: string;
   /** Target — either a same-feature ux id, or a cross-feature reference */
   to: string;
   /** True if `to` is outside this feature (another area/feature, with or without anchor) */
@@ -52,6 +55,7 @@ export function buildFlowGraph(feature: FeatureDocument): FlowGraph {
       edges.push({
         from_ux: u.id,
         via_element: el.id,
+        via_element_label: el.label,
         to: target,
         external,
       });
@@ -81,11 +85,12 @@ export function renderMermaid(graph: FlowGraph): string {
     lines.push(`  ${safeId}["${label}"]`);
   }
 
-  // Edges
+  // Edges — use the human-readable action label so the web flow uses the
+  // same words as the CLI ("add a kid", "earn") instead of element ids.
   for (const e of graph.edges) {
     const from = mermaidId(e.from_ux);
     const to = mermaidId(e.to);
-    const label = mermaidLabel(e.via_element);
+    const label = mermaidLabel(actionLabel(e));
     lines.push(`  ${from} -->|${label}| ${to}`);
   }
 
@@ -106,93 +111,291 @@ export function renderMermaid(graph: FlowGraph): string {
   return lines.join("\n");
 }
 
-/**
- * ASCII flow chart for the CLI REPL and the productos-review skill.
- *
- * Each internal UX view renders as a box with:
- *   - id in the top border (so it pops visually)
- *   - title on the first line inside
- *   - optional one-line summary on the second line (from notes if provided
- *     by `uxSummary`, otherwise blank)
- *
- * Below each box, outbound edges are listed as:
- *   [element-id] ──→ target  (cross-feature tag if external)
- *
- * Boxes stack top-to-bottom, separated by a blank line.
- */
+// ===========================================================================
+// ASCII flow chart — boxes with real arrows between them.
+// ===========================================================================
+//
+// v1 layout strategy:
+//   - Internal screens stack top-to-bottom in render order (declaration order
+//     of the UX array).
+//   - Internal-to-internal edges become vertical arrows with the action label.
+//     If the target is directly below the source in render order, it's a
+//     short arrow. If target is N>1 rows below, the line runs in a right-side
+//     channel that "passes alongside" the intermediate boxes.
+//   - External (cross-feature) edges fan to the right of each source box,
+//     one per row of the box's right edge.
+//   - "Action" labels come from element.label (lowercased, leading "+ "
+//     stripped). For unlabeled elements, fall back to element id with
+//     dashes-to-spaces.
+//
+// Multi-internal-branching to siblings at the same render row (e.g. A → B
+// and A → C where B and C are both at row 1) renders as side-by-side
+// columns. For 3+ siblings we degrade to stacked with explicit edge lines.
+
+const MIN_BOX_INNER = 26;
+const MAX_BOX_INNER = 44;
+const LEFT_MARGIN = 2;
+const BOX_GAP_Y = 3;
+const EXT_GAP_X = 1;
+
+interface BoxLayout {
+  id: string;
+  title: string;
+  summaryLines: string[];
+  externals: { action: string; target: string; kind?: "external" | "internal" }[];
+  innerWidth: number;
+  innerLines: string[];   // padded content rows (title + summary + blanks)
+  width: number;          // total box width incl. borders
+  height: number;         // total box height incl. borders
+  x: number;              // canvas column of left border
+  y: number;              // canvas row of top border
+}
+
 export function renderAscii(
   graph: FlowGraph,
   uxSummary?: Map<string, string>
 ): string {
   if (!graph.has_flow) return "(no UX views)";
 
-  const byFrom = new Map<string, FlowEdge[]>();
+  const internal = graph.nodes.filter((n) => !n.external);
+  if (internal.length === 0) return "(no UX views)";
+
+  // Index internal node by id for fast lookups.
+  const indexById = new Map<string, number>();
+  internal.forEach((n, i) => indexById.set(n.id, i));
+
+  // Partition edges into three groups:
+  //   - primaryInternal: source → next-in-declaration-order target (drawn as
+  //     a vertical arrow connecting two boxes)
+  //   - sideInternal: source → some other internal target (rendered as
+  //     fan-right with "(internal)" tag; same screen still renders below
+  //     in declaration order)
+  //   - external: cross-feature (rendered as fan-right with "(cross-feature)")
+  type Fan = { action: string; target: string; kind: "external" | "internal" };
+  const primaryInternal = new Map<string, FlowEdge>(); // by source id
+  const fansByFrom = new Map<string, Fan[]>();
   for (const e of graph.edges) {
-    const arr = byFrom.get(e.from_ux) ?? [];
-    arr.push(e);
-    byFrom.set(e.from_ux, arr);
+    const fromIdx = indexById.get(e.from_ux);
+    const toIdx = indexById.get(e.to);
+    if (fromIdx !== undefined && toIdx === fromIdx + 1 && !primaryInternal.has(e.from_ux)) {
+      // Direct down-arrow case.
+      primaryInternal.set(e.from_ux, e);
+      continue;
+    }
+    const fan: Fan = {
+      action: actionLabel(e),
+      target: e.to,
+      kind: e.external ? "external" : "internal",
+    };
+    const arr = fansByFrom.get(e.from_ux) ?? [];
+    arr.push(fan);
+    fansByFrom.set(e.from_ux, arr);
   }
 
-  const internalNodes = graph.nodes.filter((n) => !n.external);
-  const blocks: string[] = [];
+  // 1. First pass: figure out content for each box (pre-width).
+  type Pre = {
+    id: string;
+    title: string;
+    summary: string;
+    fans: Fan[];
+  };
+  const pre: Pre[] = internal.map((n) => ({
+    id: n.id,
+    title: n.title,
+    summary: uxSummary?.get(n.id) ?? "",
+    fans: fansByFrom.get(n.id) ?? [],
+  }));
 
-  for (const n of internalNodes) {
-    const summary = uxSummary?.get(n.id) ?? "";
-    blocks.push(renderUxBox(n.id, n.title, summary));
+  // 2. Pick one common inner width for all boxes so they align.
+  const widthCandidates = pre.map((p) => {
+    const idMin = p.id.length + 6; // " {id} ─" plus borders
+    const titleLen = p.title.length;
+    // Try a soft target width to fit the longest summary word at MIN_BOX_INNER.
+    const summaryWordMax = p.summary
+      ? Math.max(...p.summary.split(/\s+/).map((w) => w.length))
+      : 0;
+    return Math.max(MIN_BOX_INNER, idMin, titleLen, summaryWordMax);
+  });
+  let commonInnerWidth = Math.min(MAX_BOX_INNER, Math.max(...widthCandidates));
 
-    const outs = byFrom.get(n.id) ?? [];
-    if (outs.length > 0) {
-      // Two-space indent under the box.
-      const arrowLines: string[] = [];
-      // Compute max width of [element] for alignment.
-      const maxElLen = Math.max(...outs.map((e) => e.via_element.length));
-      for (const e of outs) {
-        const elPad = e.via_element.padEnd(maxElLen, " ");
-        const tag = e.external ? " (cross-feature)" : "";
-        arrowLines.push(`    [${elPad}] ──→ ${e.to}${tag}`);
-      }
-      blocks.push(arrowLines.join("\n"));
+  // 3. Build BoxLayouts with that common width.
+  const boxes: BoxLayout[] = pre.map((p) => {
+    const summaryLines = p.summary ? wrapText(p.summary, commonInnerWidth) : [];
+    const contentRows: string[] = [p.title, ...summaryLines];
+    const wantedH = Math.max(contentRows.length, p.fans.length);
+    while (contentRows.length < wantedH) contentRows.push("");
+    return {
+      id: p.id,
+      title: p.title,
+      summaryLines,
+      externals: p.fans.map((f) => ({ action: f.action, target: f.target, kind: f.kind })),
+      innerWidth: commonInnerWidth,
+      innerLines: contentRows,
+      width: commonInnerWidth + 4,
+      height: contentRows.length + 2,
+      x: LEFT_MARGIN,
+      y: 0,
+    };
+  });
+
+  // 2. Place boxes vertically with gap.
+  let cursorY = 0;
+  for (const b of boxes) {
+    b.y = cursorY;
+    cursorY += b.height + BOX_GAP_Y;
+  }
+
+  // 3. Compute canvas size.
+  const maxRightOfBox = Math.max(...boxes.map((b) => b.x + b.width));
+  const maxExtLine = boxes.reduce((m, b) => {
+    for (const e of b.externals) {
+      const tag = e.kind === "internal" ? " (internal)" : " (cross-feature)";
+      const s = ` ── ${e.action} ──► ${e.target}${tag}`;
+      if (s.length > m) m = s.length;
+    }
+    return m;
+  }, 0);
+
+  const canvasWidth = maxRightOfBox + EXT_GAP_X + maxExtLine + 1;
+  const canvasHeight = cursorY;
+  const canvas = new Canvas(canvasWidth, canvasHeight);
+
+  // 4. Draw each box.
+  for (const b of boxes) drawBox(canvas, b);
+
+  // 5. Draw fan edges to the right of each box.
+  for (const b of boxes) {
+    for (let i = 0; i < b.externals.length; i++) {
+      const e = b.externals[i];
+      const rowY = b.y + 1 + i;
+      const startX = b.x + b.width;
+      const tag = e.kind === "internal" ? " (internal)" : " (cross-feature)";
+      const line = ` ── ${e.action} ──► ${e.target}${tag}`;
+      canvas.writeText(startX, rowY, line);
     }
   }
 
-  return blocks.join("\n\n");
+  // 6. Draw primary internal vertical arrows between consecutive boxes only.
+  for (const [fromId, e] of primaryInternal) {
+    const src = boxes[indexById.get(fromId)!];
+    const tgt = boxes[indexById.get(e.to)!];
+    drawAdjacentEdge(canvas, src, tgt, actionLabel(e));
+  }
+
+  return canvas.toString();
+}
+
+// ---------------------------------------------------------------------------
+// Drawing primitives
+
+class Canvas {
+  private grid: string[][];
+
+  constructor(width: number, height: number) {
+    this.grid = Array.from({ length: height }, () =>
+      Array.from({ length: width }, () => " ")
+    );
+  }
+
+  set(x: number, y: number, ch: string): void {
+    if (y < 0 || y >= this.grid.length) return;
+    if (x < 0) return;
+    const row = this.grid[y];
+    while (row.length <= x) row.push(" ");
+    row[x] = ch;
+  }
+
+  writeText(x: number, y: number, s: string): void {
+    for (let i = 0; i < s.length; i++) this.set(x + i, y, s[i]);
+  }
+
+  hLine(x1: number, x2: number, y: number, ch = "─"): void {
+    if (x2 < x1) [x1, x2] = [x2, x1];
+    for (let x = x1; x <= x2; x++) this.set(x, y, ch);
+  }
+
+  vLine(y1: number, y2: number, x: number, ch = "│"): void {
+    if (y2 < y1) [y1, y2] = [y2, y1];
+    for (let y = y1; y <= y2; y++) this.set(x, y, ch);
+  }
+
+  toString(): string {
+    return this.grid.map((row) => row.join("").trimEnd()).join("\n");
+  }
+}
+
+function drawBox(canvas: Canvas, b: BoxLayout): void {
+  const top = b.y;
+  const bot = b.y + b.height - 1;
+  const left = b.x;
+  const right = b.x + b.width - 1;
+
+  // Top border: ┌─ id ──────┐
+  canvas.set(left, top, "┌");
+  canvas.set(right, top, "┐");
+  // " id " label inside the top border, starting at left+2
+  canvas.hLine(left + 1, right - 1, top, "─");
+  canvas.writeText(left + 2, top, ` ${b.id} `);
+
+  // Sides + content rows
+  for (let i = 0; i < b.innerLines.length; i++) {
+    const y = top + 1 + i;
+    canvas.set(left, y, "│");
+    canvas.set(right, y, "│");
+    // " content "
+    canvas.writeText(left + 2, y, b.innerLines[i]);
+  }
+
+  // Bottom border
+  canvas.set(left, bot, "└");
+  canvas.set(right, bot, "┘");
+  canvas.hLine(left + 1, right - 1, bot, "─");
 }
 
 /**
- * Render one UX view as a box. Top border carries the id. Title and
- * (optional) summary go inside. Box width auto-sizes to longest content
- * line, capped at 60 chars; long summaries wrap.
+ * Draw a vertical arrow between adjacent boxes (in declaration order).
+ * Source bottom-middle ──→ target top-middle, with the action label
+ * written to the right of the line.
+ *
+ * Non-adjacent internal edges aren't drawn in v1 — they're rendered as
+ * fan-right entries with the "(internal)" tag instead, so the user can
+ * see the relationship without a tangled multi-lane arrow.
  */
-function renderUxBox(id: string, title: string, summary: string): string {
-  const MAX_WIDTH = 60;
-  // Wrap summary to fit. Title doesn't wrap (assumed short).
-  const titleLine = title;
-  const summaryLines = summary ? wrapText(summary, MAX_WIDTH - 4) : [];
-  // Inner width = longest of titleLine and any summary line, padded.
-  const innerWidth = Math.max(
-    titleLine.length,
-    ...summaryLines.map((l) => l.length),
-    id.length + 4 // make room for top border id
-  );
-  const usableWidth = Math.min(innerWidth, MAX_WIDTH - 4);
+function drawAdjacentEdge(
+  canvas: Canvas,
+  src: BoxLayout,
+  tgt: BoxLayout,
+  action: string
+): void {
+  const srcBottom = src.y + src.height - 1;
+  const tgtTop = tgt.y;
+  if (tgtTop <= srcBottom) return;
 
-  // Top border: ┌─ id ──────────┐
-  const topPad = "─".repeat(Math.max(0, usableWidth - id.length - 2));
-  const top = `  ┌─ ${id} ${topPad}─┐`;
-
-  const lines: string[] = [top];
-  lines.push(`  │ ${pad(titleLine, usableWidth + 1)}│`);
-  for (const s of summaryLines) {
-    lines.push(`  │ ${pad(s, usableWidth + 1)}│`);
+  const x = Math.floor(src.x + src.width / 2);
+  // Source bottom: line continues DOWN → ┬
+  canvas.set(x, srcBottom, "┬");
+  // Target top: line approaches from ABOVE → ┴
+  canvas.set(x, tgtTop, "┴");
+  for (let y = srcBottom + 1; y < tgtTop; y++) {
+    canvas.set(x, y, "│");
   }
-  const bottom = `  └─${"─".repeat(usableWidth + 2)}┘`;
-  lines.push(bottom);
-  return lines.join("\n");
+  canvas.set(x, tgtTop - 1, "▼");
+  const midY = srcBottom + Math.floor((tgtTop - srcBottom) / 2);
+  canvas.writeText(x + 2, midY, action);
 }
 
-function pad(s: string, width: number): string {
-  if (s.length >= width) return s.slice(0, width);
-  return s + " ".repeat(width - s.length);
+// ---------------------------------------------------------------------------
+// Action label heuristic
+
+function actionLabel(e: FlowEdge): string {
+  if (e.via_element_label) {
+    // Strip leading + and -, lowercase. "+ Add a kid" → "add a kid".
+    return e.via_element_label.replace(/^[+\-\s]+/, "").trim().toLowerCase();
+  }
+  // Fall back to element id with dashes as spaces, dropping common suffixes
+  // that name the WIDGET rather than the ACTION ("-button", "-link", "-cta").
+  const id = e.via_element.replace(/-(button|link|cta|action|trigger)$/, "");
+  return id.replace(/-/g, " ");
 }
 
 function wrapText(s: string, width: number): string[] {

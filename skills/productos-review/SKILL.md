@@ -22,7 +22,7 @@ If the user doesn't name a feature, call `productos_list_features` and ask which
 
 ## 1. Summary render (default state)
 
-Call `productos_get_feature({ id, include_tracking: false })`. Render an ASCII flow chart with boxed UX views. Use box-drawing chars — the boxes are what makes the chart obviously a chart, not just a list.
+Call `productos_get_feature({ id, include_tracking: false })`. Render a real ASCII flow chart — boxes for screens, with **actual arrows connecting them** down the page. Cross-feature transitions fan out to the right of each box.
 
 ```
 Kid balance                                                wallet/kid-balance
@@ -32,20 +32,19 @@ Each kid has a running balance equal to the sum of their transactions.
 
 UX flow:
 
-  ┌─ family-list ──────────────────────┐
-  │ Family list                        │
-  │ Shows each kid's row + balance.    │
-  └────────────────────────────────────┘
-    [kid-card       ] ──→ kid-detail
-    [add-kid-button ] ──→ add-kid
-
-  ┌─ kid-detail ───────────────────────┐
-  │ Kid detail                         │
-  │ Shows current balance + history.   │
-  └────────────────────────────────────┘
-    [earn-button       ] ──→ wallet/earn (cross-feature)
-    [spend-button      ] ──→ wallet/spend (cross-feature)
-    [transaction-delete] ──→ wallet/delete-transaction (cross-feature)
+  ┌─ family-list ──────────────┐
+  │ Family list                │ ── add a kid ──► add-kid (cross-feature)
+  │ shows each kid's row with  │
+  │ name and balance           │
+  └──────────────┬─────────────┘
+                 │
+                 │ tap a kid
+                 ▼
+  ┌─ kid-detail ─┴─────────────┐
+  │ Kid detail                 │ ── earn ──► wallet/earn (cross-feature)
+  │ shows current balance +    │ ── spend ──► wallet/spend (cross-feature)
+  │ transaction history        │ ── delete a transaction ──► wallet/delete-transaction (cross-feature)
+  └────────────────────────────┘
 
 Rules & invariants: balance-is-derived, negative-balances-allowed
 Affected by: wallet/earn · wallet/spend · tasks/complete-task · wallet/interest
@@ -53,11 +52,16 @@ Affected by: wallet/earn · wallet/spend · tasks/complete-task · wallet/intere
 Does this overall flow look right? Want to change or add details, or view a particular UX screen and its behaviors?
 ```
 
-**Important:**
-- BOX every UX view in the flow chart. Id goes in the top border, title on the first line inside, **one-line summary on the second line** (use the UX view's `notes` field if present; if not, briefly describe what's on the screen based on its elements + anchored behaviors — one line, no more).
-- Arrows go BELOW each box, listing outbound `leads_to` edges with the element id in brackets. Tag cross-feature targets `(cross-feature)`.
+**The chart rules — exactly how to render:**
+
+- **Each screen is a box.** Top border carries the id (`┌─ family-list ─...─┐`). Inside: line 1 is the title, line 2+ is a wrapped one-line summary (from the UX view's `notes` field). All boxes share the same width.
+- **Internal-to-internal transitions become vertical arrows between boxes.** The action label (derived from the element's `label`, lowercased — "+ Add a kid" → "add a kid"; for unlabeled elements fall back to element id with dashes-as-spaces) goes to the right of the vertical `│` line, with `▼` just before the target box. Use `┬` on the source bottom border, `┴` on the target top border.
+- **Cross-feature transitions fan to the right of the source box**, one per inner row: ` ── action ──► target_id (cross-feature)`.
+- **Multi-internal-target case**: only the FIRST internal target gets the vertical arrow. Other internal targets render as right-fan with `(internal)` tag instead of `(cross-feature)`. Don't try to draw multiple internal arrows — it gets tangled.
 - **Don't list behaviors at the summary level.** Just the flow + rules reference + affected_by.
 - End with the **guided question** ("Does this flow look right? Want to change details or view a screen?") — NOT a generic "what's off?".
+
+The CLI tool `productos review` renders this same chart via `src/core/flowchart.ts` — when in doubt, match what it would produce.
 
 ## 2. UX drilled-in render
 
