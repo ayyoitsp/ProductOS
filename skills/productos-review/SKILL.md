@@ -1,7 +1,7 @@
 ---
 name: productos-review
 description: Use when the user wants to look at and edit a ProductOS feature conversationally. You render a compact SUMMARY first — a UX flow diagram (which screens lead to which) + behaviors as id+claim only. They talk freely or ask to drill into a SPECIFIC UX view (sketch + elements) or a SPECIFIC behavior (notes + test cases). No information dumps, no walkthroughs, no per-item Y/N. Triggers on "review the X feature", "let's look at X", "anything wrong with X", "open X", "walk me through X", "show me the family-settings screen", "drill into Y".
-version: 0.5.0
+version: 0.1.0
 ---
 
 # ProductOS — Review Skill
