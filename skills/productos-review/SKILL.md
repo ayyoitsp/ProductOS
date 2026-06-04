@@ -1,30 +1,26 @@
 ---
 name: productos-review
-description: Use when the user wants to review and edit a ProductOS feature conversationally inside Claude Code. You re-render the feature (title, status, UX sketches, behaviors) at every meaningful turn, then take natural-language requests and apply them via MCP tools. Equivalent to `productos review` in the terminal — same scope (one feature at a time), same model (edit the live products/<id>.md), same operations. Triggers on "review the X feature", "let's go through X", "walk me through wallet/add-kid", "open X for editing".
-version: 0.2.0
+description: Use when the user wants to look at a ProductOS feature and talk about it conversationally — UX sketches, behaviors, anchors, whatever. You render the feature once, then take whatever free-form feedback they give ("anything wrong with this UX?", "the second behavior is off", "drop the kid-card", "rename it"), and apply via MCP tools. No walkthroughs, no keystrokes, no per-item Y/N. Equivalent to `productos review` in the terminal — same scope (one feature), same model (live edits to products/<id>.md). Triggers on "review the X feature", "let's look at X", "anything wrong with X", "open X", "walk me through X".
+version: 0.3.0
 ---
 
-# ProductOS — Review Skill (conversational, in Claude Code)
+# ProductOS — Review Skill
 
-You're the conversational analog of `productos review` in the terminal. The user wants to look at one feature, talk about it in plain English, and have you apply changes via MCP tools. The file at `productos/products/<id>.md` is the live feature — you edit it directly, the user commits via git when satisfied.
+The user wants to look at one feature and talk about it. You render it, they tell you what's off, you fix it. **Not a walkthrough.** Not Y/N per behavior. Free-form input, free-form response, free-form edits.
 
-This skill is **scoped to one feature at a time** and **driven by natural language**, not a fixed menu.
+The file at `productos/products/<id>.md` is the live feature — every tool call writes the file directly. Git is the commit boundary; the user re-runs review whenever.
 
-## Triggers
+## Trigger phrases
 
-- "Review wallet/add-kid" / "open wallet/add-kid for editing"
-- "Walk me through the checkout flow feature"
-- "Let's go through tasks/complete-task"
+"review wallet/add-kid" · "let's look at wallet/add-kid" · "anything wrong with wallet/add-kid" · "walk me through X" · "open X for editing"
 
-If the user doesn't name a feature: call `productos_list_features` and ask which one. Don't pick for them.
+If the user doesn't name a feature, call `productos_list_features` and ask which one. Don't pick for them.
 
-## Process
+## The whole flow
 
-### 1. Open the feature: render it cleanly
+### 1. Render once
 
-Call `productos_get_feature(id, include_tracking: false)`. Render it in a compact, scannable form — title + status, UX views with ASCII sketches, behaviors with claim + anchor. Don't dump raw YAML.
-
-Example render:
+Call `productos_get_feature({ id, include_tracking: false })`. You get `{ id, title, status, description, ux, behaviors, affected_by, body }`. Render it in compact, scannable form:
 
 ```
 Add a kid                                                    wallet/add-kid
@@ -48,85 +44,91 @@ Behaviors:
   submit-modal  [add-kid-modal.confirm-btn submit]
     On confirm, a new kid is added with $0 balance and the modal closes.
 
-What would you like to change?
+What's off, or what would you like to change?
 ```
 
-After every successful edit, **re-render the feature** so the user always sees current state. Don't make them scroll up.
+That's the whole opening. One render, one open question. **Don't enumerate "Behavior 1 of 2 — accept? Y/N".** **Don't ask permission to start.** **Don't walk the user through items.**
 
-### 2. Take natural-language requests, apply via MCP tools
+### 2. Take whatever they say
 
-The user might say:
-- "drop the second behavior" → `productos_remove_behavior(feature_id, behavior_id)`
-- "the leads_to on save-btn should point to confirmation-page" → fetch the current element via the feature read, then `productos_add_or_replace_element(feature_id, ux_id, { id: "save-btn", kind: "button", label: "Save", leads_to: "confirmation-page" })`
-- "tweak the family-screen sketch — add a search row" → `productos_update_ux(feature_id, ux_id, { sketch: "<updated sketch>" })`
-- "add a behavior for the empty-state when there are no kids" → ask one clarifying question if needed (where does it anchor?), then `productos_add_behavior(feature_id, { id, claim, surface?, element?, interaction?, test_cases: [] })`
-- "rename this to 'Add a child'" → `productos_update_feature(id, { title: "Add a child" })`
-- "set the status to shipped" → `productos_update_feature(id, { status: "shipped" })`
-- "drop the family-screen view entirely" → `productos_remove_ux(feature_id, "family-screen")` — behaviors that anchored to it auto-clear their surface/element
-- "what other features anchor to family-settings?" → `productos_list_features`, filter, report — no edit
+Free-form. The user might:
 
-If the request is ambiguous, **ask ONE clarifying question** and wait. Don't pick silently.
+| They say | You do |
+|---|---|
+| "Looks good" / "nothing wrong" | Stop. End cleanly (see §4). |
+| "The second behavior is wrong — persistence is on submit, not confirm" | `productos_update_behavior(feature_id, "create-record", { claim: "..." })` or remove+add. Re-render. |
+| "Anything wrong with the family-settings sketch?" | YOU answer — give your read. Point out missing leads_to, behaviors not anchored, sketches that don't match described behavior. Don't edit yet. |
+| "Drop the kid-card element" | `productos_remove_element(...)`. Re-render. |
+| "Add a behavior for the empty state" | One clarifying Q if anchor isn't clear, then `productos_add_behavior(...)`. Re-render. |
+| "Rename this to 'Add a child'" | `productos_update_feature(id, { title: "Add a child" })`. Re-render. |
+| "Set status to shipped" | `productos_update_feature(id, { status: "shipped" })`. Re-render. |
+| "tweak the sketch to add a search row at the top" | `productos_update_ux(feature_id, ux_id, { sketch: "<new sketch>" })`. Re-render. |
+| "What else needs work?" | YOU give a focused read — 3-5 items max, prioritized. Then wait. Don't apply. |
+
+**Re-render after every meaningful write.** That's the signal that the state moved. Skip re-render when you're just answering a question or commenting.
 
 ### 3. Tools you have
 
-**Read:**
-- `productos_get_feature({ id })` — returns `{ id, title, status, description, ux, behaviors, affected_by, body, tracking? }`. Call this once at the start (and again after each edit before re-rendering) so the user always sees current state.
+**Read:** `productos_get_feature` — returns `{ id, title, status, description, ux, behaviors, affected_by, body, tracking? }`.
 
-**Feature-level:**
-- `productos_update_feature({ id, title?, status?, description?, body? })`
+**Feature-level:** `productos_update_feature({ id, title?, status?, description?, body? })`
 
 **Behaviors:**
-- `productos_add_behavior({ feature_id, behavior })` — full Behavior object
-- `productos_update_behavior({ feature_id, behavior_id, claim?, notes?, surface?, element?, interaction? })` — partial; pass empty string to clear an anchor field
+- `productos_add_behavior({ feature_id, behavior })` — full Behavior
+- `productos_update_behavior({ feature_id, behavior_id, claim?, notes?, surface?, element?, interaction? })` — partial; empty string clears anchor
 - `productos_remove_behavior({ feature_id, behavior_id })`
 
 **UX views:**
-- `productos_add_or_replace_ux({ feature_id, ux })` — pass FULL UxView, id-keyed upsert
+- `productos_add_or_replace_ux({ feature_id, ux })` — full UxView, id-keyed upsert
 - `productos_update_ux({ feature_id, ux_id, title?, sketch?, path?, notes? })` — partial; doesn't touch elements
 - `productos_remove_ux({ feature_id, ux_id })` — auto-clears dangling behavior anchors
 
 **Elements (inside a UX view):**
-- `productos_add_or_replace_element({ feature_id, ux_id, element })` — pass FULL Element
-- `productos_remove_element({ feature_id, ux_id, element_id })` — auto-clears dangling behavior anchors
+- `productos_add_or_replace_element({ feature_id, ux_id, element })` — full Element
+- `productos_remove_element({ feature_id, ux_id, element_id })` — auto-clears dangling anchors
 
-All of these write the file directly; the user commits via git.
+All writes hit the file directly.
 
-### 4. Stay in scope
+### 4. Close cleanly when they're done
 
-- One feature per session of this skill. If the user says "actually let's look at X instead", close the loop on the current feature first ("anything else here?") then open X.
-- Never set tracking status to `verified` — humans do that elsewhere.
-- Never invent behaviors or claims the user didn't ask for. If you notice something missing, ask: "I notice X isn't covered — should I add a behavior for it?"
-- Product language only. Don't write "POST /api/x returns 409" — write "the user sees an error".
-
-### 5. Closing out
-
-When the user signals they're done ("looks good", "ship it", "/quit"):
+When they signal done ("looks good", "ship it", "thanks", silence), wrap with the diff:
 
 ```
-Done. Edits applied to productos/products/<id>.md.
-
-Changes this session:
-  - Removed behavior X
-  - Updated behavior Y's claim
+Done. Changes this session:
+  - Removed behavior create-record
+  - Added behavior submit-modal
   - Set status to shipped
 
 Commit when ready:
-  git add productos/products/<id>.md
-  git commit -m "review: <feature_id>"
+  git add productos/products/wallet/add-kid.md
+  git commit -m "review: wallet/add-kid"
 ```
+
+Skip this block if no edits were made.
+
+## Rules
+
+- **One render at the start, then conversation.** No walkthrough.
+- **Re-render after every write** so the user sees current state without scrolling.
+- **No keystroke prompts.** No Y/N, no /accept, no per-item enumeration.
+- **Product language only.** Don't write "POST /api/x returns 409" — write "the user sees an error".
+- **Don't invent.** If they say "drop the second behavior" and there are three, ask which.
+- **Don't bulk-apply judgment calls.** "Fix all the leads_to that look wrong" → list what you'd change, get a one-line OK, then apply.
+- **Don't mix in verification.** Verified is a separate concept; review is just edit.
+- **Ask ONE clarifying question max per turn**, not three.
 
 ## Don't
 
-- **Don't dump raw YAML at the user.** They're not editing YAML — they're describing changes in English.
-- **Don't open the browser.** They picked Claude/text.
-- **Don't show a fixed menu.** This isn't `productos review`'s terminal multiselect — this is conversation.
-- **Don't propose NEW features.** That's `productos-scope`. Review is for what already exists.
-- **Don't mix in verification.** "Verified" is a separate concept. Review is just edit on the live file. Git is the commit boundary.
-- **Don't bulk-apply.** Each request is one logical change. If the user says "fix all the leads_to that look wrong", first list what you'd change and ask for sign-off.
+- Don't open a browser. They picked Claude.
+- Don't propose NEW features here. That's `productos-scope`.
+- Don't write code. Review is judgment over markdown.
+- Don't dump raw YAML at them.
+- Don't show a fixed menu. This isn't the CLI's slash-command surface.
+- Don't apologize for missing tools. The element-level tools exist now.
 
-## Don't do this in this skill — defer instead
+## Defer instead
 
-- **Surgical, scripted edits** (e.g. "add `leads_to: foo/bar` to element X on surface Y") → use `productos-edit`.
-- **Scope a NEW feature** → use `productos-scope`.
-- **Broad codebase pass** → use `productos-fullscan`.
-- **Map tests to behaviors** → use `productos-align`.
+- **Surgical scripted edit** ("add leads_to: foo to element X") → `productos-edit`.
+- **Scope a NEW feature** → `productos-scope`.
+- **Broad codebase pass** → `productos-fullscan`.
+- **Map tests to behaviors** → `productos-align`.

@@ -99,7 +99,7 @@ export function reviewCommand(): Command {
       }
 
       console.log("");
-      console.log(pc.dim(`Reviewing via ${byok.provider}/${byok.model}. Type plain English. Slash commands: /save /quit /reset /help`));
+      console.log(pc.dim(`Reviewing via ${byok.provider}/${byok.model}. Anything goes — "what's off?", "drop the second behavior", "rename it". Slash commands: /save /quit /reset /help`));
       await repl(paths, byok, feature);
     });
 }
