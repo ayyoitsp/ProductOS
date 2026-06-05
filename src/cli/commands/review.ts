@@ -380,6 +380,19 @@ function renderUxDetail(
     }
     console.log(pc.dim(`    /show <behavior_id> for claim + notes + test cases.`));
   }
+  // Coverage hint: 2+ interactive elements with 0 or 1 behavior is usually
+  // under-specified. Flag it so the user (or the AI) notices.
+  const interactiveCount = u.elements.filter((e) =>
+    ["button", "input", "link", "cta", "select", "checkbox", "radio", "toggle", "stepper"].some((k) =>
+      (e.kind || "").toLowerCase().includes(k)
+    )
+  ).length;
+  if (interactiveCount >= 2 && anchoredBehaviors.length <= 1) {
+    console.log("");
+    console.log(
+      pc.yellow("  !") + pc.dim(` Coverage looks thin: ${interactiveCount} interactive elements but ${anchoredBehaviors.length} ${anchoredBehaviors.length === 1 ? "behavior" : "behaviors"} anchored here. Ask the AI to propose what's missing.`)
+    );
+  }
   console.log("");
   console.log(pc.dim(`  Tip: edit the sketch, elements, or title by talking. /back to return.`));
   console.log("");
@@ -397,7 +410,7 @@ function renderBehaviorDetail(b: { id: string; claim: string; notes?: string; su
   }
   console.log("");
   if (b.test_cases.length === 0) {
-    console.log(pc.dim("  (no test cases yet)"));
+    console.log(pc.yellow("  !") + pc.dim(" No test cases yet. Ask the AI to propose some — at minimum, happy path + one error path."));
   } else {
     console.log(pc.bold(`  Test cases (${b.test_cases.length}):`));
     for (const tc of b.test_cases) {
