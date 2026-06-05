@@ -12,6 +12,7 @@ export interface ProductosPaths {
   localDir: string;         // <repo>/productos/.local (gitignored)
   cacheDir: string;
   blobsDir: string;
+  historyDir: string;       // <repo>/productos/.local/history (per-feature snapshots for undo)
 }
 
 export function findRepoRoot(start: string = process.cwd()): string | null {
@@ -38,11 +39,12 @@ export function pathsFor(repoRoot: string): ProductosPaths {
     localDir: path.join(root, ".local"),
     cacheDir: path.join(root, ".local", "cache"),
     blobsDir: path.join(root, ".local", "blobs"),
+    historyDir: path.join(root, ".local", "history"),
   };
 }
 
 export function ensureDirs(p: ProductosPaths): void {
-  for (const d of [p.root, p.contextDir, p.productsDir, p.trackingDir, p.feedbackDir, p.localDir, p.cacheDir, p.blobsDir]) {
+  for (const d of [p.root, p.contextDir, p.productsDir, p.trackingDir, p.feedbackDir, p.localDir, p.cacheDir, p.blobsDir, p.historyDir]) {
     fs.mkdirSync(d, { recursive: true });
   }
 }

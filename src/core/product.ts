@@ -274,9 +274,110 @@ export function listAreas(paths: ProductosPaths): AreaDocument[] {
 
 export function writeFeature(paths: ProductosPaths, doc: FeatureDocument): void {
   const fp = featureFilePath(paths, doc.frontmatter.id);
+  // Snapshot the current on-disk version BEFORE overwriting, so undo is
+  // always one step away. Skip if this is the first write (no existing
+  // file to snapshot).
+  if (fs.existsSync(fp)) {
+    snapshotFeature(paths, doc.frontmatter.id, fs.readFileSync(fp, "utf-8"));
+  }
   fs.mkdirSync(path.dirname(fp), { recursive: true });
   const fm = YAML.stringify(doc.frontmatter, { lineWidth: 0, blockQuote: "literal" });
   fs.writeFileSync(fp, `---\n${fm}---\n\n${doc.body.trim()}\n`, "utf-8");
+}
+
+// ---------------------------------------------------------------------------
+// Snapshot history — every writeFeature() saves the prior version under
+// productos/.local/history/<area>/<feature>/<timestamp>.md. Lets the user
+// (or Claude) undo a recent change without git acrobatics.
+//
+// Capped at MAX_SNAPSHOTS per feature to keep disk use bounded.
+
+const MAX_SNAPSHOTS = 50;
+
+export interface FeatureSnapshot {
+  feature_id: string;
+  timestamp: string;       // ISO8601
+  filepath: string;        // absolute path to snapshot file
+  age_seconds: number;     // seconds since snapshot was taken
+}
+
+function featureHistoryDir(paths: ProductosPaths, id: string): string {
+  return path.join(paths.historyDir, id);
+}
+
+function snapshotFeature(paths: ProductosPaths, id: string, raw: string): void {
+  const dir = featureHistoryDir(paths, id);
+  fs.mkdirSync(dir, { recursive: true });
+  const ts = new Date().toISOString().replace(/[:.]/g, "-");
+  fs.writeFileSync(path.join(dir, `${ts}.md`), raw, "utf-8");
+  pruneSnapshots(paths, id);
+}
+
+function pruneSnapshots(paths: ProductosPaths, id: string): void {
+  const dir = featureHistoryDir(paths, id);
+  if (!fs.existsSync(dir)) return;
+  const files = fs
+    .readdirSync(dir)
+    .filter((f) => f.endsWith(".md"))
+    .sort(); // ISO timestamps sort lexicographically
+  while (files.length > MAX_SNAPSHOTS) {
+    const oldest = files.shift()!;
+    try { fs.unlinkSync(path.join(dir, oldest)); } catch { /* ignore */ }
+  }
+}
+
+export function listFeatureSnapshots(paths: ProductosPaths, id: string): FeatureSnapshot[] {
+  const dir = featureHistoryDir(paths, id);
+  if (!fs.existsSync(dir)) return [];
+  const now = Date.now();
+  const files = fs
+    .readdirSync(dir)
+    .filter((f) => f.endsWith(".md"))
+    .sort()
+    .reverse(); // most recent first
+  return files.map((f) => {
+    const fp = path.join(dir, f);
+    const ts = f.replace(/\.md$/, "");
+    // Restore the colons / dots that we stripped when writing.
+    const iso = ts.replace(/T(\d{2})-(\d{2})-(\d{2})-(\d{3})Z$/, "T$1:$2:$3.$4Z");
+    const t = Date.parse(iso);
+    return {
+      feature_id: id,
+      timestamp: iso,
+      filepath: fp,
+      age_seconds: isNaN(t) ? 0 : Math.max(0, Math.floor((now - t) / 1000)),
+    };
+  });
+}
+
+/**
+ * Restore a snapshot by index (1 = most recent). Linear undo: each call
+ * consumes the snapshot it restored, so repeated calls to undo walk
+ * further back through the history. No redo. If the user actually wanted
+ * the post-edit state back, they can re-run the AI edit.
+ */
+export function restoreFeatureSnapshot(
+  paths: ProductosPaths,
+  id: string,
+  index = 1
+): FeatureSnapshot {
+  const snaps = listFeatureSnapshots(paths, id);
+  if (snaps.length === 0) throw new Error(`No history for ${id}`);
+  if (index < 1 || index > snaps.length) {
+    throw new Error(`Index ${index} out of range (have ${snaps.length} snapshot${snaps.length === 1 ? "" : "s"})`);
+  }
+  const snap = snaps[index - 1];
+  const raw = fs.readFileSync(snap.filepath, "utf-8");
+  const fp = featureFilePath(paths, id);
+  fs.mkdirSync(path.dirname(fp), { recursive: true });
+  fs.writeFileSync(fp, raw, "utf-8");
+  // Consume the restored snapshot AND any newer ones (so the history
+  // reflects a linear walk back). Pressing undo again then restores the
+  // NEXT-older snapshot.
+  for (let i = 0; i <= index - 1; i++) {
+    try { fs.unlinkSync(snaps[i].filepath); } catch { /* ignore */ }
+  }
+  return snap;
 }
 
 export function writeAreaReadme(
