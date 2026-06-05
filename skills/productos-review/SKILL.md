@@ -169,6 +169,10 @@ Rule/invariant behaviors (no anchor) render the same way when the user `/show`s 
 - `productos_add_or_replace_element({ feature_id, ux_id, element })`
 - `productos_remove_element({ feature_id, ux_id, element_id })`
 
+**Edit history (undo recent writes):**
+- `productos_list_edits({ feature_id })` — recent on-disk snapshots taken before each edit. Most recent first; each entry has timestamp + age.
+- `productos_undo_edit({ feature_id, index? })` — restore a snapshot (default index 1 = most recent). Use when the user reacts negatively to a change you just made ("no, that was wrong", "put it back", "undo that"). The current state is itself snapshotted before restore, so undo is reversible — call again to walk further back.
+
 ## 6. Close cleanly
 
 ```
@@ -192,6 +196,7 @@ Skip if no edits.
 - **Guided prompt** at the end of each render, not "what's off?".
 - Re-render after every write.
 - Product language only.
+- **When the user reacts negatively to a change you just made** ("no", "that's wrong", "put it back", "I didn't want that"), call `productos_undo_edit` BEFORE making other changes. Don't try to compose a fix on top of a bad edit — undo it cleanly first, then redo.
 - Ambiguity → one clarifying question.
 
 ## Don't

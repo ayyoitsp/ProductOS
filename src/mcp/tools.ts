@@ -8,9 +8,11 @@ import {
   TestCase,
   UxView,
   listAreas,
+  listFeatureSnapshots,
   listFeatures,
   nowIso,
   readFeatureById,
+  restoreFeatureSnapshot,
   writeFeature,
 } from "../core/product.js";
 import {
@@ -488,6 +490,64 @@ const removeElement: McpTool = {
 };
 
 // ===========================================================================
+// EDIT HISTORY (undo recent writes)
+// ===========================================================================
+//
+// Every productos_update_feature / propose_feature / behavior tool / UX tool
+// snapshots the pre-edit file under productos/.local/history/<id>/. These
+// tools let Claude offer a one-step undo when the user reacts negatively
+// to a change ("no, that was wrong"). No git involvement; works on
+// uncommitted edits.
+
+const ListEditsInput = z.object({
+  feature_id: z.string(),
+  limit: z.number().int().positive().default(10),
+});
+
+const listEditsTool: McpTool = {
+  name: "productos_list_edits",
+  description:
+    "List recent on-disk snapshots of a feature taken before each edit. Returns timestamps with seconds-since-now. Use this when the user asks to undo a change to see what's available. Most recent first.",
+  inputSchema: zodToInputSchema(ListEditsInput),
+  handler: async (raw, paths) => {
+    const args = ListEditsInput.parse(raw);
+    const snaps = listFeatureSnapshots(paths, args.feature_id).slice(0, args.limit);
+    return {
+      feature_id: args.feature_id,
+      count: snaps.length,
+      snapshots: snaps.map((s, i) => ({
+        index: i + 1,
+        timestamp: s.timestamp,
+        age_seconds: s.age_seconds,
+      })),
+    };
+  },
+};
+
+const UndoEditInput = z.object({
+  feature_id: z.string(),
+  index: z.number().int().positive().default(1).describe("Which snapshot to restore (1 = most recent, default)"),
+});
+
+const undoEditTool: McpTool = {
+  name: "productos_undo_edit",
+  description:
+    "Restore a previous on-disk version of a feature. Use when the user reacts negatively to a recent change (\"no, that was wrong\", \"put it back\", \"undo that\"). Default restores the most recent snapshot. Linear undo: the restored snapshot (and any newer than it) is consumed, so calling undo again walks further back through the history. No redo — if the user actually wanted the post-edit state, redo the AI edit. Snapshots are taken automatically before every write, so undo is always available for recent changes.",
+  inputSchema: zodToInputSchema(UndoEditInput),
+  handler: async (raw, paths) => {
+    const args = UndoEditInput.parse(raw);
+    const restored = restoreFeatureSnapshot(paths, args.feature_id, args.index);
+    return {
+      ok: true,
+      restored: {
+        timestamp: restored.timestamp,
+        age_seconds: restored.age_seconds,
+      },
+    };
+  },
+};
+
+// ===========================================================================
 // TRACKING (the sidecar — implementation refs, verification status, history)
 // ===========================================================================
 
@@ -866,6 +926,9 @@ export const tools: McpTool[] = [
   removeUx,
   addOrReplaceElement,
   removeElement,
+  // edit history (undo recent writes)
+  listEditsTool,
+  undoEditTool,
   // tracking
   getTracking,
   updateTracking,

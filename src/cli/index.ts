@@ -10,6 +10,7 @@ import { byokCommand } from "./commands/byok.js";
 import { configureCommand } from "./commands/configure.js";
 import { scanCommand } from "./commands/scan.js";
 import { reviewCommand } from "./commands/review.js";
+import { historyCommand, undoCommand } from "./commands/history.js";
 import { testCommand } from "./commands/test.js";
 
 const program = new Command();
@@ -28,6 +29,8 @@ program.addCommand(byokCommand());
 program.addCommand(configureCommand());
 program.addCommand(scanCommand());
 program.addCommand(reviewCommand());
+program.addCommand(historyCommand());
+program.addCommand(undoCommand());
 program.addCommand(gapsCommand());
 program.addCommand(testCommand());
 program.addCommand(doctorCommand());
