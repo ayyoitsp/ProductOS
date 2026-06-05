@@ -110,6 +110,16 @@ Then, for each behavior-bearing code path:
 1. Read the code. Don't propose claims you can't cite.
 2. Decide: existing feature (update) or new (propose)?
 3. **Write the claim in product language**. Not `POST /api/auth/signup returns 409`. Yes `When a user submits the signup form with an already-registered email, they see "this email is already registered"`. The endpoint is an implementation detail.
+
+**For UX-bearing features, walk every element systematically.** A form is not "one behavior" — it has validation rules, default values, focus behavior, button-enabled states, error paths, cancel paths, and success outcomes. For each element on a UX view, ask:
+- **Input**: what's accepted/rejected? default value? autofocus? error display?
+- **Button**: enabled-state rules? primary outcome? pending state? failure handling?
+- **Card/row**: tap target?
+- **Form-level**: initial state? default labels for optional fields? cancel/back? success-state changes? server-error display?
+
+Then check the feature-level invariants: authorization, precision/format rules, persistence guarantees, concurrency rules. These typically have no UX anchor (they're rules, not screen-bound).
+
+If a UX view has 3+ interactive elements and you wrote 1 behavior for it, you missed the rules — go back. (See `productos-scope` §3b for the full checklist with a worked form example.)
 4. **Write product truth via MCP:**
    - New feature → `productos_propose_feature` writes productos/products/<id>.md. Pass `id`, `title`, `description`, `ux`, and `behaviors`. Each behavior has `id`, `claim`, optional `notes`, optional anchor (`ux` / `element` / `interaction`), **and `test_cases`**. After the fullscan, tell the user to run `productos review` to walk the new features and edit interactively.
    - Existing feature, new behavior → `productos_add_behavior(feature_id, behavior)`.
