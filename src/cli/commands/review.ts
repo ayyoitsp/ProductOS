@@ -15,6 +15,7 @@ import {
 } from "../../core/product.js";
 import { editFeatureTurn } from "../../byok/edit.js";
 import { buildFlowGraph, renderAscii as renderFlowAscii } from "../../core/flowchart.js";
+import { auditFeature, renderAuditAscii } from "../../core/audit.js";
 import type { ModelMessage } from "ai";
 
 /**
@@ -120,9 +121,27 @@ async function repl(paths: ProductosPaths, byok: ResolvedByok, featureIn: Featur
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
   rl.on("close", () => {});
 
+  // Show the audit once on entry. Skip on subsequent renders unless user
+  // re-runs via /audit (otherwise it'd dominate every turn).
+  let auditShownOnce = false;
+
   try {
     while (true) {
       renderFeature(feature);
+      if (!focus && !auditShownOnce) {
+        console.log("");
+        console.log(pc.bold("  ─── Suggestions ──────────────────────────────────────"));
+        console.log("");
+        const findings = auditFeature(feature);
+        console.log(renderAuditAscii(findings));
+        if (findings.length > 0) {
+          console.log("");
+          console.log(pc.dim("  Talk to the AI to apply any: \"fix #1\", \"apply all the highs\", or \"rewrite #3 to be product-language\"."));
+          console.log(pc.dim("  /audit re-runs this check."));
+        }
+        console.log("");
+        auditShownOnce = true;
+      }
       if (focus) {
         if (focus.kind === "behavior") {
           const b = feature.frontmatter.behaviors.find((x) => x.id === focus!.id);
@@ -142,6 +161,14 @@ async function repl(paths: ProductosPaths, byok: ResolvedByok, featureIn: Featur
       if (!input) continue;
 
       if (input.startsWith("/")) {
+        // Special case the audit re-run before delegating to handleSlash so
+        // we don't have to thread state through it.
+        const cmdName = input.slice(1).split(/\s+/)[0]?.toLowerCase();
+        if (cmdName === "audit") {
+          auditShownOnce = false; // re-show on next loop iteration
+          focus = undefined;       // de-focus so the summary render runs first
+          continue;
+        }
         const result = await handleSlash(input, {
           paths, feature, dirty, initial, focus,
         });
@@ -267,6 +294,7 @@ async function handleSlash(
     console.log(pc.bold("Commands:"));
     console.log("  /show <ux|behavior>   Drill into a UX view (sketch + elements) or a behavior (notes + test cases)");
     console.log("  /back                 Return to the summary view");
+    console.log("  /audit                Re-run the coverage audit (thin UX, missing test cases, impl-language claims)");
     console.log("  /save                 Write changes to disk");
     console.log("  /reset                Discard changes and reload from disk");
     console.log("  /quit                 Exit (warns on unsaved changes)");

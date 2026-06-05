@@ -65,6 +65,65 @@ Does this overall flow look right? Want to change or add details, or view a part
 
 The CLI tool `productos review` renders this same chart via `src/core/flowchart.ts` — when in doubt, match what it would produce.
 
+### 1a. Auto-analyze on entry — surface suggestions WITHOUT being asked
+
+Right after the summary render, **always run an audit pass** and append a Suggestions section. Don't make the user drill in and notice gaps; surface them up front so they can pick what to address.
+
+**What to audit (walk the whole feature once):**
+
+For **each UX view**:
+- Count interactive elements (button / input / link / cta / select / checkbox / radio / toggle / stepper / card / row). If 2+ interactive elements with 0–1 behaviors anchored to this UX → flag as **HIGH** (probably under-specified — name specific missing rules per §2's gap-flag list).
+- Elements with `kind` matching `button|link|cta|card|row` and no `leads_to` → flag if the element name suggests navigation ("kid-card", "view-detail-button") → **MEDIUM**.
+- Elements with no `label` whose action would otherwise be derived from a verbose id (e.g. `kid-card` has no label, so the flow shows "kid card") → **LOW** (suggest a `label`).
+
+For **each behavior**:
+- 0 test cases → **HIGH** (especially for `status: shipped`).
+- 1 test case (happy path only) → **MEDIUM** (suggest one error/edge case).
+- Claim mentions API/file/endpoint/status-code language (`POST`, `/api/`, `HTTP 200`, `.tsx`, `function `, `return 4xx`) → **MEDIUM** (suggest a product-language rewrite).
+- Behavior id that names a widget rather than a rule (`submit-button-click`, `kid-card-tap`, anything ending in `-click`/`-tap`/`-button`) → **LOW** (suggest a rule-named alternative).
+- Behavior with `surface` or `element` that doesn't exist on the feature (dangling anchor) → **HIGH**.
+
+For the **feature as a whole**:
+- No `description` → **LOW**.
+- 0 behaviors → **HIGH**.
+- `status: shipped` but 0 behaviors with any test cases → **HIGH**.
+
+**Render the audit like this** (after the summary, before the guided question):
+
+```
+─── Suggestions ────────────────────────────────────
+
+HIGH:
+  1. earn-form has 3 interactive elements but only 1 behavior anchored. Likely
+     missing rules: amount-must-be-positive, submit-disabled-until-valid,
+     reason-is-optional, amount-autofocuses-on-open, server-failure-keeps-form-open.
+  2. behavior `earn-flow` (status: shipped) has 0 test cases.
+
+MEDIUM:
+  3. behavior `balance-is-derived` claim references "the underlying ledger" —
+     slightly implementation-leaning. Suggest: "A kid's balance is always the sum
+     of their transactions; there's no place a stale value could appear."
+  4. behavior `tap-kid` has only 1 test case (happy path). Could add: tapping a
+     kid with $0 balance still navigates correctly.
+
+LOW:
+  5. element `kid-card` on family-list has no label — flow shows "kid card" as
+     the action. Suggest label: "tap a kid".
+  6. feature has no `description`.
+
+Pick numbers to apply (e.g. "1, 3, 5"), say "all", or describe what to do.
+```
+
+**Then** end with the guided question. The user can engage with the suggestions OR ignore them and drill into something else — both are fine.
+
+**Apply rules:**
+- When the user picks numbers, apply each via the appropriate MCP tool (`productos_add_behavior` for missing-coverage suggestions, `productos_update_behavior` for claim rewrites or test-case additions, `productos_add_or_replace_element` for label additions, `productos_update_feature` for description). Then re-render the summary so they see what changed.
+- "all" → apply all HIGH and MEDIUM items at once, skip LOW (the noisy nice-to-haves). Confirm in one line afterward.
+- If a suggestion involves multiple sub-items (e.g. "missing rules: X, Y, Z"), expand inline so the user can pick a subset: ask "Apply all 5 of those? Or pick a subset (e.g. 'X and Z only')?".
+- Don't get stuck in an audit loop — after applying, re-render the summary + run audit again. If audit comes back empty, just say "Looks clean. Anything else?".
+
+**This auto-analysis is the main value-add of review.** Without it the skill is just an editor; with it it's the second pair of eyes the PM came for.
+
 ## 2. UX drilled-in render
 
 When the user says "show me family-list" / "drill into kid-detail" / etc., render JUST that UX view, with its anchored behaviors:
