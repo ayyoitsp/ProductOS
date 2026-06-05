@@ -95,6 +95,38 @@ Anything to change here? /back to the summary.
 
 This is where the sketch goes. Anchored behaviors live here too — drill from here into the behavior detail.
 
+### Proactively flag coverage gaps when you drill in
+
+Right after rendering a UX drilled view, **assess coverage**. Don't make the user notice the gap and ask. If the behaviors look thin for the elements present, surface specific candidates:
+
+- **Empty or 1 behavior with 2+ interactive elements** → almost certainly under-specified
+- **Inputs without validation behaviors** (e.g. amount-input with no claim about "rejects negatives" or "requires positive")
+- **Buttons with conditional state** (e.g. a "Submit" button whose `notes` say "disabled until valid" — that disabled-state rule isn't captured as a behavior)
+- **Optional fields with implied defaults** (e.g. reason-input optional → what's the default label? not captured)
+- **Forms with navigation** (e.g. submit returns to X — captured? what about cancel/back?)
+- **Autofocus / first-render rules** (e.g. "amount input autofocuses when form opens")
+
+When you see thin coverage, append a section after the render:
+
+```
+Coverage looks thin here — 3 interactive elements, 1 behavior. Candidates I see:
+
+  1. **Amount must be positive.** Submitting zero or negative shows an error and the
+     form doesn't submit.
+  2. **Submit disabled until amount > 0.** The button's enabled state tracks the
+     amount input.
+  3. **Empty reason defaults to "Earned".** When the parent leaves Reason blank, the
+     transaction row label is "Earned" rather than empty.
+  4. **Amount input autofocuses on open.** When the form mounts, focus lands in the
+     Amount field.
+
+Want me to add any? Pick the numbers — or "all" — and I'll add them with test cases.
+```
+
+Frame candidates as **rule-style claims** in product language. NO API/file references. Anchor each candidate to the appropriate element + interaction when the candidate is about a specific element. Wait for the user to pick before writing — don't bulk-add. If the user picks "1, 2, 4", apply just those via `productos_add_behavior` (with appropriate `surface`/`element`/`interaction` anchors and short `test_cases`), then re-render the UX drilled view so they see the new behaviors land.
+
+This proactive gap-flag IS in-scope for review — it's about the focused UX. (Whole-feature gap analysis is still `productos-fullscan` territory.)
+
 ## 3. Behavior drilled-in render
 
 When the user says "show me balance-on-family-list" / "what are the test cases for X" / etc.:
@@ -118,6 +150,32 @@ Anything to change here? /back.
 ```
 
 Rule/invariant behaviors (no anchor) render the same way when the user `/show`s them by id.
+
+### Proactively flag thin test-case coverage
+
+Right after rendering a behavior drilled view, **assess test-case coverage**. If the claim has obvious edge cases or alternate paths that aren't covered, surface them:
+
+- **0 test cases** → flag immediately
+- **Only happy path covered** → suggest at least one error/edge case
+- **Claims mentioning "always", "never", "only when"** → suggest the negation case
+- **Numeric / range claims** → suggest boundary cases (zero, max, negative)
+- **Network/persistence claims** → suggest failure-mode cases (offline, conflict, retry)
+
+When you see thin coverage, append:
+
+```
+Test coverage looks thin — happy path only. Candidates:
+
+  3. (e2e) Submitting zero amount: form rejects and stays on the page.
+  4. (e2e) Submitting negative amount: input clamps to zero before submit fires.
+  5. (api) Network failure on submit: the form re-enables and shows a retry message.
+
+Add any? Pick numbers or "all".
+```
+
+On confirmation, apply via `productos_update_behavior(..., { test_cases: [...new full array...] })` and re-render the behavior. **Pick stable numeric ids** that continue from the existing ones.
+
+Same scope rule: only test cases for the focused behavior. Whole-feature gap analysis is `productos-fullscan`.
 
 ## 4. Take whatever they say
 
