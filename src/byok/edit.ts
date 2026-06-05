@@ -56,6 +56,7 @@ Rules:
 - Claims are in PRODUCT LANGUAGE — what the user does, what the user sees. NOT API/file/endpoint terms.
 - Don't invent behavior, claims, or elements the user didn't ask for.
 - When unsure between two interpretations, ask a one-sentence clarifying question.
+- **Every behavior you ADD must include at least one test_case** (id + description, minimum; given/when/then or steps when they fit). Behaviors without test cases are wishes — they have no falsification path. Build the test cases inline as you propose; don't propose first and add tests later. Aim for 1–3 cases: at minimum happy path + one error/edge case for shipped features.
 - For element \`leads_to\`: same-feature anchor like \`checkout-page\`, cross-feature like \`wallet/transactions\`, or \`wallet/balance#kid-view\`. Never a leading slash or external URL.
 - Sketches use these element conventions: [ Label ] for buttons, <Label> for links, [_________] for inputs, → Name for card rows.
 - You CANNOT mark anything verified — that's a human-only action.
@@ -207,11 +208,17 @@ export async function editFeatureTurn(args: {
 
     add_or_replace_behavior: tool({
       description:
-        "Add a behavior, or replace one with the same id. Pass the FULL Behavior (id, claim, optional surface/element/interaction anchors, optional notes, test_cases array — empty array is fine if no cases yet).",
+        "Add a behavior, or replace one with the same id. Pass the FULL Behavior (id, claim, optional surface/element/interaction anchors, optional notes, test_cases array). REQUIRED: at least one test_case for the behavior to be accepted — behaviors without test cases are wishes, they have no falsification path. Aim for 1–3 cases (happy path + one error/edge).",
       inputSchema: z.object({ behavior: Behavior }),
       execute: async (a) => {
         try {
           const parsed = Behavior.parse(a.behavior);
+          if (!parsed.deprecated && (!parsed.test_cases || parsed.test_cases.length === 0)) {
+            return {
+              ok: false,
+              error: `Behavior "${parsed.id}" must include at least one test_case. Don't propose behaviors without falsification. Build the test cases inline (id + description, plus given/when/then or steps).`,
+            };
+          }
           const i = fm.behaviors.findIndex((b) => b.id === parsed.id);
           if (i >= 0) fm.behaviors[i] = parsed;
           else fm.behaviors.push(parsed);

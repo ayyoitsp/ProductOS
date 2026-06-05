@@ -273,7 +273,7 @@ Same scope rule: only test cases for the focused behavior. Whole-feature gap ana
 **Feature-level:** `productos_update_feature({ id, title?, status?, description?, body? })`
 
 **Behaviors:**
-- `productos_add_behavior({ feature_id, behavior })`
+- `productos_add_behavior({ feature_id, behavior })` — **the behavior's `test_cases` array must contain at least one case** or the tool rejects it. Build the tests inline: id + description, plus given/when/then or steps. Aim for happy path + one error/edge case.
 - `productos_update_behavior({ feature_id, behavior_id, claim?, notes?, surface?, element?, interaction?, test_cases? })` — `test_cases` REPLACES the array
 - `productos_remove_behavior({ feature_id, behavior_id })`
 
@@ -314,6 +314,7 @@ Skip if no edits.
 - Re-render after every write.
 - Product language only.
 - **When the user reacts negatively to a change you just made** ("no", "that's wrong", "put it back", "I didn't want that"), call `productos_undo_edit` BEFORE making other changes. Don't try to compose a fix on top of a bad edit — undo it cleanly first, then redo.
+- **Every behavior you ADD must include test_cases in the same call.** The MCP tool rejects empty test_cases. Don't try a two-phase "add behavior, then add tests" — write the cases inline. Suggested coverage when proposing from audit findings: happy path + one error/edge case per behavior. For a thin-UX-coverage finding that produces 5 new behaviors, that's 10 test cases total — write them.
 - Ambiguity → one clarifying question.
 
 ## Don't
