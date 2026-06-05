@@ -226,6 +226,15 @@ const proposeFeature: McpTool = {
     if (readFeatureById(paths, args.id)) {
       throw new Error(`Feature ${args.id} already exists. Use productos_update_feature / productos_update_behavior / productos_add_behavior to edit it — or have the human run \`productos review ${args.id}\` for interactive edits.`);
     }
+    // Every NON-deprecated behavior must ship with at least one test case.
+    const missingTests = (args.behaviors || []).filter(
+      (b) => !b.deprecated && (!b.test_cases || b.test_cases.length === 0)
+    );
+    if (missingTests.length > 0) {
+      throw new Error(
+        `These behaviors have no test_cases: ${missingTests.map((b) => b.id).join(", ")}. Every behavior must include at least one test_case (id + description, plus given/when/then or steps). Build them inline before proposing.`
+      );
+    }
     const fm = FeatureFrontmatter.parse({
       id: args.id,
       title: args.title,
@@ -278,7 +287,7 @@ const AddBehaviorInput = z.object({
 const addBehavior: McpTool = {
   name: "productos_add_behavior",
   description:
-    "Add a behavior (an atomic claim) to a feature. Behaviors live in product truth and are written in product language. Verification status and code refs are tracked separately — use productos_update_tracking to set them after adding the behavior.",
+    "Add a behavior (an atomic claim) to a feature. Behaviors live in product truth and are written in product language. REQUIRED: the behavior must include at least one test_case (id + description, plus given/when/then or steps) — behaviors without test cases are wishes; they have no falsification path. Aim for 1–3 cases: happy path + one error/edge case for shipped features. Verification status and code refs are tracked separately — use productos_update_tracking to set them after adding the behavior.",
   inputSchema: zodToInputSchema(AddBehaviorInput),
   handler: async (raw, paths) => {
     const args = AddBehaviorInput.parse(raw);
@@ -286,6 +295,11 @@ const addBehavior: McpTool = {
     if (!doc) throw new Error(`Feature "${args.feature_id}" not found`);
     if (doc.frontmatter.behaviors.some((b) => b.id === args.behavior.id))
       throw new Error(`Behavior "${args.behavior.id}" already exists on ${args.feature_id}`);
+    if (!args.behavior.deprecated && (!args.behavior.test_cases || args.behavior.test_cases.length === 0)) {
+      throw new Error(
+        `Behavior "${args.behavior.id}" must include at least one test_case. Don't propose behaviors without falsification. Build the test cases inline.`
+      );
+    }
     doc.frontmatter.behaviors.push(args.behavior);
     writeFeature(paths, doc);
     return { ok: true, feature_id: args.feature_id, behavior_id: args.behavior.id };
