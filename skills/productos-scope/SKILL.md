@@ -151,6 +151,52 @@ Heuristic: a behavior is one falsifiable claim. If two claims could be true/fals
 
 The volume isn't a vetting concern — `productos-review` walks them one at a time at the user's pace; they can quit and resume.
 
+#### Walk every element systematically — don't stop at the happy path
+
+The most common scoping failure is writing ONE happy-path behavior per UX view ("user submits the form") and skipping the rules every element implies. Walk each element and ask the questions below. Most will produce a behavior; some won't apply.
+
+**For every `input` element:**
+- **Validation** — what values does it accept / reject? (positive only? non-empty? max length? format?) → one behavior per validation rule
+- **Default value** — does it start empty, or pre-filled with something? → behavior if non-obvious
+- **Focus** — does it autofocus on mount? → behavior if yes
+- **Error display** — when invalid, does it show an inline error? → behavior
+
+**For every `button` (especially submit-style):**
+- **Enabled state** — always enabled, or only when some condition is met? ("disabled until amount > 0", "disabled while pending") → behavior per condition
+- **Primary action outcome** — what happens on tap/click? → main behavior, usually the one that's there already
+- **Loading / pending state** — does it change appearance while the action is in flight? → behavior if visible
+- **Failure handling** — what happens if the action errors? → behavior
+
+**For every `card` / `row` / list item:**
+- **Tap target** — does the whole row navigate, or just an icon? → behavior
+
+**For every `link` / CTA:**
+- **Destination** — where does it go? → behavior (often the leads_to itself is the behavior)
+
+**For every form (the whole UX view, not just elements):**
+- **Initial render** — what's shown on first open? → behavior if non-trivial
+- **Default label / fallback values** — what shows up when an optional field is left blank? → behavior
+- **Cancel / back path** — what happens if the user backs out? → behavior
+- **Successful submission outcome** — what state changes in the system? (transaction recorded, balance updated, redirect to X) → behavior per system-state change
+- **Server error path** — what does the user see if the submit fails? → behavior
+
+**Feature-level rules / invariants** (no UX anchor):
+- **Authorization** — who can do this? (logged-in only? owner only? admin?) → behavior
+- **Precision / format** — currency rounding, date format, etc. → behavior
+- **Persistence / idempotency** — can the same action be replayed safely? → behavior if a guarantee
+- **Concurrency** — what happens with simultaneous actions on the same record? → behavior if a guarantee
+
+For a form like "Earn money" (3 inputs + submit + cancel), you should typically produce **5–10 behaviors**, not 1. If you find yourself writing 1, you missed the rules — go back and walk the checklist.
+
+#### Naming behaviors
+
+Use a short, kebab-case id that names the rule, not the element:
+- ✓ `amount-must-be-positive` (rule)
+- ✓ `submit-disabled-until-valid` (rule)
+- ✓ `reason-defaults-to-earned` (rule)
+- ✗ `submit-button-click` (element-named, not a claim)
+- ✗ `earn-flow` (too broad — it folds in 5+ rules)
+
 For each behavior:
 
 - **Claim:** in product language — "When a guest user clicks Checkout, they reach the confirmation page without being asked to create an account." Not "POST /api/checkout returns 200."
@@ -307,10 +353,82 @@ Then tell the user:
 
 That last note is gold. Surface code-vs-intent gaps the moment you see them.
 
+## Worked example — a form (showing the checklist in action)
+
+User: "Scope productos on the Earn flow — kid-detail has an Earn button that opens a form."
+
+You read the form. It has: an Amount input, an optional Reason input, a Cancel link, and an "Add money" submit button. The submit is disabled until amount > 0; the amount input autofocuses on open; on success the kid's balance increments and the user returns to kid-detail.
+
+**Bad output (what an LLM defaults to — DON'T do this):**
+
+```yaml
+behaviors:
+  - id: earn-flow
+    claim: "On submit, a credit is recorded against the kid and the user returns to kid-detail."
+```
+
+One behavior. Misses everything in the checklist.
+
+**Good output (walking the checklist):**
+
+```yaml
+behaviors:
+  - id: amount-must-be-positive
+    claim: "The Amount input only accepts values greater than zero. Submitting zero or a negative number does nothing — no transaction is recorded and the form stays open."
+    surface: earn-form
+    element: amount-input
+    interaction: input
+    test_cases: [...]
+  - id: amount-autofocuses-on-open
+    claim: "When the Earn form opens, focus lands in the Amount input."
+    surface: earn-form
+    element: amount-input
+    interaction: view
+    test_cases: [...]
+  - id: reason-is-optional
+    claim: "The parent can leave Reason blank and still submit. The row label defaults to 'Earned'."
+    surface: earn-form
+    element: reason-input
+    test_cases: [...]
+  - id: submit-disabled-until-valid
+    claim: "The Add money button is disabled until the amount is greater than zero. The disabled state reads visually as greyed-out and is not tappable."
+    surface: earn-form
+    element: submit-button
+    interaction: view
+    test_cases: [...]
+  - id: submit-records-credit
+    claim: "On a valid submit, a credit transaction is recorded against the focused kid for the amount entered."
+    surface: earn-form
+    element: submit-button
+    interaction: submit
+    test_cases: [...]
+  - id: submit-returns-to-kid-detail
+    claim: "After a successful submit, the user returns to the kid's detail screen with the new balance reflected."
+    surface: earn-form
+    element: submit-button
+    interaction: submit
+    test_cases: [...]
+  - id: cancel-discards-input
+    claim: "Tapping Cancel returns to the kid's detail screen without recording anything. No transaction is created."
+    surface: earn-form
+    element: cancel-link
+    interaction: tap
+    test_cases: [...]
+  - id: server-failure-keeps-form-open
+    claim: "If the credit fails to record server-side, the form stays open with the entered values and an inline error appears."
+    surface: earn-form
+    element: submit-button
+    interaction: submit
+    test_cases: [...]
+```
+
+Eight behaviors from one form. That's the right level. Each is a falsifiable rule with its own anchor and its own test cases. The PM can argue with any of them individually.
+
 ## Don't
 
 - **Don't model the whole codebase.** This is single-feature scope. If the user wants a full pass, they ask for `productos-fullscan` instead.
 - **Don't artificially cap or pad behavior count.** Write every distinct behavior the code exhibits. If a feature has 12 distinct claims, write 12. `productos-review` walks them at the user's pace.
+- **Don't stop at the happy path.** A form is not "one behavior" — walk the §3b checklist (validation, default, focus, disabled-state, error-path, cancel, success-outcome) and produce one behavior per rule. If a UX view has 3+ interactive elements and you wrote 1 behavior for it, you missed the rules.
 - **Don't write claims in implementation language.** "POST /api/X returns 409" → wrong. "User sees 'already registered'" → right.
 - **Don't set status='verified'.** Humans do that.
 - **Don't paper over ambiguity.** If a decision isn't made, ask. If the user defers, capture in body.
