@@ -16,6 +16,7 @@ import {
   listFeatures,
 } from "../core/product.js";
 import { getStrategy } from "../core/context.js";
+import { auditFeature } from "../core/audit.js";
 
 /**
  * Conversational editor for ONE feature, driven by BYOK.
@@ -322,6 +323,7 @@ export async function editFeatureTurn(args: {
 function buildBootstrapMessages(feature: FeatureDocument, paths: ProductosPaths): ModelMessage[] {
   const strategy = getStrategy(paths);
   const corpus = listFeatures(paths).map((f) => f.frontmatter.id);
+  const findings = auditFeature(feature);
   const parts: string[] = [];
   if (strategy.trim()) {
     parts.push("# Project strategy (constrains every claim)");
@@ -340,6 +342,21 @@ function buildBootstrapMessages(feature: FeatureDocument, paths: ProductosPaths)
     parts.push("```markdown");
     parts.push(feature.body);
     parts.push("```");
+  }
+  if (findings.length > 0) {
+    parts.push("---");
+    parts.push("# Audit findings (the CLI showed these to the user)");
+    parts.push("When the user says 'fix #N' or 'apply 1, 3', they mean these numbered items:");
+    let n = 1;
+    for (const sev of ["high", "medium", "low"] as const) {
+      const grp = findings.filter((f) => f.severity === sev);
+      for (const f of grp) {
+        const tgt = f.behavior_id ? ` (behavior=${f.behavior_id})` : f.ux_id ? ` (ux=${f.ux_id}${f.element_id ? ", element=" + f.element_id : ""})` : "";
+        parts.push(`  ${n}. [${sev.toUpperCase()}] ${f.message}${tgt}`);
+        n++;
+      }
+    }
+    parts.push("When the user references a number, apply the corresponding fix via the appropriate tool. For 'thin-ux-coverage' findings, PROPOSE rule-named behaviors (validation, disabled-state, defaults, focus, error-paths) with appropriate anchors and test_cases — don't just write one generic 'flow' behavior.");
   }
   return [{ role: "user", content: parts.join("\n\n") }];
 }
