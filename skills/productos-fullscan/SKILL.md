@@ -105,6 +105,16 @@ affected_by:
 
 **User override.** If the user states a preference about where behaviors should live ("group all balance mutations inside wallet/kid-balance"), respect it. The rule is the *default* when no preference is stated; it isn't an enforcement gate.
 
+### Consult strategy and prefer principle references over restatement
+
+Before proposing behaviors, call `productos_list_context` and `productos_get_strategy` to load existing principles/goals/personas/non-goals/voice. For each behavior candidate, ask: "Does this rule already exist as a principle?"
+
+- **Yes → reference, don't restate.** Add the per-feature behavior with `notes: "Per principles#some-anchor"` instead of duplicating the rule text.
+- **No, but the rule is universal (would apply to other features)** → flag for the user. "This looks cross-cutting — should it go in principles.md instead?" On confirmation, add via `productos_propose_context` BEFORE adding the per-feature behavior with a reference.
+- **No, and the rule is feature-specific** → add the behavior normally.
+
+This keeps the corpus DRY and lets the strategy layer grow as the fullscan reveals universal patterns.
+
 Then, for each behavior-bearing code path:
 
 1. Read the code. Don't propose claims you can't cite.

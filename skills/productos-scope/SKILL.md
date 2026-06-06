@@ -32,6 +32,19 @@ Call:
 
 Strategy is **optional in v0.1** but if it's present it constrains every behavior you propose. A proposed claim that contradicts a Design Principle gets flagged for human review, not silently written.
 
+**Cross-reference principles, don't restate them.** Before writing each candidate behavior, ask: "Does this rule already exist as a principle?" If yes — write the behavior as a thin reference instead of a restatement:
+
+```yaml
+- id: submit-double-tap-safe
+  claim: "Add money is single-fire on this form."
+  notes: "Per principles#submits-are-idempotent — universal rule, this form follows it."
+  test_cases: [...]
+```
+
+This keeps the principle as source-of-truth and the feature spec lean. If a candidate looks like a CROSS-CUTTING principle that doesn't exist yet ("all primary forms accept Enter-key submit", "no caps on financial amounts"), DON'T quietly bake it into this feature's behaviors. Flag it for the user: "this looks like a principle that would apply to other forms too — add it to context first?". On confirmation, call `productos_propose_context` to add it to `principles.md` BEFORE adding the per-feature behavior with a reference.
+
+Test by reading the corpus: if you can imagine the same exact rule applying to another existing feature (spend-form, settings-form, login), it's a principle — not a per-feature behavior.
+
 ### 2. Scope to the feature
 
 Identify the code paths relevant to the feature in question. Examples:

@@ -69,6 +69,8 @@ The CLI tool `productos review` renders this same chart via `src/core/flowchart.
 
 Right after the summary render, **always run an audit pass** and append a Suggestions section. Don't make the user drill in and notice gaps; surface them up front so they can pick what to address.
 
+**Before generating suggestions, load the strategy** via `productos_get_strategy`. Many gap-candidates aren't feature-specific behaviors — they're cross-cutting product principles ("all submits are idempotent and double-tap-safe", "all primary forms accept Enter-key submit", "no caps on user-entered amounts"). When a candidate looks like a principle, treat it as a principle, not a behavior.
+
 **What to audit (walk the whole feature once):**
 
 For **each UX view**:
@@ -123,6 +125,58 @@ Pick numbers to apply (e.g. "1, 3, 5"), say "all", or describe what to do.
 - Don't get stuck in an audit loop — after applying, re-render the summary + run audit again. If audit comes back empty, just say "Looks clean. Anything else?".
 
 **This auto-analysis is the main value-add of review.** Without it the skill is just an editor; with it it's the second pair of eyes the PM came for.
+
+### 1b. Classify each candidate — feature-specific behavior vs cross-cutting principle
+
+Before adding any suggested behavior, ask: **is this rule about THIS specific input/button/screen, or about how ALL similar things in the product should behave?**
+
+| Candidate looks like | Where it goes |
+|---|---|
+| "Amount input rejects negative values" — about THIS form's amount field | Feature-specific **behavior** anchored to the element |
+| "All submit buttons disable while pending" — universal UX rule | **Principle** in `productos/context/principles.md` |
+| "Reason field defaults to 'Earned' on this form" — about this form's row label | Feature-specific **behavior** |
+| "All primary forms accept Enter-key submit" — universal | **Principle** |
+| "No cap on transaction amounts" — product strategy | **Principle** (or a non-goal) |
+| "Submit creates a credit transaction for this kid" — about THIS feature's data flow | Feature-specific **behavior** |
+
+**Decision test**: if the rule would apply identically to *another* feature in the corpus (e.g. spend-form, edit-form, settings-form), it's a principle. If it's about THIS feature's data, validation thresholds, or anchor-specific outcomes, it's a behavior.
+
+**Three workflows when you've classified a candidate:**
+
+#### a. Specific → just add the behavior
+Standard `productos_add_behavior` with test_cases (per §1a apply-rules).
+
+#### b. Cross-cutting AND a covering principle already exists
+- Check the strategy you loaded. Find the matching principle (e.g. `principles#submits-are-idempotent`).
+- Add the feature-specific behavior with a thin reference in `notes`:
+  ```yaml
+  notes: "Per principles#submits-are-idempotent — this form follows the universal rule."
+  ```
+- One test case is still required (it makes the principle's rule falsifiable in this concrete context).
+- This keeps the corpus DRY — the principle is the source of truth, behaviors are local instances.
+
+#### c. Cross-cutting AND no covering principle exists yet
+- **Don't quietly bake it into a per-feature behavior.** That hides a product decision in one feature's spec.
+- Surface the choice to the user: "This looks like a cross-cutting principle (would apply to spend-form, settings-form, etc.). Add it to `principles.md` instead of just this feature?"
+- On confirmation:
+  1. Call `productos_propose_context` to add (or extend) `principles.md` with the new section. Use a `## kebab-case` heading so it gets a stable anchor (e.g. `## submits-are-idempotent`).
+  2. Add the per-feature behavior with `notes` referencing the new principle.
+- This is how the strategy layer GROWS — through review surfacing universal patterns and lifting them as the corpus matures.
+
+**Note on the suggestion list rendering**: when you produce the Suggestions block (§1a), tag each candidate so the user knows what they're picking:
+
+```
+HIGH:
+  1. earn-form has 3 interactive elements but only 1 behavior. Missing rules:
+     - amount-must-be-positive   (feature-specific)
+     - submit-disabled-until-valid   (likely PRINCIPLE — applies to all forms)
+     - amount-autofocuses-on-open   (likely PRINCIPLE)
+     - reason-defaults-to-earned   (feature-specific)
+```
+
+When the user picks "all", apply each according to its classification (specific → add behavior; principle → propose context + add behavior with reference). When the user picks specific numbers, same — match each pick's classification.
+
+**One more rule**: when you find an EXISTING behavior whose claim restates an existing principle ("balance is always derived" when there's already a `principles#always-derived` section), suggest replacing the claim text with a one-line reference. Don't proliferate restated principles.
 
 ## 2. UX drilled-in render
 
