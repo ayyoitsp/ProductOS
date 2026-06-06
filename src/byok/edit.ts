@@ -267,6 +267,60 @@ export async function editFeatureTurn(args: {
         return { ok: true };
       },
     }),
+
+    add_or_replace_principle: tool({
+      description:
+        "Add or update a section in productos/context/principles.md. Use this when a candidate rule is CROSS-CUTTING (applies to other features too) — DON'T duplicate the rule per-feature; lift it to principles and reference it from each feature behavior via `notes`. Section heading becomes the anchor (e.g. `## submits-are-idempotent` → reference as `principles#submits-are-idempotent`). For changes to other context docs (goals, personas, non-goals, voice), the user must edit them directly — this tool only manages principles.",
+      inputSchema: z.object({
+        section_id: z
+          .string()
+          .regex(/^[a-z][a-z0-9-]*$/, "kebab-case, e.g. submits-are-idempotent")
+          .describe("Becomes the principle's ## heading and its anchor."),
+        body: z
+          .string()
+          .min(30)
+          .describe(
+            "Markdown body of the principle. Two to four sentences: what the rule is, why it exists, what scope it covers. No code/file refs."
+          ),
+      }),
+      execute: async (a) => {
+        try {
+          const { listContext, readContext, writeContext } = await import("../core/context.js");
+          // Find an existing principles doc, or default to "principles".
+          const existing = listContext(paths).find((d) => d.name === "principles");
+          const doc = existing
+            ? readContext(paths, existing.name)!
+            : { name: "principles", title: "Design principles", order: 2, body: "" };
+          // If a section with the same anchor already exists, replace it.
+          // Otherwise append to the end.
+          const heading = `## ${a.section_id}`;
+          const lines = doc.body.split("\n");
+          const startIdx = lines.findIndex((l) => l.trim() === heading);
+          if (startIdx >= 0) {
+            // Find end of this section (next ## heading or EOF).
+            let endIdx = lines.length;
+            for (let i = startIdx + 1; i < lines.length; i++) {
+              if (lines[i].startsWith("## ")) { endIdx = i; break; }
+            }
+            const before = lines.slice(0, startIdx);
+            const after = lines.slice(endIdx);
+            const block = [heading, "", a.body.trim(), ""];
+            doc.body = [...before, ...block, ...after].join("\n").trimEnd();
+          } else {
+            doc.body = (doc.body.trim() + "\n\n" + heading + "\n\n" + a.body.trim()).trim();
+          }
+          writeContext(paths, { name: doc.name, title: doc.title, order: doc.order, body: doc.body });
+          ops.push(`principle:${a.section_id}`);
+          return {
+            ok: true,
+            anchor: `principles#${a.section_id}`,
+            hint: `Now reference this from feature behaviors via \`notes: "Per principles#${a.section_id}"\`.`,
+          };
+        } catch (e) {
+          return { ok: false, error: (e as Error).message };
+        }
+      },
+    }),
   };
 
   // First turn: bootstrap history with system context + initial feature snapshot.
@@ -365,6 +419,17 @@ function buildBootstrapMessages(feature: FeatureDocument, paths: ProductosPaths)
     }
     parts.push("When the user references a number, apply the corresponding fix via the appropriate tool. For 'thin-ux-coverage' findings, PROPOSE rule-named behaviors (validation, disabled-state, defaults, focus, error-paths) with appropriate anchors and test_cases — don't just write one generic 'flow' behavior.");
   }
+  // Principle classification nudge — keep cross-cutting rules in the
+  // strategy layer instead of duplicating them per-feature.
+  parts.push("---");
+  parts.push("# Classify each candidate before adding");
+  parts.push(
+    "Before calling add_or_replace_behavior, decide: is this rule SPECIFIC to this feature, or a CROSS-CUTTING principle? " +
+    "If the same rule would apply to another existing feature in the corpus (e.g. spend-form, settings-form), it's a principle — belongs in productos/context/principles.md, not duplicated per-feature. " +
+    "If the strategy above already names a covering principle, reference it in the behavior's notes (e.g. `notes: \"Per principles#submits-are-idempotent\"`) instead of restating the rule. " +
+    "If a candidate looks cross-cutting but no principle covers it yet, tell the user — don't quietly bake it into the feature. The BYOK edit tools don't add to context.md; surface it as a question. " +
+    "Specific-to-this-feature rules (validation thresholds, anchor-specific outcomes, this-form's-data-flow) are normal behaviors."
+  );
   return [{ role: "user", content: parts.join("\n\n") }];
 }
 
