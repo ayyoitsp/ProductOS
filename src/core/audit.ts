@@ -200,6 +200,73 @@ export function auditFeature(feature: FeatureDocument): AuditFinding[] {
   return findings;
 }
 
+// ===========================================================================
+// AREA ROLL-UP — aggregate findings across every feature in an area.
+// ===========================================================================
+
+export interface AreaAuditSummary {
+  area_slug: string;
+  feature_count: number;
+  features: Array<{
+    feature_id: string;
+    title: string;
+    counts: { high: number; medium: number; low: number; total: number };
+  }>;
+  totals: { high: number; medium: number; low: number; total: number };
+}
+
+export function auditArea(
+  areaSlug: string,
+  features: FeatureDocument[]
+): AreaAuditSummary {
+  const perFeature = features.map((f) => {
+    const findings = auditFeature(f);
+    const counts = {
+      high: findings.filter((x) => x.severity === "high").length,
+      medium: findings.filter((x) => x.severity === "medium").length,
+      low: findings.filter((x) => x.severity === "low").length,
+      total: findings.length,
+    };
+    return {
+      feature_id: f.frontmatter.id,
+      title: f.frontmatter.title,
+      counts,
+    };
+  });
+  perFeature.sort((a, b) => b.counts.high - a.counts.high || b.counts.total - a.counts.total);
+  const totals = perFeature.reduce(
+    (acc, x) => ({
+      high: acc.high + x.counts.high,
+      medium: acc.medium + x.counts.medium,
+      low: acc.low + x.counts.low,
+      total: acc.total + x.counts.total,
+    }),
+    { high: 0, medium: 0, low: 0, total: 0 }
+  );
+  return {
+    area_slug: areaSlug,
+    feature_count: features.length,
+    features: perFeature,
+    totals,
+  };
+}
+
+export function renderAreaAuditAscii(summary: AreaAuditSummary): string {
+  if (summary.feature_count === 0) return "  (no features in this area)";
+  if (summary.totals.total === 0) return "  (no issues across this area — looks clean)";
+  const lines: string[] = [];
+  lines.push(
+    `  Totals: ${summary.totals.high} high, ${summary.totals.medium} medium, ${summary.totals.low} low across ${summary.feature_count} feature${summary.feature_count === 1 ? "" : "s"}.`
+  );
+  lines.push("");
+  for (const f of summary.features) {
+    if (f.counts.total === 0) continue;
+    const tag = `H:${f.counts.high} M:${f.counts.medium} L:${f.counts.low}`;
+    lines.push(`    ${f.feature_id.padEnd(30, " ")}  ${tag}`);
+  }
+  return lines.join("\n");
+}
+
 export function renderAuditAscii(findings: AuditFinding[]): string {
   if (findings.length === 0) return "  (no issues — looks clean)";
   const groups: Record<AuditSeverity, AuditFinding[]> = { high: [], medium: [], low: [] };

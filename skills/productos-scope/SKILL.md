@@ -437,6 +437,32 @@ behaviors:
 
 Eight behaviors from one form. That's the right level. Each is a falsifiable rule with its own anchor and its own test cases. The PM can argue with any of them individually.
 
+## Split features that have grown too big
+
+A feature is a tight unit of product truth — one focused concern. When a scope produces **more than 8 UX views** or **more than 15 behaviors** for a single feature, that's a strong signal it should be **split into multiple features in the same area**.
+
+You're not adding a new hierarchy layer — features in the same area already group via the area README + the area-level flow chart. Splitting just keeps each feature page scannable.
+
+**Heuristics for where to split** (pick whichever fits best):
+
+| Split axis | Example |
+|---|---|
+| **By user flow / state** | `checkout/cart`, `checkout/payment-method`, `checkout/confirmation` |
+| **By data domain** | `wallet/transactions` vs `wallet/kid-balance` vs `wallet/interest` |
+| **By persona** | `auth/parent-login` vs `auth/kid-login` (if the experiences differ enough) |
+| **By trigger origin** | `tasks/create-task` (parent) vs `tasks/complete-task` (kid) |
+| **By lifecycle phase** | `onboarding/welcome` vs `onboarding/add-first-kid` |
+
+**Don't split by widget.** "earn-form-amount-input" and "earn-form-reason-input" are not features — they're elements within one feature.
+
+**When to NOT split**, even if behavior count is high:
+- The behaviors all describe ONE invariant from many angles (e.g. `wallet/kid-balance` may legitimately have 10+ rules all about the balance being derived). Invariants concentrate; let them.
+- Splitting would force the same UX view to live in two features.
+
+**How to propose the split**: before writing, surface the split to the user. "This is two features — `checkout/guest-flow` (cart + payment for unauth users) and `checkout/auth-flow` (cart + payment for logged-in users). Each has ~5 behaviors and 3 UX views. Want me to scope as two, or keep them merged?"
+
+On confirmation, scope each feature separately (call `productos_propose_feature` per feature). Use cross-feature `leads_to` from elements to thread them together — they'll show up as connected nodes on the area-level flow chart at `/<area>/`.
+
 ## Don't
 
 - **Don't model the whole codebase.** This is single-feature scope. If the user wants a full pass, they ask for `productos-fullscan` instead.

@@ -10,7 +10,8 @@ import { BehaviorTracking, FeatureTracking } from "../core/tracking.js";
 import { FeedbackEntry } from "../core/feedback.js";
 import { ContextDocument } from "../core/context.js";
 import { derivedVerification, DerivedVerification } from "../core/derived-state.js";
-import { buildFlowGraph, renderMermaid } from "../core/flowchart.js";
+import { buildAreaFlowGraph, buildFlowGraph, renderMermaid } from "../core/flowchart.js";
+import { auditArea } from "../core/audit.js";
 
 const SHELL_CSS = `
 :root {
@@ -865,25 +866,63 @@ export function renderHome(areas: AreaDocument[], topReadme?: string): string {
 
 export function renderArea(area: AreaDocument): string {
   const bodyHtml = area.body ? (marked.parse(area.body) as string) : "";
+
+  // Audit roll-up across every feature in the area
+  const auditSummary = auditArea(area.slug, area.features);
+
   const cards = area.features
-    .map(
-      (f) => `
+    .map((f) => {
+      const fAudit = auditSummary.features.find((x) => x.feature_id === f.frontmatter.id);
+      const issuePill = fAudit && fAudit.counts.total > 0
+        ? `<span style="margin-left:10px;color:${fAudit.counts.high > 0 ? "var(--red)" : "var(--yellow)"};font-weight:600;">${fAudit.counts.total} issue${fAudit.counts.total === 1 ? "" : "s"}</span>`
+        : "";
+      return `
         <a href="${escape(f.url_path)}" style="display:block;background:var(--surface);border:1px solid var(--surface-3);border-radius:12px;padding:18px 20px;text-decoration:none;color:var(--text);margin:10px 0;">
           <div style="font-weight:600;font-size:15px;color:var(--accent);">${escape(f.frontmatter.title)}</div>
           <div style="color:var(--dim);font-size:12px;margin-top:6px;font-family:var(--mono);">${escape(f.frontmatter.id)}</div>
           <div style="color:var(--dim);font-size:12px;margin-top:6px;">
             <span class="pill ${f.frontmatter.status}">${f.frontmatter.status}</span>
             <span style="margin-left:10px;">${f.frontmatter.behaviors.length} behavior${f.frontmatter.behaviors.length === 1 ? "" : "s"}</span>
+            ${issuePill}
           </div>
-        </a>`
-    )
+        </a>`;
+    })
     .join("\n");
+
+  // Area-level flow chart (aggregated cross-feature edges)
+  const areaGraph = buildAreaFlowGraph(area);
+  const flowBlock = areaGraph.has_flow
+    ? `<section class="feature-flow">
+         <h2>Flow across this area</h2>
+         <div class="mermaid">${escape(renderMermaid(areaGraph))}</div>
+       </section>`
+    : "";
+
+  // Audit roll-up summary at the top
+  const totals = auditSummary.totals;
+  const auditBlock = totals.total > 0
+    ? `<section style="background:var(--surface);border:1px solid var(--surface-3);border-radius:12px;padding:16px 18px;margin:16px 0;">
+         <div style="font-weight:600;margin-bottom:6px;">Audit roll-up</div>
+         <div style="color:var(--dim);font-size:13px;">
+           <span style="color:var(--red);font-weight:600;">${totals.high}</span> high ·
+           <span style="color:var(--yellow);font-weight:600;">${totals.medium}</span> medium ·
+           <span style="color:var(--dim);">${totals.low}</span> low across ${auditSummary.feature_count} feature${auditSummary.feature_count === 1 ? "" : "s"}.
+         </div>
+       </section>`
+    : auditSummary.feature_count > 0
+    ? `<section style="background:var(--surface);border:1px solid var(--surface-3);border-radius:12px;padding:12px 18px;margin:16px 0;color:var(--dim);font-size:13px;">
+         Audit roll-up: no issues across this area.
+       </section>`
+    : "";
+
   return `
     <div class="crumb"><a href="/">Overview</a></div>
     <header class="feature">
       <h1>${escape(area.title)}</h1>
       <div class="meta"><span class="pill">${area.features.length} feature${area.features.length === 1 ? "" : "s"}</span></div>
     </header>
+    ${flowBlock}
+    ${auditBlock}
     <article class="prose">${bodyHtml}</article>
     ${area.features.length ? `<h2>Features</h2>${cards}` : `<div class="empty-state">No features in this area yet.</div>`}
     ${renderFeedbackSection(undefined, undefined, "Feedback on " + area.title)}

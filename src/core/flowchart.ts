@@ -1,4 +1,4 @@
-import { FeatureDocument } from "./product.js";
+import { AreaDocument, FeatureDocument } from "./product.js";
 
 /**
  * Generate a high-level flow chart from a feature's UX views + element
@@ -67,6 +67,118 @@ export function buildFlowGraph(feature: FeatureDocument): FlowGraph {
     nodes: Array.from(nodes.values()),
     edges,
     has_flow: nodes.size > 0,
+  };
+}
+
+// ===========================================================================
+// AREA-LEVEL FLOW GRAPH
+// ===========================================================================
+//
+// Nodes at this granularity are FEATURES, not UX views. Edges are
+// cross-feature transitions (one feature's element.leads_to points at
+// another feature). Lets a PM see "the whole checkout area" without
+// drowning in per-screen detail.
+//
+// Targets that fall outside the current area still render as external
+// nodes (dashed), with a click-through to that feature's page.
+
+export function buildAreaFlowGraph(area: AreaDocument): FlowGraph {
+  // First, collect the cross-feature edges so we can topo-sort the
+  // internal feature nodes by flow position (not alphabetical id) —
+  // that way "wallet/family → wallet/add-kid" appears as a forward edge
+  // (which it is, semantically) rather than getting tagged "back" just
+  // because `add-kid` sorts earlier.
+  const internalEdgeKeys: Array<{ from: string; to: string }> = [];
+  for (const f of area.features) {
+    const sourceId = f.frontmatter.id;
+    for (const u of f.frontmatter.ux) {
+      for (const el of u.elements) {
+        if (!el.leads_to) continue;
+        const target = el.leads_to.trim();
+        if (!target || !target.includes("/")) continue;
+        const targetFeatureId = target.split("#")[0];
+        if (area.features.some((g) => g.frontmatter.id === targetFeatureId)) {
+          internalEdgeKeys.push({ from: sourceId, to: targetFeatureId });
+        }
+      }
+    }
+  }
+  const orderedInternalIds = topoSortFeatureIds(
+    area.features.map((f) => f.frontmatter.id),
+    internalEdgeKeys
+  );
+
+  const nodes = new Map<string, { id: string; title: string; external: boolean }>();
+  const edges: FlowEdge[] = [];
+
+  // Internal feature nodes in topological order — sources before targets.
+  for (const id of orderedInternalIds) {
+    const f = area.features.find((g) => g.frontmatter.id === id)!;
+    nodes.set(id, {
+      id,
+      title: f.frontmatter.title,
+      external: false,
+    });
+  }
+
+  // Walk each feature's leads_to. We only care about edges that CROSS feature
+  // boundaries (intra-feature leads_to is a per-feature concern). Aggregate
+  // duplicates (e.g. earn-form AND spend-form both → wallet/kid-detail
+  // from different sources collapse into one edge per (source-feature,
+  // target-feature, action) tuple).
+  const seen = new Set<string>();
+  for (const f of area.features) {
+    const sourceId = f.frontmatter.id;
+    for (const u of f.frontmatter.ux) {
+      for (const el of u.elements) {
+        if (!el.leads_to) continue;
+        const target = el.leads_to.trim();
+        if (!target) continue;
+        // Within-feature leads_to (a UX-view-id within the same feature) — skip.
+        const withinFeature = f.frontmatter.ux.some((x) => x.id === target);
+        if (withinFeature) continue;
+        // Strip an optional #anchor — we deal with feature-level targets here.
+        const targetFeatureId = target.split("#")[0];
+        // If the target is just a UX-view id of OTHER features in the area,
+        // we still need a feature-level node. Resolve by scanning corpus —
+        // but at this stage we don't have it. Skip for now if it doesn't
+        // look like a feature path (must contain a slash).
+        if (!targetFeatureId.includes("/")) continue;
+        const external = !nodes.has(targetFeatureId);
+        if (external) {
+          nodes.set(targetFeatureId, {
+            id: targetFeatureId,
+            title: targetFeatureId,
+            external: true,
+          });
+        }
+        const action = actionLabel({
+          from_ux: u.id,
+          via_element: el.id,
+          via_element_label: el.label,
+          to: targetFeatureId,
+          external,
+        });
+        // Dedupe on (source, target, action).
+        const key = `${sourceId}→${targetFeatureId}|${action}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        edges.push({
+          from_ux: sourceId,
+          via_element: el.id,
+          via_element_label: el.label,
+          to: targetFeatureId,
+          external,
+        });
+      }
+    }
+  }
+
+  return {
+    feature_id: `area:${area.slug}`,
+    nodes: Array.from(nodes.values()),
+    edges,
+    has_flow: nodes.size > 0 && edges.length > 0,
   };
 }
 
@@ -143,6 +255,7 @@ type FanKind = "external" | "internal-forward" | "internal-back";
 
 interface BoxLayout {
   id: string;
+  displayId: string;      // id shown in the top border (may differ from id when stripIdPrefix is set)
   title: string;
   summaryLines: string[];
   externals: { action: string; target: string; kind: FanKind }[];
@@ -155,10 +268,25 @@ interface BoxLayout {
   rowIdx: number;         // logical row (0-based)
 }
 
+export interface RenderAsciiOptions {
+  uxSummary?: Map<string, string>;
+  /** Strip this prefix from internal node ids when rendering box borders.
+   *  Used by area-level flow charts to drop the redundant area prefix
+   *  (e.g. "wallet/kid-detail" → "kid-detail" when viewing the wallet
+   *  area's overview). External nodes (no match) render in full so the
+   *  cross-area nature stays visible. */
+  stripIdPrefix?: string;
+}
+
 export function renderAscii(
   graph: FlowGraph,
-  uxSummary?: Map<string, string>
+  options: RenderAsciiOptions | Map<string, string> = {}
 ): string {
+  // Back-compat: callers used to pass `uxSummary: Map` directly. Detect.
+  const opts: RenderAsciiOptions =
+    options instanceof Map ? { uxSummary: options } : options;
+  const uxSummary = opts.uxSummary;
+  const stripIdPrefix = opts.stripIdPrefix;
   if (!graph.has_flow) return "(no UX views)";
 
   const internal = graph.nodes.filter((n) => !n.external);
@@ -247,15 +375,26 @@ export function renderAscii(
   }
 
   // 3. Compute box content + a single common inner width.
-  type Pre = { id: string; title: string; summary: string; fans: { action: string; target: string; kind: FanKind }[] };
-  const pre: Pre[] = internal.map((n) => ({
-    id: n.id,
-    title: n.title,
-    summary: uxSummary?.get(n.id) ?? "",
-    fans: fansByFrom.get(n.id) ?? [],
-  }));
+  type Pre = { id: string; title: string; summary: string; fans: { action: string; target: string; kind: FanKind }[]; displayLen: number };
+  const pre: Pre[] = internal.map((n) => {
+    const displayId = stripIdPrefix && n.id.startsWith(stripIdPrefix)
+      ? n.id.slice(stripIdPrefix.length)
+      : n.id;
+    return {
+      id: n.id,
+      title: n.title,
+      summary: uxSummary?.get(n.id) ?? "",
+      fans: fansByFrom.get(n.id) ?? [],
+      displayLen: displayId.length,
+    };
+  });
+  // Width such that the id text in the top border ends BEFORE the box's
+  // mid-column (so an arrowhead landing at mid doesn't overwrite the id).
+  // id text occupies columns [left+3, left+3+displayLen-1]. midX = left +
+  // floor(width/2). For id end < midX: width > 2*(displayLen+3) → width >=
+  // 2*(displayLen+3)+1, so inner width = width - 4 >= 2*displayLen+2.
   const widthCandidates = pre.map((p) => {
-    const idMin = p.id.length + 6;
+    const idMin = 2 * p.displayLen + 4;
     const titleLen = p.title.length;
     const summaryWordMax = p.summary
       ? Math.max(...p.summary.split(/\s+/).map((w) => w.length))
@@ -271,8 +410,16 @@ export function renderAscii(
     const contentRows: string[] = [p.title, ...summaryLines];
     const wantedH = Math.max(contentRows.length, p.fans.length);
     while (contentRows.length < wantedH) contentRows.push("");
+    // Compute display id: strip the configured prefix if matching, else
+    // use the raw id. External nodes (those that fall through the strip)
+    // keep the full id so their cross-area nature stays visible.
+    const displayId =
+      stripIdPrefix && p.id.startsWith(stripIdPrefix)
+        ? p.id.slice(stripIdPrefix.length)
+        : p.id;
     boxesById.set(p.id, {
       id: p.id,
+      displayId,
       title: p.title,
       summaryLines,
       externals: p.fans,
@@ -442,7 +589,7 @@ function drawBox(canvas: Canvas, b: BoxLayout): void {
   canvas.set(right, top, "┐");
   // " id " label inside the top border, starting at left+2
   canvas.hLine(left + 1, right - 1, top, "─");
-  canvas.writeText(left + 2, top, ` ${b.id} `);
+  canvas.writeText(left + 2, top, ` ${b.displayId} `);
 
   // Sides + content rows
   for (let i = 0; i < b.innerLines.length; i++) {
@@ -568,6 +715,51 @@ function drawForwardEdges(
 
 // ---------------------------------------------------------------------------
 // Action label heuristic
+
+/**
+ * Topological order of internal feature ids based on the cross-feature
+ * leads_to graph. Roots (no inbound internal edges) come first; otherwise
+ * we walk forward. Falls back to original order for cycles or
+ * disconnected components.
+ */
+function topoSortFeatureIds(
+  ids: string[],
+  edges: Array<{ from: string; to: string }>
+): string[] {
+  const idSet = new Set(ids);
+  const inbound = new Map<string, number>();
+  const adj = new Map<string, string[]>();
+  for (const id of ids) {
+    inbound.set(id, 0);
+    adj.set(id, []);
+  }
+  for (const e of edges) {
+    if (!idSet.has(e.from) || !idSet.has(e.to)) continue;
+    if (e.from === e.to) continue;
+    inbound.set(e.to, (inbound.get(e.to) ?? 0) + 1);
+    adj.get(e.from)!.push(e.to);
+  }
+  // Kahn's: start from nodes with no inbound, keep original-list order
+  // among ties for stability.
+  const order: string[] = [];
+  const queue: string[] = ids.filter((id) => (inbound.get(id) ?? 0) === 0);
+  const visited = new Set<string>();
+  while (queue.length > 0) {
+    const cur = queue.shift()!;
+    if (visited.has(cur)) continue;
+    visited.add(cur);
+    order.push(cur);
+    for (const next of adj.get(cur) ?? []) {
+      inbound.set(next, (inbound.get(next) ?? 1) - 1);
+      if ((inbound.get(next) ?? 0) === 0 && !visited.has(next)) {
+        queue.push(next);
+      }
+    }
+  }
+  // Append any leftovers (cycles, etc.) in original order.
+  for (const id of ids) if (!visited.has(id)) order.push(id);
+  return order;
+}
 
 function actionLabel(e: FlowEdge): string {
   if (e.via_element_label) {
