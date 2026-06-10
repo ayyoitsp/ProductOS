@@ -399,6 +399,7 @@ const UpdateUxInput = z.object({
   ux_id: z.string(),
   title: z.string().optional(),
   sketch: z.string().optional(),
+  sketch_html: z.string().optional().describe("Optional raw-HTML mock of the screen. When set, the web renderer uses this INSTEAD of the ASCII sketch — so the UX preview picks up the user's app CSS (configured via productos config web.stylesheet) and looks like a real mock. Reference the user's actual class names from their CSS file."),
   path: z.string().optional(),
   notes: z.string().optional(),
 });
@@ -406,7 +407,7 @@ const UpdateUxInput = z.object({
 const updateUx: McpTool = {
   name: "productos_update_ux",
   description:
-    "Update fields on an existing UX view by id — title, sketch, path, notes. Pass only the fields to change. To replace elements or rename the id, use productos_add_or_replace_ux. To remove the view, use productos_remove_ux.",
+    "Update fields on an existing UX view by id — title, sketch, sketch_html, path, notes. Pass only the fields to change. To replace elements or rename the id, use productos_add_or_replace_ux. To remove the view, use productos_remove_ux. sketch_html is the high-fidelity HTML mock that uses the user's CSS — see field doc.",
   inputSchema: zodToInputSchema(UpdateUxInput),
   handler: async (raw, paths) => {
     const args = UpdateUxInput.parse(raw);
@@ -416,6 +417,7 @@ const updateUx: McpTool = {
     if (!u) throw new Error(`UX view "${args.ux_id}" not found on ${args.feature_id}`);
     if (args.title !== undefined) u.title = args.title;
     if (args.sketch !== undefined) u.sketch = args.sketch;
+    if (args.sketch_html !== undefined) u.sketch_html = args.sketch_html;
     if (args.path !== undefined) u.path = args.path;
     if (args.notes !== undefined) u.notes = args.notes;
     writeFeature(paths, doc);

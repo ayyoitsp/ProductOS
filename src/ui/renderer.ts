@@ -112,6 +112,20 @@ header.feature .feature-title-row .feature-status { flex: 0 0 auto; }
 .ai-assist-status.warning { color: var(--yellow); }
 .ai-assist-status.error { color: var(--red); }
 
+/* UX mock — user provided sketch_html, rendered with their own CSS via
+   /_user-style.css. We give it a scoping container so the user can scope
+   styles via .ux-mock { ... } if they want. Minimal defaults: just a
+   bordered card that contains the mock cleanly. */
+.ux-mock {
+  border: 1px solid var(--surface-3);
+  border-radius: 12px;
+  padding: 18px;
+  background: #fff;
+  color: #111;
+  overflow: hidden;
+}
+.ux-mock * { box-sizing: border-box; }
+
 /* Flow chart at the top of a feature page — Mermaid graph showing UX views
    + leads_to edges. Renders client-side via the Mermaid CDN. */
 .feature-flow { background: var(--surface); border: 1px solid var(--surface-3); border-radius: 12px; padding: 18px 20px; margin: 16px 0 20px; }
@@ -506,7 +520,22 @@ document.addEventListener('click', async (e) => {
 });
 `;
 
-export function renderShell(title: string, body: string, sidebar: string): string {
+export interface ShellOptions {
+  /** When set, an additional <link rel="stylesheet"> is inserted so the
+   *  user's app CSS loads alongside ProductOS's own styles. The server
+   *  serves the file at /_user-style.css when web.stylesheet is configured. */
+  userStylesheetUrl?: string;
+}
+
+export function renderShell(
+  title: string,
+  body: string,
+  sidebar: string,
+  options: ShellOptions = {}
+): string {
+  const userCssLink = options.userStylesheetUrl
+    ? `<link rel="stylesheet" href="${escape(options.userStylesheetUrl)}" />`
+    : "";
   return `<!doctype html>
 <html lang="en">
   <head>
@@ -514,6 +543,7 @@ export function renderShell(title: string, body: string, sidebar: string): strin
     <title>${escape(title)} — ProductOS</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <style>${SHELL_CSS}</style>
+    ${userCssLink}
   </head>
   <body>
     <aside>${sidebar}</aside>
@@ -1105,15 +1135,15 @@ function renderUxPreview(
     .join("");
   const panels = surfaces
     .map((s, i) => {
-      const sketch = s.sketch
-        ? `<pre class="surface-sketch">${decorateSketch(s.sketch, s.elements, featureId, surfaceIdsInFeature, surfaceIndex)}</pre>`
-        : `<div class="empty-state">No sketch.</div>`;
+      const mockContent = renderUxMockContent(s, (sketch) =>
+        decorateSketch(sketch, s.elements, featureId, surfaceIdsInFeature, surfaceIndex)
+      );
       return `<div class="ux-preview-panel${i === 0 ? " active" : ""}" id="ux-preview-${escape(s.id)}">
         <div class="ux-preview-head">
           <span class="ux-preview-title">${escape(s.title)}</span>
           <a class="ux-jump" href="#surface-${escape(s.id)}">Jump to ${escape(s.title)} details ↓</a>
         </div>
-        ${sketch}
+        ${mockContent}
       </div>`;
     })
     .join("\n");
@@ -1137,6 +1167,23 @@ function renderAffectedBy(featureIds: string[]): string {
   return `<div class="affected-by"><span class="affected-by-label">Affected by:</span>${pills}</div>`;
 }
 
+/**
+ * Render the visual content for ONE UX view. Fidelity chain:
+ *   1. sketch_html (AI-generated mock that mirrors the user's component
+ *      structure + classes, produced by reading their src/components)
+ *      → rendered as HTML with the user's CSS loaded via /_user-style.css
+ *   2. sketch → decorated ASCII sketch with pattern-based decoration
+ *   3. nothing → empty-state placeholder
+ */
+function renderUxMockContent(
+  s: Surface,
+  decorateAscii: (sketch: string) => string
+): string {
+  if (s.sketch_html) return `<div class="ux-mock">${s.sketch_html}</div>`;
+  if (s.sketch) return `<pre class="surface-sketch">${decorateAscii(s.sketch)}</pre>`;
+  return `<div class="empty-state">No sketch.</div>`;
+}
+
 function renderSurfaceWithBehaviors(
   featureId: string,
   s: Surface,
@@ -1151,9 +1198,9 @@ function renderSurfaceWithBehaviors(
   // declarations still live in the markdown so behaviors can anchor via
   // `element: <id>` — they just don't render as a separate redundant list.
   const elementsLine = "";
-  const sketchBlock = s.sketch
-    ? `<pre class="surface-sketch">${decorateSketch(s.sketch, s.elements, featureId, surfaceIdsInFeature, surfaceIndex)}</pre>`
-    : "";
+  const sketchBlock = renderUxMockContent(s, (sketch) =>
+    decorateSketch(sketch, s.elements, featureId, surfaceIdsInFeature, surfaceIndex)
+  );
   // Surface.path (route / URL) is intentionally NOT rendered in the header
   // — it's a routing-implementation detail the PM doesn't read. Data persists
   // in markdown for engineers who need to locate the code.

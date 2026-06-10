@@ -138,6 +138,29 @@ export const StackConfig = z.object({
 });
 export type StackConfig = z.infer<typeof StackConfig>;
 
+/**
+ * Web rendering options. Lets the user wire in their app's CSS so UX
+ * sketches can render as real-looking mocks (when sketch_html is provided
+ * on the UX view) instead of just ASCII art.
+ */
+export const WebConfig = z.object({
+  /** Path (relative to repo root) to a CSS file the user wants loaded into
+   *  productos serve so UX mocks pick up their app's design system. The
+   *  server exposes the file at /_user-style.css. */
+  stylesheet: z.string().optional(),
+  /** Optional CSS class to wrap every UX mock in. Use to scope your styles
+   *  if your app's CSS expects a root container class (e.g. "app-root"). */
+  mock_container_class: z.string().optional(),
+  /** Path (relative to repo root) to the directory containing the user's
+   *  app components. Used by the AI editor as a HINT for where to look
+   *  when reading component source to generate sketch_html. The AI uses
+   *  the user's component structure (class names, layout, semantic
+   *  elements) to produce static HTML mocks that look like the real app —
+   *  WITHOUT running the user's code. Example: "src/components". */
+  components_dir: z.string().optional(),
+});
+export type WebConfig = z.infer<typeof WebConfig>;
+
 export const ProductosConfig = z.object({
   version: z.string().default("0.0.1"),
   stack: StackConfig.default({
@@ -152,6 +175,7 @@ export const ProductosConfig = z.object({
   ui_port: z.number().default(7878),
   byok: ByokConfig.default({}),
   operations: OperationsConfig.default({}),
+  web: WebConfig.default({}),
 });
 export type ProductosConfig = z.infer<typeof ProductosConfig>;
 
