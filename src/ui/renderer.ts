@@ -381,7 +381,11 @@ document.addEventListener('click', (e) => {
 //     the UX preview, switch to that tab in-place instead of scrolling.
 //   - Cross-feature (/area/feature...): confirm before navigating away.
 document.addEventListener('click', (e) => {
-  const a = e.target.closest('.sketch-anchor');
+  // Match both decorated ASCII sketch anchors AND plain anchors inside
+  // a .ux-mock HTML mock. The AI generating sketch_html shouldn't need to
+  // know about a ProductOS-internal class — any <a> in .ux-mock counts.
+  const a = e.target.closest('.sketch-anchor') ||
+            (e.target.closest('.ux-mock') && e.target.closest('a'));
   if (!a) return;
   const href = a.getAttribute('href') || '';
   if (href.startsWith('#surface-')) {
