@@ -5,7 +5,7 @@ import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { z } from "zod";
 import YAML from "yaml";
 import { ProductosPaths } from "../core/paths.js";
-import { ResolvedByok } from "../core/config.js";
+import { ResolvedByok, readConfig } from "../core/config.js";
 import {
   Behavior,
   Element,
@@ -137,19 +137,21 @@ export async function editFeatureTurn(args: {
 
     update_ux: tool({
       description:
-        "Update fields on an existing UX view by id. Pass only the fields to change (title, sketch, path, notes). Cannot change id or replace elements — for those use add_or_replace_ux.",
+        "Update fields on an existing UX view by id. Pass only the fields to change (title, sketch, sketch_html, path, notes). Cannot change id or replace elements — for those use add_or_replace_ux. sketch_html is an OPTIONAL raw-HTML version of the sketch that the web renderer uses INSTEAD of the ASCII sketch when present — generate it referencing the user's CSS classes (loaded via productos config web.stylesheet) so the mock looks like the real app.",
       inputSchema: z.object({
         ux_id: z.string(),
         title: z.string().optional(),
         sketch: z.string().optional(),
+        sketch_html: z.string().optional(),
         path: z.string().optional(),
         notes: z.string().optional(),
       }),
-      execute: async (a: { ux_id: string; title?: string; sketch?: string; path?: string; notes?: string }) => {
+      execute: async (a: { ux_id: string; title?: string; sketch?: string; sketch_html?: string; path?: string; notes?: string }) => {
         const u = fm.ux.find((x) => x.id === a.ux_id);
         if (!u) return { ok: false, error: `no UX view ${a.ux_id}` };
         if (a.title !== undefined) u.title = a.title;
         if (a.sketch !== undefined) u.sketch = a.sketch;
+        if (a.sketch_html !== undefined) u.sketch_html = a.sketch_html;
         if (a.path !== undefined) u.path = a.path;
         if (a.notes !== undefined) u.notes = a.notes;
         ops.push(`ux:${a.ux_id}:update`);
@@ -268,6 +270,48 @@ export async function editFeatureTurn(args: {
       },
     }),
 
+    list_app_components: tool({
+      description:
+        "List files under the user's web.components_dir so you can pick which components are relevant to the current screen. Only available if web.components_dir is configured. Use BEFORE generating sketch_html so the mock mirrors the user's actual app components.",
+      inputSchema: z.object({
+        glob: z.string().optional().describe("Glob pattern relative to components_dir, e.g. '**/*.tsx'. Defaults to all component-ish files."),
+        max: z.number().int().positive().max(200).default(60),
+      }),
+      execute: async (a) => {
+        const c = readConfig(paths);
+        const dir = c.web?.components_dir;
+        if (!dir) return { ok: false, error: "web.components_dir is not configured in productos/config.yaml" };
+        const { globby } = await import("globby");
+        const pattern = a.glob ?? "**/*.{tsx,jsx,ts,js,vue,svelte,astro}";
+        const cwd = (await import("node:path")).resolve(paths.repoRoot, dir);
+        const matches = await globby(pattern, { cwd, gitignore: true, ignore: ["**/*.test.*", "**/*.spec.*", "**/*.stories.*"] });
+        ops.push(`list_app_components(${dir})`);
+        return { dir, components: matches.slice(0, a.max ?? 60) };
+      },
+    }),
+    read_app_file: tool({
+      description:
+        "Read a file from the user's app codebase (component source, CSS file, etc) so you can understand the structure + class names before generating sketch_html. Paths are relative to the repo root. Use this — DON'T invent component structure.",
+      inputSchema: z.object({
+        path: z.string().describe("Repo-relative path, e.g. 'src/components/Button.tsx'"),
+        start_line: z.number().int().nonnegative().default(1),
+      }),
+      execute: async (a) => {
+        const fs = await import("node:fs");
+        const path = await import("node:path");
+        const abs = path.resolve(paths.repoRoot, a.path);
+        const root = path.resolve(paths.repoRoot);
+        if (!abs.startsWith(root + path.sep) && abs !== root) {
+          return { ok: false, error: "path escapes repo root" };
+        }
+        if (!fs.existsSync(abs)) return { ok: false, error: "not found" };
+        const lines = fs.readFileSync(abs, "utf-8").split("\n");
+        const start = Math.max(0, (a.start_line ?? 1) - 1);
+        const slice = lines.slice(start, start + 400);
+        ops.push(`read_app_file(${a.path})`);
+        return { ok: true, total_lines: lines.length, start_line: start + 1, content: slice.join("\n") };
+      },
+    }),
     add_or_replace_principle: tool({
       description:
         "Add or update a section in productos/context/principles.md. Use this when a candidate rule is CROSS-CUTTING (applies to other features too) — DON'T duplicate the rule per-feature; lift it to principles and reference it from each feature behavior via `notes`. Section heading becomes the anchor (e.g. `## submits-are-idempotent` → reference as `principles#submits-are-idempotent`). For changes to other context docs (goals, personas, non-goals, voice), the user must edit them directly — this tool only manages principles.",
@@ -385,6 +429,14 @@ function buildBootstrapMessages(feature: FeatureDocument, paths: ProductosPaths)
   const strategy = getStrategy(paths);
   const corpus = listFeatures(paths).map((f) => f.frontmatter.id);
   const findings = auditFeature(feature);
+  // Surface the web mock hints (stylesheet + components dir) so the model
+  // knows whether sketch_html with the user's CSS is in play.
+  const webConfig: { stylesheet?: string; components_dir?: string } = {};
+  try {
+    const c = readConfig(paths);
+    if (c.web?.stylesheet) webConfig.stylesheet = c.web.stylesheet;
+    if (c.web?.components_dir) webConfig.components_dir = c.web.components_dir;
+  } catch { /* fall back to empty */ }
   const parts: string[] = [];
   if (strategy.trim()) {
     parts.push("# Project strategy (constrains every claim)");
@@ -421,6 +473,29 @@ function buildBootstrapMessages(feature: FeatureDocument, paths: ProductosPaths)
   }
   // Principle classification nudge — keep cross-cutting rules in the
   // strategy layer instead of duplicating them per-feature.
+  parts.push("---");
+  // Web mock guidance — high-fidelity sketch_html generation.
+  if (webConfig.stylesheet || webConfig.components_dir) {
+    parts.push("---");
+    parts.push("# How to produce high-fidelity UX mocks (sketch_html)");
+    parts.push(
+      [
+        `This project has the web mock pipeline enabled:`,
+        webConfig.stylesheet ? `  - web.stylesheet: \`${webConfig.stylesheet}\` (loaded into the rendered page as /_user-style.css)` : null,
+        webConfig.components_dir ? `  - web.components_dir: \`${webConfig.components_dir}\` (read these to mirror the user's actual components)` : null,
+        ``,
+        `When generating or updating a UX view's \`sketch_html\` field:`,
+        `  1. READ THE REAL CODE FIRST. Use list_app_components + read_app_file to see what the user's actual components look like. Don't invent class names or structure — pull them from the source.`,
+        webConfig.stylesheet ? `  2. Read the user's CSS file (read_app_file on \`${webConfig.stylesheet}\`) to learn which class names are real and how they're styled.` : null,
+        `  3. PRODUCE STATIC HTML that mirrors the component structure: same semantic elements, same class names, same nesting. The user's CSS will style it identically to the real app.`,
+        `  4. NO JAVASCRIPT, NO INTERACTIVITY. Static HTML only — productos renders it without a JS runtime.`,
+        `  5. WRAP THE MOCK in a single root element (a <div class="screen"> or similar). The web renderer wraps your sketch_html in a .ux-mock container.`,
+        `  6. ALWAYS KEEP THE \`sketch\` (ASCII) FIELD ALONGSIDE. The ASCII version is the canonical reader-friendly view in CLI and Claude. sketch_html is purely the web-renderer fidelity bonus.`,
+        ``,
+        `If components_dir is not set, fall back to producing a generic-but-pleasant HTML mock — but flag to the user that configuring web.components_dir would unlock real-app fidelity.`,
+      ].filter(Boolean).join("\n")
+    );
+  }
   parts.push("---");
   parts.push("# Classify each candidate before adding");
   parts.push(

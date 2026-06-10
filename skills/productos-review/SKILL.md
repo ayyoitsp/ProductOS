@@ -320,6 +320,26 @@ Same scope rule: only test cases for the focused behavior. Whole-feature gap ana
 
 **Re-render after every write.** Skip re-render when answering a question.
 
+## 4b. High-fidelity HTML mocks (sketch_html)
+
+Each UX view has an OPTIONAL `sketch_html` field — a static HTML version of the sketch that the web renderer prefers over the ASCII one. When `productos/config.yaml` has `web.stylesheet` configured, the rendered page loads the user's actual CSS, so an HTML mock written with their real class names looks like the real app.
+
+**When to generate or update sketch_html:**
+- User asks "make the mock look like the real app" / "use my components" / "render this as HTML"
+- You add a new UX view (offer to generate sketch_html alongside the ASCII sketch — the ASCII stays as the canonical reader-friendly view)
+- The user has `web.components_dir` configured AND you're scoping a UX view that visually resembles existing components in the app
+
+**How to produce a good sketch_html:**
+1. **Read the real code first.** Use your file-reading tools to look at the user's components directory (path is in `productos/config.yaml` under `web.components_dir`, e.g. `src/components`). Pick the components the screen would naturally compose.
+2. **Read the user's CSS** (`web.stylesheet` path) to learn the real class names and how they're styled.
+3. **Produce static HTML** that mirrors the component structure: same semantic elements, same class names, same nesting. **DON'T invent class names** — pull them from the source.
+4. **No JavaScript, no interactivity.** The web renderer wraps the mock in `<div class="ux-mock">` and styles it via the user's CSS — that's it.
+5. **Keep `sketch` (ASCII) alongside.** The ASCII version remains the reader-friendly view in CLI and Claude; sketch_html is purely the web-renderer fidelity bonus.
+
+Apply via `productos_update_ux(feature_id, ux_id, { sketch_html: "..." })`.
+
+If `web.stylesheet` is NOT configured, sketch_html still works but uses generic styling — flag this to the user and suggest they set `web.stylesheet` in productos/config.yaml.
+
 ## 5. Tools you have
 
 **Read:** `productos_get_feature({ id })` — returns `{ id, title, status, description, ux, behaviors, affected_by, body, tracking? }`.

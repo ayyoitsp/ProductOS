@@ -65,7 +65,16 @@ export const UxView = z.object({
   id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/, "UX ids must be kebab-case"),
   title: z.string().min(1),
   path: z.string().optional(),
+  /** ASCII art layout. Always written by the AI when scoping. Used as the
+   *  reader-friendly view in CLI / Claude and as the fallback in the web
+   *  renderer when sketch_html isn't present. */
   sketch: z.string().optional(),
+  /** Optional raw-HTML version of the sketch. When present, the web renderer
+   *  uses this INSTEAD of decorating the ASCII sketch — so the UX preview
+   *  picks up the user's actual CSS (configured via productos/config.yaml
+   *  web.stylesheet) and looks like a real mock of the screen. The AI editor
+   *  can generate this from the ASCII sketch + the user's CSS class names. */
+  sketch_html: z.string().optional(),
   notes: z.string().optional(),
   elements: z.array(Element).default([]),
 });

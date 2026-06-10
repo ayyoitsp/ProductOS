@@ -197,6 +197,36 @@ export async function startUiServer(): Promise<void> {
         }
       }
 
+      // ---- User stylesheet passthrough ----
+      // If web.stylesheet is configured, serve the file at /_user-style.css
+      // so the rendered shell can <link> to it and the UX mocks pick up
+      // the user's actual design system.
+      if (p === "/_user-style.css") {
+        const cssRel = config.web?.stylesheet;
+        if (!cssRel) {
+          res.writeHead(404, { "content-type": "text/plain" });
+          res.end("no web.stylesheet configured");
+          return;
+        }
+        const cssAbs = path.resolve(paths.repoRoot, cssRel);
+        // Prevent path traversal: ensure resolved path stays within repoRoot.
+        const repoRootResolved = path.resolve(paths.repoRoot);
+        if (!cssAbs.startsWith(repoRootResolved + path.sep)) {
+          res.writeHead(403, { "content-type": "text/plain" });
+          res.end("stylesheet path escapes repo root");
+          return;
+        }
+        if (!fs.existsSync(cssAbs)) {
+          res.writeHead(404, { "content-type": "text/plain" });
+          res.end(`stylesheet not found at ${cssRel}`);
+          return;
+        }
+        const cssBody = fs.readFileSync(cssAbs, "utf-8");
+        res.writeHead(200, { "content-type": "text/css; charset=utf-8", "cache-control": "no-cache" });
+        res.end(cssBody);
+        return;
+      }
+
       // ---- JSON API ----
       if (p === "/api/features") return json(res, listFeatures(paths).map((f) => f.frontmatter));
       if (p === "/api/areas") return json(res, listAreas(paths).map((a) => ({ slug: a.slug, title: a.title, feature_count: a.features.length })));
@@ -221,23 +251,26 @@ export async function startUiServer(): Promise<void> {
       const openFeedbackCount = listFeedback(paths, { state: "open" }).length;
       const sb = (activeId?: string) =>
         renderSidebar(areas, contextDocs, activeId, openFeedbackCount);
+      const shellOpts = config.web?.stylesheet
+        ? { userStylesheetUrl: "/_user-style.css" }
+        : {};
 
       if (p === "/" || p === "") {
         const fp = topReadmePath(paths);
         const readme = fs.existsSync(fp) ? fs.readFileSync(fp, "utf-8") : undefined;
         const body = renderHome(visibleAreas(areas), readme);
-        return html(res, renderShell("Product Truth", body, sb("_root")));
+        return html(res, renderShell("Product Truth", body, sb("_root"), shellOpts));
       }
 
       if (p === "/_feedback" || p === "/_feedback/") {
         const entries = listFeedback(paths);
         const body = renderFeedbackQueue(entries);
-        return html(res, renderShell("Feedback queue", body, sb("_feedback")));
+        return html(res, renderShell("Feedback queue", body, sb("_feedback"), shellOpts));
       }
 
       if (p === "/_context" || p === "/_context/") {
         const body = renderContextIndex(contextDocs);
-        return html(res, renderShell("Strategy", body, sb("_context")));
+        return html(res, renderShell("Strategy", body, sb("_context"), shellOpts));
       }
 
       // Per-doc URLs now redirect into the single-page Strategy view with an
@@ -257,7 +290,7 @@ export async function startUiServer(): Promise<void> {
         const area = areas.find((a) => a.slug === slug);
         if (area) {
           const body = renderArea(area);
-          return html(res, renderShell(area.title, body, sb()));
+          return html(res, renderShell(area.title, body, sb(), shellOpts));
         }
       }
 
@@ -272,11 +305,11 @@ export async function startUiServer(): Promise<void> {
           // bare surface ids to whichever feature owns them.
           const surfaceIndex = buildSurfaceIndex(listFeatures(paths));
           const body = renderFeature(f, area, tracking, surfaceIndex);
-          return html(res, renderShell(f.frontmatter.title, body, sb(id)));
+          return html(res, renderShell(f.frontmatter.title, body, sb(id), shellOpts));
         }
       }
 
-      html(res, renderShell("Not found", `<div class="empty-state">No product truth at <code>${p}</code>.</div>`, sb()), 404);
+      html(res, renderShell("Not found", `<div class="empty-state">No product truth at <code>${p}</code>.</div>`, sb(), shellOpts), 404);
     } catch (e) {
       res.writeHead(500, { "content-type": "text/plain" });
       res.end(`server error: ${(e as Error).message}`);
