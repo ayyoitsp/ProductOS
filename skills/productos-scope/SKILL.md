@@ -437,34 +437,56 @@ behaviors:
 
 Eight behaviors from one form. That's the right level. Each is a falsifiable rule with its own anchor and its own test cases. The PM can argue with any of them individually.
 
-## Split features that have grown too big
+## Whatever the user named IS the feature. Don't pre-decompose.
 
-A feature is a tight unit of product truth — one focused concern. When a scope produces **more than 8 UX views** or **more than 15 behaviors** for a single feature, that's a strong signal it should be **split into multiple features in the same area**.
+**The most common scoping failure is pre-decomposing a feature into sub-features before scoping it.** This happens when you see a large codebase footprint (many components, many files, lots of LOC) and reach for the "split" tool to make the work feel manageable. That's exactly backwards.
 
-You're not adding a new hierarchy layer — features in the same area already group via the area README + the area-level flow chart. Splitting just keeps each feature page scannable.
+The PM's mental unit is the feature. When they say "scope risk-analysis", `risk-analysis` IS the feature — even if it spans 10 components and 3,000 LOC. Scope it whole. **Don't propose a split before you've enumerated.**
 
-**Heuristics for where to split** (pick whichever fits best):
+**Hard rule**: until you've written all the UX views and behaviors for the feature the user named, **don't even mention splitting**. The output of the scope tells you whether splitting is needed; the input (component count, LOC, file count) doesn't.
+
+Concrete examples of what NOT to do:
+
+- ❌ "Risk analysis has ~3,000 LOC across 10 components — this is multiple features. Let me start with the trigger sub-feature." → Wrong. Scope all of it, then look at the output.
+- ❌ "Checkout has cart, payment, and confirmation pages — let me split into three features." → Wrong if the user said "scope checkout." Checkout IS the feature.
+- ❌ "Auth has signup and login — let me ask how to split." → Wrong if the user said "scope auth." Both flows are part of one feature unless they've genuinely diverged into different user-visible products.
+
+## When to consider splitting (post-scope, not pre-scope)
+
+After you've enumerated the whole feature, if the result is unwieldy, **then** consider whether the behaviors cluster into separable concerns. Splitting is appropriate when ALL of the following are true:
+
+1. The scope produced **30+ behaviors** AND **12+ UX views** (one alone isn't enough; LOC and component count alone never are)
+2. The behaviors **cluster cleanly** into 2-3 groups where each group could stand alone as a coherent product story
+3. **Different stakeholders** would care about different groups (a PM owning checkout cart wouldn't necessarily own payment-method)
+4. The split is along **user-meaningful axes** (flow, persona, lifecycle phase), not along widgets, components, or files
+
+If you're not confident on ALL FOUR, leave it as one feature. A long feature page is fine — `productos-review` walks the behaviors at the user's pace, the area-level flow chart links related features, and the audit roll-up keeps coverage visible.
+
+**Acceptable splittable axes** (if all four criteria are met):
 
 | Split axis | Example |
 |---|---|
-| **By user flow / state** | `checkout/cart`, `checkout/payment-method`, `checkout/confirmation` |
-| **By data domain** | `wallet/transactions` vs `wallet/kid-balance` vs `wallet/interest` |
-| **By persona** | `auth/parent-login` vs `auth/kid-login` (if the experiences differ enough) |
-| **By trigger origin** | `tasks/create-task` (parent) vs `tasks/complete-task` (kid) |
-| **By lifecycle phase** | `onboarding/welcome` vs `onboarding/add-first-kid` |
+| **By user flow / state** | `checkout/cart`, `checkout/payment-method`, `checkout/confirmation` — IF these are genuinely separable stages with their own PMs / domains |
+| **By data domain** | `wallet/transactions` vs `wallet/kid-balance` vs `wallet/interest` — IF the domains have distinct invariants |
+| **By persona** | `auth/parent-login` vs `auth/kid-login` — IF the experiences are meaningfully different products |
+| **By trigger origin** | `tasks/create-task` (parent) vs `tasks/complete-task` (kid) — IF the trigger surfaces are separate |
+| **By lifecycle phase** | `onboarding/welcome` vs `onboarding/add-first-kid` — IF the phases have separate stakeholders |
 
-**Don't split by widget.** "earn-form-amount-input" and "earn-form-reason-input" are not features — they're elements within one feature.
+**Anti-patterns — never these splits:**
 
-**When to NOT split**, even if behavior count is high:
-- The behaviors all describe ONE invariant from many angles (e.g. `wallet/kid-balance` may legitimately have 10+ rules all about the balance being derived). Invariants concentrate; let them.
-- Splitting would force the same UX view to live in two features.
+- ❌ **By widget**: `earn-form-amount-input` is not a feature
+- ❌ **By component file**: the component tree is an engineering decomposition, not a product one
+- ❌ **By API endpoint**: routes are implementation, not product
+- ❌ **By "trigger" vs "result"**: triggering an analysis and seeing its results are TWO HALVES of one feature, not two features
+- ❌ **By backend vs frontend**: features span the stack
 
-**How to propose the split**: before writing, surface the split to the user. "This is two features — `checkout/guest-flow` (cart + payment for unauth users) and `checkout/auth-flow` (cart + payment for logged-in users). Each has ~5 behaviors and 3 UX views. Want me to scope as two, or keep them merged?"
+**How to propose a split (only after scoping)**: write the full feature first via `productos_propose_feature`, then if AND ONLY IF the four criteria above are met, follow up with: "I scoped this as one feature (N behaviors, M UX views). Looking at the result, the behaviors cluster into [groups A / B / C] — each could stand alone. Want me to split into [feature-A] and [feature-B], or keep as one?"
 
-On confirmation, scope each feature separately (call `productos_propose_feature` per feature). Use cross-feature `leads_to` from elements to thread them together — they'll show up as connected nodes on the area-level flow chart at `/<area>/`.
+On user confirmation, propose the split features and remove the parent. On rejection (the default), leave the comprehensive feature as the canonical scope.
 
 ## Don't
 
+- **Don't pre-decompose based on LOC, file count, or component count.** Component count in the codebase is not behavior count in the spec. Scope the whole feature the user named, then evaluate.
 - **Don't model the whole codebase.** This is single-feature scope. If the user wants a full pass, they ask for `productos-fullscan` instead.
 - **Don't artificially cap or pad behavior count.** Write every distinct behavior the code exhibits. If a feature has 12 distinct claims, write 12. `productos-review` walks them at the user's pace.
 - **Don't stop at the happy path.** A form is not "one behavior" — walk the §3b checklist (validation, default, focus, disabled-state, error-path, cancel, success-outcome) and produce one behavior per rule. If a UX view has 3+ interactive elements and you wrote 1 behavior for it, you missed the rules.

@@ -44,6 +44,12 @@ const IMPL_LANGUAGE_PATTERNS = [
 // Behavior id smells: names a widget interaction rather than a rule.
 const WIDGET_NAME_SUFFIX = /-(click|tap|button|press)$/;
 
+// Feature-id smell: starts with an action verb, suggesting it's a sub-feature
+// carved out of a noun-feature (e.g. "run-analysis" should probably be inside
+// "risk-analysis"). When the feature also has few behaviors, that's the
+// pre-decomposition pattern productos-scope explicitly warns against.
+const ACTION_VERB_PREFIX = /^(run|trigger|view|show|see|get|create|delete|update|edit|add|remove|open|close|launch|start|stop|enable|disable|toggle)-/;
+
 export function auditFeature(feature: FeatureDocument): AuditFinding[] {
   const fm = feature.frontmatter;
   const findings: AuditFinding[] = [];
@@ -75,6 +81,22 @@ export function auditFeature(feature: FeatureDocument): AuditFinding[] {
         feature_id: featureId,
       });
     }
+  }
+  // Pre-decomposition smell: feature id starts with an action verb
+  // (run-, trigger-, view-, etc.) AND the feature itself is narrow
+  // (≤ 4 behaviors AND ≤ 1 UX view). This is the exact pattern of an AI
+  // carving a sub-feature out of a larger noun-feature instead of scoping
+  // the whole thing. Suggest the parent noun.
+  const slug = featureId.split("/").pop() ?? "";
+  const verbMatch = slug.match(ACTION_VERB_PREFIX);
+  if (verbMatch && fm.behaviors.length <= 4 && fm.ux.length <= 1) {
+    const noun = slug.slice(verbMatch[0].length); // strip the "run-" prefix
+    findings.push({
+      severity: "medium",
+      kind: "possibly-pre-decomposed",
+      message: `Feature id "${featureId}" starts with the verb "${verbMatch[0].replace("-", "")}" and is narrow (${fm.behaviors.length} behavior${fm.behaviors.length === 1 ? "" : "s"}, ${fm.ux.length} UX view${fm.ux.length === 1 ? "" : "s"}). Was this scoped as a sub-feature when the parent "${noun}" should have been scoped whole?`,
+      feature_id: featureId,
+    });
   }
 
   // UX views
