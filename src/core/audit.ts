@@ -189,6 +189,16 @@ export function auditFeature(feature: FeatureDocument): AuditFinding[] {
         behavior_id: b.id,
       });
     }
+    // Shipped behaviors without a human-validated stamp.
+    if (!b.deprecated && fm.status === "shipped" && !b.verified) {
+      findings.push({
+        severity: "medium",
+        kind: "shipped-not-verified",
+        message: `Behavior "${b.id}" is in a shipped feature but has no human-validated stamp. Use \`productos verify ${featureId} ${b.id}\` after confirming the claim.`,
+        feature_id: featureId,
+        behavior_id: b.id,
+      });
+    }
     // Implementation language in claim
     if (b.claim) {
       for (const re of IMPL_LANGUAGE_PATTERNS) {

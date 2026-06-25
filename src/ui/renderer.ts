@@ -126,6 +126,29 @@ header.feature .feature-title-row .feature-status { flex: 0 0 auto; }
 }
 .ux-mock * { box-sizing: border-box; }
 
+/* Collapsible surface + behavior blocks ---------------------------------- */
+.surface-details { margin: 16px 0; border: 1px solid var(--surface-3); border-radius: 12px; background: var(--surface); }
+.surface-details > summary.surface-summary { display: flex; align-items: center; gap: 12px; padding: 14px 18px; cursor: pointer; list-style: none; font-size: 14px; user-select: none; }
+.surface-details > summary.surface-summary::-webkit-details-marker { display: none; }
+.surface-disclosure { color: var(--dim); transition: transform 0.15s ease; font-size: 11px; }
+.surface-details[open] > summary > .surface-disclosure { transform: rotate(90deg); }
+.surface-details > summary > .surface-title { font-weight: 600; color: var(--text); }
+.surface-details > summary > .surface-id { color: var(--dim); font-family: var(--mono); font-size: 12px; }
+.surface-verified { color: var(--green); font-weight: 600; font-size: 12px; }
+.surface-details > section.surface { padding: 0 18px 18px; border-top: 1px solid var(--surface-3); }
+
+.behavior-details { margin: 8px 0; border: 1px solid var(--surface-3); border-radius: 10px; background: var(--surface); }
+.behavior-details > summary.behavior-summary { display: flex; align-items: center; gap: 10px; padding: 12px 14px; cursor: pointer; list-style: none; font-size: 13px; user-select: none; flex-wrap: wrap; }
+.behavior-details > summary.behavior-summary::-webkit-details-marker { display: none; }
+.bsum-disclosure { color: var(--dim); transition: transform 0.15s ease; font-size: 10px; flex: 0 0 auto; }
+.behavior-details[open] > summary > .bsum-disclosure { transform: rotate(90deg); }
+.bsum-verified { color: var(--green); font-weight: 700; flex: 0 0 auto; }
+.bsum-id { font-family: var(--mono); font-size: 12px; font-weight: 600; color: var(--text); flex: 0 0 auto; }
+.bsum-tests { color: var(--dim); font-size: 11px; padding: 2px 6px; background: var(--surface-2); border-radius: 4px; flex: 0 0 auto; }
+.bsum-claim { color: var(--dim); flex: 1 1 auto; min-width: 200px; }
+.behavior-details > article.behavior { padding: 0 14px 14px; border-top: 1px solid var(--surface-3); }
+.behavior-details[open] { background: var(--surface-2); }
+
 /* Flow chart at the top of a feature page — Mermaid graph showing UX views
    + leads_to edges. Renders client-side via the Mermaid CDN. */
 .feature-flow { background: var(--surface); border: 1px solid var(--surface-3); border-radius: 12px; padding: 18px 20px; margin: 16px 0 20px; }
@@ -1322,18 +1345,28 @@ function renderSurfaceWithBehaviors(
           .join("\n")}</div>`
       : "";
 
+  // Verified count for the surface summary line — quick scan signal.
+  const verifiedCount = anchoredBehaviors.filter((b) => b.verified === true).length;
+  const verifiedBadge = verifiedCount > 0 && count > 0
+    ? `<span class="surface-verified" title="${verifiedCount} of ${count} verified">✓ ${verifiedCount}/${count}</span>`
+    : "";
+
   return `
-    <section class="surface" id="surface-${escape(s.id)}">
-      <div class="surface-head">
-        <h3>${escape(s.title)}</h3>
-        ${pathLine}
+    <details class="surface-details" id="surface-${escape(s.id)}">
+      <summary class="surface-summary">
+        <span class="surface-disclosure">▸</span>
+        <span class="surface-title">${escape(s.title)}</span>
+        <code class="surface-id">${escape(s.id)}</code>
+        ${verifiedBadge}
         ${countLine}
-      </div>
-      ${sketchBlock}
-      ${elementsLine}
-      ${s.notes ? `<div class="surface-notes">${escape(s.notes)}</div>` : ""}
-      ${nestedBehaviors}
-    </section>`;
+      </summary>
+      <section class="surface">
+        ${sketchBlock}
+        ${elementsLine}
+        ${s.notes ? `<div class="surface-notes">${escape(s.notes)}</div>` : ""}
+        ${nestedBehaviors}
+      </section>
+    </details>`;
 }
 
 
@@ -1409,24 +1442,48 @@ function renderBehavior(
       </div>`;
 
   const anchorStrip = renderBehaviorAnchor(b, { hideSurfaceName: opts.nestedInSurface === true });
+  // Summary line content — visible when the behavior is collapsed.
+  // First-sentence-of-claim + ✓ if human-validated + a (N test cases) hint
+  // so the reader can scan without expanding.
+  const claimSummary = oneLine(b.claim, 140);
+  const verifiedTick = b.verified === true
+    ? `<span class="bsum-verified" title="Human-validated${b.verified_by ? " by " + escape(b.verified_by) : ""}${b.verified_at ? " at " + escape(b.verified_at) : ""}">✓</span>`
+    : "";
+  const testCount = b.test_cases.length;
+  const testCountChip = testCount > 0
+    ? `<span class="bsum-tests">${testCount} test${testCount === 1 ? "" : "s"}</span>`
+    : "";
+
   return `
-    <article class="behavior" id="${escape(b.id)}" data-feature="${escape(featureId)}" data-behavior="${escape(b.id)}">
-      <div class="head">
-        <span class="bid">${escape(b.id)}</span>
+    <details class="behavior-details" id="${escape(b.id)}" data-feature="${escape(featureId)}" data-behavior="${escape(b.id)}">
+      <summary class="behavior-summary">
+        <span class="bsum-disclosure">▸</span>
+        ${verifiedTick}
+        <span class="bsum-id">${escape(b.id)}</span>
         ${headPills}
-      </div>
-      ${anchorStrip}
-      <div class="claim">${claim}</div>
-      ${reasonLine}
-      ${deprecatedReason}
-      ${verifiedLine}
-      ${notes}
-      ${evidence}
-      ${impl}
-      ${actions}
-      ${renderFeedbackForm(featureId, b.id)}
-    </article>
+        ${testCountChip}
+        <span class="bsum-claim">${escape(claimSummary)}</span>
+      </summary>
+      <article class="behavior">
+        ${anchorStrip}
+        <div class="claim">${claim}</div>
+        ${reasonLine}
+        ${deprecatedReason}
+        ${verifiedLine}
+        ${notes}
+        ${evidence}
+        ${impl}
+        ${actions}
+        ${renderFeedbackForm(featureId, b.id)}
+      </article>
+    </details>
   `;
+}
+
+function oneLine(s: string, max: number): string {
+  const t = s.replace(/\s+/g, " ").trim();
+  if (t.length <= max) return t;
+  return t.slice(0, max - 1) + "…";
 }
 
 function renderBehaviorAnchor(

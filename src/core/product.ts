@@ -117,6 +117,14 @@ export const Behavior = z.object({
   /** What user action triggers this behavior. Freeform: click, submit, view, load, input, etc. Optional. */
   interaction: z.string().optional(),
   test_cases: z.array(TestCase).default([]),
+  /** Human-validated. A human reviewed the claim and confirmed it matches
+   *  the product's actual behavior. Distinct from being-in-git ("the
+   *  markdown is the truth") — checkin alone is NOT validation; a person
+   *  has to explicitly stamp this. Use `productos verify` (CLI) or
+   *  productos_verify_behavior (MCP) to flip it. */
+  verified: z.boolean().optional(),
+  verified_at: z.string().optional(),
+  verified_by: z.string().optional(),
   deprecated: z.boolean().optional(),
   deprecated_reason: z.string().optional(),
 });

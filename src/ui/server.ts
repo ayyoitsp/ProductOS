@@ -62,8 +62,20 @@ export async function startUiServer(): Promise<void> {
         if (!featureId || !behaviorId) return json(res, { error: "feature and behavior required" }, 400);
         const feat = readFeatureById(paths, featureId);
         if (!feat) return json(res, { error: "feature not found" }, 404);
+        const who = os.userInfo().username || "vet-ui";
+        // 1. Stamp the behavior in the Product Truth markdown so the
+        //    renderer can show ✓ on the summary line.
+        const beh = feat.frontmatter.behaviors.find((b) => b.id === behaviorId);
+        if (beh) {
+          beh.verified = true;
+          beh.verified_at = new Date().toISOString();
+          beh.verified_by = who;
+          const { writeFeature } = await import("../core/product.js");
+          writeFeature(paths, feat);
+        }
+        // 2. Mirror to tracking sidecar for backward compat.
         const t = readTracking(paths, featureId) ?? emptyTrackingFor(featureId);
-        recordTransition(t, behaviorId, "verified", os.userInfo().username || "vet-ui", {
+        recordTransition(t, behaviorId, "verified", who, {
           status: "verified",
           setVerified: true,
         });

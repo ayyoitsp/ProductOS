@@ -365,6 +365,61 @@ const removeBehavior: McpTool = {
   },
 };
 
+// ---------------------------------------------------------------------------
+// Per-behavior human validation. Stored on the Behavior itself in the
+// Product Truth markdown so the renderer can show a ✓ on the summary line.
+// Distinct from being-in-git: a checkin alone is NOT validation; a person
+// has to explicitly stamp this.
+
+const VerifyBehaviorInput = z.object({
+  feature_id: z.string(),
+  behavior_id: z.string(),
+  by: z.string().optional().describe("Optional name/handle of the human verifying. Defaults to 'ai-runtime' if unset."),
+});
+
+const verifyBehavior: McpTool = {
+  name: "productos_verify_behavior",
+  description:
+    "Mark a behavior as human-validated. A person reviewed the claim and confirmed it matches the product's actual behavior. Stamps `verified: true`, `verified_at: <now>`, and `verified_by: <by>` on the behavior in the markdown. Use ONLY when the human has explicitly confirmed — never set this from an AI's own judgment.",
+  inputSchema: zodToInputSchema(VerifyBehaviorInput),
+  handler: async (raw, paths) => {
+    const args = VerifyBehaviorInput.parse(raw);
+    const doc = readFeatureById(paths, args.feature_id);
+    if (!doc) throw new Error(`Feature "${args.feature_id}" not found`);
+    const b = doc.frontmatter.behaviors.find((bb) => bb.id === args.behavior_id);
+    if (!b) throw new Error(`Behavior "${args.behavior_id}" not found on ${args.feature_id}`);
+    b.verified = true;
+    b.verified_at = nowIso();
+    b.verified_by = args.by || "ai-runtime";
+    writeFeature(paths, doc);
+    return { ok: true, verified_at: b.verified_at, verified_by: b.verified_by };
+  },
+};
+
+const UnverifyBehaviorInput = z.object({
+  feature_id: z.string(),
+  behavior_id: z.string(),
+});
+
+const unverifyBehavior: McpTool = {
+  name: "productos_unverify_behavior",
+  description:
+    "Clear the human-validated stamp on a behavior. Use when the claim has been edited in a way that invalidates the prior verification, or when the human reverses their decision. Drops `verified`, `verified_at`, `verified_by`.",
+  inputSchema: zodToInputSchema(UnverifyBehaviorInput),
+  handler: async (raw, paths) => {
+    const args = UnverifyBehaviorInput.parse(raw);
+    const doc = readFeatureById(paths, args.feature_id);
+    if (!doc) throw new Error(`Feature "${args.feature_id}" not found`);
+    const b = doc.frontmatter.behaviors.find((bb) => bb.id === args.behavior_id);
+    if (!b) throw new Error(`Behavior "${args.behavior_id}" not found on ${args.feature_id}`);
+    delete b.verified;
+    delete b.verified_at;
+    delete b.verified_by;
+    writeFeature(paths, doc);
+    return { ok: true };
+  },
+};
+
 // ===========================================================================
 // UX VIEWS & ELEMENTS (screens, sketches, interactive items)
 // ===========================================================================
@@ -936,6 +991,8 @@ export const tools: McpTool[] = [
   addBehavior,
   updateBehavior,
   removeBehavior,
+  verifyBehavior,
+  unverifyBehavior,
   // UX views + elements (parity with the CLI BYOK editor)
   addOrReplaceUx,
   updateUx,
