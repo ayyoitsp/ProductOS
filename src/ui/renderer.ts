@@ -781,6 +781,101 @@ function decorateSketch(sketch: string, elements: Element[], featureId: string, 
 }
 
 /**
+ * Auto-wire anchors in an HTML mock (sketch_html).
+ *
+ * Walks every <a> in the mock. If the anchor's text content matches an
+ * element's `label` (case-insensitive, with the same fuzzy contained-by
+ * matching the ASCII path uses), set the href from that element's
+ * leads_to via resolveLeadsToSmart. Existing hrefs get OVERWRITTEN — so
+ * the AI generating sketch_html doesn't need to know about the
+ * `#surface-X` convention; it can leave hrefs blank or with a
+ * placeholder and the renderer fills them in from the schema.
+ *
+ * Conservative: only acts on existing <a> tags. If the AI didn't wrap a
+ * clickable element in an anchor, this doesn't try to inject one — too
+ * risky to mutate arbitrary nested HTML. The skill prompt nudges the AI
+ * toward anchors for clickable things.
+ */
+function decorateHtmlMock(
+  html: string,
+  elements: Element[],
+  featureId: string,
+  surfaceIdsInFeature: Set<string>,
+  surfaceIndex: SurfaceIndex
+): string {
+  // Build element-id → resolved-target map for elements with leads_to.
+  type LinkInfo = { label: string; labelWords: Set<string>; target: string; elementId: string };
+  const candidates: LinkInfo[] = [];
+  const byElementId = new Map<string, LinkInfo>();
+  for (const el of elements) {
+    if (!el.leads_to) continue;
+    const target = resolveLeadsToSmart(
+      el.leads_to,
+      featureId,
+      surfaceIdsInFeature,
+      surfaceIndex
+    );
+    if (!target) continue;
+    const labelLower = (el.label ?? "").toLowerCase().trim();
+    const info: LinkInfo = {
+      label: labelLower,
+      labelWords: wordSet(labelLower),
+      target,
+      elementId: el.id,
+    };
+    candidates.push(info);
+    byElementId.set(el.id, info);
+  }
+  if (candidates.length === 0) return html;
+
+  return html.replace(
+    /<a\b([^>]*)>([\s\S]*?)<\/a>/g,
+    (match, attrs: string, inner: string) => {
+      // Explicit override: if the AI already tagged the anchor with
+      // data-element="<id>", use that element's leads_to directly.
+      const explicit = attrs.match(/\bdata-element\s*=\s*"([^"]+)"/);
+      let pick: LinkInfo | undefined;
+      if (explicit) {
+        pick = byElementId.get(explicit[1]);
+      } else {
+        // Text-based match: lowercase the visible text + the labels, look for
+        // word-set overlap (handles cases like label "Override field" vs
+        // visible text "⤴ override" where one word-set is a subset of the
+        // other). Falls back to substring matching for very short cases.
+        const text = inner.replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim().toLowerCase();
+        if (!text) return match;
+        const textWords = wordSet(text);
+        for (const c of candidates) {
+          if (!c.label) continue;
+          if (text === c.label || text.includes(c.label) || c.label.includes(text)) {
+            pick = c; break;
+          }
+          if (c.labelWords.size === 0 || textWords.size === 0) continue;
+          const allLabelInText = Array.from(c.labelWords).every((w) => textWords.has(w));
+          const allTextInLabel = Array.from(textWords).every((w) => c.labelWords.has(w));
+          if (allLabelInText || allTextInLabel) { pick = c; break; }
+        }
+      }
+      if (!pick) return match;
+      const hasHref = /\bhref\s*=/.test(attrs);
+      const newAttrs = hasHref
+        ? attrs.replace(/\bhref\s*=\s*"[^"]*"/, `href="${escape(pick.target)}"`)
+        : `${attrs} href="${escape(pick.target)}"`;
+      const finalAttrs = /\bdata-element\s*=/.test(newAttrs)
+        ? newAttrs
+        : newAttrs + ` data-element="${escape(pick.elementId)}"`;
+      return `<a${finalAttrs}>${inner}</a>`;
+    }
+  );
+}
+
+function wordSet(s: string): Set<string> {
+  return new Set(
+    s.toLowerCase().replace(/[^a-z0-9 ]+/g, " ").split(/\s+/).filter(Boolean)
+  );
+}
+
+/**
  * leads_to resolution. Always returns SOMETHING (never null for non-empty
  * valid input) so rows + elements always wrap as clickable. If the destination
  * doesn't actually exist yet, the click 404s and the PM discovers they need
@@ -1139,8 +1234,10 @@ function renderUxPreview(
     .join("");
   const panels = surfaces
     .map((s, i) => {
-      const mockContent = renderUxMockContent(s, (sketch) =>
-        decorateSketch(sketch, s.elements, featureId, surfaceIdsInFeature, surfaceIndex)
+      const mockContent = renderUxMockContent(
+        s,
+        (sketch) => decorateSketch(sketch, s.elements, featureId, surfaceIdsInFeature, surfaceIndex),
+        (html) => decorateHtmlMock(html, s.elements, featureId, surfaceIdsInFeature, surfaceIndex)
       );
       return `<div class="ux-preview-panel${i === 0 ? " active" : ""}" id="ux-preview-${escape(s.id)}">
         <div class="ux-preview-head">
@@ -1181,9 +1278,10 @@ function renderAffectedBy(featureIds: string[]): string {
  */
 function renderUxMockContent(
   s: Surface,
-  decorateAscii: (sketch: string) => string
+  decorateAscii: (sketch: string) => string,
+  decorateHtml: (html: string) => string = (h) => h
 ): string {
-  if (s.sketch_html) return `<div class="ux-mock">${s.sketch_html}</div>`;
+  if (s.sketch_html) return `<div class="ux-mock">${decorateHtml(s.sketch_html)}</div>`;
   if (s.sketch) return `<pre class="surface-sketch">${decorateAscii(s.sketch)}</pre>`;
   return `<div class="empty-state">No sketch.</div>`;
 }
@@ -1202,8 +1300,10 @@ function renderSurfaceWithBehaviors(
   // declarations still live in the markdown so behaviors can anchor via
   // `element: <id>` — they just don't render as a separate redundant list.
   const elementsLine = "";
-  const sketchBlock = renderUxMockContent(s, (sketch) =>
-    decorateSketch(sketch, s.elements, featureId, surfaceIdsInFeature, surfaceIndex)
+  const sketchBlock = renderUxMockContent(
+    s,
+    (sketch) => decorateSketch(sketch, s.elements, featureId, surfaceIdsInFeature, surfaceIndex),
+    (html) => decorateHtmlMock(html, s.elements, featureId, surfaceIdsInFeature, surfaceIndex)
   );
   // Surface.path (route / URL) is intentionally NOT rendered in the header
   // — it's a routing-implementation detail the PM doesn't read. Data persists
