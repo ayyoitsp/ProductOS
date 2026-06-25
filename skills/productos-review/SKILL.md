@@ -335,6 +335,8 @@ Each UX view has an OPTIONAL `sketch_html` field — a static HTML version of th
 3. **Produce static HTML** that mirrors the component structure: same semantic elements, same class names, same nesting. **DON'T invent class names** — pull them from the source.
 4. **No JavaScript, no interactivity.** The web renderer wraps the mock in `<div class="ux-mock">` and styles it via the user's CSS — that's it.
 5. **Keep `sketch` (ASCII) alongside.** The ASCII version remains the reader-friendly view in CLI and Claude; sketch_html is purely the web-renderer fidelity bonus.
+6. **Don't hand-wire navigation hrefs.** Wrap clickable text in plain `<a>` tags — leave `href` blank or set to anything. The renderer post-processes sketch_html and auto-fills `href` from each element's `leads_to` declaration. Match on the element's `label` text. If you wrap a button labeled "Adjust" in an `<a>`, the renderer reads the element with `label: Adjust` + `leads_to: adjust-guideline-modal` and sets the href to `#surface-adjust-guideline-modal` automatically.
+7. **Generate sketch_html for ALL UX views in the feature, not a partial subset.** Partial-coverage mocks look broken — the un-mocked ones fall back to ASCII and feel jarring next to styled ones.
 
 Apply via `productos_update_ux(feature_id, ux_id, { sketch_html: "..." })`.
 
