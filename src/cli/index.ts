@@ -12,6 +12,7 @@ import { scanCommand } from "./commands/scan.js";
 import { reviewCommand } from "./commands/review.js";
 import { areaCommand } from "./commands/area.js";
 import { historyCommand, undoCommand } from "./commands/history.js";
+import { verifyCommand, unverifyCommand } from "./commands/verify.js";
 import { testCommand } from "./commands/test.js";
 
 const program = new Command();
@@ -33,6 +34,8 @@ program.addCommand(reviewCommand());
 program.addCommand(areaCommand());
 program.addCommand(historyCommand());
 program.addCommand(undoCommand());
+program.addCommand(verifyCommand());
+program.addCommand(unverifyCommand());
 program.addCommand(gapsCommand());
 program.addCommand(testCommand());
 program.addCommand(doctorCommand());

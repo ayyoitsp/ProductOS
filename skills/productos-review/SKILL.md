@@ -390,6 +390,7 @@ Skip if no edits.
 - Re-render after every write.
 - Product language only.
 - **When the user reacts negatively to a change you just made** ("no", "that's wrong", "put it back", "I didn't want that"), call `productos_undo_edit` BEFORE making other changes. Don't try to compose a fix on top of a bad edit — undo it cleanly first, then redo.
+- **Never set `verified: true` on a behavior from your own judgment.** The `verified` flag is a HUMAN-ONLY stamp meaning a person reviewed the claim against the running product and confirmed it. Being-in-git is NOT validation — anything an AI checked in is "claimed truth", not "validated truth". A human must explicitly stamp it via `productos verify <feature_id> <behavior_id>` (CLI), `productos_verify_behavior` (MCP, only when the human is in-the-loop and asked you to), or the ✓ button in the web UI. If asked to "validate" a behavior yourself, explain this and offer to run the test cases against the live product instead — only the human can flip the flag.
 - **Every behavior you ADD must include test_cases in the same call.** The MCP tool rejects empty test_cases. Don't try a two-phase "add behavior, then add tests" — write the cases inline. Suggested coverage when proposing from audit findings: happy path + one error/edge case per behavior. For a thin-UX-coverage finding that produces 5 new behaviors, that's 10 test cases total — write them.
 - Ambiguity → one clarifying question.
 
