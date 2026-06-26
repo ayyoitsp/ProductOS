@@ -10,7 +10,7 @@ import { BehaviorTracking, FeatureTracking } from "../core/tracking.js";
 import { FeedbackEntry } from "../core/feedback.js";
 import { ContextDocument } from "../core/context.js";
 import { derivedVerification, DerivedVerification } from "../core/derived-state.js";
-import { buildAreaFlowGraph, buildFlowGraph, renderMermaid } from "../core/flowchart.js";
+import { buildAreaFlowGraph, renderMermaid } from "../core/flowchart.js";
 import { auditArea } from "../core/audit.js";
 
 const SHELL_CSS = `
@@ -1149,8 +1149,6 @@ export function renderFeature(
   //   - Cross-feature (/area/feature...) → confirm dialog before navigating away
   // Also has a small tab strip listing all UX views in this feature for
   // explicit switching, and a "Jump to UX details ↓" link to the bottom section.
-  const flowBlock = surfaces.length ? renderFlowBlock(feature) : "";
-
   const uxPreviewBlock = surfaces.length
     ? renderUxPreview(f.id, surfaces, surfaceIdSet, surfaceIndex)
     : "";
@@ -1185,7 +1183,6 @@ export function renderFeature(
       </div>
       ${implBlock}
     </header>
-    ${flowBlock}
     ${uxPreviewBlock}
     ${description}
     ${overviewBody}
@@ -1217,25 +1214,7 @@ function renderAiAssistPane(featureId: string): string {
  * Top-of-feature interactive UX preview. Renders one UX view's sketch in a
  * hero container, plus a small tab strip to switch between UX views, plus
  * a "Jump to UX details" link pointing at the lower #ux-details section.
- *
-/**
- * Renders a Mermaid flow chart of the feature's UX → leads_to graph.
- * Shows up at the top of every feature page so the reader gets a map
- * before drowning in detail. Cross-feature target nodes are styled
- * dashed/grey and link to that feature.
  */
-function renderFlowBlock(feature: FeatureDocument): string {
-  const graph = buildFlowGraph(feature);
-  if (!graph.has_flow) return "";
-  const src = renderMermaid(graph);
-  if (!src) return "";
-  return `
-    <section class="feature-flow">
-      <h2>Flow</h2>
-      <div class="mermaid">${escape(src)}</div>
-    </section>
-  `;
-}
 
  /**
  * Each UX view's sketch is pre-rendered into a hidden div; the active one
