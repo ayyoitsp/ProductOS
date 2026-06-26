@@ -44,10 +44,18 @@ import {
   visibleAreas,
 } from "./renderer.js";
 
-export async function startUiServer(): Promise<void> {
+export interface StartUiServerOptions {
+  /** Explicit port override. Precedence: opts.port > $PORT > config.ui_port > 7878. */
+  port?: number;
+}
+
+export async function startUiServer(opts: StartUiServerOptions = {}): Promise<void> {
   const paths = resolvePathsOrThrow();
   const config = readConfig(paths);
-  const port = config.ui_port;
+  const envPort = process.env.PORT ? Number(process.env.PORT) : NaN;
+  const port = opts.port
+    ?? (Number.isInteger(envPort) && envPort > 0 && envPort < 65536 ? envPort : undefined)
+    ?? config.ui_port;
 
   const server = http.createServer(async (req, res) => {
     try {
@@ -329,6 +337,15 @@ export async function startUiServer(): Promise<void> {
   });
 
   ensureFeedbackDir(paths);
+  server.on("error", (err: NodeJS.ErrnoException) => {
+    if (err.code === "EADDRINUSE") {
+      console.error(pc.red("✗"), `Port ${port} is already in use.`);
+      console.error(pc.dim(`  Try: productos serve --port <other> · or set PORT=<other> · or change ui_port in productos/config.yaml`));
+      process.exit(1);
+    }
+    console.error(pc.red("✗"), `Server error: ${err.message}`);
+    process.exit(1);
+  });
   server.listen(port, () => {
     console.log(pc.green("✓"), `Product truth: ${pc.cyan(`http://localhost:${port}`)}`);
     console.log(pc.dim(`  product:  ${path.relative(process.cwd(), paths.productsDir)}/`));
