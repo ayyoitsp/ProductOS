@@ -1,6 +1,6 @@
 ---
 name: productos-scope
-description: Use when the user wants to scope ProductOS on ONE in-flight feature (the v0.1 wedge) — either pre-code planning OR retrofit on a feature that already exists. Reads the relevant code paths, proposes COMPREHENSIVE COVERAGE of behaviors with claims + test_cases in product language (however many the feature actually has — don't artificially cap), plus UX views and their elements, and writes them to productos/products/<area>/<feature>.md as Unverified. Surfaces ambiguities and discrepancies as observations (not blocking questions) before writing. Triggers on "scope productos on the X flow", "scope X with productos", "I'm planning a Y feature", "let's spec X in productos". The 80% v0.1 entry point. (For a broad pass across the whole codebase, use `productos-fullscan` instead.)
+description: Use when the user wants to scope ProductOS on ONE in-flight feature (the v0.1 wedge) — either pre-code planning OR retrofit on a feature that already exists. Reads the relevant code paths, proposes COMPREHENSIVE COVERAGE of behaviors with claims + test_cases in product language (however many the feature actually has — don't artificially cap), plus UX views and their elements (ASCII sketches AND — when web.components_dir is configured — high-fidelity HTML mocks (sketch_html) mirroring the user's real components), and writes them to productos/products/<area>/<feature>.md as Unverified. Surfaces ambiguities and discrepancies as observations (not blocking questions) before writing. Triggers on "scope productos on the X flow", "scope X with productos", "I'm planning a Y feature", "let's spec X in productos". The 80% v0.1 entry point. (For a broad pass across the whole codebase, use `productos-fullscan` instead.)
 version: 0.1.0
 ---
 
@@ -128,6 +128,31 @@ sketch: |
 
 UX is **optional** — features that are pure invariants/rules (a tax calculation, a balance constraint) don't have screens. Leave `ux` empty in that case.
 
+### 3a-ter. High-fidelity HTML mocks (sketch_html) — generate alongside the ASCII
+
+Each UX view also takes an **OPTIONAL `sketch_html`** field — a static HTML version of the sketch the web renderer prefers over ASCII. When `productos/config.yaml` has `web.stylesheet` and (ideally) `web.components_dir` configured, the rendered page loads the user's actual CSS, so a mock written with their real class names looks like the real app rather than a wireframe. **Generate sketch_html alongside the ASCII whenever the config supports it** — it transforms the scope output from "ASCII drawings of a UI nobody sees" to "previews of the real app's UI that the PM can react to".
+
+**Decision: should you generate sketch_html for this scope pass?**
+
+1. Read `productos/config.yaml` directly. Check:
+   - `web.stylesheet` — path to the user's CSS / Tailwind output. If unset, sketch_html still renders but with generic styling — flag that and suggest the user set it before continuing if visual fidelity matters to them.
+   - `web.components_dir` — path to the user's components (e.g. `src/components`, `app/`). If set, this is the source you mirror.
+2. **If `web.components_dir` is set: yes, generate sketch_html for every UX view in this scope.** Partial coverage looks broken — the un-mocked views fall back to ASCII and feel jarring next to styled ones.
+3. **If only `web.stylesheet` is set: ask the user.** They may want the fidelity bonus even without component source — say "I can generate generic HTML that loads your stylesheet but I won't be mirroring your components — useful?"
+4. **If neither is set: skip sketch_html.** ASCII alone is fine. Optionally suggest at the end: "Want richer previews? Set `web.stylesheet` (and `web.components_dir` if you have one) in productos/config.yaml and re-run scope."
+
+**How to produce a good sketch_html:**
+
+1. **Read the real components first.** Walk `web.components_dir` and pick the components the screen would naturally compose. The job is mirroring, not invention.
+2. **Read the stylesheet** (`web.stylesheet` path) — or for Tailwind, scan a few representative components to learn class conventions. Pull real class names from source; don't invent.
+3. **Produce static HTML** that mirrors the component structure: same semantic elements, same class names, same nesting. No JavaScript, no interactivity, no event handlers — the renderer wraps the mock in `<div class="ux-mock">` and styles it via the user's CSS; that's all the rendering you need.
+4. **Keep the ASCII `sketch` alongside.** ASCII stays as the canonical reader-friendly view in CLI and inline Claude; sketch_html is the web-renderer fidelity bonus.
+5. **Don't hand-wire navigation hrefs.** Wrap clickable text in plain `<a>` tags — leave `href` blank or set to anything. The renderer post-processes sketch_html and auto-fills `href` from each element's `leads_to` declaration. It matches on the element's `label` text (case-insensitive), or on a `data-element="<element-id>"` attribute if you want to be explicit. Example: an element with `label: "Adjust"` + `leads_to: adjust-guideline-modal` → wrapping the text "Adjust" in `<a>` gets href `#surface-adjust-guideline-modal` automatically.
+6. **Mirror the ASCII labels verbatim.** Same words in the HTML as in the ASCII as in `elements[].label` — that's how the renderer's text matcher finds navigation targets.
+7. **All UX views or none.** Partial coverage produces a jarring mix of styled and wireframe screens. Either generate sketch_html for every UX view in the feature, or for none.
+
+**Write order during scope:** ASCII `sketch` first (always required), then `sketch_html` for the same view in the same `productos_add_or_replace_ux` call (or follow up with `productos_update_ux(..., { sketch_html: "..." })`). Don't drop the ASCII once you have HTML — both fields stay.
+
 ### 3a-bis. Deterministic scope rule (apply BEFORE listing behaviors)
 
 When a user action in one feature mutates state in another (kid completes a task → balance changes; interest accrual → balance changes; spend → balance changes), **the behavior belongs to the feature whose user-facing trigger fires.** Not the feature whose state is mutated.
@@ -245,7 +270,7 @@ Pass to `productos_propose_feature`:
 - `title` in product language
 - `status: shipped` if the code exists; `planned` if pre-code
 - `description` (short paragraph)
-- `ux` array — UX views with sketches + elements (see §3a)
+- `ux` array — UX views with `sketch` (ASCII, always) + `sketch_html` (when `web.components_dir` is set — see §3a-ter) + elements (see §3a)
 - `behaviors` array, each with `id`, `claim`, optional `surface`/`element`/`interaction`, optional `notes`, `test_cases` array
 - `affected_by` array — features whose triggers mutate this feature's state
 - `body` (the markdown after the frontmatter) is **OPTIONAL** and stays SHORT. Use it for product-language context that doesn't fit in the description — a sentence or two on who/when/why-this-feature-exists. **Don't write:**
