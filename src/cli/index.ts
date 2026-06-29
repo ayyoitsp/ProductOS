@@ -14,6 +14,7 @@ import { areaCommand } from "./commands/area.js";
 import { historyCommand, undoCommand } from "./commands/history.js";
 import { verifyCommand, unverifyCommand } from "./commands/verify.js";
 import { testCommand } from "./commands/test.js";
+import { queueCommand } from "./commands/queue.js";
 
 const program = new Command();
 
@@ -38,6 +39,7 @@ program.addCommand(verifyCommand());
 program.addCommand(unverifyCommand());
 program.addCommand(gapsCommand());
 program.addCommand(testCommand());
+program.addCommand(queueCommand());
 program.addCommand(doctorCommand());
 
 await program.parseAsync(process.argv);
