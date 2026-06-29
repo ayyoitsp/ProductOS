@@ -9,6 +9,7 @@ export interface ProductosPaths {
   productsDir: string;      // <repo>/productos/products
   trackingDir: string;      // <repo>/productos/tracking
   feedbackDir: string;      // <repo>/productos/feedback
+  queueDir: string;         // <repo>/productos/queue (tasks for a Claude worker to drain)
   localDir: string;         // <repo>/productos/.local (gitignored)
   cacheDir: string;
   blobsDir: string;
@@ -36,6 +37,7 @@ export function pathsFor(repoRoot: string): ProductosPaths {
     productsDir: path.join(root, "products"),
     trackingDir: path.join(root, "tracking"),
     feedbackDir: path.join(root, "feedback"),
+    queueDir: path.join(root, "queue"),
     localDir: path.join(root, ".local"),
     cacheDir: path.join(root, ".local", "cache"),
     blobsDir: path.join(root, ".local", "blobs"),
@@ -44,7 +46,7 @@ export function pathsFor(repoRoot: string): ProductosPaths {
 }
 
 export function ensureDirs(p: ProductosPaths): void {
-  for (const d of [p.root, p.contextDir, p.productsDir, p.trackingDir, p.feedbackDir, p.localDir, p.cacheDir, p.blobsDir, p.historyDir]) {
+  for (const d of [p.root, p.contextDir, p.productsDir, p.trackingDir, p.feedbackDir, p.queueDir, p.localDir, p.cacheDir, p.blobsDir, p.historyDir]) {
     fs.mkdirSync(d, { recursive: true });
   }
 }

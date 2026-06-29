@@ -28,6 +28,7 @@ import {
 } from "../core/feedback.js";
 import { listContext, readContext } from "../core/context.js";
 import { processFeedback } from "../byok/processor.js";
+import { enqueueTask, listTasks, TaskKind, TaskPriority, TaskState } from "../core/queue.js";
 import {
   recordTestResults,
   RecordTestResultsInput,
@@ -114,6 +115,18 @@ export async function startUiServer(opts: StartUiServerOptions = {}): Promise<vo
           note: reason,
         });
         writeTracking(paths, t);
+
+        // If the user supplied a reason, queue a task so a Claude drainer
+        // can decide whether to soften the claim, fix the impl, or leave
+        // deprecated. No reason → it was a deliberate drop, nothing to do.
+        if (reason) {
+          enqueueTask(paths, {
+            kind: "address-feedback",
+            target: { feature: featureId, behavior: behaviorId },
+            created_by: os.userInfo().username || "vet-ui",
+            body: `User rejected behavior \`${behaviorId}\` on \`${featureId}\`.\n\nReason given:\n${reason}\n\nThe behavior is now marked deprecated. Decide whether to: (a) rewrite the claim and undeprecate, (b) leave deprecated and add a replacement behavior, or (c) just confirm the rejection holds. Use productos_get_feature to see context, then act via the MCP edit tools.`,
+          });
+        }
         return json(res, { ok: true });
       }
 
@@ -171,6 +184,17 @@ export async function startUiServer(opts: StartUiServerOptions = {}): Promise<vo
             note: `Feedback ${id}: ${text.slice(0, 100)}`,
           });
           writeTracking(paths, t);
+
+          // A contest is an active "this is wrong" signal — enqueue a task
+          // so a drainer addresses it. (Plain feedback skips this; not every
+          // comment needs AI action.)
+          enqueueTask(paths, {
+            kind: "address-feedback",
+            target,
+            feedback_id: id,
+            created_by: os.userInfo().username || "vet-ui",
+            body: `User contested behavior \`${target.behavior}\` on \`${target.feature}\`.\n\nContest text:\n${text}\n\nFeedback file: productos/feedback/${id}.md\n\nRead the feedback in context, decide whether to update the claim, add a test case, or push back via productos_mark_feedback_processed with a resolution note.`,
+          });
         }
 
         // Truth-verification handler: queue (default) or byok (auto-process inline).
@@ -200,6 +224,45 @@ export async function startUiServer(opts: StartUiServerOptions = {}): Promise<vo
         }
 
         return json(res, { ok: true, id, path: path.relative(paths.repoRoot, fp) });
+      }
+
+      // ---- POST: enqueue a work-queue task from the UX ("Ask AI" button) ----
+      if (req.method === "POST" && p === "/api/queue/enqueue") {
+        try {
+          const body = await readJson(req);
+          const kindRaw = body.kind ?? "freeform";
+          const kind = TaskKind.parse(kindRaw);
+          const text = String(body.body ?? "").trim();
+          if (!text) return json(res, { error: "body required" }, 400);
+          const priority = body.priority ? TaskPriority.parse(body.priority) : "normal";
+          const t = enqueueTask(paths, {
+            kind,
+            body: text,
+            priority,
+            created_by: os.userInfo().username || "vet-ui",
+            target: {
+              feature: body.feature ? String(body.feature) : undefined,
+              behavior: body.behavior ? String(body.behavior) : undefined,
+            },
+          });
+          return json(res, { ok: true, id: t.frontmatter.id });
+        } catch (e) {
+          return json(res, { error: (e as Error).message }, 400);
+        }
+      }
+
+      // ---- GET: queue contents (for the watcher subagent, debugging, or a future /queue page) ----
+      if (req.method === "GET" && p === "/api/queue") {
+        const stateParam = url.searchParams.get("state");
+        const featureParam = url.searchParams.get("feature");
+        const tasks = listTasks(paths, {
+          state: stateParam ? TaskState.parse(stateParam) : undefined,
+          feature: featureParam ?? undefined,
+        });
+        return json(res, {
+          count: tasks.length,
+          tasks: tasks.map((t) => ({ ...t.frontmatter, body: t.body })),
+        });
       }
 
       // ---- POST: receive test results from CI ----

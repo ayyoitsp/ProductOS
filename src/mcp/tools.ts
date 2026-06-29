@@ -30,6 +30,17 @@ import {
   readFeedbackById,
   writeFeedback,
 } from "../core/feedback.js";
+import {
+  TaskKind,
+  TaskPriority,
+  TaskState,
+  claimTask,
+  completeTask,
+  enqueueTask,
+  listTasks,
+  readTaskById,
+  releaseStaleClaim,
+} from "../core/queue.js";
 import { readEnvConfig, resolveEnv } from "../core/env.js";
 import { readConfig } from "../core/config.js";
 import {
@@ -767,6 +778,99 @@ const submitFeedback: McpTool = {
 };
 
 // ===========================================================================
+// WORK QUEUE (durable per-feature tasks for a Claude drainer to process)
+// ===========================================================================
+
+const PendingTasksInput = z.object({
+  feature: z.string().optional().describe("Only return tasks targeting this feature id"),
+  kind: TaskKind.optional(),
+  limit: z.number().int().positive().max(100).default(20),
+});
+
+const pendingTasks: McpTool = {
+  name: "productos_pending_tasks",
+  description:
+    "List pending work-queue tasks (productos/queue/*.md, state=pending). Sorted by priority then age. Used by a watch-queue drainer to find what to work on next. Tasks are produced by the web UI (Ask AI button, reject-with-reason, contest) or by other skills.",
+  inputSchema: zodToInputSchema(PendingTasksInput),
+  handler: async (raw, paths) => {
+    const args = PendingTasksInput.parse(raw);
+    const all = listTasks(paths, { state: "pending", feature: args.feature, kind: args.kind });
+    const slice = all.slice(0, args.limit);
+    return {
+      count: slice.length,
+      total_pending: all.length,
+      tasks: slice.map((t) => ({ ...t.frontmatter, body: t.body })),
+    };
+  },
+};
+
+const ClaimTaskInput = z.object({
+  id: z.string(),
+  by: z.string().default("ai-runtime"),
+});
+
+const claimTaskTool: McpTool = {
+  name: "productos_claim_task",
+  description:
+    "Atomically claim a pending task. File is renamed pending → claimed (so racing claims fail). Returns the task body so you can act on it. After completing the work, call productos_complete_task with outcome='done'. If you decide not to act (e.g. it's stale, out of scope, or duplicates another task), call complete with outcome='abandoned' and a summary. If something blows up, outcome='failed'.",
+  inputSchema: zodToInputSchema(ClaimTaskInput),
+  handler: async (raw, paths) => {
+    const args = ClaimTaskInput.parse(raw);
+    const t = claimTask(paths, args.id, args.by);
+    if (!t) {
+      return { ok: false, reason: "already-claimed-or-missing" };
+    }
+    return { ok: true, task: { ...t.frontmatter, body: t.body } };
+  },
+};
+
+const CompleteTaskInput = z.object({
+  id: z.string(),
+  outcome: z.enum(["done", "failed", "abandoned"]),
+  summary: z.string().optional().describe("One-line description of what was done (or why not). Surfaced in queue listings."),
+  by: z.string().default("ai-runtime"),
+});
+
+const completeTaskTool: McpTool = {
+  name: "productos_complete_task",
+  description:
+    "Mark a claimed task as done|failed|abandoned. Required after claiming so the queue doesn't fill with stuck tasks. Use 'done' when you applied the work, 'abandoned' when you decided not to (and say why), 'failed' when something genuinely blew up.",
+  inputSchema: zodToInputSchema(CompleteTaskInput),
+  handler: async (raw, paths) => {
+    const args = CompleteTaskInput.parse(raw);
+    const t = completeTask(paths, args.id, args.outcome, { by: args.by, summary: args.summary });
+    return { ok: true, id: t.frontmatter.id, state: t.frontmatter.state };
+  },
+};
+
+const EnqueueTaskInput = z.object({
+  kind: TaskKind,
+  body: z.string().min(1).describe("Free-text instructions for the worker."),
+  feature: z.string().optional(),
+  behavior: z.string().optional(),
+  priority: TaskPriority.default("normal"),
+  by: z.string().default("ai-runtime"),
+});
+
+const enqueueTaskTool: McpTool = {
+  name: "productos_enqueue_task",
+  description:
+    "Add a task to the work queue. For when one skill / agent needs to hand work to a drainer (e.g. fullscan finds a coverage gap and queues an address-feedback task rather than fixing it inline). Humans usually enqueue via the web UI; this tool is for AI-to-AI handoff.",
+  inputSchema: zodToInputSchema(EnqueueTaskInput),
+  handler: async (raw, paths) => {
+    const args = EnqueueTaskInput.parse(raw);
+    const t = enqueueTask(paths, {
+      kind: args.kind,
+      body: args.body,
+      created_by: args.by,
+      priority: args.priority,
+      target: { feature: args.feature, behavior: args.behavior },
+    });
+    return { ok: true, id: t.frontmatter.id };
+  },
+};
+
+// ===========================================================================
 // ENV + GAPS (unchanged + adapted)
 // ===========================================================================
 
@@ -1010,6 +1114,11 @@ export const tools: McpTool[] = [
   submitFeedback,
   claimFeedback,
   markProcessed,
+  // work queue (durable Claude task drainer)
+  pendingTasks,
+  claimTaskTool,
+  completeTaskTool,
+  enqueueTaskTool,
   // env + gaps
   getEnv,
   getGaps,

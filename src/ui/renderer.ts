@@ -339,6 +339,20 @@ h3 { font-size: 16px; margin: 22px 0 10px; color: var(--dim); }
 .feedback-form .row { display: flex; gap: 8px; margin-top: 8px; }
 .feedback-form button { padding: 6px 14px; }
 
+.ai-form { margin-top: 12px; display: none; }
+.ai-form.open { display: block; }
+.ai-form textarea {
+  width: 100%; min-height: 100px; background: var(--surface-2); color: var(--text);
+  border: 1px solid var(--surface-3); border-radius: 6px; padding: 10px 12px;
+  font: inherit; font-size: 13px; resize: vertical;
+}
+.ai-form .row { display: flex; gap: 8px; margin-top: 8px; align-items: center; }
+.ai-form button { padding: 6px 14px; }
+.ai-form select {
+  background: var(--surface-2); color: var(--text); border: 1px solid var(--surface-3);
+  border-radius: 6px; padding: 6px 10px; font: inherit; font-size: 13px;
+}
+
 .toast {
   position: fixed; bottom: 24px; right: 24px; background: var(--surface);
   border: 1px solid var(--surface-3); padding: 10px 16px; border-radius: 8px;
@@ -539,6 +553,29 @@ document.addEventListener('click', async (e) => {
       form.querySelector('textarea').value = '';
       form.classList.remove('open');
       if (actType === 'contest') setTimeout(() => location.reload(), 400);
+    } else {
+      toast('error: ' + (res.error || 'failed'));
+    }
+    btn.disabled = false;
+  } else if (a === 'ai-toggle') {
+    const form = btn.closest('.behavior').querySelector('.ai-form');
+    form.classList.toggle('open');
+    if (form.classList.contains('open')) form.querySelector('textarea').focus();
+  } else if (a === 'ai-cancel') {
+    btn.closest('.ai-form').classList.remove('open');
+  } else if (a === 'ai-submit') {
+    const form = btn.closest('.ai-form');
+    const body = form.querySelector('textarea').value.trim();
+    if (!body) { toast('write something first'); return; }
+    const kind = form.querySelector('select[name=kind]')?.value || 'freeform';
+    btn.disabled = true;
+    const res = await action('/api/queue/enqueue', {
+      feature: featureId, behavior: behaviorId, body, kind,
+    });
+    if (res.ok) {
+      toast('Queued ' + res.id + ' — say "drain productos queue" in Claude');
+      form.querySelector('textarea').value = '';
+      form.classList.remove('open');
     } else {
       toast('error: ' + (res.error || 'failed'));
     }
@@ -1410,6 +1447,18 @@ function renderBehavior(
         <button class="danger" data-action="reject" data-feature="${escape(featureId)}" data-behavior="${escape(b.id)}">✗ Reject</button>
         <button data-action="contest" data-feature="${escape(featureId)}" data-behavior="${escape(b.id)}">! Contest</button>
         <button data-action="feedback-toggle">💬 Feedback</button>
+        <button data-action="ai-toggle">🤖 Ask AI</button>
+      </div>
+      <div class="ai-form">
+        <textarea name="ask" placeholder="What should AI do? e.g. 'Verify this claim against the live app and update test cases if they're wrong.' Will be queued; say 'drain productos queue' in Claude to process."></textarea>
+        <div class="row">
+          <select name="kind">
+            <option value="freeform">Freeform</option>
+            <option value="address-feedback">Address as feedback</option>
+          </select>
+          <button class="primary" data-action="ai-submit">Send to queue</button>
+          <button data-action="ai-cancel">Cancel</button>
+        </div>
       </div>
       <div class="edit-form" data-feature="${escape(featureId)}" data-behavior="${escape(b.id)}">
         <textarea name="claim" placeholder="Claim (what the product does, in product language)">${escape(b.claim)}</textarea>
