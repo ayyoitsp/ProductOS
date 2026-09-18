@@ -1,15 +1,26 @@
 import http from "node:http";
 import fs from "node:fs";
+import matter from "gray-matter";
+import { readFrameworkGaps } from "../core/framework-gaps.js";
 import path from "node:path";
 import os from "node:os";
 import pc from "picocolors";
 import { resolvePathsOrThrow } from "../core/paths.js";
 import { readConfig, resolveTruthVerificationByok } from "../core/config.js";
+import { groupingAdvice } from "../core/grouping.js";
+import { buildWorklist, groupWorklist } from "../core/worklist.js";
 import {
   listAreas,
+  findGroup,
+  AreaDocument,
   listFeatures,
   readFeatureById,
+  isUndefinedBehavior,
   topReadmePath,
+  listCapabilities,
+  listAllContainers,
+  listCapabilitySystems,
+  listProducts,
 } from "../core/product.js";
 import {
   emptyTrackingFor,
@@ -26,7 +37,16 @@ import {
   writeFeedback,
   FeedbackFrontmatter,
 } from "../core/feedback.js";
-import { listContext, readContext } from "../core/context.js";
+import { featureReadiness, type FeatureReadiness } from "../core/readiness.js";
+import type { ContextSectionState } from "../core/context.js";
+import {
+  allContextSections,
+  listSystemContext,
+  contextSectionState,
+  listAreaContext,
+  listContext,
+  readContext,
+} from "../core/context.js";
 import { processFeedback } from "../byok/processor.js";
 import { enqueueTask, listTasks, TaskKind, TaskPriority, TaskState } from "../core/queue.js";
 import {
@@ -40,9 +60,12 @@ import {
   renderFeature,
   renderFeedbackQueue,
   renderHome,
+  renderStates,
+  renderQueue,
   renderShell,
   renderSidebar,
-  visibleAreas,
+  renderCapabilitySystem,
+  renderProduct,
 } from "./renderer.js";
 
 export interface StartUiServerOptions {
@@ -90,6 +113,77 @@ export async function startUiServer(opts: StartUiServerOptions = {}): Promise<vo
         });
         writeTracking(paths, t);
         return json(res, { ok: true });
+      }
+
+      // ---- POST: decide an open question ----
+      //
+      // ⛔ THE VERB A PRODUCT MANAGER COULD NOT REACH. `productos decide` existed and the
+      // page printed it as prose, which two reviewers landed on independently:
+      //
+      //   "The buttons available to me on that question are Accept / Reword / Not true of
+      //    the product / We should not promise this / Leave a note / Ask an agent. None of
+      //    them is 'answer it.' Accept would stamp a human approval on a container the
+      //    page itself says holds no claim. Reword would let me overwrite the question
+      //    with a claim — silently converting an open question into a decided behavior
+      //    with no record that it was ever open and no record that I closed it. And the
+      //    one affordance that is apparently correct is a command-line invocation printed
+      //    as prose on the page, which a PM reading a website cannot reach."
+      //
+      //   "I am reading a website. I have no such program, the site does not say where to
+      //    get one, and these are the only instructions on the page for the action the
+      //    page most wants taken."
+      //
+      // One of them called it the thing that would stop them using the tool. The rules
+      // are the CLI's, unchanged: the question is kept, who and why are required, and a
+      // behavior that already carries a claim is refused.
+      if (req.method === "POST" && p === "/api/decide") {
+        const body = await readJson(req);
+        const featureId = String(body.feature ?? "");
+        const behaviorId = String(body.behavior ?? "");
+        const claim = String(body.claim ?? "").trim();
+        const because = String(body.because ?? "").trim();
+        if (!featureId || !behaviorId) return json(res, { error: "feature and behavior required" }, 400);
+        if (claim.length < 10) return json(res, { error: "A claim needs to be a real sentence." }, 400);
+        if (because.length < 10) {
+          return json(
+            res,
+            { error: "Say why. The reasoning is what stops this being reopened from scratch next session." },
+            400
+          );
+        }
+        const feat = readFeatureById(paths, featureId);
+        if (!feat) return json(res, { error: "container not found" }, 404);
+        const beh = feat.frontmatter.behaviors.find((b) => b.id === behaviorId);
+        if (!beh) return json(res, { error: "behavior not found" }, 404);
+        if (!isUndefinedBehavior(beh)) {
+          return json(
+            res,
+            {
+              error: beh.answers
+                ? `Already decided by ${beh.decided_by ?? "someone"}. Reword the claim instead of re-deciding it.`
+                : "This already carries a claim. Editing a settled claim is an edit, not a decision.",
+            },
+            400
+          );
+        }
+        beh.answers = beh.question;
+        beh.claim = claim;
+        beh.because = because;
+        beh.decided_by = String(body.by ?? "") || os.userInfo().username || "vet-ui";
+        beh.decided_at = new Date().toISOString().slice(0, 10);
+        delete beh.question;
+        delete beh.asked_of;
+        delete beh.asked_at;
+        // ⛔ `blocks` belongs to a QUESTION. A decided behavior that still claims to
+        // block three others is telling a planner the work is stalled on something that
+        // was settled — and the whole point of `blocks` is being trustworthy about what
+        // is stopping the build.
+        delete beh.blocks;
+        const { writeFeature } = await import("../core/product.js");
+        writeFeature(paths, feat);
+        // ⛔ Deliberately NOT accepted by this. Deciding what the product does and
+        // confirming a written claim says what the team meant are two acts.
+        return json(res, { ok: true, awaiting_review: true });
       }
 
       // ---- POST: reject a behavior (marks as deprecated in markdown) ----
@@ -311,7 +405,7 @@ export async function startUiServer(opts: StartUiServerOptions = {}): Promise<vo
       }
 
       // ---- JSON API ----
-      if (p === "/api/features") return json(res, listFeatures(paths).map((f) => f.frontmatter));
+      if (p === "/api/features") return json(res, listAllContainers(paths).map((f) => f.frontmatter));
       if (p === "/api/areas") return json(res, listAreas(paths).map((a) => ({ slug: a.slug, title: a.title, feature_count: a.features.length })));
       if (p.startsWith("/api/features/")) {
         const id = p.slice("/api/features/".length);
@@ -330,18 +424,90 @@ export async function startUiServer(opts: StartUiServerOptions = {}): Promise<vo
 
       // ---- Site rendering ----
       const areas = listAreas(paths);
+      const capabilities = listCapabilities(paths);
+      const capabilitySystems = listCapabilitySystems(paths);
+      const products = listProducts(paths);
       const contextDocs = listContext(paths);
       const openFeedbackCount = listFeedback(paths, { state: "open" }).length;
+      // Readiness needs the tracking sidecar, which only this layer has paths
+      // for — so it is computed here and handed to the pure renderer.
+      // Citations resolve across both namespaces: `principles#x` globally,
+      // `cre/principles#x` for one product.
+      //
+      // ⛔ PRODUCT slugs, not area slugs. This passed `areas.map(a => a.slug)`, left over
+      // from before areas could nest — back then a top-level slug WAS the product, and
+      // after the change it is `deals`, `documents`, `pricing`. So the map was keyed
+      // `deals/principles#…` while every citation in the corpus reads
+      // `cre/principles#…`, and the result was that EVERY product-scoped citation
+      // resolved to nothing: a readiness blocker and an audit finding on each one, both
+      // false. A reader found the symptom without the cause — "two write-up notes say
+      // the citations are malformed… it detects it and still renders the dead citation."
+      const contextStates = new Map<string, ContextSectionState>();
+      for (const [ref, { section, doc }] of allContextSections(
+        paths,
+        products.map((p) => p.slug)
+      )) {
+        contextStates.set(ref, contextSectionState(section, doc.sections[section.anchor]));
+      }
+      const trackingFor = (id: string) => readTracking(paths, id);
+      // ⛔ TWO PASSES, and the order is the point. A feature's readiness now depends on
+      // whether the things it calls are ready, so the things it calls have to be settled
+      // first. Capabilities are the leaves of this graph — they depend on nothing —
+      // so pass one settles them and pass two can ask.
+      //
+      // Deliberately not recursive: a capability depending on a capability would make
+      // this a graph walk with a cycle risk, and one level is where the value is. A
+      // deeper chain surfaces as the middle link being unready, which is the right
+      // place to fix it anyway.
+      const allContainers = [...capabilities, ...areas.flatMap((a) => a.features)];
+      const readiness = new Map<string, FeatureReadiness>();
+      const depReady = new Map<string, boolean>();
+      for (const c of capabilities) {
+        const r = featureReadiness(c, readTracking(paths, c.frontmatter.id), contextStates, allContainers);
+        readiness.set(c.frontmatter.id, r);
+        depReady.set(c.frontmatter.id, r.ready);
+      }
+      for (const f of areas.flatMap((a) => a.features)) {
+        const r = featureReadiness(
+          f,
+          readTracking(paths, f.frontmatter.id),
+          contextStates,
+          allContainers,
+          depReady
+        );
+        readiness.set(f.frontmatter.id, r);
+        depReady.set(f.frontmatter.id, r.ready);
+      }
       const sb = (activeId?: string) =>
-        renderSidebar(areas, contextDocs, activeId, openFeedbackCount);
+        renderSidebar(
+          areas,
+          contextDocs,
+          activeId,
+          openFeedbackCount,
+          readiness,
+          capabilities,
+          capabilitySystems,
+          products
+        );
       const shellOpts = config.web?.stylesheet
         ? { userStylesheetUrl: "/_user-style.css" }
         : {};
 
       if (p === "/" || p === "") {
         const fp = topReadmePath(paths);
-        const readme = fs.existsSync(fp) ? fs.readFileSync(fp, "utf-8") : undefined;
-        const body = renderHome(visibleAreas(areas), readme);
+        // ⛔ Strip the frontmatter. Handed the raw file, marked reads `---\ntitle: X\n---`
+        // as a setext heading and the overview page opens with a stray "title: Product
+        // Truth" — the YAML rendered as prose.
+        // ⛔ Strip the frontmatter AND a leading h1. Handed the raw file, marked reads
+        // `---\ntitle: X\n---` as a setext heading, so the overview opened with a
+        // stray "title: Product Truth"; and the file's own `# Product Truth` then
+        // repeated the page header directly beneath it.
+        const readme = fs.existsSync(fp)
+          ? matter(fs.readFileSync(fp, "utf-8"))
+              .content.trim()
+              .replace(/^#\s+.*\n+/, "")
+          : undefined;
+        const body = renderHome(products, readme, capabilitySystems, readiness, trackingFor);
         return html(res, renderShell("Product Truth", body, sb("_root"), shellOpts));
       }
 
@@ -352,7 +518,7 @@ export async function startUiServer(opts: StartUiServerOptions = {}): Promise<vo
       }
 
       if (p === "/_context" || p === "/_context/") {
-        const body = renderContextIndex(contextDocs);
+        const body = renderContextIndex(contextDocs, areas);
         return html(res, renderShell("Strategy", body, sb("_context"), shellOpts));
       }
 
@@ -367,28 +533,116 @@ export async function startUiServer(opts: StartUiServerOptions = {}): Promise<vo
         return;
       }
 
-      const areaMatch = p.match(/^\/([^/]+)\/?$/);
-      if (areaMatch) {
-        const slug = areaMatch[1]!;
-        const area = areas.find((a) => a.slug === slug);
-        if (area) {
-          const body = renderArea(area);
-          return html(res, renderShell(area.title, body, sb(), shellOpts));
+      // ⛔ THE GROUPING LEVELS ARE ROUTES. The nav links to every product, group and
+      // capability system; without these they were links to 404s, which is worse than
+      // not linking at all — it reads as a broken corpus rather than a missing page.
+      if (p === "/_queue") {
+        const contextDocs: Array<{ doc: unknown; section: unknown; ref: string }> = [];
+        for (const [ref, { section, doc }] of allContextSections(
+          paths,
+          products.map((x) => x.slug)
+        )) {
+          contextDocs.push({ doc, section, ref });
+        }
+        const list = buildWorklist(
+          allContainers,
+          trackingFor,
+          contextStates,
+          contextDocs as never
+        );
+        return html(
+          res,
+          renderShell("Waiting on you", renderQueue(groupWorklist(list)), sb("_queue"), shellOpts)
+        );
+      }
+
+      if (p === "/_states") {
+        return html(res, renderShell("Status words", renderStates(products), sb("_states"), shellOpts));
+      }
+
+      const capSystemMatch = p.match(/^\/capabilities\/([^/]+)\/?$/);
+      if (capSystemMatch) {
+        const sys = capabilitySystems.find((s) => s.slug === capSystemMatch[1]);
+        if (sys) {
+          const body = renderCapabilitySystem(sys, readiness, trackingFor, listSystemContext(paths, sys.slug));
+          return html(res, renderShell(sys.title, body, sb(), shellOpts));
         }
       }
 
-      const featMatch = p.match(/^\/([^/]+)\/([^/]+)\/?$/);
-      if (featMatch) {
-        const id = `${featMatch[1]}/${featMatch[2]}`;
+      // ⛔ RESOLVE BY PATH, NOT BY SEGMENT COUNT. Areas nest to whatever depth the
+      // product needs, so `/cre/pricing/agency/limit-tiers` is as valid as
+      // `/cre/deals/deal-list`. A counted matcher 404s everything past its depth
+      // while the sidebar keeps linking to it.
+      const id = decodeURIComponent(p.replace(/^\/+|\/+$/g, ""));
+      if (id && !id.startsWith("_")) {
+        // A container is a file; a group is a directory. Files win: a group named the
+        // same as a feature is a corpus error, and `check` reports it.
         const f = readFeatureById(paths, id);
         if (f) {
-          const area = areas.find((a) => a.slug === featMatch[1]);
+          const segs = id.split("/");
+          const area = areas.find(
+            (a) => `${a.product}/${a.slug}` === segs.slice(0, -1).join("/")
+          );
           const tracking = readTracking(paths, id);
           // Build a corpus-wide surface→feature index so leads_to can resolve
           // bare surface ids to whichever feature owns them.
-          const surfaceIndex = buildSurfaceIndex(listFeatures(paths));
-          const body = renderFeature(f, area, tracking, surfaceIndex);
+          const surfaceIndex = buildSurfaceIndex(listAllContainers(paths));
+          const body = renderFeature(
+            f,
+            area,
+            tracking,
+            surfaceIndex,
+            areas,
+            capabilitySystems,
+            products,
+            listAllContainers(paths),
+            readFrameworkGaps(paths)
+              .filter((g) => g.status === "open" && g.forced_into === id)
+              .map((g) => ({ what: g.what, question: g.question })),
+            readiness.get(id),
+            allContextSections(paths, products.map((x) => x.slug)),
+            listFeedback(paths, { state: "open", feature: id })
+          );
           return html(res, renderShell(f.frontmatter.title, body, sb(id), shellOpts));
+        }
+
+        const product = products.find((x) => x.slug === id);
+        if (product) {
+          const advice = groupingAdvice(products, config.grouping, listCapabilities(paths)).filter(
+            (a) => a.where === product.slug
+          );
+          const body = renderProduct(product, listAreaContext(paths, product.slug), readiness, advice, trackingFor);
+          return html(res, renderShell(product.title, body, sb(), shellOpts));
+        }
+
+        const group = findGroup(products, id);
+        if (group) {
+          const productSlug = group.segments[0]!;
+          const area: AreaDocument = {
+            slug: group.segments.slice(1).join("/"),
+            product: productSlug,
+            title: group.title,
+            body: group.body,
+            features: group.features,
+            filepath: group.filepath,
+          };
+          // Advice about this group, plus advice about the features filed in it —
+          // an oversized feature is a shape problem you fix from the area page.
+          const inGroup = new Set(group.features.map((f) => f.frontmatter.id));
+          const advice = groupingAdvice(products, config.grouping, listCapabilities(paths)).filter(
+            (a) => a.where === group.id || inGroup.has(a.where)
+          );
+          const body = renderArea(
+            area,
+            listAreaContext(paths, group.id),
+            undefined,
+            group,
+            products,
+            readiness,
+            advice,
+            trackingFor
+          );
+          return html(res, renderShell(group.title, body, sb(), shellOpts));
         }
       }
 

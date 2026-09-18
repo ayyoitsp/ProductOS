@@ -6,6 +6,17 @@ version: 0.1.0
 
 # ProductOS — Align Skill (map existing tests to declared cases)
 
+> **The model is defined outside this skill.** `OVERVIEW.md` introduces it, `EXAMPLE.md`
+> shows it as real files one concept at a time, and `GLOSSARY.md` defines every term and
+> what it refuses — feature area, capability system, feature, capability, surface, stub,
+> behavior, claim, undefined behavior, `depends_on` vs `affected_by`, validation,
+> readiness, framework gap.
+>
+> Read them before classifying anything, and do not re-derive a definition here: this
+> skill and the glossary disagreeing is how six words ended up circulating for one
+> concept.
+
+
 The user has declared behaviors + test_cases for a feature; they almost certainly already have existing tests in their repo that cover some of those cases. Your job: **map**, not generate.
 
 For each declared test case, propose one of two outcomes:
@@ -86,7 +97,7 @@ Aligned <feature_id>:
   Skipped (no match):       K cases (will be Orphan until covered)
 
 Markdown changes ready to commit:
-  productos/products/<area>/<feature>.md  (coverage_ref additions)
+  productos/products/<product>/<area…>/<feature>.md  (coverage_ref additions)
 
 Code changes ready to commit (if rename was chosen):
   tests/checkout/guest.test.ts  (test name updates)

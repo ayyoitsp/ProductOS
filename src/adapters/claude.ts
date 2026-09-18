@@ -6,6 +6,42 @@ import { fileURLToPath } from "node:url";
 const HOME = os.homedir();
 const CLAUDE_DIR = path.join(HOME, ".claude");
 const SKILLS_DIR = path.join(CLAUDE_DIR, "skills");
+const AGENTS_DIR = path.join(CLAUDE_DIR, "agents");
+
+/**
+ * Where the bundled agent definitions live.
+ *
+ * ⛔ Agents are installed separately from skills and are NOT skills. A skill loads
+ * into whatever context invokes it, which is exactly wrong for the fresh-eyes
+ * reviewer: its whole value is not knowing what ProductOS is, and a skill read by the
+ * main agent has already lost that. It has to be a subagent with its own context.
+ */
+function bundledAgentsRoot(): string {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  return path.resolve(here, "../../agents");
+}
+
+/** Install the agent definitions. Same copy-or-symlink rule as skills. */
+function installClaudeAgents(dev: boolean, update?: boolean): string[] {
+  const root = bundledAgentsRoot();
+  if (!fs.existsSync(root)) return [];
+  fs.mkdirSync(AGENTS_DIR, { recursive: true });
+  const out: string[] = [];
+  for (const file of fs.readdirSync(root)) {
+    if (!file.endsWith(".md") || !file.startsWith("productos")) continue;
+    const src = path.join(root, file);
+    const dst = path.join(AGENTS_DIR, file);
+    const exists = !!fs.lstatSync(dst, { throwIfNoEntry: false });
+    if (exists) {
+      if (!update) continue;
+      fs.rmSync(dst, { force: true });
+    }
+    if (dev) fs.symlinkSync(src, dst);
+    else fs.copyFileSync(src, dst);
+    out.push(file.replace(/\.md$/, ""));
+  }
+  return out;
+}
 
 /** Where this binary's bundled skill content lives, regardless of install mode. */
 function bundledSkillsRoot(): string {
@@ -20,6 +56,8 @@ function bundledSkillsRoot(): string {
 
 export interface ClaudeInstallResult {
   installed: string[];
+  /** Agent definitions installed into ~/.claude/agents/. */
+  agents: string[];
   mcpRegisteredAt: string;
   /** True if installed via symlink (dev install) instead of copy. */
   symlinked: boolean;
@@ -102,11 +140,20 @@ export function installClaudeSkills(opts: { update?: boolean } = {}): ClaudeInst
   };
   fs.writeFileSync(target, JSON.stringify(existing, null, 2) + "\n", "utf-8");
 
-  return { installed, mcpRegisteredAt: target, symlinked: dev };
+  const agents = installClaudeAgents(dev, opts.update);
+  return { installed, agents, mcpRegisteredAt: target, symlinked: dev };
 }
 
 export function uninstallClaudeSkills(): { removed: string[] } {
   const removed: string[] = [];
+  if (fs.existsSync(AGENTS_DIR)) {
+    for (const f of fs.readdirSync(AGENTS_DIR)) {
+      if (f.startsWith("productos") && f.endsWith(".md")) {
+        fs.rmSync(path.join(AGENTS_DIR, f), { force: true });
+        removed.push(`agents/${f.replace(/\.md$/, "")}`);
+      }
+    }
+  }
   if (!fs.existsSync(SKILLS_DIR)) return { removed };
   for (const d of fs.readdirSync(SKILLS_DIR)) {
     if (d.startsWith("productos")) {

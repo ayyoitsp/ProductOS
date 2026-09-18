@@ -6,6 +6,17 @@ version: 0.1.0
 
 # ProductOS — Review Skill
 
+> **The model is defined outside this skill.** `OVERVIEW.md` introduces it, `EXAMPLE.md`
+> shows it as real files one concept at a time, and `GLOSSARY.md` defines every term and
+> what it refuses — feature area, capability system, feature, capability, surface, stub,
+> behavior, claim, undefined behavior, `depends_on` vs `affected_by`, validation,
+> readiness, framework gap.
+>
+> Read them before classifying anything, and do not re-derive a definition here: this
+> skill and the glossary disagreeing is how six words ended up circulating for one
+> concept.
+
+
 The user wants to look at one feature and edit it. **Three layers, flow-chart first:**
 
 1. **Summary (default):** ASCII flow chart with **boxes around each UX view**, a one-line summary per UX, arrows showing leads_to between screens. **No behavior list at this level.** Rule/invariant behaviors get a one-line `Rules: id1, id2` reference at the bottom.
@@ -13,6 +24,40 @@ The user wants to look at one feature and edit it. **Three layers, flow-chart fi
 3. **Behavior drilled:** ONE behavior — claim + notes + test cases.
 
 The file at `productos/products/<id>.md` is the live feature — every tool call writes the file directly. Git is the commit boundary.
+
+
+## Lead with readiness and what's undefined
+
+Before the flow chart, say whether this feature is **ready to build** and if not, why.
+`productos gaps` has the same data.
+
+Readiness is **a gate with reasons, never a score.** Say *"not ready — 3 undefined
+behaviors and 2 behaviors with no acceptance criteria"* and name them. Never a
+percentage: a ratio invites building at 73%, which is exactly where an agent invents
+the rest.
+
+**Walk `guessed` claims first.** Confidence tells you where review time changes an
+outcome: a `stated` claim quotes a human who already asserted it, an `observed` one cites
+code you can check, and a `guessed` one is the agent's inference with nothing behind it.
+Lead with the guesses, show the basis for the others so the reader can skim them, and say
+how many of each there are up front.
+
+Order the blockers by distance from buildable, not by count:
+
+1. **undefined** — no claim decided. Hardest: there is nothing for a human to accept.
+2. **contested** — something disagrees with the claim.
+3. **unverified** — a claim exists, awaiting a human stamp. An answer is waiting.
+4. **no acceptance criteria** — nothing defines what done means.
+
+`orphan` (accepted, no evidence yet) is **not** a readiness blocker. A `planned` feature
+has no code and therefore no test runs, and `planned` is where generation lives.
+
+**Undefined behaviors come first in the walkthrough**, before any screen. They are what
+the reader must not assume, and resolving one is usually the highest-value thing in the
+session — offer it: *"shall we settle this one now?"* If they answer, hand off to
+`productos-edit`'s resolve flow (claim on the same id, drop `question:`, add test
+cases).
+
 
 ## Trigger phrases
 
@@ -26,7 +71,7 @@ Call `productos_get_feature({ id, include_tracking: false })`. Render a real ASC
 
 ```
 Kid balance                                                wallet/kid-balance
-status: shipped
+status: built
 
 Each kid has a running balance equal to the sum of their transactions.
 
@@ -79,7 +124,7 @@ For **each UX view**:
 - Elements with no `label` whose action would otherwise be derived from a verbose id (e.g. `kid-card` has no label, so the flow shows "kid card") → **LOW** (suggest a `label`).
 
 For **each behavior**:
-- 0 test cases → **HIGH** (especially for `status: shipped`).
+- 0 test cases → **HIGH** (especially for `status: built`).
 - 1 test case (happy path only) → **MEDIUM** (suggest one error/edge case).
 - Claim mentions API/file/endpoint/status-code language (`POST`, `/api/`, `HTTP 200`, `.tsx`, `function `, `return 4xx`) → **MEDIUM** (suggest a product-language rewrite).
 - Behavior id that names a widget rather than a rule (`submit-button-click`, `kid-card-tap`, anything ending in `-click`/`-tap`/`-button`) → **LOW** (suggest a rule-named alternative).
@@ -88,7 +133,7 @@ For **each behavior**:
 For the **feature as a whole**:
 - No `description` → **LOW**.
 - 0 behaviors → **HIGH**.
-- `status: shipped` but 0 behaviors with any test cases → **HIGH**.
+- `status: built` but 0 behaviors with any test cases → **HIGH**.
 
 **Render the audit like this** (after the summary, before the guided question):
 
@@ -99,7 +144,7 @@ HIGH:
   1. earn-form has 3 interactive elements but only 1 behavior anchored. Likely
      missing rules: amount-must-be-positive, submit-disabled-until-valid,
      reason-is-optional, amount-autofocuses-on-open, server-failure-keeps-form-open.
-  2. behavior `earn-flow` (status: shipped) has 0 test cases.
+  2. behavior `earn-flow` (status: built) has 0 test cases.
 
 MEDIUM:
   3. behavior `balance-is-derived` claim references "the underlying ledger" —
@@ -409,3 +454,64 @@ Skip if no edits.
 - **NEW feature scope** → `productos-scope`.
 - **Broad codebase pass** → `productos-fullscan`.
 - **Map tests to behaviors** → `productos-align`.
+
+## Undecided behaviors: you walk them, you never answer them
+
+A behavior with a `question:` and no claim has **nothing for a human to accept**, so it
+does not belong in an accept/reject walk. Show it, show who owes the answer
+(`asked_of`), how long it has been open (`asked_at`) and what it blocks (`blocks`), and
+move on.
+
+If the user answers one in conversation, that is a **decision**, not an acceptance:
+
+```bash
+productos decide <container> <behavior> --claim "<what they said>" --because "<their reasoning>" --by <them>
+```
+
+⛔ Capture their reasoning, not a paraphrase of the claim. `because` is the field that
+stops the question being reopened from scratch next session, and it is the one an agent
+is most tempted to fill with a restatement of the claim.
+
+Then tell them the claim is **awaiting review** — deciding what the product does and
+confirming a written claim says what they meant are two separate acts, and `decide`
+deliberately does not do the second.
+
+## Two words that used to mislead, and what they are now
+
+| Say | Not |
+|---|---|
+| **undecided** | ~~undefined~~ — read as a JavaScript error leaking into the page |
+| **awaiting review** | ~~not accepted~~ (read as *rejected*), ~~unverified~~, ~~to verify~~ |
+
+"Awaiting review" is the same word for a behavior and for a context section, because it
+is the same act by the same person. `/_states` in the site is the full key.
+
+## When the user says "I can't tell what this means"
+
+That is an **ambiguity**, and it has a verb. Do not write it into a feedback note.
+
+```bash
+productos ask ambiguous <container> <behavior> \
+  -r "<the first way it can be read>" \
+  -r "<the second way>" \
+  -c "<what it costs to guess wrong>" --by <them>
+```
+
+⛔ Two readings minimum. If you can only articulate one, the user's complaint is
+something else — a missing claim, or prose they disagree with. And it is **not**
+`contested`: contested says the claim is false, ambiguous says it is true and does not
+pin the build.
+
+## When the user finishes a walk
+
+Ask whether they could hand it to an engineer, and record the answer:
+
+```bash
+productos read <container> --buildable --by <them>
+# or
+productos read <container> --blocked --blocked-by <ids> -n "<what they'd tell the room>" --by <them>
+```
+
+⛔ **Never record this for yourself.** It is the only signal on the page that nothing can
+compute — a corpus can satisfy every check and still be unbuildable — and an agent
+stamping it makes it worthless. Ask; record what they say.

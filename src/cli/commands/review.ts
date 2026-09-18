@@ -12,7 +12,7 @@ import {
   listFeatures,
   readFeatureById,
   writeFeature,
-} from "../../core/product.js";
+  listAllContainers,} from "../../core/product.js";
 import { editFeatureTurn } from "../../byok/edit.js";
 import { buildFlowGraph, renderAscii as renderFlowAscii } from "../../core/flowchart.js";
 import { auditFeature, renderAuditAscii } from "../../core/audit.js";
@@ -70,7 +70,7 @@ export function reviewCommand(): Command {
 
       let featureId = featureIdArg;
       if (!featureId) {
-        const features = listFeatures(paths);
+        const features = listAllContainers(paths);
         if (features.length === 0) {
           console.log(pc.dim("No features yet. Run `productos scan <area/slug> \"<hint>\"` to create one, or ask Claude to scope a feature."));
           return;

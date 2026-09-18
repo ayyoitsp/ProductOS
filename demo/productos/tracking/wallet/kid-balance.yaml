@@ -1,0 +1,65 @@
+feature_id: wallet/kid-balance
+implements:
+  - db/schema.ts
+  - db/operations.ts
+  - db/index.ts
+  - store/sqlite.ts
+  - store/types.ts
+  - app/(tabs)/(family)/index.tsx
+  - app/(tabs)/(family)/kid/[id].tsx
+  - app/adjust/[id].tsx
+behaviors:
+  balance-on-family-list:
+    code_refs:
+      - app/(tabs)/(family)/index.tsx:21-37   # load() + onDataChange — pulls balances
+      - app/(tabs)/(family)/index.tsx:64-86   # renderItem — shows balance per kid row
+    status: proposed
+  balance-on-kid-detail:
+    code_refs:
+      - app/(tabs)/(family)/kid/[id].tsx:38-54   # load() — fetches balance on focus
+      - app/(tabs)/(family)/kid/[id].tsx:99-135  # balance card header
+    status: proposed
+  negative-balances-allowed:
+    code_refs:
+      - app/adjust/[id].tsx:33-45    # Spend writes -cents; no overdraft guard
+      - db/index.ts:42-48            # formatMoney emits leading "-" for negatives
+    status: proposed
+  earn-flow:
+    code_refs:
+      - app/(tabs)/(family)/kid/[id].tsx:115-123   # earn button → router.push(/adjust/[id]?direction=credit)
+      - app/adjust/[id].tsx:17-46                  # AdjustScreen with direction=credit
+      - app/adjust/[id].tsx:33-45                  # save() — parseMoney, addTransaction(+cents, "earn"), router.back()
+    status: proposed
+  spend-flow:
+    code_refs:
+      - app/(tabs)/(family)/kid/[id].tsx:124-132   # spend button → router.push(/adjust/[id]?direction=debit)
+      - app/adjust/[id].tsx:17-46                  # AdjustScreen with direction=debit
+      - app/adjust/[id].tsx:33-45                  # save() — parseMoney, addTransaction(-cents, "spend"), router.back()
+    status: proposed
+  one-kid-per-transaction:
+    code_refs:
+      - db/schema.ts:26-34       # Transaction has kid_id; no multi-kid or "family" target
+      - store/sqlite.ts:142-155  # addTransaction takes a single kidId
+      - app/adjust/[id].tsx:21-25  # form opens via /adjust/[id] — kid id carried in the route
+    status: proposed
+  earn-and-spend-are-inverses:
+    code_refs:
+      - app/adjust/[id].tsx:26-28   # direction = "credit" | "debit" picked once
+      - app/adjust/[id].tsx:33-45   # save() — same parseMoney + addTransaction path, only sign flips
+    status: proposed
+  whole-cent-precision:
+    code_refs:
+      - db/index.ts:50-57           # parseMoney — Math.round(n * 100), returns integer cents
+      - db/schema.ts:14-22          # amount_cents integer everywhere
+      - db/index.ts:42-48           # formatMoney — always two-decimal display
+    status: proposed
+  transactions-are-recorded-not-edited:
+    code_refs:
+      - db/operations.ts:79-90      # addTransaction / deleteTransaction only — no updateTransaction
+      - app/(tabs)/(family)/kid/[id].tsx:140-167  # transaction row renders trash, no edit
+    status: proposed
+  reason-is-the-row-label:
+    code_refs:
+      - app/adjust/[id].tsx:40       # reason.trim() || (isEarn ? "Earned" : "Spent")
+      - app/(tabs)/(family)/kid/[id].tsx:143-147   # row renders item.reason verbatim
+    status: proposed

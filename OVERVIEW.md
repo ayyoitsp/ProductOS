@@ -1,415 +1,311 @@
 # Overview
 
-> **ProductOS enables Product-Driven Development.**
->
-> **As implementation becomes automated, Product Truth becomes the bottleneck.**
->
-> **ProductOS creates, verifies, and maintains Product Truth so autonomous systems can safely build software.**
+> **The canonical conceptual reference** — *why the model is shaped this way*. Term definitions live in [`GLOSSARY.md`](./GLOSSARY.md), which wins on any disagreement. *Why we're building it* is `planning/STRATEGY.md`; *how* is `planning/ARCHITECTURE.md`.
+> **Revised 2026-08-03.**
 
-## Product-Driven Development (PDD)
+ProductOS holds a **human-validated record of what your product does**, structured so AI agents can build from it and check against it.
 
-> Product-Driven Development is the practice of continuously growing and maintaining **Product Truth** — the verified corpus of **Product Contracts** that describe how the product behaves — while minimizing **Product Drift**.
+> **AI agents autonomously deliver code based on human-validated product truths.**
 
-PDD is a methodology for building software where **verified product behavior is the primary unit of work** — not code, not tickets, not stories, not features in a tracker. You write down what your product does as structured, falsifiable claims; a human validates each one with evidence; everything downstream — tests, tickets, walkthroughs, evals — derives from that record.
+Truth is an **input to building**, not a report on what was built. Everything below serves that.
 
-The shift PDD makes:
+---
 
-| Conventional development | Product-Driven Development |
-| --- | --- |
-| Ship code, then write tests against it | Write the behavior, derive the test |
-| Product knowledge lives in heads, wikis, and tribal lore | Product knowledge is a structured, owned, dated graph |
-| Tickets describe work; correctness is implicit | The graph describes correctness; tickets fall out of gaps |
-| AI agents read code and infer intent | AI agents read verified behavior and don't regress it |
-| Regressions are caught by tests (if you wrote them) | Regressions are caught by Product Drift signals on the graph |
-| Planning happens in a separate tool from the code | Planning happens by writing `planned` behaviors that the implementation must satisfy |
+## The model
 
-The five tenets:
-
-1. **Behavior is the unit.** Every claim about what the product does is atomic, falsifiable, and individually tracked.
-2. **Humans verify; the system maintains.** Agents propose new Contracts, and self-heal cosmetic/mechanical Drift autonomously. Humans are pulled in only to make load-bearing judgments about claims. The graph cannot mark itself true, but it can carry an existing Verification forward when nothing about the claim changed.
-3. **Outputs are derived, not parallel.** Tests, tickets, walkthroughs, evals all come from the same source — the graph — so they can't drift from each other.
-4. **Drift is first-class.** When code changes, evidence stales, or feedback contests a claim, the system surfaces it as a signal, not a silent rot.
-5. **Planning is graph-writing.** Intended behavior is written as `planned` claims before code lands. The implementation is checked against the plan.
-
-## The conceptual system
-
-| Layer | Name |
-| --- | --- |
-| **Philosophy** | Product-Driven Development (PDD) |
-| **Platform** | ProductOS |
-| **Upstream framing** | Product Context (goals, design principles, personas, non-goals, voice) — durable product-level claims that constrain every Contract below |
-| **Primitive** | Behavior — a single falsifiable claim about the product |
-| **Container** | Feature (bundles behaviors), grouped into Areas |
-| **Item-level artifact** | Product Contract (an individual claim about how the product behaves) |
-| **Corpus** | Product Truth (the verified collection of all Product Contracts, framed by Product Context) |
-| **Outputs** | Tests, tickets, walkthroughs, evals |
-
-ProductOS is the platform that makes PDD operable. It holds the structured artifact, surfaces drift and gaps, and lets your existing AI runtime do the reasoning. *Pods (team-level ownership scoping) are an aspirational layer in the planning docs; not first-class in v0.1.0.*
-
-## Truth, Evidence, Derived state — the three layers
-
-ProductOS separates the *spec* (what the product is supposed to do) from the *signals about whether reality matches that spec right now*. Three layers, each with a clean role:
-
-| Layer | What it holds | Authoritative for | Survives if you remove ProductOS? |
-| --- | --- | --- | --- |
-| **Truth** (committed markdown) | Product Context + Product Contracts (claims + numbered test cases). PM-authored intent in product language. | What the product *means* to do | **Yes** — it's just markdown in your repo |
-| **Evidence** (DB) | Test results from CI, AI-derived code-consistency analyses, AI-derived test-coverage analyses, PM acceptance log, drift events. Every signal that informs "does reality match the spec?" | What reality currently *says* about the spec | **No** — replaceable, gitignored, regenerable |
-| **Derived state** | Per-Contract: Verified / Contested / Orphan / Uncertain / Unverified. Computed by a pure function over Truth + Evidence. | What the dashboard reads | **No** — pure function, no separate persistence |
-
-The boundary is load-bearing for three reasons:
-
-1. **Portability.** Remove ProductOS and you keep the spec. Lose nothing committed; lose only the live signal layer that gets rebuilt the moment ProductOS comes back.
-2. **Honesty.** Truth is what humans authored and committed. Evidence is what the system measured. Derived state is the computation that joins them. No layer can pretend to be another.
-3. **Hosted compatibility.** v0.1 runs locally with Truth in your git repo and Evidence in a local SQLite. v0.2 hosted moves Evidence to a remote DB and reads Truth via the GitHub API — *the same markdown, the same derivation, the same renderer.* Only the substrate underneath changes.
-
-**Evidence kinds in v0.1:**
-
-| Kind | Source | Confidence |
-| --- | --- | --- |
-| Test result (`{stable_id, status, timestamp}`) | User's CI via receive interface | Strongest — actual execution |
-| Code-consistency analysis | AI skill reads code, judges whether the claim is consistent with what the code does | Supporting — LLM-derived, confidence-bounded |
-| Test-coverage analysis | AI skill reads code + tests, judges whether existing tests adequately verify the claim | Supporting — LLM-derived, confidence-bounded |
-| PM acceptance | Human accepts the Contract via the product-truth site | Authoritative for *intent*, not reality |
-| Drift event | Push (CI test failure, customer feedback) or pull (code-change analyzer flagged it) | Negative signal — opens until resolved |
-
-Code-consistency and test-coverage analyses are produced by the **same** analyzer skill on the **same** inputs (code + tests) — one pass, two evidence outputs. The site shows them side by side with the test result.
-
-## Product Context — the layer above Contracts
-
-Product Contracts answer *"what does the product do?"*. But upstream of that there are durable claims about the product as a whole that constrain every Contract below them. These are **Product Context**.
-
-| Type | Example for Family Wallet |
-| --- | --- |
-| **Goals** | "Kids internalize saving by feeling progress on small balances" / "Parents spend <5min/week on chore admin" |
-| **Design principles** | "Numbers feel rewarding, never punishing" / "Parents stay in control — kids suggest, parents approve" / "Interest is opt-in and unbounded by design" |
-| **Personas** | "Sarah, mom of 2 (ages 8 & 10)" / "Jake, single dad of a 6yo who had a piggy bank growing up" |
-| **Non-goals** | "We don't connect to real bank accounts" / "No anti-fraud — this is trust-based" |
-| **Voice / tone** | "Kid-friendly language; celebrate wins; never shame losses" |
-
-Context is **the first thing Claude reads before proposing anything** — a proposed Contract that contradicts a Design Principle or a Non-goal is wrong before it's even evaluated against the code.
-
-Stored as a top-level directory mirroring `products/`:
+Three altitudes, one atom.
 
 ```
-productos/
-├── context/                       ← Product Context
-│   ├── README.md                  ← how to read this dir
-│   ├── goals.md
-│   ├── principles.md
-│   ├── personas.md
-│   ├── non-goals.md
-│   └── voice.md
-└── products/                      ← Product Contracts (claims + numbered test cases)
-    └── <area>/<feature>.md
+   Surface  ─────  how the user interacts, exactly
+                   screens, elements, flow between them
+
+   Feature  ─────  what the user gets
+                   user-facing functionality
+
+   Capability ───  one thing a subsystem promises, as an interface
+                   grouped into capability systems; many features depend on one
 ```
 
-Context items are vetted and edited through the same product-truth site as Contracts — Claude can propose updates (e.g., during analysis of a new feature it might suggest a new design principle), and the human accepts, refines, or rejects.
+**Altitudes, not containment.** Many features depend on one capability; one capability composes others; one surface serves several features. The edges are many-to-many — this is a DAG, and any strict hierarchy would be a lie.
 
-## What a Contract looks like
+**Two symmetric trees.** Features group into **feature areas** (which nest, inside a **product**); capabilities group into **capability systems**. Same shape, different decomposition: an area is a product concern, a capability system is a subsystem — engineering's cut of the system. A capability system is never inside an area, because a subsystem serves many of them.
 
-A Contract bundles the claim and its numbered test cases. The claim is the prescriptive spec; the test cases are the concrete scenarios that prove it. Test generation materializes each test case into a runnable test in the user's framework.
+```
+products/                                    capabilities/
+└── billing/            ← product            └── user-account-manager/  ← capability system
+    └── pricing/        ← feature area           ├── invite-user.md     ← capability
+        ├── seat-estimator.md   ← feature        └── change-role.md
+        └── invite-teammate.md
+```
+
+**Feature areas nest as deep as the product needs.** `cre/pricing/agency/limit-tiers` is
+as valid as `cre/pricing/deal-pricing`. A fixed two levels forced every real joint past
+the second one into a name (`deal-pricing-agency`) or into a bag of thirty features
+nobody reads — depth is a property of the product, not of ProductOS.
+
+What keeps that from becoming a free-for-all is a **target size**, not a depth limit.
+`productos check` measures every area against `grouping:` in `productos/config.yaml`
+(default: 2–8 features, 24 behaviors) and names the specific edit — which features
+cluster into a proposed sub-area, which level separates nothing and should collapse,
+which feature has grown into two. Re-filing is `productos move <id> <destination>`,
+which carries the file, the id, the tracking sidecar and every `depends_on`,
+`affected_by` and `leads_to` edge pointing at it in one operation.
+
+⛔ **Never re-file by hand.** A container's id *is* its path, so `mv` leaves the id
+claiming the old location and silently strands every edge aimed at it — a corpus that
+passes `check` on the moved file and has quietly lost its graph.
+
+
+### Three things only a reader can say
+
+Every signal above is derived from the corpus's shape. Shape is not what goes wrong.
+
+A fresh reader handed a corpus that satisfied every check found sixteen problems on one
+page, on which the tool had logged thirty-two findings — **none of which was any of the
+sixteen**. Their conclusion: *"The checks that exist are checks of form. Everything that
+would produce wrong software here is a matter of agreement between two sentences, and
+nothing checks that."*
+
+So three things are supplied by a person and computed by nothing:
+
+| | Says | Recorded with |
+|---|---|---|
+| **Read-through** | I read this end to end and could / could not build from it | `productos read` |
+| **Ambiguous** | this claim is decided, and two of us would build it differently | `productos ask ambiguous` |
+| **Suspected dependency** | I believe this edge exists and its owner has not declared it | `suspected_depends_on` |
+| **Same question** | these open questions are one hole, and one decision closes them all | `same_as` |
+
+⛔ **All three are addable by someone who does not own the page**, and that is the point.
+The person who finds an ambiguity is by definition not the person who wrote it
+unambiguously in their own head, and a wrong impact count cannot be corrected by the page
+that is wrong about it.
+
+### Behavior is the atom
+
+A **Behavior** is a single falsifiable claim about what the product does. Everything verifiable hangs here: acceptance test cases, validation state, drift.
+
+Behaviors live on **Features** and **Capabilities** — the two container kinds. They *anchor* to a Surface + Element when triggered by a user action, and anchor to nothing when they're rules or invariants.
+
+Surfaces don't own behaviors. A behavior belongs to whatever **triggers** it; the screen is where it's anchored, not who owns it.
 
 ```yaml
+# feature: documents/delete-document
+- id: delete-removes-from-file
+  claim: "When a user deletes a document, it is removed from the loan file
+          and no longer counted toward completeness"
+  anchor: { surface: document-list, element: delete-button }
+
+# capability: capabilities/extraction/field-extraction
+- id: extracts-by-type
+  claim: "Given a document and a document type, extraction returns every field
+          defined for that type, each with a confidence between 0 and 1"
+  # no anchor — nothing user-triggered
+```
+
+### Feature vs. Capability
+
+| | Groups into | Trigger | Anchored to | Promisee |
+| --- | --- | --- | --- | --- |
+| **Feature** behavior | a feature area | A *user action* | A surface + element | The user |
+| **Capability** behavior | a capability system | An *input from elsewhere in the product* | Nothing | The consuming feature |
+
+A capability is **one thing a subsystem promises.** *"Classification returns a confidence for every document"* is a capability. The **capability system** it belongs to is the subsystem — `document-classifier` — which is engineering's decomposition, and is why capability systems live outside product areas and have no screens.
+
+What never leaks in is the subsystem's *internals*. *"There's a classification service behind a queue"* is mechanism: engineering's, and not ours.
+
+⛔ **"Not a subsystem" is a rule about claims, not about grouping.** Reading it as "the container must not be named for a subsystem" is what produces capabilities grouped by topic, or a screen filed as a capability because it had no route in the repo being read.
+
+The capability altitude is where product and engineering **negotiate**: product owns what is promised, engineering owns how it's kept. That altitude is missing from most teams' artifacts entirely — PRDs stop at features, design docs start at services — which is why the gap between them is where arguments happen.
+
 ---
-id: auth/signup
-title: User signup
-owners: [peter]
-implements:
-  - src/api/auth/signup.ts
-  - src/pages/signup.tsx
-behaviors:
-  - id: duplicate-email
-    claim: "POST /api/auth/signup with an email already in use returns 409 with body.error.code = 'duplicate_email' and no new account is created"
-    notes: |
-      Intentional separation from 400 so the client can show a
-      specific 'this email is already registered' message.
-    test_cases:
-      - id: 1
-        description: "Standard duplicate rejection"
-        steps: |
-          1. Existing user with email alice@example.com
-          2. POST /api/auth/signup with email alice@example.com
-          3. Assert response is 409 with body.error.code = 'duplicate_email'
-          4. Assert no new user record was created
-      - id: 2
-        description: "Case-insensitive duplicate detection"
-        steps: |
-          1. Existing user with email alice@example.com
-          2. POST /api/auth/signup with email ALICE@EXAMPLE.COM
-          3. Assert response is 409 (emails treated case-insensitively)
-  - id: welcome-email
-    claim: "Successful signup enqueues a welcome email to the registered address"
-    test_cases:
-      - id: 1
-        description: "Welcome email enqueued on success"
-        steps: |
-          1. POST /api/auth/signup with a fresh email + valid password
-          2. Assert response is 201
-          3. Assert one job enqueued on the email queue, targeted at the new user's email
+
+## The two rules
+
+### Observability — does this belong at all?
+
+> A detail belongs in Truth **iff someone the product makes a promise to can distinguish two implementations that differ only in that detail.**
+>
+> When it qualifies, state **the observation, never the mechanism.**
+
+**Promisees:** the user (features), the consuming feature (capabilities), external integrators (public APIs). **Not** engineers with logs, dashboards, traces, or DB access — engineering visibility is not product observability. *Exception:* a customer-facing audit log or status page **is** a promise surface.
+
+**The procedure:** name the detail → imagine two implementations differing only in it → can any promisee tell them apart? → yes: state what's *observed*; no: cut it.
+
+Worked against an async pipeline (upload → classify → extract):
+
+| Detail | Distinguishable? | Verdict |
+| --- | --- | --- |
+| Classification runs before extraction | No | ❌ Cut |
+| The type appears before the fields do | Yes | ✅ *"The type appears as soon as it's known, before fields are ready"* |
+| Internal retry on low confidence | No | ❌ Cut |
+| A user's correction survives re-extraction | Yes | ✅ Include |
+| Runs on a queue vs. inline | No | ❌ Cut |
+
+Row 2 is the one to internalise: the claim is *"the type appears before the fields"* — **not** *"classification runs first."* Same fact; only one survives a rewrite.
+
+This rule also does **anti-redundancy** work: if no promisee can distinguish the implementations, the claim adds nothing over reading the code and wastes a reviewer's attention.
+
+**Async workflows need no new concept.** A long-running pipeline is a feature depending on several capabilities. The async-ness is Truth wherever it surfaces — pending states, partial results, failures, whether work continues after navigation. Orchestration stays out; composition is carried by `depends_on`, so you never write "then."
+
+### Trigger — where does it belong?
+
+Feature or capability, per the table above. Two orthogonal jobs: **observability decides inclusion, trigger decides placement.** Don't conflate them.
+
+*(The "does it survive reimplementation?" test is a corollary of observability, not a third rule — if no promisee can distinguish the implementations, the claim survives by construction.)*
+
 ---
-```
 
-The test case carries a stable id (e.g. `auth/signup#duplicate-email/1`) so any test eventually written for it — by the implementer in v0.1, by a future skill in a future release — traces back to the Contract.
+## Non-redundancy
 
-**In v0.1, ProductOS does not generate runnable test files.** Test cases live in the Contract as the spec; the implementer (engineer or agent) writes the actual tests in the user's framework, using the cases as acceptance criteria. Skill-driven test generation lands in a future release once the test-case shape is settled.
+> **Every fact has exactly one home. Other places reference it; nothing restates it.**
 
-## What ProductOS is, in one sentence
+Not elegance — **the primary lever on review burden.** If nothing is restated, reviewing a feature means reading only what's genuinely new, so review cost tracks *new information* rather than corpus size.
 
-A **human-validated product correctness graph** — a structured, owned, dated record of what your product does, version-controlled in your repo, with explicit verification status per claim.
+Three redundancy types, three fixes:
 
-## Terminology
-
-Two layers of vocabulary: the **conceptual terms** (how the methodology talks) and the **Contract states** (the per-contract lifecycle, orthogonal to the conceptual layer).
-
-### Conceptual terms
-
-| Term | What it is |
+| Type | Fix |
 | --- | --- |
-| **Product Graph** | The data structure underneath everything: nodes are context items, features, behaviors, contracts, evidence, code refs, owners; edges are the relationships between them. The graph is the canvas; everything else is a view over it |
-| **Product Context** | Upstream, product-level claims that frame every Contract: Goals, Design Principles, Personas, Non-goals, Voice/Tone. Durable; rarely changes. Stored as committed markdown under `productos/context/`. Read first by Claude before proposing Contracts |
-| **Product Contract** | An individual unit of how the product behaves. Includes both **the claim** (what's true at the product level) and **numbered test cases** (concrete scenarios that demonstrate the claim). One Contract per behavior; the claim is the spec, the test cases are the verification scaffold. Stored as a behavior entry inside a Feature's committed markdown |
-| **Product Truth** | The corpus — the collection of all Product Contracts as authored markdown. Truth is whatever is committed to the repo. Lives at the **Truth layer** (see *Three layers*) — survives if you remove ProductOS |
-| **Product Verification** | A *derived state* per Contract, computed from Evidence + acceptance log. Provenance for human acceptance: `human` (person accepts via the product-truth site after reviewing/editing) and `self-heal:<reason>` (an agent carries an existing human Verification forward because a change was non-semantic — cosmetic edit, mechanical rename, file move). Content edits write to committed markdown; state transitions write to the local DB without a commit. Audits can filter to human-only Verifications trivially |
-| **Product Evidence** | Every signal that informs whether reality matches Truth — test results (CI), code-consistency analyses (AI), test-coverage analyses (AI), narrative notes, optional query results. Text-only refs by design. Lives at the **Evidence layer** (DB) — gitignored, replaceable, regenerable. Provenance includes the source, the timestamp, and the confidence (where applicable) |
-| **Product Drift** | Divergence between an Implemented Contract and reality — code changes that invalidate Evidence, test failures, customer feedback disagreements, Evidence past its TTL. Drift signals push an Implemented Contract from Verified → Contested. Surfaced as a first-class signal, not silent rot |
-| **Product Correctness** | The aggregate quality of Product Truth: how many Implemented Contracts are Verified with fresh Evidence, how few are Contested, how few Gaps remain. The property the whole methodology optimizes for |
-| **Behavior** | The implementation-level name for a Contract — a single falsifiable claim held inside a Feature file. Optionally anchored to a Surface + Element + interaction when triggered by a UI action; un-anchored when it's a rule/invariant |
-| **Surface** | A screen / page / modal / view within a Feature. Carries a freeform `title`, optional `path` (route or selector), an **ASCII sketch** of the interface structure, and a list of named Elements. *Captures interface (what's there, where it sits) — NOT design (colors, fonts, brand)* |
-| **Element** | An interactive item within a Surface — button, input, link, stepper, modal-trigger, etc. Has `id`, `kind`, optional `label` and `notes`. Behaviors reference Elements by id when anchoring to a specific interaction |
-| **Feature** | A bundle of related behaviors / Contracts + the Surfaces those behaviors live on. The file unit: `productos/products/<area>/<feature>.md` |
-| **`affected_by`** | A Feature-level cross-reference to other Features whose user-facing triggers cause this Feature's state to change. *Deterministic rule*: a behavior belongs to the feature whose **trigger** fires, not the feature whose state is mutated. `affected_by` lets a state-holding feature list the triggering features without duplicating their behaviors |
-| **Area** | A folder-level grouping of features. Pure organization; no inherent semantics |
-| **Gap** | A place in the corpus where Truth is missing or weak: a Planned Contract with no code yet, an Implemented Contract that's Unverified or Orphan, a Verified Contract past its TTL, a Contested Contract, a code path with no Contracts (coverage gap), a Contract with no owner. Gaps are where the Graph tells you what to work on next |
+| Truth ↔ truth (same fact twice) | Reference via `depends_on` / `affected_by` / `decided_by` |
+| Truth ↔ code (claim adds nothing over the code) | The observability rule |
+| Truth ↔ truth (contradiction) | Conflict detection |
 
-### Contract states — two orthogonal axes
+Conflict detection therefore has **two modes**: contradiction *and* duplication. *"This already exists at `extraction/field-extraction#confidence`"* is as valuable as *"this contradicts X."*
 
-A Contract has two independent state dimensions: its **lifecycle** (where it sits in its life — a property of the Contract itself) and its **verification** (whether it currently matches reality — a function of downstream validation and Drift signals).
+---
 
-**Lifecycle** — a property of the Contract:
+## The graph
 
-| State | Meaning |
+**Nodes:** context items · decisions · glossary terms · feature areas · capability systems · surfaces · elements · features · capabilities · behaviors · test cases · evidence · drift signals · code refs · owners
+
+**Edges:**
+
+| Edge | From → To |
 | --- | --- |
-| **Planned** | Forward-looking intent. The Contract describes a behavior the team plans to build. No code yet; verification state not meaningful |
-| **Implemented** | Code exists for this Contract. Carries a verification state |
-| **Deprecated** | Explicitly retired by the team. Kept in the corpus for history; no longer counted toward Correctness |
+| `has` | Feature area → Feature; Capability system → Capability; Feature/Capability → Behavior; Behavior → Test case; Surface → Element |
+| `anchor` | Behavior → Surface + Element + interaction |
+| `depends_on` | Feature → Capability; Capability → Capability |
+| `uses` | Feature → Surface |
+| `leads_to` | Element → Surface (the flow graph) |
+| `affected_by` | Feature → Feature |
+| `decided_by` | Behavior → Decision |
+| `implements` | Feature/Capability → code ref |
 
-**Verification** — derived state per Contract, only meaningful for Implemented Contracts. Computed by a pure function over Truth + Evidence:
+**Views** — projections, never authored twice:
 
-| State | Meaning |
+| View | Question |
 | --- | --- |
-| **Unverified** | No human has accepted the Contract and no signals are available yet. Default for newly-Implemented Contracts (e.g., analyzer-generated drafts) |
-| **Verified** | Human accepted, AND a passing test result has been received for at least one test case, AND no open drift events. The strongest steady state |
-| **Contested** | A negative signal challenges the Contract: a failing test result, a code-consistency analysis flagging inconsistency, customer feedback disagreement, or a code-change drift event. Stays Contested until the signal resolves |
-| **Orphan** | Human accepted, but no test result has ever been received and no `coverage_ref` has been set. The PM authored intent, but no evidence backs it. Surfaces as a gap |
-| **Uncertain** | Human accepted, but at least one evidence signal is hedged: code-consistency analysis returned "uncertain," or test-coverage analysis is partial. The PM has work to clarify, but nothing is broken |
+| Flow | How does a user move between screens? |
+| Blast radius | If this capability's promise changes, what breaks? |
+| Subsystem load | Which features lean on this capability system, and how heavily? |
+| Surface usage | Which features does this screen participate in? |
+| Component usage | If I change this component, which screens change? |
+| Rationale | Why is this behavior the way it is? |
+| Gaps | Where is Truth missing, stale, or contested? |
 
-```
-Lifecycle:                       Verification (only when Implemented):
+The **reversed** traversals are where value concentrates — *"what breaks if I change this"* is the question a hierarchy structurally cannot answer.
 
-  Planned                            Unverified ──(HITL accepts, no evidence yet)──► Orphan
-     │                                  │
-     │ (code lands)                     │ (test pass received, drift clean)
-     ▼                                  ▼
-  Implemented                        Verified ◄──┐
-     │                                  │       │
-     │ (team retires)                   ▼       │ (signal resolves)
-     ▼                              Contested ──┘
-  Deprecated                            ▲
-                                        │ (negative signal: test fails, code-consistency
-                                           flagged inconsistent, feedback contests)
-```
+---
 
-A Planned Contract has no verification state — there's nothing to verify against yet. A Deprecated Contract has no verification state — it's no longer counted. An Implemented Contract always carries one of {Unverified, Verified, Contested, Orphan, Uncertain}, derived from its Evidence.
+## Product Context
 
-## Where ProductOS sits relative to the tools you already use
+Upstream claims that frame every behavior. **Read first** — a proposal contradicting a principle or non-goal is wrong before it's evaluated against anything.
 
-Everyone else owns a stage of the PDLC or a surface in the stack. ProductOS owns the **Product Graph** that those stages read from, write to, or fall out of.
+Goals · Design principles · Personas · Non-goals · Voice/tone · **Glossary** · **Decisions**
 
-| Adjacent category | Relationship |
+**Glossary** — term → one-line product meaning. Keeps vocabulary consistent so analysis doesn't invent synonyms (*kid* / *child* / *dependent*). Deliberately **not** an entity model: entities with fields are a data model, which is implementation.
+
+### Decisions
+
+Non-goals record *what* the product doesn't do. Decisions record **why**, and **what else was considered**.
+
+The failure this prevents is the one PDD exists for: an agent finds no handling for a case, calls it a gap, and "fixes" it — reintroducing something removed deliberately. No behavior can express this, because the whole point is that the behavior doesn't exist.
+
+Decisions carry **no validation state** — a decision isn't falsifiable, it's a record of a choice.
+
+> **The record is immutable; the ruling is not.**
+
+You never erase *that* a decision was made or why. Whether it still **governs** is expected to change: `active` → `under-review` → `superseded`, with `revisit_after` and a `reaffirmed` history. A decision from ten months ago encodes ten-month-old constraints; treating it as permanent converts an old trade-off into an unexamined rule.
+
+Four revisit triggers, all signals rather than verdicts: **age**, **the stated constraint changed**, **a citing behavior is contested**, **direct challenge**. Note the last — feedback can contest a *decision*, not just a behavior. Reopening is normal, not exceptional.
+
+---
+
+## State — deliberately minimal
+
+Rich internally, poor externally. A reviewer should never meet the internal taxonomy.
+
+**Lifecycle** — is it built?
+
+| | |
 | --- | --- |
-| **BDD / acceptance frameworks** (Cucumber, Gherkin, SpecFlow) | **Closest conceptual neighbor.** Both describe behavior in human-readable form. Gherkin couples scenarios tightly to test execution; ProductOS decouples — behaviors stand on their own as the artifact, and tests are one of several evidence kinds |
-| **Product docs / wikis** (Notion, Confluence, internal wikis) | **Replaces, for product behavior.** Wikis are free-form, undated, ownerless, and decay silently. The graph is structured, owned, dated, with explicit verification status and stale-detection |
-| **Test frameworks** (Jest, Playwright, pytest, Vitest) | **Downstream.** The graph defines what should be true; the framework runs the check. Tests are a generated output of the graph, run in the user's stack |
-| **Test / QA management** (TestRail, Zephyr, Qase, Xray) | **Tests are a direct output of the graph.** Whether ProductOS replaces these tools or feeds them depends on how a team uses them — for a team that treats the catalog as authoritative, ProductOS *is* that catalog; for a team that uses QA management as a workflow layer on top, ProductOS feeds it |
-| **Ticket systems** (Linear, Jira, GitHub Issues) | **Downstream.** The graph is the source of truth for *what work needs to exist* — gaps in the graph become tickets. The ticket system tracks the work; the graph tracks the correctness |
-| **Product spec / roadmap tools** (Productboard, Aha, Linear roadmaps) | **Downstream.** Planning happens through the graph — `planned` behaviors capture intent before code lands and synthesize what the product *should* do. The roadmap consumes that, and ProductOS is a natural extension for managing some of it directly |
-| **AI coding assistants** (Claude Code, Cursor, Copilot, Codex, Devin) | **Symbiotic.** They write the code; the graph gives them verified behaviors so they don't regress what's true, and they propose new behaviors back. ProductOS needs a runtime, doesn't compete with one |
-| **Customer feedback** (Zendesk, Intercom, Pendo, Canny) | **Upstream input.** Feedback contests verified behaviors and surfaces planned ones; the graph + feedback together drive how the product should evolve to meet what customers actually want |
+| **Planned** | Intended, no code yet. *This is where generation lives* |
+| **Built** | Code exists |
+| **Retired** | Deliberately withdrawn; kept for history |
 
-## Scope — in vs. out
+**Validation** — can we trust it?
 
-| In scope | Out of scope |
+| | |
 | --- | --- |
-| Reading the user's codebase to propose Product Contracts | Writing or refactoring the user's code (that's the runtime's job) |
-| Routing Product Context into the runtime's context window | Replacing the runtime — Claude Code stays Claude Code |
-| Vetting / accepting Contracts via the product-truth site | Calling LLMs directly — no BYOK in v0.1 |
-| Holding numbered test cases inside Contracts (specs in plain English) | Writing runnable test files in the user's framework (v0.1: implementer writes them; skill-driven generation ships future) |
-| Ingesting feedback queue entries as Drift signals | n/a |
-| Receiving test results from the user's CI (`{stable_id, status, timestamp}` via MCP / CLI / HTTP) and opening/resolving `test_failed` Drift on each | Parsing framework-specific test output formats (connectors ship as separate convenience packages) |
-| Self-healing cosmetic / mechanical Drift | Self-validating claims as Verified — human signal required |
-| Surfacing Drift events when load-bearing change is detected | Deciding what to do about them |
-| Surfacing Gaps (uncovered, unverified, stale, contested) | Prioritizing engineering work |
-| Per-Contract Lifecycle + Verification state | Workflows, ticket statuses, deployment states |
-| Storage: committed markdown + local SQLite (later: remote endpoint) | Hosted-only operation; multi-repo orchestration |
-| Web + API surfaces | Native-app analysis (mobile / desktop) |
-| Receiving inbound signals (test reports, feedback queue entries) | Holding third-party API keys (Linear, Zendesk, Sentry, etc.) — those flow through the user's runtime MCPs |
+| **Needs review** | Proposed by an agent, no human has accepted it |
+| **Validated** | A human accepted it |
+| **Problem** | Something disagrees — a failing check, a contradiction, a challenge |
 
-## What ProductOS is explicitly *not*
+That's it externally. One "problem" signal, not seven drift kinds. Richer internal structure (evidence provenance, signal source, confidence) exists for analysis and stays out of the reviewer's way.
 
-- **Not an LLM, agent, or coding assistant.** It makes the runtime you already use smarter; it doesn't replace it.
-- **Not a wiki or free-form doc tool.** The graph is structured, owned, and dated by construction.
-- **Not a description of implementation.** It describes product *behavior*, not interface contracts or code shape. API docs and OpenAPI schemas sit in a different concern.
-- **Not a test runner or test parser.** Verification is a human *judgment* anchored by the markdown commit and live drift signals. Tests execute in the user's normal runner; ProductOS doesn't drive browsers, capture screenshots, or run live traces. It *receives* per-test status from the user's CI (one tiny interface: `{stable_id, status, timestamp}`) and lets that move Verification — but it never parses framework-specific output formats itself.
-- **Not self-validating.** Agents and humans propose; humans verify. The "human-validated" half of the name is non-negotiable — without it, the graph becomes the agent gaslighting itself.
+**The one bit that is sacred:** *human-validated* vs *agent-proposed*. It's the trust anchor, it's what agents consume to decide what they can rely on, and it survives every simplification. Agents propose; only humans validate.
 
-## The verification loop
+---
 
-Verification is not a discrete action — it's the iteration loop between Claude and the human, mediated by the product-truth site.
+## Adoption
 
-```
-Claude (skill) ──► proposes contracts (writes markdown)
-                          │
-                          ▼
-            User opens product-truth site
-                          │
-            reviews → edits → accepts
-                          │
-            ┌─────────────┴─────────────┐
-            ▼                           ▼
-   edit contract content         mark as verified
-   (writes markdown,             (writes DB,
-    committed to git)             no commit)
-            │                           │
-            └─────────────┬─────────────┘
-                          │
-                          ▼
-              Updated Product Truth
-                          │
-              (next Claude pass reads this)
-```
+### Setup — a correction task, not a blank form
 
-Two kinds of user actions land in two different places:
+Before anything is ingested, the product needs framing: **what it is, who it's for, and what it deliberately doesn't do.** Without that, imported claims land at arbitrary altitude with nothing to judge relevance against.
 
-| Action | Writes to | Commits? |
-| --- | --- | --- |
-| Edit a claim, split a behavior, add notes, refine a contract | Markdown file | Yes — content change, belongs in git |
-| Accept a contract as Truth, mark contested, record validator + timestamp | Local DB behind MCP | No — state change, no commit per verify |
+The minimum is small — a paragraph, a rough audience, two or three non-goals. Everything else accrues. And it's drafted from whatever's reachable (README, an existing PRD) for the PM to *correct*, because editing a wrong sentence is far cheaper than authoring a blank one.
 
-This resolves the friction of "commit per verify" without losing the audit trail: git captures every content evolution; the DB captures every state evolution; together they're the full history.
+### Seeding — in the corpus ≠ in your queue
 
-## Self-healing — humans verify, the system maintains
+A PM starting from nothing has nothing to design against, so the corpus can be seeded from a codebase, existing tests, PRDs, or support conversations. Every imported claim lands **unvalidated**, tagged with where it came from.
 
-> **Goal:** Product Truth should be self-healing. Humans verify; they do not maintain.
+The rubber-stamping failure comes from *asking for review*, not from claims existing. So the two are separated:
 
-The agent's role splits in two:
+> Hundreds of unvalidated claims can exist as orientation and as a conflict-detection substrate, with none of them landing in a queue.
 
-- **Verifying a claim** — "is this assertion about the product correct?" — load-bearing judgment, always human
-- **Assessing whether a change matters to a claim** — "does this code edit affect what the claim says?" — falsifiable, agent-driven
+Baseline claims are **never packeted, never emitted to agents, and flagged as unvalidated when they surface in a conflict.** They validate incrementally as a byproduct — when a PM designs in an area, the relevant ones surface for confirmation as part of that work.
 
-The agent never decides a claim is true. It decides whether a *change* is relevant to a claim the human already said was true. When the change is non-semantic, the agent records a `self-heal` Verification and the Contract stays Verified. When the change is load-bearing, the agent escalates by emitting a Drift event and flipping Verification to Contested.
+### Growth
 
-### What self-heals
+**Incremental, from active work. Never a day-one review push.**
 
-| Change type | Self-heal action |
-| --- | --- |
-| Whitespace, formatting, comments | Record `self-heal:cosmetic` Verification; no Contract change |
-| Mechanical rename (all callers updated atomically) | Update `code_refs`; record `self-heal:rename` Verification |
-| File moved (no body change) | Update `code_refs` path; record `self-heal:file-move` Verification |
-| Behavior-preserving refactor (e.g., extract-method on private helper) | Update `code_refs`; record `self-heal:refactor` Verification |
+Asking someone to accept 40 claims in a sitting produces rubber-stamping, and a rubber-stamped corpus is **worse than none** — every claim in it is labelled reviewed.
 
-### What escalates to a human
+1. **Start with what's in flight.** Scope the feature being built. The work is happening anyway; validation rides along.
+2. **Grow at the edges.** Each new or actively-changed feature adds its slice.
+3. **Reach steady state.** The actively-developed surface gets covered, which is the surface that matters.
 
-| Change type | Escalation |
-| --- | --- |
-| Logic change in a referenced region | Drift event; Verification → Contested; agent may propose updated claim |
-| Observable behavior changed (return shape, error code, side effect) | Drift event with proposed Contract edit; Verification → Contested |
-| Ambiguous (agent can't classify) | Drift event "needs human review"; Verification → Contested |
+**Coverage percentage is a bad headline metric** — it rewards the bulk-accept behavior that hollows the corpus out. *Validated behaviors in actively-changed areas* is the number that means something.
 
-### The confidence gate
+---
 
-Self-heal only fires when the agent is highly confident the change is non-semantic. Anything less escalates. The skill's instruction is explicit: *false positives (escalating cosmetic changes) are cheap; false negatives (auto-healing a load-bearing change) corrupt Truth.*
+## Storage
 
-### The success metric
+**The database is the authority. Markdown is an export.**
 
-The principle is measurable: **what fraction of code changes flow through without human attention?** A team where every refactor pulls humans into the vet queue is failing self-healing; a team where cosmetic and mechanical changes carry forward silently is succeeding.
+Truth lives in a hosted service. Export produces the same markdown corpus on demand, which preserves the portability promise — *remove ProductOS and you keep your truth* — without making a repo the authoring surface.
 
-## Drift detection — on-demand, not continuous
+This matters beyond convenience: a **product isn't a repo**. One product often spans several, and truth is a property of the product.
 
-ProductOS doesn't watch for Drift. The user (or their CI) decides when to scan; ProductOS provides the analyzers.
+Agents reach truth over MCP. Verified truth is also emitted into **AGENTS.md**, which is read natively by most major coding agents — so behavior reaches them with no integration at all.
 
-Seven kinds in MVP, split by trigger pattern:
+See `planning/ARCHITECTURE.md` for the substrate.
 
-| Kind | Pattern | Trigger |
-| --- | --- | --- |
-| `code_change` | Pull (agent-analyzed) | User (or PR webhook in v0.2) triggers the analyzer skill on a changed code path |
-| `code_inconsistent` | Pull (agent-analyzed) | Analyzer skill judges that the code does not support a Contract's claim. Confidence-bounded — surfaces the reasoning, never auto-flips Verification by itself |
-| `test_uncovered` | Pull (agent-analyzed) | Analyzer skill judges that no existing test adequately verifies a Contract's claim. Pairs with `coverage_ref` evidence — when align finds a covering test, this resolves |
-| `conflict` | Pull (agent-analyzed) | Two Contracts make contradictory claims about overlapping code paths |
-| `expired` | Pull (deterministic query) | Verified Contract past its freshness TTL |
-| `test_failed` | Push (inbound from CI) | User's CI calls `productos_record_test_results` (MCP / CLI / HTTP) with a per-test status; ProductOS opens a `test_failed` Drift for each failing *active* stable id, resolves it when the same id passes on a later run. *Deprecated* ids pass through to `last_run_status` without opening Drift (deprecated cases aren't part of current Truth). Unmapped ids are dropped silently. Stable ids are immutable + append-only — test cases are deprecated, never deleted. Connectors (jest reporter, pytest plugin, JUnit converter) ship as separate convenience packages |
-| `feedback` | Push (inbound) | A feedback entry is filed targeting a Verified Contract |
+---
 
-**One analyzer skill, multiple evidence outputs.** The same skill that proposes Contracts also produces code-consistency and test-coverage signals when re-run on an existing Contract. Both signals are evidence (with reasoning attached), not Truth — they inform Derived state but can't mark a Contract Verified by themselves.
+## What ProductOS is not
 
-**Two co-equal PM surfaces — site and Claude/text.** The product-truth site (`localhost:7878`) and the Claude Code skill flow are both first-class authoring + validation surfaces in v0.1. The site is for batch review and deep inspection of behaviors + evidence; the Claude/text flow is for inline vetting one behavior at a time without leaving the Claude Code session. Both call the same MCP tools and produce the same DB writes — the PM picks whichever fits the moment. No "real" surface; no canonical surface. The choice is contextual.
-
-**MVP first iteration:** the `productos-drift` skill — a Claude-driven, local, pre-PR scan that uses the user's existing runtime session. The skill walks the branch diff, runs the `code_change` and `conflict` analyzers, self-heals what it can, and escalates the rest as Drift events.
-
-**Deferred:** a CI PR bot packaging the same analyzers for headless use (requires BYOK; lands later).
-
-## Storage model
-
-Two artifacts are checked into the user's repo. Everything else lives behind the MCP server in a local DB.
-
-**Committed:**
-
-```
-productos/context/                       ← Product Context (goals, principles, personas, non-goals, voice)
-productos/products/<area>/<feature>.md   ← Product Contracts (claims + numbered test cases in frontmatter)
-```
-
-*Runnable test files are written by the implementer in v0.1 (using the test cases as the spec) and live wherever the user's stack expects them. Skill-driven generation into `productos/tests/...` ships future.*
-
-**Gitignored, behind the MCP server:**
-
-```
-productos/.local/runtime.db              ← verification state, drift events, evidence refs
-```
-
-All clients (CLI, product-truth site, Claude Code skill) read and write through the MCP server. The server owns the DB; today it's a local SQLite file, later it can be swapped for a remote endpoint via `productos configure` without any client-side changes.
-
-| Concept | Storage | Layer |
-| --- | --- | --- |
-| Product Context | `productos/context/*.md` — committed markdown for goals, design principles, personas, non-goals, voice. Edited via the product-truth site (writes back as PR-shaped diffs in v0.2) | Truth |
-| Product Contracts | `productos/products/<area>/<feature>.md` — frontmatter holds id, owners, code links, behaviors with claims, notes, and numbered test cases (each with optional `level: unit \| integration \| api \| e2e` and optional `coverage_ref`). Edited directly via the product-truth site | Truth |
-| Product Verification (acceptance log) | DB — append-only log of state changes per behavior with provenance | Evidence |
-| Product Evidence (signals) | DB — text-only refs: code refs, narrative, test results (per stable_id), code-consistency analyses (with reasoning), test-coverage analyses (with reasoning); no binary artifacts | Evidence |
-| Drift events | DB — event stream (`code_change`, `code_inconsistent`, `test_uncovered`, `conflict`, `expired`, `test_failed`, `feedback`) with `state` (open/resolved/dismissed) | Evidence |
-| Per-test-case state | DB — `last_run_status`, `last_run_at`, `last_run_message` per stable_id | Evidence |
-| Product Verification (state per Contract) | Derived — pure function over Evidence: Verified / Contested / Orphan / Uncertain / Unverified | Derived |
-| Product Correctness (rollup) | Derived | Derived |
-| Generated tests | *v0.1: not generated by ProductOS — the implementer writes runnable tests using the Contract's test cases as the spec. Scaffolder available as a supporting feature for net-new behaviors. Skill-driven generation across frameworks ships future* | n/a (output) |
-
-## v0.1 (local) → v0.2 (hosted) — same conceptual model, different substrate
-
-ProductOS v0.1 runs as a local process (`productos serve`) on the developer's machine — MCP on stdio, product-truth site on localhost. v0.2 will be a hosted GitHub App + multi-tenant web app. **The conceptual model doesn't change between modes; only the substrate underneath does.**
-
-| | v0.1 (local) | v0.2 (hosted) |
-| --- | --- | --- |
-| Truth storage | Committed markdown in user's repo | Same — read via GitHub API; edits write back as PRs |
-| Evidence storage | Local SQLite at `.local/runtime.db` (gitignored) | Postgres, tenant-isolated |
-| Auth | None — single user | GitHub OAuth, per-org tenancy |
-| Repo access | Filesystem reads | GitHub API reads + PR-writes |
-| AI access | User's runtime (Claude Code) — no key held | BYOK proxy or platform key — only mode where ProductOS calls LLMs directly |
-| Drift triggers | On-demand (CLI / skill) | + Push (webhook on push / PR) |
-| Notifications | None | PR comments, Slack, email |
-| Renderer / validator / MCP tool surface | Same code | Same code |
-
-**What this means for v0.1 design discipline:**
-
-- **Unidirectional data flow.** Writes go through the API; the renderer is read-only. Keeps the hosting story clean (no GET endpoint lazily mutating shared state).
-- **Storage abstraction.** SQLite-isms don't leak past the DB layer; `db.kind = remote` is a future config switch, not a rewrite.
-- **Repo access abstraction.** Markdown reads happen behind an interface so v0.2 can swap in a GitHub API reader without touching the renderer/validator.
-- **Identity abstraction.** Even in single-user v0.1, a `current_user` concept (always `local`) rather than baked-in user-ids — cheaper than retrofitting auth later.
-
-The result: v0.2 is "swap implementations behind interfaces + add auth + add multi-tenancy + add LLM proxy" — meaningful work, but no rewrite. **One product, two deploys.**
+- **Not an agent, IDE, or coding assistant.** It makes the runtime you already use smarter.
+- **Not implementation.** No services, queues, schemas, or interface contracts — ever. When an agent builds the wrong thing, the fix is a **more precise claim**, never technical detail.
+- **Not a wiki.** Structured, owned, and dated by construction.
+- **Not a ticket tracker or roadmap tool.** Those consume the graph.
+- **Not self-validating.** Agents propose; humans validate. Without that, the graph is an agent gaslighting itself.

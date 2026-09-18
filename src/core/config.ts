@@ -161,6 +161,20 @@ export const WebConfig = z.object({
 });
 export type WebConfig = z.infer<typeof WebConfig>;
 
+/**
+ * What a readable tree looks like in THIS corpus.
+ *
+ * Exposed as config because the right number is a product judgement: a corpus of
+ * twelve features and one of four hundred do not want the same ceiling. The defaults
+ * are what `productos check` advises against when nobody has said otherwise.
+ */
+export const GroupingConfig = z.object({
+  group_min: z.number().default(2),
+  group_max: z.number().default(8),
+  behaviors_max: z.number().default(24),
+});
+export type GroupingConfig = z.infer<typeof GroupingConfig>;
+
 export const ProductosConfig = z.object({
   version: z.string().default("0.0.1"),
   stack: StackConfig.default({
@@ -176,6 +190,7 @@ export const ProductosConfig = z.object({
   byok: ByokConfig.default({}),
   operations: OperationsConfig.default({}),
   web: WebConfig.default({}),
+  grouping: GroupingConfig.default({}),
 });
 export type ProductosConfig = z.infer<typeof ProductosConfig>;
 

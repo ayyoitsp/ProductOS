@@ -6,7 +6,78 @@ version: 0.1.0
 
 # ProductOS — Edit Skill (surgical, non-interactive)
 
+> **The model is defined outside this skill.** `OVERVIEW.md` introduces it, `EXAMPLE.md`
+> shows it as real files one concept at a time, and `GLOSSARY.md` defines every term and
+> what it refuses — feature area, capability system, feature, capability, surface, stub,
+> behavior, claim, undefined behavior, `depends_on` vs `affected_by`, validation,
+> readiness, framework gap.
+>
+> Read them before classifying anything, and do not re-derive a definition here: this
+> skill and the glossary disagreeing is how six words ended up circulating for one
+> concept.
+
+
 The user knows exactly what they want changed. You apply it. No walkthrough, no questions unless the instruction is genuinely ambiguous.
+
+
+
+## When something has no clean home
+
+Do not force it into the nearest category. Run:
+
+```
+productos todo add "<what the model cannot express>" --forced-into <where it had to go>
+```
+
+That records a **framework gap** — a TODO for ProductOS's developers, distinct from the
+user's queue. `productos todo scan` also detects forced fits mechanically (a capability
+behavior demonstrable only through a screen; a behavior anchored to a surface nothing
+declares), because this instruction alone has repeatedly not been enough.
+
+A hand-placed compromise is worse than a recorded gap: it looks correct, so the evidence
+that the framework was deficient disappears and the same hole is rediscovered next time.
+
+
+## Undefined behaviors, and resolving them
+
+A behavior with `question:` and no `claim:` is **undefined** — nobody has decided what
+it claims.
+
+**Adding one** — "we don't know whether X yet": write the behavior with `question:` and
+no `claim:`, no test cases. Never invent a claim to fill the slot.
+
+**Resolving one** — the user tells you the answer:
+
+1. Write the `claim:` on the **same behavior id**. Never create a new id — the whole
+   point is that undefined → unverified → verified happens on one stable id.
+2. **Remove `question:`.** The schema rejects a behavior carrying both, and leaving it
+   would mean "is this decided?" has two answers.
+3. Add test cases — the claim now needs acceptance criteria.
+4. Leave verification alone. It becomes *unverified*, awaiting the human stamp; you
+   never set `verified`.
+
+**Changing `kind:` means MOVING THE FILE.** The two live in separate trees and `kind` is
+inferred from which tree a file is in:
+
+| | Path | Id |
+|---|---|---|
+| feature | `productos/products/<product>/<area…>/<slug>.md` | `<area>/<slug>` |
+| capability | `productos/capabilities/<system>/<slug>.md` | `capabilities/<system>/<slug>` |
+
+So feature → capability is: move the file, rewrite the `id`, drop every behavior's
+`surface` / `element` / `interaction` anchor (an interface has no screen), and repoint
+every `depends_on` and prose reference to the old id.
+
+⛔ **This changes an id, which is normally immutable.** Only do it while nothing in the
+container is validated, and say so explicitly before starting — once claims are accepted
+or tests carry the id, the move is no longer safe and the right answer is a new
+capability plus deprecation of the old container.
+
+**Retiring a container that should never have existed** — set `status: deprecated`, mark
+every behavior `deprecated: true` with a `deprecated_reason` naming where its content
+went, and leave the file in place. Deleting it breaks every id that ever pointed at it
+and erases the record that the mistake was made.
+
 
 ## When to use this skill vs others
 
@@ -22,7 +93,7 @@ If the user's instruction can't be acted on without more decisions ("make this f
 
 ## The schema you can edit
 
-### Feature (file: `productos/products/<area>/<feature>.md`, frontmatter)
+### Feature (file: `productos/products/<product>/<area…>/<feature>.md`, frontmatter)
 
 | Field | Type | Notes |
 |---|---|---|

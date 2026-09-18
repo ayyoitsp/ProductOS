@@ -14,7 +14,7 @@ import {
   TestCase,
   UxView,
   listFeatures,
-} from "../core/product.js";
+  listAllContainers,} from "../core/product.js";
 import { getStrategy } from "../core/context.js";
 import { auditFeature } from "../core/audit.js";
 
@@ -96,14 +96,14 @@ export async function editFeatureTurn(args: {
       inputSchema: z.object({
         title: z.string().optional(),
         description: z.string().optional(),
-        status: z.enum(["planned", "shipped", "deprecated"]).optional(),
+        status: z.enum(["planned", "built", "retired"]).optional(),
         affected_by: z.array(z.string()).optional(),
         body: z.string().optional(),
       }),
       execute: async (a: {
         title?: string;
         description?: string;
-        status?: "planned" | "shipped" | "deprecated";
+        status?: "planned" | "built" | "retired";
         affected_by?: string[];
         body?: string;
       }) => {
@@ -427,7 +427,7 @@ export async function editFeatureTurn(args: {
 
 function buildBootstrapMessages(feature: FeatureDocument, paths: ProductosPaths): ModelMessage[] {
   const strategy = getStrategy(paths);
-  const corpus = listFeatures(paths).map((f) => f.frontmatter.id);
+  const corpus = listAllContainers(paths).map((f) => f.frontmatter.id);
   const findings = auditFeature(feature);
   // Surface the web mock hints (stylesheet + components dir) so the model
   // knows whether sketch_html with the user's CSS is in play.

@@ -1,5 +1,6 @@
 import { ThemeProvider, DefaultTheme, DarkTheme } from "@react-navigation/native";
-import { Stack } from "expo-router";
+import * as Linking from "expo-linking";
+import { Stack, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, AppState, StyleSheet, View } from "react-native";
@@ -10,6 +11,7 @@ import { useColorScheme } from "@/components/useColorScheme";
 import Colors from "@/constants/Colors";
 import { emitDataChange } from "@/db/events";
 import { applyInterestIfDue } from "@/db/interest";
+import { parseKidUrl } from "@/lib/nfc";
 import { initStore } from "@/store";
 
 export { ErrorBoundary } from "expo-router";
@@ -54,9 +56,32 @@ export default function RootLayout() {
           />
         </Stack>
         <InterestApplyRunner />
+        <NfcDeepLinkRunner />
       </ToastProvider>
     </ThemeProvider>
   );
+}
+
+/**
+ * Watches for familywallet://kid/<id> URLs delivered via NFC tap (or any
+ * other OS-level scheme dispatch) and routes to the kid's detail screen.
+ * Exists because expo-router's built-in linking can drop the initial URL
+ * on cold launch when the target route is nested inside two groups
+ * ((tabs)/(family)/kid/[id]).
+ */
+function NfcDeepLinkRunner() {
+  const router = useRouter();
+  useEffect(() => {
+    const openKid = (url: string | null) => {
+      if (!url) return;
+      const kidId = parseKidUrl(url);
+      if (kidId != null) router.push(`/kid/${kidId}` as never);
+    };
+    Linking.getInitialURL().then(openKid).catch(() => {});
+    const sub = Linking.addEventListener("url", ({ url }) => openKid(url));
+    return () => sub.remove();
+  }, [router]);
+  return null;
 }
 
 /**

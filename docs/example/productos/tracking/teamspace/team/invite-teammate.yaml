@@ -1,0 +1,23 @@
+feature_id: teamspace/team/invite-teammate
+implements:
+  - app/team/invite-form.tsx
+behaviors:
+  sending-shows-them-as-invited:
+    status: verified
+    confidence: stated
+    basis:
+      - kind: human
+        ref: product review, 2026-09-12
+        quote: the admin should see them on the list straight away, not after a refresh
+    code_refs:
+      - app/team/invite-form.tsx:44-71
+  an-invite-needs-a-valid-address:
+    status: verified
+    confidence: observed
+    basis:
+      - kind: code
+        ref: app/team/invite-form.tsx:22-30
+  an-outstanding-invite-is-explained-not-just-refused:
+    status: proposed
+    confidence: guessed
+    basis: []
