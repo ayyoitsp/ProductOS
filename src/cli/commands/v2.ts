@@ -641,7 +641,18 @@ export function v2Command(): Command {
       let allowed = false;
       let where = "productos/config.yaml";
       try {
-        const paths = resolvePathsOrThrow();
+        /**
+         * ⛔ RESOLVED FROM THE CORPUS, NOT FROM WHERE THE COMMAND WAS RUN.
+         *
+         * `resolvePathsOrThrow()` defaults to `process.cwd()`, so the permission came from whatever
+         * project the shell happened to be in. Running this from the ProductOS checkout — which
+         * allows publishing, because its only corpus is a fictional seed — would have published a
+         * client's corpus on the seed's authority, and the refusal would never have fired.
+         *
+         * The gate's whole claim is that permission belongs to a corpus. Reading it from the cwd
+         * attached it to a shell.
+         */
+        const paths = resolvePathsOrThrow(dir);
         where = paths.configFile;
         allowed = readConfig(paths).exchange.publish === "allow";
       } catch {

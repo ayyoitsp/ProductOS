@@ -218,3 +218,41 @@ test("a write to one corpus is invisible to an identical one", () => {
    * contamination where there is none. Whether a slot is settled is the fact; the words are not.
    */
 });
+
+/**
+ * ⛔ THE PUBLISH GATE BELONGS TO THE CORPUS, AND IT WAS READING THE SHELL.
+ *
+ * `resolvePathsOrThrow()` defaults to `process.cwd()`, and the gate called it with no argument. So
+ * the permission came from whatever project the terminal happened to be in: running
+ * `v2 publishable --at <work>/v2` from the ProductOS checkout — which allows publishing, because its
+ * only corpus is a fictional seed — would have published a client's product truth to claude.ai on
+ * the seed's authority, and the refusal would never have fired.
+ *
+ * Found because a sandbox blocked the write that would have masked it. Asserted on the RESOLVER,
+ * because the command itself cannot be driven here without publishing something.
+ */
+test("a corpus's publish permission comes from its own project, not the working directory", async () => {
+  const { resolvePathsOrThrow } = await import("../dist/core/paths.js");
+  const { readConfig } = await import("../dist/core/config.js");
+
+  // This project allows publishing — its only corpus is the fictional seed.
+  const here = resolvePathsOrThrow(process.cwd());
+  assert.equal(readConfig(here).exchange.publish, "allow", "the seed's own project should allow it");
+
+  // A corpus in a directory belonging to no project carries no permission, so it cannot inherit one.
+  const orphan = fs.mkdtempSync(path.join(os.tmpdir(), "v2orphan-"));
+  fs.cpSync("v2-seed", orphan, { recursive: true });
+  let resolvedFromCorpus;
+  try {
+    resolvedFromCorpus = readConfig(resolvePathsOrThrow(orphan)).exchange.publish;
+  } catch {
+    resolvedFromCorpus = "never";
+  }
+  assert.notEqual(
+    resolvedFromCorpus,
+    "allow",
+    "a corpus outside this project inherited its permission — the gate is reading the shell, not the corpus"
+  );
+  // ⛔ And the default is refusal, so a project that has never considered the question cannot publish.
+  assert.equal(readConfig({ configFile: path.join(orphan, "nope.yaml") }).exchange.publish, "never");
+});
