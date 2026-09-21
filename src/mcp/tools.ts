@@ -65,6 +65,7 @@ import {
 } from "../core/test-results.js";
 import fs from "node:fs";
 import path from "node:path";
+import { exchangeTools } from "./v2-tools.js";
 
 export interface McpTool {
   name: string;
@@ -1234,6 +1235,15 @@ const recordTestResultsTool: McpTool = {
 // Registry
 
 export const tools: McpTool[] = [
+  /**
+   * The Exchange model — reads, and the five acts of human judgement.
+   *
+   * ⛔ THE ACTS ARE HERE ON PURPOSE, and a boundary test used to forbid exactly that. What
+   * replaced the old guarantee is `Verdict.via`: every act records which surface obtained the
+   * person's consent, so a corpus can be read for the quality of its validation rather than only
+   * its presence. See the header of `v2-tools.ts` for the full trade.
+   */
+  ...exchangeTools,
   // context (overarching — read first)
   listContextTool,
   getContextTool,

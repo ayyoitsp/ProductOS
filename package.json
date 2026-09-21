@@ -29,7 +29,8 @@
     "dev": "tsx src/cli/index.ts",
     "dev:serve": "tsx watch src/cli/index.ts serve --ui",
     "start": "node bin/productos.js",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "node --test test/*.test.mjs"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.81",

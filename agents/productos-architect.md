@@ -63,8 +63,27 @@ rather than to a person:
 For each: name the subsystem page that **owns** it. Not one that mentions it in passing —
 the one whose promises say what a caller may rely on when it happens.
 
-**Every verb with no owner is a missing subsystem**, and it is the highest-value thing you
+**Every verb with no owner is a missing promise**, and it is the highest-value thing you
 can find, because the screens are already promising behaviour that rests on it.
+
+⛔ **A missing promise is not the same as a missing subsystem, and conflating them produces
+a corpus full of subsystems that are one verb wearing a subsystem's clothes.** This brief
+used to say "missing subsystem" here, and on a real corpus four of six subsystems ended up
+holding exactly one promise — "deal pipeline", "access control" — each named after the noun
+it read rather than the component that owns it. On the page they were indistinguishable
+from the one subsystem that genuinely held seven.
+
+So when you find an unowned verb, say which of these it is, because the fix differs:
+
+| What you found | What it is |
+|---|---|
+| A verb that belongs to a component already on the site | a **missing promise** on that page |
+| Several unowned verbs that one component would plausibly own | a **missing subsystem**, and name it after the component, not the data |
+| A noun several screens read and nothing writes | an **unowned entity** — say so in those words; it is usually not a subsystem at all |
+
+The last row is the trap. A thing is not a subsystem because nobody owns it. Systems nest,
+so a lone promise can sit under a broader one — you never need to mint a peer subsystem to
+give a single verb somewhere to live.
 
 ### 3. Judge the boundaries
 
@@ -153,7 +172,8 @@ consistent with.
 
 Weight by **what it costs to get wrong**, and prefer the errors that are invisible:
 
-- A missing subsystem is worse than a badly-named one.
+- A missing promise is worse than a badly-placed one.
+- A subsystem named after the data it holds is a finding: name the component, not the noun.
 - A contract two engineers would implement differently, where both pass every stated
   check, is worse than one that is obviously incomplete — incomplete gets asked about.
 - An architectural error that only surfaces with the second customer, the second

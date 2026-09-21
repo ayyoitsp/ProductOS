@@ -42,6 +42,7 @@ export type ReadinessBlockerKind =
   // when the things it calls are.
   | "dependency-missing"
   | "dependency-not-ready"
+  | "dependency-awaiting-review"
   | "dependency-unconfirmed"
   | "dependency-has-no-failure-story"
   // ⛔ A PERSON SAID THEY COULD NOT BUILD FROM THIS, and readiness ignored them. The
@@ -113,8 +114,17 @@ export function featureReadiness(
    * failure behaviour. That feature is not ready and the gate said it was.
    */
   allContainers: FeatureDocument[] = [],
-  /** Readiness of the things it depends on. Pass to avoid recursing; computed if absent. */
-  dependencyReadiness?: Map<string, boolean>
+  /**
+   * Readiness of the things it depends on — the whole result, not a boolean.
+   *
+   * ⛔ A boolean could only produce "X is not ready", which is not actionable and was
+   * emitted once per dependency: five identical-shaped lines on one page, 37 across a
+   * corpus, more than half of that tenet's blockers. The useful question is *why* it is
+   * not ready, because the two answers go to different people and clear at different
+   * times — a dependency waiting on acceptance clears the moment somebody reviews it,
+   * and a dependency with an undecided behavior needs a person to decide something.
+   */
+  dependencyReadiness?: Map<string, FeatureReadiness>
 ): FeatureReadiness {
   const f = feature.frontmatter;
   const active = f.behaviors.filter((b) => !b.deprecated);
@@ -258,6 +268,8 @@ export function featureReadiness(
 
   if (allContainers.length > 0) {
     const byId = new Map(allContainers.map((c) => [c.frontmatter.id, c]));
+    /** Dependencies unready ONLY because nobody has accepted their claims yet. */
+    const unacceptedDeps: string[] = [];
     for (const dep of f.depends_on ?? []) {
       const target = byId.get(dep);
       if (!target) {
@@ -275,13 +287,51 @@ export function featureReadiness(
           detail: `"${dep}" never says what happens when it cannot do the thing — you cannot build against it, only guess`,
         });
       }
-      if (dependencyReadiness?.get(dep) === false) {
-        blockers.push({
-          kind: "dependency-not-ready",
-          detail: `"${dep}" is not ready to build, and this rests on it`,
-        });
+      const depR = dependencyReadiness?.get(dep);
+      if (depR && !depR.ready) {
+        // Undecided, contradicted or ambiguous underneath is a real gap — somebody has to
+        // decide. Merely unaccepted is the acceptance backlog, which the page already
+        // says at the top, so it is collected and reported once rather than per-dependency.
+        const substantive = depR.blockers.filter(
+          (x) =>
+            x.kind === "undefined-behavior" ||
+            x.kind === "contradiction" ||
+            x.kind === "ambiguous" ||
+            x.kind === "contested-behavior" ||
+            x.kind === "dependency-missing" ||
+            x.kind === "dependency-has-no-failure-story"
+        );
+        if (substantive.length > 0) {
+          blockers.push({
+            kind: "dependency-not-ready",
+            detail: `"${dep}" has ${substantive.length} thing${
+              substantive.length === 1 ? "" : "s"
+            } nobody has settled, and this rests on it — ${substantive
+              .slice(0, 2)
+              .map((x) => x.detail)
+              .join("; ")}`,
+          });
+        } else {
+          unacceptedDeps.push(dep);
+        }
       }
     }
+    // One line for the whole acceptance backlog underneath. It is the same fact the page
+    // already states at the top, and repeating it per dependency buried the gaps that
+    // actually need a decision.
+    if (unacceptedDeps.length > 0) {
+      blockers.push({
+        kind: "dependency-awaiting-review",
+        detail: `${unacceptedDeps.length} ${
+          unacceptedDeps.length === 1 ? "capability" : "capabilities"
+        } this rests on ${
+          unacceptedDeps.length === 1 ? "is" : "are"
+        } written and unaccepted — nothing is undecided in ${
+          unacceptedDeps.length === 1 ? "it" : "them"
+        }, they just need reviewing: ${unacceptedDeps.join(", ")}`,
+      });
+    }
+
     // An unconfirmed edge might be real, and if it is, this rests on something nobody has
     // traced. Either way its owner owes an answer before anybody builds.
     for (const s of f.suspected_depends_on ?? []) {

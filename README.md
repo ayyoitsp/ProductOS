@@ -14,6 +14,38 @@ Writing code is automating. Knowing *what* to build, and telling when you've bro
 
 ProductOS makes product truth an input to building, rather than a report on what was built.
 
+## The two tenets
+
+Everything here is judged against these, and a feature that serves neither does not belong.
+
+> **1. A human has validated the product truth.**
+>
+> **2. The product truth is sufficient to build from — no confusion, no room for interpretation.**
+
+The second carries a corollary: it has to help you see whether the truth is **complete**, not
+only whether it is clear. And the first carries a constraint on how it is served — **make
+validating easy, never overwhelm the reviewer, and record their decisions.** A queue nobody
+works is worth nothing, and a rubber-stamped corpus is worse than none, because every claim
+in it is labelled reviewed.
+
+These are the two things a repository structurally cannot hold and an agent cannot supply
+for itself. An agent can write a plausible claim; it cannot make a human have agreed to it.
+It can describe what code does; it cannot tell you the description omits the case nobody
+decided, or that one sentence has two builds.
+
+They divide the work cleanly, and the division is visible in the product:
+
+| | Tenet 1 — has a person agreed? | Tenet 2 — is it enough to build from? |
+|---|---|---|
+| **The act** | accepting a claim, settling a question | writing a claim that admits one reading |
+| **Who** | only a person; no tool exposes it to a model | whoever authors, human or agent |
+| **Surfaced by** | `productos next` · the ranked queue | `productos check` · readiness · the audit |
+| **Fails as** | *awaiting review* | *undecided* · *ambiguous* · *contradiction* |
+
+⛔ **The order matters.** Never accept a claim that is contradicted or ambiguous: stamping
+*"this is what we intend"* onto a sentence with two meanings is worse than leaving it
+unstamped, because now it looks settled. Tenet 2 first, then tenet 1.
+
 Start with [`OVERVIEW.md`](./OVERVIEW.md) — the model and why it is shaped this way — alongside [`EXAMPLE.md`](./EXAMPLE.md), which shows the same model as real files. [`GLOSSARY.md`](./GLOSSARY.md) defines every term and what it refuses; [`VISION.md`](./VISION.md) has the thesis.
 
 ## The model

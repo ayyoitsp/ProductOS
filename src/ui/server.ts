@@ -1,11 +1,12 @@
 import http from "node:http";
 import fs from "node:fs";
-import matter from "gray-matter";
+import { parseFrontmatter } from "../core/frontmatter.js";
 import { readFrameworkGaps } from "../core/framework-gaps.js";
 import path from "node:path";
 import os from "node:os";
 import pc from "picocolors";
 import { resolvePathsOrThrow } from "../core/paths.js";
+import { v2Route } from "../v2/serve.js";
 import { readConfig, resolveTruthVerificationByok } from "../core/config.js";
 import { groupingAdvice } from "../core/grouping.js";
 import { buildWorklist, groupWorklist } from "../core/worklist.js";
@@ -71,6 +72,14 @@ import {
 export interface StartUiServerOptions {
   /** Explicit port override. Precedence: opts.port > $PORT > config.ui_port > 7878. */
   port?: number;
+  /**
+   * The v2 (Exchange) corpus directory, served under `/v2`.
+   *
+   * ⛔ A SEPARATE TREE ON PURPOSE. v2 exists to be compared against v1, and a surface that
+   * replaced v1's would make the comparison unfalsifiable. Nothing under `/v2` can shadow a v1
+   * route: `v2Route` returns false for every path that is not its own.
+   */
+  v2Dir?: string;
 }
 
 export async function startUiServer(opts: StartUiServerOptions = {}): Promise<void> {
@@ -81,10 +90,14 @@ export async function startUiServer(opts: StartUiServerOptions = {}): Promise<vo
     ?? (Number.isInteger(envPort) && envPort > 0 && envPort < 65536 ? envPort : undefined)
     ?? config.ui_port;
 
+  const v2Dir = opts.v2Dir ?? path.join(path.dirname(paths.productsDir), "..", "v2");
   const server = http.createServer(async (req, res) => {
     try {
       const url = new URL(req.url ?? "/", `http://${req.headers.host}`);
       const p = url.pathname;
+
+      // ---- The Exchange model, on its own tree. Returns false for anything not under /v2.
+      if (await v2Route(req, res, p, { dir: v2Dir })) return;
 
       // ---- POST: verify a behavior ----
       if (req.method === "POST" && p === "/api/verify") {
@@ -461,11 +474,11 @@ export async function startUiServer(opts: StartUiServerOptions = {}): Promise<vo
       // place to fix it anyway.
       const allContainers = [...capabilities, ...areas.flatMap((a) => a.features)];
       const readiness = new Map<string, FeatureReadiness>();
-      const depReady = new Map<string, boolean>();
+      const depReady = new Map<string, FeatureReadiness>();
       for (const c of capabilities) {
         const r = featureReadiness(c, readTracking(paths, c.frontmatter.id), contextStates, allContainers);
         readiness.set(c.frontmatter.id, r);
-        depReady.set(c.frontmatter.id, r.ready);
+        depReady.set(c.frontmatter.id, r);
       }
       for (const f of areas.flatMap((a) => a.features)) {
         const r = featureReadiness(
@@ -476,7 +489,7 @@ export async function startUiServer(opts: StartUiServerOptions = {}): Promise<vo
           depReady
         );
         readiness.set(f.frontmatter.id, r);
-        depReady.set(f.frontmatter.id, r.ready);
+        depReady.set(f.frontmatter.id, r);
       }
       const sb = (activeId?: string) =>
         renderSidebar(
@@ -503,7 +516,7 @@ export async function startUiServer(opts: StartUiServerOptions = {}): Promise<vo
         // stray "title: Product Truth"; and the file's own `# Product Truth` then
         // repeated the page header directly beneath it.
         const readme = fs.existsSync(fp)
-          ? matter(fs.readFileSync(fp, "utf-8"))
+          ? parseFrontmatter(fs.readFileSync(fp, "utf-8"))
               .content.trim()
               .replace(/^#\s+.*\n+/, "")
           : undefined;
@@ -668,6 +681,8 @@ export async function startUiServer(opts: StartUiServerOptions = {}): Promise<vo
     console.log(pc.dim(`  product:  ${path.relative(process.cwd(), paths.productsDir)}/`));
     console.log(pc.dim(`  tracking: ${path.relative(process.cwd(), paths.trackingDir)}/`));
     console.log(pc.dim(`  feedback: ${path.relative(process.cwd(), paths.feedbackDir)}/`));
+    if (fs.existsSync(v2Dir))
+      console.log(pc.dim(`  exchange: ${path.relative(process.cwd(), v2Dir)}/ → ${pc.cyan(`http://localhost:${port}/v2`)}`));
   });
 }
 

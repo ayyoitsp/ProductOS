@@ -1,11 +1,12 @@
 import fs from "node:fs";
-import matter from "gray-matter";
+import { parseFrontmatter } from "./frontmatter.js";
 import {
   walkGroups,
   topReadmePath,
   listProducts,
   listAllContainers,
   listCapabilitySystems,
+  walkCapabilitySystems,
 } from "./product.js";
 import { readTracking } from "./tracking.js";
 import { readFrameworkGaps, gapsFilePath } from "./framework-gaps.js";
@@ -47,7 +48,7 @@ export function servableUrls(paths: ProductosPaths): Set<string> {
     urls.add(`/${product.slug}/`);
     walkGroups(product.groups, (g) => urls.add(`/${g.id}/`));
   }
-  for (const sys of listCapabilitySystems(paths)) urls.add(`/capabilities/${sys.slug}/`);
+  walkCapabilitySystems(listCapabilitySystems(paths), (sys) => urls.add(`/capabilities/${sys.slug}/`));
   for (const c of listAllContainers(paths)) urls.add(`/${c.frontmatter.id}`);
   return urls;
 }
@@ -137,7 +138,7 @@ export function checkConformance(paths: ProductosPaths): {
 
   const topReadme = topReadmePath(paths);
   if (hasRealTruth && fs.existsSync(topReadme)) {
-    const body = matter(fs.readFileSync(topReadme, "utf-8")).content;
+    const body = parseFrontmatter(fs.readFileSync(topReadme, "utf-8")).content;
     if (body.includes("Replace this page")) {
       problems.push({
         what: "The overview page is still the scaffold",
@@ -204,7 +205,7 @@ export function checkConformance(paths: ProductosPaths): {
     walkGroups(product.groups, (g) => check(g.id, g.filepath, g.body));
   }
 
-  for (const system of listCapabilitySystems(paths)) {
+  walkCapabilitySystems(listCapabilitySystems(paths), (system) => {
     if (!fs.existsSync(system.filepath)) {
       problems.push({
         what: `Capability system "${system.slug}" has no description`,
@@ -212,25 +213,52 @@ export function checkConformance(paths: ProductosPaths): {
         rule: "a capability system is a subsystem with an identity, congruent to a feature area",
       });
     }
-    if (system.capabilities.length === 0) {
+    // ⛔ Empty is only a problem when nothing is under it either. A system that groups
+    // nested subsystems and offers no promise of its own is the whole point of nesting.
+    const below = (s: typeof system): number =>
+      s.capabilities.length + s.systems.reduce((n, x) => n + below(x), 0);
+    if (below(system) === 0) {
       problems.push({
-        what: `Capability system "${system.slug}" holds no capabilities`,
+        what: `Capability system "${system.slug}" holds no capabilities, and nothing beneath it does either`,
         where: system.slug,
         rule: "a system groups the capabilities it offers",
       });
     }
-  }
+    /**
+     * ⛔ A ONE-PROMISE SUBSYSTEM, which for a long time the layout FORCED.
+     *
+     * `capabilities/<system>/<slug>` had no shape for a single unowned promise, so filing
+     * one required inventing a parent to put it in. On a real corpus four of six
+     * "subsystems" held exactly one promise — "deal pipeline" and "access control" were
+     * each a single verb wearing a subsystem's clothes, and on the page they were
+     * indistinguishable from the one that held seven.
+     *
+     * Advisory rather than refused, because a subsystem can legitimately begin with one
+     * promise and grow. What is not legitimate is nobody noticing.
+     */
+    if (system.capabilities.length === 1 && system.systems.length === 0) {
+      suggestions.push({
+        what: `Capability system "${system.slug}" is one promise in a subsystem's clothes`,
+        where: system.slug,
+        rule: "a subsystem groups several promises — one on its own belongs under a broader system, or is a promise the product tree should own",
+      });
+    }
+  });
 
   // Every container must sit at the right depth.
   for (const c of all) {
     const id = c.frontmatter.id;
     const depth = id.split("/").length;
     if (c.frontmatter.kind === "capability") {
-      if (depth !== 3) {
+      // ⛔ A MINIMUM, NEVER AN EXACT DEPTH — the same rule the product tree has always
+      // had. `depth !== 3` pinned the system tree at two levels for no reason beyond the
+      // order the two trees were written in, and that asymmetry is what forced a
+      // one-promise subsystem every time a lone promise needed filing.
+      if (depth < 3) {
         problems.push({
           what: `Capability "${id}" is not inside a capability system`,
           where: id,
-          rule: "a capability lives at capabilities/<system>/<slug>",
+          rule: "a capability lives at capabilities/<system…>/<slug>, nested as deep as the system needs",
         });
       }
     } else if (depth < 3) {

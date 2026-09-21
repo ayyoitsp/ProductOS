@@ -1,0 +1,31 @@
+# ⛔ Observations, never truth. They explain WHY the truth is what it is, and the packet
+# prints them under a heading that says a builder may not implement one.
+#
+# This file exists because the concept did not, in practice: `basis.kind` offered code,
+# test-run, screen and series — four ways of observing a machine and none of observing a
+# person — so the strongest evidence in this corpus was living as prose inside a standing's
+# `because`, and `readings/` stayed empty in a way that read as the concept being useless.
+readings:
+  - id: parents-record-after-the-fact
+    bears_on: money#record-spending#refuses
+    observes: >
+      Parents entered spending after the fact, from a receipt, rather than at the till. Two
+      of the six recorded an amount larger than the kid's balance during the fortnight and
+      neither expected it to be refused; one said they would have written it on paper
+      instead.
+    basis:
+      kind: trial
+      ref: six families, a fortnight, on their own devices
+      at: 2026-09-10
+      by: peter
+  - id: siblings-check-each-other
+    bears_on: tasks#complete-a-task#at_once
+    observes: >
+      In three of six households the kids used one device and watched each other use it.
+      Both kids pressing the same task was observed twice in a fortnight, which is why the
+      question of who claims a task is not hypothetical.
+    basis:
+      kind: trial
+      ref: six families, a fortnight, on their own devices
+      at: 2026-09-10
+      by: peter

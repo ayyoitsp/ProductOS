@@ -57,3 +57,8 @@ productos/.local/
 docs/example/.claude/
 docs/example/.git/
 docs/example/productos/.local/
+
+# The v2 working corpus is regenerated from v2-seed/ by `productos v2 reset` before every
+# review run, so committing it would only ever record whichever run finished last.
+# v2-seed/ IS committed — it is the pristine copy every run starts from.
+/v2/

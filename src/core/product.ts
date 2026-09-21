@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import matter from "gray-matter";
+import { parseFrontmatter } from "./frontmatter.js";
 import YAML from "yaml";
 import { z } from "zod";
 import { ProductosPaths } from "./paths.js";
@@ -488,7 +488,12 @@ const FeatureFrontmatterRaw = z.object({
    * Giving it an area would make that area part of its identity forever, since
    * ids are immutable.
    */
-  id: z.string().regex(/^[a-z0-9][a-z0-9/_-]*\/[a-z0-9][a-z0-9_-]*$/, "Must be area/slug, or capabilities/slug"),
+  id: z
+    .string()
+    .regex(
+      /^[a-z0-9][a-z0-9/_-]*\/[a-z0-9][a-z0-9_-]*$/,
+      "Must be <area…>/<slug>, or capabilities/<system…>/<slug> — both nest to any depth"
+    ),
   title: z.string(),
   /**
    * Feature or capability — decided by ONE question: what triggers it?
@@ -726,7 +731,7 @@ export function productReadmePath(paths: ProductosPaths, product: string): strin
 
 function readGrouping(readme: string, slug: string): { title: string; body: string } {
   if (!fs.existsSync(readme)) return { title: slug, body: "" };
-  const parsed = matter(fs.readFileSync(readme, "utf-8"));
+  const parsed = parseFrontmatter(fs.readFileSync(readme, "utf-8"));
   return { title: parsed.data.title ?? slug, body: parsed.content.trim() };
 }
 
@@ -853,7 +858,7 @@ export function ensureProductsDirs(paths: ProductosPaths): void {
 
 export function readFeature(filepath: string): FeatureDocument {
   const raw = fs.readFileSync(filepath, "utf-8");
-  const parsed = matter(raw);
+  const parsed = parseFrontmatter(raw);
   const frontmatter = FeatureFrontmatter.parse(parsed.data);
   return {
     frontmatter,
@@ -895,44 +900,98 @@ export function listAllContainers(paths: ProductosPaths): FeatureDocument[] {
  * for. A directory name is not a description.
  */
 export interface CapabilitySystemDocument {
+  /** The path BELOW `capabilities/`, which may be several segments deep. */
   slug: string;
   title: string;
   body: string;
   capabilities: FeatureDocument[];
   filepath: string;
+  /** ⛔ 1 for a top-level subsystem. Nesting is unbounded, same as the product tree. */
+  depth: number;
+  /** Nested subsystems beneath this one. */
+  systems: CapabilitySystemDocument[];
 }
 
 export function capabilitySystemReadmePath(paths: ProductosPaths, system: string): string {
   return path.join(paths.capabilitiesDir, system, "README.md");
 }
 
+/**
+ * The system tree, nested to whatever depth the corpus uses.
+ *
+ * ⛔ CAPABILITY SYSTEMS NEST ARBITRARILY, AND FOR A LONG TIME THEY DID NOT.
+ *
+ * The old version read `parts[1]` as "the system" and listed only the top-level
+ * directories of `capabilities/`. So the system tree was pinned at exactly two levels
+ * while the product tree nested without limit — an asymmetry with no argument behind it,
+ * only the order the two were written in.
+ *
+ * What it cost, measured on a real corpus of six subsystems: **four of them held exactly
+ * one promise.** `capabilities/<system>/<slug>` has no shape for a single unowned promise,
+ * so filing one *requires* inventing a parent subsystem to put it in — and a one-promise
+ * subsystem is indistinguishable, on the page, from a real one. "Deal pipeline" and
+ * "access control" were each a single verb wearing a subsystem's clothes.
+ *
+ * Nesting removes the forcing function: a promise can sit directly under a broader system,
+ * several can group beneath it when there are enough to group, and a genuine component
+ * boundary can live three levels down without pretending to be a peer of the product's
+ * largest subsystem.
+ */
 export function listCapabilitySystems(paths: ProductosPaths): CapabilitySystemDocument[] {
   const root = paths.capabilitiesDir;
   if (!fs.existsSync(root)) return [];
-  const caps = listCapabilities(paths);
+  // A capability's id is its path, so its system is everything between `capabilities/`
+  // and the final segment — at whatever depth that turns out to be.
   const bySystem = new Map<string, FeatureDocument[]>();
-  for (const c of caps) {
-    // `capabilities/<system>/<slug>` — the middle segment is the system.
+  for (const c of listCapabilities(paths)) {
     const parts = c.frontmatter.id.split("/");
-    const system = parts.length >= 3 ? parts[1]! : "";
-    const arr = bySystem.get(system) ?? [];
+    const key = parts.slice(1, -1).join("/");
+    const arr = bySystem.get(key) ?? [];
     arr.push(c);
-    bySystem.set(system, arr);
+    bySystem.set(key, arr);
   }
-  const out: CapabilitySystemDocument[] = [];
-  for (const slug of fs.readdirSync(root)) {
-    const dir = path.join(root, slug);
-    if (!fs.statSync(dir).isDirectory()) continue;
-    const readme = capabilitySystemReadmePath(paths, slug);
-    let title = slug;
-    let body = "";
-    if (fs.existsSync(readme)) {
-      const parsed = matter(fs.readFileSync(readme, "utf-8"));
-      title = parsed.data.title ?? slug;
-      body = parsed.content.trim();
+  const build = (dir: string, segments: string[]): CapabilitySystemDocument[] => {
+    const out: CapabilitySystemDocument[] = [];
+    for (const name of fs.readdirSync(dir)) {
+      if (NON_GROUP_DIRS.has(name) || name.startsWith(".")) continue;
+      const sub = path.join(dir, name);
+      if (!fs.statSync(sub).isDirectory()) continue;
+      const segs = [...segments, name];
+      const slug = segs.join("/");
+      const readme = path.join(sub, "README.md");
+      const meta = readGrouping(readme, name);
+      out.push({
+        slug,
+        title: meta.title,
+        body: meta.body,
+        capabilities: bySystem.get(slug) ?? [],
+        filepath: readme,
+        depth: segs.length,
+        systems: build(sub, segs),
+      });
     }
-    out.push({ slug, title, body, capabilities: bySystem.get(slug) ?? [], filepath: readme });
+    return out.sort((a, b) => a.slug.localeCompare(b.slug));
+  };
+  return build(root, []);
+}
+
+/** Every system at every depth, flattened. */
+export function walkCapabilitySystems(
+  ss: CapabilitySystemDocument[],
+  fn: (s: CapabilitySystemDocument) => void
+): void {
+  for (const s of ss) {
+    fn(s);
+    walkCapabilitySystems(s.systems, fn);
   }
+}
+
+/** Every system that directly holds at least one promise. */
+export function listCapabilitySystemsFlat(paths: ProductosPaths): CapabilitySystemDocument[] {
+  const out: CapabilitySystemDocument[] = [];
+  walkCapabilitySystems(listCapabilitySystems(paths), (s) => {
+    if (s.capabilities.length) out.push(s);
+  });
   return out.sort((a, b) => a.slug.localeCompare(b.slug));
 }
 

@@ -390,7 +390,7 @@ the shared part is an unnamed capability.
 
 ## Validation
 
-A human accepting a claim. **The trust anchor**: agents propose, only humans validate,
+**Tenet 1 of two.** A human accepting a claim. **The trust anchor**: agents propose, only humans validate,
 and there is no tool a model can call to mark something true.
 
 **Not the same act as deciding.** `productos decide` settles *what the product does*;
@@ -409,8 +409,8 @@ context section carries a hash of the text the stamp covered.
 
 ## Readiness
 
-Whether there is enough here to properly build something. **A gate with enumerated
-blockers, never a score** — a percentage invites building at 73%, which is exactly where
+**Tenet 2 of two.** Whether there is enough here to properly build something — and
+whether it is complete. **A gate with enumerated blockers, never a score** — a percentage invites building at 73%, which is exactly where
 an agent invents the rest.
 
 Two axes that must not be collapsed:

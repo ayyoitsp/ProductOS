@@ -11,6 +11,28 @@ Truth is an **input to building**, not a report on what was built. Everything be
 
 ---
 
+## What the whole thing is for
+
+Two tenets, and every shape below exists to serve one of them:
+
+> **1. A human has validated the product truth.**
+>
+> **2. The product truth is sufficient to build from — no confusion, no room for
+> interpretation** — which includes being able to see whether it is **complete**.
+
+Reading the model with those in hand makes most of it obvious. Validation is per behavior
+rather than per file because per-file would bless fifteen claims with one click — that is
+tenet 1 refusing to overwhelm a reviewer. An undecided behavior carries a question and no
+claim so that nothing can be built from it by accident — tenet 2. `cites` is structured
+rather than prose so the reverse traversal works, which is what makes an unaccepted rule
+visible — tenet 1 again. Non-redundancy is named the primary lever on review cost for the
+same reason.
+
+⛔ **They are ordered.** Never accept a claim that is contradicted or ambiguous — stamping
+intent onto a sentence with two meanings is worse than leaving it unstamped, because now it
+looks settled.
+
+
 ## The model
 
 Three altitudes, one atom.

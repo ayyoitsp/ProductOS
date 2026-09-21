@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import matter from "gray-matter";
+import { parseFrontmatter } from "./frontmatter.js";
 import YAML from "yaml";
 import crypto from "node:crypto";
 import { z } from "zod";
@@ -340,7 +340,7 @@ export function allContextSections(
 /** One reader for both trees — global and area context are the same shape. */
 export function readContextFile(fp: string, name: string): ContextDocument | null {
   if (!fs.existsSync(fp)) return null;
-  const parsed = matter(fs.readFileSync(fp, "utf-8"));
+  const parsed = parseFrontmatter(fs.readFileSync(fp, "utf-8"));
   const fm = ContextFrontmatter.parse(parsed.data);
   return {
     name,
@@ -397,7 +397,7 @@ export function writeContextSections(
 ): string {
   const fp = contextFilePath(paths, name);
   const raw = fs.readFileSync(fp, "utf-8");
-  const parsed = matter(raw);
+  const parsed = parseFrontmatter(raw);
   const fm: Record<string, unknown> = { ...parsed.data };
   if (Object.keys(sections).length > 0) fm.sections = sections;
   else delete fm.sections;

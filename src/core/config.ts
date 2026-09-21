@@ -69,6 +69,28 @@ export type ByokConfig = z.infer<typeof ByokConfigInner>;
  * Resolved BYOK config — the shape the processor consumes. Always has
  * provider/api_key_env/model/max_steps filled in.
  */
+/**
+ * ⛔ PUBLISHING A CORPUS IS AN EXTERNAL SEND, AND IT DEFAULTS TO REFUSED.
+ *
+ * A published page is the only way a button inside Claude can actually record anything — a strict
+ * CSP blocks a rendered page from reaching localhost at all — so the affordance is genuinely
+ * valuable. It also copies the product truth to claude.ai, and product truth routinely names a
+ * real client. Whether that is acceptable is the corpus owner's call and nobody else's.
+ *
+ * So it is a per-corpus setting that starts at `never`, rather than a thing the tool remembers to
+ * ask about. A protection that depends on somebody deciding correctly under time pressure, every
+ * time, is not a protection.
+ */
+export const ExchangeConfig = z
+  .object({
+    publish: z
+      .enum(["never", "allow"])
+      .default("never")
+      .describe("whether this corpus may be published to claude.ai as an interactive page"),
+  })
+  .strict();
+export type ExchangeConfig = z.infer<typeof ExchangeConfig>;
+
 export interface ResolvedByok {
   provider: ByokProvider;
   api_key_env: string;
@@ -191,6 +213,7 @@ export const ProductosConfig = z.object({
   operations: OperationsConfig.default({}),
   web: WebConfig.default({}),
   grouping: GroupingConfig.default({}),
+  exchange: ExchangeConfig.default({}),
 });
 export type ProductosConfig = z.infer<typeof ProductosConfig>;
 
