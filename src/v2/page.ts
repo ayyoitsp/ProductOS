@@ -529,7 +529,15 @@ function renderExchanges(corpus: Corpus, scopeIds: string[], cellOf: Map<string,
  * a reviewer has and no surface answered it. A list of names makes them open each one to find
  * out whether there is anything to do.
  */
-function renderNav(corpus: Corpus, here: string, base: string | undefined, contains: Set<string>, open: number): string {
+function renderNav(
+  corpus: Corpus,
+  here: string,
+  base: string | undefined,
+  contains: Set<string>,
+  open: number,
+  aboutLabel: string,
+  charterTabs: string
+): string {
   const kids = (parent?: string) => corpus.scopes.filter((s) => s.scope.in === parent);
   const rows: string[] = [];
   const walk = (parent: string | undefined, depth: number): void => {
@@ -700,6 +708,19 @@ function renderNav(corpus: Corpus, here: string, base: string | undefined, conta
       )
       .join("")}</div>` +
     /**
+     * ⛔ OVERVIEW'S OWN MENU BELONGS IN THE FRAME, NOT IN THE PAGE.
+     *
+     * It was rendered at the top of the Overview view, so it scrolled away — and the one row that
+     * moves between the queue and the principles was gone by the time you had read either. The frame
+     * is the part that does not move; a menu that scrolls is a heading.
+     *
+     * It shares the second row with the trail, one at a time: both at once is two navigations
+     * competing for the line that says where you are.
+     */
+    `<div class="subtabs" hidden><button type="button" class="subtab" data-sub="queue">Queue${
+      open ? ` <span class="pill">${open}</span>` : ""
+    }</button><button type="button" class="subtab" data-sub="about">${aboutLabel}</button>${charterTabs}</div>` +
+    /**
      * ⛔ THE TRAIL NAVIGATES; THE CHEVRON EXPANDS. One control doing both meant every attempt to go
      * up a level dropped the whole tree on you instead, which is the opposite of what a breadcrumb
      * is for.
@@ -788,7 +809,17 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
   const ctx: Ctx = { base: opts.linkBase, here: ids, anchors };
   const title = line(entry.scope.title || scopeId);
   const body = `
-    ${renderNav(corpus, scopeId, opts.linkBase, viewed, live.length)}
+    ${renderNav(
+      corpus,
+      scopeId,
+      opts.linkBase,
+      viewed,
+      live.length,
+      line(entry.scope.title || scopeId),
+      corpus.charter
+        .map((c) => `<button type="button" class="subtab" data-sub="${esc(c.charter.id)}">${line(c.charter.title)}</button>`)
+        .join("")
+    )}
     <main>
       <header class="top">
         <h1>${title}</h1>
@@ -825,15 +856,6 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
          * they belong to.
          */
         `<section class="view" id="view-overview" data-view="overview">
-           <div class="subtabs">
-             <button type="button" class="subtab" data-sub="queue">Queue${
-               live.length ? ` <span class="pill">${live.length}</span>` : ""
-             }</button>
-             <button type="button" class="subtab" data-sub="about">${line(entry.scope.title || scopeId)}</button>
-             ${corpus.charter
-               .map((c) => `<button type="button" class="subtab" data-sub="${esc(c.charter.id)}">${line(c.charter.title)}</button>`)
-               .join("")}
-           </div>
            <div class="sub-view" data-sub-view="queue">
              ${
                live.length
@@ -1152,6 +1174,10 @@ const VIEW_SWITCH = `<script>
     scopeTree(section);
     // ⛔ Overview has no tree to open, so the chevron goes away rather than opening an empty one.
     if (chev) chev.hidden = section === "overview";
+    const sm = document.querySelector(".topframe .subtabs");
+    const cr = document.querySelector(".topframe .crumbs");
+    if (sm) sm.hidden = section !== "overview";
+    if (cr) cr.hidden = section === "overview";
     if (collapse || section === "overview") setOpen(false);
     try { history.replaceState(null, "", "#" + (name === "overview" ? "view-overview" : "at-" + name)); } catch {}
   };
@@ -1264,6 +1290,13 @@ const STYLE = `<style>
     --ok: #7fc39a; --code: #26262b;
   }
   * { box-sizing: border-box; }
+  /* ⛔ The [hidden] attribute is a UA rule of display:none, and ANY class setting display beats it.
+     nav.scopes li, the crumb row and the sub-menu are all display:flex, so every element the
+     switcher marked hidden stayed on screen: choosing one half still showed the whole tree, and
+     Overview's menu sat on top of the breadcrumbs. Worse, it was invisible to testing — reading the
+     hidden PROPERTY reported the filtering as correct while the page showed everything, which is
+     how it survived a browser check. Assert on visibility, never on the property. */
+  [hidden] { display: none !important; }
   body { background: var(--bg); color: var(--ink); margin: 0;
     font: 16px/1.55 ui-sans-serif, -apple-system, "Segoe UI", system-ui, sans-serif; }
   main { max-width: 52rem; margin: 0 auto; padding: 2.5rem 1.25rem 6rem; }
@@ -1399,8 +1432,8 @@ const STYLE = `<style>
     padding: .4rem .7rem; border-radius: 4px 4px 0 0; }
   .topframe .tab:hover { color: var(--ink); }
   .topframe .tab.on { color: var(--ink); font-weight: 600; border-bottom-color: var(--accent); }
-  .subtabs { display: flex; gap: .15rem; flex-wrap: wrap; margin: 0 0 1.5rem;
-    border-bottom: 1px solid var(--line); padding-bottom: .1rem; }
+  .topframe .subtabs { display: flex; gap: .15rem; flex-wrap: wrap; max-width: 52rem;
+    margin: 0 auto; padding: .35rem 1.25rem .5rem; border-top: 1px solid var(--line); }
   .subtab { font: inherit; font-size: .88rem; background: none; border: 0; cursor: pointer;
     color: var(--dim); padding: .35rem .6rem; border-bottom: 2px solid transparent; }
   .subtab:hover { color: var(--ink); }

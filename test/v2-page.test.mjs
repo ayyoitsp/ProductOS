@@ -348,3 +348,29 @@ test("the frame has tabs for each half, and Overview carries the queue", () => {
       `${c.charter.id} is product-wide truth with nowhere to be read`
     );
 });
+
+/**
+ * ⛔ HIDING MUST ACTUALLY HIDE, AND THE ATTRIBUTE ALONE DOES NOT.
+ *
+ * `[hidden]` is a UA rule of `display:none`, and any class setting `display` beats it. Every row of
+ * the tree, the crumb row and Overview's menu are `display:flex`, so everything the switcher marked
+ * hidden stayed on screen: choosing one half of the product still showed the whole tree, and the
+ * Overview menu sat on top of the breadcrumbs.
+ *
+ * It survived a browser check because that check read the `hidden` PROPERTY, which was set correctly
+ * the whole time. The property is what the script controls; visibility is what a reader gets.
+ */
+test("everything the page can hide is overridden back into view by nothing", () => {
+  const html = renderScopePage(corpus, corpus.scopes.find((s) => !s.scope.in).scope.id, { linkBase: "/v2" });
+  const style = /<style>([\s\S]*?)<\/style>/.exec(html)[1];
+
+  assert.match(style, /\[hidden\]\s*\{\s*display:\s*none\s*!important/, "nothing forces hidden to hide");
+
+  // ⛔ Every selector that sets `display` is a candidate to beat the UA rule. If one is added for a
+  // thing the switcher hides, and the override above is ever removed, this is the tripwire.
+  const setsDisplay = [...style.matchAll(/([^{}]+)\{[^}]*display:\s*(?!none)[a-z-]+/g)].map((m) => m[1].trim());
+  assert.ok(
+    setsDisplay.some((sel) => /nav\.scopes li/.test(sel)),
+    "the tree rows no longer set display — re-check whether the override is still needed"
+  );
+});
