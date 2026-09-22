@@ -283,6 +283,34 @@ function renderRecord(ds: Decision[]): string {
     </details>`;
 }
 
+
+/**
+ * A scope's prose, as paragraphs.
+ *
+ * ⛔ THE CORPUS KEPT THIS AND THE PAGE NEVER SHOWED IT, so every scope read as blank — the product,
+ * every area, every feature. The body is where a reader is told what the thing IS: what the domain
+ * is, where the boundary sits, who works here. A page of promises with no framing asks somebody to
+ * review sentences about a thing nobody has described to them.
+ *
+ * ⛔ Deliberately not a markdown renderer. Paragraphs, bold, inline code, and a heading dropped
+ * because the title is already on screen — anything more and this becomes a parser nobody asked
+ * for, with its own bugs, inside a tool about not inventing things.
+ */
+function renderProse(body: string): string {
+  const text = body.trim();
+  if (!text) return "";
+  const paras = text
+    .split(/\n{2,}/)
+    .map((b) => b.trim())
+    .filter((b) => b && !/^#{1,6}\s/.test(b))
+    .map((b) =>
+      esc(b.replace(/\s+/g, " "))
+        .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+        .replace(/`([^`]+)`/g, "<code>$1</code>")
+    );
+  return paras.length ? `<div class="prose">${paras.map((b) => `<p>${b}</p>`).join("")}</div>` : "";
+}
+
 // ---------------------------------------------------------------------------
 // The grid — what this scope promises, and where each promise came from.
 
@@ -364,7 +392,15 @@ function renderGrid(g: Grid, ctx: Ctx): string {
 // ---------------------------------------------------------------------------
 // The exchanges — one card each, with the accept act on it or the reasons it is gated.
 
-function renderExchanges(corpus: Corpus, scopeIds: string[], cellOf: Map<string, Cell>, ctx: Ctx): string {
+/**
+ * ⛔ ONE SCOPE'S PROMISES AT A TIME, because the whole corpus at once is not reviewable.
+ *
+ * This rendered every descendant's cards in one flat run. On a real product that is 51 promises and
+ * ten grids on a single scroll, and the surface exists to review ONE feature — so the page is cut
+ * into views and the menu switches between them. `heading: false` keeps the served and standalone
+ * renders as they were.
+ */
+function renderExchanges(corpus: Corpus, scopeIds: string[], cellOf: Map<string, Cell>, ctx: Ctx, heading = true): string {
   /**
    * ⛔ THE RESOLVED SLOT, NOT THE RAW ONE.
    *
@@ -481,7 +517,9 @@ function renderExchanges(corpus: Corpus, scopeIds: string[], cellOf: Map<string,
         </article>`);
     }
   }
-  return cards.length ? `<section class="exchanges"><h2>Every promise, in full</h2>${cards.join("")}</section>` : "";
+  return cards.length
+    ? `<section class="exchanges">${heading ? "<h2>Every promise, in full</h2>" : ""}${cards.join("")}</section>`
+    : "";
 }
 
 /**
@@ -491,37 +529,186 @@ function renderExchanges(corpus: Corpus, scopeIds: string[], cellOf: Map<string,
  * a reviewer has and no surface answered it. A list of names makes them open each one to find
  * out whether there is anything to do.
  */
-function renderNav(corpus: Corpus, here: string, base: string | undefined): string {
+function renderNav(corpus: Corpus, here: string, base: string | undefined, contains: Set<string>, open: number): string {
   const kids = (parent?: string) => corpus.scopes.filter((s) => s.scope.in === parent);
   const rows: string[] = [];
   const walk = (parent: string | undefined, depth: number): void => {
     for (const { scope } of kids(parent)) {
+      /**
+       * ⛔ THE ROOT IS NOT A ROW. It is the Overview tab, and listing it again at the head of both
+       * trees gave every half a first entry that jumped to the other tab — the one place the tree is
+       * not for.
+       */
+      if (!scope.in) {
+        walk(scope.id, depth);
+        continue;
+      }
       const qs = questionsFor(corpus, scope.id);
-      const open = qs.filter((q) => !q.parked).length;
+      /**
+       * ⛔ AN ORG-WIDE QUESTION IS COUNTED ONCE, NOT ONCE PER SCOPE IT REACHES.
+       *
+       * A rule's question reaches every scope its selector touches, so counting them per row put
+       * "7 to decide" on all sixteen rows of a real corpus — reading as 112 decisions when it is 7.
+       * The nav's whole job is to answer "which feature should I look at next", and a number that
+       * is identical everywhere answers nothing.
+       *
+       * Reported separately instead: what is undecided HERE, and what is waiting on the product.
+       */
+      const own = qs.filter((q) => !q.parked && q.ref.includes("#"));
+      const orgWide = qs.filter((q) => !q.parked && !q.ref.includes("#")).length;
+      const here_open = own.length;
       const a = actsFor(corpus);
       const ids = descendants(corpus, scope.id);
       const ready = a.acceptable.filter((r) => ids.some((i) => r.startsWith(`${i}#`))).length;
       const label = line(scope.title || scope.id);
-      // ⛔ The current scope is never a link to itself — a nav row that reloads the page you are
-      // on is indistinguishable from one that is broken.
+      /**
+       * ⛔ A SINGLE PAGE IS NAVIGABLE BY ANCHOR, AND THIS RENDERED SIXTEEN DEAD LABELS INSTEAD.
+       *
+       * The rule "never emit a link that cannot resolve" is right, and the conclusion drawn from it
+       * was wrong. A SERVED corpus navigates across pages, so with no `linkBase` this fell back to
+       * plain text — and a published artifact is one page with no server, so every scope in it
+       * became unclickable. The page already contains the whole subtree; the scopes simply had no
+       * anchor to jump to, which made "review one feature" impossible on the surface built for it.
+       *
+       * So: anchor within this page where it holds the scope, cross-page where a base is given, and
+       * only fall back to text where neither is true.
+       */
+      // ⛔ Containers too — but only the ones this render actually emits a view for. Inferring it
+      // from "has no exchanges" claimed every container in the corpus was on this page, and a leaf
+      // scope's page links at a dozen sections it does not contain.
+      const holdsIt = contains.has(scope.id);
       const name =
         scope.id === here
           ? `<strong>${label}</strong>`
-          : base
-            ? `<a href="${esc(base)}/${esc(scope.id)}">${label}</a>`
-            : `<span class="unlinked">${label}</span>`;
+          : holdsIt
+            ? `<a href="#${anchorOf(scope.id)}" data-goto="${esc(scope.id)}">${label}</a>`
+            : base
+              ? `<a href="${esc(base)}/${esc(scope.id)}">${label}</a>`
+              : `<span class="unlinked" title="not on this page">${label}</span>`;
       rows.push(
         `<li style="--d:${depth}">${name}` +
-          (open ? ` <span class="n warn">${open} to decide</span>` : "") +
+          (here_open ? ` <span class="n warn">${here_open} to decide</span>` : "") +
           (ready ? ` <span class="n ok">${ready} to agree to</span>` : "") +
-          (!open && !ready ? ` <span class="n">—</span>` : "") +
+          (!here_open && !ready && !orgWide ? ` <span class="n">—</span>` : "") +
+          (!here_open && orgWide ? ` <span class="n">waiting on the shared questions</span>` : "") +
           `</li>`
       );
       walk(scope.id, depth + 1);
     }
   };
   walk(undefined, 0);
-  return rows.length > 1 ? `<nav class="scopes"><ul>${rows.join("")}</ul></nav>` : "";
+  if (rows.length < 2) return "";
+  /**
+   * ⛔ THE TRAIL IS BUILT WHERE THE TREE IS, from the same `in:` chain the rows are indented by.
+   * Computing it again in the browser would be a second answer to "where am I", and the two would
+   * drift the first time a scope moved.
+   */
+  const labelOf = (id: string) => line(corpus.scopes.find((x) => x.scope.id === id)?.scope.title || id);
+  const trail = (id: string): Array<{ id: string; label: string }> => {
+    const out: Array<{ id: string; label: string }> = [];
+    let at: string | undefined = id;
+    const guard = new Set<string>();
+    while (at && !guard.has(at)) {
+      guard.add(at);
+      out.unshift({ id: at, label: labelOf(at) });
+      at = corpus.scopes.find((x) => x.scope.id === at)?.scope.in;
+    }
+    return out;
+  };
+  /**
+   * ⛔ EVERY LEVEL IS SOMEWHERE YOU CAN STAND, so every crumb carries the id it navigates to. With
+   * labels alone the ancestors were decoration: "Deals" sat above "The deals list" in the trail and
+   * in the tree and did nothing in either, which is a link that failed as far as a reader can tell.
+   */
+  const trails: Record<string, Array<{ id: string; label: string }>> = {
+    overview: [{ id: "overview", label: "Overview" }],
+  };
+  /**
+   * ⛔ THE ROOT IS NOT A CRUMB. It is the Overview tab, so repeating it at the head of every trail
+   * spent the widest part of the line on the one place the tab row already names — and read as a
+   * level you could go up to that was in fact a different tab.
+   */
+  for (const { scope } of corpus.scopes) {
+    const t = trail(scope.id);
+    trails[scope.id] = t.length > 1 ? t.slice(1) : t;
+  }
+  /**
+   * ⛔ THE TOP LEVEL IS A ROW OF TABS, NOT A ROW INSIDE A DROPDOWN.
+   *
+   * The two halves of a product — what it promises a person, and the machinery underneath — are the
+   * one split a reader navigates by constantly, and burying them at depth 1 of a collapsed tree put
+   * the most-used move behind two presses and a scan. They sit side by side; the tree is for going
+   * deeper, which is the thing a tree is good at.
+   */
+  const rootId = corpus.scopes.find((x) => !x.scope.in)?.scope.id;
+  const sections: Array<{ id: string; label: string }> = [
+    { id: "overview", label: "Overview" },
+    /**
+     * ⛔ WHAT A PERSON SEES, THEN THE MACHINERY UNDERNEATH. File order put the subsystems first,
+     * which is backwards for every reader: the promises are the product, and the machinery is what
+     * they rest on. Ordered by whether anything beneath the section has a screen, so it holds
+     * whatever the corpus is called rather than a list of names to keep updated.
+     */
+    ...corpus.scopes
+      .filter((x) => x.scope.in === rootId)
+      .map((x) => {
+        const under = descendants(corpus, x.scope.id);
+        const screens = under.reduce(
+          (n, d) => n + (corpus.scopes.find((y) => y.scope.id === d)?.scope.views.length ?? 0),
+          0
+        );
+        return { id: x.scope.id, label: line(x.scope.title || x.scope.id), screens };
+      })
+      .sort((a, b) => b.screens - a.screens)
+      .map(({ id, label }) => ({ id, label })),
+  ];
+  /** view → the tab it lives under, so the row can show where you are without being told. */
+  const sectionOf: Record<string, string> = { overview: "overview" };
+  for (const { scope } of corpus.scopes) {
+    const t = trails[scope.id]!;
+    // ⛔ Index 0 now, because the root is no longer a crumb — see the trail comment above. Reading
+    // index 1 after that change put every section under whatever happened to be two levels down.
+    sectionOf[scope.id] = scope.id === rootId ? "overview" : t[0]!.id;
+  }
+  /**
+   * ⛔ THE QUESTIONS ARE THEIR OWN DESTINATION. They are org-wide — one answer reaches every feature
+   * — so they belong to no single one of them, and burying them above the first feature's grid meant
+   * the only thing a reviewer is actually asked to do had no way to be navigated to.
+   */
+  void open;
+  /**
+   * ⛔ A TOP FRAME THAT COLLAPSES TO WHERE YOU ARE. Sixteen rows permanently on screen is a table of
+   * contents competing with the thing being reviewed; the trail alone is the one line worth keeping,
+   * and the tree is one press away.
+   */
+  return (
+    /**
+     * ⛔ DOUBLE-QUOTED, because `esc` escapes `"` and not `'` — and a single-quoted attribute holding
+     * JSON is one apostrophe away from being cut in half.
+     *
+     * It was cut in half: "Resolve an organization's stages" ended the attribute early, `JSON.parse`
+     * threw, and every breadcrumb silently fell back to a bare scope id. Nothing errored — the trail
+     * just quietly stopped knowing where anything was.
+     */
+    `<div class="topframe" data-trails="${esc(JSON.stringify(trails))}" data-sections="${esc(JSON.stringify(sectionOf))}">` +
+    `<div class="tabs">${sections
+      .map(
+        (t) =>
+          `<button type="button" class="tab" data-tab="${esc(t.id)}">${t.label}${
+            t.id === "overview" && open ? ` <span class="pill">${open}</span>` : ""
+          }</button>`
+      )
+      .join("")}</div>` +
+    /**
+     * ⛔ THE TRAIL NAVIGATES; THE CHEVRON EXPANDS. One control doing both meant every attempt to go
+     * up a level dropped the whole tree on you instead, which is the opposite of what a breadcrumb
+     * is for.
+     */
+    `<div class="crumbs"><span class="trail"></span>` +
+    `<button type="button" class="chev" aria-expanded="false" aria-label="Show every feature">▾</button></div>` +
+    `<nav class="scopes"><ul>${rows.join("")}</ul></nav>` +
+    `</div>`
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -584,8 +771,14 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
    * ⛔ COMPUTED BEFORE ANYTHING IS RENDERED, so a link and its target cannot disagree — which is
    * how 357 dead anchors reached a real corpus.
    */
+  /** Every scope this render emits a view for — leaves with promises, and the containers above them. */
+  const containerViews = ids.filter(
+    (id) => (corpus.scopes.find((s) => s.scope.id === id)?.scope.exchanges.length ?? 0) === 0
+  );
+  const viewed = new Set<string>([...grids.map((g) => g.scope), ...containerViews]);
   const anchors = new Set<string>([
     ...qs.map((q) => q.ref),
+    ...viewed,
     ...ids.flatMap((sid) => {
       const sc = corpus.scopes.find((s) => s.scope.id === sid);
       return (sc?.scope.exchanges ?? []).map((e) => `${sid}#${e.id}`);
@@ -595,6 +788,7 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
   const ctx: Ctx = { base: opts.linkBase, here: ids, anchors };
   const title = line(entry.scope.title || scopeId);
   const body = `
+    ${renderNav(corpus, scopeId, opts.linkBase, viewed, live.length)}
     <main>
       <header class="top">
         <h1>${title}</h1>
@@ -611,22 +805,113 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
         }</p>
         ${
           opts.interactive
-            ? `<p class="mode live">Your presses are recorded${opts.recordsTo ? ` — ${esc(opts.recordsTo)}` : ""}, with your name and today's date, and written into the product truth.</p>`
+            ? `<p class="mode live">Your presses are recorded with your name and today's date${opts.recordsTo ? `, and ${esc(opts.recordsTo)}` : ", and written into the product truth"}.</p>`
             : `<p class="mode">Read-only preview — the buttons below show what you will be asked to do, and record nothing.</p>`
         }
       </header>
-      ${renderNav(corpus, scopeId, opts.linkBase)}
       ${broken}
       ${staleBlock}
       ${
-        live.length
-          ? `<section class="questions"><h2>What needs deciding</h2>${live
-              .map((q, i) => renderQuestion(q, i, decisionsOn(corpus, q.ref), ctx))
-              .join("")}</section>`
-          : ""
+        /**
+         * ⛔ OVERVIEW IS WHAT THE PRODUCT IS, AND THEN WHAT IT OWES. The queue used to be a row in
+         * the tree beside the features, which put the only thing a reviewer is actually asked to do
+         * at the same level as the things it is asked about — and left the product's own framing
+         * with nowhere to be read at all.
+         */
+        /**
+         * ⛔ OVERVIEW IS A SET OF PAGES, NOT ONE. The queue, the goals, the principles and the rest
+         * are all product-wide and all separately long; stacked on one scroll the principles sit
+         * under seven open questions and nobody reads them. A second row of items, at the level
+         * they belong to.
+         */
+        `<section class="view" id="view-overview" data-view="overview">
+           <div class="subtabs">
+             <button type="button" class="subtab" data-sub="queue">Queue${
+               live.length ? ` <span class="pill">${live.length}</span>` : ""
+             }</button>
+             <button type="button" class="subtab" data-sub="about">${line(entry.scope.title || scopeId)}</button>
+             ${corpus.charter
+               .map((c) => `<button type="button" class="subtab" data-sub="${esc(c.charter.id)}">${line(c.charter.title)}</button>`)
+               .join("")}
+           </div>
+           <div class="sub-view" data-sub-view="queue">
+             ${
+               live.length
+                 ? `<p class="lede"><strong>${live.length}</strong> question${live.length === 1 ? "" : "s"} nobody has answered. Each reaches every promise its selector touches, and every one written after it.</p>
+                    ${live.map((q, i) => renderQuestion(q, i, decisionsOn(corpus, q.ref), ctx)).join("")}`
+                 : `<p class="lede">Nothing is undecided.</p>`
+             }
+           </div>
+           <div class="sub-view" data-sub-view="about">
+             <h2>${line(entry.scope.title || scopeId)}</h2>
+             ${renderProse(entry.body)}
+           </div>
+           ${corpus.charter
+             .map(
+               (c) => `<div class="sub-view" data-sub-view="${esc(c.charter.id)}">
+                 <h2>${line(c.charter.title)}</h2>
+                 ${renderProse(c.body)}
+                 ${c.charter.sections
+                   .map(
+                     (sec) => `<article class="charter-section" id="${anchorOf(`${c.charter.id}#${sec.id}`)}">
+                       <h3>${line(sec.title)}</h3>
+                       ${renderProse(sec.says)}
+                     </article>`
+                   )
+                   .join("")}
+               </div>`
+             )
+             .join("")}
+         </section>`
       }
-      ${grids.map((g) => renderGrid(g, ctx)).join("")}
-      ${renderExchanges(corpus, ids, cellOf, ctx)}
+      ${grids
+        .map(
+          (g) => `<section class="view" id="${anchorOf(g.scope)}" data-view="${esc(g.scope)}">
+            <h2>${line(g.title)}</h2>
+            ${renderProse(corpus.scopes.find((x) => x.scope.id === g.scope)?.body ?? "")}
+            ${renderGrid(g, ctx)}
+            ${renderExchanges(corpus, [g.scope], cellOf, ctx, false)}
+          </section>`
+        )
+        .join("")}
+      ${
+        /**
+         * ⛔ A CONTAINER IS A PLACE YOU CAN STAND, AND IT LISTS WHAT IS BENEATH IT — it does not
+         * repeat the subtree.
+         *
+         * Repeating would put the same promise in two views, which means two accept buttons with one
+         * ref: pressing either leaves the other reading as un-agreed, and a reviewer cannot tell
+         * which one counted. The listing is what a container actually has to say — a grouping's own
+         * content is its children.
+         */
+        containerViews
+          .map((id) => {
+            const sc = corpus.scopes.find((s) => s.scope.id === id)!.scope;
+            const kids = corpus.scopes.filter((x) => x.scope.in === id);
+            return `<section class="view" id="${anchorOf(id)}" data-view="${esc(id)}">
+              <h2>${line(sc.title || id)}</h2>
+              ${renderProse(corpus.scopes.find((x) => x.scope.id === id)?.body ?? "")}
+              <h3 class="sub">What is filed under it</h3>
+              <ul class="contents">${kids
+                .map((k) => {
+                  const under = descendants(corpus, k.scope.id);
+                  const promises = under.reduce(
+                    (n, d) => n + (corpus.scopes.find((x) => x.scope.id === d)?.scope.exchanges.length ?? 0),
+                    0
+                  );
+                  const ready = a.acceptable.filter((r: string) => under.some((u) => r.startsWith(`${u}#`))).length;
+                  return `<li><a href="#${anchorOf(k.scope.id)}" data-goto="${esc(k.scope.id)}">${line(
+                    k.scope.title || k.scope.id
+                  )}</a> <span class="n">${promises} promise${promises === 1 ? "" : "s"}${
+                    ready ? ` · ${ready} ready to agree to` : ""
+                  }</span></li>`;
+                })
+                .join("")}</ul>
+              ${kids.length ? "" : `<p class="lede">Nothing is filed under this yet.</p>`}
+            </section>`;
+          })
+          .join("")
+      }
       ${
         parked.length
           ? `<section class="questions parked-set">
@@ -638,7 +923,7 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
       }
     </main>`;
 
-  return `${STYLE}${body}${opts.interactive ? liveScript(opts) : INERT}`;
+  return `${STYLE}${body}${VIEW_SWITCH}${opts.interactive ? liveScript(opts) : INERT}`;
 }
 
 
@@ -792,6 +1077,158 @@ document.addEventListener("click", (ev) => {
 });
 </script>`;
 }
+
+
+/**
+ * ⛔ ONE VIEW AT A TIME, AND EVERYTHING VISIBLE WITHOUT THIS SCRIPT.
+ *
+ * The whole corpus on one scroll is not reviewable — a real product is ten grids and 51 promises —
+ * and the surface exists to review one feature. So the menu hides the views it is not on.
+ *
+ * Progressive enhancement on purpose: with no JS every view is visible and the anchors still work,
+ * which is how the served page and a saved file behave. Nothing about what a press records depends
+ * on this.
+ */
+const VIEW_SWITCH = `<script>
+(function () {
+  const views = [...document.querySelectorAll("section.view")];
+  if (views.length < 2) return;
+  const menu = [...document.querySelectorAll("nav.scopes a[data-goto]")];
+  const frame = document.querySelector(".topframe");
+  const crumbs = frame && frame.querySelector(".crumbs");
+  const trail = frame && frame.querySelector(".trail");
+  const tree = frame && frame.querySelector("nav.scopes");
+  let trails = {};
+  try { trails = JSON.parse(frame.dataset.trails); } catch {}
+
+  /**
+   * ⛔ THE TREE STARTS OPEN AND CLOSES ONCE YOU HAVE CHOSEN. Before anything is selected the whole
+   * point is to see what there is; after, the trail is the only line worth the space, and the tree
+   * is one press away.
+   */
+  const setOpen = (open) => {
+    if (!tree) return;
+    tree.hidden = !open;
+    const c = frame.querySelector(".chev");
+    if (c) c.setAttribute("aria-expanded", String(open));
+    frame.classList.toggle("open", open);
+  };
+
+  const show = (name, collapse) => {
+    let found = false;
+    for (const v of views) {
+      const mine = v.dataset.view === name;
+      v.hidden = !mine;
+      found = found || mine;
+    }
+    if (!found) { for (const v of views) v.hidden = false; return; }
+    for (const a of menu) a.classList.toggle("on", a.dataset.goto === name);
+    if (trail) {
+      const parts = trails[name] || [{ id: name, label: name }];
+      trail.textContent = "";
+      parts.forEach((part, i) => {
+        if (i) {
+          const sep = document.createElement("span");
+          sep.className = "sep";
+          sep.textContent = "›";
+          trail.appendChild(sep);
+        }
+        const last = i === parts.length - 1;
+        // ⛔ Where you are is text; every level above it is a link, because going up is the whole
+        // reason a trail is worth the space.
+        const bit = document.createElement(last ? "span" : "a");
+        bit.className = last ? "at" : "up";
+        bit.textContent = part.label;
+        if (!last) {
+          bit.setAttribute("href", "#" + (part.id === "overview" ? "view-overview" : "at-" + part.id));
+          bit.dataset.goto = part.id;
+          // ⛔ No listener here: the data-goto attribute is enough, and the delegated handler owns it.
+        }
+        trail.appendChild(bit);
+      });
+    }
+    const section = sectionOf[name] || "overview";
+    for (const t of tabs) t.classList.toggle("on", t.dataset.tab === section);
+    scopeTree(section);
+    // ⛔ Overview has no tree to open, so the chevron goes away rather than opening an empty one.
+    if (chev) chev.hidden = section === "overview";
+    if (collapse || section === "overview") setOpen(false);
+    try { history.replaceState(null, "", "#" + (name === "overview" ? "view-overview" : "at-" + name)); } catch {}
+  };
+
+  const chev = frame && frame.querySelector(".chev");
+  if (chev) chev.addEventListener("click", () => setOpen(tree.hidden));
+
+  let sectionOf = {};
+  try { sectionOf = JSON.parse(frame.dataset.sections); } catch {}
+  const tabs = [...document.querySelectorAll(".topframe .tab")];
+  for (const t of tabs) t.addEventListener("click", () => { show(t.dataset.tab, true); window.scrollTo(0, 0); });
+  /**
+   * ⛔ The tree shows only the half you are in. Every scope in both halves at once is the wall the
+   * tabs exist to remove, and a reader who has chosen a side has said which one they mean.
+   */
+  const scopeTree = (section) => {
+    for (const li of tree ? tree.querySelectorAll("li") : []) {
+      const a = li.querySelector("a[data-goto]") || li.querySelector("[data-goto]");
+      const id = a && a.dataset.goto;
+      /**
+       * ⛔ A ROW THE FILTER CANNOT IDENTIFY IS HIDDEN, NOT KEPT.
+       *
+       * Defaulting to visible meant every row without a usable link survived every filter — so
+       * choosing the promises half still showed the machinery, while the machinery half looked
+       * correct and hid the bug. An unidentifiable row is exactly the one there is no reason to
+       * trust.
+       */
+      li.hidden = section === "overview" || !id || sectionOf[id] !== section;
+    }
+  };
+  // ⛔ No per-row binding: the delegated handler above covers the menu, the crumbs and a
+  // container's contents alike. Two handlers on one click is how a toggle fires twice.
+  // ⛔ Escape closes it, because a tree covering the page with no visible way out is a trap.
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") setOpen(false); });
+  // ⛔ An anchor from elsewhere on the page — "decide it", a grid row, a blocks ref — must bring its
+  // view with it, or following a link inside a hidden section does nothing at all.
+  document.addEventListener("click", (e) => {
+    const a = e.target.closest && e.target.closest('a[href^="#"]');
+    if (!a) return;
+    /**
+     * ⛔ A data-goto ANYWHERE IS HONOURED, not only inside the menu.
+     *
+     * The menu bound its own rows and this handler skipped anything carrying it, so a
+     * container's contents list — the only thing a container view has to offer — did nothing: the
+     * entry highlighted and the page stayed exactly where it was.
+     */
+    if (a.dataset.goto) {
+      e.preventDefault();
+      show(a.dataset.goto, true);
+      window.scrollTo(0, 0);
+      return;
+    }
+    const target = document.querySelector(a.getAttribute("href"));
+    const view = target && target.closest("section.view");
+    if (view && view.hidden) show(view.dataset.view, true);
+  });
+  /**
+   * ⛔ The same one-at-a-time rule, one level down. Everything is visible without this, so a saved
+   * file still reads as one long document rather than as a blank panel.
+   */
+  const subs = [...document.querySelectorAll(".subtab")];
+  const subViews = [...document.querySelectorAll(".sub-view")];
+  const showSub = (name) => {
+    for (const v of subViews) v.hidden = v.dataset.subView !== name;
+    for (const t of subs) t.classList.toggle("on", t.dataset.sub === name);
+  };
+  for (const t of subs) t.addEventListener("click", () => { showSub(t.dataset.sub); window.scrollTo(0, 0); });
+  if (subs.length) showSub(subs[0].dataset.sub);
+
+  const opening = location.hash.replace(/^#/, "");
+  const fromHash = opening === "view-overview" ? "overview" : views.find((v) => v.id === opening)?.dataset.view;
+  // Opening on a named view means somebody linked to it: collapse. Opening cold: leave it open.
+  // ⛔ Opens on Overview: what the product is, and what it owes. Landing in a feature's grid with
+  // no idea what the product is was the shape this replaced.
+  show(fromHash || "overview", true);
+})();
+</script>`;
 
 /** ⛔ Visibly inert, not omitted — see `PageOptions.interactive`. */
 const INERT = `<script>
@@ -948,6 +1385,56 @@ const STYLE = `<style>
   nav.scopes .n { font-size: .78rem; color: var(--dim); }
   nav.scopes .n.warn { color: var(--warn); }
   nav.scopes .n.ok { color: var(--ok); }
+  nav.scopes .grouping { color: var(--dim); }
+  nav.scopes li.jump { border-bottom: 1px solid var(--line); padding-bottom: .45rem; margin-bottom: .2rem; }
+  nav.scopes li.jump a { font-weight: 600; }
+  nav.scopes a.on { font-weight: 700; text-decoration: none; }
+  nav.scopes a.on::before { content: "▸ "; color: var(--accent); }
+  .topframe { position: sticky; top: 0; z-index: 8; background: var(--bg);
+    border-bottom: 1px solid var(--line); }
+  .topframe .tabs { display: flex; gap: .15rem; max-width: 52rem; margin: 0 auto;
+    padding: .55rem 1.25rem 0; }
+  .topframe .tab { font: inherit; font-size: .92rem; background: none; border: 0;
+    border-bottom: 2px solid transparent; color: var(--dim); cursor: pointer;
+    padding: .4rem .7rem; border-radius: 4px 4px 0 0; }
+  .topframe .tab:hover { color: var(--ink); }
+  .topframe .tab.on { color: var(--ink); font-weight: 600; border-bottom-color: var(--accent); }
+  .subtabs { display: flex; gap: .15rem; flex-wrap: wrap; margin: 0 0 1.5rem;
+    border-bottom: 1px solid var(--line); padding-bottom: .1rem; }
+  .subtab { font: inherit; font-size: .88rem; background: none; border: 0; cursor: pointer;
+    color: var(--dim); padding: .35rem .6rem; border-bottom: 2px solid transparent; }
+  .subtab:hover { color: var(--ink); }
+  .subtab.on { color: var(--ink); font-weight: 600; border-bottom-color: var(--accent); }
+  .subtab .pill, .topframe .tab .pill { font-size: .72rem; background: var(--warn); color: var(--bg);
+    border-radius: 99px; padding: .05rem .4rem; margin-left: .25rem; vertical-align: .05em; }
+  .topframe .crumbs { display: flex; gap: .5rem; align-items: center; width: 100%;
+    max-width: 52rem; margin: 0 auto; padding: .45rem 1.25rem .6rem;
+    border-top: 1px solid var(--line); background: none; border: 0;
+    font: inherit; font-size: .9rem; color: var(--ink); cursor: pointer; text-align: left; }
+  .topframe .trail { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .topframe .trail .up { color: var(--dim); }
+  .topframe .trail .at { font-weight: 600; }
+  .topframe .trail .sep { color: var(--dim); margin: 0 .4rem; }
+  .topframe .trail a.up { color: var(--dim); text-decoration: none; }
+  .topframe .trail a.up:hover { color: var(--accent); text-decoration: underline; }
+  .topframe .chev { background: none; border: 1px solid var(--line); border-radius: 6px;
+    color: var(--dim); cursor: pointer; font: inherit; line-height: 1; padding: .25rem .5rem;
+    transition: transform .12s ease; }
+  .topframe .chev:hover { color: var(--ink); border-color: var(--accent); }
+  .topframe.open .chev { transform: rotate(180deg); }
+  .prose { margin: .6rem 0 1.4rem; max-width: 42rem; }
+  .prose p { margin: .6rem 0; }
+  h3.sub { font-size: .8rem; text-transform: uppercase; letter-spacing: .07em; color: var(--dim);
+    margin: 1.6rem 0 0; font-weight: 600; }
+  .charter-section { border-top: 1px solid var(--line); padding-top: 1rem; margin-top: 1.4rem; }
+  .charter-section h3 { font-size: 1.1rem; margin: 0 0 .3rem; }
+  ul.contents { list-style: none; margin: 1rem 0 0; padding: 0; }
+  ul.contents li { padding: .7rem 0; border-bottom: 1px solid var(--line);
+    display: flex; gap: .7rem; align-items: baseline; flex-wrap: wrap; }
+  ul.contents a { font-size: 1.05rem; }
+  ul.contents .n { font-size: .82rem; color: var(--dim); }
+  .topframe nav.scopes { max-width: 52rem; margin: 0 auto; padding: 0 1.25rem 1rem;
+    max-height: 60vh; overflow-y: auto; }
   form.act-form { margin: .9rem 0 0; padding: .9rem; border: 1px solid var(--accent); border-radius: 8px;
     display: grid; gap: .35rem; }
   form.act-form label { font-size: .82rem; color: var(--dim); }

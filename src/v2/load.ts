@@ -15,7 +15,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { parseFrontmatter } from "../core/frontmatter.js";
 import YAML from "yaml";
-import { Scope, Rule, Reading, Verdict, type SlotName } from "./schema.js";
+import { Scope, Rule, Reading, Verdict, Charter, type SlotName } from "./schema.js";
 
 export interface V2Paths {
   root: string;
@@ -38,6 +38,13 @@ export function v2Paths(root: string): V2Paths {
 export interface Corpus {
   paths: V2Paths;
   scopes: Array<{ scope: Scope; body: string; file: string }>;
+  /**
+   * The product-wide documents — goals, principles, personas and the rest.
+   *
+   * ⛔ A SEPARATE LIST, not folded into a scope's prose, because each section is agreed to on its own
+   * and prose has no addressable parts. See `Charter` in the schema for why they are not rules.
+   */
+  charter: Array<{ charter: Charter; body: string; file: string }>;
   rules: Array<{ rule: Rule; body: string; file: string }>;
   readings: Reading[];
   verdicts: Verdict[];
@@ -79,6 +86,7 @@ export function loadCorpus(root: string): Corpus {
   const broken: Corpus["broken"] = [];
   const scopes: Corpus["scopes"] = [];
   const rules: Corpus["rules"] = [];
+  const charter: Corpus["charter"] = [];
 
   for (const file of readDir(paths.truth, [".md"])) {
     if (path.basename(file).toLowerCase() === "readme.md") continue;
@@ -98,6 +106,17 @@ export function loadCorpus(root: string): Corpus {
     }
   }
 
+  for (const file of readDir(path.join(paths.root, "charter"), [".md"])) {
+    if (path.basename(file).toLowerCase() === "readme.md") continue;
+    try {
+      const p = parseFrontmatter(fs.readFileSync(file, "utf-8"));
+      charter.push({ charter: Charter.parse(p.data), body: p.content.trim(), file });
+    } catch (e) {
+      broken.push({ file, why: why(e) });
+    }
+  }
+  charter.sort((a, b) => (a.charter.order ?? 99) - (b.charter.order ?? 99));
+
   const readings: Reading[] = [];
   for (const file of readDir(paths.readings, [".yaml", ".yml"])) {
     try {
@@ -116,7 +135,7 @@ export function loadCorpus(root: string): Corpus {
       broken.push({ file, why: why(e) });
     }
   }
-  return { paths, scopes, rules, readings, verdicts, broken };
+  return { paths, scopes, rules, charter, readings, verdicts, broken };
 }
 
 // ---------------------------------------------------------------------------

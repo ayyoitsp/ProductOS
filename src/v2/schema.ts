@@ -1774,7 +1774,50 @@ export const Verdict = z
   });
 export type Verdict = z.infer<typeof Verdict>;
 
+/**
+ * ⛔ THE PRODUCT-WIDE DOCUMENTS — goals, non-goals, principles, personas, voice, decisions.
+ *
+ * The model had no home for any of them, which was not an omission in a migration but a hole in the
+ * schema: a real corpus carried six such documents, one of them with human verification stamps on
+ * individual sections, and migrating it dropped all of it on the floor. A builder handed every
+ * promise and none of the principles is handed the sentences and not the rules the sentences were
+ * written against — and features in the previous model were explicitly told to CITE these rather
+ * than restate them, so the citations pointed at nothing.
+ *
+ * ⛔ NOT A RULE, and the distinction is load-bearing. A `Rule` supplies or constrains a named slot
+ * and owes a criterion; it is checkable. A goal is what the product is for, and a principle settles
+ * a design argument without being demonstrable on any one exchange. Filing them as rules would
+ * demand demonstrations nobody can write and then read as governing slots they do not govern —
+ * which is the precise failure of a v1 "principle" that carried no weight.
+ *
+ * ⛔ SECTIONS ARE NAMED so they can be agreed to one at a time. A reviewer accepts "report, never
+ * block", not "the principles document" — and a document-sized stamp goes stale on every edit to any
+ * part of it, which is how a stamp stops meaning anything.
+ */
+export const CharterSection = z
+  .object({
+    id: z.string().regex(new RegExp(`^${SEGMENT}$`), "a section id is one segment, kebab-case"),
+    title: z.string().min(1),
+    says: z.string().min(20, "a section nobody can read is not worth agreeing to"),
+  })
+  .strict();
+
+export const Charter = z
+  .object({
+    id: z.string().regex(new RegExp(`^${SEGMENT}$`), "a charter id is one segment, kebab-case"),
+    title: z.string().min(1),
+    /** Reading order. ⛔ Goals before the principles that serve them, and it is not derivable. */
+    order: z.number().optional(),
+    kind: z.enum(["goals", "non-goals", "principles", "personas", "voice", "decisions"]),
+    sections: z.array(CharterSection).min(1, "a document with no sections says nothing"),
+    /** ⛔ What this was called in v1, for the migrator. See `Scope.was`. */
+    was: z.string().optional(),
+  })
+  .strict();
+export type Charter = z.infer<typeof Charter>;
+
 export const ScopeFile = Scope;
 export const RulesFile = z.object({ rules: z.array(Rule).default([]) }).strict();
+export const CharterFile = Charter;
 export const ReadingsFile = z.object({ readings: z.array(Reading).default([]) }).strict();
 export const VerdictsFile = z.object({ verdicts: z.array(Verdict).default([]) }).strict();

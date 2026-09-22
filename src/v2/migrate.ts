@@ -90,13 +90,41 @@ const seg = (s: string): string =>
  * ⛔ Collisions are refused, not suffixed. Two features with the same leaf name in different areas
  * would silently become one scope, and everything filed under the loser would vanish.
  */
+/**
+ * ⛔ BOTH HALVES ARE NAMED, and only one of them was.
+ *
+ * A capability's v1 id carries its half — `capabilities/access-control/...` — and a feature's does
+ * not: `cre/deals/...` starts at the area. So the migration produced a `capabilities` grouping and
+ * nothing for the promises, which left the product's own half appearing as whatever its first area
+ * happened to be called. On a corpus with one area the top level read `CRE | Capabilities`, which
+ * names a domain beside a layer.
+ */
+const PROMISES = "product";
+
 function scopeIdOf(v1id: string, taken: Map<string, string>): { id: string; parents: string[] } | { clash: string } {
-  const parts = v1id.split("/").filter(Boolean).map(seg);
+  const raw = v1id.split("/").filter(Boolean);
+  const parts = (raw[0] === "capabilities" ? raw : [PROMISES, ...raw]).map(seg);
   const id = parts[parts.length - 1]!;
   const prior = taken.get(id);
   if (prior && prior !== v1id) return { clash: prior };
   taken.set(id, v1id);
   return { id, parents: parts.slice(0, -1) };
+}
+
+/**
+ * What a directory said about itself.
+ *
+ * ⛔ v1 KEPT A README PER DIRECTORY AND THIS SKIPPED THEM ALL, so every grouping in the migrated
+ * corpus — the product, each area — came out with a placeholder body saying it was "a directory
+ * rather than a thing anybody wrote about". That was false: somebody HAD written about it, at some
+ * length, and the migration dropped it on the floor and then said nobody had bothered.
+ */
+function readmeFor(dir: string): { title?: string; body: string } | null {
+  const f = path.join(dir, "README.md");
+  if (!fs.existsSync(f)) return null;
+  const m = parseFrontmatter(fs.readFileSync(f, "utf-8"));
+  const title = (m.data as { title?: string }).title;
+  return { ...(title ? { title } : {}), body: m.content.trim() };
 }
 
 /** Every v1 container under a root, features and capabilities alike. */
@@ -159,6 +187,22 @@ function orgWideQuestion(slot: SlotName, at: string, scopeIds: string[]): Record
 
 export function migrate(v1Root: string, outDir: string, at: string): Migration {
   const docs = readAll(v1Root);
+  /**
+   * ⛔ WHO ASKS FOR THIS — WHICH v1 DID RECORD, IN THE OTHER DIRECTION.
+   *
+   * Every capability was refused on the grounds that "a capability's ask needs what hands it over,
+   * and v1 recorded neither". That was wrong, and it cost the migration all fifteen of them: v1
+   * records the relation as `depends_on` on the CALLER, so the trigger for
+   * `capabilities/deal-pipeline/resolve-an-organizations-stages` is every feature that declares a
+   * dependency on it. Inverting a relation somebody wrote down is reading, not guessing.
+   *
+   * What stays refused is a capability nothing depends on. There the trigger genuinely is unrecorded
+   * — and a promise nobody asks for is worth surfacing on its own account.
+   */
+  const askedBy = new Map<string, string[]>();
+  for (const d of docs)
+    for (const dep of d.frontmatter.depends_on)
+      askedBy.set(dep, [...(askedBy.get(dep) ?? []), d.frontmatter.title || d.frontmatter.id]);
   const refused: NotCarried[] = [];
   const carried: Carried = { scopes: 0, exchanges: 0, views: 0, criteria: 0, answered: 0, opened: 0 };
   const taken = new Map<string, string>();
@@ -182,8 +226,16 @@ export function migrate(v1Root: string, outDir: string, at: string): Migration {
 
   /** Container scopes for every intermediate path segment, so the tree is real. */
   const containers = new Map<string, string | undefined>();
+  /** Which directory each grouping came from, so its README can be read. */
+  const containerDir = new Map<string, string>();
   for (const [v1id, parents] of parentsOf) {
-    void v1id;
+    const doc = docs.find((d) => d.frontmatter.id === v1id)!;
+    let dir = path.dirname(doc.filepath);
+    // Walk back up from the file, one level per path segment, to the directory each grouping owns.
+    for (let i = parents.length - 1; i >= 0; i--) {
+      containerDir.set(parents[i]!, dir);
+      dir = path.dirname(dir);
+    }
     parents.forEach((p, i) => containers.set(p, i === 0 ? undefined : parents[i - 1]));
   }
 
@@ -317,12 +369,18 @@ export function migrate(v1Root: string, outDir: string, at: string): Migration {
         continue;
       }
       if (!b.surface) {
+        // ⛔ A capability IS an ask, and its caller is recorded — see `askedBy`.
+        const callers = askedBy.get(v1.id) ?? [];
+        if (v1.kind === "capability" && callers.length) {
+          byAnchor.set(`!${b.id}`, [b]);
+          continue;
+        }
         refused.push({
           what: `${v1.id} · ${b.id}`,
           from: d.filepath,
           why:
             v1.kind === "capability"
-              ? "a capability's ask needs what hands it over and whether it repeats, and v1 recorded neither — inventing a trigger would put words in the product's mouth"
+              ? "nothing in this product declares a dependency on it, so what hands it over is genuinely unrecorded — and a promise nobody asks for is worth a second look"
               : "it is anchored to no screen, so there is no ask to attach it to",
         });
         continue;
@@ -335,12 +393,49 @@ export function migrate(v1Root: string, outDir: string, at: string): Migration {
       id: string;
       title: string;
       asked_by: string;
-      at: { view: string; part?: string };
+      at?: { view: string; part?: string };
+      when?: { triggered_by: string; cadence: string };
       exists?: string;
       slots: Record<string, unknown>;
       criteria: Array<Record<string, unknown>>;
     }
     const exchanges: Built[] = [...byAnchor.entries()].flatMap(([key, group]): Built[] => {
+      if (key.startsWith("!")) {
+        const b = group[0]!;
+        const callers = askedBy.get(v1.id) ?? [];
+        carried.exchanges++;
+        carried.answered++;
+        return [
+          {
+            id: seg(b.id),
+            title: flat(b.claim).slice(0, 70) || seg(b.id).replace(/-/g, " "),
+            asked_by: "system",
+            when: {
+              /**
+               * ⛔ Named callers, from their own `depends_on`. Not "something elsewhere asks for it"
+               * — that is the definition of a capability restated, which tells a builder nothing and
+               * is the placeholder shape the model refuses everywhere else.
+               */
+              triggered_by: `${callers.join(", ")} ${callers.length === 1 ? "asks" : "ask"} for this`,
+              // ⛔ A capability answers a caller, so it happens when it is asked. That follows from
+              // what a capability IS rather than from a guess about this one.
+              cadence: "on-an-event",
+            },
+            exists: v1.status === "planned" ? "intended" : "kept",
+            slots: { answer: { says: flat(b.claim) } },
+            criteria: b.test_cases.map((t, i) => {
+              carried.criteria++;
+              return {
+                id: `${seg(b.id)}-${t.id ?? i + 1}`,
+                slot: "answer",
+                ...(t.given ? { given: flat(t.given) } : {}),
+                ...(t.when ? { when: flat(t.when) } : {}),
+                ...(t.then ? { then: flat(t.then) } : {}),
+              };
+            }),
+          },
+        ];
+      }
       if (key.startsWith("?")) {
         const b = group[0]!;
         const title = flat(b.question).slice(0, 70);
@@ -516,22 +611,55 @@ export function migrate(v1Root: string, outDir: string, at: string): Migration {
     });
   }
 
+  /**
+   * ⛔ ONE PRODUCT ROOT OVER BOTH HALVES, because v1's two top-level directories are two halves of
+   * one product and the migration left them as two unconnected trees.
+   *
+   * `products/` and `capabilities/` are siblings in v1 — a subsystem serves many areas, so it is
+   * deliberately not filed inside one. But nothing above them said they were the same product, so a
+   * page rooted at the product's one area showed the screens and none of the machinery, and asking
+   * "where are all the capabilities" had no answer on that page at all.
+   *
+   * Its description is `products/README.md`, which v1 kept and which is the only thing in either
+   * tree that says what the product IS.
+   */
+  const productReadme = readmeFor(path.join(v1Root, "products"));
+  const PRODUCT = "the-product";
   const written = new Set(pending.map((x) => x.id));
   /** Only the groupings that end up holding something. */
   const keptContainers = new Set<string>();
   for (const x of pending) x.parents.forEach((p) => keptContainers.add(p));
+  carried.scopes++;
+  write(
+    PRODUCT,
+    { id: PRODUCT, title: productReadme?.title || "The product", exists: "kept" },
+    productReadme?.body ||
+      `Nothing in the previous model said what this product is, at the level above its areas. That is\nthe first thing a reader needs and the last thing anybody writes down.`
+  );
+
   for (const [id, parent] of containers) {
     if (!keptContainers.has(id)) continue;
+    const readme = containerDir.has(id) ? readmeFor(containerDir.get(id)!) : null;
+    // ⛔ Named for what it is — the half a person is promised — not for whatever area came first.
+    const forced = id === PROMISES ? "Product" : id === "capabilities" ? "Capabilities" : undefined;
+    if (!readme?.body)
+      refused.push({
+        what: id,
+        from: containerDir.get(id) ?? id,
+        why: "this grouping has nothing that says what it is — a reader meets its features with no idea what the area is for",
+      });
     carried.scopes++;
     write(
       id,
       {
         id,
-        title: id.replace(/-/g, " ").replace(/^./, (c) => c.toUpperCase()),
-        ...(parent && keptContainers.has(parent) ? { in: parent } : {}),
+        title: forced || readme?.title || id.replace(/-/g, " ").replace(/^./, (c) => c.toUpperCase()),
+        // ⛔ A former root now sits under the product, so both halves are one tree.
+        in: parent && keptContainers.has(parent) ? parent : PRODUCT,
         exists: "kept",
       },
-      `A grouping carried over from the previous model, where it was a directory rather than a thing\nanybody wrote about. It holds no promises of its own — whatever is filed beneath it does.\n\nIf it deserves a description, that is a real gap and worth writing.`
+      readme?.body ||
+        `Nothing in the previous model said what this grouping is. It holds no promises of its own —\nwhatever is filed beneath it does — but a reader arriving here still needs to know what the area\nis for, and that is a real gap rather than a formality.`
     );
   }
   for (const x of pending) {
@@ -547,7 +675,10 @@ export function migrate(v1Root: string, outDir: string, at: string): Migration {
       x.id,
       {
         ...rest,
-        ...(x.parents.length && keptContainers.has(x.parents[x.parents.length - 1]!) ? { in: x.parents[x.parents.length - 1] } : {}),
+        in:
+          x.parents.length && keptContainers.has(x.parents[x.parents.length - 1]!)
+            ? x.parents[x.parents.length - 1]
+            : PRODUCT,
         ...(deps.length ? { depends_on: deps } : {}),
       },
       x.body
@@ -560,6 +691,78 @@ export function migrate(v1Root: string, outDir: string, at: string): Migration {
    * already recorded 61 times over.
    */
   const asked = SLOTS.filter((s) => s !== "answer");
+  /**
+   * ⛔ THE PRODUCT-WIDE DOCUMENTS, WHICH THIS DROPPED ENTIRELY — and not by oversight: the model had
+   * nowhere to put them until `Charter` existed.
+   *
+   * v1 keeps goals, non-goals, principles, personas, voice and decisions, and tells feature authors
+   * to CITE them rather than restate them. Migrating every promise and none of the documents they
+   * cite hands a builder the sentences without the rules they were written against, and leaves the
+   * citations pointing at nothing.
+   *
+   * Sections are split on `##`, because that is the grain v1 verified at: its principles file
+   * carries `verified_by` per section, not per document.
+   */
+  const KINDS: Record<string, string> = {
+    goals: "goals",
+    "non-goals": "non-goals",
+    principles: "principles",
+    personas: "personas",
+    voice: "voice",
+    decisions: "decisions",
+  };
+  const contextDir = path.join(v1Root, "context");
+  fs.mkdirSync(path.join(outDir, "charter"), { recursive: true });
+  let order = 0;
+  for (const [base, kind] of Object.entries(KINDS)) {
+    const f = path.join(contextDir, `${base}.md`);
+    if (!fs.existsSync(f)) continue;
+    const doc = parseFrontmatter(fs.readFileSync(f, "utf-8"));
+    const data = doc.data as { title?: string; order?: number; sections?: Record<string, unknown> };
+    const parts = doc.content.split(/^##\s+/m).slice(1);
+    const sections = parts
+      .map((chunk) => {
+        const nl = chunk.indexOf("\n");
+        const title = (nl === -1 ? chunk : chunk.slice(0, nl)).trim();
+        const says = (nl === -1 ? "" : chunk.slice(nl + 1)).trim();
+        return { id: seg(title).slice(0, 60), title, says: flat(says) };
+      })
+      .filter((x) => x.id && x.says.length >= 20);
+    if (!sections.length) {
+      refused.push({
+        what: `context/${base}.md`,
+        from: f,
+        why: "it has no `##` sections with anything under them, so there is nothing anybody could agree to one piece at a time",
+      });
+      continue;
+    }
+    /**
+     * ⛔ v1'S VERIFICATION STAMPS DO NOT COME WITH IT, and pretending they did would be the worst
+     * thing this migration could do. A stamp covers a hash of what was read; the text has been
+     * re-cut into a different shape here, so the old hash covers nothing and a carried stamp would
+     * assert somebody had read a document that did not exist when they read it.
+     */
+    const verifiedInV1 = Object.entries(data.sections ?? {}).filter(
+      ([, v]) => (v as { verified?: boolean })?.verified
+    );
+    if (verifiedInV1.length)
+      refused.push({
+        what: `context/${base}.md — ${verifiedInV1.length} section${verifiedInV1.length === 1 ? "" : "s"} a person had verified`,
+        from: f,
+        why: `${verifiedInV1.map(([k]) => k).join(", ")} — a stamp covers a hash of what was read, and the text is cut differently here, so those need reading again rather than carrying across`,
+      });
+    order += 1;
+    const id = seg(base);
+    fs.writeFileSync(
+      path.join(outDir, "charter", `${id}.md`),
+      `---\n${YAML.stringify(
+        { id, title: data.title || base, kind, order: data.order ?? order, was: `context/${base}.md`, sections },
+        { lineWidth: 96, blockQuote: "literal" }
+      )}---\n\n${doc.content.split(/^##\s+/m)[0]!.trim()}\n`
+    );
+    files.push(path.join(outDir, "charter", `${id}.md`));
+  }
+
   fs.mkdirSync(path.join(outDir, "rules"), { recursive: true });
   for (const slot of asked) {
     const r = orgWideQuestion(slot, at, [...idOf.values()]);

@@ -111,13 +111,39 @@ test("a slot answered at a rule is named, not linked", () => {
   }
 });
 
-test("cross-scope links appear only where they can resolve", () => {
+/**
+ * ⛔ A PAGE IS NAVIGABLE BY ANCHOR FOR EVERY SCOPE IT HOLDS, WHATEVER SURFACE IT IS ON.
+ *
+ * "Never emit a link that cannot resolve" is the right rule; falling back to plain text without a
+ * `linkBase` was the wrong conclusion drawn from it. A published artifact is ONE page with no
+ * server, so every scope in it rendered as an unclickable label — which made "review one feature",
+ * the entire purpose of the surface, impossible on it.
+ *
+ * Three cases, and the middle one is the one that shipped broken.
+ */
+test("a page navigates within itself, and across pages only for what it does not hold", () => {
   const root = corpus.scopes.find((s) => !s.scope.in).scope.id;
-  const alone = renderScopePage(corpus, root);
-  assert.doesNotMatch(alone, /href="\/v2/, "a standalone file offered a link it cannot follow");
-  assert.match(alone, /class="unlinked"/, "nothing marked as unreachable — is the nav rendering at all?");
-  const served = renderScopePage(corpus, root, { linkBase: "/v2" });
-  assert.match(served, /href="\/v2\//, "a served page rendered no cross-scope link");
+  const leaf = corpus.scopes.find((s) => s.scope.exchanges.length && s.scope.in).scope.id;
+
+  // 1. The root holds the whole subtree, so it anchors — even when a base is available, because
+  //    jumping within the page you are on beats reloading it.
+  for (const opts of [{}, { linkBase: "/v2" }]) {
+    const html = renderScopePage(corpus, root, opts);
+    assert.match(html, /nav class="scopes"/, "no nav at all");
+    assert.ok(
+      (html.match(/nav class="scopes"[\s\S]*?<\/nav>/)[0].match(/href="#/g) ?? []).length >= 2,
+      `root${opts.linkBase ? " (served)" : ""}: the nav is not navigable`
+    );
+  }
+
+  // 2. A leaf holds only itself, so the rest of the tree needs cross-page links where served…
+  const servedLeaf = renderScopePage(corpus, leaf, { linkBase: "/v2" });
+  assert.match(servedLeaf, /href="\/v2\//, "a served leaf offered no way to the other scopes");
+
+  // 3. …and is honest about them where there is nowhere to send you.
+  const aloneLeaf = renderScopePage(corpus, leaf);
+  assert.doesNotMatch(aloneLeaf, /href="\/v2/, "a standalone file offered a link it cannot follow");
+  assert.match(aloneLeaf, /class="unlinked"/, "a standalone leaf claimed to reach scopes it does not hold");
 });
 
 test("every open question reaches the page, with what it costs to guess wrong", () => {
@@ -169,4 +195,156 @@ test("rendering writes nothing to the corpus", () => {
   const before = JSON.stringify(loadCorpus("v2-seed").verdicts);
   for (const id of SCOPES) renderScopePage(corpus, id, { interactive: true });
   assert.equal(JSON.stringify(loadCorpus("v2-seed").verdicts), before);
+});
+
+/**
+ * ⛔ ONE FEATURE AT A TIME, OR THE SURFACE IS NOT REVIEWABLE.
+ *
+ * The page rendered every descendant on one scroll. On a real product that is ten grids and 51
+ * promises in a single artifact — and the surface exists to review ONE feature, which Peter could
+ * not do on it. It is cut into views now, with the menu switching between them.
+ *
+ * Asserted as structure, because the switching itself is browser behaviour: every scope that has
+ * promises gets exactly one view and exactly one menu entry, the questions get their own, and the
+ * whole thing works with the script removed.
+ */
+test("each feature is its own view, reachable from the menu", () => {
+  const root = corpus.scopes.find((s) => !s.scope.in).scope.id;
+  const html = renderScopePage(corpus, root, { linkBase: "/v2" });
+
+  const withPromises = descendants(corpus, root).filter(
+    (id) => (corpus.scopes.find((s) => s.scope.id === id)?.scope.exchanges.length ?? 0) > 0
+  );
+  const views = [...html.matchAll(/data-view="([^"]+)"/g)].map((m) => m[1]);
+  // ⛔ Scoped to the nav. `data-goto` is no longer nav-only — a container's contents list uses it
+  // too — and counting both made every feature look like it had two menu rows.
+  const navHtml = /<nav class="scopes">[\s\S]*?<\/nav>/.exec(html)[0];
+  const menu = [...navHtml.matchAll(/data-goto="([^"]+)"/g)].map((m) => m[1]);
+
+  for (const id of withPromises) {
+    assert.ok(views.includes(id), `${id} has promises and no view of its own`);
+    assert.ok(menu.includes(id), `${id} has a view and no way to reach it`);
+  }
+  /**
+   * ⛔ The queue lives on Overview now, reached by a TAB rather than a row in the tree. Beside the
+   * features it sat at the same level as the things it asks about, and the product's own framing had
+   * nowhere to be read.
+   */
+  assert.ok(views.includes("overview"), "there is no Overview, so the queue has no home");
+  assert.match(html, /class="tab" data-tab="overview"/, "Overview is not reachable");
+  assert.ok(!menu.includes("overview"), "the queue is still a row in the tree");
+  // ⛔ Exactly one of each — a duplicate view means two sections claiming one feature, and a
+  // duplicate menu row means one of them silently does nothing.
+  assert.equal(new Set(views).size, views.length, "a feature has more than one view");
+  assert.equal(new Set(menu).size, menu.length, "a feature has more than one menu row");
+
+  // ⛔ Progressive enhancement: nothing is hidden in the markup, so a saved file or a page whose
+  // script fails still shows everything rather than a blank screen.
+  assert.doesNotMatch(html, /section class="view"[^>]*hidden/, "a view is hidden before any script runs");
+});
+
+/**
+ * ⛔ THE TREE IS A TOP FRAME THAT COLLAPSES TO WHERE YOU ARE.
+ *
+ * Sixteen nav rows permanently on screen is a table of contents competing with the thing being
+ * reviewed. The trail is the one line worth the space once a feature is chosen, and the tree is one
+ * press away. Structure is asserted here; the collapsing itself is browser behaviour and was
+ * verified by driving it.
+ */
+test("the top frame carries a trail for every view it can reach", () => {
+  const root = corpus.scopes.find((s) => !s.scope.in).scope.id;
+  const html = renderScopePage(corpus, root, { linkBase: "/v2" });
+
+  assert.match(html, /class="topframe"/, "no top frame");
+  /**
+   * ⛔ THE CHEVRON EXPANDS; THE TRAIL NAVIGATES. One control doing both meant every attempt to go up
+   * a level dropped the whole tree on you — the opposite of what a breadcrumb is for.
+   */
+  assert.match(html, /class="chev" aria-expanded="false"/, "nothing expands the tree");
+  assert.doesNotMatch(html, /class="crumbs"[^>]*aria-expanded/, "the trail is still the expander");
+
+  const raw = /data-trails="([^"]+)"/.exec(html);
+  assert.ok(raw, "the frame carries no trails");
+  const trails = JSON.parse(raw[1].replace(/&quot;/g, '"').replace(/&amp;/g, "&"));
+  /**
+   * ⛔ An apostrophe in a scope title used to cut this attribute in half — "Resolve an
+   * organization's stages" ended it early, JSON.parse threw, and every breadcrumb fell back to a
+   * bare id with nothing reporting an error.
+   */
+  assert.ok(Object.keys(trails).length > 1, "the trails did not survive being written into an attribute");
+
+  // ⛔ Every view the menu offers has a trail, or selecting it leaves the frame lying about where
+  // you are — which is worse than no trail at all.
+  const nav = /<nav class="scopes">[\s\S]*?<\/nav>/.exec(html)[0];
+  for (const view of [...nav.matchAll(/data-goto="([^"]+)"/g)].map((m) => m[1])) {
+    assert.ok(trails[view]?.length, `${view} is reachable and has no trail`);
+    // ⛔ Every crumb carries the id it navigates to. With labels alone the ancestors were decoration.
+    for (const crumb of trails[view]) assert.ok(crumb.id && crumb.label, `a crumb of ${view} cannot be followed`);
+  }
+
+  // ⛔ The trail is the `in:` chain, root first — the same one the rows are indented by.
+  const leaf = descendants(corpus, root).find((id) => {
+    const sc = corpus.scopes.find((s) => s.scope.id === id)?.scope;
+    return sc?.exchanges.length && sc.in && sc.in !== root;
+  });
+  if (leaf) {
+    const t = trails[leaf];
+    assert.ok(t.length >= 3, `${leaf} is nested and its trail is ${JSON.stringify(t)}`);
+    const title = corpus.scopes.find((s) => s.scope.id === leaf).scope.title;
+    assert.equal(t[t.length - 1].label, title, "the trail does not end where you are");
+    assert.equal(t[t.length - 1].id, leaf);
+  }
+});
+
+/**
+ * ⛔ THE TOP LEVEL IS A ROW, NOT A DEPTH IN A DROPDOWN.
+ *
+ * The two halves of a product — what it promises a person, and the machinery underneath — are the
+ * split a reader navigates by constantly. Buried at depth 1 of a collapsed tree, the most-used move
+ * cost two presses and a scan. And the queue sat in that tree beside the features, at the same level
+ * as the things it asks about, which left the product's own framing with nowhere to be read at all.
+ */
+test("the frame has tabs for each half, and Overview carries the queue", () => {
+  const root = corpus.scopes.find((s) => !s.scope.in).scope.id;
+  const html = renderScopePage(corpus, root, { linkBase: "/v2" });
+
+  const tabs = [...html.matchAll(/class="tab" data-tab="([^"]+)"/g)].map((m) => m[1]);
+  assert.equal(tabs[0], "overview", "Overview is not the first thing offered");
+  for (const half of corpus.scopes.filter((s) => s.scope.in === root))
+    assert.ok(tabs.includes(half.scope.id), `${half.scope.id} is a half of the product and has no tab`);
+
+  // ⛔ What a person sees comes before the machinery underneath it. File order put subsystems first.
+  const screensUnder = (id) =>
+    descendants(corpus, id).reduce(
+      (n, d) => n + (corpus.scopes.find((y) => y.scope.id === d)?.scope.views.length ?? 0),
+      0
+    );
+  const halves = tabs.slice(1);
+  for (let i = 1; i < halves.length; i++)
+    assert.ok(
+      screensUnder(halves[i - 1]) >= screensUnder(halves[i]),
+      `${halves[i]} has more screens than ${halves[i - 1]} and comes after it`
+    );
+
+  // ⛔ The root is a tab, not a crumb — repeating it spent the widest part of the line on the one
+  // place the tab row already names, and read as a level you could go up to that was another tab.
+  const trails = JSON.parse(/data-trails="([^"]+)"/.exec(html)[1].replace(/&quot;/g, '"').replace(/&amp;/g, "&"));
+  for (const [view, t] of Object.entries(trails))
+    // ⛔ The root's own trail is necessarily itself — it is the one scope with nothing above it.
+    if (view !== "overview" && view !== root)
+      assert.notEqual(t[0].id, root, `${view}'s trail starts at the root`);
+
+  /**
+   * ⛔ Overview is a set of product-wide pages, not one scroll: the queue, what the product is, and
+   * every charter document. Stacked together the principles sit under seven open questions and
+   * nobody reads them.
+   */
+  assert.match(html, /data-sub-view="queue"/, "Overview does not carry the queue");
+  assert.match(html, /data-sub-view="about"[\s\S]{0,300}class="prose"/, "Overview does not say what the product is");
+  for (const c of corpus.charter)
+    assert.match(
+      html,
+      new RegExp(`data-sub-view="${c.charter.id}"`),
+      `${c.charter.id} is product-wide truth with nowhere to be read`
+    );
 });
