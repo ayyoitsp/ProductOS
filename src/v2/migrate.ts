@@ -639,7 +639,13 @@ export function migrate(v1Root: string, outDir: string, at: string): Migration {
 
   for (const [id, parent] of containers) {
     if (!keptContainers.has(id)) continue;
-    const readme = containerDir.has(id) ? readmeFor(containerDir.get(id)!) : null;
+    /**
+     * ⛔ ONE HOME. `products/README.md` describes the PRODUCT — "this is the record of what the
+     * product promises them" — and it was being used for both the root and the promises half, so the
+     * same paragraph introduced two different scopes. The root keeps it; the half is left to say
+     * what it is, and the gap is recorded rather than filled with a copy.
+     */
+    const readme = id === PROMISES ? null : containerDir.has(id) ? readmeFor(containerDir.get(id)!) : null;
     // ⛔ Named for what it is — the half a person is promised — not for whatever area came first.
     const forced = id === PROMISES ? "Product" : id === "capabilities" ? "Capabilities" : undefined;
     if (!readme?.body)

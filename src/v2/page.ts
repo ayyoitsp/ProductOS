@@ -16,7 +16,7 @@
  * would be the MCP boundary broken by a longer path.
  */
 import { resolveRules, type Corpus } from "./load.js";
-import { SLOTS, type SlotName } from "./schema.js";
+import { SLOTS, type SlotName, type Scope } from "./schema.js";
 import { gridFor, gateFor, actsFor, type Grid, type Cell } from "./grid.js";
 import { questionsFor, descendants, type Question } from "./settle.js";
 import { decisionsOn, decisionsUnder, howItWasDecided, type Decision } from "./record.js";
@@ -309,6 +309,56 @@ function renderProse(body: string): string {
         .replace(/`([^`]+)`/g, "<code>$1</code>")
     );
   return paras.length ? `<div class="prose">${paras.map((b) => `<p>${b}</p>`).join("")}</div>` : "";
+}
+
+
+/**
+ * The screens a scope's asks arrive at.
+ *
+ * ⛔ THE PAGE NEVER SHOWED THESE, and the packet always did. So the surface built for reviewing a
+ * promise showed the promise and not the control it arrives at, while the artefact for BUILDING it
+ * showed both — exactly backwards. A reviewer asked whether "Deal row on CRE Deals" is right, with
+ * no picture of the list it sits in, is being asked to review a sentence about a screen they have
+ * not seen.
+ *
+ * ⛔ The sketch is interface structure, not design — where things sit and what kind of thing they
+ * are. It is rendered verbatim, in a monospaced block, because it was drawn to be read that way and
+ * anything cleverer would be this tool inventing a layout.
+ */
+function renderScreens(scope: Scope, ctx: Ctx, scopeId: string): string {
+  const shown = scope.views.filter((v) => v.exists !== "withdrawn");
+  if (!shown.length) return "";
+  return `
+    <section class="screens">
+      <h3 class="sub">Where these arrive</h3>
+      ${shown
+        .map(
+          (v) => `<article class="screen">
+            <h4>${line(v.title)}${v.view_kind ? ` <span class="n">${esc(v.view_kind)}</span>` : ""}</h4>
+            ${
+              v.exists === "intended"
+                ? `<p class="owes">This screen does not exist yet — everything here is intent, not observation.</p>`
+                : ""
+            }
+            ${!v.walked ? `<p class="owes">Nobody has walked this screen, so what it holds is unconfirmed.</p>` : ""}
+            ${v.sketch ? `<pre class="sketch">${esc(v.sketch.trimEnd())}</pre>` : ""}
+            ${
+              v.parts.length
+                ? `<ul class="parts">${v.parts
+                    .map((pt) => {
+                      const at = `${scopeId}#`;
+                      void at;
+                      return `<li><span class="role">${esc(pt.role)}</span> ${line(pt.label || pt.id)}${
+                        pt.leads_to ? ` <span class="n">→ ${esc(pt.leads_to)}</span>` : ""
+                      }</li>`;
+                    })
+                    .join("")}</ul>`
+                : ""
+            }
+          </article>`
+        )
+        .join("")}
+    </section>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -761,8 +811,10 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
   const live = qs.filter((q) => !q.parked);
   const parked = qs.filter((q) => q.parked);
   const a = actsFor(corpus);
-  const mine = (refs: string[]) => refs.filter((r) => ids.some((i) => r.startsWith(`${i}#`)));
-  const acceptable = mine(a.acceptable);
+  /** ⛔ Scoped to this page's subtree, so the figure describes what the reader is looking at. */
+  const under = (r: string) => ids.some((i) => r.startsWith(`${i}#`));
+  const gated = a.gated.filter(under);
+  const agreed = corpus.verdicts.filter((v) => v.kind === "accept" && under(v.target ?? "")).length;
   const stale = a.stale.filter((s) => ids.some((i) => s.where.startsWith(`${i}#`)));
 
   /**
@@ -807,7 +859,6 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
     ...grids.flatMap((g) => [...g.rulesUsed.keys()]),
   ]);
   const ctx: Ctx = { base: opts.linkBase, here: ids, anchors };
-  const title = line(entry.scope.title || scopeId);
   const body = `
     ${renderNav(
       corpus,
@@ -821,25 +872,21 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
         .join("")
     )}
     <main>
-      <header class="top">
-        <h1>${title}</h1>
-        <p class="lede">${
-          live.length
-            ? `<strong>${live.length}</strong> thing${live.length === 1 ? "" : "s"} here ${
-                live.length === 1 ? "needs" : "need"
-              } deciding, and <strong>${acceptable.length}</strong> ${
-                acceptable.length === 1 ? "promise is" : "promises are"
-              } ready to agree to.`
-            : `Nothing here is undecided. <strong>${acceptable.length}</strong> ${
-                acceptable.length === 1 ? "promise is" : "promises are"
-              } ready to agree to.`
-        }</p>
-        ${
-          opts.interactive
-            ? `<p class="mode live">Your presses are recorded with your name and today's date${opts.recordsTo ? `, and ${esc(opts.recordsTo)}` : ", and written into the product truth"}.</p>`
-            : `<p class="mode">Read-only preview — the buttons below show what you will be asked to do, and record nothing.</p>`
-        }
-      </header>
+      ${
+        /**
+         * ⛔ NO PAGE HEADER. It sat above the views, so one title, one count and one line of
+         * boilerplate repeated on all thirty-three of them — and every one of the three was already
+         * somewhere better. The title is the crumb and the view's own heading; the counts are on the
+         * tabs and the tree rows; and who a press is recorded as belongs in the form that records
+         * it, at the moment it matters, which is where it already was.
+         *
+         * A read-only render keeps one line, because disabled buttons with no explanation are worse
+         * than the repetition was.
+         */
+        opts.interactive
+          ? ""
+          : `<p class="mode">Read-only preview — the acts below show what you will be asked to do, and record nothing.</p>`
+      }
       ${broken}
       ${staleBlock}
       ${
@@ -860,6 +907,28 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
              ${
                live.length
                  ? `<p class="lede"><strong>${live.length}</strong> question${live.length === 1 ? "" : "s"} nobody has answered. Each reaches every promise its selector touches, and every one written after it.</p>
+                    ${
+                      /**
+                       * ⛔ A SHORT QUEUE IS NOT A REVIEWED CORPUS, AND THE PAGE READ AS THOUGH IT WERE.
+                       *
+                       * Seven items offered, seventy-seven promises nobody has ever agreed to, and
+                       * nothing on screen connecting the two: every one of those promises is GATED
+                       * behind these same questions, because a stamp on a slot that says nothing
+                       * reads exactly like a considered one. So the queue is short for the worst
+                       * reason available, and looked like the best.
+                       */
+                      gated.length || agreed
+                        ? `<p class="gate-note">${
+                            agreed
+                              ? `<strong>${agreed}</strong> of ${agreed + gated.length} promises have been agreed to. `
+                              : `<strong>Nothing here has been agreed to yet.</strong> `
+                          }${
+                            gated.length
+                              ? `The other ${gated.length} cannot be, until these ${live.length === 1 ? "is" : "are"} answered — every one of them has a slot waiting on ${live.length === 1 ? "it" : "them"}.`
+                              : ""
+                          }</p>`
+                        : ""
+                    }
                     ${live.map((q, i) => renderQuestion(q, i, decisionsOn(corpus, q.ref), ctx)).join("")}`
                  : `<p class="lede">Nothing is undecided.</p>`
              }
@@ -891,6 +960,7 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
           (g) => `<section class="view" id="${anchorOf(g.scope)}" data-view="${esc(g.scope)}">
             <h2>${line(g.title)}</h2>
             ${renderProse(corpus.scopes.find((x) => x.scope.id === g.scope)?.body ?? "")}
+            ${renderScreens(corpus.scopes.find((x) => x.scope.id === g.scope)!.scope, ctx, g.scope)}
             ${renderGrid(g, ctx)}
             ${renderExchanges(corpus, [g.scope], cellOf, ctx, false)}
           </section>`
@@ -1459,6 +1529,20 @@ const STYLE = `<style>
   .prose p { margin: .6rem 0; }
   h3.sub { font-size: .8rem; text-transform: uppercase; letter-spacing: .07em; color: var(--dim);
     margin: 1.6rem 0 0; font-weight: 600; }
+  .screens { margin: 1.5rem 0; }
+  .screen { margin: 1.2rem 0 0; }
+  .screen h4 { font-size: 1rem; margin: 0 0 .4rem; }
+  .screen .n { font-size: .78rem; color: var(--dim); font-weight: 400; }
+  pre.sketch { background: var(--card); border: 1px solid var(--line); border-radius: 8px;
+    padding: .9rem 1rem; overflow-x: auto; font: .78rem/1.35 ui-monospace, Menlo, monospace;
+    margin: .5rem 0; }
+  ul.parts { list-style: none; margin: .5rem 0 0; padding: 0; font-size: .88rem;
+    display: grid; gap: .2rem; }
+  ul.parts li { display: flex; gap: .5rem; align-items: baseline; }
+  ul.parts .role { font-family: ui-monospace, Menlo, monospace; font-size: .74rem;
+    color: var(--accent); min-width: 5rem; }
+  .gate-note { background: var(--warn-bg); border-left: 3px solid var(--warn); border-radius: 0 6px 6px 0;
+    padding: .7rem .9rem; margin: .9rem 0 1.4rem; font-size: .92rem; }
   .charter-section { border-top: 1px solid var(--line); padding-top: 1rem; margin-top: 1.4rem; }
   .charter-section h3 { font-size: 1.1rem; margin: 0 0 .3rem; }
   ul.contents { list-style: none; margin: 1rem 0 0; padding: 0; }
