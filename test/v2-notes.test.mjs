@@ -60,17 +60,31 @@ test("notes are kept apart from verdicts", () => {
   assert.equal(c.verdicts.length, 0, "a note landed in the verdict log");
 });
 
-test("the panel is offered only where a press can be recorded, and captures the ref", () => {
+test("the composer is docked, always there, and never asks what you are looking at", () => {
   const live = renderScopePage(corpus, "family-wallet", { interactive: true, records: "http", by: "peter" });
-  assert.match(live, /id="note-open"/, "there is no way to ask for a change");
-  assert.match(live, /id="note-about"/, "the note cannot be attached to anything");
-  // Every scope on the page is offerable as a target, and so is every screen.
-  for (const { scope } of corpus.scopes) {
-    if (!corpus.scopes.some((s) => s.scope.id === scope.id)) continue;
-    for (const v of scope.views)
-      assert.match(live, new RegExp(`value="${scope.id}#${v.id}"`), `${scope.id}#${v.id} cannot be pointed at`);
-  }
+  assert.match(live, /id="note-bar"/, "there is no way to ask for a change");
+  assert.match(live, /id="note-text"/, "there is no box to type in");
+
+  /**
+   * ⛔ IT WAS A FLOATING BUTTON THAT HID ITSELF WHILE IN USE, over a panel with an "attach it to"
+   * dropdown. Peter: "change something here should always be visible. fixed to the bottom of the
+   * screen. 'attach it to' shouldn't be an option, should always just capture context of current
+   * section. just a text box, minimal UX."
+   *
+   * The dropdown is the worse half: it asked the reader to re-state what the page already knows,
+   * and every field between somebody and the text box is a chance to not bother. A request nobody
+   * bothered to make looks exactly like a page with nothing wrong with it.
+   */
+  assert.doesNotMatch(live, /id="note-open"/, "the floating button came back");
+  assert.doesNotMatch(live, /id="note-about"[^-]/, "the attach-it-to dropdown came back");
+  assert.doesNotMatch(live, /<select/, "the composer is asking a question again");
+
+  // Docked, not floated, and the body makes room so it never covers the last card.
+  assert.match(live, /\.note-bar \{[^}]*position: fixed/, "the composer is not pinned to the viewport");
+  assert.match(live, /\.note-bar \{[^}]*bottom: 0/, "the composer is not at the bottom of the screen");
+  assert.match(live, /body\.has-note-bar \{ padding-bottom/, "nothing makes room for the composer");
+
   // ⛔ And not on a read-only render, where it would collect words that go nowhere.
   const ro = renderScopePage(corpus, "family-wallet");
-  assert.doesNotMatch(ro, /id="note-open"/, "a read-only page offered to record a note it cannot send");
+  assert.doesNotMatch(ro, /id="note-bar"/, "a read-only page offered to record a note it cannot send");
 });

@@ -593,40 +593,29 @@ function renderBehaviours(
  * ⛔ AND IT IS NOT PRODUCT TRUTH. Nothing here changes what the product does; it is a message to
  * whoever authors. See `Note` in the schema for why it is neither a verdict nor a slot.
  */
-function renderNotePanel(corpus: Corpus, ids: string[], opts: PageOptions): string {
+function renderNotePanel(_corpus: Corpus, _ids: string[], opts: PageOptions): string {
   if (!opts.interactive) return "";
-  const targets = ids.flatMap((id) => {
-    const sc = corpus.scopes.find((x) => x.scope.id === id)?.scope;
-    if (!sc) return [];
-    return [
-      { ref: id, label: `${line(sc.title || id)} — the whole feature` },
-      ...sc.views.map((v) => ({ ref: `${id}#${v.id}`, label: `${line(sc.title || id)} · screen: ${line(v.title)}` })),
-    ];
-  });
+  /**
+   * ⛔ ALWAYS THERE, AND IT DOES NOT ASK WHAT YOU ARE LOOKING AT.
+   *
+   * This was a floating button that opened a panel with an "attach it to" dropdown. Two defects in
+   * one: the button hid itself while the panel was open, so the affordance was not in fact always
+   * available; and the dropdown asked the reader to re-state the thing the page already knows.
+   *
+   * A reader will write the note if it costs one click and nothing to think about. Every field
+   * between them and the text box is a chance to not bother — and a request nobody bothered to make
+   * is indistinguishable from a page with nothing wrong with it.
+   *
+   * So: one box, docked, with the captured section shown beside it rather than chosen.
+   */
   return `
-    <button type="button" id="note-open" class="note-fab" title="Ask for a change to this page">
-      Change something here
-    </button>
-    <aside id="note-panel" class="note-panel" hidden>
-      <header>
-        <strong>Ask for a change</strong>
-        <button type="button" class="note-close" aria-label="Close">×</button>
-      </header>
-      <p class="note-ctx">About: <span id="note-about-label"></span></p>
-      <label for="note-about">Attach it to</label>
-      <select id="note-about">
-        <option value="">whatever I am looking at</option>
-        ${targets.map((t) => `<option value="${esc(t.ref)}">${t.label}</option>`).join("")}
-      </select>
-      <label for="note-text">What should change?</label>
-      <textarea id="note-text" rows="5" placeholder="The tab strip should also show the pinned version…"></textarea>
-      <div class="note-go">
-        <button type="button" id="note-send">Send it</button>
-        <span class="status"></span>
-      </div>
-      <p class="note-foot">This changes nothing on its own — it is a message to whoever authors, with
-      the thing you are looking at attached.</p>
-    </aside>`;
+    <form id="note-bar" class="note-bar" autocomplete="off">
+      <span class="note-ctx" id="note-about-label"></span>
+      <textarea id="note-text" rows="1" placeholder="Change something here…"
+        aria-label="Ask for a change to what you are looking at"></textarea>
+      <button type="submit" id="note-send">Send</button>
+      <span class="status" id="note-status"></span>
+    </form>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -1456,36 +1445,49 @@ async function record(payload, form, button) {
  * reconstruct an hour later is the ref they were looking at, so that is captured automatically and
  * shown before they send.
  */
-const notePanel = document.getElementById("note-panel");
-if (notePanel) {
-  const open = document.getElementById("note-open");
-  const about = document.getElementById("note-about");
-  const label = document.getElementById("note-about-label");
+const noteBar = document.getElementById("note-bar");
+if (noteBar) {
+  document.body.classList.add("has-note-bar");
   const text = document.getElementById("note-text");
-  const status = notePanel.querySelector(".status");
+  const label = document.getElementById("note-about-label");
+  const status = document.getElementById("note-status");
+
+  /**
+   * What the reader is looking at, taken from the page rather than asked for. The visible view
+   * carries its ref on data-view; the heading is only for showing them what got captured.
+   */
   const current = () => {
     const v = [...document.querySelectorAll("section.view")].find((x) => !x.hidden);
-    return v ? v.dataset.view : "";
+    return v ? { ref: v.dataset.view || "", title: (v.querySelector("h1, h2") || {}).textContent || v.dataset.view || "" } : { ref: "", title: "" };
   };
   const describe = () => {
-    const chosen = about.value || current();
-    const opt = [...about.options].find((o) => o.value === chosen);
-    label.textContent = opt && opt.value ? opt.textContent : chosen || "this page";
-    return chosen;
+    const c = current();
+    label.textContent = c.title ? "about " + c.title.trim() : "about this page";
+    label.title = c.ref || "this page";
+    return c.ref;
   };
-  const show = (on) => {
-    notePanel.hidden = !on;
-    open.hidden = on;
-    if (on) { describe(); text.focus(); }
+  describe();
+  // The tabs and the tree swap which view is visible; the capture has to follow.
+  document.addEventListener("click", () => setTimeout(describe, 0));
+  window.addEventListener("hashchange", describe);
+
+  const grow = () => {
+    text.style.height = "auto";
+    text.style.height = Math.min(text.scrollHeight, 144) + "px";
   };
-  open.addEventListener("click", () => show(true));
-  notePanel.querySelector(".note-close").addEventListener("click", () => show(false));
-  about.addEventListener("change", describe);
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !notePanel.hidden) show(false); });
-  document.getElementById("note-send").addEventListener("click", async () => {
+  text.addEventListener("input", () => { grow(); status.textContent = ""; });
+  // Enter makes a new line — people write more than one, and Peter's first note had a blank line
+  // in it. Cmd/Ctrl+Enter sends, and so does the button.
+  text.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); noteBar.requestSubmit(); }
+  });
+
+  noteBar.addEventListener("submit", async (e) => {
+    e.preventDefault();
     const says = (text.value || "").trim();
-    if (!says) { status.textContent = "Say what should change."; status.className = "status bad"; return; }
-    const payload = { about: describe() || "this page", says, by: BY, via: "page" };
+    if (!says) { status.textContent = "Say what should change."; status.className = "status bad"; text.focus(); return; }
+    const about = describe() || "this page";
+    const payload = { about, says, by: BY, via: "page" };
     status.textContent = "sending…"; status.className = "status";
     try {
       if (MODE === "http") {
@@ -1501,9 +1503,11 @@ if (notePanel) {
         if (!channel) throw new Error("this page cannot record anything from here");
         await channel.collection("notes").add({ ...payload, at: new Date().toISOString(), state: "open" });
       }
-      status.textContent = "sent"; status.className = "status ok";
-      text.value = "";
-      setTimeout(() => show(false), 900);
+      text.value = ""; grow();
+      // ⛔ Says what it did and did NOT do. A green tick alone would read as "changed".
+      status.textContent = "noted — nothing changes until somebody authors it";
+      status.className = "status ok";
+      setTimeout(() => { if (status.className === "status ok") status.textContent = ""; }, 6000);
     } catch (err) {
       status.textContent = "Not sent: " + (err && err.message ? err.message : String(err));
       status.className = "status bad";
@@ -1964,25 +1968,34 @@ const STYLE = `<style>
     color: var(--dim); font-weight: 600; }
   table.worklist .num { font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--dim); }
   table.worklist code { font-size: .78em; }
-  .note-fab { position: fixed; right: 1.25rem; bottom: 1.25rem; z-index: 20; font: inherit;
-    font-size: .88rem; background: var(--accent); color: var(--bg); border: 0; border-radius: 99px;
-    padding: .6rem 1rem; cursor: pointer; box-shadow: 0 2px 10px rgba(0,0,0,.18); }
-  .note-panel { position: fixed; right: 1.25rem; bottom: 1.25rem; z-index: 21; width: min(26rem, calc(100vw - 2.5rem));
-    background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 1rem;
-    box-shadow: 0 4px 24px rgba(0,0,0,.22); display: grid; gap: .4rem; max-height: 80vh; overflow-y: auto; }
-  .note-panel header { display: flex; justify-content: space-between; align-items: center; }
-  .note-close { background: none; border: 0; color: var(--dim); font-size: 1.2rem; cursor: pointer; line-height: 1; }
-  .note-panel label { font-size: .78rem; color: var(--dim); margin-top: .3rem; }
-  .note-panel select, .note-panel textarea { font: inherit; font-size: .92rem; width: 100%;
-    padding: .4rem .5rem; border: 1px solid var(--line); border-radius: 5px;
-    background: var(--bg); color: var(--ink); }
-  .note-ctx { font-size: .8rem; color: var(--dim); margin: 0; }
-  .note-go { display: flex; gap: .6rem; align-items: center; margin-top: .5rem; }
-  .note-go button { font: inherit; font-size: .9rem; background: var(--accent); color: var(--bg);
-    border: 0; border-radius: 6px; padding: .4rem .9rem; cursor: pointer; }
-  .note-go .status { font-size: .85rem; }
-  .note-go .status.ok { color: var(--ok); } .note-go .status.bad { color: var(--bad); }
-  .note-foot { font-size: .76rem; color: var(--dim); margin: .3rem 0 0; }
+  /**
+   * ⛔ DOCKED AND ALWAYS THERE. It was a floating button that hid itself the moment the panel
+   * opened, so the one affordance for "this is wrong" was missing exactly when it was in use.
+   *
+   * Fixed to the bottom with a left/right span, plus padding on the body so it never sits on top
+   * of the last card — a composer that covers the thing being described is a composer people close.
+   *
+   * (No backticks in this comment: it lives inside a template literal, and a backtick here ends
+   * the string. That has now cost four builds.)
+   */
+  .note-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; display: flex;
+    gap: .55rem; align-items: flex-end; padding: .55rem .8rem;
+    background: var(--card); border-top: 1px solid var(--line);
+    box-shadow: 0 -2px 14px rgba(0,0,0,.14); }
+  .note-bar .note-ctx { font-size: .74rem; color: var(--dim); white-space: nowrap; max-width: 30%;
+    overflow: hidden; text-overflow: ellipsis; padding-bottom: .45rem; }
+  .note-bar textarea { flex: 1; font: inherit; font-size: .92rem; resize: none; min-height: 2.1rem;
+    max-height: 9rem; padding: .45rem .6rem; border: 1px solid var(--line); border-radius: 6px;
+    background: var(--bg); color: var(--ink); line-height: 1.35; }
+  .note-bar button { font: inherit; font-size: .88rem; background: var(--accent); color: var(--bg);
+    border: 0; border-radius: 6px; padding: .45rem .9rem; cursor: pointer; }
+  .note-bar .status { font-size: .8rem; white-space: nowrap; padding-bottom: .45rem; }
+  .note-bar .status.ok { color: var(--ok); } .note-bar .status.bad { color: var(--bad); }
+  /* Clearance for the composer, so it never covers the last thing on the page. */
+  body.has-note-bar { padding-bottom: 4.5rem; }
+  @media (max-width: 34rem) {
+    .note-bar .note-ctx { display: none; }
+  }
   .gate-note { background: var(--warn-bg); border-left: 3px solid var(--warn); border-radius: 0 6px 6px 0;
     padding: .7rem .9rem; margin: .9rem 0 1.4rem; font-size: .92rem; }
   .charter-section { border-top: 1px solid var(--line); padding-top: 1rem; margin-top: 1.4rem; }
