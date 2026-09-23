@@ -95,7 +95,7 @@ const seg = (s: string): string =>
  *
  * A capability's v1 id carries its half — `capabilities/access-control/...` — and a feature's does
  * not: `cre/deals/...` starts at the area. So the migration produced a `capabilities` grouping and
- * nothing for the promises, which left the product's own half appearing as whatever its first area
+ * nothing for the product half, which left the product's own half appearing as whatever its first area
  * happened to be called. On a corpus with one area the top level read `CRE | Capabilities`, which
  * names a domain beside a layer.
  */
@@ -159,7 +159,7 @@ function readAll(root: string): FeatureDocument[] {
  *   - it is not a question anybody asked. "What happens when two askers arrive at once?" has no
  *     single answer across a product: some asks refuse, some are idempotent, some queue. It is 539
  *     separate facts nobody wrote down, not seven decisions.
- *   - as `supplies` rules reaching everywhere, they GATED all 77 carried promises. A tool's
+ *   - as `supplies` rules reaching everywhere, they GATED all 77 carried behaviours. A tool's
  *     invented questions made a human's real product truth un-agreeable.
  *   - it presented all of it to a reviewer as their own backlog. The header of this file says a
  *     migration may not decide anything; writing seven org-wide rules asserts that seven
@@ -183,7 +183,7 @@ export function migrate(v1Root: string, outDir: string, at: string): Migration {
    * dependency on it. Inverting a relation somebody wrote down is reading, not guessing.
    *
    * What stays refused is a capability nothing depends on. There the trigger genuinely is unrecorded
-   * — and a promise nobody asks for is worth surfacing on its own account.
+   * — and a behaviour nobody asks for is worth surfacing on its own account.
    */
   const askedBy = new Map<string, string[]>();
   for (const d of docs)
@@ -277,7 +277,7 @@ export function migrate(v1Root: string, outDir: string, at: string): Migration {
         /**
          * ⛔ `leads_to` IS CARRIED ONLY WHERE IT CAN RESOLVE. v1 points at a FEATURE
          * (`cre/deals/deal-list`); v2 points at a VIEW. A feature with several screens has no
-         * single right answer, and a wrong one renders as a considered navigation promise that
+         * single right answer, and a wrong one renders as a considered navigation behaviour that
          * goes nowhere — which `check` reports as `leads-nowhere` on somebody else's behalf.
          */
         let leads: string | undefined;
@@ -320,7 +320,7 @@ export function migrate(v1Root: string, outDir: string, at: string): Migration {
         }
         /**
          * ⛔ WHERE A COMMIT LANDS IS THE `answer` SLOT, NOT A LINK. v1 put `leads_to` on submit
-         * buttons; carrying it would make the outcome of the work a navigation promise, and the
+         * buttons; carrying it would make the outcome of the work a navigation behaviour, and the
          * outcome is the thing the exchange is about.
          */
         if (role === "commits" && leads) {
@@ -366,7 +366,7 @@ export function migrate(v1Root: string, outDir: string, at: string): Migration {
           from: d.filepath,
           why:
             v1.kind === "capability"
-              ? "nothing in this product declares a dependency on it, so what hands it over is genuinely unrecorded — and a promise nobody asks for is worth a second look"
+              ? "nothing in this product declares a dependency on it, so what hands it over is genuinely unrecorded — and a behaviour nobody asks for is worth a second look"
               : "it is anchored to no screen, so there is no ask to attach it to",
         });
         continue;
@@ -429,7 +429,7 @@ export function migrate(v1Root: string, outDir: string, at: string): Migration {
          * ⛔ AN ASK NEEDS SOMEWHERE TO ARRIVE, AND A CONTROL TO ARRIVE AT.
          *
          * This wrote `view: ""` for anything with no screen — a whole file that would not parse, taking
-         * every promise in it down — and then, fixed halfway, wrote the FIRST screen with no control,
+         * every behaviour in it down — and then, fixed halfway, wrote the FIRST screen with no control,
          * which `arrives-nowhere` refuses for the same reason a claim needs one: the control is what
          * makes two asks on one screen distinguishable. An open question is carried where v1 said it
          * belongs, and handed to a person where v1 did not say.
@@ -487,7 +487,7 @@ export function migrate(v1Root: string, outDir: string, at: string): Migration {
        *
        * Reading them is instructive: *"when the list cannot be loaded, the reason is shown above the
        * table and the previously loaded page stays on screen"* is a `fails` slot. *"a tab whose work
-       * has not landed says plainly it is not built yet"* is a display promise. v1 DID record
+       * has not landed says plainly it is not built yet"* is a display behaviour. v1 DID record
        * non-answer truth — it had nowhere to put it, so each became a separate screen-level behaviour.
        *
        * Which slot each one answers is a judgement, and joining them into `answer` would reproduce
@@ -556,7 +556,7 @@ export function migrate(v1Root: string, outDir: string, at: string): Migration {
     void dependsOn;
 
     /**
-     * ⛔ A SCOPE THAT PROMISES NOTHING IS NOT WRITTEN AT ALL — `owns-no-promise` refuses it, and
+     * ⛔ A SCOPE THAT PROMISES NOTHING IS NOT WRITTEN AT ALL — `states-no-behaviour` refuses it, and
      * rightly. Every capability whose behaviours were all refused (v1 never recorded what hands them
      * over) came out as an empty scope, so the migration manufactured 21 refusals out of its own
      * omissions. The container is reported once instead, with the count.
@@ -566,9 +566,9 @@ export function migrate(v1Root: string, outDir: string, at: string): Migration {
         what: v1.id,
         from: d.filepath,
         why:
-          `none of its ${v1.behaviors.length} claim${v1.behaviors.length === 1 ? "" : "s"} could be carried, so it would be a scope that promises nothing` +
+          `none of its ${v1.behaviors.length} claim${v1.behaviors.length === 1 ? "" : "s"} could be carried, so it would be a scope that states no behaviour` +
           (views.length
-            ? ` — its ${views.length} screen${views.length === 1 ? "" : "s"} are waiting on those claims, because a screen with no promise on it is a picture`
+            ? ` — its ${views.length} screen${views.length === 1 ? "" : "s"} are waiting on those claims, because a screen with no behaviour on it is a picture`
             : " — what it needs is what hands its asks over"),
       });
       continue;
@@ -627,7 +627,7 @@ export function migrate(v1Root: string, outDir: string, at: string): Migration {
     if (!keptContainers.has(id)) continue;
     /**
      * ⛔ ONE HOME. `products/README.md` describes the PRODUCT — "this is the record of what the
-     * product promises them" — and it was being used for both the root and the promises half, so the
+     * product promises them" — and it was being used for both the root and the product half, so the
      * same paragraph introduced two different scopes. The root keeps it; the half is left to say
      * what it is, and the gap is recorded rather than filled with a copy.
      */
@@ -651,7 +651,7 @@ export function migrate(v1Root: string, outDir: string, at: string): Migration {
         exists: "kept",
       },
       readme?.body ||
-        `Nothing in the previous model said what this grouping is. It holds no promises of its own —\nwhatever is filed beneath it does — but a reader arriving here still needs to know what the area\nis for, and that is a real gap rather than a formality.`
+        `Nothing in the previous model said what this grouping is. It states no behaviours of its own —\nwhatever is filed beneath it does — but a reader arriving here still needs to know what the area\nis for, and that is a real gap rather than a formality.`
     );
   }
   for (const x of pending) {
@@ -682,7 +682,7 @@ export function migrate(v1Root: string, outDir: string, at: string): Migration {
    * nowhere to put them until `Charter` existed.
    *
    * v1 keeps goals, non-goals, principles, personas, voice and decisions, and tells feature authors
-   * to CITE them rather than restate them. Migrating every promise and none of the documents they
+   * to CITE them rather than restate them. Migrating every behaviour and none of the documents they
    * cite hands a builder the sentences without the rules they were written against, and leaves the
    * citations pointing at nothing.
    *

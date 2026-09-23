@@ -309,10 +309,10 @@ export function resolveRules(c: Corpus): Resolved {
  * Terms flowed only down `in:`. So two sibling scopes sharing one word had three options:
  * duplicate it (a permanent `one-word-defined-twice` note), refuse to use it (`not-a-word-here`,
  * a refusal), or **invent a parent scope to hold it** — and that third one is
- * `capabilities/<system>/<promise>` reappearing in the vocabulary channel, an author made to
+ * `capabilities/<system>/<behaviour>` reappearing in the vocabulary channel, an author made to
  * mint a container in order to file a thing. A reviewer followed the note's own fix text,
  * minted the container, and got a scope that compiles a packet with one glossary entry and
- * no promises.
+ * no behaviours.
  *
  * `depends_on` already meant "this rests on that" and contributed nothing anywhere. It is the
  * edge that should carry a word between siblings, and now does.
@@ -392,7 +392,7 @@ function selects(
   if (s.under && !ancestry.includes(s.under)) return false;
   if (s.asked_by && ex.asked_by !== s.asked_by) return false;
   if (s.tag && !tagsFor(c, scope, ancestry).includes(s.tag)) return false;
-  // ⛔ Through the same resolver the rest of the corpus uses. A promise arriving on another
+  // ⛔ Through the same resolver the rest of the corpus uses. A behaviour arriving on another
   // area's screen must be governed by the rules that screen's controls attract, or the
   // selector says one thing and the picture says another.
   const at = ex.at ? resolveView(c, scope, ex.at.view) : undefined;
@@ -562,7 +562,7 @@ export function permittedVocabulary(
    *
    * Admitting every label leaked the sketch into the permitted vocabulary: the row label
    * "Sat Tidy your room" licensed `sat`, `tidy`, `your` and `room` for criteria on every
-   * slot of every exchange at that view. A drawing is not a promise, and it must not widen
+   * slot of every exchange at that view. A drawing is not a behaviour, and it must not widen
    * what a criterion is allowed to assert.
    */
   const v = scope.views.find((x) => x.id === ex.at?.view);
@@ -614,11 +614,11 @@ export function disputeIndex(c: Corpus): Map<string, Array<{ from: string; becau
  *
  * ⛔ A VIEW HAD IDENTITY ONLY INSIDE ITS OWN SCOPE, WHICH FORCED GROUPING BY SCREEN.
  *
- * A promise that arrives on another area's screen had three exits and all of them were wrong:
+ * A behaviour that arrives on another area's screen had three exits and all of them were wrong:
  * naming the view bare was refused (`arrives-nowhere`), naming it qualified was refused too,
  * and declaring it on the shared ancestor was refused because views do not inherit. So the
- * only legal moves were re-filing the promise under whoever owns the screen — grouping by
- * screen rather than by what owns the promise, which is `capabilities/<system>/<promise>` one
+ * only legal moves were re-filing the behaviour under whoever owns the screen — grouping by
+ * screen rather than by what owns the behaviour, which is `capabilities/<system>/<behaviour>` one
  * level over — or DUPLICATING the view, which a reviewer did: zero refusals, two views with
  * the same id in two scopes, two different answers on one control, and
  * `one-press-two-answers` escaped entirely because it keys per scope.
@@ -663,7 +663,7 @@ export function existsOf(c: Corpus, scopeId: string, exchangeExists?: string): s
   if (exchangeExists) return exchangeExists;
   for (const id of lineage(c, scopeId)) {
     const e = c.scopes.find((s) => s.scope.id === id)?.scope.exists;
-    // `withdrawn` anywhere above wins: a promise inside a removed area is removed.
+    // `withdrawn` anywhere above wins: a behaviour inside a removed area is removed.
     if (e === "withdrawn") return "withdrawn";
     if (e === "intended") return "intended";
   }

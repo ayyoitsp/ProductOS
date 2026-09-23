@@ -11,7 +11,7 @@
  * Then every write path went around them. Each of these was run on a pristine corpus:
  *
  *  - `--pick` on a slot whose standing was `about` ONE aspect replaced the whole sentence.
- *    The agreed promise — *"the amount is taken off what the kid has, the act appears at the
+ *    The agreed behaviour — *"the amount is taken off what the kid has, the act appears at the
  *    top of their history dated today, and the parent is returned to the kid's money"* — was
  *    gone. `check` then refused two surviving CRITERIA for over-asserting, and advised
  *    putting their content "in the slot". The clause with no criterion vanished silently.

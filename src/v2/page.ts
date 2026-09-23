@@ -289,7 +289,7 @@ function renderRecord(ds: Decision[]): string {
  *
  * ⛔ THE CORPUS KEPT THIS AND THE PAGE NEVER SHOWED IT, so every scope read as blank — the product,
  * every area, every feature. The body is where a reader is told what the thing IS: what the domain
- * is, where the boundary sits, who works here. A page of promises with no framing asks somebody to
+ * is, where the boundary sits, who works here. A page of behaviours with no framing asks somebody to
  * review sentences about a thing nobody has described to them.
  *
  * ⛔ Deliberately not a markdown renderer. Paragraphs, bold, inline code, and a heading dropped
@@ -316,7 +316,7 @@ function renderProse(body: string): string {
  * The screens a scope's asks arrive at.
  *
  * ⛔ THE PAGE NEVER SHOWED THESE, and the packet always did. So the surface built for reviewing a
- * promise showed the promise and not the control it arrives at, while the artefact for BUILDING it
+ * behaviour showed the behaviour and not the control it arrives at, while the artefact for BUILDING it
  * showed both — exactly backwards. A reviewer asked whether "Deal row on CRE Deals" is right, with
  * no picture of the list it sits in, is being asked to review a sentence about a screen they have
  * not seen.
@@ -393,7 +393,7 @@ function renderWorklist(
   return `
     <div class="gate-note">
       <p><strong>And almost none of it is written.</strong> ${written} of ${written + blanks} slots carry a
-      sentence; the other ${blanks} say nothing at all. Nothing can be agreed to while a promise has a
+      sentence; the other ${blanks} say nothing at all. Nothing can be agreed to while a behaviour has a
       slot that says nothing — which is why ${gatedCount} of them are waiting.</p>
       <p class="what-next">Writing ${blanks} sentences by hand is not review. Pick a feature below, have
       its blanks drafted from the code and from what the previous model recorded, and review the
@@ -424,7 +424,7 @@ function renderWorklist(
 }
 
 // ---------------------------------------------------------------------------
-// The grid — what this scope promises, and where each promise came from.
+// The grid — the behaviours this scope states, and where each came from.
 
 function renderGrid(g: Grid, ctx: Ctx): string {
   const cell = (mark: string, meaning: string, extra: string[]): string =>
@@ -451,7 +451,7 @@ function renderGrid(g: Grid, ctx: Ctx): string {
   const { stated, inherited, unsettled, blank, outOfScope, constrained, deferred } = g.counts;
   return `
     <section class="grid-wrap">
-      <h2>What ${line(g.title)} promises</h2>
+      <h2>Behaviours in ${line(g.title)}</h2>
       <p class="counts">
         <span>${g.rows.length} exchange${g.rows.length === 1 ? "" : "s"}</span>
         <span>${stated} said here</span>
@@ -507,7 +507,7 @@ function renderGrid(g: Grid, ctx: Ctx): string {
 /**
  * ⛔ ONE SCOPE'S PROMISES AT A TIME, because the whole corpus at once is not reviewable.
  *
- * This rendered every descendant's cards in one flat run. On a real product that is 51 promises and
+ * This rendered every descendant's cards in one flat run. On a real product that is 51 behaviours and
  * ten grids on a single scroll, and the surface exists to review ONE feature — so the page is cut
  * into views and the menu switches between them. `heading: false` keeps the served and standalone
  * renders as they were.
@@ -630,7 +630,7 @@ function renderExchanges(corpus: Corpus, scopeIds: string[], cellOf: Map<string,
     }
   }
   return cards.length
-    ? `<section class="exchanges">${heading ? "<h2>Every promise, in full</h2>" : ""}${cards.join("")}</section>`
+    ? `<section class="exchanges">${heading ? "<h2>Every behaviour, in full</h2>" : ""}${cards.join("")}</section>`
     : "";
 }
 
@@ -755,7 +755,7 @@ function renderNav(
   /**
    * ⛔ THE TOP LEVEL IS A ROW OF TABS, NOT A ROW INSIDE A DROPDOWN.
    *
-   * The two halves of a product — what it promises a person, and the machinery underneath — are the
+   * The two halves of a product — what it states a person, and the machinery underneath — are the
    * one split a reader navigates by constantly, and burying them at depth 1 of a collapsed tree put
    * the most-used move behind two presses and a scan. They sit side by side; the tree is for going
    * deeper, which is the thing a tree is good at.
@@ -765,7 +765,7 @@ function renderNav(
     { id: "overview", label: "Overview" },
     /**
      * ⛔ WHAT A PERSON SEES, THEN THE MACHINERY UNDERNEATH. File order put the subsystems first,
-     * which is backwards for every reader: the promises are the product, and the machinery is what
+     * which is backwards for every reader: the behaviours are the product, and the machinery is what
      * they rest on. Ordered by whether anything beneath the section has a screen, so it holds
      * whatever the corpus is called rather than a list of names to keep updated.
      */
@@ -859,7 +859,7 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
   /**
    * ⛔ ONE GRID PER SCOPE THAT HAS PROMISES. `gridFor` reads one scope's own exchanges, and
    * a container has none — so a single call for the named scope rendered an empty grid
-   * reading `0 exchanges · 0 blank` directly above cards for every promise underneath it.
+   * reading `0 exchanges · 0 blank` directly above cards for every behaviour underneath it.
    * Containers nest without limit, so this has to be the whole subtree or it is a lie about
    * the commonest shape in the model.
    */
@@ -909,9 +909,13 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
    * ⛔ COMPUTED BEFORE ANYTHING IS RENDERED, so a link and its target cannot disagree — which is
    * how 357 dead anchors reached a real corpus.
    */
-  /** Every scope this render emits a view for — leaves with promises, and the containers above them. */
+  /** Every scope this render emits a view for — leaves with behaviours, and the containers above them. */
   const containerViews = ids.filter(
-    (id) => (corpus.scopes.find((s) => s.scope.id === id)?.scope.exchanges.length ?? 0) === 0
+    (id) =>
+      (corpus.scopes.find((s) => s.scope.id === id)?.scope.exchanges.length ?? 0) === 0 &&
+      // ⛔ Not the scope this page is rooted at — that is Overview, and giving it a container view
+      // too rendered its description twice under two headings.
+      id !== scopeId
   );
   const viewed = new Set<string>([...grids.map((g) => g.scope), ...containerViews]);
   const anchors = new Set<string>([
@@ -971,13 +975,13 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
            <div class="sub-view" data-sub-view="queue">
              ${
                live.length
-                 ? `<p class="lede"><strong>${live.length}</strong> question${live.length === 1 ? "" : "s"} nobody has answered. Each reaches every promise its selector touches, and every one written after it.</p>
+                 ? `<p class="lede"><strong>${live.length}</strong> question${live.length === 1 ? "" : "s"} nobody has answered. Each reaches every behaviour its selector touches, and every one written after it.</p>
                     ${
                       /**
                        * ⛔ A SHORT QUEUE IS NOT A REVIEWED CORPUS, AND THE PAGE READ AS THOUGH IT WERE.
                        *
-                       * Seven items offered, seventy-seven promises nobody has ever agreed to, and
-                       * nothing on screen connecting the two: every one of those promises is GATED
+                       * Seven items offered, seventy-seven behaviours nobody has ever agreed to, and
+                       * nothing on screen connecting the two: every one of those behaviours is GATED
                        * behind these same questions, because a stamp on a slot that says nothing
                        * reads exactly like a considered one. So the queue is short for the worst
                        * reason available, and looked like the best.
@@ -985,7 +989,7 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
                       gated.length || agreed
                         ? `<p class="gate-note">${
                             agreed
-                              ? `<strong>${agreed}</strong> of ${agreed + gated.length} promises have been agreed to. `
+                              ? `<strong>${agreed}</strong> of ${agreed + gated.length} behaviours have been agreed to. `
                               : `<strong>Nothing here has been agreed to yet.</strong> `
                           }${
                             gated.length
@@ -1058,7 +1062,7 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
          * ⛔ A CONTAINER IS A PLACE YOU CAN STAND, AND IT LISTS WHAT IS BENEATH IT — it does not
          * repeat the subtree.
          *
-         * Repeating would put the same promise in two views, which means two accept buttons with one
+         * Repeating would put the same behaviour in two views, which means two accept buttons with one
          * ref: pressing either leaves the other reading as un-agreed, and a reviewer cannot tell
          * which one counted. The listing is what a container actually has to say — a grouping's own
          * content is its children.
@@ -1074,14 +1078,14 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
               <ul class="contents">${kids
                 .map((k) => {
                   const under = descendants(corpus, k.scope.id);
-                  const promises = under.reduce(
+                  const behaviours = under.reduce(
                     (n, d) => n + (corpus.scopes.find((x) => x.scope.id === d)?.scope.exchanges.length ?? 0),
                     0
                   );
                   const ready = a.acceptable.filter((r: string) => under.some((u) => r.startsWith(`${u}#`))).length;
                   return `<li><a href="#${anchorOf(k.scope.id)}" data-goto="${esc(k.scope.id)}">${line(
                     k.scope.title || k.scope.id
-                  )}</a> <span class="n">${promises} promise${promises === 1 ? "" : "s"}${
+                  )}</a> <span class="n">${behaviours} behaviour${behaviours === 1 ? "" : "s"}${
                     ready ? ` · ${ready} ready to agree to` : ""
                   }</span></li>`;
                 })
@@ -1095,7 +1099,7 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
         parked.length
           ? `<section class="questions parked-set">
                <h2>Parked</h2>
-               <p class="lede">Read, deliberately not answered now, and still holes — no promise containing one can be built from.</p>
+               <p class="lede">Read, deliberately not answered now, and still holes — no behaviour containing one can be built from.</p>
                ${parked.map((q, i) => renderQuestion(q, live.length + i, decisionsOn(corpus, q.ref), ctx)).join("")}
              </section>`
           : ""
@@ -1261,7 +1265,7 @@ document.addEventListener("click", (ev) => {
 /**
  * ⛔ ONE VIEW AT A TIME, AND EVERYTHING VISIBLE WITHOUT THIS SCRIPT.
  *
- * The whole corpus on one scroll is not reviewable — a real product is ten grids and 51 promises —
+ * The whole corpus on one scroll is not reviewable — a real product is ten grids and 51 behaviours —
  * and the surface exists to review one feature. So the menu hides the views it is not on.
  *
  * Progressive enhancement on purpose: with no JS every view is visible and the anchors still work,
@@ -1358,7 +1362,7 @@ const VIEW_SWITCH = `<script>
        * ⛔ A ROW THE FILTER CANNOT IDENTIFY IS HIDDEN, NOT KEPT.
        *
        * Defaulting to visible meant every row without a usable link survived every filter — so
-       * choosing the promises half still showed the machinery, while the machinery half looked
+       * choosing the product half still showed the machinery, while the machinery half looked
        * correct and hid the bug. An unidentifiable row is exactly the one there is no reason to
        * trust.
        */

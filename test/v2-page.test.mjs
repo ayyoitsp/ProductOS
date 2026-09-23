@@ -6,7 +6,7 @@
  * answering printed as "nobody has said what this is" — directly above a grid on the same page
  * marking them `↑R5` and `↑R2`. And it called `gridFor` once for the named scope, which reads
  * one scope's own exchanges, so every container rendered `0 exchanges` above cards for every
- * promise underneath it.
+ * behaviour underneath it.
  *
  * A reviewer cannot tell which of two numbers on one screen is the real one, and the stamp
  * they leave is over whichever they believed.
@@ -43,7 +43,7 @@ test("the page and the grid agree on how many slots are blank", () => {
   }
 });
 
-test("a container renders the promises filed beneath it, not an empty grid", () => {
+test("a container renders the behaviours filed beneath it, not an empty grid", () => {
   const containers = SCOPES.filter(
     (id) => corpus.scopes.find((s) => s.scope.id === id).scope.exchanges.length === 0
   );
@@ -55,9 +55,9 @@ test("a container renders the promises filed beneath it, not an empty grid", () 
       .filter(Boolean)
       .reduce((n, g) => n + g.rows.length, 0);
     assert.ok(under > 0, `${id} has nothing beneath it, so this proves nothing`);
-    // One grid heading per scope that actually has promises.
-    const headings = (html.match(/<h2>What [^<]*promises/g) ?? []).length;
-    assert.ok(headings >= 1, `${id} rendered no grid for ${under} promises beneath it`);
+    // One grid heading per scope that actually has behaviours.
+    const headings = (html.match(/<h2>Behaviours in [^<]*<\/h2>/g) ?? []).length;
+    assert.ok(headings >= 1, `${id} rendered no grid for ${under} behaviours beneath it`);
     assert.equal((html.match(/0 exchange/g) ?? []).length, 0, `${id} claims 0 exchanges`);
   }
 });
@@ -201,18 +201,18 @@ test("rendering writes nothing to the corpus", () => {
  * ⛔ ONE FEATURE AT A TIME, OR THE SURFACE IS NOT REVIEWABLE.
  *
  * The page rendered every descendant on one scroll. On a real product that is ten grids and 51
- * promises in a single artifact — and the surface exists to review ONE feature, which Peter could
+ * behaviours in a single artifact — and the surface exists to review ONE feature, which Peter could
  * not do on it. It is cut into views now, with the menu switching between them.
  *
  * Asserted as structure, because the switching itself is browser behaviour: every scope that has
- * promises gets exactly one view and exactly one menu entry, the questions get their own, and the
+ * behaviours gets exactly one view and exactly one menu entry, the questions get their own, and the
  * whole thing works with the script removed.
  */
 test("each feature is its own view, reachable from the menu", () => {
   const root = corpus.scopes.find((s) => !s.scope.in).scope.id;
   const html = renderScopePage(corpus, root, { linkBase: "/v2" });
 
-  const withPromises = descendants(corpus, root).filter(
+  const withBehaviours = descendants(corpus, root).filter(
     (id) => (corpus.scopes.find((s) => s.scope.id === id)?.scope.exchanges.length ?? 0) > 0
   );
   const views = [...html.matchAll(/data-view="([^"]+)"/g)].map((m) => m[1]);
@@ -221,8 +221,8 @@ test("each feature is its own view, reachable from the menu", () => {
   const navHtml = /<nav class="scopes">[\s\S]*?<\/nav>/.exec(html)[0];
   const menu = [...navHtml.matchAll(/data-goto="([^"]+)"/g)].map((m) => m[1]);
 
-  for (const id of withPromises) {
-    assert.ok(views.includes(id), `${id} has promises and no view of its own`);
+  for (const id of withBehaviours) {
+    assert.ok(views.includes(id), `${id} has behaviours and no view of its own`);
     assert.ok(menu.includes(id), `${id} has a view and no way to reach it`);
   }
   /**
@@ -299,7 +299,7 @@ test("the top frame carries a trail for every view it can reach", () => {
 /**
  * ⛔ THE TOP LEVEL IS A ROW, NOT A DEPTH IN A DROPDOWN.
  *
- * The two halves of a product — what it promises a person, and the machinery underneath — are the
+ * The two halves of a product — what it states a person, and the machinery underneath — are the
  * split a reader navigates by constantly. Buried at depth 1 of a collapsed tree, the most-used move
  * cost two presses and a scan. And the queue sat in that tree beside the features, at the same level
  * as the things it asks about, which left the product's own framing with nowhere to be read at all.
@@ -389,7 +389,7 @@ test("a queue with no questions says how much is unwritten", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "v2bare-"));
   fs.mkdirSync(path.join(dir, "truth"), { recursive: true });
   for (const d of ["rules", "readings", "verdicts"]) fs.mkdirSync(path.join(dir, d), { recursive: true });
-  // One promise, one slot said, the rest blank — a migration's output in miniature.
+  // One behaviour, one slot said, the rest blank — a migration's output in miniature.
   fs.writeFileSync(
     path.join(dir, "truth", "thing.md"),
     `---\nid: thing\ntitle: A thing\nexists: kept\nviews:\n  - id: a-screen\n    title: A screen\n    walked: true\n    parts:\n      - id: go\n        role: commits\n        label: Go\nexchanges:\n  - id: press-go\n    title: Somebody presses Go\n    asked_by: person\n    at: { view: a-screen, part: go }\n    slots:\n      answer:\n        says: Something is recorded, and the person is told it was.\n    criteria: []\n---\n\nA scope with one sentence and seven blanks.\n`
@@ -404,7 +404,7 @@ test("a queue with no questions says how much is unwritten", () => {
   // break's worth of formatting fails on the next reflow while the copy is perfectly correct.
   assert.match(
     html.replace(/\s+/g, " "),
-    /Nothing can be agreed to while a promise has a slot that says nothing/,
+    /Nothing can be agreed to while a behaviour has a slot that says nothing/,
     "it does not say what the blanks block"
   );
   /**

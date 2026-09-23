@@ -354,7 +354,7 @@ function doAccept(dir: string, { target }: AcceptPayload, consent: Consent): Out
    * accepted truth bricked the corpus: `check` refused it, `accept` refused to re-accept it,
    * and the only exit was hand-deleting a human's verdict from the log.
    *
-   * Re-accepting after a change is exactly the right act — the reviewer reads the new promise
+   * Re-accepting after a change is exactly the right act — the reviewer reads the new behaviour
    * and stamps that. The stamp is computed from the current content, so it cannot launder
    * anything.
    */
@@ -469,7 +469,7 @@ function doRule(dir: string, o: RulePayload, consent: Consent): Outcome {
    * WHOLE SENTENCE — SO THE PERSON WRITES IT, AND SEES WHAT THEY ARE REPLACING.
    *
    * Picking on such a slot took the candidate — which answers the ASPECT — and made it the
-   * entire `says`. A three-clause agreed promise was replaced by one clause; `check` then
+   * entire `says`. A three-clause agreed behaviour was replaced by one clause; `check` then
    * refused two surviving criteria for over-asserting, and the clause with no criterion
    * vanished with no signal at all.
    */

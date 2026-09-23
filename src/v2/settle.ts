@@ -710,7 +710,7 @@ export function waive(
    *
    * It used to delete `says`, `none`, `cannot_fail` and `outcomes` — so waiving one slot
    * removed two settled named refusals with no gate and no record. Declaring latitude over
-   * something already answered is not granting latitude; it is deleting a promise, and it
+   * something already answered is not granting latitude; it is deleting a behaviour, and it
    * has to be two acts so that the deletion is visible as one.
    */
   const waived = { standing: { kind: "out_of_scope", because, answered_by: by, answered_at: at } };

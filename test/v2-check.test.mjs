@@ -43,7 +43,7 @@ const MUST_FIRE = {
   "excepts-a-rule-nobody-has-written": "a reasoned exemption from a sentence nobody has read",
   "declares-against-a-rule-nobody-has-written": "the same act at slot grain, which costs the same",
   "says-it-changes-nothing-and-declares-otherwise": "a declared state change with no sentence saying what changed",
-  "leaves-something-nothing-declares": "something left behind that no other promise can discover",
+  "leaves-something-nothing-declares": "something left behind that no other behaviour can discover",
   "nothing-demonstrates-what-it-leaves-behind": "the clause with no criterion is the one that goes missing",
   "criterion-asserts-more-than-the-slot": "the criterion is what an engineer implements",
   "criterion-asserts-more-than-the-rule": "a rule criterion reaches every exchange it governs",
@@ -57,13 +57,13 @@ const MUST_FIRE = {
   "rule-governs-nothing": "a principle carrying no weight, which is what v1 could not surface",
   "named-in-a-dispute": "the far side of a contradiction otherwise reads as settled",
   "nothing-in-this-product-sets-this": "an unowned entity, which is not a subsystem",
-  "nothing-demonstrates-this": "a promise with nothing that would show it",
+  "nothing-demonstrates-this": "a behaviour with nothing that would show it",
   "slot-disputed": "a standing a person has to move",
   "two-rules-answer-this": "which org rule wins was decided by filename",
   "latitude-nobody-granted": "the strongest claim in the schema, made by an edit rather than an act",
   "demonstrates-nothing": "a criterion pointing at a slot nothing answers",
   "two-things-share-an-id": "two scopes declaring one screen was the escape from one-press-two-answers",
-  "owns-no-promise": "a container named after data, standing in for a component that owns something",
+  "states-no-behaviour": "a container named after data, standing in for a component that owns something",
   "follows-nothing": "machinery following an ask nobody can find",
   "names-no-rule": "a declaration naming a rule that does not exist, printed to the builder as considered",
   "declares-against-nothing": "a formal exemption from a rule that was never there",
@@ -182,17 +182,17 @@ test("the seed's queue stays small enough to work", () => {
 /**
  * ⛔ A CROSS-SCOPE `at:` SPLIT ONE PICTURE ACROSS TWO PACKETS, AND NEITHER HALF SAID SO.
  *
- * A promise filed in one scope may arrive on a screen owned by another — views have one home and
+ * A behaviour filed in one scope may arrive on a screen owned by another — views have one home and
  * deliberately do not inherit. But the packet read `entry.scope.views` and nothing else, so:
  *
  *   - the scope owning the PROMISE named `task-list · task-row` with no picture of it, while a
  *     perfectly good sketch sat in the corpus reaching nobody
  *   - the scope owning the SCREEN — whose packet is what a builder implementing it receives —
- *     never mentioned that a promise from elsewhere lands on its row
+ *     never mentioned that a behaviour from elsewhere lands on its row
  *
  * Both halves passed every check. Pinned by building the shape rather than by reading the renderer.
  */
-test("a promise arriving on another scope's screen is whole in both packets", () => {
+test("a behaviour arriving on another scope's screen is whole in both packets", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "v2xs-"));
   fs.cpSync("v2-seed", dir, { recursive: true });
   const f = path.join(dir, "truth", "money.md");
@@ -204,11 +204,11 @@ test("a promise arriving on another scope's screen is whole in both packets", ()
   const owner = compilePacket(corpus, "money");
   const screen = compilePacket(corpus, "tasks");
 
-  // The promise's packet carries the screen it arrives on, labelled as belonging elsewhere.
+  // The behaviour's packet carries the screen it arrives on, labelled as belonging elsewhere.
   assert.match(owner, /This screen belongs to \*\*tasks\*\*/, "the borrowed screen has no picture");
-  assert.ok(owner.includes("│  Tasks"), "the sketch did not travel with the promise");
+  assert.ok(owner.includes("│  Tasks"), "the sketch did not travel with the behaviour");
   // The screen's packet names what arrives on it from elsewhere.
-  assert.match(screen, /Promises from elsewhere arrive on this screen/, "the arrival is invisible to whoever builds the screen");
+  assert.match(screen, /Behaviours from elsewhere arrive on this screen/, "the arrival is invisible to whoever builds the screen");
   assert.match(screen, /money#see-a-balance · task-row/);
   // ⛔ And the screen still has exactly one home — it is reproduced, never re-declared.
   assert.equal((screen.match(/### Tasks \*\(list\)\*/g) ?? []).length, 1);

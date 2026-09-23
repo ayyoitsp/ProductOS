@@ -233,7 +233,7 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
      */
     for (const ex of scope.exchanges) {
       if (!ex.at) continue;
-      // ⛔ Resolved corpus-wide, so a promise can arrive on another area's screen. See
+      // ⛔ Resolved corpus-wide, so a behaviour can arrive on another area's screen. See
       // `resolveView` — restricting this to the declaring scope forced grouping by screen, and
       // the workaround reviewers found was duplicating the view, which escaped the
       // one-control-one-answer refusal entirely.
@@ -324,7 +324,7 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
      *
      * ⛔ `exists` was declared on Scope and Exchange and read only on View. So
      * `exists: withdrawn` on an exchange left it in the grid, in `acts`, and in the packet
-     * under its own heading as truth to build — a promise somebody had removed, delivered
+     * under its own heading as truth to build — a behaviour somebody had removed, delivered
      * to a builder as observed fact.
      */
     /**
@@ -362,7 +362,7 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
             kind: "leaves-something-nothing-declares",
             where: `${ref}#after`,
             what: "says something is different afterwards, and declares `changes: []`",
-            fix: "name in `changes:` the words whose state this moves — that list is how another promise finds out this one can move something it reads",
+            fix: "name in `changes:` the words whose state this moves — that list is how another behaviour finds out this one can move something it reads",
           });
         /**
          * ⛔ A STATED `after` OWES A DEMONSTRATION, and the generic detector could not ask for one
@@ -445,7 +445,7 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
         });
     }
     // ⛔ An exchange nobody asks is a Rule. This is the guard that stops a scope
-    // accumulating promises with no asker, which is how v1's capability pages went thin.
+    // accumulating behaviours with no asker, which is how v1's capability pages went thin.
     for (const ex of scope.exchanges) {
       const ref = `${scope.id}#${ex.id}`;
 
@@ -485,7 +485,7 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
               kind: "says-it-differently-here",
               where: `${ref}#${slot}#${so.name}`,
               what: `"${so.name}" is shared by ${r.id} and worded differently here`,
-              fix: `${r.id} says: ${norm(so.told)} — if this really is a different promise, keep it; if not, drop the local case and let the shared one reach here unchanged`,
+              fix: `${r.id} says: ${norm(so.told)} — if this really is a different behaviour, keep it; if not, drop the local case and let the shared one reach here unchanged`,
             });
           }
 
@@ -697,7 +697,7 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
             kind: "budget-only-an-engineer-can-see",
             where: `${ref}#${slot}`,
             what: `"${fill.within}" reads as telemetry, not as something the asker can observe`,
-            fix: "say what the asker notices, or drop it — a budget no counterparty can see is not a promise",
+            fix: "say what the asker notices, or drop it — a budget no counterparty can see is not a behaviour",
           });
         }
       }
@@ -1274,7 +1274,7 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
   }
 
   /**
-   * ---- a scope that owns no promise ----
+   * ---- a scope that owns no behaviour ----
    *
    * ⛔ REQUIREMENT 3'S OWN EXAMPLE, PASSING CLEAN.
    *
@@ -1282,8 +1282,8 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
    * children — and `check` output was byte-identical to pristine. `packet workbook-templates`
    * compiled a title, the prose and the full glossary with nothing under it; `decide` said
    * "nothing undecided"; `read --buildable yes` was recorded. `packet tasks` then printed
-   * *"— **Workbook Templates** — its promises are its own; do not re-decide them here"* about
-   * a scope with no promises at all.
+   * *"— **Workbook Templates** — its behaviours are its own; do not re-decide them here"* about
+   * a scope with no behaviours at all.
    *
    * That is the shape this model was built to make impossible: a container named after data,
    * standing in for a component that owns something. It was the defect that started this
@@ -1294,21 +1294,21 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
    */
   for (const { scope } of corpus.scopes) {
     const below = descendants(corpus, scope.id);
-    const promises = below.reduce(
+    const behaviours = below.reduce(
       (n, id) => n + (corpus.scopes.find((s) => s.scope.id === id)?.scope.exchanges.length ?? 0),
       0
     );
-    if (promises) continue;
+    if (behaviours) continue;
     const terms = Object.keys(scope.terms);
     add({
       severity: "refuse",
-      kind: "owns-no-promise",
+      kind: "states-no-behaviour",
       where: scope.id,
       what:
-        `nothing here promises anything, and nothing filed under it does either` +
+        `nothing here states any behaviour, and nothing filed under it does either` +
         (terms.length ? ` — it declares ${terms.join(", ")} and no exchange reads or changes ${terms.length === 1 ? "it" : "them"} here` : ""),
       fix:
-        "a scope is a thing that promises, or a container for things that do. If this is vocabulary, declare those words on the scope whose promises use them; if something ought to promise this, that promise is what is missing",
+        "a scope is a thing that states behaviours, or a container for things that do. If this is vocabulary, declare those words on the scope whose behaviours use them; if something ought to state this, that behaviour is what is missing",
     });
   }
 
@@ -1399,7 +1399,7 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
           kind: "two-things-share-an-id",
           where: scopes.map((s) => `${s}#${id}`).join(", "),
           what: `${scopes.length} scopes declare a view called "${id}"`,
-          fix: "a screen has one identity — declare it once and let the other scope's promises arrive at it as <scope>#<view>, which is what lets a promise be filed where it belongs rather than where its screen is",
+          fix: "a screen has one identity — declare it once and let the other scope's behaviours arrive at it as <scope>#<view>, which is what lets a behaviour be filed where it belongs rather than where its screen is",
         });
   }
 
@@ -1438,14 +1438,14 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
    *
    * In the model this replaced, an unowned noun had nowhere to go, so it got filed as a
    * subsystem — the only container available. On a real corpus that produced six
-   * "subsystems" of which four held exactly one promise: "deal pipeline" and "workbook
+   * "subsystems" of which four held exactly one behaviour: "deal pipeline" and "workbook
    * templates" were each a noun several screens read and nothing wrote, described
    * accurately and then filed as though they were components.
    *
    * It is not a subsystem, and it is not usually an author's mistake either. It is one of
    * three things, and which one a person has to say:
    *
-   *   - a promise is missing — something ought to set this, and no exchange does
+   *   - a behaviour is missing — something ought to set this, and no exchange does
    *   - it comes from outside the product, and nothing here will ever set it
    *   - the term is dead and should be deleted
    *
@@ -1478,7 +1478,7 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
         // ⛔ A WITHDRAWN PROMISE IS NOT A WRITER. Adding one with `changes: [task]` switched
         // off `nothing-in-this-product-sets-this` for that term and pushed another term's
         // reader count up — so the cheapest way to silence the unowned-entity finding was to
-        // declare a promise and immediately withdraw it.
+        // declare a behaviour and immediately withdraw it.
         if (existsOf(corpus, scope.id, ex.exists) === "withdrawn") continue;
         for (const term of ex.reads) {
           const key = `${homeOf(scope.id, term) ?? scope.id}#${term}`;
@@ -1543,7 +1543,7 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
          * and was then PRINTED TO THE BUILDER as product truth. Declared on `money`, which
          * three exchanges in the same corpus write, the output was byte-identical to pristine
          * and the packet's glossary read *"nothing in this product sets this — the family's
-         * bank is the system of record"* seventy lines above three promises saying the amount
+         * bank is the system of record"* seventy lines above three behaviours saying the amount
          * is added to and taken off what a kid has.
          *
          * `writers` is already in hand here and was used only to silence the finding.
@@ -1563,7 +1563,7 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
             kind: "nothing-in-this-product-sets-this",
             where: `${scope.id} · ${term}`,
             what: `${r.length} exchange${r.length === 1 ? "" : "s"} read "${term}" and none changes it — ${r.slice(0, 4).join(", ")}`,
-            fix: "say which: a promise is missing that ought to set it, it comes from outside the product and nothing here ever will, or the word is dead. It is not a subsystem",
+            fix: "say which: a behaviour is missing that ought to set it, it comes from outside the product and nothing here ever will, or the word is dead. It is not a subsystem",
           });
         const readElsewhere = corpus.scopes.find((s) => s.scope.id === home)?.scope.terms[term]?.read_outside;
         if (readElsewhere && r.length)
@@ -1584,7 +1584,7 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
             // cleared and could not be parked either: `defer family-wallet#completion` → "no
             // exchange \"completion\"". A finding with no true answer is one people learn to
             // scroll past.
-            fix: "either a promise is missing that ought to read it, or something outside this product does — say which with `read_outside` on the term, the way `set_outside` answers the other direction",
+            fix: "either a behaviour is missing that ought to read it, or something outside this product does — say which with `read_outside` on the term, the way `set_outside` answers the other direction",
           });
       }
     }
@@ -1862,7 +1862,7 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
           kind: "two-rules-answer-this",
           where: slotRef,
           what: `${ids.join(" and ")} all supply this slot, and which one wins is decided by filename`,
-          fix: "narrow one selector, or have this exchange state the slot itself with an `instead_of` naming the rest — nothing about a filename belongs in what the product promises",
+          fix: "narrow one selector, or have this exchange state the slot itself with an `instead_of` naming the rest — nothing about a filename belongs in what the product states",
         });
   }
 
@@ -1877,7 +1877,7 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
   for (const { rule } of corpus.rules) {
     if (!rule.standing || rule.standing.kind === "stated") continue;
     /**
-     * ⛔ Parking silences the ask AT EVERY GRAIN, or `defer` is a promise the tool keeps only
+     * ⛔ Parking silences the ask AT EVERY GRAIN, or `defer` is a behaviour the tool keeps only
      * for slots. It stays unsettled, the rule still governs nothing, and every exchange it
      * would have reached still reads as blank — only the asking stops.
      */

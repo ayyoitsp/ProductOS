@@ -106,7 +106,7 @@ const tool = <T extends z.ZodObject<z.ZodRawShape>>(
 
 const scopesTool = tool(
   "productos_exchange_scopes",
-  "Every scope in the Exchange corpus as a tree, with how much each is holding: questions nobody has answered, and promises ready to agree to. Start here — this answers 'which feature should we look at next'.",
+  "Every scope in the Exchange corpus as a tree, with how much each is holding: questions nobody has answered, and behaviours ready to agree to. Start here — this answers 'which feature should we look at next'.",
   AtDir,
   (a, paths) => {
     const dir = dirOf(a, paths);
@@ -146,7 +146,7 @@ const questionsTool = tool(
 
 const gridTool = tool(
   "productos_exchange_grid",
-  "What a scope promises and where each promise came from — one row per exchange, one column per slot, marked for said-here, inherited from an org-wide rule, deliberately unanswered, unsettled, or blank.",
+  "What a scope behaviours and where each behaviour came from — one row per exchange, one column per slot, marked for said-here, inherited from an org-wide rule, deliberately unanswered, unsettled, or blank.",
   AtDir.extend({ scope: z.string() }),
   (a, paths) => {
     const dir = dirOf(a, paths);
@@ -155,14 +155,14 @@ const gridTool = tool(
       .map((id) => gridFor(corpus, id))
       .filter((g): g is NonNullable<typeof g> => !!g && g.rows.length > 0)
       .map((g) => renderGridText(g));
-    if (!out.length) throw new Error(`no scope "${a.scope}", or nothing beneath it promises anything`);
+    if (!out.length) throw new Error(`no scope "${a.scope}", or nothing beneath it behaviours anything`);
     return { dir, grid: out.join("\n\n") };
   }
 );
 
 const packetTool = tool(
   "productos_exchange_packet",
-  "What a builder receives for one scope: every promise in full, the words the sentences use, what demonstrates each, the holes, and whether a human has read it end to end.",
+  "What a builder receives for one scope: every behaviour in full, the words the sentences use, what demonstrates each, the holes, and whether a human has read it end to end.",
   AtDir.extend({ scope: z.string() }),
   (a, paths) => {
     const dir = dirOf(a, paths);
@@ -202,7 +202,7 @@ const recordTool = tool(
 
 const pageTool = tool(
   "productos_exchange_page",
-  "Render one scope as a self-contained HTML page a person can read — the questions with their options, the grid, every promise in full, and what was already decided. Write it to a file and show it to them; it is read-only unless served, so the acts on it are visibly inert.",
+  "Render one scope as a self-contained HTML page a person can read — the questions with their options, the grid, every behaviour in full, and what was already decided. Write it to a file and show it to them; it is read-only unless served, so the acts on it are visibly inert.",
   AtDir.extend({
     scope: z.string(),
     out: z.string().describe("file path to write the HTML to").optional(),

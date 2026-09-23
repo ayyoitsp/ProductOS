@@ -113,7 +113,7 @@ export function v2Command(): Command {
 
   cmd
     .command("grid")
-    .description("What a scope promises, and where each promise came from")
+    .description("The behaviours a scope states, and where each came from")
     .argument("[scope]", "scope id; omit to show every scope")
     .option("--at <dir>", "corpus directory", "v2")
     .action((scope: string | undefined, o: { at?: string }) => {
@@ -139,7 +139,7 @@ export function v2Command(): Command {
         if (s && !s.exchanges.length && kids.length && ids.length === 1) {
           console.log("");
           console.log(
-            `${s.title} — ${pc.dim(`promises nothing itself; it contains ${kids.map((k) => k.scope.id).join(", ")}`)}`
+            `${s.title} — ${pc.dim(`behaviours nothing itself; it contains ${kids.map((k) => k.scope.id).join(", ")}`)}`
           );
           continue;
         }
@@ -241,7 +241,7 @@ export function v2Command(): Command {
     .action((scope: string, o: { at?: string }) => {
       const corpus = loadCorpus(at(o));
       refuseIfBroken(corpus, "a packet handed to a builder");
-      // ⛔ A container compiles a packet with a glossary and no promises, which reads as a
+      // ⛔ A container compiles a packet with a glossary and no behaviours, which reads as a
       // finished specification for a thing that has none. Say so before printing it.
       const kids = corpus.scopes.filter((s) => s.scope.in === scope);
       const mine = corpus.scopes.find((s) => s.scope.id === scope)?.scope.exchanges.length ?? 0;
@@ -249,7 +249,7 @@ export function v2Command(): Command {
         console.log(
           pc.yellow("→"),
           pc.dim(
-            `${scope} promises nothing itself — it contains ${kids.map((k) => k.scope.id).join(", ")}. Compile one of those.`
+            `${scope} behaviours nothing itself — it contains ${kids.map((k) => k.scope.id).join(", ")}. Compile one of those.`
           ),
           "\n"
         );
@@ -601,7 +601,7 @@ export function v2Command(): Command {
      * test drives them — they are not the interface, and presenting them as one was a mistake.
      */
     .command("page")
-    .description("Render one scope as a page a person can review — the acts, the grid, every promise")
+    .description("Render one scope as a page a person can review — the acts, the grid, every behaviour")
     .argument("<scope>")
     .requiredOption("--out <file>", "where to write the HTML")
     .option("--at <dir>", "corpus directory", "v2")

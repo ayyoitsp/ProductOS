@@ -116,26 +116,26 @@ function compileOne(corpus: Corpus, scopeId: string): string | null {
      *
      * The scope's prose sat three lines under "Everything below is what the product must do",
      * which made an untyped, unstructured field part of the truth region. Five invented
-     * promises prepended to it shipped above `accepted by peter` with zero findings, one
+     * behaviours prepended to it shipped above `accepted by peter` with zero findings, one
      * contradicting the accepted `refuses`. It is hashed now — so an edit breaks the stamp —
      * and it is fenced so a builder can tell orientation from obligation.
      */
     out.push("## Why this exists");
     out.push("");
-    out.push("> Orientation, not obligation. Nothing here is a promise; every promise is a slot below.");
+    out.push("> Orientation, not obligation. Nothing here is a behaviour; every behaviour is a slot below.");
     out.push("");
     out.push(entry.body);
     out.push("");
   }
 
   if (entry.scope.depends_on.length) {
-    // ⛔ What a builder is allowed to assume, and whose promise it is — stated rather than
+    // ⛔ What a builder is allowed to assume, and whose behaviour it is — stated rather than
     // left to be inferred from which pages happen to mention each other.
-    out.push("## What this rests on, and does not itself promise");
+    out.push("## What this rests on, and does not itself behaviour");
     out.push("");
     for (const d of entry.scope.depends_on) {
       const dep = corpus.scopes.find((s) => s.scope.id === d);
-      out.push(`- **${dep?.scope.title ?? d}** (\`${d}\`) — its promises are its own; do not re-decide them here`);
+      out.push(`- **${dep?.scope.title ?? d}** (\`${d}\`) — its behaviours are its own; do not re-decide them here`);
     }
     out.push("");
   }
@@ -151,7 +151,7 @@ function compileOne(corpus: Corpus, scopeId: string): string | null {
   if (readings.length) {
     out.push("## What has been observed");
     out.push("");
-    out.push("> These are observations, not promises. They explain why the truth above is what it is.");
+    out.push("> These are observations, not behaviours. They explain why the truth above is what it is.");
     out.push("> A builder may not implement one — if an observation matters, it belongs in a slot.");
     out.push("");
     for (const r of readings)
@@ -207,7 +207,7 @@ function compileOne(corpus: Corpus, scopeId: string): string | null {
    * On the pristine seed, pointing `money#see-a-balance` at `tasks`' task-row gave: money's packet
    * naming `task-list · task-row` with **no picture of it** — the sketch sat in the corpus reaching
    * nobody, which is the exact defect the ⛔ below was written for — and tasks' packet, the one a
-   * builder implementing that screen receives, never mentioning that a money promise lands on its
+   * builder implementing that screen receives, never mentioning that a money behaviour lands on its
    * row at all. Both halves passed every check.
    *
    * Views do not inherit and must not start to: a screen has one home. What travels is a copy for
@@ -222,7 +222,7 @@ function compileOne(corpus: Corpus, scopeId: string): string | null {
     if (borrowed.some((b) => b.view.id === r.view.id && b.from === r.scope)) continue;
     borrowed.push({ from: r.scope, view: r.view });
   }
-  /** Promises filed in OTHER scopes that arrive on a screen this one owns. */
+  /** Behaviours filed in OTHER scopes that arrive on a screen this one owns. */
   const arrivals = new Map<string, string[]>();
   for (const { scope: other } of corpus.scopes) {
     if (other.id === scopeId) continue;
@@ -245,13 +245,13 @@ function compileOne(corpus: Corpus, scopeId: string): string | null {
       if (lent)
         out.push(
           "",
-          `> ⛔ This screen belongs to **${lent.from}**, not here. It is reproduced so the promise that arrives on it can be built — change it there, never here, or two packets will describe one screen differently.`
+          `> ⛔ This screen belongs to **${lent.from}**, not here. It is reproduced so the behaviour that arrives on it can be built — change it there, never here, or two packets will describe one screen differently.`
         );
       const here = arrivals.get(v.id) ?? [];
       if (here.length)
         out.push(
           "",
-          `> ⛔ Promises from elsewhere arrive on this screen: ${here.map((x) => `\`${x}\``).join(", ")}. Building this screen without reading them ships a control that answers to nothing.`
+          `> ⛔ Behaviours from elsewhere arrive on this screen: ${here.map((x) => `\`${x}\``).join(", ")}. Building this screen without reading them ships a control that answers to nothing.`
         );
       if (v.exists === "intended") out.push("", "> ⛔ This screen does not exist yet. Everything here is intent, not observation.");
       if (!v.walked) out.push("", "> ⛔ Nobody has walked this screen. Treat what follows as incomplete.");
@@ -274,7 +274,7 @@ function compileOne(corpus: Corpus, scopeId: string): string | null {
   }
 
   for (const ex of entry.scope.exchanges) {
-    // ⛔ A withdrawn promise is not handed to a builder as truth to build.
+    // ⛔ A withdrawn behaviour is not handed to a builder as truth to build.
     if (existsOf(corpus, scopeId, ex.exists) === "withdrawn") continue;
     const ref = `${scopeId}#${ex.id}`;
     const st = stampFor(corpus, ref);
@@ -386,7 +386,7 @@ function compileOne(corpus: Corpus, scopeId: string): string | null {
          * `refuses` resolved all-or-nothing, so "the shared refusal vocabulary plus one case
          * of my own" was unsayable — which is why the shipped seed hand-types `not-positive`
          * twice, as *"an amount earned is more than nothing"* and *"an amount spent is more
-         * than nothing"*, under a rule whose statement promises they are identical, with
+         * than nothing"*, under a rule whose statement behaviours they are identical, with
          * nothing comparing them.
          *
          * A local case of the same name wins, because the narrower sentence is the more

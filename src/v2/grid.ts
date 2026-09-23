@@ -1,5 +1,5 @@
 /**
- * The grid — what a scope promises, and where each promise came from.
+ * The grid — the behaviours a scope states, and where each came from.
  *
  * ⛔ THIS IS THE DESIGN MADE VISIBLE. Seven columns, one row per exchange. A cell is
  * stated here, inherited from a rule already accepted, unsettled, or blank — and a blank
@@ -483,7 +483,7 @@ export function actsFor(corpus: Corpus): ActCount {
   for (const { scope } of corpus.scopes) {
     for (const ex of scope.exchanges) {
       const ref = `${scope.id}#${ex.id}`;
-      // ⛔ A withdrawn promise is in no queue at all — not offered for acceptance and not
+      // ⛔ A withdrawn behaviour is in no queue at all — not offered for acceptance and not
       // owing a ruling. The finding's fix text claimed both and delivered neither.
       if (existsOf(corpus, scope.id, ex.exists) === "withdrawn") continue;
       let settled = true;

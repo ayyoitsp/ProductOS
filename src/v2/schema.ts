@@ -308,7 +308,7 @@ export const Standing = z
      * DISPUTED standing could carry one — *"whichever reading the storage layer makes cheapest
      * is the one we ship, since both are defensible and neither has a champion"* — and `decide`
      * offered it as "One answer has been proposed. Take it, or replace it." An argument about
-     * how to choose, shipped to a builder as the `at_once` promise.
+     * how to choose, shipped to a builder as the `at_once` behaviour.
      */
     if (s.kind !== "open" && (s.candidates ?? []).length) {
       ctx.addIssue({
@@ -351,7 +351,7 @@ export const Standing = z
     if (s.kind === "disputed") {
       // ⛔ DISTINCT targets, and the declaring slot does not count towards the two. The
       // guard counted, so a dispute listing its own ref twice satisfied "≥2" and named
-      // nobody. `disputeIndex` in load.ts is the construction the message promises.
+      // nobody. `disputeIndex` in load.ts is the construction the message behaviours.
       /**
        * ⛔ ONE COUNTERPARTY IS A DISPUTE. Requiring two made the ordinary bilateral case
        * inexpressible.
@@ -791,7 +791,7 @@ export const Exchange = z
      * WHOLE ARGUMENT IS SYMMETRY.
      *
      * `at` is required for a person's ask on the stated grounds that without it v1
-     * accumulated screen-shaped promises nobody could find. The machinery side had exactly
+     * accumulated screen-shaped behaviours nobody could find. The machinery side had exactly
      * that problem and no field for it, so the fact got smuggled: this corpus wrote
      * `with: A kid with a standing allowance, **and the day it falls due**`, and a reviewer
      * writing a system exchange from scratch put the trigger in both `may` and `with` and
@@ -860,7 +860,7 @@ export const Exchange = z
   }).strict()
   .superRefine((e, ctx) => {
     // ⛔ A person's ask arrives somewhere. Without this an exchange can claim a human
-    // trigger and name no screen, which is how v1 accumulated screen-shaped promises
+    // trigger and name no screen, which is how v1 accumulated screen-shaped behaviours
     // nobody could find.
     /**
      * ⛔ `at.part` IS THE KEY OF A REFUSAL, SO OMITTING IT CANNOT BE FREE.
@@ -912,8 +912,8 @@ export const Exchange = z
         message: "only a person's ask arrives at a view — machinery is handed an input from elsewhere",
       });
     }
-    // ⛔ An e2e criterion on a system-asked exchange means the promise can only be
-    // demonstrated through a screen, which means it is somebody's screen's promise.
+    // ⛔ An e2e criterion on a system-asked exchange means the behaviour can only be
+    // demonstrated through a screen, which means it is somebody's screen's behaviour.
     if (e.asked_by !== "person") {
       for (const c of e.criteria) {
         if (c.level === "e2e") {
@@ -1029,7 +1029,7 @@ export const Exchange = z
 export type Exchange = z.infer<typeof Exchange>;
 
 // ---------------------------------------------------------------------------
-// View — where an ask arrives. Never what promises it.
+// View — where an ask arrives. Never what states it.
 
 /**
  * ⛔ FIVE ROLES, BECAUSE "control" WAS THREE DIFFERENT THINGS AND THE COST LANDED ON THE
@@ -1055,7 +1055,7 @@ export const PartRole = z.enum([
   /** Takes what the person types or picks. What it accepts belongs to the `with` slot of
    *  whatever `commits` reads it — not to an exchange of its own. */
   "entry",
-  /** Goes somewhere else and changes nothing. `leads_to` is its whole promise. */
+  /** Goes somewhere else and changes nothing. `leads_to` is its whole behaviour. */
   "navigates",
   /** Shows something. */
   "display",
@@ -1194,7 +1194,7 @@ export const Rule = z
      * Which slot or slots this rule answers.
      *
      * ⛔ A SINGLE SLOT IS COHERENT FOR `supplies` AND A CATEGORY ERROR FOR `constrains` — and
-     * the compromise is already written into this corpus.
+     * the combehaviour is already written into this corpus.
      *
      * `supplies` answers one slot: one answer, one place. `constrains` "adds a requirement to
      * whatever the exchange says", and a real one lands on several — *"a control that starts
@@ -1264,7 +1264,7 @@ export const Rule = z
      * than no field, because a reader plans around it.
      *
      * The behaviour it claimed to configure is the right one and is not configurable: a rule
-     * arriving changes what an exchange promises, so the person who accepted the old promise
+     * arriving changes what an exchange states, so the person who accepted the old behaviour
      * has to see the new one. */
     why: z.string().optional(),
   }).strict()
@@ -1467,7 +1467,7 @@ export const Scope = z.object({
           /**
            * ⛔ THE ANSWER `check` ASKED FOR AND THE SCHEMA COULD NOT HOLD.
            *
-           * `nothing-in-this-product-sets-this` offers three exits: a promise is missing, the
+           * `nothing-in-this-product-sets-this` offers three exits: a behaviour is missing, the
            * word comes from outside and nothing here will ever set it, or the word is dead.
            * Writing the middle one was refused — `Unrecognized key(s) in object` — so the two
            * working exits were inventing an exchange that writes it, or deleting a true
@@ -1505,12 +1505,12 @@ export const Scope = z.object({
     )
     .default({}),
   /**
-   * What this scope rests on and does not itself promise.
+   * What this scope rests on and does not itself behaviour.
    *
    * ⛔ Rendered in the packet, not merely validated. It was reference-checked and shown on
    * no surface — and a field that only ever gets validated is a field nobody fills in
    * honestly. It is also the only thing carrying the structure the deleted capability tree
-   * used to hold, so a builder needs it: what is assumed here, and whose promise it is.
+   * used to hold, so a builder needs it: what is assumed here, and whose behaviour it is.
    */
   depends_on: z.array(z.string()).default([]),
   views: z.array(View).default([]),
@@ -1780,7 +1780,7 @@ export type Verdict = z.infer<typeof Verdict>;
  * The model had no home for any of them, which was not an omission in a migration but a hole in the
  * schema: a real corpus carried six such documents, one of them with human verification stamps on
  * individual sections, and migrating it dropped all of it on the floor. A builder handed every
- * promise and none of the principles is handed the sentences and not the rules the sentences were
+ * behaviour and none of the principles is handed the sentences and not the rules the sentences were
  * written against — and features in the previous model were explicitly told to CITE these rather
  * than restate them, so the citations pointed at nothing.
  *

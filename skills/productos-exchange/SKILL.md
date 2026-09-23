@@ -81,7 +81,7 @@ So when you author:
 - **`after: { none: true }`** is the honest answer for anything that only reads. Say it rather than
   inventing a change to fill the cell.
 - **`changes:` and `after` are checked against each other.** Declaring terms while `after` says
-  nothing changed is refused, and so is the inverse. `changes:` is how another promise discovers
+  nothing changed is refused, and so is the inverse. `changes:` is how another behaviour discovers
   this one can move a word it reads; `after` is what it moves it to.
 - **a stated `after` owes a criterion** whose `then` is the new state. The clause with no criterion
   is the one that goes missing without a trace.
@@ -152,7 +152,7 @@ what a failure leaves, what a repeat does, or what two at once does. On a real c
 
 An earlier version of this migrator could not bear handing over 643 blanks, so it wrote seven open
 org-wide rules — one per unrecorded slot, with a generated question restating the slot's own
-definition, `scope: everywhere`. The result: a tool's invented questions gated every real promise in
+definition, `scope: everywhere`. The result: a tool's invented questions gated every real behaviour in
 the product, and were presented to the reviewer as their own backlog. Peter's reaction on being
 shown it is the shortest summary of the failure: *"it's all generic, org-wide BS?"*
 
@@ -244,7 +244,7 @@ migration that assigned `commits` to anything with a claim attached turned every
 filter into an ask of its own — say which role a control has by what it does, not by what somebody
 happened to record about it.
 
-Both the page and the packet render the sketch, so a reviewer sees the control a promise arrives at
+Both the page and the packet render the sketch, so a reviewer sees the control a behaviour arrives at
 rather than the sentence alone.
 
 ## Walking someone through what is undecided
@@ -259,7 +259,7 @@ productos_exchange_scopes                     which feature is holding the most 
 productos_exchange_page   scope, out: <file>  render it, then show them the file
 ```
 
-The page carries the questions with their options, the grid, every promise in full, and what was
+The page carries the questions with their options, the grid, every behaviour in full, and what was
 already decided. Reading it is what makes the next step answerable — a question with no feature
 around it is not a question anybody can answer.
 

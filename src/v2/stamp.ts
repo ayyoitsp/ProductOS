@@ -12,15 +12,15 @@
  *
  * One of them found the worse version: reword an accepted org-wide RULE, and both
  * exchanges that inherited it stay stamped while now promising the opposite failure
- * semantics. One file nobody accepted against changed the promise of six exchanges.
+ * semantics. One file nobody accepted against changed the behaviour of six exchanges.
  *
  * So the hash covers three things, and the third is the one that is easy to forget:
  *
  *   1. the slot text the exchange states itself
  *   2. the criteria set — separately, so adding a criterion breaks only the criteria half
  *   3. **the id AND STATEMENT of every rule resolved into it** — because an exchange's
- *      promise is not only what it says, and a reviewer who accepted it accepted the
- *      resolved promise they were shown
+ *      behaviour is not only what it says, and a reviewer who accepted it accepted the
+ *      resolved behaviour they were shown
  *
  * Two hashes rather than one, because the two things go stale for different reasons and
  * conflating them makes a new criterion look like a reversed claim.
@@ -123,7 +123,7 @@ export function coveredBy(corpus: Corpus, target: string): Covered | null {
    * refusals, nothing stale, and the packet printed both edits above `accepted by alice`.
    *
    * A sentence means what its words mean. Redefining a term the sentence is written in
-   * changes the promise exactly as rewriting the sentence would, and the screen is what the
+   * changes the behaviour exactly as rewriting the sentence would, and the screen is what the
    * reviewer was looking at when they agreed.
    */
   const scopeOf = corpus.scopes.find((s) => s.scope.id === scopeId)!.scope;
@@ -134,7 +134,7 @@ export function coveredBy(corpus: Corpus, target: string): Covered | null {
     canon({
       // ⛔ The prose body too. It is printed inside the packet's truth region, three lines
       // under "Everything below is what the product must do" — so after accepting an
-      // exchange, five invented promises prepended to the scope body (a daily cap, a kid
+      // exchange, five invented behaviours prepended to the scope body (a daily cap, a kid
       // seeing every sibling's balance, an email receipt, rounding, a 24-hour cancel) shipped
       // above `accepted by peter`, one of them contradicting the accepted `refuses`.
       body: corpus.scopes.find((s) => s.scope.id === scopeId)?.body,
@@ -149,7 +149,7 @@ export function coveredBy(corpus: Corpus, target: string): Covered | null {
        * anything.
        *
        * A sentence means what its words mean, so the words IT USES are covered. A word it
-       * does not use is not part of the promise.
+       * does not use is not part of the behaviour.
        */
       terms: Object.fromEntries(
         (() => {
@@ -202,7 +202,7 @@ export function coveredBy(corpus: Corpus, target: string): Covered | null {
        * The list used to name `says`, `within`, `cannot_fail`, `none`, `outcomes` and the
        * standing kind, and it omitted `notes` and `instead_of`. Both of those are PRINTED
        * BY THE PACKET as truth a builder works from. So after accepting an exchange it was
-       * possible to rewrite its `notes` into four new promises — a 24-hour hold, a parent
+       * possible to rewrite its `notes` into four new behaviours — a 24-hour hold, a parent
        * undo, a de-duplication rule contradicting the accepted sentence directly above it,
        * an email receipt — and get zero findings, nothing under "Accepted, and changed
        * since", and all four printed under a human's stamp. Rewriting an `instead_of`
@@ -273,7 +273,7 @@ export function coveredBy(corpus: Corpus, target: string): Covered | null {
       reads.push(`    and also — ${norm(r.statement ?? "")}  (${r.id})`);
       parts.push(`${slot}: also ${r.id}`);
     }
-    // ⛔ Hashed on every slot (an exception changes what the whole exchange promises) but
+    // ⛔ Hashed on every slot (an exception changes what the whole exchange behaviours) but
     // READ only on the slot its rule fills — printing it under all seven made one exception
     // look like seven, and buried the sentences a reviewer is actually agreeing to.
     for (const x of ex.excepts) {
@@ -358,11 +358,11 @@ export function staleReason(s: StampState): string | null {
        * among seven identical ones, find nothing, and re-accept, which launders the change
        * they were being warned about.
        */
-      return `${s.by} accepted this on ${s.at}, and what it promises is not what they read — either a sentence here changed, or an org-wide rule reaching it arrived, left or was reworded`;
+      return `${s.by} accepted this on ${s.at}, and what it states is not what they read — either a sentence here changed, or an org-wide rule reaching it arrived, left or was reworded`;
     case "criteria-changed":
       return `${s.by} accepted this on ${s.at}, and its criteria have changed since — at least one was added or edited after the acceptance and nobody has read it`;
     case "both-changed":
-      return `${s.by} accepted this on ${s.at}, and both what it promises and what demonstrates it have changed since`;
+      return `${s.by} accepted this on ${s.at}, and both what it states and what demonstrates it have changed since`;
     default:
       return null;
   }
