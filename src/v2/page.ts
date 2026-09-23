@@ -396,9 +396,26 @@ function renderWorklist(
   if (!rows.length) return "";
   return `
     <div class="gate-note">
-      <p><strong>And almost none of it is written.</strong> ${written} of ${written + blanks} slots carry a
-      sentence; the other ${blanks} say nothing at all. Nothing can be agreed to while a behaviour has a
-      slot that says nothing — which is why ${gatedCount} of them are waiting.</p>
+      ${
+        /**
+         * ⛔ THIS SAID "nothing can be agreed to", AND IT STOPPED BEING TRUE ONE COMMIT AGO.
+         *
+         * It was written when a stamp could only cover a whole exchange, so a single blank slot made
+         * the whole thing un-agreeable. A behaviour can now be agreed to on its own — and telling a
+         * reviewer there is nothing they can do, on the page whose job is to give them something to
+         * do, is the same failure as the manufactured queue in a politer voice.
+         *
+         * There are two different numbers here and they are not the same work: sentences waiting to
+         * be READ, and slots waiting to be WRITTEN.
+         */
+        acts.behaviours.length
+          ? `<p><strong>${acts.behaviours.length} behaviour${acts.behaviours.length === 1 ? "" : "s"} nobody has
+             agreed to yet.</strong> Each is one sentence; open a feature below and read them.</p>`
+          : `<p><strong>Every written behaviour has been agreed to.</strong></p>`
+      }
+      <p>And ${written} of ${written + blanks} slots carry a sentence — the other ${blanks} say nothing at
+      all, so ${gatedCount} ${gatedCount === 1 ? "ask is" : "asks are"} not yet complete enough to agree to
+      whole.</p>
       <p class="what-next">Writing ${blanks} sentences by hand is not review. Pick a feature below, have
       its blanks drafted from the code and from what the previous model recorded, and review the
       drafts here — that is the loop. ${

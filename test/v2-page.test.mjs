@@ -399,21 +399,28 @@ test("a queue with no questions says how much is unwritten", () => {
   assert.equal(bare.broken.length, 0, JSON.stringify(bare.broken));
 
   const html = renderScopePage(bare, "thing");
-  assert.match(html, /Nothing here is undecided/);
-  assert.match(html, /almost none of it is written/i, "an empty queue read as a finished corpus");
-  // ⛔ Whitespace-tolerant: the template wraps mid-sentence, and a test that only matches one line
-  // break's worth of formatting fails on the next reflow while the copy is perfectly correct.
-  assert.match(
-    html.replace(/\s+/g, " "),
-    /Nothing can be agreed to while a behaviour has a slot that says nothing/,
-    "it does not say what the blanks block"
-  );
+  /**
+   * ⛔ Whitespace-tolerant throughout: the template wraps mid-sentence, and a test matching one
+   * line break's worth of formatting fails on the next reflow while the copy is perfectly correct.
+   */
+  const flat = html.replace(/\s+/g, " ");
+  assert.match(flat, /Nothing here is undecided/);
+  /**
+   * ⛔ Two different numbers, and they are not the same work: sentences waiting to be READ, and
+   * slots waiting to be WRITTEN. An empty queue that reports neither reads as a finished corpus.
+   *
+   * An earlier version asserted "nothing can be agreed to", which was true only while a stamp had
+   * to cover a whole exchange — it stopped being true the moment one behaviour became acceptable.
+   */
+  assert.match(flat, /behaviours? nobody has agreed to yet/, "it does not say what is waiting to be read");
+  assert.match(flat, /slots carry a sentence/, "it does not say how much is unwritten");
+  assert.match(flat, /say nothing at all/, "an empty queue read as a finished corpus");
   /**
    * ⛔ And it says what to DO. "Somebody should write it down" is a diagnosis; a reviewer facing 539
    * blanks needs to know which feature to start with, which is what the worklist is for.
    */
   assert.match(html, /table class="worklist"/, "a diagnosis with no next action");
-  assert.match(html.replace(/\s+/g, " "), /ordered smallest first/, "the worklist does not say what its order means");
+  assert.match(flat, /ordered smallest first/, "the worklist does not say what its order means");
   assert.match(html, /<code>may<\/code>/, "the worklist does not say which slots are missing");
   // ⛔ The figures come from the grid, so the page and the grid cannot disagree about what is empty.
   const grid = gridFor(bare, "thing");
