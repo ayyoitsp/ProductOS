@@ -689,18 +689,11 @@ export function migrate(v1Root: string, outDir: string, at: string): Migration {
    * Sections are split on `##`, because that is the grain v1 verified at: its principles file
    * carries `verified_by` per section, not per document.
    */
-  const KINDS: Record<string, string> = {
-    goals: "goals",
-    "non-goals": "non-goals",
-    principles: "principles",
-    personas: "personas",
-    voice: "voice",
-    decisions: "decisions",
-  };
+  const KINDS = ["goals", "non-goals", "principles", "personas", "voice", "decisions"];
   const contextDir = path.join(v1Root, "context");
   fs.mkdirSync(path.join(outDir, "charter"), { recursive: true });
   let order = 0;
-  for (const [base, kind] of Object.entries(KINDS)) {
+  for (const base of KINDS) {
     const f = path.join(contextDir, `${base}.md`);
     if (!fs.existsSync(f)) continue;
     const doc = parseFrontmatter(fs.readFileSync(f, "utf-8"));
@@ -742,7 +735,7 @@ export function migrate(v1Root: string, outDir: string, at: string): Migration {
     fs.writeFileSync(
       path.join(outDir, "charter", `${id}.md`),
       `---\n${YAML.stringify(
-        { id, title: data.title || base, kind, order: data.order ?? order, was: `context/${base}.md`, sections },
+        { id, title: data.title || base, order: data.order ?? order, was: `context/${base}.md`, sections },
         { lineWidth: 96, blockQuote: "literal" }
       )}---\n\n${doc.content.split(/^##\s+/m)[0]!.trim()}\n`
     );

@@ -361,6 +361,68 @@ function renderScreens(scope: Scope, ctx: Ctx, scopeId: string): string {
     </section>`;
 }
 
+
+/**
+ * Where to start, when nothing is decided because almost nothing is written.
+ *
+ * ⛔ ORDERED BY HOW CLOSE EACH FEATURE IS TO FINISHED. A list in corpus order answers "what exists";
+ * a reviewer facing 539 blanks is asking "where do I start", and the answer is the feature with the
+ * fewest holes — it is the cheapest to finish and the first that becomes agreeable.
+ */
+function renderWorklist(
+  corpus: Corpus,
+  grids: Grid[],
+  written: number,
+  blanks: number,
+  gatedCount: number,
+  ctx: Ctx
+): string {
+  const rows = grids
+    .map((g) => {
+      const missing = new Map<SlotName, number>();
+      for (const r of g.rows)
+        for (const slot of SLOTS) if (r.cells[slot].mark === "·") missing.set(slot, (missing.get(slot) ?? 0) + 1);
+      const total = g.rows.length * SLOTS.length;
+      const blank = [...missing.values()].reduce((a, b) => a + b, 0);
+      return { g, blank, total, said: total - blank, missing: [...missing.keys()] };
+    })
+    .filter((r) => r.blank)
+    // Fewest holes first: the least work, and the first to become agreeable.
+    .sort((a, b) => a.blank - b.blank);
+  if (!rows.length) return "";
+  return `
+    <div class="gate-note">
+      <p><strong>And almost none of it is written.</strong> ${written} of ${written + blanks} slots carry a
+      sentence; the other ${blanks} say nothing at all. Nothing can be agreed to while a promise has a
+      slot that says nothing — which is why ${gatedCount} of them are waiting.</p>
+      <p class="what-next">Writing ${blanks} sentences by hand is not review. Pick a feature below, have
+      its blanks drafted from the code and from what the previous model recorded, and review the
+      drafts here — that is the loop. ${
+        /**
+         * ⛔ SAY WHAT THE ORDER ACTUALLY IS. This claimed the top rows were "closest to finished",
+         * and on a freshly migrated corpus every feature has exactly one slot in eight — so the
+         * ordering is by SIZE, and calling it completeness tells a reviewer they are nearly done
+         * with something nobody has started.
+         */
+        rows.every((r) => r.said === r.g.rows.length)
+          ? "They are ordered smallest first, so the top of the list is the least work — none of them is further along than any other."
+          : "They are ordered by how much is missing, so the top of the list is the least work."
+      }</p>
+    </div>
+    <table class="worklist">
+      <thead><tr><th>Feature</th><th>Written</th><th>Missing</th></tr></thead>
+      <tbody>${rows
+        .map(
+          (r) => `<tr>
+            <td>${refLink(r.g.scope, ctx, line(r.g.title))}</td>
+            <td class="num">${r.said} / ${r.total}</td>
+            <td>${r.missing.map((m) => `<code>${esc(SLOT_LABEL[m])}</code>`).join(" ")}</td>
+          </tr>`
+        )
+        .join("")}</tbody>
+    </table>`;
+}
+
 // ---------------------------------------------------------------------------
 // The grid — what this scope promises, and where each promise came from.
 
@@ -945,13 +1007,16 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
                     */
                    `<p class="lede">Nothing here is undecided.</p>
                     ${
-                      blanks
-                        ? `<p class="gate-note"><strong>And almost none of it is written.</strong>
-                             ${written} of ${written + blanks} slots carry a sentence; the other ${blanks} say nothing at
-                             all — so there is nothing for a reviewer to decide yet, and ${gated.length} promise${
-                               gated.length === 1 ? "" : "s"
-                             } cannot be agreed to. What this needs first is somebody to write it down.</p>`
-                        : ""
+                      /**
+                       * ⛔ A DIAGNOSIS IS NOT A NEXT ACTION, and this said "somebody should write it
+                       * down" to a person who then had nowhere to go. Replacing a queue that lied
+                       * with a dead end is not an improvement.
+                       *
+                       * So: the worklist. Which feature, how much of it is missing, and which slots
+                       * — ordered by how close each is to finished, because the useful question is
+                       * "where do I start" and the answer is the one with the fewest holes.
+                       */
+                      blanks ? renderWorklist(corpus, grids, written, blanks, gated.length, ctx) : ""
                     }`
              }
            </div>
@@ -1563,6 +1628,14 @@ const STYLE = `<style>
   ul.parts li { display: flex; gap: .5rem; align-items: baseline; }
   ul.parts .role { font-family: ui-monospace, Menlo, monospace; font-size: .74rem;
     color: var(--accent); min-width: 5rem; }
+  .what-next { color: var(--dim); font-size: .9rem; margin-top: .5rem; }
+  table.worklist { border-collapse: collapse; width: 100%; font-size: .9rem; margin: 1rem 0 2rem; }
+  table.worklist th, table.worklist td { border-bottom: 1px solid var(--line); padding: .5rem .5rem .5rem 0;
+    text-align: left; vertical-align: top; }
+  table.worklist thead th { font-size: .72rem; text-transform: uppercase; letter-spacing: .06em;
+    color: var(--dim); font-weight: 600; }
+  table.worklist .num { font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--dim); }
+  table.worklist code { font-size: .78em; }
   .gate-note { background: var(--warn-bg); border-left: 3px solid var(--warn); border-radius: 0 6px 6px 0;
     padding: .7rem .9rem; margin: .9rem 0 1.4rem; font-size: .92rem; }
   .charter-section { border-top: 1px solid var(--line); padding-top: 1rem; margin-top: 1.4rem; }

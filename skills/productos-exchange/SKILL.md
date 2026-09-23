@@ -95,6 +95,70 @@ and the navigation to avoid deleting them. Three facts welded together because o
 comes after. That field was itself called `after` until this slot arrived, which is exactly the
 collision this warning exists to prevent.
 
+## The product-wide documents
+
+```
+charter/<doc>.md      goals · non-goals · principles · personas · voice · decisions
+```
+
+A **Charter** document is product-wide truth with **named sections**. Features cite these rather
+than restating them, so the citation has to point at something addressable:
+
+```yaml
+id: principles
+title: Design principles
+order: 2
+sections:
+  - id: report-never-block
+    title: Report, never block
+    says: >
+      Where a figure cannot be read, the row is reported and the work continues. Nothing in the
+      pipeline stops because one input is unreadable.
+```
+
+⛔ **Sections are named because a person agrees to one at a time.** A reviewer accepts *"report,
+never block"*, not "the principles document" — and a document-sized stamp goes stale on any edit to
+any part of it, which is how a stamp stops meaning anything.
+
+⛔ **A charter document is NOT a rule, and this is the distinction that matters.**
+
+| | it does | it owes |
+|---|---|---|
+| `Rule` | supplies or constrains a named slot | a conformance criterion — it is checkable |
+| Charter section | settles a design argument, or says what the product is for | nothing demonstrable |
+
+A goal is what the product is *for*. A principle settles an argument without being demonstrable on
+any one exchange. Filing either as a rule demands a demonstration nobody can write, and then reads
+as governing slots it does not govern — which is exactly what a v1 "principle" did, carrying no
+weight at all.
+
+So: if you can name the slot it fills and write a given/when/then for it, it is a `Rule`. If you
+cannot, and it still constrains how the product is built, it is a charter section.
+
+## Bringing a v1 corpus across
+
+```bash
+productos v2 migrate --from productos --out v2      # add --force to redo it
+```
+
+It carries what v1 recorded and **refuses the rest by name**, into `not-carried.yaml`. Read that
+file before anything else: it is the real work queue, and every entry needs a person rather than a
+better script.
+
+⛔ **A migration decides nothing, and the temptation to make it decide is strong.** v1 recorded only
+`answer` — it had no field for who may ask, what they bring, what is left behind, what it refuses,
+what a failure leaves, what a repeat does, or what two at once does. On a real corpus that is
+**one slot in eight**, and the other seven-eighths come across blank.
+
+An earlier version of this migrator could not bear handing over 643 blanks, so it wrote seven open
+org-wide rules — one per unrecorded slot, with a generated question restating the slot's own
+definition, `scope: everywhere`. The result: a tool's invented questions gated every real promise in
+the product, and were presented to the reviewer as their own backlog. Peter's reaction on being
+shown it is the shortest summary of the failure: *"it's all generic, org-wide BS?"*
+
+**A blank is a blank.** The count is the finding, and a surface that dresses it up as a queue is
+lying about how much of a product has been written down.
+
 ## When you do not know
 
 ⛔ **This is the part that matters, and the part that gets done wrong.** Write the standing,
@@ -168,6 +232,20 @@ exchanges instead guarantees four different answers.
 If an exchange's own sentence lands where a rule would, say which: `defers_to` (the rule still
 holds, this is narrower) or `instead_of` (it does not hold here). `check` asks for one of them;
 guessing is the one thing that is refused.
+
+## Screens
+
+A `View` is where a person's ask arrives: `sketch` (interface structure in ASCII — where things sit
+and what kind of thing they are, never colour or type), and `parts` with a `role` each.
+
+⛔ **`commits` is the only role that owes an exchange.** An `entry` part's accepted values belong to
+the `with` slot of whatever commits it, and a `navigates` part is fully described by `leads_to`. A
+migration that assigned `commits` to anything with a claim attached turned every search field and
+filter into an ask of its own — say which role a control has by what it does, not by what somebody
+happened to record about it.
+
+Both the page and the packet render the sketch, so a reviewer sees the control a promise arrives at
+rather than the sentence alone.
 
 ## Walking someone through what is undecided
 

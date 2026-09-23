@@ -35,6 +35,15 @@ const SURFACES = ["check.ts", "grid.ts", "packet.ts", "settle.ts", "stamp.ts", "
   .concat(fs.readFileSync("src/cli/commands/v2.ts", "utf-8"))
   .join("\n");
 
+/**
+ * ⛔ THIS CHECK MATCHES A FIELD NAME AGAINST THE SURFACES' TEXT, SO A COMMON NAME PASSES FOR FREE.
+ *
+ * `Charter.kind` was required, read by nothing, and passed — because `.kind` appears all over for
+ * standings and verdicts. The field was removed rather than the check weakened, but the weakness is
+ * real: a field called `id`, `title`, `kind` or `at` will always look read. For those, the honest
+ * check is to grep for the qualified access and see a reader.
+ */
+
 /** Written deliberately and deliberately not surfaced, with why. */
 const ALLOWED = new Map([
   ["Scope.was", "a migration alias from the previous model — read by the migrator, not by a reader"],

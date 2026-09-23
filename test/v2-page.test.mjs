@@ -400,7 +400,20 @@ test("a queue with no questions says how much is unwritten", () => {
   const html = renderScopePage(bare, "thing");
   assert.match(html, /Nothing here is undecided/);
   assert.match(html, /almost none of it is written/i, "an empty queue read as a finished corpus");
-  assert.match(html, /cannot be agreed to/, "it does not say what the blanks are blocking");
+  // ⛔ Whitespace-tolerant: the template wraps mid-sentence, and a test that only matches one line
+  // break's worth of formatting fails on the next reflow while the copy is perfectly correct.
+  assert.match(
+    html.replace(/\s+/g, " "),
+    /Nothing can be agreed to while a promise has a slot that says nothing/,
+    "it does not say what the blanks block"
+  );
+  /**
+   * ⛔ And it says what to DO. "Somebody should write it down" is a diagnosis; a reviewer facing 539
+   * blanks needs to know which feature to start with, which is what the worklist is for.
+   */
+  assert.match(html, /table class="worklist"/, "a diagnosis with no next action");
+  assert.match(html.replace(/\s+/g, " "), /ordered smallest first/, "the worklist does not say what its order means");
+  assert.match(html, /<code>may<\/code>/, "the worklist does not say which slots are missing");
   // ⛔ The figures come from the grid, so the page and the grid cannot disagree about what is empty.
   const grid = gridFor(bare, "thing");
   assert.match(html, new RegExp(`${grid.counts.blank} say nothing`), "the count is not the grid's");

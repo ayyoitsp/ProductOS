@@ -1808,7 +1808,14 @@ export const Charter = z
     title: z.string().min(1),
     /** Reading order. ⛔ Goals before the principles that serve them, and it is not derivable. */
     order: z.number().optional(),
-    kind: z.enum(["goals", "non-goals", "principles", "personas", "voice", "decisions"]),
+    /* ⛔ `kind` LIVED HERE AND NOTHING READ IT.
+       It was added to distinguish goals from principles from personas, and every surface renders
+       them identically from the title — so it was a required field with no reader, which this file
+       calls worse than an absent one.
+       It also slipped past the dead-field test, because that matches a field NAME against the
+       surfaces' text and `.kind` appears everywhere for standings and verdicts. A common name
+       passes that check for free; see the note added to the test.
+       If a reader appears — a rule citing a principle, say — it comes back with the reader. */
     sections: z.array(CharterSection).min(1, "a document with no sections says nothing"),
     /** ⛔ What this was called in v1, for the migrator. See `Scope.was`. */
     was: z.string().optional(),
