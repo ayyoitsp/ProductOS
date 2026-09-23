@@ -304,6 +304,15 @@ function shortRule(id: string, g: Grid): string {
 // Tenet 1: how many acts of human judgement does this corpus demand?
 
 export interface ActCount {
+  /**
+   * Behaviours settled and not yet agreed to — one sentence each.
+   *
+   * ⛔ THE NUMBER A REVIEWER IS ACTUALLY FACING, and it was reported as zero. Everything here
+   * counted exchange-grained acts, and an exchange is gated until all eight of its slots are
+   * settled — so a migrated corpus read "0 acts now" while 47 written sentences waited for somebody
+   * to agree to them. The one figure that says how much review is owed said none was.
+   */
+  behaviours: string[];
   /** One accept per exchange whose every slot is stated. */
   acceptable: string[];
   /** Gated: an exchange with an unsettled slot cannot be accepted yet. */
@@ -463,6 +472,7 @@ export function gateFor(corpus: Corpus, ref: string): GateResult | null {
 export function actsFor(corpus: Corpus): ActCount {
   const { inherited, reach } = resolveRules(corpus);
   const acceptable: string[] = [];
+  const behaviours: string[] = [];
   const gated: string[] = [];
   const rulings: ActCount["rulings"] = [];
   const deferred: ActCount["deferred"] = [];
@@ -496,6 +506,21 @@ export function actsFor(corpus: Corpus): ActCount {
         }
         if (!fill) continue;
         const k = fill.standing.kind;
+        /**
+         * ⛔ A SETTLED SENTENCE NOBODY HAS AGREED TO IS AN ACT SOMEBODY OWES.
+         *
+         * Counting only exchange-grained acceptances reported "0 acts now" over 47 written
+         * sentences, because an exchange is gated until all eight of its slots are settled. The one
+         * figure that says how much review is owed said none was.
+         *
+         * `out_of_scope` is excluded deliberately: latitude is already a recorded act, and asking
+         * somebody to agree to "we deliberately do not answer this" would be asking them to stamp
+         * their own waiver.
+         */
+        if (k === "stated") {
+          const said = fill.says || fill.none || fill.cannot_fail || (fill.outcomes ?? []).length;
+          if (said && !isAccepted(`${ref}#${slot}`)) behaviours.push(`${ref}#${slot}`);
+        }
         if (k === "stated" || k === "out_of_scope") continue;
         settled = false;
         const slotRef = `${ref}#${slot}`;
@@ -548,6 +573,7 @@ export function actsFor(corpus: Corpus): ActCount {
   }
   return {
     acceptable,
+    behaviours,
     gated,
     deferred,
     stale,

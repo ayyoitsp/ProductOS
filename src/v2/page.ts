@@ -372,6 +372,7 @@ function renderScreens(scope: Scope, ctx: Ctx, scopeId: string): string {
 function renderWorklist(
   corpus: Corpus,
   grids: Grid[],
+  acts: ReturnType<typeof actsFor>,
   written: number,
   blanks: number,
   gatedCount: number,
@@ -384,7 +385,10 @@ function renderWorklist(
         for (const slot of SLOTS) if (r.cells[slot].mark === "·") missing.set(slot, (missing.get(slot) ?? 0) + 1);
       const total = g.rows.length * SLOTS.length;
       const blank = [...missing.values()].reduce((a, b) => a + b, 0);
-      return { g, blank, total, said: total - blank, missing: [...missing.keys()] };
+      // ⛔ What is written and what has been AGREED are different questions, and a worklist that
+      // answers only the first sends somebody to author a feature whose sentences nobody has read.
+      const toRead = acts.behaviours.filter((b) => b.startsWith(`${g.scope}#`)).length;
+      return { g, blank, total, said: total - blank, toRead, missing: [...missing.keys()] };
     })
     .filter((r) => r.blank)
     // Fewest holes first: the least work, and the first to become agreeable.
@@ -410,11 +414,12 @@ function renderWorklist(
       }</p>
     </div>
     <table class="worklist">
-      <thead><tr><th>Feature</th><th>Written</th><th>Missing</th></tr></thead>
+      <thead><tr><th>Feature</th><th>To read</th><th>Written</th><th>Missing</th></tr></thead>
       <tbody>${rows
         .map(
           (r) => `<tr>
             <td>${refLink(r.g.scope, ctx, line(r.g.title))}</td>
+            <td class="num">${r.toRead ? `<strong>${r.toRead}</strong>` : "—"}</td>
             <td class="num">${r.said} / ${r.total}</td>
             <td>${r.missing.map((m) => `<code>${esc(SLOT_LABEL[m])}</code>`).join(" ")}</td>
           </tr>`
@@ -1109,7 +1114,7 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
                        * — ordered by how close each is to finished, because the useful question is
                        * "where do I start" and the answer is the one with the fewest holes.
                        */
-                      blanks ? renderWorklist(corpus, grids, written, blanks, gated.length, ctx) : ""
+                      blanks ? renderWorklist(corpus, grids, a, written, blanks, gated.length, ctx) : ""
                     }`
              }
            </div>

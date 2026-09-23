@@ -159,6 +159,14 @@ export function v2Command(): Command {
         0
       );
       console.log(pc.bold("What a person is asked to do"));
+      /**
+       * ⛔ FIRST, BECAUSE IT IS THE ONE THAT IS USUALLY OWED. Exchange- and rule-grained
+       * acceptances are the wide stamps; a behaviour is the atom, and on any corpus that is not
+       * finished it is where all the review actually is.
+       */
+      console.log(
+        `  ${pc.green(String(a.behaviours.length))} behaviours to read ${pc.dim("— one sentence each, settled and not yet agreed to")}`
+      );
       console.log(`  ${pc.green(String(a.acceptable.length))} exchanges ready to accept`);
       // ⛔ The NAMES, not the count. `actsFor` computed the list and the CLI threw it away,
       // so a reviewer was told "150 exchanges ready to accept" with no way to find one.
