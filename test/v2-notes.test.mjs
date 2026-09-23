@@ -79,6 +79,28 @@ test("the composer is docked, always there, and never asks what you are looking 
   assert.doesNotMatch(live, /id="note-about"[^-]/, "the attach-it-to dropdown came back");
   assert.doesNotMatch(live, /<select/, "the composer is asking a question again");
 
+  /**
+   * ⛔ THE CAPTURE GOES DOWN TO THE SUBSECTION, AND ITS TRAIL SITS ABOVE THE BOX.
+   *
+   * Peter: "the context aware tab should be aware of subsections - e.g. overview/producttruth vs
+   * overview/product goals. and make it above the textbox line."
+   *
+   * The visible view alone was too coarse — on Overview every request arrived attached to the same
+   * ref whether somebody was reading the queue, the goals or the principles. So every section the
+   * renderer emits for a model object carries its ref and its name, and the composer reads the
+   * page's own answer instead of computing a second one.
+   */
+  for (const attr of ["data-ref", "data-label"])
+    assert.ok(
+      (live.match(new RegExp(attr, "g")) ?? []).length > 5,
+      `sections do not carry ${attr}, so the capture cannot see past the whole view`
+    );
+  // Views are in the same chain as everything else: a tab renders SEVERAL of them at once, and
+  // naming "the first visible view" separately put the wrong scope at the head of every trail.
+  assert.match(live, /class="view"[^>]*data-ref=/, "a view carries no ref, so it cannot be part of the trail");
+  // The trail is its own line above the box, not a column beside it competing for width.
+  assert.match(live, /class="note-at"[\s\S]{0,200}class="note-row"/, "the captured place is not above the box");
+
   // Docked, not floated, and the body makes room so it never covers the last card.
   assert.match(live, /\.note-bar \{[^}]*position: fixed/, "the composer is not pinned to the viewport");
   assert.match(live, /\.note-bar \{[^}]*bottom: 0/, "the composer is not at the bottom of the screen");

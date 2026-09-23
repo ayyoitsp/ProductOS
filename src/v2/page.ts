@@ -174,7 +174,7 @@ function renderQuestion(q: Question, i: number, past: Decision[], ctx: Ctx): str
       </div>`);
 
   return `
-    <article class="q${q.parked ? " parked" : ""}" id="${anchorOf(q.ref)}">
+    <article class="q${q.parked ? " parked" : ""}" id="${anchorOf(q.ref)}" data-ref="${esc(q.ref)}" data-label="${esc(`undecided · ${q.ref}`)}">
       <header>
         <span class="ref">${esc(q.ref)}</span>
         <span class="kind">${esc(q.kind)}</span>
@@ -520,7 +520,7 @@ function renderBehaviours(
         const sref = shown.length > 1 && said.id !== "it" ? `${ref}#${slot}#${said.id}` : `${ref}#${slot}`;
         const past = decisionsOn(corpus, sref);
         cards.push(`
-        <article class="beh" id="${anchorOf(sref)}" data-beh="${esc(sref)}">
+        <article class="beh" id="${anchorOf(sref)}" data-beh="${esc(sref)}" data-ref="${esc(sref)}" data-label="${esc(`${SLOT_ASKS_SHORT[slot] ?? slot} · ${line(ex.title)}`)}">
           <div class="beh-says">${shown.length > 1 ? line(said.says) : says}</div>
           <p class="beh-where">
             ${esc(SLOT_ASKS_SHORT[slot] ?? slot)} · on ${refLink(ref, ctx, ex.title)}${
@@ -608,13 +608,23 @@ function renderNotePanel(_corpus: Corpus, _ids: string[], opts: PageOptions): st
    *
    * So: one box, docked, with the captured section shown beside it rather than chosen.
    */
+  /**
+   * ⛔ THE CAPTURED PLACE GOES ABOVE THE BOX, ON ITS OWN LINE.
+   *
+   * Beside the box it competed with the text for width and got truncated to an ellipsis — so the
+   * one thing the reader needs to check before sending was the first thing squeezed out. It is also
+   * the thing they are most likely to want to correct by scrolling, so it has to be legible while
+   * they type.
+   */
   return `
     <form id="note-bar" class="note-bar" autocomplete="off">
-      <span class="note-ctx" id="note-about-label"></span>
-      <textarea id="note-text" rows="1" placeholder="Change something here…"
-        aria-label="Ask for a change to what you are looking at"></textarea>
-      <button type="submit" id="note-send">Send</button>
-      <span class="status" id="note-status"></span>
+      <div class="note-at"><span class="note-at-what" id="note-about-label"></span></div>
+      <div class="note-row">
+        <textarea id="note-text" rows="1" placeholder="Change something here…"
+          aria-label="Ask for a change to what you are looking at"></textarea>
+        <button type="submit" id="note-send">Send</button>
+        <span class="status" id="note-status"></span>
+      </div>
     </form>`;
 }
 
@@ -797,7 +807,7 @@ function renderExchanges(corpus: Corpus, scopeIds: string[], cellOf: Map<string,
         )
         .join("");
       cards.push(`
-        <article class="ex-card" id="${anchorOf(ref)}">
+        <article class="ex-card" id="${anchorOf(ref)}" data-ref="${esc(ref)}" data-label="${esc(line(e.title))}">
           <header>
             <h3>${line(e.title)}</h3>
             <code>${esc(ref)}</code>
@@ -1188,8 +1198,8 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
          * under seven open questions and nobody reads them. A second row of items, at the level
          * they belong to.
          */
-        `<section class="view" id="view-overview" data-view="overview">
-           <div class="sub-view" data-sub-view="queue">
+        `<section class="view" id="view-overview" data-view="overview" data-ref="${esc(scopeId)}" data-label="Overview">
+           <div class="sub-view" data-sub-view="queue" data-ref="queue" data-label="Queue">
              ${
                live.length
                  ? `<p class="lede"><strong>${live.length}</strong> question${live.length === 1 ? "" : "s"} nobody has answered. Each reaches every behaviour its selector touches, and every one written after it.</p>
@@ -1241,18 +1251,18 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
                     }`
              }
            </div>
-           <div class="sub-view" data-sub-view="about">
+           <div class="sub-view" data-sub-view="about" data-ref="${esc(scopeId)}" data-label="Product Truth">
              <h2>${line(entry.scope.title || scopeId)}</h2>
              ${renderProse(entry.body)}
            </div>
            ${corpus.charter
              .map(
-               (c) => `<div class="sub-view" data-sub-view="${esc(c.charter.id)}">
+               (c) => `<div class="sub-view" data-sub-view="${esc(c.charter.id)}" data-ref="${esc(c.charter.id)}" data-label="${esc(line(c.charter.title))}">
                  <h2>${line(c.charter.title)}</h2>
                  ${renderProse(c.body)}
                  ${c.charter.sections
                    .map(
-                     (sec) => `<article class="charter-section" id="${anchorOf(`${c.charter.id}#${sec.id}`)}">
+                     (sec) => `<article class="charter-section" id="${anchorOf(`${c.charter.id}#${sec.id}`)}" data-ref="${esc(`${c.charter.id}#${sec.id}`)}" data-label="${esc(line(sec.title))}">
                        <h3>${line(sec.title)}</h3>
                        ${renderProse(sec.says)}
                      </article>`
@@ -1265,7 +1275,7 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
       }
       ${grids
         .map(
-          (g) => `<section class="view" id="${anchorOf(g.scope)}" data-view="${esc(g.scope)}">
+          (g) => `<section class="view" id="${anchorOf(g.scope)}" data-view="${esc(g.scope)}" data-ref="${esc(g.scope)}" data-label="${esc(line(g.title))}">
             <h2>${line(g.title)}</h2>
             ${renderProse(corpus.scopes.find((x) => x.scope.id === g.scope)?.body ?? "")}
             ${renderBehaviours(corpus, g.scope, cellOf, ctx)}
@@ -1291,7 +1301,7 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
           .map((id) => {
             const sc = corpus.scopes.find((s) => s.scope.id === id)!.scope;
             const kids = corpus.scopes.filter((x) => x.scope.in === id);
-            return `<section class="view" id="${anchorOf(id)}" data-view="${esc(id)}">
+            return `<section class="view" id="${anchorOf(id)}" data-view="${esc(id)}" data-ref="${esc(id)}" data-label="${esc(line(sc.title || id))}">
               <h2>${line(sc.title || id)}</h2>
               ${renderProse(corpus.scopes.find((x) => x.scope.id === id)?.body ?? "")}
               <h3 class="sub">What is filed under it</h3>
@@ -1351,6 +1361,11 @@ const OWED: Record<string, Array<{ name: string; label: string; floor?: number; 
   ],
 };
 
+/**
+ * ⛔ EVERYTHING BELOW THIS LINE IS INSIDE A TEMPLATE LITERAL, SO NO BACKTICKS — not in code and
+ * not in a comment. A backtick here ends the string mid-script and the build fails somewhere else
+ * entirely. That has cost five builds in this file; the same warning sits above the CSS block.
+ */
 function liveScript(opts: PageOptions): string {
   const mode = opts.records ?? "http";
   return `<script>
@@ -1456,20 +1471,100 @@ if (noteBar) {
    * What the reader is looking at, taken from the page rather than asked for. The visible view
    * carries its ref on data-view; the heading is only for showing them what got captured.
    */
-  const current = () => {
-    const v = [...document.querySelectorAll("section.view")].find((x) => !x.hidden);
-    return v ? { ref: v.dataset.view || "", title: (v.querySelector("h1, h2") || {}).textContent || v.dataset.view || "" } : { ref: "", title: "" };
+  /**
+   * ⛔ WHAT THE READER IS LOOKING AT, TO THE SUBSECTION.
+   *
+   * The visible view alone was too coarse: on Overview it said "Product Truth" whether somebody was
+   * reading the queue, the product goals or the design principles, so three different requests all
+   * arrived attached to the same ref — which is the one thing a note carries that nobody can
+   * reconstruct later.
+   *
+   * So: the innermost thing on screen that the model has a ref for. Every section the renderer
+   * emits for a model object carries data-ref and data-label, so this reads the page's own answer
+   * rather than a second one computed here.
+   */
+  const READING_LINE = 0.35; // a third down the viewport is where somebody is actually reading
+
+  const visible = (el) => {
+    if (el.hidden || el.closest("[hidden]")) return false;
+    const r = el.getBoundingClientRect();
+    return r.height > 0 && r.bottom > 0 && r.top < window.innerHeight;
   };
+
+  const current = () => {
+    /**
+     * ⛔ ONE CHAIN, DERIVED ONE WAY.
+     *
+     * This used to name the view separately, as "the first section.view that is not hidden" — but a
+     * tab renders SEVERAL views at once, so on any feature page the trail read "Overview /" above a
+     * card belonging to a different scope entirely. Two answers to "where am I" and the wrong one
+     * was in front.
+     *
+     * Views carry a ref like everything else now, so the trail is just the ancestor chain of the
+     * thing being read.
+     */
+    const trail = [];
+
+    // Everything on screen with a ref, innermost last: the deepest one whose top has passed the
+    // reading line, else the first one still below it.
+    const marks = [...document.querySelectorAll("[data-ref]")].filter(visible);
+    const line = window.innerHeight * READING_LINE;
+    const passed = marks.filter((m) => m.getBoundingClientRect().top <= line);
+    const at = passed.length ? passed[passed.length - 1] : marks[0];
+
+    /**
+     * ⛔ THE WHOLE CHAIN, NOT JUST THE INNERMOST.
+     *
+     * Taking only the deepest mark made the capture flip between a group and its first child
+     * depending on how much intro prose happened to sit above the reading line: clicking "Product
+     * goals" showed a single goal, clicking "Design principles" showed the group. Same gesture, two
+     * different answers, neither wrong and no way for the reader to tell which they were getting.
+     *
+     * Walking up from the innermost mark gives one stable answer that contains both.
+     */
+    const chain = [];
+    for (let el = at; el; el = el.parentElement ? el.parentElement.closest("[data-ref]") : null) {
+      if (el.dataset.ref) chain.unshift({ ref: el.dataset.ref, label: el.dataset.label || el.dataset.ref });
+    }
+    /**
+     * Deduped on the LABEL, not the ref. The Overview tab and the "Product Truth" panel inside it
+     * are the same scope wearing two names, and dropping the second one collapsed the trail to a
+     * bare "Overview" — which is the tab, not the place.
+     */
+    for (const link of chain) if (link.label !== trail[trail.length - 1]?.label) trail.push(link);
+    return trail.filter((t) => t.label);
+  };
+
   const describe = () => {
-    const c = current();
-    label.textContent = c.title ? "about " + c.title.trim() : "about this page";
-    label.title = c.ref || "this page";
-    return c.ref;
+    const trail = current();
+    if (!trail.length) {
+      label.textContent = "this page";
+      return "";
+    }
+    // ⛔ The trail is shown, not just the leaf: "Overview" and "Overview / Product goals" are
+    // different places, and a bare "Product goals" does not say which product truth it is in.
+    label.textContent = trail.map((t) => t.label).join(" / ");
+    const leaf = trail[trail.length - 1];
+    label.title = leaf.ref;
+    return leaf.ref;
   };
   describe();
-  // The tabs and the tree swap which view is visible; the capture has to follow.
+  // The tabs, the tree and scrolling all change what is being read; the capture has to follow.
   document.addEventListener("click", () => setTimeout(describe, 0));
   window.addEventListener("hashchange", describe);
+  let ticking = false;
+  window.addEventListener(
+    "scroll",
+    () => {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(() => {
+        ticking = false;
+        describe();
+      });
+    },
+    { passive: true }
+  );
 
   const grow = () => {
     text.style.height = "auto";
@@ -1978,12 +2073,15 @@ const STYLE = `<style>
    * (No backticks in this comment: it lives inside a template literal, and a backtick here ends
    * the string. That has now cost four builds.)
    */
-  .note-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; display: flex;
-    gap: .55rem; align-items: flex-end; padding: .55rem .8rem;
+  .note-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; display: grid;
+    gap: .3rem; padding: .5rem .8rem .55rem;
     background: var(--card); border-top: 1px solid var(--line);
     box-shadow: 0 -2px 14px rgba(0,0,0,.14); }
-  .note-bar .note-ctx { font-size: .74rem; color: var(--dim); white-space: nowrap; max-width: 30%;
-    overflow: hidden; text-overflow: ellipsis; padding-bottom: .45rem; }
+  .note-row { display: flex; gap: .55rem; align-items: flex-end; }
+  /* The captured place, on its own line above the box and never truncated. */
+  .note-at { font-size: .74rem; color: var(--dim); line-height: 1.3; }
+  .note-at::before { content: "about "; }
+  .note-at-what { color: var(--ink); }
   .note-bar textarea { flex: 1; font: inherit; font-size: .92rem; resize: none; min-height: 2.1rem;
     max-height: 9rem; padding: .45rem .6rem; border: 1px solid var(--line); border-radius: 6px;
     background: var(--bg); color: var(--ink); line-height: 1.35; }
@@ -1993,9 +2091,7 @@ const STYLE = `<style>
   .note-bar .status.ok { color: var(--ok); } .note-bar .status.bad { color: var(--bad); }
   /* Clearance for the composer, so it never covers the last thing on the page. */
   body.has-note-bar { padding-bottom: 4.5rem; }
-  @media (max-width: 34rem) {
-    .note-bar .note-ctx { display: none; }
-  }
+
   .gate-note { background: var(--warn-bg); border-left: 3px solid var(--warn); border-radius: 0 6px 6px 0;
     padding: .7rem .9rem; margin: .9rem 0 1.4rem; font-size: .92rem; }
   .charter-section { border-top: 1px solid var(--line); padding-top: 1rem; margin-top: 1.4rem; }
