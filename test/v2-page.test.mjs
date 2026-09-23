@@ -14,7 +14,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { loadCorpus } from "../dist/v2/load.js";
-import { gridFor } from "../dist/v2/grid.js";
+import { gridFor, actsFor } from "../dist/v2/grid.js";
 import { descendants, questionsFor } from "../dist/v2/settle.js";
 import { renderScopePage } from "../dist/v2/page.js";
 import { SLOTS } from "../dist/v2/schema.js";
@@ -474,5 +474,42 @@ test("a feature offers its behaviours one at a time, and the slot machinery is f
     // ⛔ And the grid is behind a fold. It is how an author finds a hole, not how a reviewer works.
     assert.match(html, /details class="fold"/, "the authoring view is not folded away");
     assert.doesNotMatch(html, /<details class="fold" open/, "the authoring view opens by default");
+  }
+});
+
+/**
+ * ⛔ THE TREE SAYS WHERE THE WORK IS, AND IT USED TO SAY NOTHING.
+ *
+ * Every row reported exchange-grained acceptances, which are zero on any corpus that is not
+ * finished — so the whole tree read "waiting on the shared questions" and could not answer the one
+ * question it exists for: which of these do I look at next.
+ */
+test("every section says how much it is holding", () => {
+  const root = corpus.scopes.find((s) => !s.scope.in).scope.id;
+  const html = renderScopePage(corpus, root, { linkBase: "/v2" });
+  const acts = actsFor(corpus);
+  const nav = /<nav class="scopes">[\s\S]*?<\/nav>/.exec(html)[0];
+
+  for (const { scope } of corpus.scopes) {
+    if (scope.id === root) continue;
+    const under = descendants(corpus, scope.id);
+    const toRead = acts.behaviours.filter((b) => under.some((u) => b.startsWith(`${u}#`))).length;
+    if (!toRead) continue;
+    // The row for this scope carries its own figure, not the corpus-wide one.
+    const row = new RegExp(`data-goto="${scope.id}"[^]*?</li>`).exec(nav);
+    assert.ok(row, `${scope.id} has no row`);
+    assert.match(row[0], new RegExp(`${toRead} to read`), `${scope.id}'s row does not say it holds ${toRead}`);
+  }
+
+  // ⛔ And the tab too, so the top row answers "which side" without opening either tree.
+  for (const half of corpus.scopes.filter((s) => s.scope.in === root)) {
+    const under = descendants(corpus, half.scope.id);
+    const n = acts.behaviours.filter((b) => under.some((u) => b.startsWith(`${u}#`))).length;
+    if (n)
+      assert.match(
+        html,
+        new RegExp(`data-tab="${half.scope.id}">[^<]*<span class="pill quiet">${n}</span>`),
+        `the ${half.scope.id} tab does not carry its count`
+      );
   }
 });

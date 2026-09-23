@@ -776,6 +776,8 @@ function renderNav(
   charterTabs: string
 ): string {
   const kids = (parent?: string) => corpus.scopes.filter((s) => s.scope.in === parent);
+  // ⛔ Once for the whole nav. It was called per row, which walks the entire corpus per row.
+  const acts = actsFor(corpus);
   const rows: string[] = [];
   const walk = (parent: string | undefined, depth: number): void => {
     for (const { scope } of kids(parent)) {
@@ -802,9 +804,17 @@ function renderNav(
       const own = qs.filter((q) => !q.parked && q.ref.includes("#"));
       const orgWide = qs.filter((q) => !q.parked && !q.ref.includes("#")).length;
       const here_open = own.length;
-      const a = actsFor(corpus);
+      /**
+       * ⛔ WHAT THIS SECTION IS HOLDING, so "which one next" is answerable from the tree.
+       *
+       * The row used to report exchange-grained acceptances, which are zero on any corpus that is
+       * not finished — so every row read "waiting on the shared questions" and the tree said nothing
+       * about where the work was. Two numbers, because they are two different jobs: questions
+       * nobody has answered, and sentences nobody has read.
+       */
       const ids = descendants(corpus, scope.id);
-      const ready = a.acceptable.filter((r) => ids.some((i) => r.startsWith(`${i}#`))).length;
+      const toRead = acts.behaviours.filter((b) => ids.some((i) => b.startsWith(`${i}#`))).length;
+      const ready = acts.acceptable.filter((r) => ids.some((i) => r.startsWith(`${i}#`))).length;
       const label = line(scope.title || scope.id);
       /**
        * ⛔ A SINGLE PAGE IS NAVIGABLE BY ANCHOR, AND THIS RENDERED SIXTEEN DEAD LABELS INSTEAD.
@@ -832,10 +842,11 @@ function renderNav(
               : `<span class="unlinked" title="not on this page">${label}</span>`;
       rows.push(
         `<li style="--d:${depth}">${name}` +
-          (here_open ? ` <span class="n warn">${here_open} to decide</span>` : "") +
-          (ready ? ` <span class="n ok">${ready} to agree to</span>` : "") +
-          (!here_open && !ready && !orgWide ? ` <span class="n">—</span>` : "") +
-          (!here_open && orgWide ? ` <span class="n">waiting on the shared questions</span>` : "") +
+          (here_open ? ` <span class="n warn">${here_open} unanswered</span>` : "") +
+          (orgWide ? ` <span class="n warn">${orgWide} shared</span>` : "") +
+          (toRead ? ` <span class="n ok">${toRead} to read</span>` : "") +
+          (ready ? ` <span class="n ok">${ready} whole</span>` : "") +
+          (!here_open && !orgWide && !toRead && !ready ? ` <span class="n">—</span>` : "") +
           `</li>`
       );
       walk(scope.id, depth + 1);
@@ -886,7 +897,7 @@ function renderNav(
    * deeper, which is the thing a tree is good at.
    */
   const rootId = corpus.scopes.find((x) => !x.scope.in)?.scope.id;
-  const sections: Array<{ id: string; label: string }> = [
+  const sections: Array<{ id: string; label: string; toRead?: number }> = [
     { id: "overview", label: "Overview" },
     /**
      * ⛔ WHAT A PERSON SEES, THEN THE MACHINERY UNDERNEATH. File order put the subsystems first,
@@ -902,10 +913,11 @@ function renderNav(
           (n, d) => n + (corpus.scopes.find((y) => y.scope.id === d)?.scope.views.length ?? 0),
           0
         );
-        return { id: x.scope.id, label: line(x.scope.title || x.scope.id), screens };
+        const toRead = acts.behaviours.filter((b: string) => under.some((u) => b.startsWith(`${u}#`))).length;
+        return { id: x.scope.id, label: line(x.scope.title || x.scope.id), screens, toRead };
       })
       .sort((a, b) => b.screens - a.screens)
-      .map(({ id, label }) => ({ id, label })),
+      .map(({ id, label, toRead }) => ({ id, label, toRead })),
   ];
   /** view → the tab it lives under, so the row can show where you are without being told. */
   const sectionOf: Record<string, string> = { overview: "overview" };
@@ -940,7 +952,17 @@ function renderNav(
       .map(
         (t) =>
           `<button type="button" class="tab" data-tab="${esc(t.id)}">${t.label}${
-            t.id === "overview" && open ? ` <span class="pill">${open}</span>` : ""
+            /**
+             * ⛔ THE COUNT ON THE TAB TOO. Overview carried one and the halves carried none, so the
+             * top row could not answer "which side has the work" without opening both.
+             */
+            t.id === "overview"
+              ? open
+                ? ` <span class="pill">${open}</span>`
+                : ""
+              : t.toRead
+                ? ` <span class="pill quiet">${t.toRead}</span>`
+                : ""
           }</button>`
       )
       .join("")}</div>` +
@@ -1477,7 +1499,21 @@ const VIEW_SWITCH = `<script>
   let sectionOf = {};
   try { sectionOf = JSON.parse(frame.dataset.sections); } catch {}
   const tabs = [...document.querySelectorAll(".topframe .tab")];
-  for (const t of tabs) t.addEventListener("click", () => { show(t.dataset.tab, true); window.scrollTo(0, 0); });
+  /**
+   * ⛔ CHOOSING A HALF OPENS THE TREE; CHOOSING A FEATURE CLOSES IT.
+   *
+   * Both collapsed, which is backwards: pressing "Product" is the moment you want to see what is in
+   * it, and it dropped you on a landing page with the tree shut. The collapse belongs to the act
+   * that means "I have chosen" — a feature — not to the act that means "show me the options".
+   *
+   * Overview has no tree, so it stays closed there.
+   */
+  for (const t of tabs)
+    t.addEventListener("click", () => {
+      show(t.dataset.tab, false);
+      if (t.dataset.tab !== "overview") setOpen(true);
+      window.scrollTo(0, 0);
+    });
   /**
    * ⛔ The tree shows only the half you are in. Every scope in both halves at once is the wall the
    * tabs exist to remove, and a reader who has chosen a side has said which one they mean.
