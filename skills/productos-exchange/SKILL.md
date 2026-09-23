@@ -334,9 +334,16 @@ notes/notes.yaml      requests, append-only. Not truth, and not verdicts.
 ```
 
 ```bash
-productos v2 notes            # what is open, and what each was raised against
-productos v2 notes --all      # including the ones dealt with
+productos v2 notes                                     # what is open, and what each was raised against
+productos v2 notes --all                               # including the ones dealt with
+productos v2 notes add "<what should change>" \
+    --about <ref> --by <who> --via page|question|chat   # file one
+productos v2 notes done <id> --outcome "<what you did>" # close it
 ```
+
+A press on a **published** page writes to the artifact's database rather than to disk, so those
+have to be carried in — `WATCHING_PRESSES.md` has the loop, including the `--id` that makes
+carrying the same row in twice file one note.
 
 A **note** is a request: *"the tab strip should also show the pinned version"*, *"this sketch is two
 releases out of date"*, *"this behaviour belongs on the other screen"*. It carries `about` — the ref

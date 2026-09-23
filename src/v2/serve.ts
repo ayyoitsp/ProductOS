@@ -11,13 +11,11 @@
  * divergence again, this time between the browser and the terminal.
  */
 import type http from "node:http";
-import fs from "node:fs";
-import path from "node:path";
 import os from "node:os";
 import { loadCorpus } from "./load.js";
 import { renderScopePage, standalone } from "./page.js";
 import { perform, VIA, type Act, type Payload, type Via } from "./acts.js";
-import { Note } from "./schema.js";
+import { fileNote } from "./notes.js";
 
 export interface V2Routes {
   /** The corpus directory this server is serving. */
@@ -74,40 +72,19 @@ export async function v2Route(req: http.IncomingMessage, res: http.ServerRespons
    */
   if (req.method === "POST" && p === "/api/v2/note") {
     const body = await readJson(req);
-    const says = String(body.says ?? "").trim();
-    if (!says) return json(res, { ok: false, why: "an empty note is a click nobody can act on" }, 400), true;
-    const note = {
-      id: `n-${Date.now().toString(36)}`,
-      about: String(body.about ?? "").trim() || "the whole corpus",
-      says,
+    /**
+     * ⛔ Filed through `fileNote`, not written here. This handler used to assemble the YAML itself,
+     * which is the `gateFor`/`check` shape again — two writers for one file, diverging by whichever
+     * field one of them forgot.
+     */
+    const r = fileNote(dir, {
+      about: String(body.about ?? ""),
+      says: String(body.says ?? ""),
       by: typeof body.by === "string" && body.by.trim() ? body.by.trim() : whoIsPressing(),
-      via: "page" as const,
+      via: "page",
       at: new Date().toISOString().slice(0, 10),
-      state: "open" as const,
-    };
-    const parsed = Note.safeParse(note);
-    if (!parsed.success)
-      return json(res, { ok: false, why: "that is not a note anybody could act on", detail: parsed.error.issues.map((i) => i.message) }, 422), true;
-    const file = path.join(dir, "notes", "notes.yaml");
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    const existing = fs.existsSync(file) ? fs.readFileSync(file, "utf-8") : "notes:\n";
-    // ⛔ Append-only, like the verdict log. A request somebody made is a record, not a field.
-    fs.writeFileSync(
-      file,
-      existing.trimEnd() +
-        "\n" +
-        [
-          `  - id: ${note.id}`,
-          `    about: ${JSON.stringify(note.about)}`,
-          `    says: ${JSON.stringify(note.says)}`,
-          `    by: ${note.by}`,
-          `    at: ${note.at}`,
-          `    via: page`,
-          `    state: open`,
-        ].join("\n") +
-        "\n"
-    );
-    return json(res, { ok: true, said: `noted against ${note.about}` }), true;
+    });
+    return json(res, r.ok ? { ok: true, said: r.said } : r, r.ok ? 200 : 422), true;
   }
 
   if (req.method === "POST" && p === "/api/v2/act") {

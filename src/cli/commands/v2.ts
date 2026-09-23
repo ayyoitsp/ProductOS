@@ -10,6 +10,7 @@ import { compilePacket } from "../../v2/packet.js";
 
 import { questionsFor, descendants } from "../../v2/settle.js";
 import { perform, preview, optionText, VIA, type Via, type Outcome, type Refused } from "../../v2/acts.js";
+import { fileNote, closeNote } from "../../v2/notes.js";
 import { HOW } from "../../v2/record.js";
 import { renderScopePage, standalone } from "../../v2/page.js";
 import { migrate } from "../../v2/migrate.js";
@@ -69,7 +70,29 @@ const warnIfBroken = (corpus: { broken: Array<{ file: string; why: string }> }):
 
 export function v2Command(): Command {
   const cmd = new Command("v2").description("The Exchange schema (parallel track) — check · grid · acts · packet · reset");
-  const at = (o: { at?: string }) => path.resolve(o.at ?? "v2");
+  /**
+   * ⛔ THE CORPUS DIRECTORY, AND IT REFUSES RATHER THAN FALLING BACK.
+   *
+   * `--at` was silently dropped once — `notes add` declared it while its parent `notes` declared it
+   * too, so commander banked the value on the parent and handed the child its default. A carry-in
+   * meant for a work corpus was written into the seed working copy instead, and every message said
+   * ✓. Nothing in the output distinguished that from success.
+   *
+   * A default that quietly points somewhere real is the dangerous kind: the write lands, the
+   * report is green, and the corpus that was supposed to change did not. So the resolved directory
+   * has to look like a corpus, and the refusal names both where it looked and where it was run
+   * from — because the two differing is the whole failure.
+   */
+  const at = (o: { at?: string }, mustExist = true) => {
+    const dir = path.resolve(o.at ?? "v2");
+    if (mustExist && !fs.existsSync(path.join(dir, "truth"))) {
+      console.error(pc.red("✗"), `no corpus at ${dir}`);
+      console.error(pc.dim(`  expected truth/ inside it. run from ${process.cwd()}`));
+      console.error(pc.dim(`  point at one with --at <dir>`));
+      process.exit(1);
+    }
+    return dir;
+  };
 
   cmd
     .command("check")
@@ -778,7 +801,10 @@ export function v2Command(): Command {
       console.log(pc.dim(`  productos serve --v2 ${o.out}   → review it at /v2`));
     });
 
-  cmd
+  /**
+   * ⛔ `notes` reads by default; `notes add` and `notes done` hang off it.
+   */
+  const noteCmd = cmd
     /**
      * ⛔ THE REQUESTS SOMEBODY MADE, WHICH ARE NOT DECISIONS.
      *
@@ -809,13 +835,73 @@ export function v2Command(): Command {
       console.log(pc.dim("  these change nothing on their own — each needs somebody to author the change"));
     });
 
+  noteCmd
+    /**
+     * ⛔ THE CARRY-IN FOR A PUBLISHED PAGE.
+     *
+     * A published page's panel writes to the artifact's own database, because a strict CSP stops it
+     * reaching the machine the corpus lives on. Without this command that row was a dead end: it
+     * could be read back and never filed, so the one surface Peter actually reviews in could collect
+     * requests that went nowhere. See WATCHING_PRESSES.md.
+     */
+    .command("add")
+    .description("File a request somebody made — including one carried in from a published page")
+    .argument("<says>", "what should change")
+    .requiredOption("--about <ref>", "what they were looking at")
+    .requiredOption("--by <who>", "who asked")
+    .option("--via <how>", `how they asked: ${VIA.join(" | ")}`, "chat")
+    .option("--on <date>", "the day they asked (a carried-in row already has one)")
+    .option("--id <id>", "the id of the row this was carried in under, so carrying it twice files one note")
+    /**
+     * ⛔ NO `--at` HERE. The parent declares it; declaring it again is what made the value vanish.
+     * `optsWithGlobals` reads it whichever side of the verb it was typed.
+     */
+    .action((says: string, o: { about: string; by: string; via?: string; on?: string; id?: string }, self: Command) => {
+      if (!VIA.includes(o.via as Via)) {
+        console.error(pc.red("✗"), `"${o.via}" is not a way somebody could have asked`);
+        console.error(pc.dim(`  ${VIA.join(" · ")}`));
+        process.exit(1);
+      }
+      const r = fileNote(at(self.optsWithGlobals()), {
+        about: o.about,
+        says,
+        by: o.by,
+        via: o.via as Via,
+        at: o.on ?? new Date().toISOString().slice(0, 10),
+        id: o.id,
+      });
+      if (!r.ok) {
+        console.error(pc.red("✗"), r.why);
+        for (const d of r.detail ?? []) console.error(pc.dim(`  ${d}`));
+        process.exit(1);
+      }
+      console.log(pc.green("✓"), `${r.said} — ${pc.dim(r.note.id)}`);
+      console.log(pc.dim("  this changes nothing on its own. author the change, then close it saying what you did."));
+    });
+
+  noteCmd
+    .command("done")
+    .description("Close a request, saying what was done about it")
+    .argument("<id>")
+    .requiredOption("--outcome <what>", "what actually happened — including \"we are not doing this\"")
+    .action((id: string, o: { outcome: string }, self: Command) => {
+      const r = closeNote(at(self.optsWithGlobals()), id, o.outcome);
+      if (!r.ok) {
+        console.error(pc.red("✗"), r.why);
+        for (const d of r.detail ?? []) console.error(pc.dim(`  ${d}`));
+        process.exit(1);
+      }
+      console.log(pc.green("✓"), r.said);
+    });
+
   cmd
     .command("reset")
     .description("Restore a corpus from the pristine seed, so every run starts identical")
     .option("--at <dir>", "corpus directory to restore INTO", "v2")
     .option("--from <dir>", "the pristine seed", "v2-seed")
     .action((o: { at?: string; from?: string }) => {
-      const dest = at(o);
+      // The destination may not exist yet — reset does its own, stricter check below.
+      const dest = at(o, false);
       const src = path.resolve(o.from ?? "v2-seed");
       if (!fs.existsSync(src)) {
         console.error(pc.red("✗"), `no seed at ${src}`);
