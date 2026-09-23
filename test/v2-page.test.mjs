@@ -717,3 +717,42 @@ test("a generated screen keeps the app's CSS out of the review page", () => {
   const bare = renderScopePage(withHtml, scope.scope.id, { linkBase: "/v2" });
   assert.doesNotMatch(bare, /:host, :root/, "a page with no app CSS emitted an empty style block");
 });
+
+test("a label the browser writes as text is escaped once, not twice", () => {
+  /**
+   * ⛔ "Pricing & loan terms" APPEARED IN THE BREADCRUMB AS "Pricing &amp; loan terms".
+   *
+   * `line()` escapes for HTML, which is right for markup and wrong for a value that goes into an
+   * attribute and is later assigned to `textContent`: the escaping happens once on the way out and
+   * once more on the way in. It hit the crumbs and the note composer's trail, on every title
+   * containing an ampersand or a quote — and it is invisible in the HTML, because `&amp;amp;` looks
+   * like correctly-escaped markup right up until a browser renders it.
+   */
+  const amp = corpus.scopes.find((s) => /[&"']/.test(s.scope.title ?? ""));
+  const root = corpus.scopes.find((s) => !s.scope.in).scope.id;
+
+  // The seed may have no such title; construct one rather than skip, because the bug is the encoding.
+  const c = structuredClone(corpus);
+  const victim = c.scopes.find((s) => s.scope.in === root) ?? c.scopes[1];
+  victim.scope.title = 'Pricing & "loan" terms';
+  const html = renderScopePage(c, root, { linkBase: "/v2", interactive: true, records: "http", by: "t" });
+
+  const trails = /data-trails="([^"]*)"/.exec(html);
+  assert.ok(trails, "the frame carries no trails");
+  // Decoded once from the attribute, the JSON must hold the RAW title — no entities inside it.
+  const json = trails[1].replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+  const parsed = JSON.parse(json);
+  const labels = Object.values(parsed).flat().map((x) => x.label);
+  assert.ok(
+    labels.includes('Pricing & "loan" terms'),
+    `a trail label is double-escaped: ${JSON.stringify(labels.filter((l) => /&amp;|&quot;/.test(l)))}`
+  );
+  for (const l of labels) assert.doesNotMatch(l, /&(amp|quot|lt|gt|#39);/, `"${l}" carries an HTML entity into textContent`);
+
+  // Same for every data-label, which the composer writes as text.
+  for (const m of html.matchAll(/data-label="([^"]*)"/g)) {
+    const once = m[1].replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, "&");
+    assert.doesNotMatch(once, /&(amp|quot|lt|gt|#39);/, `data-label="${m[1]}" is escaped twice`);
+  }
+  void amp;
+});

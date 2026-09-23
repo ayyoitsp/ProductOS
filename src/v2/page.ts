@@ -32,6 +32,19 @@ const esc = (s: unknown): string =>
 const line = (s: unknown): string => esc(String(s ?? "").replace(/\s+/g, " ").trim());
 
 /**
+ * ⛔ THE SAME NORMALISING, WITHOUT THE ESCAPING, FOR ANYTHING THE BROWSER WILL WRITE AS TEXT.
+ *
+ * `line()` escapes for HTML, which is right for markup and wrong for a value that goes into an
+ * attribute and is later assigned to `textContent`: the attribute escaping happens once on the way
+ * out and once more on the way in, so an area called "Pricing & loan terms" appeared in the
+ * breadcrumb as "Pricing &amp;amp; loan terms" — rendered as "Pricing &amp; loan terms". Visible in
+ * the crumbs and in the note composer's trail, on every title containing an ampersand or a quote.
+ *
+ * `esc()` still wraps it at the attribute boundary. This only drops the second pass.
+ */
+const plain = (s: unknown): string => String(s ?? "").replace(/\s+/g, " ").trim();
+
+/**
  * A ref as an anchor. ⛔ One function, because a link and its target computing the slug
  * separately is how a nav that looks complete 404s on a third of its rows.
  */
@@ -421,9 +434,17 @@ function renderScreenIndex(corpus: Corpus, ids: string[], ctx: Ctx): string {
  * would register, the panel would open, and nothing on the screen would show what was selected.
  */
 const PT_STYLE = `<style>
-  .pt { cursor: pointer; border-radius: 3px; box-shadow: inset 0 -2px 0 rgba(37,99,235,.45); }
-  .pt:hover { box-shadow: inset 0 -2px 0 rgba(37,99,235,1); }
-  .pt.on { background: rgba(37,99,235,.14); box-shadow: inset 0 0 0 2px rgba(37,99,235,.9); }
+  .pt { cursor: pointer; border-radius: 3px; }
+  /**
+   * ⛔ ONLY THE THINGS A PERSON TOUCHES ADVERTISE THEMSELVES. Marking every part the same way drew
+   * a two-pixel underline across whole strips and panels — the version strip, the metrics row, the
+   * source-file bar — so the screen read as though everything on it were a control. A region is
+   * still clickable; it just does not claim to be a button.
+   */
+  .pt-commits, .pt-entry, .pt-navigates { box-shadow: inset 0 -2px 0 rgba(37,99,235,.45); }
+  .pt-commits:hover, .pt-entry:hover, .pt-navigates:hover { box-shadow: inset 0 -2px 0 rgba(37,99,235,1); }
+  .pt-region:hover, .pt-display:hover { outline: 1px dashed rgba(37,99,235,.55); outline-offset: 2px; }
+  .pt.on { background: rgba(37,99,235,.10); box-shadow: inset 0 0 0 2px rgba(37,99,235,.9); }
 </style>`;
 
 /** Normalised for label matching: the sketch writes "[ × Clear ]" where the part says "Clear filters". */
@@ -622,7 +643,13 @@ function renderScreens(scope: Scope, ctx: Ctx, scopeId: string, opts: PageOption
    * spacing value empty, which renders as an unstyled page rather than as an error. `:host` is the
    * shadow root's own equivalent, so both are named.
    */
-  const appStyle = opts.appCss ? `<style>${opts.appCss.replace(/:root\b/g, ":host, :root")}</style>` : "";
+  /**
+   * ⛔ THE APP'S CSS IS NOT REPEATED PER MOCK. Inlining it inside each shadow root put 370 KB of
+   * stylesheet into the page eleven times — a 4.7 MB document, eleven parses, for one stylesheet.
+   * It ships once and every shadow root adopts it; only the marker styles, which are six lines, are
+   * inline so a control still looks clickable before any script runs.
+   */
+  void opts;
   const shown = scope.views.filter((v) => v.exists !== "withdrawn");
   if (!shown.length) return "";
   return `
@@ -658,7 +685,7 @@ function renderScreens(scope: Scope, ctx: Ctx, scopeId: string, opts: PageOption
            * Declarative, so it works with no script: the markup IS the shadow tree on parse.
            */
           const body = v.sketch_html
-            ? `<div class="proto html"><template shadowrootmode="open">${appStyle}${PT_STYLE}<div class="${esc(
+            ? `<div class="proto html"><template shadowrootmode="open">${PT_STYLE}<div class="${esc(
                 opts.mockClass || "productos-mock"
               )}">${wireHtml(v, matched)}</div></template></div>`
             : v.sketch
@@ -667,7 +694,7 @@ function renderScreens(scope: Scope, ctx: Ctx, scopeId: string, opts: PageOption
           const undrawn = v.parts.filter((pt) => !matched.get(pt.id) && !pt.decorative);
           const loose = statedAt(scope, v.id, undefined);
           return `<article class="screen" id="${anchorOf(`${scopeId}#view#${v.id}`)}" data-screen="${esc(v.id)}"
-            data-ref="${esc(scopeId)}" data-label="${esc(`screen: ${line(v.title)}`)}">
+            data-ref="${esc(scopeId)}" data-label="${esc(`screen: ${plain(v.title)}`)}">
             <h4>${line(v.title)}${v.view_kind ? ` <span class="n">${esc(v.view_kind)}</span>` : ""}</h4>
             ${
               v.exists === "intended"
@@ -709,6 +736,19 @@ function renderScreens(scope: Scope, ctx: Ctx, scopeId: string, opts: PageOption
         })
         .join("")}
     </section>`;
+}
+
+/**
+ * The application's stylesheet, once, for every shadow root on the page to adopt.
+ *
+ * ⛔ `:root` DOES NOT MATCH INSIDE A SHADOW TREE, so a design system that defines its tokens there
+ * would hand every mock variables that resolve to nothing — every colour and spacing value empty,
+ * which renders as an unstyled page rather than as an error. `:host` is the shadow root's own
+ * equivalent, so both are named.
+ */
+function appCssOnce(opts: PageOptions): string {
+  if (!opts.appCss) return "";
+  return `<template id="app-css">${opts.appCss.replace(/:root\b/g, ":host, :root").replace(/<\/(script|template)/gi, "<\\/$1")}</template>`;
 }
 
 /**
@@ -892,7 +932,7 @@ function renderBehaviours(
         const sref = shown.length > 1 && said.id !== "it" ? `${ref}#${slot}#${said.id}` : `${ref}#${slot}`;
         const past = decisionsOn(corpus, sref);
         cards.push(`
-        <article class="beh" id="${anchorOf(sref)}" data-beh="${esc(sref)}" data-ref="${esc(sref)}" data-label="${esc(`${SLOT_ASKS_SHORT[slot] ?? slot} · ${line(ex.title)}`)}">
+        <article class="beh" id="${anchorOf(sref)}" data-beh="${esc(sref)}" data-ref="${esc(sref)}" data-label="${esc(`${SLOT_ASKS_SHORT[slot] ?? slot} · ${plain(ex.title)}`)}">
           <div class="beh-says">${shown.length > 1 ? line(said.says) : says}</div>
           <p class="beh-where">
             ${esc(SLOT_ASKS_SHORT[slot] ?? slot)} · on ${refLink(ref, ctx, ex.title)}${
@@ -1030,7 +1070,8 @@ function renderNotePanel(_corpus: Corpus, _ids: string[], opts: PageOptions): st
  */
 function renderGroupRules(corpus: Corpus, scopeId: string, ctx: Ctx, homes: Map<string, string | undefined>): string {
   const mine = corpus.rules.filter((r) => homes.get(r.rule.id) === scopeId);
-  const title = line(corpus.scopes.find((s) => s.scope.id === scopeId)?.scope.title || scopeId);
+  const rawTitle = plain(corpus.scopes.find((s) => s.scope.id === scopeId)?.scope.title || scopeId);
+  const title = esc(rawTitle);
   if (!mine.length)
     return `<section class="group-rules empty">
       <h3>What holds everywhere in ${title}</h3>
@@ -1046,7 +1087,7 @@ function renderGroupRules(corpus: Corpus, scopeId: string, ctx: Ctx, homes: Map<
       .map((r) => {
         const open = r.rule.standing && r.rule.standing.kind !== "stated";
         const hits = (reach.get(r.rule.id) ?? []).length;
-        return `<article class="beh group-rule${open ? " asking" : ""}" data-group-rule="${esc(scopeId)}" id="${anchorOf(r.rule.id)}" data-ref="${esc(r.rule.id)}" data-label="${esc(`holds everywhere in ${title}`)}">
+        return `<article class="beh group-rule${open ? " asking" : ""}" data-group-rule="${esc(scopeId)}" id="${anchorOf(r.rule.id)}" data-ref="${esc(r.rule.id)}" data-label="${esc(`holds everywhere in ${plain(rawTitle)}`)}">
           <div class="beh-says">${open ? line(r.rule.standing!.question ?? "Undecided — nobody has written what this says yet.") : line(r.rule.statement ?? "")}</div>
           <p class="beh-where">
             reaches ${hits} behaviour${hits === 1 ? "" : "s"} under ${title}${
@@ -1247,7 +1288,7 @@ function renderExchanges(corpus: Corpus, scopeIds: string[], cellOf: Map<string,
         )
         .join("");
       cards.push(`
-        <article class="ex-card" id="${anchorOf(ref)}" data-ref="${esc(ref)}" data-label="${esc(line(e.title))}">
+        <article class="ex-card" id="${anchorOf(ref)}" data-ref="${esc(ref)}" data-label="${esc(plain(e.title))}">
           <header>
             <h3>${line(e.title)}</h3>
             <code>${esc(ref)}</code>
@@ -1414,7 +1455,8 @@ function renderNav(
    * Computing it again in the browser would be a second answer to "where am I", and the two would
    * drift the first time a scope moved.
    */
-  const labelOf = (id: string) => line(corpus.scopes.find((x) => x.scope.id === id)?.scope.title || id);
+  // ⛔ plain(), not line(): these labels are written with textContent in the browser.
+  const labelOf = (id: string) => plain(corpus.scopes.find((x) => x.scope.id === id)?.scope.title || id);
   const trail = (id: string): Array<{ id: string; label: string }> => {
     const out: Array<{ id: string; label: string }> = [];
     let at: string | undefined = id;
@@ -1743,12 +1785,12 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
            </div>
            ${corpus.charter
              .map(
-               (c) => `<div class="sub-view" data-sub-view="${esc(c.charter.id)}" data-ref="${esc(c.charter.id)}" data-label="${esc(line(c.charter.title))}">
+               (c) => `<div class="sub-view" data-sub-view="${esc(c.charter.id)}" data-ref="${esc(c.charter.id)}" data-label="${esc(plain(c.charter.title))}">
                  <h2>${line(c.charter.title)}</h2>
                  ${renderProse(c.body)}
                  ${c.charter.sections
                    .map(
-                     (sec) => `<article class="charter-section" id="${anchorOf(`${c.charter.id}#${sec.id}`)}" data-ref="${esc(`${c.charter.id}#${sec.id}`)}" data-label="${esc(line(sec.title))}">
+                     (sec) => `<article class="charter-section" id="${anchorOf(`${c.charter.id}#${sec.id}`)}" data-ref="${esc(`${c.charter.id}#${sec.id}`)}" data-label="${esc(plain(sec.title))}">
                        <h3>${line(sec.title)}</h3>
                        ${renderProse(sec.says)}
                      </article>`
@@ -1761,7 +1803,7 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
       }
       ${grids
         .map(
-          (g) => `<section class="view" id="${anchorOf(g.scope)}" data-view="${esc(g.scope)}" data-ref="${esc(g.scope)}" data-label="${esc(line(g.title))}">
+          (g) => `<section class="view" id="${anchorOf(g.scope)}" data-view="${esc(g.scope)}" data-ref="${esc(g.scope)}" data-label="${esc(plain(g.title))}">
             <h2>${line(g.title)}</h2>
             ${renderProse(corpus.scopes.find((x) => x.scope.id === g.scope)?.body ?? "")}
             ${
@@ -1793,7 +1835,7 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
           .map((id) => {
             const sc = corpus.scopes.find((s) => s.scope.id === id)!.scope;
             const kids = corpus.scopes.filter((x) => x.scope.in === id);
-            return `<section class="view" id="${anchorOf(id)}" data-view="${esc(id)}" data-ref="${esc(id)}" data-label="${esc(line(sc.title || id))}">
+            return `<section class="view" id="${anchorOf(id)}" data-view="${esc(id)}" data-ref="${esc(id)}" data-label="${esc(plain(sc.title || id))}">
               <h2>${line(sc.title || id)}</h2>
               ${renderProse(corpus.scopes.find((x) => x.scope.id === id)?.body ?? "")}
               ${renderGroupRules(corpus, id, ctx, homesOf)}
@@ -1829,7 +1871,7 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
       }
     </main>`;
 
-  return `${STYLE}${body}${partFacts(corpus, ids)}${renderNotePanel(corpus, ids, opts)}${VIEW_SWITCH}${PROTOTYPE}${opts.interactive ? liveScript(opts) : INERT}`;
+  return `${STYLE}${body}${appCssOnce(opts)}${partFacts(corpus, ids)}${renderNotePanel(corpus, ids, opts)}${VIEW_SWITCH}${PROTOTYPE}${opts.interactive ? liveScript(opts) : INERT}`;
 }
 
 
@@ -2184,6 +2226,35 @@ const PROTOTYPE = `<script>
    * shadow boundary, so a control cannot find the screen it is on.
    */
   const hosts = () => [...document.querySelectorAll("div.proto.html")];
+
+  /**
+   * ⛔ ONE STYLESHEET, ADOPTED. Repeating the app's CSS inside every shadow root cost 370 KB per
+   * mock; parsed once here and shared by reference instead. The clone path is for anything without
+   * constructable stylesheets — still one copy of the bytes in the document either way.
+   */
+  (function adoptAppCss() {
+    const tpl = document.getElementById("app-css");
+    if (!tpl) return;
+    const css = tpl.innerHTML;
+    if (!css.trim()) return;
+    let sheet = null;
+    try {
+      sheet = new CSSStyleSheet();
+      sheet.replaceSync(css);
+    } catch (e) {
+      sheet = null;
+    }
+    for (const h of hosts()) {
+      const root = h.shadowRoot;
+      if (!root) continue;
+      if (sheet && "adoptedStyleSheets" in root) root.adoptedStyleSheets = [sheet, ...root.adoptedStyleSheets];
+      else {
+        const el = document.createElement("style");
+        el.textContent = css;
+        root.insertBefore(el, root.firstChild);
+      }
+    }
+  })();
   const deepPath = (ev) => (ev.composedPath ? ev.composedPath() : [ev.target]);
   const inPath = (ev, sel) => deepPath(ev).find((n) => n && n.matches && n.matches(sel));
 

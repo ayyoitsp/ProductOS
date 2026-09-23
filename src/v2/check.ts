@@ -29,6 +29,7 @@ import { stampFor, staleReason, coveredBy } from "./stamp.js";
 import { resolveRef } from "./ref.js";
 import { descendants } from "./settle.js";
 import { ruleHomes } from "./grid.js";
+import { appStyleFor } from "./appcss.js";
 
 export type Severity = "refuse" | "note" | "shape";
 
@@ -129,6 +130,12 @@ const norm = (s?: string) => (s ?? "").replace(/\s+/g, " ").trim();
 
 export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[] } {
   const corpus = loadCorpus(root);
+  /**
+   * ⛔ Read from the corpus's own project, not asked for as an argument. A finding that says "render
+   * this from the codebase" is only honest where the corpus names a codebase to read; asking every
+   * caller to pass that in is how one of them forgets and the finding fires on a corpus with no app.
+   */
+  const opts = { hasAppStyles: appStyleFor(root).from.length > 0 };
   const findings: Finding[] = [];
   const add = (f: Finding) => findings.push(f);
 
@@ -1340,6 +1347,33 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
       fix:
         "a scope is a thing that states behaviours, or a container for things that do. If this is vocabulary, declare those words on the scope whose behaviours use them; if something ought to state this, that behaviour is what is missing",
     });
+  }
+
+  /**
+   * ---- a screen still drawn as a diagram, where there is code to read ----
+   *
+   * ⛔ Peter: "why still ascii? we should render in the appropriate styles of the codebase."
+   *
+   * ASCII is for a screen nobody has built and nobody has designed. Where the application exists
+   * and its stylesheets are configured, a screen can be rendered in its own markup and its own CSS,
+   * and the difference is not cosmetic: a reviewer shown a wireframe is asked to imagine the
+   * product, and what they agree to is their imagination.
+   *
+   * Only fires when the corpus says there IS a codebase to read — `web.stylesheets` configured.
+   * Without that this would be a demand nobody can act on.
+   */
+  if (opts?.hasAppStyles) {
+    const wireframes = corpus.scopes.flatMap(({ scope }) =>
+      scope.views.filter((v) => v.exists !== "withdrawn" && v.sketch && !v.sketch_html).map((v) => `${scope.id}#${v.id}`)
+    );
+    if (wireframes.length)
+      add({
+        severity: "note",
+        kind: "drawn-as-a-diagram-where-there-is-code",
+        where: wireframes[0]!,
+        what: `${wireframes.length} screen${wireframes.length === 1 ? "" : "s"} still drawn in ASCII, while this corpus names the application's own stylesheets`,
+        fix: "render it from the codebase into sketch_html — read the route's component and the primitives it composes, mirror their markup and classes, and mark each part with data-part",
+      });
   }
 
   /**
