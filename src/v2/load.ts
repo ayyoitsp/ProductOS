@@ -15,7 +15,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { parseFrontmatter } from "../core/frontmatter.js";
 import YAML from "yaml";
-import { Scope, Rule, Reading, Verdict, Charter, type SlotName , saysText} from "./schema.js";
+import { Scope, Rule, Reading, Verdict, Charter, type SlotName , saysText, type Says} from "./schema.js";
 
 export interface V2Paths {
   root: string;
@@ -693,7 +693,7 @@ export function existsOf(c: Corpus, scopeId: string, exchangeExists?: string): s
  */
 export const DOWNSTREAM_OF_ANSWER: SlotName[] = ["after", "refuses", "fails", "again", "at_once"];
 
-export function answerIsUnknown(fill: { says?: string | string[]; standing: { kind: string } } | undefined): boolean {
+export function answerIsUnknown(fill: { says?: Says; standing: { kind: string } } | undefined): boolean {
   if (!fill) return false;
   const k = fill.standing.kind;
   if (k === "stated" || k === "out_of_scope") return false;

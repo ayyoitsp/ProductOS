@@ -270,7 +270,7 @@ function aimOf(corpus: Corpus, target: string): Refused | { kind: string } {
    * `GLOSSARY.md` calls one falsifiable claim "the atom". That is the thing a person reads and has
    * an opinion about, so that is the thing a stamp has to be able to cover.
    */
-  if (aim.ref.kind !== "exchange" && aim.ref.kind !== "rule" && aim.ref.kind !== "slot")
+  if (aim.ref.kind !== "exchange" && aim.ref.kind !== "rule" && aim.ref.kind !== "slot" && aim.ref.kind !== "statement")
     return no(`${target} is a ${aim.ref.kind} — an acceptance covers one behaviour, one whole exchange, or one rule`, [
       aim.ref.kind === "case"
         ? `you are probably after the slot: ${target.split("#").slice(0, 3).join("#")}`
@@ -329,7 +329,7 @@ function doAccept(dir: string, { target }: AcceptPayload, consent: Consent): Out
    * What a single behaviour owes is what the model already demands of it: something said, and no
    * unsettled standing over it.
    */
-  if (aim.kind === "slot") {
+  if (aim.kind === "slot" || aim.kind === "statement") {
     const [sc, exId, slot] = target.split("#");
     const fill = corpus.scopes.find((x) => x.scope.id === sc)?.scope.exchanges.find((e) => e.id === exId)
       ?.slots[slot as SlotName];

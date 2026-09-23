@@ -7,7 +7,7 @@
  * you can see from across a room, which is the only reason "every button has a loading
  * state" can be written once and still be legible on forty pages.
  */
-import { SLOTS, type SlotName, type Rule } from "./schema.js";
+import { SLOTS, type SlotName, type Rule , statements} from "./schema.js";
 import { resolveRules, disputeIndex, DOWNSTREAM_OF_ANSWER, answerIsUnknown, type Corpus } from "./load.js";
 import { stampFor } from "./stamp.js";
 import { existsOf } from "./load.js";
@@ -518,8 +518,16 @@ export function actsFor(corpus: Corpus): ActCount {
          * their own waiver.
          */
         if (k === "stated") {
-          const said = fill.says || fill.none || fill.cannot_fail || (fill.outcomes ?? []).length;
-          if (said && !isAccepted(`${ref}#${slot}`)) behaviours.push(`${ref}#${slot}`);
+          /**
+           * ⛔ ONE PER STATEMENT, because the cards are one per statement.
+           *
+           * Counting per slot made the tree say "3 to read" for a feature showing eleven cards. Two
+           * numbers for one thing, on one screen, and the reviewer cannot tell which is the work.
+           */
+          const said = statements(fill.says);
+          const refs = said.length > 1 ? said.map((x) => `${ref}#${slot}#${x.id}`) : [`${ref}#${slot}`];
+          const anything = said.length || fill.none || fill.cannot_fail || (fill.outcomes ?? []).length;
+          if (anything) for (const r of refs) if (!isAccepted(r)) behaviours.push(r);
         }
         if (k === "stated" || k === "out_of_scope") continue;
         settled = false;

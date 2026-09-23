@@ -16,7 +16,7 @@
  * would be the MCP boundary broken by a longer path.
  */
 import { resolveRules, type Corpus } from "./load.js";
-import { SLOTS, SLOT_ASKS_SHORT, statements, saysText, type SlotName, type Scope } from "./schema.js";
+import { SLOTS, SLOT_ASKS_SHORT, statements, saysText, type SlotName, type Scope , type Says} from "./schema.js";
 import { gridFor, gateFor, actsFor, type Grid, type Cell } from "./grid.js";
 import { questionsFor, descendants, type Question } from "./settle.js";
 import { decisionsOn, decisionsUnder, howItWasDecided, type Decision } from "./record.js";
@@ -475,19 +475,9 @@ function renderBehaviours(
       const cell = cellOf.get(`${ref}#${slot}`);
       // ⛔ Only what somebody has actually said. A blank is an authoring gap, reported in the
       // worklist — it is not a behaviour, and putting it here is what asked a person to fill cells.
-      /**
-       * ⛔ SEVERAL STATEMENTS ARE LISTED, AND STILL TAKE ONE DECISION.
-       *
-       * A slot may say nine things where v1 recorded nine claims. Run together as a paragraph they
-       * are unreadable and unanswerable; as a list they are nine lines somebody can scan, while the
-       * act stays one — which is what Peter asked for: "one card, but probably list the claims as
-       * annotations."
-       */
-      const parts = statements(fill?.says as string | string[] | undefined);
-      const says = parts.length > 1
-        ? `<ol class="claims">${parts.map((x) => `<li>${line(x)}</li>`).join("")}</ol>`
-        : fill?.says
-        ? line(saysText(fill.says as string | string[]))
+      const parts = statements(fill?.says as Says);
+      const says = fill?.says
+        ? line(saysText(fill.says as Says))
         : fill?.none
           ? `<em>nothing to refuse</em>`
           : fill?.cannot_fail
@@ -500,20 +490,57 @@ function renderBehaviours(
       if (!says) continue;
       const standing = (fill?.standing as { kind?: string } | undefined)?.kind ?? "stated";
       const settled = standing === "stated";
-      const past = decisionsOn(corpus, `${ref}#${slot}`);
-      const shows = ex.criteria.filter((c) => c.slot === slot);
-      cards.push(`
-        <article class="beh" id="${anchorOf(`${ref}#${slot}`)}">
-          <!-- ⛔ A div, not a p: several statements render as an <ol>, and a block element inside a
-               <p> is invalid HTML — the browser hoists it out, which emptied the element and made
-               the claims vanish from the card entirely. -->
-          <div class="beh-says">${says}</div>
+      const slotShows = ex.criteria.filter((c) => c.slot === slot);
+      /**
+       * ⛔ ONE CARD PER STATEMENT, because one card per SLOT was not reviewable.
+       *
+       * Listing a slot's statements and taking one decision over the set looked reasonable at nine.
+       * At thirteen — one lender's Fannie Mae program settings, with thirty-one criteria under a
+       * single "That is right" — it plainly is not. Peter: "this is one card?????"
+       *
+       * Every statement carries an id, so each can be agreed to, reworded or ruled on its own. The
+       * set still takes one press when a reviewer wants that: see `renderTakeAll`.
+       */
+      /**
+       * ⛔ `none` AND `cannot_fail` ARE STATED BEHAVIOURS, AND THEY VANISHED.
+       *
+       * They carry no `says`, so iterating the statements produced no card at all — "nothing to
+       * refuse" and "cannot fail" are things somebody decided and a reviewer should agree to, and
+       * they silently left the surface when cards moved from per-slot to per-statement.
+       *
+       * One synthetic statement whose id is the slot itself, so its ref stays `<scope>#<ex>#<slot>`
+       * and any stamp already made against it still covers it.
+       */
+      const shown = parts.length ? parts : [{ id: "it", says: "" }];
+      for (const said of shown) {
+        const shows =
+          shown.length > 1
+            ? slotShows.filter((c) => c.of === said.id || (!c.of && said.id === shown[0]!.id))
+            : slotShows;
+        const sref = shown.length > 1 && said.id !== "it" ? `${ref}#${slot}#${said.id}` : `${ref}#${slot}`;
+        const past = decisionsOn(corpus, sref);
+        cards.push(`
+        <article class="beh" id="${anchorOf(sref)}" data-beh="${esc(sref)}">
+          <div class="beh-says">${shown.length > 1 ? line(said.says) : says}</div>
           <p class="beh-where">
             ${esc(SLOT_ASKS_SHORT[slot] ?? slot)} · on ${refLink(ref, ctx, ex.title)}${
               ex.at?.part ? ` · <code>${esc(ex.at.part)}</code>` : ""
             }${cell && cell.rule ? ` · from <code>${esc(cell.rule)}</code>` : ""}
           </p>
           ${
+            /**
+             * ⛔ The evidence hangs off the SLOT, not the statement, so it is shown once per set
+             * rather than repeated on all thirteen cards. Criteria naming which statement they
+             * demonstrate is the next change; until then repeating them would be thirteen copies of
+             * thirty-one lines.
+             */
+            /**
+             * ⛔ ONLY THIS STATEMENT'S EVIDENCE. Hanging every criterion off the first card showed a
+             * reviewer reading claim one the evidence for all thirteen — thirty-one lines, most of
+             * them about something else. A criterion names the statement it demonstrates; the ones
+             * that name none belong to the slot and show on the first card, because that is where
+             * they were before anybody said otherwise.
+             */
             shows.length
               ? `<details class="beh-shows"><summary>${shows.length} thing${
                   shows.length === 1 ? "" : "s"
@@ -531,13 +558,14 @@ function renderBehaviours(
           ${
             settled
               ? `<footer class="beh-acts">
-                   <button class="act" data-act="accept" data-ref="${esc(`${ref}#${slot}`)}">That is right</button>
-                   <button class="act ghost" data-act="say" data-ref="${esc(`${ref}#${slot}`)}">Not quite — reword it</button>
-                   <button class="act ghost" data-act="waive" data-ref="${esc(`${ref}#${slot}`)}">Not ours to say</button>
+                   <button class="act" data-act="accept" data-ref="${esc(sref)}">That is right</button>
+                   <button class="act ghost" data-act="say" data-ref="${esc(sref)}">Not quite — reword it</button>
+                   <button class="act ghost" data-act="waive" data-ref="${esc(sref)}">Not ours to say</button>
                  </footer>`
               : `<p class="owes">Not settled yet — ${esc(standing.replace(/_/g, " "))}. It is in the queue.</p>`
           }
         </article>`);
+      }
     }
   }
   if (!cards.length) return "";

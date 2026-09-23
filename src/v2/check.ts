@@ -10,7 +10,7 @@
  *   note     worth a person's attention; never blocks
  *   shape    an observation about proportions, which no single page can show
  */
-import { SLOTS, SLOT_ASKS, type SlotName } from "./schema.js";
+import { SLOTS, SLOT_ASKS, type SlotName , type Says} from "./schema.js";
 import {
   DOWNSTREAM_OF_ANSWER,
   answerIsUnknown,

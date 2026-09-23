@@ -25,7 +25,7 @@
  *   <scope>#<exchange>#<slot>#<case>          one named refusal inside a slot
  *   <rule-id>                                 a rule, which has no `#`
  */
-import { SLOTS, type SlotName, type Standing } from "./schema.js";
+import { SLOTS, type SlotName, type Standing , statements} from "./schema.js";
 import type { Corpus } from "./load.js";
 
 export type Ref =
@@ -34,7 +34,21 @@ export type Ref =
   | { kind: "scope"; id: string; scope: string }
   | { kind: "exchange"; id: string; scope: string; exchange: string }
   | { kind: "slot"; id: string; scope: string; exchange: string; slot: SlotName }
-  | { kind: "case"; id: string; scope: string; exchange: string; slot: SlotName; name: string };
+  | { kind: "case"; id: string; scope: string; exchange: string; slot: SlotName; name: string }
+  /**
+   * One statement of what a slot says.
+   *
+   * ⛔ THE FOURTH SEGMENT IS NOW TWO THINGS, AND THE ORDER OF THE CHECKS IS THE WHOLE ANSWER.
+   *
+   * `<scope>#<exchange>#<slot>#<name>` was always a named refusal case. A slot can now hold several
+   * identified statements, which need addressing for the same reason cases did: so one of them can
+   * be agreed to, reworded or ruled without touching its neighbours.
+   *
+   * Cases are resolved FIRST, because they existed first and a corpus may already carry stamps and
+   * criteria pointing at one. A statement id that collides with a case name loses, and `check`
+   * reports the collision rather than letting a ref silently mean the other thing.
+   */
+  | { kind: "statement"; id: string; scope: string; exchange: string; slot: SlotName; name: string };
 
 export interface Resolved {
   ref: Ref;
@@ -116,11 +130,23 @@ export function resolveRef(corpus: Corpus, raw: string): Resolved | { error: str
   }
   const outcome = (fill.outcomes ?? []).find((o) => o.name === caseName);
   if (!outcome) {
+    // ⛔ A statement, then — same shape, and resolved second so an existing case always wins.
+    const said = statements(fill.says).find((x) => x.id === caseName);
+    if (said) {
+      const k = fill.standing.kind;
+      return {
+        ref: { kind: "statement", id: raw, scope: scopeId!, exchange: exId!, slot: slotName as SlotName, name: caseName! },
+        standing: fill.standing,
+        // A statement inherits its slot's standing: there is nowhere else for one to be unsettled.
+        unsettled: k !== "stated" && k !== "out_of_scope",
+      };
+    }
     const names = (fill.outcomes ?? []).map((o) => o.name);
+    const saidNames = statements(fill.says).map((x) => x.id);
     return {
-      error: names.length
-        ? `${exId}'s ${slotName} has no case "${caseName}" — it names ${names.join(", ")}`
-        : `${exId}'s ${slotName} names no cases, so there is no "${caseName}" to address`,
+      error: names.length || saidNames.length
+        ? `${exId}'s ${slotName} has no "${caseName}" — it names ${[...names, ...saidNames].join(", ")}`
+        : `${exId}'s ${slotName} names no cases or statements, so there is no "${caseName}" to address`,
     };
   }
   const k = outcome.standing?.kind ?? "stated";

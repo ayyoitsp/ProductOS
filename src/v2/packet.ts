@@ -383,7 +383,7 @@ function compileOne(corpus: Corpus, scopeId: string): string | null {
      * separate claims with nine separate tests.
      */
     statements(fill.says).length > 1
-      ? [`- ${label} —`, ...statements(fill.says).map((x) => `    - ${x.replace(/\s+/g, " ").trim()}`)].join("\n") +
+      ? [`- ${label} —`, ...statements(fill.says).map((x) => `    - ${x.says.replace(/\s+/g, " ").trim()}`)].join("\n") +
         (fill.within ? `\n    *(within: ${fill.within.replace(/\s+/g, " ").trim()})*` : "")
       : `- ${label} — ${saysText(fill.says).replace(/\s+/g, " ").trim()}${fill.within ? ` *(within: ${fill.within.replace(/\s+/g, " ").trim()})*` : ""}`
           );

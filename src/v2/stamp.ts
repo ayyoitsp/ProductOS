@@ -26,7 +26,7 @@
  * conflating them makes a new criterion look like a reversed claim.
  */
 import { createHash } from "node:crypto";
-import { SLOTS, type Verdict , type SlotName, saysText} from "./schema.js";
+import { SLOTS, type Verdict , type SlotName, saysText, statements} from "./schema.js";
 import { resolveRules, vocabularyReach, type Corpus } from "./load.js";
 
 const h = (s: string) => "sha256:" + createHash("sha256").update(s).digest("hex").slice(0, 16);
@@ -114,6 +114,15 @@ export function coveredBy(corpus: Corpus, target: string): Covered | null {
   const only: SlotName | undefined =
     slotName && (SLOTS as readonly string[]).includes(slotName) ? (slotName as SlotName) : undefined;
   if (slotName && !only) return null;
+  /**
+   * ⛔ ONE STATEMENT, when the ref names one.
+   *
+   * A slot may say thirteen things. Hashing all thirteen for a stamp on one of them means agreeing
+   * to the twelfth stales the stamp on the first, and a reviewer re-reads a sentence nobody touched.
+   * The statement's own text is what it covers; the envelope, the terms and the screen still count,
+   * because they are what the sentence MEANS.
+   */
+  const saidId = target.split("#")[3];
 
   const parts: string[] = [];
   const reads: string[] = [];
@@ -232,7 +241,13 @@ export function coveredBy(corpus: Corpus, target: string): Covered | null {
        * field is covered the moment it exists, and `test/v2-stamp.test.mjs` asserts every
        * key of `SlotFill.shape` changes the hash.
        */
-      bits.push(canon(fill));
+      bits.push(
+        canon(
+          saidId
+            ? { ...fill, says: statements(fill.says).filter((x) => x.id === saidId) }
+            : fill
+        )
+      );
       /**
        * ⛔ NOT ALWAYS "stated here". This line is what a reviewer is shown at the moment
        * of consent, and it read `at_once: stated here` for a slot holding an unanswered

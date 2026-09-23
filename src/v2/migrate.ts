@@ -421,6 +421,8 @@ export function migrate(v1Root: string, outDir: string, at: string): Migration {
               return {
                 id: `${seg(b.id)}-${t.id ?? i + 1}`,
                 slot: "answer",
+                // ⛔ Which statement it demonstrates — see the other criteria site and `of` in the schema.
+                of: seg(b.id),
                 ...(t.given ? { given: flat(t.given) } : {}),
                 ...(t.when ? { when: flat(t.when) } : {}),
                 ...(t.then ? { then: flat(t.then) } : {}),
@@ -525,14 +527,25 @@ export function migrate(v1Root: string, outDir: string, at: string): Migration {
        * They stay separate. `says` holds several statements where v1 recorded several claims, and
        * the surfaces list them.
        */
-      const claims = group.map((b) => flat(b.claim)).filter(Boolean);
-      const answer = claims.length === 1 ? claims[0]! : claims;
+      /**
+       * ⛔ v1'S IDS COME ACROSS. Each claim had one — `an-unsized-deal-shows-no-loan-figure` — and
+       * merging the claims threw them away, which left nothing smaller than the whole list to point
+       * at. One slot ended up holding thirteen claims under a single "That is right".
+       *
+       * The id is what a stamp and a criterion point at, so v1's is reused rather than generated:
+       * a stamp made against `an-unsized-deal-shows-no-loan-figure` still names the same thing if
+       * this migration is ever re-run.
+       */
+      const claims = group.filter((b) => flat(b.claim)).map((b) => ({ id: seg(b.id), says: flat(b.claim) }));
+      const answer = claims.length === 1 ? claims[0]!.says : claims;
       const criteria = group.flatMap((b) =>
         b.test_cases.map((t, i) => {
           carried.criteria++;
           return {
             id: `${seg(b.id)}-${t.id ?? i + 1}`,
             slot: "answer",
+            // ⛔ Which statement it demonstrates — v1's test case belonged to this behaviour.
+            of: seg(b.id),
             ...(t.given ? { given: flat(t.given) } : {}),
             ...(t.when ? { when: flat(t.when) } : {}),
             ...(t.then ? { then: flat(t.then) } : {}),

@@ -94,19 +94,49 @@ export const REF_MESSAGE =
 
 
 /**
+ * One statement of what a slot says, with an identity.
+ *
+ * ⛔ THE ID IS THE POINT, AND THROWING IT AWAY MADE REVIEW IMPOSSIBLE.
+ *
+ * Statements started as bare strings. On a real corpus one slot ended up holding THIRTEEN of them —
+ * every rule about a lender's Fannie Mae program settings — and nothing smaller than the whole list
+ * could be pointed at. So a reviewer got thirteen claims and thirty-one criteria under one
+ * "That is right", with no way to say twelve are and one is not.
+ *
+ * v1 had this right: every claim carried an id and its own tests. The migration merged them into one
+ * string and lost it. An id makes a statement addressable — `<scope>#<exchange>#<slot>#<id>` — so it
+ * can be agreed to on its own, reworded on its own, and carry its own criteria.
+ *
+ * ⛔ Ids are what a stamp and a criterion point at, so they are stable: renaming one is a new
+ * statement and the old stamp stops covering anything.
+ */
+export const Statement = z
+  .object({
+    id: z.string().regex(new RegExp(`^${SEGMENT}$`), "a statement id is one segment, kebab-case"),
+    says: z.string().min(10, "a statement nobody can read is not worth agreeing to"),
+  })
+  .strict();
+export type Statement = z.infer<typeof Statement>;
+
+/**
  * A slot's statements, always as a list.
  *
  * ⛔ ONE NORMALISER. `says` may be a sentence or several, and sixty-three places read it — every one
  * of them inventing its own handling is how a field ends up meaning two things. Anything doing text
  * work on it uses `saysText`; anything showing it to a person uses this.
  */
-export function statements(says: string | string[] | undefined): string[] {
-  return Array.isArray(says) ? says : says ? [says] : [];
+export type Says = string | Statement[] | undefined;
+
+export function statements(says: Says): Statement[] {
+  // ⛔ A bare sentence is one statement whose id is the slot itself — callers never special-case it.
+  return Array.isArray(says) ? says : says ? [{ id: "it", says }] : [];
 }
 
 /** The same statements as one string, for hashing, matching and prose. */
-export function saysText(says: string | string[] | undefined): string {
-  return statements(says).join(" ");
+export function saysText(says: Says): string {
+  return statements(says)
+    .map((x) => x.says)
+    .join(" ");
 }
 
 export const SLOT_ASKS: Record<SlotName, string> = {
@@ -599,7 +629,7 @@ export const SlotFill = z
      * The slot still answers ONE question — what the asker gets. The answer simply has parts, and
      * they stay parts, so a surface can list them and a stamp can cover the set.
      */
-    says: z.union([z.string().min(10), z.array(z.string().min(10)).min(2)]).optional(),
+    says: z.union([z.string().min(10), z.array(Statement).min(2)]).optional(),
     standing: Standing.default({ kind: "stated" }),
     /** ⛔ Observable by the asker, or it is engineering's. */
     within: z.string().min(10).optional(),
@@ -719,7 +749,7 @@ export const SlotFill = z
       ]),
     ] as const) {
       // ⛔ Every statement, not the first: "tbd" hiding as the ninth of nine is still a non-answer.
-    if (value && statements(value).some((x) => PLACEHOLDER.test(x.trim())))
+    if (value && statements(value).some((x) => PLACEHOLDER.test(x.says.trim())))
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: [field],
@@ -788,6 +818,17 @@ export const Criterion = z
   .object({
     id: z.union([z.number(), z.string()]).transform(String),
     slot: z.enum(SLOTS),
+    /**
+     * The statement this demonstrates, where the slot says several things.
+     *
+     * ⛔ v1 HAD THIS AND THE MIGRATION LOST IT. A v1 test case belonged to a BEHAVIOUR, not to a
+     * screen — and flattening every case onto `slot: answer` put thirty-one of them under one
+     * statement, where most demonstrated a different one. A reviewer reading the first claim was
+     * shown the evidence for all thirteen.
+     *
+     * Optional because a slot saying one thing needs no pointer: there is only one thing to show.
+     */
+    of: z.string().optional(),
     kind: CriterionKind.default("instance"),
     given: z.string().optional(),
     when: z.string().optional(),

@@ -17,7 +17,7 @@ import { loadCorpus } from "../dist/v2/load.js";
 import { gridFor, actsFor } from "../dist/v2/grid.js";
 import { descendants, questionsFor } from "../dist/v2/settle.js";
 import { renderScopePage } from "../dist/v2/page.js";
-import { SLOTS } from "../dist/v2/schema.js";
+import { SLOTS, statements } from "../dist/v2/schema.js";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
@@ -452,8 +452,24 @@ test("a feature offers its behaviours one at a time, and the slot machinery is f
     for (const ref of said)
       assert.match(html, new RegExp(`id="at-${ref.replace(/[^a-z0-9]+/gi, "-")}"`), `${ref} is stated and not offered`);
 
+    /**
+     * ⛔ ONE CARD PER STATEMENT, not per slot. A slot may say thirteen things; thirteen claims and
+     * thirty-one criteria under one "That is right" is not review, which is what one-card-per-slot
+     * produced on a real corpus.
+     */
+    const expected = scope.exchanges.reduce(
+      (n, ex) =>
+        n +
+        SLOTS.reduce((m, sl) => {
+          const f = ex.slots[sl];
+          if (!f) return m;
+          if (f.none || f.cannot_fail || f.outcomes?.length) return m + 1;
+          return m + statements(f.says).length;
+        }, 0),
+      0
+    );
     const cards = (html.match(/article class="beh"/g) ?? []).length;
-    assert.equal(cards, said.length, `${scope.id}: ${cards} cards for ${said.length} stated behaviours`);
+    assert.equal(cards, expected, `${scope.id}: ${cards} cards for ${expected} statements`);
 
     /**
      * ⛔ The act aims at the BEHAVIOUR — aiming it at the exchange is the grain error in one line.
