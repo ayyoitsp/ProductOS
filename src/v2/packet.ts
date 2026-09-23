@@ -11,7 +11,7 @@
  * — `refuses: none`, `cannot_fail`, `out_of_scope` are statements a builder can rely on,
  * where silence would have been something they had to guess about.
  */
-import { SLOTS, type SlotName } from "./schema.js";
+import { SLOTS, type SlotName , statements, saysText} from "./schema.js";
 import { resolveRules, disputeIndex, vocabularyReach, resolveView, DOWNSTREAM_OF_ANSWER, answerIsUnknown, type Corpus } from "./load.js";
 import { descendants } from "./settle.js";
 import { existsOf } from "./load.js";
@@ -366,7 +366,7 @@ function compileOne(corpus: Corpus, scopeId: string): string | null {
           `- ${label} — ⛔ **CONTRADICTED.** ${namedIn[0]!.from} says it cannot hold with this: ${namedIn[0]!.because} ` +
             `Whatever this slot says below is one side of an unresolved contradiction. **Stop and ask.**`
         );
-        if (fill.says) out.push(`    - it currently says: ${fill.says.replace(/\s+/g, " ").trim()}`);
+        if (fill.says) out.push(`    - it currently says: ${saysText(fill.says).replace(/\s+/g, " ").trim()}`);
         out.push(...alsoLines);
         continue;
       }
@@ -377,7 +377,15 @@ function compileOne(corpus: Corpus, scopeId: string): string | null {
         // template printed the word "undefined" into the artifact a builder works from.
         else if (fill.says)
           out.push(
-            `- ${label} — ${fill.says.replace(/\s+/g, " ").trim()}${fill.within ? ` *(within: ${fill.within.replace(/\s+/g, " ").trim()})*` : ""}`
+            /**
+     * ⛔ SEVERAL STATEMENTS ARE LISTED, NOT RUN TOGETHER. A slot may say nine things — see `says` in
+     * the schema — and a builder handed them as one paragraph has to parse back out what were nine
+     * separate claims with nine separate tests.
+     */
+    statements(fill.says).length > 1
+      ? [`- ${label} —`, ...statements(fill.says).map((x) => `    - ${x.replace(/\s+/g, " ").trim()}`)].join("\n") +
+        (fill.within ? `\n    *(within: ${fill.within.replace(/\s+/g, " ").trim()})*` : "")
+      : `- ${label} — ${saysText(fill.says).replace(/\s+/g, " ").trim()}${fill.within ? ` *(within: ${fill.within.replace(/\s+/g, " ").trim()})*` : ""}`
           );
         else out.push(`- ${label} — the named cases below, and nothing else:`);
         /**
@@ -423,7 +431,7 @@ function compileOne(corpus: Corpus, scopeId: string): string | null {
          * clearly marked as not yet accepted, and the unruled part named.
          */
         const stated: string[] = [];
-        if (fill.says) stated.push(fill.says.replace(/\s+/g, " ").trim());
+        if (fill.says) stated.push(saysText(fill.says).replace(/\s+/g, " ").trim());
         if (fill.none) stated.push("nothing to refuse. Stated, not omitted.");
         if (fill.cannot_fail) stated.push(`cannot fail: ${fill.cannot_fail}`);
         if (stated.length) {
@@ -512,7 +520,7 @@ function compileOne(corpus: Corpus, scopeId: string): string | null {
       out.push("");
       out.push("What this sets off, which must agree with what it says above:");
       for (const s of setsOff)
-        out.push(`- **${s.title}** (\`${s.id}\`) — ${(s.says ?? "nothing stated").replace(/\s+/g, " ").trim()}`);
+        out.push(`- **${s.title}** (\`${s.id}\`) — ${(saysText(s.says) || "nothing stated").replace(/\s+/g, " ").trim()}`);
     }
     const cs = ex.criteria;
     if (cs.length) {

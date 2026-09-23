@@ -93,6 +93,22 @@ export const REF_MESSAGE =
   "a reference is a rule id, or <scope>#<exchange>[#<slot>[#<case>]] — nothing else addresses anything";
 
 
+/**
+ * A slot's statements, always as a list.
+ *
+ * ⛔ ONE NORMALISER. `says` may be a sentence or several, and sixty-three places read it — every one
+ * of them inventing its own handling is how a field ends up meaning two things. Anything doing text
+ * work on it uses `saysText`; anything showing it to a person uses this.
+ */
+export function statements(says: string | string[] | undefined): string[] {
+  return Array.isArray(says) ? says : says ? [says] : [];
+}
+
+/** The same statements as one string, for hashing, matching and prose. */
+export function saysText(says: string | string[] | undefined): string {
+  return statements(says).join(" ");
+}
+
 export const SLOT_ASKS: Record<SlotName, string> = {
   may: "who is permitted to ask",
   with: "what must be known to ask, in product language",
@@ -543,7 +559,7 @@ export const RefusalOutcome = z
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: [field],
-          message: `"${value.trim()}" is not an answer — if nobody has decided, that is a standing on this case, and it belongs in one where a person will be asked about it`,
+          message: `"${saysText(value).trim()}" is not an answer — if nobody has decided, that is a standing on this case, and it belongs in one where a person will be asked about it`,
         });
   });
 
@@ -565,7 +581,25 @@ export const SlotFill = z
      * comment "a builder cannot build \"tbd\"". This is the same sentence at the same
      * altitude.
      */
-    says: z.string().min(10).optional(),
+    /**
+     * What this slot says.
+     *
+     * ⛔ SEVERAL STATEMENTS, NOT ONE, BECAUSE A REAL SCREEN SAYS SEVERAL THINGS.
+     *
+     * This was a single string, and a real corpus broke it immediately: v1 recorded NINE separate
+     * claims about one deals list — the columns it shows, that an unsized deal shows a dash rather
+     * than a zero, that the filters live in the address, what an empty list says, what a failed load
+     * leaves on screen — each with its own id and its own tests. One field, nine claims, so the
+     * migration concatenated them into one paragraph.
+     *
+     * What that cost the reviewer is the whole point: nine things they could each have said yes or
+     * no to became one thing they could only accept or reject entire. Eight right and one wrong had
+     * no way to be expressed.
+     *
+     * The slot still answers ONE question — what the asker gets. The answer simply has parts, and
+     * they stay parts, so a surface can list them and a stamp can cover the set.
+     */
+    says: z.union([z.string().min(10), z.array(z.string().min(10)).min(2)]).optional(),
     standing: Standing.default({ kind: "stated" }),
     /** ⛔ Observable by the asker, or it is engineering's. */
     within: z.string().min(10).optional(),
@@ -684,11 +718,12 @@ export const SlotFill = z
         [`outcomes.${i}.when`, o.when],
       ]),
     ] as const) {
-      if (value && PLACEHOLDER.test(value.trim()))
+      // ⛔ Every statement, not the first: "tbd" hiding as the ninth of nine is still a non-answer.
+    if (value && statements(value).some((x) => PLACEHOLDER.test(x.trim())))
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: [field],
-          message: `"${value.trim()}" is not an answer — if nobody has decided, that is a standing, and it belongs in one where a person will be asked about it`,
+          message: `"${saysText(value).trim()}" is not an answer — if nobody has decided, that is a standing, and it belongs in one where a person will be asked about it`,
         });
     }
     /**

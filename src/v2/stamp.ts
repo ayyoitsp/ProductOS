@@ -26,7 +26,7 @@
  * conflating them makes a new criterion look like a reversed claim.
  */
 import { createHash } from "node:crypto";
-import { SLOTS, type Verdict , type SlotName} from "./schema.js";
+import { SLOTS, type Verdict , type SlotName, saysText} from "./schema.js";
 import { resolveRules, vocabularyReach, type Corpus } from "./load.js";
 
 const h = (s: string) => "sha256:" + createHash("sha256").update(s).digest("hex").slice(0, 16);
@@ -199,7 +199,7 @@ export function coveredBy(corpus: Corpus, target: string): Covered | null {
       // ⛔ And what follows this ask, so a sentence appearing after acceptance breaks the stamp
       // on the exchange that sets it off — the two have to be read together or not at all.
       setsOff: corpus.scopes
-        .flatMap((s) => s.scope.exchanges.filter((x) => x.when?.follows?.startsWith(target)).map((x) => `${s.scope.id}#${x.id}:${norm(x.slots.answer?.says ?? "")}`))
+        .flatMap((s) => s.scope.exchanges.filter((x) => x.when?.follows?.startsWith(target)).map((x) => `${s.scope.id}#${x.id}:${norm(saysText(x.slots.answer?.says))}`))
         .sort(),
       exists: ex.exists,
       reads: [...ex.reads].sort(),
@@ -242,7 +242,7 @@ export function coveredBy(corpus: Corpus, target: string): Covered | null {
       reads.push(
         `${slot} — ${
           fill.says
-            ? norm(fill.says)
+            ? norm(saysText(fill.says))
             : fill.none
               ? "nothing to refuse. Stated, not omitted."
               : fill.cannot_fail

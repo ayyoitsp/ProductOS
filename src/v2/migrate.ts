@@ -512,7 +512,21 @@ export function migrate(v1Root: string, outDir: string, at: string): Migration {
        * several things that one answer does, in v1's own words. Joining is not interpretation;
        * choosing which was primary would have been.
        */
-      const answer = group.map((b) => flat(b.claim)).filter(Boolean).join(" ");
+      /**
+       * ⛔ NOT JOINED. This was `.join(" ")`, and on one screen it pasted NINE of v1's claims into
+       * one sentence — the columns shown, the dash rather than a zero, the filters in the address,
+       * what an empty list says, what a failed load leaves behind — each of which v1 had recorded
+       * separately with its own id and its own tests.
+       *
+       * What it cost the reviewer is the whole point: nine things they could each have said yes or
+       * no to became one thing they could only take or leave entire. Eight right and one wrong had
+       * nowhere to go.
+       *
+       * They stay separate. `says` holds several statements where v1 recorded several claims, and
+       * the surfaces list them.
+       */
+      const claims = group.map((b) => flat(b.claim)).filter(Boolean);
+      const answer = claims.length === 1 ? claims[0]! : claims;
       const criteria = group.flatMap((b) =>
         b.test_cases.map((t, i) => {
           carried.criteria++;

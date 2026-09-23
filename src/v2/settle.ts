@@ -27,7 +27,7 @@
 import fs from "node:fs";
 import { parseFrontmatter } from "../core/frontmatter.js";
 import YAML from "yaml";
-import { Scope, Rule, type SlotName } from "./schema.js";
+import { Scope, Rule, type SlotName , saysText} from "./schema.js";
 import { loadCorpus, resolveRules, selectsFor, lineageOf, type Corpus } from "./load.js";
 import { resolveRef } from "./ref.js";
 import { removals, refuseBecause } from "./write.js";
@@ -250,7 +250,7 @@ function questionsIn(corpus: Corpus, scopeId: string): Question[] {
          * longer be confused. A `proposal` is one such answer.
          */
         candidates: s.candidates ?? [],
-        revises: s.about ? fill.says : undefined,
+        revises: s.about ? saysText(fill.says) : undefined,
         candidatesAreWhole:
           (s.candidates ?? []).length > 0 && (s.candidates ?? []).every((c) => c.replaces === "the whole sentence"),
         about: s.about,

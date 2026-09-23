@@ -16,7 +16,7 @@
  * would be the MCP boundary broken by a longer path.
  */
 import { resolveRules, type Corpus } from "./load.js";
-import { SLOTS, SLOT_ASKS_SHORT, type SlotName, type Scope } from "./schema.js";
+import { SLOTS, SLOT_ASKS_SHORT, statements, saysText, type SlotName, type Scope } from "./schema.js";
 import { gridFor, gateFor, actsFor, type Grid, type Cell } from "./grid.js";
 import { questionsFor, descendants, type Question } from "./settle.js";
 import { decisionsOn, decisionsUnder, howItWasDecided, type Decision } from "./record.js";
@@ -475,8 +475,19 @@ function renderBehaviours(
       const cell = cellOf.get(`${ref}#${slot}`);
       // ⛔ Only what somebody has actually said. A blank is an authoring gap, reported in the
       // worklist — it is not a behaviour, and putting it here is what asked a person to fill cells.
-      const says = fill?.says
-        ? line(fill.says)
+      /**
+       * ⛔ SEVERAL STATEMENTS ARE LISTED, AND STILL TAKE ONE DECISION.
+       *
+       * A slot may say nine things where v1 recorded nine claims. Run together as a paragraph they
+       * are unreadable and unanswerable; as a list they are nine lines somebody can scan, while the
+       * act stays one — which is what Peter asked for: "one card, but probably list the claims as
+       * annotations."
+       */
+      const parts = statements(fill?.says as string | string[] | undefined);
+      const says = parts.length > 1
+        ? `<ol class="claims">${parts.map((x) => `<li>${line(x)}</li>`).join("")}</ol>`
+        : fill?.says
+        ? line(saysText(fill.says as string | string[]))
         : fill?.none
           ? `<em>nothing to refuse</em>`
           : fill?.cannot_fail
@@ -493,7 +504,10 @@ function renderBehaviours(
       const shows = ex.criteria.filter((c) => c.slot === slot);
       cards.push(`
         <article class="beh" id="${anchorOf(`${ref}#${slot}`)}">
-          <p class="beh-says">${says}</p>
+          <!-- ⛔ A div, not a p: several statements render as an <ol>, and a block element inside a
+               <p> is invalid HTML — the browser hoists it out, which emptied the element and made
+               the claims vanish from the card entirely. -->
+          <div class="beh-says">${says}</div>
           <p class="beh-where">
             ${esc(SLOT_ASKS_SHORT[slot] ?? slot)} · on ${refLink(ref, ctx, ex.title)}${
               ex.at?.part ? ` · <code>${esc(ex.at.part)}</code>` : ""
@@ -1738,6 +1752,8 @@ const STYLE = `<style>
   .beh { background: var(--card); border: 1px solid var(--line); border-radius: 10px;
     padding: 1.1rem 1.25rem; margin: 0 0 .9rem; }
   .beh-says { font-size: 1.05rem; line-height: 1.5; margin: 0 0 .5rem; }
+  ol.claims { margin: 0; padding-left: 1.4rem; }
+  ol.claims li { margin: .45rem 0; }
   .beh-where { font-size: .78rem; color: var(--dim); margin: 0; }
   .beh-where code { font-size: .95em; }
   .beh-shows { margin-top: .7rem; font-size: .9rem; }
