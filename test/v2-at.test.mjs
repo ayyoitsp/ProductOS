@@ -15,7 +15,6 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { execFileSync } from "node:child_process";
-import { v2Command } from "../dist/cli/commands/v2.js";
 
 const CLI = path.resolve("dist/cli/index.js");
 const run = (args, cwd) => {
@@ -26,20 +25,41 @@ const run = (args, cwd) => {
   }
 };
 
-test("no v2 command re-declares an option its parent owns", () => {
-  const v2 = v2Command();
-
-  const walk = (cmd, ownedAbove) => {
-    const mine = cmd.options.map((o) => o.long).filter(Boolean);
-    for (const flag of mine)
-      assert.ok(
-        !ownedAbove.has(flag),
-        `"${cmd.name()}" re-declares ${flag}, which a parent already owns — the value goes to the parent and the child silently gets its default`
-      );
-    const owned = new Set([...ownedAbove, ...mine]);
-    for (const sub of cmd.commands) walk(sub, owned);
-  };
-  walk(v2, new Set());
+test("no command anywhere in the CLI re-declares an option a parent owns", async () => {
+  /**
+   * Swept across every command group, not just v2 — the mechanism is commander's, so the next
+   * place it happens will not be here. Today only `v2 notes add` had it; the sweep is what keeps
+   * that true.
+   */
+  const dir = path.resolve("dist/cli/commands");
+  const shadowed = [];
+  for (const f of fs.readdirSync(dir)) {
+    if (!f.endsWith(".js")) continue;
+    const mod = await import(path.join(dir, f));
+    for (const [name, make] of Object.entries(mod)) {
+      if (typeof make !== "function" || !name.endsWith("Command")) continue;
+      let cmd;
+      try {
+        cmd = make();
+      } catch {
+        continue; // a factory that needs arguments is not a command group
+      }
+      if (!cmd?.commands) continue;
+      const walk = (c, above, trail) => {
+        const mine = c.options.map((o) => o.long).filter(Boolean);
+        for (const flag of mine)
+          if (above.has(flag)) shadowed.push(`${[...trail, c.name()].join(" ")} re-declares ${flag}`);
+        const owned = new Set([...above, ...mine]);
+        for (const sub of c.commands) walk(sub, owned, [...trail, c.name()]);
+      };
+      walk(cmd, new Set(), []);
+    }
+  }
+  assert.deepEqual(
+    shadowed,
+    [],
+    `the value goes to the parent and the child silently gets its default:\n  ${shadowed.join("\n  ")}`
+  );
 });
 
 test("a corpus directory that is not one is refused, not written into", () => {
