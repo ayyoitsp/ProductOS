@@ -339,6 +339,13 @@ export function migrate(v1Root: string, outDir: string, at: string): Migration {
         // claiming otherwise would manufacture the only evidence that a screen exists.
         walked: false,
         ...(v.sketch ? { sketch: v.sketch } : {}),
+        /**
+         * ⛔ CARRIED, AND IT WAS NOT. `sketch_html` is the same screen in the application's own
+         * markup and classes — the thing that makes a prototype look like the product rather than
+         * like a wireframe. The migrator copied the ASCII and dropped it, so every corpus brought
+         * across arrived with the low-fidelity half only and no sign the other half had existed.
+         */
+        ...(v.sketch_html ? { sketch_html: v.sketch_html } : {}),
         parts,
       };
     });

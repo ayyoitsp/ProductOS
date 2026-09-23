@@ -305,9 +305,47 @@ is unjudgeable — and was the exact complaint that made this exist. In a real 4
 named a screen and **7** named a control; `productos v2 check` reports the controls no behaviour
 says anything about, which is where the holes are.
 
-**⛔ `sketch_html` when you can.** The same screen in the application's own markup and classes, so
-it looks like the product rather than a wireframe. The part wiring is identical — by label — so it
-costs nothing to switch. Read the real components first and mirror them; do not invent class names.
+### Generate the screen from the codebase — `sketch_html`
+
+⛔ **Prefer this to ASCII wherever there is code to read.** ASCII is for a screen nobody has built
+and nobody has designed. If the application exists, the screen can be rendered in its own markup
+and its own CSS, and the difference is not cosmetic: a reviewer looking at a wireframe is asked to
+imagine the product, and what they agree to is their imagination.
+
+```yaml
+# productos/config.yaml
+web:
+  components_dir: frontend/app/components
+  stylesheets:                              # inlined into the page, in cascade order
+    - frontend/design-system/src/tokens.css
+    - frontend/design-system/src/themes.css
+    - frontend/design-system/src/typography.css
+    - frontend/design-system/src/styles.css
+    - frontend/.next/static/chunks/*.css    # ⛔ a glob: build output is content-hashed
+```
+
+How to write one:
+
+1. **Find the route** the screen corresponds to and read its component. Then read the UI primitives
+   it composes — that is where the class names live, not in the page.
+2. **Mirror them.** Same elements, same classes, same nesting. Never invent a class name: an
+   invented one resolves to nothing and renders as a broken app.
+3. **Static only.** No script, no handlers, no fetch. Realistic sample data, never real customer
+   data — the page gets published.
+4. **Say which element is which part**, with `data-part="<part id>"` on it. The renderer will fall
+   back to matching the part's label in the text, and to `placeholder` / `aria-label` / `title` on
+   inputs, but an explicit attribute is the only way that cannot be guessed wrong.
+
+⛔ **The mock renders in a shadow root with the app's CSS inside it.** That is what stops Tailwind
+restyling the review page. Two consequences worth knowing: a design system defining tokens on
+`:root` is rewritten to `:host, :root`, because `:root` does not match inside a shadow tree; and a
+stylesheet using `@import` will not work, because an import is a fetch and the CSP blocks it — name
+the imported files in the list instead.
+
+⛔ **`@import` and remote fonts are dropped, and stylesheet paths are reported.** A mistyped path
+produces a mock with the right class names and browser-default styling, which reads as a badly
+written mock rather than a stale config line — so `publishable` prints what it loaded and warns
+about what it could not find.
 
 A published page **cannot** reach the running application: a strict CSP blocks every external host,
 so there is no iframe of localhost and no fetch from the dev server. A prototype here is built from

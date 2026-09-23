@@ -170,6 +170,19 @@ export const WebConfig = z.object({
    *  productos serve so UX mocks pick up their app's design system. The
    *  server exposes the file at /_user-style.css. */
   stylesheet: z.string().optional(),
+  /**
+   * Every stylesheet a mock needs, in cascade order.
+   *
+   * ⛔ A LIST, BECAUSE ONE FILE IS NOT HOW A REAL APP IS STYLED. The app this was built against
+   * has four design-system files (tokens, themes, typography, styles) plus a Tailwind build, and
+   * `stylesheet` could name one of them. Naming one produced a mock with the right class names and
+   * none of the values they resolve to, which looks like a broken app rather than the app.
+   *
+   * ⛔ INLINED, NEVER LINKED. A published page is served from claude.ai under a strict CSP: an
+   * external stylesheet is blocked, and there is no ProductOS server on the other side to ask. The
+   * bytes travel with the page or the mock renders unstyled.
+   */
+  stylesheets: z.array(z.string()).default([]),
   /** Optional CSS class to wrap every UX mock in. Use to scope your styles
    *  if your app's CSS expects a root container class (e.g. "app-root"). */
   mock_container_class: z.string().optional(),

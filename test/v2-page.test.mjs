@@ -669,3 +669,51 @@ test("a card about a control can take you to it", () => {
       assert.match(html, /nothing says where this happens/, "a behaviour with no screen is silent about it");
   }
 });
+
+test("a generated screen keeps the app's CSS out of the review page", () => {
+  /**
+   * ⛔ Peter: "i don't think we should have ascii, we should try to generate what it'd look like
+   * from the codebase."
+   *
+   * A mock in the application's real class names needs the application's real CSS, and that CSS
+   * styles `.flex`, `*` and `:root`. Inlined into this page it restyles the page — the review
+   * surface starts looking like the thing under review, and any later change to their stylesheet
+   * can break this page's layout with nothing connecting cause to effect.
+   */
+  const scope = corpus.scopes.find((s) => s.scope.views.some((v) => v.parts.length));
+  assert.ok(scope, "the seed has no screen with parts");
+  const view = scope.scope.views.find((v) => v.parts.length);
+
+  // Stand in a mock for the seed's screen, in the shape a generated one has.
+  const withHtml = structuredClone(corpus);
+  const target = withHtml.scopes.find((s) => s.scope.id === scope.scope.id).scope.views.find((v) => v.id === view.id);
+  target.sketch_html = `<div class="flex p-4"><button class="rounded bg-blue-600">${view.parts[0].label ?? view.parts[0].id}</button><input placeholder="nothing" /></div>`;
+
+  const html = renderScopePage(withHtml, scope.scope.id, {
+    linkBase: "/v2",
+    appCss: ":root { --x: red } .flex { display: flex } * { box-sizing: border-box }",
+  });
+
+  // The app's CSS is inside a shadow root, not in the page's own <style>.
+  assert.match(html, /<template shadowrootmode="open">/, "the mock is not isolated from the page");
+  const shadow = /<template shadowrootmode="open">([\s\S]*?)<\/template>/.exec(html);
+  assert.ok(shadow, "no shadow tree was emitted");
+  assert.match(shadow[1], /\.flex \{ display: flex \}/, "the app's CSS did not travel with the mock");
+
+  /**
+   * ⛔ `:root` does not match inside a shadow tree, so a design system defining its tokens there
+   * would hand the mock variables that resolve to nothing — every colour and spacing value empty,
+   * which renders as an unstyled page rather than as an error.
+   */
+  assert.match(shadow[1], /:host, :root \{ --x: red \}/, ":root was left unreachable inside the shadow tree");
+
+  // The selection marker has to be inside too: page CSS does not cross the boundary.
+  assert.match(shadow[1], /\.pt\.on \{/, "nothing inside the mock can show which control is selected");
+
+  // And the part is wired in the generated markup, not just in the ASCII path.
+  assert.match(shadow[1], new RegExp(`data-part="${view.parts[0].id}"`), "the generated mock has no wired control");
+
+  // ⛔ And where no CSS is supplied, nothing claims otherwise.
+  const bare = renderScopePage(withHtml, scope.scope.id, { linkBase: "/v2" });
+  assert.doesNotMatch(bare, /:host, :root/, "a page with no app CSS emitted an empty style block");
+});

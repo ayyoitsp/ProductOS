@@ -11,6 +11,7 @@ import { compilePacket } from "../../v2/packet.js";
 import { questionsFor, descendants } from "../../v2/settle.js";
 import { perform, preview, optionText, VIA, type Via, type Outcome, type Refused } from "../../v2/acts.js";
 import { fileNote, closeNote } from "../../v2/notes.js";
+import { appStyleFor } from "../../v2/appcss.js";
 import { HOW } from "../../v2/record.js";
 import { renderScopePage, standalone } from "../../v2/page.js";
 import { migrate } from "../../v2/migrate.js";
@@ -626,9 +627,11 @@ export function v2Command(): Command {
     .requiredOption("--out <file>", "where to write the HTML")
     .option("--at <dir>", "corpus directory", "v2")
     .action((scope: string, o: { out: string; at?: string }) => {
-      const corpus = loadCorpus(at(o));
+      const dir = at(o);
+      const corpus = loadCorpus(dir);
       warnIfBroken(corpus);
-      const page = renderScopePage(corpus, scope);
+      const app = appStyleFor(dir);
+      const page = renderScopePage(corpus, scope, { appCss: app.css || undefined, mockClass: app.mockClass });
       if (!page) {
         console.error(pc.red("✗"), `no scope "${scope}"`);
         process.exit(1);
@@ -696,11 +699,20 @@ export function v2Command(): Command {
        * own database and are turned into product truth by the same `perform` every other surface
        * uses; nothing about a press is truth until that happens.
        */
+      const app = appStyleFor(dir);
+      /**
+       * ⛔ SAY WHAT WAS READ AND WHAT WAS NOT. A mistyped stylesheet path produces a page whose
+       * mocks render unstyled, which looks exactly like a page whose mocks were never written.
+       */
+      if (app.from.length) console.log(pc.dim(`  styled with ${app.from.join(", ")}`));
+      for (const m of app.missing) console.error(pc.yellow("!"), `web.stylesheets names ${m}, which is not there — mocks will render unstyled`);
       const page = renderScopePage(corpus, scope, {
         interactive: true,
         records: "db",
         by: o.by,
         recordsTo: "read back from this page and written into the product truth",
+        appCss: app.css || undefined,
+        mockClass: app.mockClass,
       });
       if (!page) {
         console.error(pc.red("✗"), `no scope "${scope}"`);

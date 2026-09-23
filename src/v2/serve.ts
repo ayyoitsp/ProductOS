@@ -16,6 +16,7 @@ import { loadCorpus } from "./load.js";
 import { renderScopePage, standalone } from "./page.js";
 import { perform, VIA, type Act, type Payload, type Via } from "./acts.js";
 import { fileNote } from "./notes.js";
+import { appStyleFor } from "./appcss.js";
 
 export interface V2Routes {
   /** The corpus directory this server is serving. */
@@ -142,9 +143,13 @@ export async function v2Route(req: http.IncomingMessage, res: http.ServerRespons
      */
     const target = scope ?? corpus.scopes.find((s) => !s.scope.in)?.scope.id;
     if (!target) return html(res, standalone("Nothing here", `<main><h1>No corpus at <code>${dir}</code></h1></main>`), 404), true;
+    // The app's own CSS, so a mock written in its class names looks like the application.
+    const app = appStyleFor(dir);
     const page = renderScopePage(corpus, target, {
       interactive: true,
       records: "http",
+      appCss: app.css || undefined,
+      mockClass: app.mockClass,
       linkBase: "/v2",
       by: whoIsPressing(),
       recordsTo: `written into ${dir}`,

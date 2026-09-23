@@ -62,6 +62,17 @@ export interface PageOptions {
   /** Where a press is recorded, shown to the reader so consent is informed. */
   recordsTo?: string;
   /**
+   * The application's own CSS, to be inlined inside each mock's shadow root.
+   *
+   * ⛔ The BYTES, not a path. Whoever builds the page decides whether to read the user's files —
+   * the renderer is used from a test, from the CLI and from a server, and one of those reading the
+   * filesystem behind the others' backs is how a page starts depending on the cwd it was rendered
+   * from.
+   */
+  appCss?: string;
+  /** Wrapper class the app's CSS expects around its own markup, from `web.mock_container_class`. */
+  mockClass?: string;
+  /**
    * Prefix for links to OTHER scopes, e.g. `/v2`. Omit for a standalone file, where a link
    * to a sibling page cannot resolve.
    *
@@ -354,6 +365,67 @@ function partLabel(corpus: Corpus, scopeId: string, viewId: string, partId: stri
   return line(pt?.label || partId);
 }
 
+/**
+ * ⛔ THE PROTOTYPES WERE THREE LEVELS DOWN AND NOTHING POINTED AT THEM.
+ *
+ * Peter, after they shipped: "are we done? i don't see anything." They were on the twelve leaf
+ * feature views, so the only way to reach one was to already know which feature drew it — and the
+ * landing surface said nothing about screens existing at all.
+ *
+ * ⛔ THIS LINKS, IT DOES NOT COPY. Rendering each prototype a second time here would put one
+ * screen's controls in two places in the DOM: the same `data-part` twice, so selecting one would
+ * resolve to whichever copy came first — possibly the one inside a hidden view. Every fact has one
+ * home; this is an index to those homes.
+ */
+function renderScreenIndex(corpus: Corpus, ids: string[], ctx: Ctx): string {
+  const rows = ids.flatMap((id) => {
+    const sc = corpus.scopes.find((s) => s.scope.id === id)?.scope;
+    if (!sc) return [];
+    return sc.views
+      .filter((v) => v.exists !== "withdrawn")
+      .map((v) => {
+        const said = sc.exchanges.filter((e) => e.at?.view === v.id).length;
+        const live = v.parts.filter((p) => !p.decorative && p.role !== "display" && p.role !== "region");
+        const silent = live.filter((p) => !sc.exchanges.some((e) => e.at?.view === v.id && e.at?.part === p.id)).length;
+        return { scope: sc, view: v, said, controls: live.length, silent };
+      });
+  });
+  if (!rows.length) return `<p class="none">Nothing in this product draws a screen.</p>`;
+  return `
+    <h2>Screens</h2>
+    <p class="lede">Every screen this product draws. Open one to click its controls and see what the
+    product promises there — and what nothing says yet.</p>
+    <table class="worklist">
+      <thead><tr><th>Screen</th><th>Where it lives</th><th class="num">Controls</th><th class="num">Say nothing</th><th class="num">Behaviours</th></tr></thead>
+      <tbody>
+        ${rows
+          .map(
+            (r) => `<tr>
+              <td><button type="button" class="show-part" data-show-part="${esc(`${r.view.id}/`)}">${line(r.view.title)}</button>${
+              r.view.exists === "intended" ? ` <span class="n">not built yet</span>` : ""
+            }${!r.view.walked ? ` <span class="n">not walked</span>` : ""}</td>
+              <td>${refLink(r.scope.id, ctx, line(r.scope.title || r.scope.id))}</td>
+              <td class="num">${r.controls}</td>
+              <td class="num${r.silent ? " warn" : ""}">${r.silent || "—"}</td>
+              <td class="num">${r.said || "—"}</td>
+            </tr>`
+          )
+          .join("")}
+      </tbody>
+    </table>`;
+}
+
+/**
+ * ⛔ THE SELECTION MARKER HAS TO BE INSIDE THE SHADOW ROOT. Page CSS does not cross the boundary,
+ * so the class that says "this is the control you clicked" would have no effect at all — the click
+ * would register, the panel would open, and nothing on the screen would show what was selected.
+ */
+const PT_STYLE = `<style>
+  .pt { cursor: pointer; border-radius: 3px; box-shadow: inset 0 -2px 0 rgba(37,99,235,.45); }
+  .pt:hover { box-shadow: inset 0 -2px 0 rgba(37,99,235,1); }
+  .pt.on { background: rgba(37,99,235,.14); box-shadow: inset 0 0 0 2px rgba(37,99,235,.9); }
+</style>`;
+
 /** Normalised for label matching: the sketch writes "[ × Clear ]" where the part says "Clear filters". */
 const forMatch = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 
@@ -436,6 +508,90 @@ function liveSketch(view: View, matched: Map<string, boolean>): string {
   return out;
 }
 
+
+/**
+ * Wire the parts into generated HTML, so a mock from the codebase is as clickable as a drawing.
+ *
+ * ⛔ TEXT NODES ONLY. A label like "New Deal" or "Stage" can occur inside an attribute — a class
+ * name, a test id, an aria-label — and wrapping it there would splice a button into the middle of
+ * an attribute value and silently corrupt the markup. Only the runs between a `>` and the next `<`
+ * are candidates.
+ *
+ * ⛔ AN EXPLICIT `data-part` WINS. A generated mock should say which element is which part rather
+ * than leave it to a text match, and one that does is exempt from all of this.
+ */
+function wireHtml(view: View, matched: Map<string, boolean>): string {
+  let html = view.sketch_html!;
+
+  // Anything the author already labelled is done: mark it wired and give it the class.
+  for (const pt of view.parts) {
+    const hasAttr = new RegExp(`data-part\\s*=\\s*["']${pt.id}["']`).test(html);
+    if (!hasAttr) continue;
+    matched.set(pt.id, true);
+    html = html.replace(
+      new RegExp(`(<[a-zA-Z][^>]*data-part\\s*=\\s*["']${pt.id}["'][^>]*)>`),
+      (_m, open: string) => `${open.includes("class=") ? open.replace(/class\s*=\s*"([^"]*)"/, `class="$1 pt pt-${pt.role}"`) : `${open} class="pt pt-${pt.role}"`}${pt.leads_to ? ` data-goes="${esc(pt.leads_to)}"` : ""}>`
+    );
+  }
+
+  /**
+   * ⛔ AN INPUT CARRIES ITS NAME IN AN ATTRIBUTE, NOT IN TEXT.
+   *
+   * The deals list wires its New Deal button, its stage filter and its clear button by text and
+   * leaves the search field unwired — because "Search deals" lives in a `placeholder`. Every form
+   * on every screen has that shape, so text matching alone can never point at an entry control,
+   * which is most of what a person actually touches.
+   *
+   * Narrow on purpose: the three attributes that NAME a control to a person, on elements that take
+   * input. Matching any attribute would wire a class name or a test id.
+   */
+  for (const pt of view.parts.filter((x) => !matched.get(x.id))) {
+    const label = esc(pt.label ?? pt.id);
+    const named = new RegExp(
+      `<(input|textarea|select|button)\\b([^>]*\\b(?:placeholder|aria-label|title)\\s*=\\s*["'][^"']*${label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[^"']*["'][^>]*)>`,
+      "i"
+    );
+    const hit = named.exec(html);
+    if (!hit) continue;
+    matched.set(pt.id, true);
+    const goes = pt.leads_to ? ` data-goes="${esc(pt.leads_to)}"` : "";
+    const attrs = hit[2]!;
+    const withClass = /class\s*=\s*"([^"]*)"/.test(attrs)
+      ? attrs.replace(/class\s*=\s*"([^"]*)"/, `class="$1 pt pt-${pt.role}"`)
+      : `${attrs} class="pt pt-${pt.role}"`;
+    html = html.replace(hit[0], `<${hit[1]}${withClass} data-part="${esc(pt.id)}"${goes}>`);
+  }
+
+  const byLength = [...view.parts]
+    .filter((pt) => !matched.get(pt.id))
+    .sort((a, b) => (b.label ?? b.id).length - (a.label ?? a.id).length);
+
+  for (const pt of byLength) {
+    const label = pt.label ?? pt.id;
+    if (!label) continue;
+    const probes = [label, ...label.split(/\s+/).slice(0, 1).filter((w) => w.length >= 5)];
+    let done = false;
+    for (const probe of probes) {
+      if (done) break;
+      const needle = esc(probe);
+      // Scan only the text between tags, and only the first free occurrence.
+      html = html.replace(/>([^<]+)</g, (whole: string, text: string) => {
+        if (done) return whole;
+        const at = text.indexOf(needle);
+        if (at < 0) return whole;
+        const before = text[at - 1] ?? "";
+        const after = text[at + needle.length] ?? "";
+        if (/[a-z0-9]/i.test(before) || /[a-z0-9]/i.test(after)) return whole;
+        done = true;
+        matched.set(pt.id, true);
+        const goes = pt.leads_to ? ` data-goes="${esc(pt.leads_to)}"` : "";
+        return `>${text.slice(0, at)}<span class="pt pt-${esc(pt.role)}" data-part="${esc(pt.id)}"${goes} role="button" tabindex="0">${needle}</span>${text.slice(at + needle.length)}<`;
+      });
+    }
+  }
+  return html;
+}
+
 /** Everything the corpus states at one part of one screen, and the slots that say nothing. */
 function statedAt(scope: Scope, viewId: string, partId: string | undefined): Array<{ ref: string; title: string; said: Array<{ slot: SlotName; text: string }>; blank: SlotName[] }> {
   return scope.exchanges
@@ -459,7 +615,14 @@ function statedAt(scope: Scope, viewId: string, partId: string | undefined): Arr
     });
 }
 
-function renderScreens(scope: Scope, ctx: Ctx, scopeId: string): string {
+function renderScreens(scope: Scope, ctx: Ctx, scopeId: string, opts: PageOptions): string {
+  /**
+   * ⛔ `:root` DOES NOT MATCH INSIDE A SHADOW TREE, so a design system that defines its tokens
+   * there would hand the mock a stylesheet of variables that resolve to nothing — every colour and
+   * spacing value empty, which renders as an unstyled page rather than as an error. `:host` is the
+   * shadow root's own equivalent, so both are named.
+   */
+  const appStyle = opts.appCss ? `<style>${opts.appCss.replace(/:root\b/g, ":host, :root")}</style>` : "";
   const shown = scope.views.filter((v) => v.exists !== "withdrawn");
   if (!shown.length) return "";
   return `
@@ -475,8 +638,29 @@ function renderScreens(scope: Scope, ctx: Ctx, scopeId: string): string {
            * application's own markup and classes, so it looks like the product rather than like a
            * wireframe — and the part wiring is identical either way, by label.
            */
+          /**
+           * ⛔ THE REAL MARKUP GOES IN A SHADOW ROOT, WITH THE APP'S OWN CSS INSIDE IT.
+           *
+           * Peter: "i don't think we should have ascii, we should try to generate what it'd look
+           * like from the codebase."
+           *
+           * A mock written in the application's real class names needs the application's real CSS
+           * to look like anything — and that CSS is Tailwind plus a design system, which styles
+           * `.flex`, `.p-4`, `*` and `:root`. Inlined into this page it would restyle the page
+           * itself: the review surface would start looking like the thing under review, and every
+           * later change to their CSS could silently break this page's layout.
+           *
+           * Rewriting their selectors to scope them was the other option and it is the worse one —
+           * a hand-rolled CSS transform over @layer, @supports, custom properties and :is() fails
+           * quietly, on their stylesheet, in a way nobody here would notice. A shadow root isolates
+           * both directions with no parsing at all.
+           *
+           * Declarative, so it works with no script: the markup IS the shadow tree on parse.
+           */
           const body = v.sketch_html
-            ? `<div class="proto html">${v.sketch_html}</div>`
+            ? `<div class="proto html"><template shadowrootmode="open">${appStyle}${PT_STYLE}<div class="${esc(
+                opts.mockClass || "productos-mock"
+              )}">${wireHtml(v, matched)}</div></template></div>`
             : v.sketch
               ? `<pre class="proto sketch">${liveSketch(v, matched)}</pre>`
               : `<p class="owes">Nobody has drawn this screen, so there is nothing here to point at.</p>`;
@@ -1109,7 +1293,9 @@ function renderNav(
   contains: Set<string>,
   open: number,
   aboutLabel: string,
-  charterTabs: string
+  charterTabs: string,
+  /** How many screens the subtree draws, so the tab says whether it is worth opening. */
+  screens: number
 ): string {
   const kids = (parent?: string) => corpus.scopes.filter((s) => s.scope.in === parent);
   // ⛔ Once for the whole nav. It was called per row, which walks the entire corpus per row.
@@ -1347,6 +1533,8 @@ function renderNav(
      */
     `<div class="subtabs" hidden><button type="button" class="subtab" data-sub="queue">Queue${
       open ? ` <span class="pill">${open}</span>` : ""
+    }</button><button type="button" class="subtab" data-sub="screens">Screens${
+      screens ? ` <span class="pill quiet">${screens}</span>` : ""
     }</button><button type="button" class="subtab" data-sub="about">${aboutLabel}</button>${charterTabs}</div>` +
     /**
      * ⛔ THE TRAIL NAVIGATES; THE CHEVRON EXPANDS. One control doing both meant every attempt to go
@@ -1456,7 +1644,11 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
       line(entry.scope.title || scopeId),
       corpus.charter
         .map((c) => `<button type="button" class="subtab" data-sub="${esc(c.charter.id)}">${line(c.charter.title)}</button>`)
-        .join("")
+        .join(""),
+      ids.reduce(
+        (n, id) => n + (corpus.scopes.find((s) => s.scope.id === id)?.scope.views.filter((v) => v.exists !== "withdrawn").length ?? 0),
+        0
+      )
     )}
     <main>
       ${
@@ -1542,6 +1734,9 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
                     }`
              }
            </div>
+           <div class="sub-view" data-sub-view="screens" data-ref="screens" data-label="Screens">
+             ${renderScreenIndex(corpus, ids, ctx)}
+           </div>
            <div class="sub-view" data-sub-view="about" data-ref="${esc(scopeId)}" data-label="Product Truth">
              <h2>${line(entry.scope.title || scopeId)}</h2>
              ${renderProse(entry.body)}
@@ -1576,7 +1771,7 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
               [...homesOf.values()].includes(g.scope) ? renderGroupRules(corpus, g.scope, ctx, homesOf) : ""
             }
             ${renderBehaviours(corpus, g.scope, cellOf, ctx)}
-            ${renderScreens(corpus.scopes.find((x) => x.scope.id === g.scope)!.scope, ctx, g.scope)}
+            ${renderScreens(corpus.scopes.find((x) => x.scope.id === g.scope)!.scope, ctx, g.scope, opts)}
             <details class="fold"><summary>Every slot, and where each came from — the authoring view</summary>
               ${renderGrid(g, ctx)}
               ${renderExchanges(corpus, [g.scope], cellOf, ctx, false)}
@@ -1980,11 +2175,37 @@ const PROTOTYPE = `<script>
 
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
-  /** The screen a control belongs to, and the panel that screen shows detail in. */
-  const screenOf = (el) => el.closest("article.screen");
+  /**
+   * ⛔ A CONTROL MAY BE INSIDE A SHADOW ROOT, so neither closest() nor a document query reaches it.
+   *
+   * A mock generated from the codebase renders in a shadow tree — that is what keeps the app's
+   * Tailwind from restyling this page. Two consequences, and both bit: a click inside it arrives
+   * retargeted at the host div, so ev.target.closest finds nothing; and closest() stops at the
+   * shadow boundary, so a control cannot find the screen it is on.
+   */
+  const hosts = () => [...document.querySelectorAll("div.proto.html")];
+  const deepPath = (ev) => (ev.composedPath ? ev.composedPath() : [ev.target]);
+  const inPath = (ev, sel) => deepPath(ev).find((n) => n && n.matches && n.matches(sel));
+
+  const screenOf = (el) => {
+    const direct = el.closest && el.closest("article.screen");
+    if (direct) return direct;
+    // Out through the shadow boundary, then up.
+    const root = el.getRootNode && el.getRootNode();
+    const host = root && root.host;
+    return host ? host.closest("article.screen") : null;
+  };
+
+  /** Every control on a screen, inside its shadow root as well as out. */
+  const controlsIn = (screen) => {
+    const out = [...screen.querySelectorAll("button.pt")];
+    for (const h of screen.querySelectorAll("div.proto.html"))
+      if (h.shadowRoot) out.push(...h.shadowRoot.querySelectorAll("button.pt, [data-part]"));
+    return out;
+  };
 
   const clear = (screen) => {
-    for (const b of screen.querySelectorAll("button.pt.on")) b.classList.remove("on");
+    for (const b of controlsIn(screen)) b.classList.remove("on");
     const panel = screen.querySelector(".pt-detail");
     if (panel) { panel.hidden = true; panel.innerHTML = ""; }
   };
@@ -2031,7 +2252,7 @@ const PROTOTYPE = `<script>
   };
 
   document.addEventListener("click", (ev) => {
-    const btn = ev.target.closest("button.pt");
+    const btn = inPath(ev, "button.pt, [data-part]");
     if (!btn) return;
     ev.preventDefault();
     select(btn);
@@ -2043,7 +2264,7 @@ const PROTOTYPE = `<script>
    * destination either exists on this page or it does not, and either way they learn something.
    */
   document.addEventListener("dblclick", (ev) => {
-    const btn = ev.target.closest("button.pt[data-goes]");
+    const btn = inPath(ev, "[data-goes]");
     if (!btn) return;
     ev.preventDefault();
     walk(btn.dataset.goes, btn);
@@ -2099,8 +2320,12 @@ const PROTOTYPE = `<script>
       const go = document.querySelector('nav.scopes a[data-goto="' + CSS.escape(view.dataset.view) + '"]');
       if (go) go.click();
     }
-    const btn = partId && screen.querySelector('button.pt[data-part="' + CSS.escape(partId) + '"]');
+    const btn = partId && controlsIn(screen).find((c) => c.dataset.part === partId);
     screen.scrollIntoView({ block: "center" });
+    // ⛔ Say where you landed. Switching the view and scrolling with no marker leaves the reader
+    // looking at a different page with no idea which of its screens they asked for.
+    screen.classList.add("arrived");
+    setTimeout(() => screen.classList.remove("arrived"), 1400);
     // ⛔ Clear first. "Show me the screen" with a control still selected from a previous card left
     // the wrong thing highlighted beside the right sentence.
     clear(screen);
