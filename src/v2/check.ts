@@ -1343,6 +1343,63 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
   }
 
   /**
+   * ---- screens nothing can be judged against ----
+   *
+   * ⛔ A BEHAVIOUR ABOUT A CONTROL IS UNJUDGEABLE WITHOUT THE CONTROL.
+   *
+   * Peter, on a card reading "Deal row on CRE Deals — refuses": "wtf does that even mean?" It meant
+   * nothing, because the row was nowhere on screen. The page renders a working prototype now, and
+   * it can only point at what the corpus anchors: an exchange says `at: {view, part}`, and in a real
+   * 47-exchange corpus 21 named a screen and 7 named a control.
+   *
+   * Two notes, rolled up, because the fix is authoring and the author needs the shape of the gap
+   * rather than 26 identical lines. Neither refuses: plenty of behaviours are invariants with no
+   * screen at all, which is what `kind: capability` is for.
+   */
+  {
+    const nowhere: string[] = [];
+    const screenOnly: string[] = [];
+    const silentParts: string[] = [];
+    for (const { scope } of corpus.scopes) {
+      const hasScreens = scope.views.some((v) => v.exists !== "withdrawn");
+      for (const ex of scope.exchanges) {
+        if (!ex.at?.view) {
+          // Only where there IS a screen to name. A scope with none is machinery, not an omission.
+          if (hasScreens) nowhere.push(`${scope.id}#${ex.id}`);
+          continue;
+        }
+        if (!ex.at.part) screenOnly.push(`${scope.id}#${ex.id}`);
+      }
+      for (const v of scope.views) {
+        if (v.exists === "withdrawn") continue;
+        for (const pt of v.parts) {
+          if (pt.decorative || pt.role === "display" || pt.role === "region") continue;
+          if (!scope.exchanges.some((e) => e.at?.view === v.id && e.at?.part === pt.id))
+            silentParts.push(`${scope.id}#${v.id}#${pt.id}`);
+        }
+      }
+    }
+    if (nowhere.length)
+      add({
+        severity: "note",
+        kind: "says-nothing-about-where-it-happens",
+        where: nowhere[0]!,
+        what: `${nowhere.length} behaviour${nowhere.length === 1 ? "" : "s"} name no screen, on scopes that have screens — so the prototype cannot show what ${nowhere.length === 1 ? "it is" : "they are"} about`,
+        fix: "name the screen it arrives on, and the control if there is one. A reviewer judging a sentence about a control needs the control in front of them; an engineer without it picks a screen",
+      });
+    if (silentParts.length)
+      add({
+        severity: "note",
+        kind: "a-control-nothing-states-anything-about",
+        where: silentParts[0]!,
+        what: `${silentParts.length} control${silentParts.length === 1 ? "" : "s"} the screens draw, that no behaviour says anything about`,
+        fix: "each one is a thing a person can press that the product makes no promise about, so whoever builds it decides. State what it does, or say it is decorative",
+      });
+    if (screenOnly.length > nowhere.length + silentParts.length)
+      void 0; // nothing to say: naming the screen without a control is normal for whole-screen rules
+  }
+
+  /**
    * ---- groups that state nothing in their own right ----
    *
    * ⛔ A GROUP HAD NO VOICE, AND THE NUMBER ON ITS ROW WAS ITS CHILDREN'S.

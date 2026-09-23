@@ -598,3 +598,74 @@ test("a rule belongs to the narrowest group that contains its whole reach", () =
   assert.ok(grouped > 0, "no rule in the seed belongs to a group — the concept has no example");
   assert.ok(shared > 0, "no rule in the seed is genuinely shared — the concept has no example");
 });
+
+test("a screen is a prototype: every part is a control, wired to the right text", () => {
+  /**
+   * ⛔ A FENCED DRAWING AND A LIST OF NAMES IS NOT UX.
+   *
+   * Peter: "we need to actually incorporate real UX. this is useless without UX. it should be able
+   * to render prototypes, and per-card show the interactions interactively."
+   *
+   * A behaviour like "the deal row refuses" cannot be judged without the row. The model already
+   * connected them — an exchange arrives `at: {view, part}` — and the renderer computed that anchor
+   * and threw it away (`void at`).
+   */
+  const withScreens = corpus.scopes.filter((s) => s.scope.views.some((v) => v.exists !== "withdrawn" && v.sketch));
+  assert.ok(withScreens.length, "the seed has no drawn screen");
+
+  for (const { scope } of withScreens) {
+    const html = renderScopePage(corpus, scope.id, { linkBase: "/v2" });
+    for (const v of scope.views) {
+      if (v.exists === "withdrawn" || !v.sketch) continue;
+
+      for (const pt of v.parts) {
+        // Drawn or not, every part is reachable as a control — an undrawn one is listed, never dropped.
+        assert.match(
+          html,
+          new RegExp(`data-part="${pt.id}"`),
+          `${v.id}/${pt.id} cannot be pointed at on the prototype`
+        );
+        /**
+         * ⛔ WIRED TO THE RIGHT TEXT, OR NOT WIRED. A part bound to the wrong words is strictly
+         * worse than one left unbound: the reviewer gets a confident answer about something they
+         * did not click, and nothing on the page says the binding was guessed. "No deals yet" bound
+         * itself to the "No" inside "Northgate".
+         */
+        const wrap = new RegExp(`<button[^>]*data-part="${pt.id}"[^>]*>([^<]*)</button>`).exec(html);
+        if (wrap && v.sketch.includes(wrap[1])) {
+          const inside = wrap[1];
+          const label = pt.label ?? pt.id;
+          assert.ok(
+            label.toLowerCase().startsWith(inside.toLowerCase().trim()) || inside.toLowerCase().includes(label.toLowerCase()),
+            `${v.id}/${pt.id} is labelled "${label}" and got wired to "${inside}"`
+          );
+          assert.ok(inside.trim().length >= 5 || label.split(/\s+/).length === 1, `${pt.id} was wired to "${inside}" — too short to be evidence`);
+        }
+        // A part that goes somewhere carries where, so the flow can be walked.
+        if (pt.leads_to)
+          assert.match(html, new RegExp(`data-part="${pt.id}"[^>]*data-goes="[^"]`), `${pt.id} goes somewhere and the prototype does not know where`);
+      }
+    }
+
+    // ⛔ And what is stated at each control ships with the page, so clicking works with nothing
+    // behind it — a published artifact has no server to ask.
+    assert.match(html, /id="part-facts"/, "the prototype has no facts to show when a control is clicked");
+  }
+});
+
+test("a card about a control can take you to it", () => {
+  for (const { scope } of corpus.scopes.filter((s) => s.scope.exchanges.some((e) => e.at?.view))) {
+    const html = renderScopePage(corpus, scope.id, { linkBase: "/v2" });
+    for (const ex of scope.exchanges) {
+      if (!ex.at?.view) continue;
+      assert.match(
+        html,
+        new RegExp(`data-show-part="${ex.at.view}/${ex.at.part ?? ""}"`),
+        `${scope.id}#${ex.id} arrives at ${ex.at.view} and no card offers to show it`
+      );
+    }
+    // ⛔ And one that names no screen says so, rather than printing a bare id nobody can follow.
+    if (scope.exchanges.some((e) => !e.at?.view) && scope.views.length)
+      assert.match(html, /nothing says where this happens/, "a behaviour with no screen is silent about it");
+  }
+});

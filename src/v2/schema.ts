@@ -1201,6 +1201,8 @@ export const Part = z
     }
   });
 
+export type Part = z.infer<typeof Part>;
+
 export const View = z.object({
   id: z.string(),
   title: z.string(),

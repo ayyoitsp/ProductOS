@@ -16,7 +16,7 @@
  * would be the MCP boundary broken by a longer path.
  */
 import { resolveRules, type Corpus } from "./load.js";
-import { SLOTS, SLOT_ASKS_SHORT, statements, saysText, type SlotName, type Scope , type Says} from "./schema.js";
+import { SLOTS, SLOT_ASKS_SHORT, statements, saysText, type SlotName, type Scope, type View, type Part, type Says } from "./schema.js";
 import { gridFor, gateFor, actsFor, ruleHomes, type Grid, type Cell } from "./grid.js";
 import { questionsFor, descendants, type Question } from "./settle.js";
 import { decisionsOn, decisionsUnder, howItWasDecided, type Decision } from "./record.js";
@@ -325,15 +325,165 @@ function renderProse(body: string): string {
  * are. It is rendered verbatim, in a monospaced block, because it was drawn to be read that way and
  * anything cleverer would be this tool inventing a layout.
  */
+/**
+ * ⛔ A PROTOTYPE, NOT A PICTURE OF ONE.
+ *
+ * Peter: "we need to actually incorporate real UX. this is useless without UX. it should be able to
+ * render prototypes, and per-card show the interactions interactively."
+ *
+ * He is right, and the reason is the whole review loop: a behaviour like "the deal row refuses" is
+ * unjudgeable in the abstract. The reviewer needs to see the row, see what else is on the screen
+ * with it, and follow where it goes. A fenced block of box-drawing characters and a flat list of
+ * part names below it is a screenshot of a wireframe — nothing on it can be pointed at, and the
+ * part list and the drawing sat side by side with no relation between them stated.
+ *
+ * The model already connects them: an exchange arrives `at: {view, part}`. Nothing rendered it. The
+ * old body computed the anchor for exactly this and threw it away (`void at`).
+ *
+ * ⛔ A published page cannot reach the running app — a strict CSP blocks every external host — so a
+ * prototype here is built from what the corpus itself says: the sketch for the layout, the parts
+ * for what is interactive, `leads_to` for where each one goes. That is a real constraint and also
+ * the right one: a prototype that needed the dev server running would stop being reviewable the
+ * moment anybody closed their laptop.
+ */
+
+/** The human name of a part, so a card can offer "show me the deal row" rather than an id. */
+function partLabel(corpus: Corpus, scopeId: string, viewId: string, partId: string): string {
+  const v = corpus.scopes.find((s) => s.scope.id === scopeId)?.scope.views.find((x) => x.id === viewId);
+  const pt = v?.parts.find((p) => p.id === partId);
+  return line(pt?.label || partId);
+}
+
+/** Normalised for label matching: the sketch writes "[ × Clear ]" where the part says "Clear filters". */
+const forMatch = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+
+/**
+ * Wrap each part's label where it appears in the sketch, so the drawing becomes the control surface.
+ *
+ * ⛔ ESCAPE FIRST, THEN SPLICE. The sketch is user text full of box-drawing and the odd angle
+ * bracket; wrapping before escaping would emit the wrappers as literal text, and escaping after
+ * would neuter them. Splices are tracked so a longer label cannot be eaten by a shorter one that
+ * sits inside it — "Clear" inside "Clear filters" is exactly the collision.
+ */
+function liveSketch(view: View, matched: Map<string, boolean>): string {
+  const raw = esc(view.sketch!.trimEnd());
+  type Hit = { at: number; len: number; part: Part };
+  const hits: Hit[] = [];
+  const taken: Array<[number, number]> = [];
+  const free = (at: number, len: number) => !taken.some(([a, b]) => at < b && a < at + len);
+
+  // Longest label first: a part whose label contains another part's must claim its text first.
+  const byLength = [...view.parts].sort((a, b) => (b.label ?? b.id).length - (a.label ?? a.id).length);
+  for (const part of byLength) {
+    const label = part.label ?? part.id;
+    if (!label) continue;
+    let at = -1;
+    let len = 0;
+
+    /**
+     * ⛔ WHOLE WORDS ONLY, AT BOTH ENDS.
+     *
+     * The part "No deals yet" bound itself to the "No" inside "Northgate" — a row in the drawing —
+     * so clicking a deal name reported on the empty state. A control wired to the WRONG text is
+     * strictly worse than one left unwired: the reviewer is shown a confident answer about
+     * something they did not click, and nothing on screen says the binding was guessed.
+     */
+    const word = /[a-z0-9]/i;
+    const bounded = (i: number, n: number) =>
+      i >= 0 && !word.test(raw[i - 1] ?? "") && !word.test(raw[i + n] ?? "") && free(i, n);
+    const findBounded = (probe: string): number => {
+      for (let i = raw.indexOf(probe); i >= 0; i = raw.indexOf(probe, i + 1)) if (bounded(i, probe.length)) return i;
+      return -1;
+    };
+
+    // Exact first, then the longest leading run of words the sketch does contain — a drawing
+    // abbreviates ("Clear" for "Clear filters") far more often than it renames.
+    const whole = findBounded(esc(label));
+    if (whole >= 0) {
+      at = whole;
+      len = esc(label).length;
+    } else {
+      const words = label.split(/\s+/);
+      for (let take = words.length - 1; take >= 1; take--) {
+        // ⛔ A single short word is not evidence. "No", "All", "Up" match half a drawing by accident,
+        // and a wrong binding is unfalsifiable from the page. Two words, or one long one.
+        const probe = esc(words.slice(0, take).join(" "));
+        if (take === 1 && probe.length < 5) break;
+        const i = findBounded(probe);
+        if (i >= 0) {
+          at = i;
+          len = probe.length;
+          break;
+        }
+      }
+    }
+    if (at < 0) continue;
+    hits.push({ at, len, part });
+    taken.push([at, at + len]);
+    matched.set(part.id, true);
+  }
+
+  hits.sort((a, b) => a.at - b.at);
+  let out = "";
+  let cursor = 0;
+  for (const h of hits) {
+    out += raw.slice(cursor, h.at);
+    const goes = h.part.leads_to ? ` data-goes="${esc(h.part.leads_to)}"` : "";
+    out += `<button type="button" class="pt pt-${esc(h.part.role)}" data-part="${esc(h.part.id)}"${goes}>${raw.slice(h.at, h.at + h.len)}</button>`;
+    cursor = h.at + h.len;
+  }
+  out += raw.slice(cursor);
+  return out;
+}
+
+/** Everything the corpus states at one part of one screen, and the slots that say nothing. */
+function statedAt(scope: Scope, viewId: string, partId: string | undefined): Array<{ ref: string; title: string; said: Array<{ slot: SlotName; text: string }>; blank: SlotName[] }> {
+  return scope.exchanges
+    .filter((e) => e.at?.view === viewId && (partId ? e.at?.part === partId : !e.at?.part))
+    .map((e) => {
+      const said: Array<{ slot: SlotName; text: string }> = [];
+      const blank: SlotName[] = [];
+      for (const slot of SLOTS) {
+        const f = e.slots[slot];
+        if (!f) {
+          blank.push(slot);
+          continue;
+        }
+        const texts = statements(f.says).map((st) => st.says);
+        if (texts.length) said.push({ slot, text: texts[0]! });
+        else if (f.none) said.push({ slot, text: "nothing happens" });
+        else if (f.cannot_fail) said.push({ slot, text: "this cannot fail" });
+        else if (f.outcomes?.length) said.push({ slot, text: f.outcomes.map((o) => o.name).join(", ") });
+      }
+      return { ref: `${scope.id}#${e.id}`, title: e.title, said, blank };
+    });
+}
+
 function renderScreens(scope: Scope, ctx: Ctx, scopeId: string): string {
   const shown = scope.views.filter((v) => v.exists !== "withdrawn");
   if (!shown.length) return "";
   return `
     <section class="screens">
-      <h3 class="sub">Where these arrive</h3>
+      <h3 class="sub">The screens these arrive on</h3>
+      <p class="what-next">Click anything on a screen to see what the product promises there — and
+      what it does not say yet. Controls that go somewhere take you there.</p>
       ${shown
-        .map(
-          (v) => `<article class="screen">
+        .map((v) => {
+          const matched = new Map<string, boolean>();
+          /**
+           * ⛔ `sketch_html` WINS WHERE IT EXISTS. It is the same screen drawn with the real
+           * application's own markup and classes, so it looks like the product rather than like a
+           * wireframe — and the part wiring is identical either way, by label.
+           */
+          const body = v.sketch_html
+            ? `<div class="proto html">${v.sketch_html}</div>`
+            : v.sketch
+              ? `<pre class="proto sketch">${liveSketch(v, matched)}</pre>`
+              : `<p class="owes">Nobody has drawn this screen, so there is nothing here to point at.</p>`;
+          const undrawn = v.parts.filter((pt) => !matched.get(pt.id) && !pt.decorative);
+          const loose = statedAt(scope, v.id, undefined);
+          return `<article class="screen" id="${anchorOf(`${scopeId}#view#${v.id}`)}" data-screen="${esc(v.id)}"
+            data-ref="${esc(scopeId)}" data-label="${esc(`screen: ${line(v.title)}`)}">
             <h4>${line(v.title)}${v.view_kind ? ` <span class="n">${esc(v.view_kind)}</span>` : ""}</h4>
             ${
               v.exists === "intended"
@@ -341,26 +491,64 @@ function renderScreens(scope: Scope, ctx: Ctx, scopeId: string): string {
                 : ""
             }
             ${!v.walked ? `<p class="owes">Nobody has walked this screen, so what it holds is unconfirmed.</p>` : ""}
-            ${v.sketch ? `<pre class="sketch">${esc(v.sketch.trimEnd())}</pre>` : ""}
+            ${body}
+            <div class="pt-detail" data-for="${esc(v.id)}" hidden></div>
             ${
-              v.parts.length
-                ? `<ul class="parts">${v.parts
-                    .map((pt) => {
-                      const at = `${scopeId}#`;
-                      void at;
-                      return `<li><span class="role">${esc(pt.role)}</span> ${line(pt.label || pt.id)}${
-                        pt.leads_to ? ` <span class="n">→ ${esc(pt.leads_to)}</span>` : ""
-                      }</li>`;
-                    })
-                    .join("")}</ul>`
+              /**
+               * ⛔ A PART THE DRAWING DOES NOT SHOW IS STILL A PART, and saying so is the point.
+               * Silently dropping it would make the prototype look complete while a control the
+               * corpus claims exists is nowhere on it — which is how a reviewer agrees to a screen
+               * that cannot be built as drawn.
+               */
+              undrawn.length
+                ? `<details class="undrawn"><summary>${undrawn.length} part${
+                    undrawn.length === 1 ? "" : "s"
+                  } the drawing does not show</summary><ul class="parts">${undrawn
+                    .map(
+                      (pt) =>
+                        `<li><button type="button" class="pt pt-${esc(pt.role)}" data-part="${esc(pt.id)}"${
+                          pt.leads_to ? ` data-goes="${esc(pt.leads_to)}"` : ""
+                        }>${line(pt.label || pt.id)}</button> <span class="role">${esc(pt.role)}</span></li>`
+                    )
+                    .join("")}</ul></details>`
                 : ""
             }
-          </article>`
-        )
+            ${
+              // Anchored to the screen but not to any control on it: true of the screen as a whole.
+              loose.length
+                ? `<p class="n">${loose.length} thing${loose.length === 1 ? "" : "s"} stated about this screen as a whole — ${loose
+                    .map((l) => refLink(l.ref, ctx, l.title))
+                    .join(", ")}</p>`
+                : ""
+            }
+          </article>`;
+        })
         .join("")}
     </section>`;
 }
 
+/**
+ * ⛔ WHAT IS STATED AT EVERY PART, AS DATA, so selecting one needs no round trip and the published
+ * page works with nothing behind it. Emitted once per render rather than inlined into every control.
+ */
+function partFacts(corpus: Corpus, ids: string[]): string {
+  const facts: Record<string, unknown> = {};
+  for (const { scope } of corpus.scopes) {
+    if (!ids.includes(scope.id)) continue;
+    for (const v of scope.views) {
+      for (const pt of v.parts) {
+        facts[`${v.id}/${pt.id}`] = {
+          label: pt.label || pt.id,
+          role: pt.role,
+          goes: pt.leads_to ?? null,
+          at: statedAt(scope, v.id, pt.id),
+          slots: SLOT_ASKS_SHORT,
+        };
+      }
+    }
+  }
+  return `<script type="application/json" id="part-facts">${JSON.stringify(facts).replace(/</g, "\\u003c")}</script>`;
+}
 
 /**
  * Where to start, when nothing is decided because almost nothing is written.
@@ -524,7 +712,19 @@ function renderBehaviours(
           <div class="beh-says">${shown.length > 1 ? line(said.says) : says}</div>
           <p class="beh-where">
             ${esc(SLOT_ASKS_SHORT[slot] ?? slot)} · on ${refLink(ref, ctx, ex.title)}${
-              ex.at?.part ? ` · <code>${esc(ex.at.part)}</code>` : ""
+              /**
+               * ⛔ THE CONTROL, AS SOMETHING YOU CAN GO AND LOOK AT.
+               *
+               * This printed the part id as bare code — `deal-row` — beside a sentence about
+               * refusing. Peter: "wtf does 'Deal row on CRE Deals' -> refuses even mean?" It meant
+               * nothing, because the row was nowhere on screen. Now it walks to that control on the
+               * screen and selects it, so the sentence and the thing it describes are together.
+               */
+              ex.at?.view
+                ? ` · <button type="button" class="show-part" data-show-part="${esc(`${ex.at.view}/${ex.at.part ?? ""}`)}">${
+                    ex.at.part ? `show me ${esc(partLabel(corpus, scopeId, ex.at.view, ex.at.part))}` : "show me the screen"
+                  }</button>`
+                : ` · <span class="n owes-inline">nothing says where this happens</span>`
             }${cell && cell.rule ? ` · from <code>${esc(cell.rule)}</code>` : ""}
           </p>
           ${
@@ -1434,7 +1634,7 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
       }
     </main>`;
 
-  return `${STYLE}${body}${renderNotePanel(corpus, ids, opts)}${VIEW_SWITCH}${opts.interactive ? liveScript(opts) : INERT}`;
+  return `${STYLE}${body}${partFacts(corpus, ids)}${renderNotePanel(corpus, ids, opts)}${VIEW_SWITCH}${PROTOTYPE}${opts.interactive ? liveScript(opts) : INERT}`;
 }
 
 
@@ -1762,6 +1962,153 @@ document.addEventListener("click", (ev) => {
  * which is how the served page and a saved file behave. Nothing about what a press records depends
  * on this.
  */
+/**
+ * ⛔ THE PROTOTYPE IS NOT AN ACT, SO IT WORKS EVERYWHERE.
+ *
+ * Emitted on read-only renders too. Clicking a control to see what the product promises there
+ * records nothing and needs nothing behind it — gating it behind the recording surface would mean
+ * the only way to look at a screen was to be in a position to stamp it.
+ *
+ * ⛔ No backticks below this line: template literal.
+ */
+const PROTOTYPE = `<script>
+(function () {
+  const blob = document.getElementById("part-facts");
+  if (!blob) return;
+  let FACTS = {};
+  try { FACTS = JSON.parse(blob.textContent || "{}"); } catch (e) { return; }
+
+  const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+  /** The screen a control belongs to, and the panel that screen shows detail in. */
+  const screenOf = (el) => el.closest("article.screen");
+
+  const clear = (screen) => {
+    for (const b of screen.querySelectorAll("button.pt.on")) b.classList.remove("on");
+    const panel = screen.querySelector(".pt-detail");
+    if (panel) { panel.hidden = true; panel.innerHTML = ""; }
+  };
+
+  const describePart = (viewId, partId) => {
+    const f = FACTS[viewId + "/" + partId];
+    if (!f) return '<p class="none">Nothing in the corpus describes this control.</p>';
+    /**
+     * ⛔ THE WAY ON IS A BUTTON, NOT A HIDDEN GESTURE. Double-click walked the flow and nothing on
+     * screen said so, which makes a prototype that navigates indistinguishable from one that does
+     * not. The double-click still works as a shortcut.
+     */
+    const head = '<p class="pt-head"><strong>' + esc(f.label) + '</strong> <span class="role">' + esc(f.role) + '</span>' +
+      (f.goes ? ' <button type="button" class="pt-go" data-walk="' + esc(f.goes) + '">follow it →</button>' : "") + '</p>';
+    if (!f.at || !f.at.length) {
+      /**
+       * ⛔ THE BLANK IS THE FINDING. A control the corpus draws and states nothing about is the
+       * commonest real hole, and it is invisible in a list of what IS written. 77 parts, 7 of them
+       * named by any behaviour: a reviewer should be able to see that by clicking.
+       */
+      return head + '<p class="none">Nothing states what happens here. An engineer building this screen would decide it.</p>';
+    }
+    return head + f.at.map((a) => {
+      const said = (a.said || []).map((s) =>
+        '<li><span class="g">' + esc((f.slots && f.slots[s.slot]) || s.slot) + '</span> ' + esc(s.text) + '</li>').join("");
+      const blank = (a.blank || []).map((b) => esc((f.slots && f.slots[b]) || b)).join(" · ");
+      return '<div class="pt-ex"><p class="pt-ex-t">' + esc(a.title) + ' <code>' + esc(a.ref) + '</code></p>' +
+        (said ? '<ul class="pt-said">' + said + "</ul>" : "") +
+        (blank ? '<p class="none">says nothing about: ' + blank + "</p>" : "") + "</div>";
+    }).join("");
+  };
+
+  const select = (btn) => {
+    const screen = screenOf(btn);
+    if (!screen) return;
+    const viewId = screen.dataset.screen;
+    const partId = btn.dataset.part;
+    const wasOn = btn.classList.contains("on");
+    clear(screen);
+    if (wasOn) return;
+    btn.classList.add("on");
+    const panel = screen.querySelector(".pt-detail");
+    if (panel) { panel.innerHTML = describePart(viewId, partId); panel.hidden = false; }
+  };
+
+  document.addEventListener("click", (ev) => {
+    const btn = ev.target.closest("button.pt");
+    if (!btn) return;
+    ev.preventDefault();
+    select(btn);
+  });
+
+  /**
+   * ⛔ A CONTROL THAT GOES SOMEWHERE TAKES YOU THERE — that is what makes it a prototype rather
+   * than a diagram. Walking the flow is how a reviewer finds the screen nobody wrote: the
+   * destination either exists on this page or it does not, and either way they learn something.
+   */
+  document.addEventListener("dblclick", (ev) => {
+    const btn = ev.target.closest("button.pt[data-goes]");
+    if (!btn) return;
+    ev.preventDefault();
+    walk(btn.dataset.goes, btn);
+  });
+
+  document.addEventListener("click", (ev) => {
+    const go = ev.target.closest("button.pt-go");
+    if (!go) return;
+    ev.preventDefault();
+    walk(go.dataset.walk, go);
+  });
+
+  function walk(dest, from) {
+    const bare = String(dest).split("#")[0];
+    const target =
+      document.querySelector('article.screen[data-screen="' + CSS.escape(bare) + '"]') ||
+      document.querySelector('article.screen[data-screen="' + CSS.escape(String(dest).split("#").pop()) + '"]') ||
+      document.getElementById("at-" + bare.replace(/[^a-z0-9]+/gi, "-"));
+    if (!target) {
+      const panel = screenOf(from) && screenOf(from).querySelector(".pt-detail");
+      if (panel) {
+        panel.innerHTML = '<p class="none">This goes to <code>' + esc(dest) + '</code>, which is not on this page. Nobody has written it here.</p>';
+        panel.hidden = false;
+      }
+      return;
+    }
+    // Make sure the view holding it is the one on screen before scrolling to it.
+    const view = target.closest("section.view");
+    if (view && view.hidden) {
+      const go = document.querySelector('nav.scopes a[data-goto="' + CSS.escape(view.dataset.view) + '"]');
+      if (go) go.click();
+    }
+    target.scrollIntoView({ block: "center" });
+    target.classList.add("arrived");
+    setTimeout(() => target.classList.remove("arrived"), 1400);
+  }
+
+  /**
+   * ⛔ PER CARD: SHOW ME WHERE. A behaviour card names the control it is about; this walks to that
+   * control on the screen and selects it, so the sentence and the thing it is about are on screen
+   * together. Reading "Deal row on CRE Deals — refuses" without the row in front of you is the
+   * exact complaint that started this.
+   */
+  document.addEventListener("click", (ev) => {
+    const link = ev.target.closest("[data-show-part]");
+    if (!link) return;
+    ev.preventDefault();
+    const [viewId, partId] = link.dataset.showPart.split("/");
+    const screen = document.querySelector('article.screen[data-screen="' + CSS.escape(viewId) + '"]');
+    if (!screen) return;
+    const view = screen.closest("section.view");
+    if (view && view.hidden) {
+      const go = document.querySelector('nav.scopes a[data-goto="' + CSS.escape(view.dataset.view) + '"]');
+      if (go) go.click();
+    }
+    const btn = partId && screen.querySelector('button.pt[data-part="' + CSS.escape(partId) + '"]');
+    screen.scrollIntoView({ block: "center" });
+    // ⛔ Clear first. "Show me the screen" with a control still selected from a previous card left
+    // the wrong thing highlighted beside the right sentence.
+    clear(screen);
+    if (btn) select(btn);
+  });
+})();
+</script>`;
+
 const VIEW_SWITCH = `<script>
 (function () {
   const views = [...document.querySelectorAll("section.view")];
@@ -2147,6 +2494,37 @@ const STYLE = `<style>
   .screen { margin: 1.2rem 0 0; }
   .screen h4 { font-size: 1rem; margin: 0 0 .4rem; }
   .screen .n { font-size: .78rem; color: var(--dim); font-weight: 400; }
+  /* ---- the prototype ---------------------------------------------------- */
+  .proto { background: var(--card); border: 1px solid var(--line); border-radius: 8px; }
+  .proto.html { padding: .8rem; overflow-x: auto; }
+  /* Every control the corpus declares, as something that can be pointed at. */
+  button.pt { font: inherit; font-size: inherit; line-height: inherit; background: transparent;
+    border: 0; border-bottom: 1px dashed var(--accent); color: inherit; padding: 0; margin: 0;
+    cursor: pointer; border-radius: 2px; }
+  button.pt:hover, button.pt:focus-visible { background: var(--accent); color: var(--bg); outline: 0; }
+  button.pt.on { background: var(--accent); color: var(--bg); }
+  /* A control that commits work reads differently from one that only navigates or displays. */
+  button.pt-commits { border-bottom-style: solid; border-bottom-width: 2px; }
+  button.pt-display { border-bottom-color: var(--line); }
+  .pt-detail { border: 1px solid var(--line); border-top: 0; border-radius: 0 0 8px 8px;
+    background: var(--bg); padding: .7rem .9rem; font-size: .9rem; }
+  .pt-head { margin: 0 0 .5rem; }
+  .pt-head .role { font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; color: var(--dim); }
+  .pt-ex { border-top: 1px solid var(--line); padding-top: .5rem; margin-top: .5rem; }
+  .pt-ex:first-of-type { border-top: 0; padding-top: 0; margin-top: 0; }
+  .pt-ex-t { margin: 0 0 .3rem; font-weight: 600; font-size: .9rem; }
+  ul.pt-said { margin: 0; padding-left: 1rem; }
+  ul.pt-said .g { font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; color: var(--dim); }
+  .pt-detail .none { color: var(--dim); font-style: italic; margin: .3rem 0 0; }
+  .screen.arrived { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 8px; }
+  details.undrawn { margin-top: .5rem; font-size: .88rem; }
+  details.undrawn summary { color: var(--dim); cursor: pointer; }
+  /* "show me the deal row" — the control this sentence is about, on the screen it lives on. */
+  button.pt-go { font: inherit; font-size: .82rem; background: var(--accent); color: var(--bg);
+    border: 0; border-radius: 4px; padding: .12rem .45rem; cursor: pointer; margin-left: .3rem; }
+  button.show-part { font: inherit; font-size: inherit; background: none; border: 0; padding: 0;
+    color: var(--accent); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+  .owes-inline { font-style: italic; }
   pre.sketch { background: var(--card); border: 1px solid var(--line); border-radius: 8px;
     padding: .9rem 1rem; overflow-x: auto; font: .78rem/1.35 ui-monospace, Menlo, monospace;
     margin: .5rem 0; }

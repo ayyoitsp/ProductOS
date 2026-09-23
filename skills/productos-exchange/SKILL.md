@@ -278,8 +278,46 @@ migration that assigned `commits` to anything with a claim attached turned every
 filter into an ask of its own — say which role a control has by what it does, not by what somebody
 happened to record about it.
 
-Both the page and the packet render the sketch, so a reviewer sees the control a behaviour arrives at
-rather than the sentence alone.
+### The sketch is a working prototype, so write it like one
+
+The page turns the sketch into the control surface: every part is a button a reviewer can click to
+see what the product promises there, and a part with `leads_to` walks to that screen. Three things
+make that work, and all three are authoring:
+
+**⛔ Put each part's `label` in the sketch verbatim.** The wiring finds a part by looking for its
+label in the drawing. Whole words only, at both ends — a part labelled *"No deals yet"* once bound
+itself to the `No` inside `Northgate` and clicking a deal row reported on the empty state, so a
+single word shorter than five characters is not accepted as a match at all. An abbreviated label
+still matches on its leading words (`Clear` for `Clear filters`); a renamed one does not match and
+is listed under *"parts the drawing does not show"*, which is a visible admission that the drawing
+and the parts disagree.
+
+**⛔ Anchor a behaviour at the control it happens at**, not just at the screen:
+
+```yaml
+at:
+  view: deals-list
+  part: deal-row          # ⛔ the card can now say "show me the deal row" and take them to it
+```
+
+Without the part, a card reads *"Deal row on CRE Deals — refuses"* with nothing to look at, which
+is unjudgeable — and was the exact complaint that made this exist. In a real 47-exchange corpus 21
+named a screen and **7** named a control; `productos v2 check` reports the controls no behaviour
+says anything about, which is where the holes are.
+
+**⛔ `sketch_html` when you can.** The same screen in the application's own markup and classes, so
+it looks like the product rather than a wireframe. The part wiring is identical — by label — so it
+costs nothing to switch. Read the real components first and mirror them; do not invent class names.
+
+A published page **cannot** reach the running application: a strict CSP blocks every external host,
+so there is no iframe of localhost and no fetch from the dev server. A prototype here is built from
+what the corpus says, which is also why it still works a year later.
+
+### A control the product promises nothing about
+
+Clicking one says so, in those words. That is not a formatting choice: a control a person can press
+that no behaviour describes is decided by whoever builds it, and it is invisible in any list of what
+IS written. Either state what it does, or mark it `decorative: true`.
 
 ## Walking someone through what is undecided
 
