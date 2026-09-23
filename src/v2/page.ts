@@ -16,7 +16,7 @@
  * would be the MCP boundary broken by a longer path.
  */
 import { resolveRules, type Corpus } from "./load.js";
-import { SLOTS, type SlotName, type Scope } from "./schema.js";
+import { SLOTS, SLOT_ASKS_SHORT, type SlotName, type Scope } from "./schema.js";
 import { gridFor, gateFor, actsFor, type Grid, type Cell } from "./grid.js";
 import { questionsFor, descendants, type Question } from "./settle.js";
 import { decisionsOn, decisionsUnder, howItWasDecided, type Decision } from "./record.js";
@@ -421,6 +421,95 @@ function renderWorklist(
         )
         .join("")}</tbody>
     </table>`;
+}
+
+/**
+ * The behaviours a scope states, one at a time, as the thing a person is asked about.
+ *
+ * ⛔ THIS IS THE GRAIN THE WHOLE SURFACE GOT WRONG.
+ *
+ * The page handed a reviewer an eight-compartment cluster and asked them to fill it, which produced
+ * "Deal row on CRE Deals → refuses" — not a hard question, not a question. `GLOSSARY.md` calls one
+ * falsifiable claim "the atom", and it is what somebody reads and has an opinion about in five
+ * seconds. The eight slots are an AUTHORING device: they make thinness countable. Turning them into
+ * the reviewer's unit of work was the error, and everything else followed from it.
+ *
+ * So: one sentence, what demonstrates it, where it came from, and the only question a person can
+ * answer about it.
+ */
+function renderBehaviours(
+  corpus: Corpus,
+  scopeId: string,
+  cellOf: Map<string, Cell>,
+  ctx: Ctx
+): string {
+  const entry = corpus.scopes.find((s) => s.scope.id === scopeId);
+  if (!entry) return "";
+  const cards: string[] = [];
+  for (const ex of entry.scope.exchanges) {
+    const ref = `${scopeId}#${ex.id}`;
+    for (const slot of SLOTS) {
+      const fill = (ex.slots as Record<string, Record<string, unknown> | undefined>)[slot];
+      const cell = cellOf.get(`${ref}#${slot}`);
+      // ⛔ Only what somebody has actually said. A blank is an authoring gap, reported in the
+      // worklist — it is not a behaviour, and putting it here is what asked a person to fill cells.
+      const says = fill?.says
+        ? line(fill.says)
+        : fill?.none
+          ? `<em>nothing to refuse</em>`
+          : fill?.cannot_fail
+            ? `<em>cannot fail</em>`
+            : (fill?.outcomes as Array<{ name: string; when: string; told: string }> | undefined)?.length
+              ? (fill!.outcomes as Array<{ name: string; when: string; told: string }>)
+                  .map((o) => `<strong>${esc(o.name)}</strong> — when ${line(o.when)}, ${line(o.told)}`)
+                  .join("<br>")
+              : "";
+      if (!says) continue;
+      const standing = (fill?.standing as { kind?: string } | undefined)?.kind ?? "stated";
+      const settled = standing === "stated";
+      const past = decisionsOn(corpus, `${ref}#${slot}`);
+      const shows = ex.criteria.filter((c) => c.slot === slot);
+      cards.push(`
+        <article class="beh" id="${anchorOf(`${ref}#${slot}`)}">
+          <p class="beh-says">${says}</p>
+          <p class="beh-where">
+            ${esc(SLOT_ASKS_SHORT[slot] ?? slot)} · on ${refLink(ref, ctx, ex.title)}${
+              ex.at?.part ? ` · <code>${esc(ex.at.part)}</code>` : ""
+            }${cell && cell.rule ? ` · from <code>${esc(cell.rule)}</code>` : ""}
+          </p>
+          ${
+            shows.length
+              ? `<details class="beh-shows"><summary>${shows.length} thing${
+                  shows.length === 1 ? "" : "s"
+                } that would show this</summary><ul>${shows
+                  .map(
+                    (c) =>
+                      `<li>${[c.given && `<span class="g">given</span> ${line(c.given)}`, c.when && `<span class="g">when</span> ${line(c.when)}`, c.then && `<span class="g">then</span> ${line(c.then)}`]
+                        .filter(Boolean)
+                        .join(" ")}</li>`
+                  )
+                  .join("")}</ul></details>`
+              : `<p class="beh-nothing">Nothing here says what would show this working.</p>`
+          }
+          ${renderRecord(past)}
+          ${
+            settled
+              ? `<footer class="beh-acts">
+                   <button class="act" data-act="accept" data-ref="${esc(`${ref}#${slot}`)}">That is right</button>
+                   <button class="act ghost" data-act="say" data-ref="${esc(`${ref}#${slot}`)}">Not quite — reword it</button>
+                   <button class="act ghost" data-act="waive" data-ref="${esc(`${ref}#${slot}`)}">Not ours to say</button>
+                 </footer>`
+              : `<p class="owes">Not settled yet — ${esc(standing.replace(/_/g, " "))}. It is in the queue.</p>`
+          }
+        </article>`);
+    }
+  }
+  if (!cards.length) return "";
+  return `<section class="behaviours">
+    <h3 class="sub">${cards.length} behaviour${cards.length === 1 ? "" : "s"} to read</h3>
+    <p class="what-next">One sentence at a time. Is it right? Reword it if not — your words are what gets recorded.</p>
+    ${cards.join("")}
+  </section>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -1051,9 +1140,12 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
           (g) => `<section class="view" id="${anchorOf(g.scope)}" data-view="${esc(g.scope)}">
             <h2>${line(g.title)}</h2>
             ${renderProse(corpus.scopes.find((x) => x.scope.id === g.scope)?.body ?? "")}
+            ${renderBehaviours(corpus, g.scope, cellOf, ctx)}
             ${renderScreens(corpus.scopes.find((x) => x.scope.id === g.scope)!.scope, ctx, g.scope)}
-            ${renderGrid(g, ctx)}
-            ${renderExchanges(corpus, [g.scope], cellOf, ctx, false)}
+            <details class="fold"><summary>Every slot, and where each came from — the authoring view</summary>
+              ${renderGrid(g, ctx)}
+              ${renderExchanges(corpus, [g.scope], cellOf, ctx, false)}
+            </details>
           </section>`
         )
         .join("")}
@@ -1620,6 +1712,21 @@ const STYLE = `<style>
   .prose p { margin: .6rem 0; }
   h3.sub { font-size: .8rem; text-transform: uppercase; letter-spacing: .07em; color: var(--dim);
     margin: 1.6rem 0 0; font-weight: 600; }
+  .behaviours { margin: .5rem 0 2rem; }
+  .beh { background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 1.1rem 1.25rem; margin: 0 0 .9rem; }
+  .beh-says { font-size: 1.05rem; line-height: 1.5; margin: 0 0 .5rem; }
+  .beh-where { font-size: .78rem; color: var(--dim); margin: 0; }
+  .beh-where code { font-size: .95em; }
+  .beh-shows { margin-top: .7rem; font-size: .9rem; }
+  .beh-shows summary { cursor: pointer; color: var(--dim); }
+  .beh-shows ul { margin: .5rem 0 0; padding-left: 1.1rem; }
+  .beh-shows li { margin: .3rem 0; }
+  .beh-nothing { font-size: .85rem; color: var(--warn); margin: .6rem 0 0; }
+  .beh-acts { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: .9rem;
+    padding-top: .8rem; border-top: 1px solid var(--line); }
+  details.fold { margin: 2rem 0 0; border-top: 1px solid var(--line); padding-top: 1rem; }
+  details.fold > summary { cursor: pointer; color: var(--dim); font-size: .88rem; }
   .screens { margin: 1.5rem 0; }
   .screen { margin: 1.2rem 0 0; }
   .screen h4 { font-size: 1rem; margin: 0 0 .4rem; }

@@ -104,6 +104,28 @@ export const SLOT_ASKS: Record<SlotName, string> = {
   at_once: "what happens when two askers arrive on one subject",
 };
 
+/**
+ * The same asks, short enough for a label.
+ *
+ * ⛔ HERE, BESIDE `SLOT_ASKS`, BECAUSE TWO HAND-MAINTAINED TABLES OF WHAT THE SLOTS ASK DISAGREED.
+ *
+ * A reviewer flagged it: the schema said `answer` asks "what the asker gets" and the CLI's own copy
+ * said "what it does". Two answers to the same question, in one tool, and no way for a reader to
+ * tell which was meant. A third copy was about to be added to the page for the same reason — a
+ * label needs something short — so both now come from one place, and the long and short forms sit
+ * where a change to either is visible against the other.
+ */
+export const SLOT_ASKS_SHORT: Record<SlotName, string> = {
+  may: "who may ask",
+  with: "what they bring",
+  answer: "what they get",
+  after: "what is different afterwards",
+  refuses: "what it refuses",
+  fails: "what a failure leaves them with",
+  again: "asked twice",
+  at_once: "two at once",
+};
+
 // ---------------------------------------------------------------------------
 // Standing — the disposition of a slot. One enum; each value demands its companions.
 

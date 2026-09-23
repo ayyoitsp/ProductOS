@@ -26,7 +26,7 @@
  * conflating them makes a new criterion look like a reversed claim.
  */
 import { createHash } from "node:crypto";
-import { SLOTS, type Verdict } from "./schema.js";
+import { SLOTS, type Verdict , type SlotName} from "./schema.js";
 import { resolveRules, vocabularyReach, type Corpus } from "./load.js";
 
 const h = (s: string) => "sha256:" + createHash("sha256").update(s).digest("hex").slice(0, 16);
@@ -93,10 +93,27 @@ export function coveredBy(corpus: Corpus, target: string): Covered | null {
     };
   }
 
-  const [scopeId, exId] = target.split("#");
+  /**
+   * ⛔ A STAMP MAY COVER ONE BEHAVIOUR, and until now the smallest thing it could cover was a
+   * whole exchange with all eight of its slots settled.
+   *
+   * That is the wrong grain for a reviewer and it made review impossible on a real corpus: 47
+   * exchanges, 329 blanks, so nothing was ever acceptable and there was nothing a person could
+   * agree to. But the sentences were there — `GLOSSARY.md` calls one falsifiable claim "the atom",
+   * and that is what somebody reads and has an opinion about.
+   *
+   * Everything the exchange-grained stamp covers still applies: the envelope decides which rules
+   * reach the slot, the terms are the words the sentence is written in, and the screen is what the
+   * reviewer was looking at. What narrows is the CONTENT — this slot's fill, and only the criteria
+   * filed against it.
+   */
+  const [scopeId, exId, slotName] = target.split("#");
   const scope = corpus.scopes.find((s) => s.scope.id === scopeId)?.scope;
   const ex = scope?.exchanges.find((e) => e.id === exId);
   if (!scope || !ex) return null;
+  const only: SlotName | undefined =
+    slotName && (SLOTS as readonly string[]).includes(slotName) ? (slotName as SlotName) : undefined;
+  if (slotName && !only) return null;
 
   const parts: string[] = [];
   const reads: string[] = [];
@@ -190,7 +207,7 @@ export function coveredBy(corpus: Corpus, target: string): Covered | null {
       excepts: ex.excepts,
     }),
   ];
-  for (const slot of SLOTS) {
+  for (const slot of (only ? [only] : SLOTS) as readonly SlotName[]) {
     const fill = ex.slots[slot];
     const inh = inherited.get(`${target}#${slot}`);
     const cons = constrained.get(`${target}#${slot}`) ?? [];
@@ -283,9 +300,13 @@ export function coveredBy(corpus: Corpus, target: string): Covered | null {
     }
     slotBits.push(bits.join("|"));
   }
+  /** The criteria this stamp covers — all of them, or just this slot's. */
+  const shown = only ? ex.criteria.filter((c) => c.slot === only) : ex.criteria;
   return {
     slots: h(slotBits.join("\n")),
-    criteria: h(canon(ex.criteria)),
+    // ⛔ Only the criteria filed against this slot, or adding one to a sibling would stale a stamp
+    // on a sentence nobody touched — the failure `coveredBy` already fixed once for the glossary.
+    criteria: h(canon(only ? ex.criteria.filter((c) => c.slot === only) : ex.criteria)),
     parts,
     /**
      * ⛔ THE CRITERIA, NOT A COUNT OF THEM.
@@ -297,11 +318,14 @@ export function coveredBy(corpus: Corpus, target: string): Covered | null {
      */
     reads: [
       ...reads,
-      ...(ex.criteria.length
+      ...(shown.length
         ? [
             "",
             "what must be demonstrated:",
-            ...ex.criteria.map(
+            // ⛔ `shown`, not `ex.criteria` — the count was narrowed to the slot and the LIST was
+            // not, so accepting one behaviour printed a sibling slot's criterion as the thing being
+            // agreed to. A preview that shows the wrong evidence is worse than one that shows none.
+            ...shown.map(
               (c) =>
                 `  ${c.slot}${c.example ? " (an example)" : ""} — ${norm(
                   [c.given && `given ${c.given}`, c.when && `when ${c.when}`, c.then && `then ${c.then}`]

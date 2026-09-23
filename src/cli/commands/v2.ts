@@ -4,7 +4,7 @@ import { Command } from "commander";
 import pc from "picocolors";
 import { checkCorpus, summarise } from "../../v2/check.js";
 import { loadCorpus } from "../../v2/load.js";
-import { SLOTS, type SlotName } from "../../v2/schema.js";
+import { SLOTS, SLOT_ASKS_SHORT, type SlotName } from "../../v2/schema.js";
 import { gridFor, renderGridText, actsFor, gateFor } from "../../v2/grid.js";
 import { compilePacket } from "../../v2/packet.js";
 
@@ -26,17 +26,6 @@ import { readConfig } from "../../core/config.js";
  * `--at <dir>` everywhere, defaulting to `./v2`, because the reset loop needs to point a
  * run at a pristine copy without touching the original.
  */
-/** Short form of what each slot asks, for the answering surface. */
-const SLOT_ASKS_SHORT: Record<string, string> = {
-  may: "who is permitted to ask",
-  with: "what the asker brings",
-  answer: "what it does",
-  after: "what is different afterwards",
-  refuses: "what it refuses, and what the asker is told",
-  fails: "what the asker is left with when it cannot",
-  again: "what happens when it is asked twice",
-  at_once: "what happens when two ask at the same time",
-};
 
 /**
  * ⛔ NO ACT OF HUMAN JUDGEMENT IS RECORDED OVER A CORPUS THAT DID NOT LOAD.

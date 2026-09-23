@@ -17,6 +17,7 @@ import { loadCorpus } from "../dist/v2/load.js";
 import { gridFor } from "../dist/v2/grid.js";
 import { descendants, questionsFor } from "../dist/v2/settle.js";
 import { renderScopePage } from "../dist/v2/page.js";
+import { SLOTS } from "../dist/v2/schema.js";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
@@ -417,4 +418,54 @@ test("a queue with no questions says how much is unwritten", () => {
   // ⛔ The figures come from the grid, so the page and the grid cannot disagree about what is empty.
   const grid = gridFor(bare, "thing");
   assert.match(html, new RegExp(`${grid.counts.blank} say nothing`), "the count is not the grid's");
+});
+
+/**
+ * ⛔ A REVIEWER IS ASKED ABOUT A BEHAVIOUR, NOT ABOUT AN EIGHT-COMPARTMENT CLUSTER.
+ *
+ * The page handed over an exchange with its eight slots and asked a person to fill them, which
+ * produced "Deal row on CRE Deals → refuses" — not a hard question, not a question. `GLOSSARY.md`
+ * calls one falsifiable claim "the atom": it is what somebody reads and has an opinion about. The
+ * slots are an AUTHORING device that makes thinness countable; using them as the reviewer's unit of
+ * work was the error everything else followed from.
+ */
+test("a feature offers its behaviours one at a time, and the slot machinery is folded away", () => {
+  const scopes = corpus.scopes.filter((s) => s.scope.exchanges.length);
+  assert.ok(scopes.length, "the seed has no scope with behaviours");
+  for (const { scope } of scopes) {
+    const html = renderScopePage(corpus, scope.id, { linkBase: "/v2" });
+
+    // Every stated sentence is offered on its own, and nothing blank is.
+    const said = scope.exchanges.flatMap((ex) =>
+      SLOTS.filter((sl) => {
+        const f = ex.slots[sl];
+        return f && (f.says || f.none || f.cannot_fail || f.outcomes?.length);
+      }).map((sl) => `${scope.id}#${ex.id}#${sl}`)
+    );
+    for (const ref of said)
+      assert.match(html, new RegExp(`id="at-${ref.replace(/[^a-z0-9]+/gi, "-")}"`), `${ref} is stated and not offered`);
+
+    const cards = (html.match(/article class="beh"/g) ?? []).length;
+    assert.equal(cards, said.length, `${scope.id}: ${cards} cards for ${said.length} stated behaviours`);
+
+    /**
+     * ⛔ The act aims at the BEHAVIOUR — aiming it at the exchange is the grain error in one line.
+     *
+     * But only where the sentence is settled. A sentence carrying an unruled aspect is shown and
+     * deliberately NOT offered: agreeing to it would stamp the part nobody has decided along with
+     * the part they have, which is the whole reason `about` exists.
+     */
+    for (const ref of said) {
+      const [, exId, sl] = ref.split("#");
+      const fill = scope.exchanges.find((e) => e.id === exId).slots[sl];
+      const offered = new RegExp(`data-act="accept" data-ref="${ref}"`).test(html);
+      if (fill.standing.kind === "stated")
+        assert.ok(offered, `${ref} is settled and cannot be agreed to on its own`);
+      else assert.ok(!offered, `${ref} is ${fill.standing.kind} and was offered for agreement anyway`);
+    }
+
+    // ⛔ And the grid is behind a fold. It is how an author finds a hole, not how a reviewer works.
+    assert.match(html, /details class="fold"/, "the authoring view is not folded away");
+    assert.doesNotMatch(html, /<details class="fold" open/, "the authoring view opens by default");
+  }
 });

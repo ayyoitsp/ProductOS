@@ -259,11 +259,22 @@ export function preview(dir: string, act: Act, payload: Payload): { ok: true; re
 function aimOf(corpus: Corpus, target: string): Refused | { kind: string } {
   const aim = resolveRef(corpus, target);
   if ("error" in aim) return no(aim.error);
-  if (aim.ref.kind !== "exchange" && aim.ref.kind !== "rule")
-    return no(`${target} is a ${aim.ref.kind} — an acceptance covers one whole exchange, or one rule`, [
-      aim.ref.kind === "slot" || aim.ref.kind === "case"
-        ? `you are probably after the exchange: ${target.split("#").slice(0, 2).join("#")}`
-        : "name an exchange as <scope>#<exchange>, or a rule by its id",
+  /**
+   * ⛔ A SLOT IS ACCEPTABLE, and refusing it made review impossible on a real corpus.
+   *
+   * An acceptance used to cover a whole exchange or a whole rule, and an exchange is gated until
+   * every one of its eight slots is settled. On a migrated corpus — 47 exchanges, 329 blanks — that
+   * meant nothing was ever acceptable and a reviewer had nothing they could agree to, while 47
+   * sentences sat there already written.
+   *
+   * `GLOSSARY.md` calls one falsifiable claim "the atom". That is the thing a person reads and has
+   * an opinion about, so that is the thing a stamp has to be able to cover.
+   */
+  if (aim.ref.kind !== "exchange" && aim.ref.kind !== "rule" && aim.ref.kind !== "slot")
+    return no(`${target} is a ${aim.ref.kind} — an acceptance covers one behaviour, one whole exchange, or one rule`, [
+      aim.ref.kind === "case"
+        ? `you are probably after the slot: ${target.split("#").slice(0, 3).join("#")}`
+        : "name a behaviour as <scope>#<exchange>#<slot>, an exchange as <scope>#<exchange>, or a rule by its id",
     ]);
   return { kind: aim.ref.kind };
 }
@@ -308,6 +319,46 @@ function doAccept(dir: string, { target }: AcceptPayload, consent: Consent): Out
    * `gateFor` is the single predicate, shared with `acts`, so the list that declines to offer
    * something and the act that refuses to stamp it cannot disagree again.
    */
+  /**
+   * ⛔ A BEHAVIOUR IS GATED ON ITSELF, NOT ON ITS NEIGHBOURS.
+   *
+   * `gateFor` answers for a whole exchange, so running it on a slot ref would refuse a perfectly
+   * settled sentence because a sibling slot says nothing — which is the gate doing its job at the
+   * wrong grain, and the reason nothing on a migrated corpus was acceptable.
+   *
+   * What a single behaviour owes is what the model already demands of it: something said, and no
+   * unsettled standing over it.
+   */
+  if (aim.kind === "slot") {
+    const [sc, exId, slot] = target.split("#");
+    const fill = corpus.scopes.find((x) => x.scope.id === sc)?.scope.exchanges.find((e) => e.id === exId)
+      ?.slots[slot as SlotName];
+    if (!fill)
+      return no(`${target} says nothing, so there is nothing to agree to`, [
+        "a stamp on a blank reads exactly like a stamp on a considered sentence",
+      ]);
+    if (fill.standing.kind !== "stated")
+      return no(`${target} is ${fill.standing.kind.replace(/_/g, " ")}, so it is not settled yet`, [
+        fill.standing.question ? flat(fill.standing.question) : "nobody has ruled on it",
+      ], [{ act: "rule", ref: target, why: "settle it first" }]);
+    const covered = coveredBy(corpus, target);
+    if (!covered) return no(`no behaviour "${target}"`);
+    writeVerdict(dir, "accepts.yaml", [
+      `  - kind: accept`,
+      `    target: ${target}`,
+      `    by: ${consent.by}`,
+      `    at: ${today()}`,
+      `    via: ${consent.via}`,
+      `    covers_slots: ${covered.slots}`,
+      `    covers_criteria: ${covered.criteria}`,
+    ]);
+    return {
+      ok: true,
+      said: `agreed: ${target}`,
+      detail: ["if this sentence or what demonstrates it changes, check refuses the stamp rather than let it read as current"],
+    };
+  }
+
   const gate = gateFor(corpus, target);
   if (gate && !gate.ok) {
     /**
