@@ -28,6 +28,7 @@ import {
 import { stampFor, staleReason, coveredBy } from "./stamp.js";
 import { resolveRef } from "./ref.js";
 import { descendants } from "./settle.js";
+import { ruleHomes } from "./grid.js";
 
 export type Severity = "refuse" | "note" | "shape";
 
@@ -1339,6 +1340,42 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
       fix:
         "a scope is a thing that states behaviours, or a container for things that do. If this is vocabulary, declare those words on the scope whose behaviours use them; if something ought to state this, that behaviour is what is missing",
     });
+  }
+
+  /**
+   * ---- groups that state nothing in their own right ----
+   *
+   * ⛔ A GROUP HAD NO VOICE, AND THE NUMBER ON ITS ROW WAS ITS CHILDREN'S.
+   *
+   * Peter: "i don't think subsections should sum up questions below it — each section should have
+   * their own behaviors and own unanswered count. belongs to the whole group. so each group has
+   * rules that cascade down."
+   *
+   * The model could always express this — a selector takes `under: <scope>` — so this is not a
+   * framework gap. What it was, in a real 34-scope corpus, was a thing no author had ever been
+   * asked about: zero rules, so every group stated nothing, and the rolled-up count made each one
+   * look like it had something.
+   *
+   * ⛔ ONE FINDING, NOT ONE PER GROUP, AND DELIBERATELY A NOTE. Plenty of groupings are just
+   * filing and owe nothing — "you must write a rule here" would be manufacturing work, which is
+   * exactly the complaint that got seven invented org-wide questions deleted. This reports the
+   * blank and names where it is; whether any of them should hold something is the author's call.
+   */
+  {
+    const homes = ruleHomes(corpus);
+    const silent = corpus.scopes
+      .filter(({ scope }) => corpus.scopes.some((x) => x.scope.in === scope.id))
+      .filter(({ scope }) => scope.in) // the root is the product, not a grouping within it
+      .filter(({ scope }) => ![...homes.values()].includes(scope.id))
+      .map(({ scope }) => scope.id);
+    if (silent.length)
+      add({
+        severity: "note",
+        kind: "groups-state-nothing-of-their-own",
+        where: silent[0]!,
+        what: `${silent.length} grouping${silent.length === 1 ? "" : "s"} state${silent.length === 1 ? "s" : ""} nothing that holds across ${silent.length === 1 ? "it" : "them"}: ${silent.join(", ")}`,
+        fix: "if something is true of everything filed under one of these, write it there as a rule scoped `under` it — one sentence, agreed to once, holding for anything added later. If they are only filing, this is nothing to fix",
+      });
   }
 
   /**

@@ -8,7 +8,7 @@
  * state" can be written once and still be legible on forty pages.
  */
 import { SLOTS, type SlotName, type Rule , statements} from "./schema.js";
-import { resolveRules, disputeIndex, DOWNSTREAM_OF_ANSWER, answerIsUnknown, type Corpus } from "./load.js";
+import { resolveRules, disputeIndex, DOWNSTREAM_OF_ANSWER, answerIsUnknown, lineageOf, type Corpus } from "./load.js";
 import { stampFor } from "./stamp.js";
 import { existsOf } from "./load.js";
 
@@ -616,5 +616,72 @@ export function actsFor(corpus: Corpus): ActCount {
       .map((r) => ({ id: r.rule.id, reaches: (reach.get(r.rule.id) ?? []).length }))
       .sort((a, b) => b.reaches - a.reaches),
     rulings,
+  };
+}
+
+/**
+ * ⛔ WHERE A RULE BELONGS IN THE TREE.
+ *
+ * Peter: "i don't think subsections should sum up questions below it — i think each section, like
+ * 'versioned inputs' should have their own behaviors and own unanswered count. belongs to the whole
+ * group. so each group has rules that cascade down."
+ *
+ * The model could already express a group rule — a selector takes `under: <scope>` — but nothing
+ * ever asked where a rule LIVED. Every rule was reported as org-wide, on every row of the tree, so
+ * a sentence that holds for one area read as a decision the whole company owed, and the tree said
+ * the same thing in sixteen places.
+ *
+ * A rule is this group's when everything it reaches is inside this group. When its reach spans the
+ * product it is nobody's in particular, which is what org-wide actually means and is the only case
+ * that belongs in the shared queue.
+ */
+export function ruleHomes(corpus: Corpus): Map<string, string | undefined> {
+  const { reach } = resolveRules(corpus);
+  const root = corpus.scopes.find((s) => !s.scope.in)?.scope.id;
+  const out = new Map<string, string | undefined>();
+  for (const { rule } of corpus.rules) {
+    const scopes = [...new Set((reach.get(rule.id) ?? []).map((r) => r.split("#")[0]!))];
+    let home: string | undefined;
+    if (!scopes.length) {
+      // ⛔ A rule that reaches nothing still lives somewhere, and `in:` is where its author put it.
+      // Reporting it as corpus-wide would put a rule governing nothing into the shared queue.
+      home = rule.in;
+    } else {
+      // Lineage runs leaf→root, so reversed it is a path from the root down; the last segment every
+      // path agrees on is the narrowest scope containing all of them.
+      const paths = scopes.map((s) => lineageOf(corpus, s).slice().reverse());
+      const first = paths[0]!;
+      let i = 0;
+      while (i < first.length && paths.every((p) => p[i] === first[i])) i++;
+      home = first[i - 1];
+    }
+    out.set(rule.id, home === root ? undefined : home);
+  }
+  return out;
+}
+
+/** What one scope states in its own right, separated from what is filed beneath it. */
+export interface OwnCount {
+  /** Questions nobody has answered that are THIS scope's to answer. */
+  open: number;
+  /** Settled sentences here that nobody has agreed to yet. */
+  toRead: number;
+  /** Exchanges here that are whole and could be agreed to in one act. */
+  ready: number;
+}
+
+/**
+ * ⛔ OWN, NOT ROLLED UP. A group row summing its children answered "how much work is under here",
+ * which is a number every ancestor repeats and no ancestor is responsible for. What a reader needs
+ * from a group row is what the GROUP owes — the rules it states that cascade down to everything
+ * inside it — reported beside, not instead of, how much sits below.
+ */
+export function ownCount(corpus: Corpus, scopeId: string, acts: ActCount, homes: Map<string, string | undefined>, openRules: Set<string>): OwnCount {
+  const mine = (ref: string) => ref.startsWith(`${scopeId}#`);
+  const rulesHere = [...homes].filter(([id, home]) => home === scopeId).map(([id]) => id);
+  return {
+    open: openRules.size ? rulesHere.filter((id) => openRules.has(id)).length : 0,
+    toRead: acts.behaviours.filter(mine).length + rulesHere.filter((id) => !openRules.has(id)).length,
+    ready: acts.acceptable.filter(mine).length,
   };
 }

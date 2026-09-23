@@ -197,7 +197,7 @@ most common way to make a question unanswerable.
 Four standings: `stated` · `open` · `disputed` · `out_of_scope`. Anything you cannot settle is
 `open`. `out_of_scope` costs a recorded act (`v2 waive`) and is **not yours to declare**.
 
-## Org-wide rules — where the leverage is
+## Rules — where the leverage is, and where each one belongs
 
 Before writing the same sentence on a third exchange, stop. It is a rule:
 
@@ -232,6 +232,40 @@ exchanges instead guarantees four different answers.
 If an exchange's own sentence lands where a rule would, say which: `defers_to` (the rule still
 holds, this is narrower) or `instead_of` (it does not hold here). `check` asks for one of them;
 guessing is the one thing that is refused.
+
+### A rule belongs to a group, and most rules are not org-wide
+
+```yaml
+in: versioned-inputs
+scope:
+  under: versioned-inputs       # ⛔ everything filed under this group, and nothing else
+  acts_on: changes
+```
+
+`under:` scopes a rule to one part of the tree. The page renders it on that group under
+**"What holds everywhere in <group>"**, and it counts as that group's own unanswered question
+until somebody rules it — not as a decision the whole company owes.
+
+**⛔ ASK "WHAT HOLDS ACROSS THIS WHOLE GROUP" AT EVERY GROUPING, NOT ONLY AT THE TOP.** This is
+the most-missed authoring move in the model and it was invisible until the counts stopped
+rolling up: a real 34-scope corpus had **zero** rules, so every grouping stated nothing, and
+the rolled-up number on each row made it look like it had something. `productos v2 check`
+reports the groupings that state nothing across them.
+
+A group rule is the cheapest thing in the corpus to review — one sentence, agreed to once,
+holding for every feature filed under the group *including ones written next year*. The same
+sentence copied onto nine features is nine reviews, nine chances to diverge, and nothing that
+notices when the tenth feature forgets it.
+
+**⛔ But do not manufacture one.** Plenty of groupings are only filing and owe nothing. A
+grouping that genuinely states nothing should say so; inventing a rule to fill the blank is
+how seven generic org-wide questions once ended up gating every behaviour in a corpus, none of
+which mattered to the product. Ask the question at every grouping; accept "nothing" as an
+answer.
+
+**Where a rule lands is derived, not declared twice.** A rule belongs to the narrowest scope
+containing everything its selector reaches. Reach the whole product and it is genuinely
+org-wide — reported once, in the shared queue, not on every row.
 
 ## Screens
 

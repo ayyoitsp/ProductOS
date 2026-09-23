@@ -13,8 +13,8 @@
  */
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { loadCorpus } from "../dist/v2/load.js";
-import { gridFor, actsFor } from "../dist/v2/grid.js";
+import { loadCorpus, resolveRules, lineageOf } from "../dist/v2/load.js";
+import { gridFor, actsFor, ruleHomes } from "../dist/v2/grid.js";
 import { descendants, questionsFor } from "../dist/v2/settle.js";
 import { renderScopePage } from "../dist/v2/page.js";
 import { SLOTS, statements } from "../dist/v2/schema.js";
@@ -457,6 +457,8 @@ test("a feature offers its behaviours one at a time, and the slot machinery is f
      * thirty-one criteria under one "That is right" is not review, which is what one-card-per-slot
      * produced on a real corpus.
      */
+    // ⛔ A group's own rules render as cards too, and they are NOT this scope's statements — they
+    // are what holds across everything filed under it. Counted together they hid a real regression.
     const expected = scope.exchanges.reduce(
       (n, ex) =>
         n +
@@ -506,18 +508,40 @@ test("every section says how much it is holding", () => {
   const acts = actsFor(corpus);
   const nav = /<nav class="scopes">[\s\S]*?<\/nav>/.exec(html)[0];
 
+  /**
+   * ⛔ ITS OWN FIGURE, AND WHAT IS BELOW SAID SEPARATELY.
+   *
+   * Peter: "i don't think subsections should sum up questions below it — each section should have
+   * their own behaviors and own unanswered count."
+   *
+   * A rolled-up number is one every ancestor repeats and no ancestor is responsible for: the root
+   * said "126 to read", so did the product, so did the area, and none of them was where the work
+   * was. Worse, it concealed that in a real 34-scope corpus EVERY group stated nothing of its own —
+   * each row looked like it held something, and what it held was its children.
+   */
+  const homes = ruleHomes(corpus);
   for (const { scope } of corpus.scopes) {
     if (scope.id === root) continue;
-    const under = descendants(corpus, scope.id);
-    const toRead = acts.behaviours.filter((b) => under.some((u) => b.startsWith(`${u}#`))).length;
-    if (!toRead) continue;
-    // The row for this scope carries its own figure, not the corpus-wide one.
+    const ownStated = [...homes].filter(([id, home]) => home === scope.id).map(([id]) => id)
+      .filter((id) => !corpus.rules.find((r) => r.rule.id === id)?.rule.standing || corpus.rules.find((r) => r.rule.id === id)?.rule.standing?.kind === "stated").length;
+    const own = acts.behaviours.filter((b) => b.startsWith(`${scope.id}#`)).length + ownStated;
+    const below = descendants(corpus, scope.id).filter((d) => d !== scope.id);
+    const under = acts.behaviours.filter((b) => below.some((u) => b.startsWith(`${u}#`))).length;
     const row = new RegExp(`data-goto="${scope.id}"[^]*?</li>`).exec(nav);
+    if (!own && !under) continue;
     assert.ok(row, `${scope.id} has no row`);
-    assert.match(row[0], new RegExp(`${toRead} to read`), `${scope.id}'s row does not say it holds ${toRead}`);
+    if (own) assert.match(row[0], new RegExp(`${own} to read`), `${scope.id}'s row does not say what IT holds (${own})`);
+    // What is filed beneath is reported, and reported as being beneath.
+    if (under) assert.match(row[0], new RegExp(`${under} below`), `${scope.id}'s row does not say ${under} sit below it`);
+    // ⛔ And a group holding nothing of its own says so, rather than showing its children's total.
+    if (!own && under) assert.match(row[0], /states nothing of its own/, `${scope.id} is silent and does not say so`);
   }
 
-  // ⛔ And the tab too, so the top row answers "which side" without opening either tree.
+  /**
+   * ⛔ THE TAB STAYS A ROLL-UP, DELIBERATELY. It answers "which side has the work" before either
+   * tree is open, which is a question about a subtree — the row answers "what does this one owe",
+   * which is a question about one scope. Two questions, two numbers.
+   */
   for (const half of corpus.scopes.filter((s) => s.scope.in === root)) {
     const under = descendants(corpus, half.scope.id);
     const n = acts.behaviours.filter((b) => under.some((u) => b.startsWith(`${u}#`))).length;
@@ -528,4 +552,49 @@ test("every section says how much it is holding", () => {
         `the ${half.scope.id} tab does not carry its count`
       );
   }
+});
+
+test("a rule belongs to the narrowest group that contains its whole reach", () => {
+  /**
+   * ⛔ EVERY RULE WAS REPORTED AS ORG-WIDE, ON EVERY ROW.
+   *
+   * The model could always scope a rule to a subtree — the selector takes `under:` — but nothing
+   * ever asked where a rule LIVED. So a sentence holding for one area read as a decision the whole
+   * company owed, and it read that way on sixteen rows at once. The nav's job is "which one next",
+   * and a number identical everywhere answers nothing.
+   */
+  const homes = ruleHomes(corpus);
+  assert.equal(homes.size, corpus.rules.length, "some rule was not placed anywhere");
+
+  const root = corpus.scopes.find((s) => !s.scope.in).scope.id;
+  const { reach } = resolveRules(corpus);
+  for (const { rule } of corpus.rules) {
+    const home = homes.get(rule.id);
+    const hits = [...new Set((reach.get(rule.id) ?? []).map((r) => r.split("#")[0]))];
+    if (!hits.length) continue;
+
+    // ⛔ The root is not a group. A rule reaching the whole product is nobody's in particular,
+    // which is the only thing org-wide should ever have meant.
+    assert.notEqual(home, root, `${rule.id} is filed on the root rather than read as shared`);
+
+    if (home === undefined) continue;
+    // Everything it reaches is inside its home…
+    for (const h of hits)
+      assert.ok(
+        lineageOf(corpus, h).includes(home),
+        `${rule.id} lives in ${home} but reaches ${h}, which is outside it`
+      );
+    // …and its home is the NARROWEST such scope: no child of it contains the whole reach.
+    for (const kid of corpus.scopes.filter((s) => s.scope.in === home))
+      assert.ok(
+        !hits.every((h) => lineageOf(corpus, h).includes(kid.scope.id)),
+        `${rule.id} is filed on ${home} when all of it fits inside ${kid.scope.id}`
+      );
+  }
+
+  // The seed is the worked example, so it has to demonstrate both kinds or nobody will write one.
+  const grouped = [...homes.values()].filter(Boolean).length;
+  const shared = [...homes.values()].filter((h) => h === undefined).length;
+  assert.ok(grouped > 0, "no rule in the seed belongs to a group — the concept has no example");
+  assert.ok(shared > 0, "no rule in the seed is genuinely shared — the concept has no example");
 });

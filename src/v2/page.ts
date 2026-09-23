@@ -17,7 +17,7 @@
  */
 import { resolveRules, type Corpus } from "./load.js";
 import { SLOTS, SLOT_ASKS_SHORT, statements, saysText, type SlotName, type Scope , type Says} from "./schema.js";
-import { gridFor, gateFor, actsFor, type Grid, type Cell } from "./grid.js";
+import { gridFor, gateFor, actsFor, ruleHomes, type Grid, type Cell } from "./grid.js";
 import { questionsFor, descendants, type Question } from "./settle.js";
 import { decisionsOn, decisionsUnder, howItWasDecided, type Decision } from "./record.js";
 
@@ -628,6 +628,62 @@ function renderNotePanel(_corpus: Corpus, _ids: string[], opts: PageOptions): st
     </form>`;
 }
 
+
+/**
+ * ⛔ WHAT A GROUP STATES IN ITS OWN RIGHT.
+ *
+ * Peter: "each section, like 'versioned inputs' should have their own behaviors and own unanswered
+ * count. belongs to the whole group. so each group has rules that cascade down."
+ *
+ * A group had no voice. Its page was its prose and then a list of its children, so anything true of
+ * the whole group had nowhere to go — and the only place the model offered was the org-wide rules
+ * layer, which says "everywhere in the company" when the author meant "everywhere in here". The
+ * ability was in the selector all along (`under:`); what was missing was anywhere to see it.
+ *
+ * ⛔ AND A GROUP THAT STATES NOTHING SAYS SO. It is not a finding and not a question — plenty of
+ * groupings are just filing. But a silent blank reads as "checked, fine", and the number that used
+ * to sit here was the sum of its children, which made every group look like it had something.
+ */
+function renderGroupRules(corpus: Corpus, scopeId: string, ctx: Ctx, homes: Map<string, string | undefined>): string {
+  const mine = corpus.rules.filter((r) => homes.get(r.rule.id) === scopeId);
+  const title = line(corpus.scopes.find((s) => s.scope.id === scopeId)?.scope.title || scopeId);
+  if (!mine.length)
+    return `<section class="group-rules empty">
+      <h3>What holds everywhere in ${title}</h3>
+      <p class="none">Nothing yet. Anything stated here would hold for every behaviour filed under
+      ${title}, and be agreed to once instead of once per feature.</p>
+    </section>`;
+  const { reach } = resolveRules(corpus);
+  return `<section class="group-rules">
+    <h3>What holds everywhere in ${title}</h3>
+    <p class="lede">These hold for every behaviour filed under ${title}. Agreeing to one is agreeing
+    to it everywhere it reaches, including anything written under ${title} after today.</p>
+    ${mine
+      .map((r) => {
+        const open = r.rule.standing && r.rule.standing.kind !== "stated";
+        const hits = (reach.get(r.rule.id) ?? []).length;
+        return `<article class="beh group-rule${open ? " asking" : ""}" data-group-rule="${esc(scopeId)}" id="${anchorOf(r.rule.id)}" data-ref="${esc(r.rule.id)}" data-label="${esc(`holds everywhere in ${title}`)}">
+          <div class="beh-says">${open ? line(r.rule.standing!.question ?? "Undecided — nobody has written what this says yet.") : line(r.rule.statement ?? "")}</div>
+          <p class="beh-where">
+            reaches ${hits} behaviour${hits === 1 ? "" : "s"} under ${title}${
+              open ? ` · <strong>nobody has answered this</strong>` : ""
+            } · <code>${esc(r.rule.id)}</code>
+          </p>
+          ${
+            open
+              ? `<p class="owes">Nobody has answered this. Answering it once settles it everywhere it reaches.</p>`
+              : `<footer class="beh-acts">
+                   <button class="act" data-act="accept" data-ref="${esc(r.rule.id)}">That is right, everywhere</button>
+                   <button class="act ghost" data-act="say" data-ref="${esc(r.rule.id)}">Not quite — reword it</button>
+                   <button class="act ghost" data-act="waive" data-ref="${esc(r.rule.id)}">Not ours to say</button>
+                 </footer>`
+          }
+        </article>`;
+      })
+      .join("")}
+  </section>`;
+}
+
 // ---------------------------------------------------------------------------
 // The grid — the behaviours this scope states, and where each came from.
 
@@ -858,6 +914,11 @@ function renderNav(
   const kids = (parent?: string) => corpus.scopes.filter((s) => s.scope.in === parent);
   // ⛔ Once for the whole nav. It was called per row, which walks the entire corpus per row.
   const acts = actsFor(corpus);
+  const homes = ruleHomes(corpus);
+  const openRule = new Set(corpus.rules.filter((r) => r.rule.standing && r.rule.standing.kind !== "stated").map((r) => r.rule.id));
+  /** Rules this scope owns, split by whether they are still a question. */
+  const rulesOwnedBy = (id: string, asking: boolean) =>
+    [...homes].filter(([rid, home]) => home === id && openRule.has(rid) === asking).length;
   const rows: string[] = [];
   const walk = (parent: string | undefined, depth: number): void => {
     for (const { scope } of kids(parent)) {
@@ -881,9 +942,21 @@ function renderNav(
        *
        * Reported separately instead: what is undecided HERE, and what is waiting on the product.
        */
+      /**
+       * ⛔ A RULE'S QUESTION BELONGS TO THE GROUP THAT OWNS THE RULE, not to every row it reaches.
+       *
+       * Counting them per row put "7 to decide" on all sixteen rows of a real corpus — 112
+       * decisions where there were 7 — so they were pulled out and reported as "shared" instead.
+       * That was half a fix: a rule scoped to one area is not shared, it is that area's, and saying
+       * "shared" on every row is the same non-answer in quieter language.
+       *
+       * So a rule counts as unanswered on the row of the scope that owns it, and only a rule whose
+       * reach spans the product stays in the shared queue, where it is reported once.
+       */
       const own = qs.filter((q) => !q.parked && q.ref.includes("#"));
-      const orgWide = qs.filter((q) => !q.parked && !q.ref.includes("#")).length;
-      const here_open = own.length;
+      const openHere = qs.filter((q) => !q.parked && !q.ref.includes("#") && homes.get(q.ref.split("#")[0]!) === scope.id).length;
+      const orgWide = qs.filter((q) => !q.parked && !q.ref.includes("#") && homes.get(q.ref.split("#")[0]!) === undefined).length;
+      const here_open = own.length + openHere;
       /**
        * ⛔ WHAT THIS SECTION IS HOLDING, so "which one next" is answerable from the tree.
        *
@@ -892,9 +965,23 @@ function renderNav(
        * about where the work was. Two numbers, because they are two different jobs: questions
        * nobody has answered, and sentences nobody has read.
        */
+      /**
+       * ⛔ OWN FIRST, AND WHAT IS BELOW SAID SEPARATELY.
+       *
+       * Peter: "i don't think subsections should sum up questions below it — each section should
+       * have their own behaviors and own unanswered count."
+       *
+       * A rolled-up number is one every ancestor repeats and no ancestor is responsible for: the
+       * root read "126 to read", so did the product, so did the area, and none of them was where
+       * the work was. The group's own figure is what it states in its own right — the rules that
+       * cascade down to everything inside it — and the subtree total is one dim number beside it,
+       * so "which one next" stays answerable without pretending the total is the group's.
+       */
       const ids = descendants(corpus, scope.id);
-      const toRead = acts.behaviours.filter((b) => ids.some((i) => b.startsWith(`${i}#`))).length;
-      const ready = acts.acceptable.filter((r) => ids.some((i) => r.startsWith(`${i}#`))).length;
+      const below = ids.filter((i) => i !== scope.id);
+      const toRead = acts.behaviours.filter((b) => b.startsWith(`${scope.id}#`)).length + rulesOwnedBy(scope.id, false);
+      const ready = acts.acceptable.filter((r) => r.startsWith(`${scope.id}#`)).length;
+      const under = acts.behaviours.filter((b) => below.some((i) => b.startsWith(`${i}#`))).length;
       const label = line(scope.title || scope.id);
       /**
        * ⛔ A SINGLE PAGE IS NAVIGABLE BY ANCHOR, AND THIS RENDERED SIXTEEN DEAD LABELS INSTEAD.
@@ -926,7 +1013,9 @@ function renderNav(
           (orgWide ? ` <span class="n warn">${orgWide} shared</span>` : "") +
           (toRead ? ` <span class="n ok">${toRead} to read</span>` : "") +
           (ready ? ` <span class="n ok">${ready} whole</span>` : "") +
-          (!here_open && !orgWide && !toRead && !ready ? ` <span class="n">—</span>` : "") +
+          (!here_open && !orgWide && !toRead && !ready ? ` <span class="n">${under ? "states nothing of its own" : "—"}</span>` : "") +
+          // ⛔ Dim, and labelled "below": it is not this row's work, it is where to look next.
+          (under ? ` <span class="n under">${under} below</span>` : "") +
           `</li>`
       );
       walk(scope.id, depth + 1);
@@ -1096,6 +1185,8 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
   const cellOf = new Map<string, Cell>();
   for (const g of grids)
     for (const r of g.rows) for (const s of SLOTS) cellOf.set(`${g.scope}#${r.exchange}#${s}`, r.cells[s]);
+  // Where each rule belongs in the tree, so a group's own sentences render on the group.
+  const homesOf = ruleHomes(corpus);
   const qs = questionsFor(corpus, scopeId);
   const live = qs.filter((q) => !q.parked);
   const parked = qs.filter((q) => q.parked);
@@ -1278,6 +1369,12 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
           (g) => `<section class="view" id="${anchorOf(g.scope)}" data-view="${esc(g.scope)}" data-ref="${esc(g.scope)}" data-label="${esc(line(g.title))}">
             <h2>${line(g.title)}</h2>
             ${renderProse(corpus.scopes.find((x) => x.scope.id === g.scope)?.body ?? "")}
+            ${
+              /* ⛔ A leaf shows this only when it owns something. "Nothing holds everywhere in here"
+                 on a feature with no children is noise, and noise is what stops the real blanks
+                 being read. */
+              [...homesOf.values()].includes(g.scope) ? renderGroupRules(corpus, g.scope, ctx, homesOf) : ""
+            }
             ${renderBehaviours(corpus, g.scope, cellOf, ctx)}
             ${renderScreens(corpus.scopes.find((x) => x.scope.id === g.scope)!.scope, ctx, g.scope)}
             <details class="fold"><summary>Every slot, and where each came from — the authoring view</summary>
@@ -1304,6 +1401,7 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
             return `<section class="view" id="${anchorOf(id)}" data-view="${esc(id)}" data-ref="${esc(id)}" data-label="${esc(line(sc.title || id))}">
               <h2>${line(sc.title || id)}</h2>
               ${renderProse(corpus.scopes.find((x) => x.scope.id === id)?.body ?? "")}
+              ${renderGroupRules(corpus, id, ctx, homesOf)}
               <h3 class="sub">What is filed under it</h3>
               <ul class="contents">${kids
                 .map((k) => {
@@ -1983,6 +2081,8 @@ const STYLE = `<style>
   nav.scopes li { padding: .3rem 0 .3rem calc(var(--d) * 1.1rem); border-bottom: 1px solid var(--line);
     display: flex; gap: .6rem; align-items: baseline; flex-wrap: wrap; }
   nav.scopes .n { font-size: .78rem; color: var(--dim); }
+  /* What is filed below this row, not what this row owes — dimmer, and always last. */
+  nav.scopes .n.under { opacity: .55; font-style: italic; }
   nav.scopes .n.warn { color: var(--warn); }
   nav.scopes .n.ok { color: var(--ok); }
   nav.scopes .grouping { color: var(--dim); }
@@ -2101,6 +2201,13 @@ const STYLE = `<style>
     display: flex; gap: .7rem; align-items: baseline; flex-wrap: wrap; }
   ul.contents a { font-size: 1.05rem; }
   ul.contents .n { font-size: .82rem; color: var(--dim); }
+  .group-rules { margin: 1.2rem 0 1.6rem; }
+  .group-rules h3 { font-size: 1rem; margin: 0 0 .3rem; }
+  .group-rules .lede { font-size: .9rem; color: var(--dim); margin: 0 0 .8rem; }
+  /* A group that states nothing says so, quietly — a silent blank reads as "checked, fine". */
+  .group-rules .none { font-size: .88rem; color: var(--dim); font-style: italic; margin: 0;
+    border-left: 2px solid var(--line); padding-left: .7rem; }
+  .group-rules .beh.asking { border-left: 3px solid var(--warn); }
   .topframe nav.scopes { max-width: 52rem; margin: 0 auto; padding: 0 1.25rem 1rem;
     max-height: 60vh; overflow-y: auto; }
   form.act-form { margin: .9rem 0 0; padding: .9rem; border: 1px solid var(--accent); border-radius: 8px;
