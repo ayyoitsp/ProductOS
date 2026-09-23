@@ -762,8 +762,10 @@ export function v2Command(): Command {
        * org-wide rules that had been deleted from the migrator went on governing a corpus through
        * two further runs — invisible, because nothing regenerates a file it no longer writes.
        *
-       * ⛔ `verdicts/` IS NOT TOUCHED, EVER. A person's acts are the one thing in the corpus nothing
-       * can reconstruct, and `--force` is about discarding derived output.
+       * ⛔ `verdicts/` AND `notes/` ARE NOT TOUCHED, EVER. A person's acts and a person's requests
+       * are the two things in the corpus nothing can reconstruct, and `--force` is about discarding
+       * derived output. `notes/` survived this list by omission rather than by decision until it was
+       * written down here; anyone adding to the list should have to argue past this sentence.
        */
       if (o.force) for (const d of ["truth", "rules", "charter"]) fs.rmSync(path.join(out, d), { recursive: true, force: true });
       const m = migrate(from, out, new Date().toISOString().slice(0, 10));

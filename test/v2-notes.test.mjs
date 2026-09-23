@@ -88,3 +88,22 @@ test("the composer is docked, always there, and never asks what you are looking 
   const ro = renderScopePage(corpus, "family-wallet");
   assert.doesNotMatch(ro, /id="note-bar"/, "a read-only page offered to record a note it cannot send");
 });
+
+test("a regenerate discards derived truth and keeps what people said", () => {
+  /**
+   * ⛔ `--force` exists to throw away everything the migrator produces, because a file it no longer
+   * writes is a file nothing regenerates — that is how seven deleted org-wide rules went on
+   * governing a corpus for two further runs.
+   *
+   * Verdicts and notes are the exception, and for the same reason: a person's judgement and a
+   * person's request are the only things in a corpus nothing can reconstruct. `notes/` was outside
+   * the clear list by omission rather than by decision, which is not a protection.
+   */
+  const src = fs.readFileSync("src/cli/commands/v2.ts", "utf-8");
+  const clause = /if \(o\.force\) for \(const d of \[([^\]]*)\]\)/.exec(src);
+  assert.ok(clause, "the force-clear list moved — find it and re-pin what it must never delete");
+  const cleared = clause[1].split(",").map((s) => s.trim().replace(/["']/g, ""));
+  for (const sacred of ["verdicts", "notes"])
+    assert.ok(!cleared.includes(sacred), `--force would delete ${sacred}/, which nothing can reconstruct`);
+  assert.deepEqual(cleared, ["truth", "rules", "charter"], "the clear list changed — decide deliberately, then update this");
+});

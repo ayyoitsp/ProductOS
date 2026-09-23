@@ -2,7 +2,9 @@
  * Re-filing a container or an area — one operation over the whole corpus.
  *
  * ⛔ A container's id IS its path. So `mv` alone leaves the id inside the file
- * claiming the old location, every `depends_on` / `affected_by` / `leads_to` edge
+ * claiming the old location, every reference edge — `depends_on`, `affected_by`,
+ * `leads_to`, `blocked_by` on a reading, `suspected_depends_on`, and a behavior's
+ * `same_as` / `blocks` / `contradicts` / `cites` —
  * aimed at a container that no longer exists, and the tracking sidecar stranded where
  * nothing reads it. That state passes validation on the moved file and has silently
  * lost the graph, which is why re-filing is a tool rather than an instruction — the
@@ -19,6 +21,7 @@ import {
   readFeatureById,
 } from "./product.js";
 import { trackingFilePath } from "./tracking.js";
+import { readFrameworkGaps, gapsFilePath } from "./framework-gaps.js";
 
 export interface MovePair {
   from_id: string;
@@ -176,6 +179,46 @@ export function planMove(
         if (el.leads_to) check(`ux/${view.id}/${el.id}.leads_to`, [el.leads_to]);
       }
     }
+    /**
+     * ⛔ THE FOUR ON A BEHAVIOR, WHICH THIS USED TO WALK STRAIGHT PAST.
+     *
+     * A move of the CRE documents area reported "Nothing points at this" while
+     * `publish-pricing` carried `same_as: cre/documents/rent-roll/publish-a-roll#…`. Four of the
+     * seven reference-bearing fields in the schema were never scanned, so the move left them
+     * pointing at a path that no longer existed — and said so in the affirmative, which is worse
+     * than saying nothing.
+     *
+     * `productos check` would have caught the dangling refs afterwards. The report claiming there
+     * were none is the defect: it is read as "safe to move" by whoever is deciding.
+     */
+    /**
+     * A reading names what stopped the reader, and a suspected edge names what it suspects.
+     * Both hold container refs, and both outlive a move.
+     */
+    for (const r of fm.read_throughs ?? []) check(`read_throughs/${r.by}.blocked_by`, r.blocked_by ?? []);
+    for (const sd of fm.suspected_depends_on ?? []) check("suspected_depends_on", [sd.id]);
+    for (const b of fm.behaviors ?? []) {
+      const at = (f: string) => `behaviors/${b.id}.${f}`;
+      check(at("same_as"), b.same_as ?? []);
+      check(at("blocks"), b.blocks ?? []);
+      check(at("contradicts"), b.contradicts ?? []);
+      check(at("cites"), b.cites ?? []);
+    }
+  }
+
+  /**
+   * ⛔ `forced_into` ON A FRAMEWORK GAP, which lives outside every container and was therefore
+   * missed by the pass that walks container files.
+   *
+   * Moving the CRE pricing area left `fg-0009` forced into a page that no longer existed. CLAUDE.md
+   * calls this the load-bearing field for exactly the reason `check` gives when it breaks: a
+   * compromise nobody can find is a compromise that becomes the convention.
+   */
+  for (const gap of readFrameworkGaps(paths)) {
+    if (!gap.forced_into) continue;
+    const bare = gap.forced_into.split("#")[0]!;
+    const to = rename.get(bare);
+    if (to) edges.push({ where: gap.id, field: "forced_into", from: gap.forced_into, to: gap.forced_into.replace(bare, to) });
   }
 
   return { moves, edges, root };
@@ -233,6 +276,16 @@ export function applyMove(paths: ProductosPaths, plan: MovePlan): void {
       );
     }
     if (next !== body) fs.writeFileSync(c.filepath, next, "utf-8");
+  }
+
+  // 4. And the framework-gap ledger, which is not a container and so is not in that list.
+  const gapsFile = gapsFilePath(paths);
+  if (fs.existsSync(gapsFile)) {
+    const body = fs.readFileSync(gapsFile, "utf-8");
+    let next = body;
+    for (const [fromId, toId] of rename)
+      next = next.replace(new RegExp(`(?<![\\w/-])${escapeRe(fromId)}(?=$|["'\\s#,\\]])`, "gm"), toId);
+    if (next !== body) fs.writeFileSync(gapsFile, next, "utf-8");
   }
 }
 

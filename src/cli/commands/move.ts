@@ -2,6 +2,22 @@ import { Command } from "commander";
 import pc from "picocolors";
 import { resolvePathsOrThrow } from "../../core/paths.js";
 import { MoveRefused, planMove, applyMove } from "../../core/move.js";
+import fs from "node:fs";
+import path from "node:path";
+
+/** The title a moved container still carries, read from wherever the move left it. */
+function titleOf(p: string): string | undefined {
+  const file = fs.existsSync(p) && fs.statSync(p).isDirectory() ? path.join(p, "README.md") : p;
+  if (!fs.existsSync(file)) return undefined;
+  return /^title:\s*(.+?)\s*$/m.exec(fs.readFileSync(file, "utf-8"))?.[1]?.replace(/^["']|["']$/g, "");
+}
+
+const slugify = (s: string): string =>
+  s
+    .toLowerCase()
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
 
 /**
  * `productos move <id> <destination>` — re-file a feature or an area.
@@ -54,6 +70,25 @@ export function moveCommand(): Command {
         pc.green("\n✓"),
         `Moved. ${plan.edges.length} reference${plan.edges.length === 1 ? "" : "s"} repointed.`
       );
+
+      /**
+       * ⛔ A RENAMED SLUG WITH ITS OLD TITLE IS A CORPUS SAYING TWO THINGS.
+       *
+       * `--as versioned-inputs` on the CRE documents area left the id reading versioned-inputs and
+       * the page still headed "Document review". A move cannot know the new title — that is a
+       * product decision and guessing it from a slug would be worse — but it knows for certain the
+       * two no longer relate, and saying nothing is what lets the mismatch ship.
+       */
+      if (opts.as) {
+        const title = titleOf(plan.root.to_path);
+        if (title && slugify(title) !== opts.as) {
+          console.log("");
+          console.log(pc.yellow("!"), `the title still reads "${title}"`);
+          console.log(pc.dim(`  the slug is now "${opts.as}". a title is a product decision, so this did not guess one —`));
+          console.log(pc.dim(`  set it in the page's frontmatter and heading:`));
+          console.log(pc.dim(`      ${path.relative(process.cwd(), plan.root.to_path)}`));
+        }
+      }
       console.log(pc.dim("Run `productos check` to confirm the corpus still conforms."));
     });
 }
