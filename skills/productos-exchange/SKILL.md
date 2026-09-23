@@ -326,3 +326,32 @@ displaces an org-wide rule without saying which way, two exchanges on one contro
 asserting more than its slot, latitude nobody granted, and a dozen more. Every refusal names
 what to do. **Do not work around one** — if a refusal has no honest answer, that is a finding
 about the model and worth saying so.
+
+## Notes — what somebody asked to be changed
+
+```
+notes/notes.yaml      requests, append-only. Not truth, and not verdicts.
+```
+
+```bash
+productos v2 notes            # what is open, and what each was raised against
+productos v2 notes --all      # including the ones dealt with
+```
+
+A **note** is a request: *"the tab strip should also show the pinned version"*, *"this sketch is two
+releases out of date"*, *"this behaviour belongs on the other screen"*. It carries `about` — the ref
+the person was looking at when they wrote it — because that is the part nobody can reconstruct an
+hour later.
+
+⛔ **A note is not product truth and not a verdict.** The five acts record a judgement about a
+sentence; a note records a request to change one. Filed as either, a request reads as a decision —
+a packet would ship *"the tab strip should show the pinned version"* as something the product does,
+under whatever stamp covered the slot it landed in.
+
+⛔ **Acting on one is authoring, and it is your job.** Read the note, make the change to the truth,
+then close it saying what you did. `state: done` with no `outcome` is refused by the schema,
+because a closed note with no account of what happened cannot be told apart from one somebody
+dropped.
+
+⛔ **Never answer a note by editing the note.** If the request is wrong, or you cannot do it, say so
+in the outcome and leave the truth alone — the note is the record that somebody asked.

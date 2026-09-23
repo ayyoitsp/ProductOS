@@ -11,10 +11,13 @@
  * divergence again, this time between the browser and the terminal.
  */
 import type http from "node:http";
+import fs from "node:fs";
+import path from "node:path";
 import os from "node:os";
 import { loadCorpus } from "./load.js";
 import { renderScopePage, standalone } from "./page.js";
 import { perform, VIA, type Act, type Payload, type Via } from "./acts.js";
+import { Note } from "./schema.js";
 
 export interface V2Routes {
   /** The corpus directory this server is serving. */
@@ -61,7 +64,51 @@ const whoIsPressing = (): string => os.userInfo().username || "whoever-is-at-thi
  * on — v2 is a parallel track and must not shadow a single v1 route.
  */
 export async function v2Route(req: http.IncomingMessage, res: http.ServerResponse, p: string, { dir }: V2Routes): Promise<boolean> {
-  if (p !== "/v2" && !p.startsWith("/v2/") && p !== "/api/v2/act") return false;
+  if (p !== "/v2" && !p.startsWith("/v2/") && p !== "/api/v2/act" && p !== "/api/v2/note") return false;
+
+  /**
+   * ⛔ A NOTE IS NOT AN ACT, so it is a different route and a different file.
+   *
+   * Routing it through `/api/v2/act` would have been less code and would have made a request for
+   * change indistinguishable from a judgement about truth at the one place both arrive.
+   */
+  if (req.method === "POST" && p === "/api/v2/note") {
+    const body = await readJson(req);
+    const says = String(body.says ?? "").trim();
+    if (!says) return json(res, { ok: false, why: "an empty note is a click nobody can act on" }, 400), true;
+    const note = {
+      id: `n-${Date.now().toString(36)}`,
+      about: String(body.about ?? "").trim() || "the whole corpus",
+      says,
+      by: typeof body.by === "string" && body.by.trim() ? body.by.trim() : whoIsPressing(),
+      via: "page" as const,
+      at: new Date().toISOString().slice(0, 10),
+      state: "open" as const,
+    };
+    const parsed = Note.safeParse(note);
+    if (!parsed.success)
+      return json(res, { ok: false, why: "that is not a note anybody could act on", detail: parsed.error.issues.map((i) => i.message) }, 422), true;
+    const file = path.join(dir, "notes", "notes.yaml");
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    const existing = fs.existsSync(file) ? fs.readFileSync(file, "utf-8") : "notes:\n";
+    // ⛔ Append-only, like the verdict log. A request somebody made is a record, not a field.
+    fs.writeFileSync(
+      file,
+      existing.trimEnd() +
+        "\n" +
+        [
+          `  - id: ${note.id}`,
+          `    about: ${JSON.stringify(note.about)}`,
+          `    says: ${JSON.stringify(note.says)}`,
+          `    by: ${note.by}`,
+          `    at: ${note.at}`,
+          `    via: page`,
+          `    state: open`,
+        ].join("\n") +
+        "\n"
+    );
+    return json(res, { ok: true, said: `noted against ${note.about}` }), true;
+  }
 
   if (req.method === "POST" && p === "/api/v2/act") {
     const body = await readJson(req);

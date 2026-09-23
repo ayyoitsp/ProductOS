@@ -1936,8 +1936,57 @@ export const Charter = z
   .strict();
 export type Charter = z.infer<typeof Charter>;
 
+/**
+ * Something a person wants changed, addressed to whoever authors.
+ *
+ * ⛔ A NOTE IS NOT PRODUCT TRUTH, AND KEEPING THAT LINE IS THE WHOLE DESIGN.
+ *
+ * The five acts record a JUDGEMENT about truth: this is right, this is not ours, this is undecided.
+ * A note records a REQUEST — "the tab strip should show the pinned version", "this sketch is out of
+ * date", "this behaviour belongs on the other screen". It is a message, and until somebody acts on
+ * it nothing about the product has changed.
+ *
+ * So it is deliberately not a `Verdict` and deliberately not a slot. Filed as either, a request
+ * would read as a decision: a packet would ship "the tab strip should show the pinned version" as
+ * something the product does, under whatever stamp happened to cover the slot it landed in.
+ *
+ * ⛔ `about` IS THE POINT. A reviewer looking at a screen and typing "this is wrong" has told you
+ * almost nothing an hour later. The ref they were looking at is captured with the words, because
+ * reconstructing it is the part nobody can do afterwards.
+ */
+export const Note = z
+  .object({
+    id: z.string().min(1),
+    /** What they were looking at: a scope, an exchange, a slot, a statement, or a view. */
+    about: z.string().min(1),
+    says: z.string().min(1, "an empty note is a click nobody can act on"),
+    by: z.string().min(1),
+    at: z.string(),
+    /** ⛔ Which surface it came from, for the same reason a verdict records it. */
+    via: z.enum(["page", "question", "chat", "cli"]),
+    /**
+     * ⛔ CLOSING A NOTE SAYS WHAT WAS DONE, or the queue becomes a list nobody trusts.
+     *
+     * `done` with no `outcome` is indistinguishable from a note somebody deleted because they did
+     * not fancy it, and the next reader cannot tell which.
+     */
+    state: z.enum(["open", "done"]).default("open"),
+    outcome: z.string().optional(),
+  })
+  .strict()
+  .superRefine((n, ctx) => {
+    if (n.state === "done" && !n.outcome)
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["outcome"],
+        message: "say what was done about it — a closed note with no outcome cannot be told apart from one that was dropped",
+      });
+  });
+export type Note = z.infer<typeof Note>;
+
 export const ScopeFile = Scope;
 export const RulesFile = z.object({ rules: z.array(Rule).default([]) }).strict();
 export const CharterFile = Charter;
 export const ReadingsFile = z.object({ readings: z.array(Reading).default([]) }).strict();
 export const VerdictsFile = z.object({ verdicts: z.array(Verdict).default([]) }).strict();
+export const NotesFile = z.object({ notes: z.array(Note).default([]) }).strict();

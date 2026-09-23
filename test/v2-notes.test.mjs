@@ -1,0 +1,76 @@
+/**
+ * ⛔ A NOTE IS A REQUEST, NOT A JUDGEMENT, AND THE MODEL HAS TO KEEP THOSE APART.
+ *
+ * The five acts say whether a sentence is right. A reviewer looking at a screen and thinking "the
+ * tab strip should also show the pinned version" has nowhere to put that, and every option in front
+ * of them is a wrong answer — so it gets mis-filed as a rewording, or not said at all.
+ *
+ * Filed as a verdict or as a slot, a request would read as a decision: a packet would ship "the tab
+ * strip should show the pinned version" as something the product does.
+ */
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import fs from "node:fs";
+import path from "node:path";
+import os from "node:os";
+import { Note } from "../dist/v2/schema.js";
+import { loadCorpus } from "../dist/v2/load.js";
+import { renderScopePage } from "../dist/v2/page.js";
+
+const corpus = loadCorpus("v2-seed");
+
+test("a note carries what the person was looking at", () => {
+  const ok = Note.safeParse({
+    id: "n-1",
+    about: "money#see-a-balance",
+    says: "The balance should show the date of the last movement.",
+    by: "peter",
+    at: "2026-09-23",
+    via: "page",
+  });
+  assert.equal(ok.success, true, JSON.stringify(ok.error?.issues));
+  assert.equal(ok.data.state, "open", "a note has to start somewhere, and open is the only honest default");
+
+  // ⛔ An empty note is a click nobody can act on.
+  assert.equal(Note.safeParse({ id: "n", about: "x", says: "", by: "p", at: "d", via: "page" }).success, false);
+
+  /**
+   * ⛔ Closing one says what was done. `done` with no outcome cannot be told apart from a note
+   * somebody dropped because they did not fancy it, and the next reader has no way to know which.
+   */
+  const closedBlind = Note.safeParse({
+    id: "n-2", about: "x", says: "something", by: "p", at: "d", via: "page", state: "done",
+  });
+  assert.equal(closedBlind.success, false, "a note was closed with no account of what happened");
+  assert.match(closedBlind.error.issues[0].message, /cannot be told apart/);
+});
+
+test("notes are kept apart from verdicts", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "v2notes-"));
+  fs.cpSync("v2-seed", dir, { recursive: true });
+  fs.mkdirSync(path.join(dir, "notes"), { recursive: true });
+  fs.writeFileSync(
+    path.join(dir, "notes", "notes.yaml"),
+    `notes:\n  - id: n-1\n    about: money#see-a-balance\n    says: The balance should show the date of the last movement.\n    by: peter\n    at: 2026-09-23\n    via: page\n    state: open\n`
+  );
+  const c = loadCorpus(dir);
+  assert.equal(c.broken.length, 0, JSON.stringify(c.broken));
+  assert.equal(c.notes.length, 1);
+  // ⛔ The one thing that must never be true: a request counted among the acts of judgement.
+  assert.equal(c.verdicts.length, 0, "a note landed in the verdict log");
+});
+
+test("the panel is offered only where a press can be recorded, and captures the ref", () => {
+  const live = renderScopePage(corpus, "family-wallet", { interactive: true, records: "http", by: "peter" });
+  assert.match(live, /id="note-open"/, "there is no way to ask for a change");
+  assert.match(live, /id="note-about"/, "the note cannot be attached to anything");
+  // Every scope on the page is offerable as a target, and so is every screen.
+  for (const { scope } of corpus.scopes) {
+    if (!corpus.scopes.some((s) => s.scope.id === scope.id)) continue;
+    for (const v of scope.views)
+      assert.match(live, new RegExp(`value="${scope.id}#${v.id}"`), `${scope.id}#${v.id} cannot be pointed at`);
+  }
+  // ⛔ And not on a read-only render, where it would collect words that go nowhere.
+  const ro = renderScopePage(corpus, "family-wallet");
+  assert.doesNotMatch(ro, /id="note-open"/, "a read-only page offered to record a note it cannot send");
+});

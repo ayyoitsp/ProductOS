@@ -15,7 +15,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { parseFrontmatter } from "../core/frontmatter.js";
 import YAML from "yaml";
-import { Scope, Rule, Reading, Verdict, Charter, type SlotName , saysText, type Says} from "./schema.js";
+import { Scope, Rule, Reading, Verdict, Charter, type SlotName , saysText, type Says, Note} from "./schema.js";
 
 export interface V2Paths {
   root: string;
@@ -45,6 +45,14 @@ export interface Corpus {
    * and prose has no addressable parts. See `Charter` in the schema for why they are not rules.
    */
   charter: Array<{ charter: Charter; body: string; file: string }>;
+  /**
+   * Requests for change, addressed to whoever authors.
+   *
+   * ⛔ Kept apart from `verdicts` on purpose — see `Note` in the schema. A judgement about truth and
+   * a request to change it are different things, and one list holding both would let a request be
+   * read as a decision.
+   */
+  notes: Note[];
   rules: Array<{ rule: Rule; body: string; file: string }>;
   readings: Reading[];
   verdicts: Verdict[];
@@ -126,6 +134,15 @@ export function loadCorpus(root: string): Corpus {
       broken.push({ file, why: why(e) });
     }
   }
+  const notes: Note[] = [];
+  for (const file of readDir(path.join(paths.root, "notes"), [".yaml", ".yml"])) {
+    try {
+      const raw = YAML.parse(fs.readFileSync(file, "utf-8")) ?? {};
+      for (const n of raw.notes ?? []) notes.push(Note.parse(n));
+    } catch (e) {
+      broken.push({ file, why: why(e) });
+    }
+  }
   const verdicts: Verdict[] = [];
   for (const file of readDir(paths.verdicts, [".yaml", ".yml"])) {
     try {
@@ -135,7 +152,7 @@ export function loadCorpus(root: string): Corpus {
       broken.push({ file, why: why(e) });
     }
   }
-  return { paths, scopes, rules, charter, readings, verdicts, broken };
+  return { paths, scopes, rules, charter, notes, readings, verdicts, broken };
 }
 
 // ---------------------------------------------------------------------------

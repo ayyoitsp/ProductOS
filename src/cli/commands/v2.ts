@@ -779,6 +779,37 @@ export function v2Command(): Command {
     });
 
   cmd
+    /**
+     * ⛔ THE REQUESTS SOMEBODY MADE, WHICH ARE NOT DECISIONS.
+     *
+     * Kept separate from `acts` because the two lists answer different questions: `acts` is what a
+     * person is asked to judge, this is what a person has asked somebody to change. Reported
+     * together they would read as one backlog, and a request would look like a decision owed.
+     */
+    .command("notes")
+    .description("What people have asked to be changed, and what they were looking at")
+    .option("--all", "include the ones already dealt with")
+    .option("--at <dir>", "corpus directory", "v2")
+    .action((o: { all?: boolean; at?: string }) => {
+      const corpus = loadCorpus(at(o));
+      warnIfBroken(corpus);
+      const notes = corpus.notes.filter((n) => o.all || n.state === "open");
+      if (!notes.length) {
+        console.log(pc.dim(o.all ? "no notes at all" : "nothing open — nobody has asked for a change"));
+        return;
+      }
+      console.log(pc.bold(`${notes.length} ${o.all ? "notes" : "open"}`));
+      for (const n of notes) {
+        console.log("");
+        console.log(`  ${pc.cyan(n.about)} ${pc.dim(`— ${n.by} on ${n.at}, ${n.via}`)}`);
+        for (const l of n.says.split("\n")) console.log(`    ${l}`);
+        if (n.state === "done") console.log(pc.dim(`    ✓ ${n.outcome}`));
+      }
+      console.log("");
+      console.log(pc.dim("  these change nothing on their own — each needs somebody to author the change"));
+    });
+
+  cmd
     .command("reset")
     .description("Restore a corpus from the pristine seed, so every run starts identical")
     .option("--at <dir>", "corpus directory to restore INTO", "v2")
