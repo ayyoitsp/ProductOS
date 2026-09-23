@@ -39,8 +39,8 @@ export interface Carried {
   criteria: number;
   /** Slots carrying a v1 claim. */
   answered: number;
-  /** Slots written as an open question because v1 never had a word for them. */
-  opened: number;
+  /** Slots left blank because v1 had no field for them. ⛔ Not questions — see the header. */
+  blank: number;
 }
 
 export interface NotCarried {
@@ -148,43 +148,29 @@ function readAll(root: string): FeatureDocument[] {
 }
 
 /**
- * ⛔ ONE ORG-WIDE QUESTION PER SLOT v1 HAD NO WORD FOR — NOT ONE PER EXCHANGE.
+ * ⛔ THIS MIGRATION DOES NOT MANUFACTURE QUESTIONS, AND IT DID.
  *
- * The first version of this wrote an open standing onto every unrecorded slot of every exchange.
- * On a shipped product that produced **643 open questions**, which are SEVEN questions asked once
- * per control because nothing could ask them once: what may anyone ask, what do they bring, what
- * does it refuse, what does a failure leave them with, what does a repeat do, what does two at
- * once do, what is left behind. A reviewer handed 643 items does not review; they stop.
+ * v1 recorded only `answer`. For the other seven slots it wrote one open org-wide rule each —
+ * `what-happens-again`, `what-happens-at-once` and so on — with a generated question that was a
+ * restatement of the slot's own definition, `scope: everywhere`, and `mode: supplies`.
  *
- * The rule layer is exactly the home for a question about a class. One ruling here reaches every
- * exchange the selector touches **and every one written after it**, which is the leverage the layer
- * exists for — and `check` now reports how many slots each one unblocks, so the reviewer can take
- * the widest one first.
+ * Three things were wrong with that, and the third is the serious one:
  *
- * ⛔ `mode: supplies`, because these will BE the answer where an exchange says nothing. And
- * `criteria: []` with no statement: an unsettled rule owes its demonstration in the same act as its
- * ruling, which is the person's to give and not the migration's to guess.
+ *   - it is not a question anybody asked. "What happens when two askers arrive at once?" has no
+ *     single answer across a product: some asks refuse, some are idempotent, some queue. It is 539
+ *     separate facts nobody wrote down, not seven decisions.
+ *   - as `supplies` rules reaching everywhere, they GATED all 77 carried promises. A tool's
+ *     invented questions made a human's real product truth un-agreeable.
+ *   - it presented all of it to a reviewer as their own backlog. The header of this file says a
+ *     migration may not decide anything; writing seven org-wide rules asserts that seven
+ *     product-wide questions exist, which is a decision, made by a script, about somebody's
+ *     product.
+ *
+ * It was done to avoid handing over 643 blanks. That is an ergonomics problem about how a surface
+ * presents a hole, and it was solved by inventing truth — which is the one trade this model exists
+ * to refuse. A blank is the honest state, `slot-blank` is the honest report, and the number is the
+ * measurement: v1 recorded one slot in eight.
  */
-function orgWideQuestion(slot: SlotName, at: string, scopeIds: string[]): Record<string, unknown> {
-  void scopeIds;
-  return {
-    id: `what-happens-${slot.replace(/_/g, "-")}`,
-    fills: [slot],
-    mode: "supplies",
-    // ⛔ `everywhere`, because the previous model was silent about this slot for the WHOLE product,
-    // not for some corner of it. Narrowing it would be a claim about where the silence stops.
-    scope: { everywhere: true },
-    standing: {
-      kind: "open",
-      question: `${SLOT_ASKS[slot][0]!.toUpperCase()}${SLOT_ASKS[slot].slice(1)}? The previous model had no field for this anywhere in the product, so nobody has ever been asked — and until somebody is, every slot it would fill says nothing.`,
-      asked_of: "product",
-      asked_at: at,
-      blocks: [],
-    },
-    criteria: [],
-  };
-}
-
 export function migrate(v1Root: string, outDir: string, at: string): Migration {
   const docs = readAll(v1Root);
   /**
@@ -204,7 +190,7 @@ export function migrate(v1Root: string, outDir: string, at: string): Migration {
     for (const dep of d.frontmatter.depends_on)
       askedBy.set(dep, [...(askedBy.get(dep) ?? []), d.frontmatter.title || d.frontmatter.id]);
   const refused: NotCarried[] = [];
-  const carried: Carried = { scopes: 0, exchanges: 0, views: 0, criteria: 0, answered: 0, opened: 0 };
+  const carried: Carried = { scopes: 0, exchanges: 0, views: 0, criteria: 0, answered: 0, blank: 0 };
   const taken = new Map<string, string>();
 
   // Pass one: every container's scope id, so `depends_on` and `leads_to` can resolve.
@@ -692,12 +678,6 @@ export function migrate(v1Root: string, outDir: string, at: string): Migration {
   }
 
   /**
-   * ⛔ The questions v1 never had a field for, asked once each. `answer` is excluded: it is the one
-   * slot v1 was ever about, so asking the product what an answer is would be asking about something
-   * already recorded 61 times over.
-   */
-  const asked = SLOTS.filter((s) => s !== "answer");
-  /**
    * ⛔ THE PRODUCT-WIDE DOCUMENTS, WHICH THIS DROPPED ENTIRELY — and not by oversight: the model had
    * nowhere to put them until `Charter` existed.
    *
@@ -770,22 +750,6 @@ export function migrate(v1Root: string, outDir: string, at: string): Migration {
   }
 
   fs.mkdirSync(path.join(outDir, "rules"), { recursive: true });
-  for (const slot of asked) {
-    const r = orgWideQuestion(slot, at, [...idOf.values()]);
-    fs.writeFileSync(
-      path.join(outDir, "rules", `${r.id}.md`),
-      `---\n${YAML.stringify(r, { lineWidth: 96, blockQuote: "literal" })}---\n\n` +
-        `# ${SLOT_ASKS[slot]}\n\n` +
-        `The previous model had no field for this, anywhere. So this is not a gap in one feature —\n` +
-        `it is one decision the product has never made, and every slot it would fill says nothing\n` +
-        `until somebody makes it.\n\n` +
-        `Answering it reaches every ask in this product and every one written afterwards. If the\n` +
-        `answer is genuinely different in one place, that place says so for itself and declares\n` +
-        `which way — this rule is what the rest of the product does.\n`
-    );
-    files.push(path.join(outDir, "rules", `${r.id}.md`));
-  }
-  carried.opened = asked.length;
   fs.mkdirSync(path.join(outDir, "readings"), { recursive: true });
   fs.mkdirSync(path.join(outDir, "verdicts"), { recursive: true });
   if (refused.length) {

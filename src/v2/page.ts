@@ -814,6 +814,9 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
   /** ⛔ Scoped to this page's subtree, so the figure describes what the reader is looking at. */
   const under = (r: string) => ids.some((i) => r.startsWith(`${i}#`));
   const gated = a.gated.filter(under);
+  /** ⛔ From the grids, so the page and the grid cannot disagree about what is empty. */
+  const blanks = grids.reduce((n, g) => n + g.counts.blank, 0);
+  const written = grids.reduce((n, g) => n + g.counts.stated + g.counts.inherited + g.counts.outOfScope, 0);
   const agreed = corpus.verdicts.filter((v) => v.kind === "accept" && under(v.target ?? "")).length;
   const stale = a.stale.filter((s) => ids.some((i) => s.where.startsWith(`${i}#`)));
 
@@ -930,7 +933,26 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
                         : ""
                     }
                     ${live.map((q, i) => renderQuestion(q, i, decisionsOn(corpus, q.ref), ctx)).join("")}`
-                 : `<p class="lede">Nothing is undecided.</p>`
+                 : /**
+                    * ⛔ "NOTHING IS UNDECIDED" IS TRUE AND MISLEADING WHEN NOTHING IS WRITTEN.
+                    *
+                    * An empty queue reads as a finished corpus. On a migrated one it means the
+                    * opposite: there are no questions because nobody has written enough down to
+                    * have a question about it. A reviewer told "nothing to decide" over 539 blank
+                    * slots has been told the corpus is ready.
+                    *
+                    * What this needs is an author, and saying so is the whole finding.
+                    */
+                   `<p class="lede">Nothing here is undecided.</p>
+                    ${
+                      blanks
+                        ? `<p class="gate-note"><strong>And almost none of it is written.</strong>
+                             ${written} of ${written + blanks} slots carry a sentence; the other ${blanks} say nothing at
+                             all — so there is nothing for a reviewer to decide yet, and ${gated.length} promise${
+                               gated.length === 1 ? "" : "s"
+                             } cannot be agreed to. What this needs first is somebody to write it down.</p>`
+                        : ""
+                    }`
              }
            </div>
            <div class="sub-view" data-sub-view="about">

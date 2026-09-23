@@ -374,3 +374,34 @@ test("everything the page can hide is overridden back into view by nothing", () 
     "the tree rows no longer set display — re-check whether the override is still needed"
   );
 });
+
+/**
+ * ⛔ AN EMPTY QUEUE MUST NOT READ AS A FINISHED CORPUS.
+ *
+ * "Nothing is undecided" is true of a corpus nobody has written, and on a migrated one it means the
+ * opposite of what it says: there are no questions because nobody has written enough down to have a
+ * question about it. A reviewer told "nothing to decide" over 539 blank slots has been told it is
+ * ready.
+ *
+ * This is the shape a migration actually produces, so it is the shape that has to be honest.
+ */
+test("a queue with no questions says how much is unwritten", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "v2bare-"));
+  fs.mkdirSync(path.join(dir, "truth"), { recursive: true });
+  for (const d of ["rules", "readings", "verdicts"]) fs.mkdirSync(path.join(dir, d), { recursive: true });
+  // One promise, one slot said, the rest blank — a migration's output in miniature.
+  fs.writeFileSync(
+    path.join(dir, "truth", "thing.md"),
+    `---\nid: thing\ntitle: A thing\nexists: kept\nviews:\n  - id: a-screen\n    title: A screen\n    walked: true\n    parts:\n      - id: go\n        role: commits\n        label: Go\nexchanges:\n  - id: press-go\n    title: Somebody presses Go\n    asked_by: person\n    at: { view: a-screen, part: go }\n    slots:\n      answer:\n        says: Something is recorded, and the person is told it was.\n    criteria: []\n---\n\nA scope with one sentence and seven blanks.\n`
+  );
+  const bare = loadCorpus(dir);
+  assert.equal(bare.broken.length, 0, JSON.stringify(bare.broken));
+
+  const html = renderScopePage(bare, "thing");
+  assert.match(html, /Nothing here is undecided/);
+  assert.match(html, /almost none of it is written/i, "an empty queue read as a finished corpus");
+  assert.match(html, /cannot be agreed to/, "it does not say what the blanks are blocking");
+  // ⛔ The figures come from the grid, so the page and the grid cannot disagree about what is empty.
+  const grid = gridFor(bare, "thing");
+  assert.match(html, new RegExp(`${grid.counts.blank} say nothing`), "the count is not the grid's");
+});

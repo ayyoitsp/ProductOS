@@ -734,28 +734,41 @@ export function v2Command(): Command {
         console.error(pc.dim("  pass --force if that is what you want"));
         process.exit(1);
       }
-      if (o.force) fs.rmSync(path.join(out, "truth"), { recursive: true, force: true });
+      /**
+       * ⛔ EVERYTHING THIS COMMAND WRITES, NOT JUST `truth/`.
+       *
+       * Clearing only truth left the previous run's `rules/` and `charter/` in place, so a
+       * re-migration silently kept files the new run would never have produced. It is how seven
+       * org-wide rules that had been deleted from the migrator went on governing a corpus through
+       * two further runs — invisible, because nothing regenerates a file it no longer writes.
+       *
+       * ⛔ `verdicts/` IS NOT TOUCHED, EVER. A person's acts are the one thing in the corpus nothing
+       * can reconstruct, and `--force` is about discarding derived output.
+       */
+      if (o.force) for (const d of ["truth", "rules", "charter"]) fs.rmSync(path.join(out, d), { recursive: true, force: true });
       const m = migrate(from, out, new Date().toISOString().slice(0, 10));
       const c = m.carried;
       console.log(pc.green("✓"), `${o.out}`);
       console.log(`  ${c.scopes} scopes · ${c.views} screens · ${c.exchanges} asks · ${c.criteria} criteria`);
       console.log("");
+      /**
+       * ⛔ THE MEASUREMENT, NOT A BACKLOG. This used to report seven org-wide questions it had
+       * written itself, which read as "answer these and you are done" when what it meant was "one
+       * slot in eight was ever recorded". The number is the finding.
+       */
       console.log(pc.bold("  What v1 knew, against what this model asks"));
-      console.log(`    ${pc.green(String(c.answered))} slots carry a claim v1 recorded`);
+      const owed = c.exchanges * SLOTS.length;
+      console.log(`    ${pc.green(String(c.answered))} of ${owed} slots carry a sentence v1 recorded`);
       console.log(
-        `    ${pc.yellow(String(c.opened))} org-wide questions nobody has ever been asked ${pc.dim("— one per slot v1 had no field for")}`
+        `    ${pc.yellow(String(owed - c.answered))} say nothing ${pc.dim("— v1 had no field for them, so nobody ever wrote them down")}`
       );
-      const owed = c.exchanges * (c.opened + 1) - c.answered;
-      if (c.exchanges)
+      if (owed)
         console.log(
-          pc.dim(
-            `    ${c.answered} of ${c.exchanges * (c.opened + 1)} slots carry a sentence; the other ${owed} are waiting on those ${c.opened} answers,`
-          ),
-          "\n" +
-            pc.dim(
-              `    which is the measurement this model exists to take rather than a fault of the migration`
-            )
+          pc.dim(`    that is ${Math.round((c.answered / owed) * 100)}% of this product written down, which is the measurement`)
         );
+      console.log(
+        pc.dim("    no questions were invented to stand in for the rest — a blank is what a blank is")
+      );
       if (m.refused.length) {
         console.log("");
         console.log(pc.red(pc.bold(`  ${m.refused.length} things were NOT carried`)) + pc.dim(" — each needs a person, not a better script"));
