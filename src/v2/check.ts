@@ -934,6 +934,35 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
         }
       }
 
+      /**
+       * ⛔ AN ASK MAY NOT ARRIVE AT A CONTROL THAT OWNS NOTHING.
+       *
+       * `entry` is described by the `with` slot of whatever commits it; `navigates` is described
+       * entirely by `leads_to`. An exchange on either asks a person what a text box refuses, or what
+       * two people clicking a link at once does — and a migration that anchored one exchange per
+       * claimed element produced exactly that, at scale: `deal-list#deal-row#refuses`, on a row in a
+       * table, which refuses nothing.
+       *
+       * The schema said `commits` was "the only role that owes an exchange" in a comment and nothing
+       * checked it. The comment was also wrong — looking at something IS an ask — so this is the
+       * narrower rule that is actually true.
+       */
+      if (ex.at?.part) {
+        const v = scope.views.find((x) => x.id === ex.at!.view);
+        const part = v?.parts.find((x) => x.id === ex.at!.part);
+        if (part && (part.role === "entry" || part.role === "navigates"))
+          add({
+            severity: "refuse",
+            kind: "arrives-at-a-part-that-owns-nothing",
+            where: ref,
+            what: `arrives at "${part.id}", which ${part.role === "entry" ? "takes what a person types" : "goes somewhere else"}`,
+            fix:
+              part.role === "entry"
+                ? "what it accepts belongs to the `with` slot of whatever commits it — move this there, or point the ask at the control that commits"
+                : "where it goes is `leads_to` and nothing else — whatever this ask says belongs to the thing that renders it, or to the control that commits",
+          });
+      }
+
       for (const x of ex.excepts) {
         const named = corpus.rules.find((r) => r.rule.id === x.rule);
         if (!named) {

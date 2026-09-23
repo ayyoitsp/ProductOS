@@ -249,23 +249,20 @@ export function migrate(v1Root: string, outDir: string, at: string): Migration {
     const parents = parentsOf.get(v1.id)!;
 
     /**
-     * ⛔ THE ROLE FOLLOWS WHAT v1 RECORDED ABOUT THE CONTROL, NOT ITS HTML-ISH `kind`.
+     * ⛔ REVERSED, AND THIS WAS THE DEFECT BEHIND "what does a table row REFUSE?".
      *
-     * Deriving it from `kind` alone produced two wrongs at once. A `kind: row` with claims against it
-     * became `navigates`, which v2 refuses without a destination v1 never recorded — so the part was
-     * dropped and every exchange anchored to it then arrived nowhere, taking real product truth with
-     * it. Meanwhile `commits` — *the only role that owes an exchange* — was reserved for things v1
-     * happened to call buttons.
+     * The rule below used to be: an element with claims attached becomes `commits`, because v1
+     * recorded what happens when you press it. That turned every row, every search box and every
+     * filter into an ask of its own — and an ask owes all eight slots, so a reviewer was asked what
+     * `deal-list#deal-row` refuses, what it leaves behind, and what two people doing it at once
+     * does. A row in a table does none of those things.
      *
-     * If v1 recorded what happens when you press something, that IS an exchange arriving at a control
-     * the person waits on. `kind` only decides the ones nothing was ever recorded about.
+     * A role is what a control IS. Having been written about does not make a row a button.
      */
-    const anchored = new Set(v1.behaviors.filter((b) => b.element).map((b) => `${b.surface}::${b.element}`));
-
     // ---- views ----
     const views = v1.ux.map((v) => {
       const parts = v.elements.flatMap((el) => {
-        const role = anchored.has(`${v.id}::${el.id}`) ? "commits" : ROLE[el.kind];
+        const role = ROLE[el.kind];
         if (!role) {
           refused.push({
             what: `${v1.id} · ${v.id} · ${el.id}`,
@@ -371,7 +368,17 @@ export function migrate(v1Root: string, outDir: string, at: string): Migration {
         });
         continue;
       }
-      const key = `${b.surface}::${b.element ?? ""}`;
+      /**
+       * ⛔ ONLY A `commits` CONTROL GETS ITS OWN ASK. Everything else a screen shows or links to is
+       * part of what the ask that RENDERS the screen answers — which is where v1 was really pointing
+       * when it attached a display claim to a row.
+       *
+       * Without this the corpus had one ask per claimed element, each owing eight slots, so 16
+       * screens became 77 asks and 539 blanks. Most of those asks did not exist.
+       */
+      const el = b.element ? v1.ux.find((x) => x.id === b.surface)?.elements.find((x) => x.id === b.element) : undefined;
+      const isAct = el ? ROLE[el.kind] === "commits" : false;
+      const key = isAct ? `${b.surface}::${b.element}` : `${b.surface}::`;
       byAnchor.set(key, [...(byAnchor.get(key) ?? []), b]);
     }
 
@@ -483,28 +490,21 @@ export function migrate(v1Root: string, outDir: string, at: string): Migration {
         return [];
       }
       /**
-       * ⛔ A CLAIM ANCHORED TO A SCREEN AND NOT A CONTROL GOES TO A PERSON, VERBATIM.
+       * ⛔ SUPERSEDED, AND IT WAS FIGHTING THE RULE THAT REPLACED IT.
        *
-       * Reading them is instructive: *"when the list cannot be loaded, the reason is shown above the
-       * table and the previously loaded page stays on screen"* is a `fails` slot. *"a tab whose work
-       * has not landed says plainly it is not built yet"* is a display behaviour. v1 DID record
-       * non-answer truth — it had nowhere to put it, so each became a separate screen-level behaviour.
+       * This used to refuse every claim v1 anchored to a screen rather than a control, on the
+       * grounds that which slot it answers is a judgement. That was true while every claimed element
+       * became its own ask. It stopped being true the moment non-`commits` claims were routed to the
+       * ask that RENDERS the screen — which is where they belong — and then the two rules collided:
+       * 93 claims were routed here and refused on arrival, taking 152 criteria with them.
        *
-       * Which slot each one answers is a judgement, and joining them into `answer` would reproduce
-       * exactly the defect being migrated away from: a `fails` fact reading as what the asker gets. So
-       * the text is preserved in `not-carried.yaml` for somebody to file, rather than mis-filed here.
+       * A claim about what a screen shows is answered by the ask that shows it. That is a decision
+       * the model can make, so it is made here rather than handed to a person 93 times.
        */
-      if (!element) {
-        for (const b of group)
-          refused.push({
-            what: `${v1.id} · ${b.id}`,
-            from: d.filepath,
-            why: `v1 recorded this against the screen "${surface}" rather than a control, and which slot it answers is a judgement: "${flat(b.claim)}"`,
-          });
-        return [];
-      }
       const el = element ? view.elements.find((e) => e.id === element) : undefined;
-      const title = el?.label ? `${el.label} on ${view.title}` : view.title;
+      // ⛔ A view-level ask is somebody ARRIVING, which is a real ask — see the `commits` comment in
+      // the schema. It names no part, because what it answers is the whole screen.
+      const title = el?.label ? `${el.label} on ${view.title}` : `Somebody looks at ${view.title}`;
 
       /**
        * ⛔ ONE EXCHANGE PER CONTROL, which is what v2 means by an ask — `one-press-two-answers`

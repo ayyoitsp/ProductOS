@@ -1050,7 +1050,22 @@ export type Exchange = z.infer<typeof Exchange>;
  * actually talk about, and nothing else on a screen belongs in it.
  */
 export const PartRole = z.enum([
-  /** Pressing it starts work the person waits on. The only role that owes an exchange. */
+  /**
+   * Pressing it starts work the person waits on.
+   *
+   * ⛔ THIS SAID "the only role that owes an exchange", AND THAT WAS FALSE — with nothing checking
+   * it either way, so it misled without ever failing.
+   *
+   * The seed's own "somebody looks at what a kid has" arrives at a `display` part and meaningfully
+   * fills all eight slots: it refuses (a kid looking at another kid's money), it fails (the history
+   * cannot be loaded), and it is idempotent on a repeat. Looking IS an ask; it is simply triggered
+   * by arriving rather than by pressing.
+   *
+   * What is true is narrower, and it is `exchange-arrives-at-a-part-that-owns-nothing` in `check`:
+   * an ask may arrive at a `commits` control or at something shown, and never at `entry` or
+   * `navigates` — those two are fully described elsewhere, and an exchange on them asks a person
+   * what a text box refuses.
+   */
   "commits",
   /** Takes what the person types or picks. What it accepts belongs to the `with` slot of
    *  whatever `commits` reads it — not to an exchange of its own. */
