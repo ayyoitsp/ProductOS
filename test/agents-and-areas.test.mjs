@@ -108,3 +108,48 @@ test("the agents that have no prompt yet say so", () => {
   for (const a of unwritten()) assert.equal(a.prompt, undefined);
   for (const a of AGENTS) if (a.prompt) assert.ok(fs.existsSync(a.prompt), `"${a.name}" points at ${a.prompt}, which is not there`);
 });
+
+test("the host's frontmatter is generated, and a judge never gets a writing tool", () => {
+  /**
+   * ⛔ Peter: "ideally in the future these job agents will be portable - model agnostic."
+   *
+   * So a prompt file holds the prompt and nothing else. The name, description, tool list and model
+   * are one host's dialect, produced at install time from the portable spec plus the project's
+   * config. They used to be hand-written into each prompt, which made every agent a Claude agent
+   * and made the model something somebody edits inside a prompt.
+   */
+  for (const a of AGENTS) {
+    if (!a.prompt) continue;
+    const body = fs.readFileSync(a.prompt, "utf-8");
+    assert.doesNotMatch(body, /^---\n/, `${a.prompt} carries frontmatter — that belongs to the adapter`);
+    for (const m of ["opus", "sonnet", "haiku", "gpt-4", "gemini"])
+      assert.ok(!body.toLowerCase().includes(m), `${a.prompt} names the model "${m}"`);
+    /**
+     * ⛔ And the body names no host's tools. `ask-the-human` is a capability; `AskUserQuestion` is
+     * one product's name for it, and a prompt naming it is a prompt for that product only.
+     */
+    for (const t of ["AskUserQuestion", "WebFetch", "the Bash tool", "the Read tool", "the Grep tool"])
+      assert.ok(!body.includes(t), `${a.prompt} names the host tool "${t}" — declare a capability instead`);
+  }
+
+  /**
+   * ⛔ THE TOOL LIST IS DERIVED FROM CAPABILITIES, and no capability a judge may declare maps to a
+   * writing tool. This is where "a reviewer never writes" is enforced rather than hoped: it is not
+   * possible to express an agent that judges and can write.
+   */
+  const adapter = fs.readFileSync("src/adapters/claude.ts", "utf-8");
+  const map = /const TOOL_FOR: Record<Capability, string\[\]> = \{([\s\S]*?)\n\};/.exec(adapter);
+  assert.ok(map, "the capability-to-tool map moved — re-read it before trusting this test");
+  /**
+   * ⛔ Read the VALUES, not the prose. The first version of this grepped the extracted block and
+   * matched the word "Write" inside the comment explaining why nothing maps to it — a test failing
+   * on its own documentation, which is the same class of mistake as asserting on flattened text.
+   */
+  const mapped = [...map[1].replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/\[([^\]]*)\]/g)].flatMap((m) =>
+    m[1].split(",").map((t) => t.trim().replace(/"/g, "")).filter(Boolean)
+  );
+  assert.ok(mapped.length >= 5, `the capability map reads as ${mapped.length} tools — re-read it`);
+  for (const t of mapped)
+    assert.ok(!/^(Write|Edit|NotebookEdit|MultiEdit)$/.test(t), `a capability maps to "${t}", which writes`);
+  assert.match(map[1], /"write-corpus":\s*\[\]/, "write-corpus gained a mapping — a judge could now be handed it");
+});

@@ -6,6 +6,7 @@ import { installClaudeSkills, uninstallClaudeSkills } from "../../adapters/claud
 import {
   ensureDirs,
   pathsFor,
+  resolvePathsOrThrow,
 } from "../../core/paths.js";
 import {
   defaultConfigFor,
@@ -44,7 +45,23 @@ export function initCommand(): Command {
       }
 
       // 1. Install skills + register MCP
-      const install = installClaudeSkills({ update: opts.update });
+      /**
+       * ⛔ THE PROJECT'S CONFIG GOES IN, because model choice per agent lives there. Installing
+       * without it silently gives every agent the host's default, which is the one thing the
+       * portability requirement was about.
+       */
+      let projectConfig;
+      let projectRoot: string | undefined;
+      try {
+        const p = resolvePathsOrThrow();
+        projectConfig = readConfig(p);
+        // The repo the corpus belongs to — agents install beside it, not on the machine.
+        projectRoot = path.dirname(path.dirname(p.configFile));
+      } catch {
+        projectConfig = undefined;
+        projectRoot = undefined;
+      }
+      const install = installClaudeSkills({ update: opts.update, config: projectConfig, configRoot: projectRoot });
       const verb = install.symlinked ? "Linked" : "Installed";
       for (const s of install.installed) {
         console.log(pc.green("✓"), `${verb} skill: ~/.claude/skills/${s}/`);
@@ -56,7 +73,13 @@ export function initCommand(): Command {
         console.log(pc.dim("   (dev install detected — skills are symlinked, so edits in skills/ are live immediately)"));
       }
       for (const a of install.agents) {
-        console.log(pc.green("✓"), `${verb} agent: ~/.claude/agents/${a}.md`);
+        /**
+         * ⛔ "Written", never "Linked", whatever the skills did. An agent file is this host's
+         * frontmatter generated from the registry and the project's config, plus the portable
+         * prompt body — so there is nothing to symlink, and saying otherwise sends somebody to
+         * edit a file they think is the source.
+         */
+        console.log(pc.green("✓"), `Wrote agent: ${path.join(install.agentsDir, `${a}.md`)}`);
       }
       console.log(pc.green("✓"), `MCP server registered in ${install.mcpRegisteredAt}`);
 

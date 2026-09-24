@@ -236,6 +236,7 @@ export const AGENTS: Agent[] = [
     never: ["write anything", "fix what it finds — a reviewer that repairs hides how often it fires"],
     needs: ["read-files", "search-files", "run-commands"],
     judges: true,
+    prompt: "agents/productos-consistency.md",
   },
   {
     name: "coverage",
@@ -260,6 +261,7 @@ export const AGENTS: Agent[] = [
     never: ["write tests itself — it reports the hole; closing it is authoring", "count tests as a measure of anything"],
     needs: ["read-files", "search-files", "run-commands"],
     judges: true,
+    prompt: "agents/productos-coverage.md",
   },
   {
     name: "generated",
@@ -283,6 +285,7 @@ export const AGENTS: Agent[] = [
     never: ["regenerate anything itself", "treat legitimate authoring — a claim, a question, a purpose — as a generated artefact"],
     needs: ["read-files", "search-files", "run-commands"],
     judges: true,
+    prompt: "agents/productos-generated.md",
   },
   {
     name: "truthfulness",
@@ -309,6 +312,7 @@ export const AGENTS: Agent[] = [
     ],
     needs: ["read-files", "search-files", "run-commands"],
     judges: true,
+    prompt: "agents/productos-truthfulness.md",
   },
   {
     name: "newcomer",

@@ -529,6 +529,59 @@ truth to claude.ai. Do not argue with the gate; tell them what it said.
 
 See `WATCHING_PRESSES.md` for reading presses back and turning them into truth.
 
+## The reviewers, and what each one asks
+
+```bash
+productos v2 agents            # what each asks, why it exists, which model runs it
+```
+
+⛔ **You cannot review your own work.** By the time you have written a corpus you know what it
+meant to say, so your reading of it is worth nothing as evidence that it communicates — and after
+a few exchanges there is no reader left in the session who has not been told the answer.
+
+Each reviewer answers **one question about the whole**, which is why none of them is scoped to a
+file:
+
+| Agent | Asks |
+|---|---|
+| `productos-consistency` | is every concept in every layer it needs to be, or in one and nowhere else |
+| `productos-coverage` | is each defect pinned by something that fails on its own |
+| `productos-generated` | is anything hand-authored that a generator should have produced |
+| `productos-truthfulness` | does the corpus say what the code actually does |
+| `productos-newcomer` | could a PM handed this build from it |
+| `productos-architect` | are these the right subsystems with the right boundaries |
+| `productos-framework` | can the model express a real product, and can a person review it |
+
+⛔ **Every one of them judges and none may write.** Enforced at install: the tool list is derived
+from declared capabilities and no capability a judge can declare maps to a writing tool. So a
+reviewer physically cannot fix what it finds — which is the point, because how often a reviewer
+fires is the only measure of whether the model is holding.
+
+⛔ **Never explain the model to the newcomer**, in the prompt or in follow-up. A reviewer who has
+been told what a capability is can no longer detect that the corpus failed to tell them.
+
+⛔ **Route what comes back.** "There was nowhere to record X" is a framework gap and belongs to us.
+"I could not tell whether X" is a finding about the corpus and belongs to its author. Getting the
+direction wrong is costly both ways: one sends somebody to rearrange a corpus that has no correct
+arrangement, the other buries a real fix in a backlog.
+
+Which model runs each is the project's choice, in its own `productos/config.yaml`:
+
+```yaml
+agents:
+  default_model: sonnet
+  model:
+    truthfulness: opus        # this one reads the code as well as the corpus
+    consistency: opus
+  effort:
+    truthfulness: high
+  off:
+    architecture: reviewed by hand here — one promise per subsystem already
+```
+
+⛔ **`off` removes the agent**, it does not merely skip it. An agent a project has switched off and
+left on disk is one the host can still run while the config says otherwise.
+
 ## Before handing anything over
 
 ```bash
