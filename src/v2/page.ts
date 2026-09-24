@@ -18,7 +18,7 @@
 import { resolveRules, type Corpus } from "./load.js";
 import { SLOTS, SLOT_ASKS_SHORT, statements, saysText, type SlotName, type Scope, type View, type Part, type Says } from "./schema.js";
 import { gridFor, gateFor, actsFor, ruleHomes, type Grid, type Cell } from "./grid.js";
-import { stampFor } from "./stamp.js";
+import { stampFor, decidedFor } from "./stamp.js";
 import { wireParts } from "./wire.js";
 import { questionsFor, descendants, type Question } from "./settle.js";
 import { decisionsOn, decisionsUnder, howItWasDecided, type Decision } from "./record.js";
@@ -1088,6 +1088,14 @@ function renderHappyPath(corpus: Corpus, scopeId: string, ctx: Ctx, past: Decisi
   const hp = sc.happy_path;
   const stamp = stampFor(corpus, ref);
   const agreed = stamp.state === "accepted";
+  /**
+   * ⛔ WHAT SOFTWARE DECIDED, SAID ON THE THING ITSELF.
+   *
+   * Peter: "decide and override, but should be obvious to be asked to change." A default that is
+   * not findable is not a default — it quietly becomes the answer. So it is stated where the
+   * sentence is, in the words of what actually happened: nobody has looked at this.
+   */
+  const landed = agreed ? undefined : decidedFor(corpus, ref);
   return `
     <section class="happy${agreed ? " agreed" : ""}" id="${anchorOf(ref)}" data-ref="${esc(ref)}" data-label="what it is for">
       <h3>What this feature is for</h3>
@@ -1115,6 +1123,14 @@ function renderHappyPath(corpus: Corpus, scopeId: string, ctx: Ctx, past: Decisi
           : `<p class="owes">No screens are named, so the flow cannot be walked.</p>`
       }
       ${renderRecord(past)}
+      ${
+        landed
+          ? `<p class="decided-for-you">Nobody has looked at this. It was written for you by
+             <code>${esc(landed.by)}</code> on ${esc(landed.at)} so there would be something to
+             disagree with — it is <strong>not</strong> agreed, and the sentences below are still
+             waiting on you.</p>`
+          : ""
+      }
       ${
         agreed
           ? `<p class="happy-ok">Agreed by ${esc(stamp.by ?? "somebody")} on ${esc(stamp.at ?? "")} — the sentences below can be read against it.</p>`
@@ -3279,6 +3295,12 @@ const STYLE = `<style>
   ol.happy-through li + li::before { content: "→"; color: var(--dim); margin: 0 .45rem 0 .35rem; }
   .happy-ok { font-size: .82rem; color: var(--ok); margin: .5rem 0 0; }
   .happy-why { font-size: .82rem; color: var(--dim); margin: .5rem 0 0; }
+  /**
+   * ⛔ LOUD, BECAUSE THE WHOLE POINT IS BEING ASKED TO CHANGE IT. A default rendered in the same
+   * grey as everything else is a default nobody overrides — it becomes the answer by attrition.
+   */
+  .decided-for-you { font-size: .88rem; background: var(--warn-bg); border-left: 3px solid var(--warn);
+    border-radius: 0 6px 6px 0; padding: .6rem .8rem; margin: .6rem 0 0; }
   .group-ux { margin: 1.4rem 0 1.8rem; }
   .group-ux h3 { font-size: 1rem; margin: 0 0 .3rem; }
   .group-ux .lede { font-size: .9rem; color: var(--dim); margin: 0 0 .9rem; }

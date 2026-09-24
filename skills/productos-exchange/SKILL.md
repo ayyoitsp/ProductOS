@@ -663,6 +663,32 @@ truth to claude.ai. Do not argue with the gate; tell them what it said.
 
 See `WATCHING_PRESSES.md` for reading presses back and turning them into truth.
 
+## ⛔ Software may decide. It may never count as somebody having agreed
+
+```bash
+productos v2 accept "<ref>" --by <agent-name> --via agent
+```
+
+`via: agent` records a **default**: something written so a reviewer has an answer to disagree with
+rather than a blank. It is the only value of `via` that is not consent, and it is filtered out at
+`stampFor` — the single function every gate in the model asks — so it is structurally incapable of:
+
+- satisfying a gate
+- offering a single behaviour for agreement
+- reading as an acceptance on any surface
+
+⛔ **Use it only where nobody was asked, and never instead of asking.** The whole model rests on a
+person having agreed; a default is scaffolding for that conversation, not a substitute for it.
+
+⛔ **It must be obvious, on the thing itself, that somebody is being asked to change it.** The page
+says *"Nobody has looked at this. It was written for you by X"* in a warning band, and the queue
+distinguishes it from a blank. A default nobody can see is not a default — it becomes the answer by
+attrition.
+
+⛔ **And say so in the report.** `accept --via agent` answers "wrote what X is for, on X's authority
+— nobody has agreed it", not "agreed". A command whose output contradicts what it did is worse than
+one that refuses: somebody reads the tick and stops looking.
+
 ## The reviewers, and what each one asks
 
 ```bash

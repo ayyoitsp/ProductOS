@@ -58,9 +58,9 @@ const dirOf = (args: { dir?: string }, paths: ProductosPaths): string =>
 const Consent = {
   by: z.string().describe("the person who decided — recorded, never authenticated, and it outlives the session"),
   via: z
-    .enum(["page", "question", "chat", "cli"])
+    .enum(["page", "question", "chat", "cli", "agent"])
     .describe(
-      "how their consent was obtained: page = they pressed a button on a rendered page showing what it covered; question = they chose from options in the question interface; chat = they answered in conversation; cli = they typed it. Never guess this — it is the record of HOW they agreed."
+      "how their consent was obtained: page = they pressed a button on a rendered page showing what it covered; question = they chose from options in the question interface; chat = they answered in conversation; cli = they typed it. Never guess this — it is the record of HOW they agreed. ⛔ agent = NOBODY AGREED: software landed a default so a reviewer has something to disagree with rather than a blank. It never satisfies a gate and it never reads as agreement. Use it only when no person was asked, and never as a substitute for asking."
     ),
 };
 

@@ -396,7 +396,20 @@ export type StampState =
  * with reality by printing "accepted separately" for rules with no verdict at all.
  */
 export function stampFor(corpus: Corpus, target: string): StampState {
-  const accepts = corpus.verdicts.filter((v) => v.kind === "accept" && v.target === target);
+  /**
+   * ⛔ AN AGENT'S RECORD IS NOT AN ACCEPTANCE, AND THIS IS THE ONE PLACE THAT MATTERS.
+   *
+   * Software may land a default so a reviewer has something to disagree with rather than a blank —
+   * that is what `via: agent` is for. But every gate in the model asks this function whether a
+   * thing is accepted, so if an agent's record answered yes here, one field would make the first
+   * tenet void: a corpus reading agreed because software decided it has been validated by nobody,
+   * and no surface could tell.
+   *
+   * So it is filtered out at the source rather than at each of the callers. `decidedFor` below is
+   * how a surface finds what is standing on software's authority, which is the other half: a
+   * default nobody can see is a default nobody will ever override.
+   */
+  const accepts = corpus.verdicts.filter((v) => v.kind === "accept" && v.target === target && v.via !== "agent");
   if (!accepts.length) return { state: "never" };
   const latest = accepts[accepts.length - 1]!;
   const now = coveredBy(corpus, target);
@@ -441,3 +454,16 @@ export function staleReason(s: StampState): string | null {
  * record in the model — the exact shape of defect this codebase keeps finding. Acts are
  * performed in one place: `acts.ts`.
  */
+
+/**
+ * What software decided here, standing until a person disagrees.
+ *
+ * ⛔ Peter: "decide and override, but should be obvious to be asked to change." A default that is
+ * not findable is a default nobody overrides — it just quietly becomes the answer. This is what a
+ * surface asks so it can say, on the thing itself, that nobody has looked at it yet.
+ */
+export function decidedFor(corpus: Corpus, target: string): { by: string; at: string } | undefined {
+  const landed = corpus.verdicts.filter((v) => v.kind === "accept" && v.target === target && v.via === "agent");
+  const last = landed[landed.length - 1];
+  return last ? { by: last.by, at: last.at } : undefined;
+}

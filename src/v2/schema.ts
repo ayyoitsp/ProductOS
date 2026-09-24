@@ -1804,8 +1804,13 @@ export const Verdict = z
      *
      * A default would defeat the whole thing: the weakest provenance would silently wear the
      * strongest name, which is the failure the field exists to make visible.
+     *
+     * ⛔ AND `agent` IS NOT CONSENT. A verdict may be recorded by software — a default landed so a
+     * reviewer has something to disagree with rather than a blank — and it is then structurally
+     * incapable of satisfying a gate. Without this value the choice was between software that
+     * cannot help and software whose help is indistinguishable from a person's agreement.
      */
-    via: z.enum(["page", "question", "chat", "cli"]),
+    via: z.enum(["page", "question", "chat", "cli", "agent"]),
     covers_slots: z.string().optional(),
     covers_criteria: z.string().optional(),
     // rule

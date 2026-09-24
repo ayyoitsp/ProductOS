@@ -108,6 +108,8 @@ export const HOW: Record<Verdict["via"], string> = {
   question: "chosen from the options, in the question interface",
   chat: "answered in conversation",
   cli: "recorded at the command line",
+  /** ⛔ Not consent. A default landed so somebody has something to disagree with. */
+  agent: "decided for you by software, and standing only until somebody says otherwise",
 };
 
 export function howItWasDecided(d: Decision): string {

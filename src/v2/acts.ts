@@ -41,8 +41,28 @@ import { resolveRef, nothingToDecide } from "./ref.js";
  * A default would defeat the whole point — the weakest provenance would silently wear the
  * strongest name.
  */
-export type Via = "page" | "question" | "chat" | "cli";
-export const VIA: readonly Via[] = ["page", "question", "chat", "cli"] as const;
+/**
+ * How consent was obtained — and one value here is not consent at all.
+ *
+ * ⛔ `agent` IS THE ONE THAT MUST NEVER COUNT AS AGREEMENT.
+ *
+ * Peter, on who decides how a feature is split: "i think decide and override, but should be obvious
+ * to be asked to change." Landing a default is right — nineteen features is a lot of accepting — but
+ * the moment a machine's choice can be recorded, the first tenet is one field away from being void:
+ * a corpus where something reads agreed because software decided it has validated nothing, and
+ * nobody can tell by looking.
+ *
+ * So an agent's decision is recordable, distinguishable, and structurally incapable of satisfying a
+ * gate. It stands until a person disagrees; it never reads as though a person agreed.
+ */
+export type Via = "page" | "question" | "chat" | "cli" | "agent";
+export const VIA: readonly Via[] = ["page", "question", "chat", "cli", "agent"] as const;
+
+/**
+ * ⛔ WHAT A PERSON DID, as opposed to what something decided on their behalf. Every gate asks this
+ * rather than asking whether a record exists.
+ */
+export const isHuman = (via: Via): boolean => via !== "agent";
 
 export type Act = "accept" | "rule" | "read" | "waive" | "defer";
 
@@ -337,6 +357,21 @@ function doAccept(dir: string, { target }: AcceptPayload, consent: Consent): Out
       `    covers_slots: ${cover.slots}`,
       `    covers_criteria: ${cover.criteria}`,
     ]);
+    /**
+     * ⛔ THE REPORT MUST NOT CLAIM AGREEMENT SOFTWARE DID NOT GIVE. This said "agreed what X is for
+     * — every sentence is now offered" for a `via: agent` record, while the gate correctly stayed
+     * shut. A command whose output contradicts what it did is worse than one that refuses: somebody
+     * reads the ✓ and stops looking.
+     */
+    if (!isHuman(consent.via))
+      return {
+        ok: true,
+        said: `wrote what ${scopeId} is for, on ${consent.by}'s authority — nobody has agreed it`,
+        detail: [
+          "⛔ this is NOT agreement and does not offer a single behaviour: it is a default, so a reviewer has something to disagree with rather than a blank",
+          "it is shown on the feature as written-for-you until a person accepts or rewords it",
+        ],
+      };
     return {
       ok: true,
       said: `agreed what ${scopeId} is for`,

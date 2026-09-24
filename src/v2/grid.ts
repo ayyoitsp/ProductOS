@@ -9,7 +9,7 @@
  */
 import { SLOTS, type SlotName, type Rule , statements} from "./schema.js";
 import { resolveRules, disputeIndex, DOWNSTREAM_OF_ANSWER, answerIsUnknown, lineageOf, type Corpus } from "./load.js";
-import { stampFor } from "./stamp.js";
+import { stampFor, decidedFor } from "./stamp.js";
 import { existsOf } from "./load.js";
 
 export interface Cell {
@@ -524,7 +524,19 @@ export function actsFor(corpus: Corpus): ActCount {
     if (!sc?.happy_path) return { ok: false, why: "nothing says what this feature is for yet" };
     const st = stampFor(corpus, `${scopeId}#happy-path`);
     if (st.state === "accepted") return { ok: true, why: "" };
-    if (st.state === "never") return { ok: false, why: "nobody has agreed what this feature is for" };
+    /**
+     * ⛔ A DEFAULT SOFTWARE LANDED IS REPORTED AS SUCH, not as a blank. "Nobody has agreed" and
+     * "something decided this and nobody has looked" are different states and the second one is
+     * the one a reviewer should be drawn to — it has an answer in it to argue with.
+     */
+    const landed = decidedFor(corpus, `${scopeId}#happy-path`);
+    if (st.state === "never")
+      return {
+        ok: false,
+        why: landed
+          ? `written for you by ${landed.by} and nobody has looked at it`
+          : "nobody has agreed what this feature is for",
+      };
     return { ok: false, why: `what this feature is for was agreed and has changed since — ${st.state}` };
   };
   const context = new Map<string, { ok: boolean; why: string }>();
