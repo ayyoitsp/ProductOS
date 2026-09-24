@@ -371,6 +371,12 @@ function renderProse(body: string): string {
  * moment anybody closed their laptop.
  */
 
+/** The screen's own title, for a caption that names where a sentence lands. */
+function viewTitle(corpus: Corpus, scopeId: string, viewId: string): string {
+  const v = corpus.scopes.find((s) => s.scope.id === scopeId)?.scope.views.find((x) => x.id === viewId);
+  return plain(v?.title || viewId);
+}
+
 /** The human name of a part, so a card can offer "show me the deal row" rather than an id. */
 function partLabel(corpus: Corpus, scopeId: string, viewId: string, partId: string): string {
   const v = corpus.scopes.find((s) => s.scope.id === scopeId)?.scope.views.find((x) => x.id === viewId);
@@ -445,6 +451,14 @@ const PT_STYLE = `<style>
   .pt-commits:hover, .pt-entry:hover, .pt-navigates:hover { box-shadow: inset 0 -2px 0 rgba(37,99,235,1); }
   .pt-region:hover, .pt-display:hover { outline: 1px dashed rgba(37,99,235,.55); outline-offset: 2px; }
   .pt.on { background: rgba(37,99,235,.10); box-shadow: inset 0 0 0 2px rgba(37,99,235,.9); }
+  /**
+   * ⛔ THE FOCUS MARK CANNOT BE THE ACCENT COLOUR. On a card's copy it landed on the primary
+   * button — blue ring, blue button, invisible. The one job of the copy is to say WHICH control the
+   * sentence is about, so the mark has to read against the application's own palette rather than
+   * share it. Amber with a halo, which survives being drawn on a blue button, a grey row or white.
+   */
+  .focus { outline: 3px solid #f59e0b; outline-offset: 3px; border-radius: 3px;
+    box-shadow: 0 0 0 7px rgba(245,158,11,.22); position: relative; z-index: 1; }
 </style>`;
 
 /** Normalised for label matching: the sketch writes "[ × Clear ]" where the part says "Clear filters". */
@@ -977,6 +991,35 @@ function renderBehaviours(
                   )
                   .join("")}</ul></details>`
               : `<p class="beh-nothing">Nothing here says what would show this working.</p>`
+          }
+          ${
+            /**
+             * ⛔ THE SCREEN GOES IN THE CARD, not behind a link to somewhere else on the page.
+             *
+             * Peter: "screens should be embedded into every card, relevant to the behavior it's
+             * talking about. don't see this happening."
+             *
+             * "show me the deal row" was a scroll away from the sentence, which means reading the
+             * sentence and seeing the thing it describes are two acts with the page moving in
+             * between. The judgement is "is this true of THAT", and both halves have to be in front
+             * of somebody at once.
+             *
+             * ⛔ A PLACEHOLDER, FILLED BY CLONING THE ONE COPY. Rendering the screen again inside
+             * every card would put one screen's controls in the DOM a hundred times over, with the
+             * same `data-part` on all of them — so selecting a control would resolve to whichever
+             * copy came first, possibly inside a hidden view. The screen keeps one home; the card
+             * gets a copy of it made in the browser, with its ids stripped, focused on the part this
+             * sentence is about.
+             */
+            ex.at?.view
+              ? `<figure class="card-screen" data-of="${esc(ex.at.view)}"${
+                  ex.at.part ? ` data-focus="${esc(ex.at.part)}"` : ""
+                }><figcaption>${
+                  ex.at.part
+                    ? `${esc(partLabel(corpus, scopeId, ex.at.view, ex.at.part))} on ${esc(viewTitle(corpus, scopeId, ex.at.view))}`
+                    : esc(viewTitle(corpus, scopeId, ex.at.view))
+                }</figcaption></figure>`
+              : ""
           }
           ${renderRecord(past)}
           ${
@@ -2374,6 +2417,106 @@ const PROTOTYPE = `<script>
   }
 
   /**
+   * ⛔ THE SCREEN, IN THE CARD, FOCUSED ON WHAT THE SENTENCE IS ABOUT.
+   *
+   * Cloned from the screen's one home rather than rendered again: a hundred cards each carrying
+   * their own copy of the markup would put the same data-part in the DOM a hundred times, and
+   * selecting a control would resolve to whichever came first — possibly inside a hidden view.
+   *
+   * ⛔ LAZILY. Cloning eleven screens into a hundred and twenty-six cards on load is a great deal
+   * of DOM for cards nobody has scrolled to yet, so each one is filled the first time it comes near
+   * the viewport.
+   */
+  const fillCardScreen = (fig) => {
+    if (fig.dataset.filled) return;
+    const viewId = fig.dataset.of;
+    const src = document.querySelector('article.screen[data-screen="' + CSS.escape(viewId) + '"]');
+    if (!src) {
+      fig.dataset.filled = "1";
+      // ⛔ Say so. An empty frame reads as a screen with nothing on it.
+      fig.insertAdjacentHTML("beforeend", '<p class="none">This screen is not on this page.</p>');
+      return;
+    }
+    fig.dataset.filled = "1";
+
+    const proto = src.querySelector(".proto");
+    if (!proto) {
+      fig.insertAdjacentHTML("beforeend", '<p class="none">Nobody has drawn this screen.</p>');
+      return;
+    }
+
+    const holder = document.createElement("div");
+    holder.className = "card-proto";
+
+    if (proto.classList.contains("html")) {
+      /**
+       * A generated screen lives in a shadow root, so the clone needs its own — and the same
+       * adopted stylesheet, which is why that is a shared object rather than a string.
+       */
+      const host = document.createElement("div");
+      host.className = "proto html";
+      const root = host.attachShadow({ mode: "open" });
+      const from = proto.shadowRoot;
+      if (from) {
+        if (from.adoptedStyleSheets && from.adoptedStyleSheets.length) root.adoptedStyleSheets = from.adoptedStyleSheets;
+        for (const st of from.querySelectorAll("style")) root.appendChild(st.cloneNode(true));
+        for (const node of from.children) {
+          if (node.tagName === "STYLE") continue;
+          root.appendChild(node.cloneNode(true));
+        }
+      }
+      neutralise(root, fig.dataset.focus);
+      holder.appendChild(host);
+    } else {
+      const pre = proto.cloneNode(true);
+      neutralise(pre, fig.dataset.focus);
+      holder.appendChild(pre);
+    }
+    fig.appendChild(holder);
+  };
+
+  /**
+   * ⛔ A COPY IS NOT A CONTROL. Strip every id and data-part from the clone: leaving them would give
+   * the page duplicate ids and make a click inside a card select a control on a screen somewhere
+   * else. What stays is the focus mark, which is the entire point of the copy.
+   */
+  function neutralise(root, focus) {
+    for (const el of root.querySelectorAll("[id]")) el.removeAttribute("id");
+    for (const el of root.querySelectorAll("[data-part]")) {
+      const part = el.dataset.part;
+      el.removeAttribute("data-part");
+      el.removeAttribute("data-goes");
+      el.classList.remove("on");
+      if (focus && part === focus) el.classList.add("focus");
+      if (el.tagName === "BUTTON" || el.tagName === "INPUT" || el.tagName === "SELECT" || el.tagName === "TEXTAREA") el.disabled = true;
+      el.setAttribute("tabindex", "-1");
+    }
+    for (const el of root.querySelectorAll("button, input, select, textarea, a")) {
+      el.setAttribute("tabindex", "-1");
+      if ("disabled" in el) el.disabled = true;
+    }
+  }
+
+  const figures = [...document.querySelectorAll("figure.card-screen")];
+  if (figures.length) {
+    if ("IntersectionObserver" in window) {
+      const io = new IntersectionObserver(
+        (entries) => {
+          for (const e of entries)
+            if (e.isIntersecting) {
+              fillCardScreen(e.target);
+              io.unobserve(e.target);
+            }
+        },
+        { rootMargin: "400px" }
+      );
+      for (const f of figures) io.observe(f);
+    } else {
+      for (const f of figures) fillCardScreen(f);
+    }
+  }
+
+  /**
    * ⛔ PER CARD: SHOW ME WHERE. A behaviour card names the control it is about; this walks to that
    * control on the screen and selects it, so the sentence and the thing it is about are on screen
    * together. Reading "Deal row on CRE Deals — refuses" without the row in front of you is the
@@ -2815,6 +2958,23 @@ const STYLE = `<style>
   .screen.arrived { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 8px; }
   details.undrawn { margin-top: .5rem; font-size: .88rem; }
   details.undrawn summary { color: var(--dim); cursor: pointer; }
+  /* ---- the screen inside a card ---------------------------------------- */
+  figure.card-screen { margin: .7rem 0 0; border: 1px solid var(--line); border-radius: 8px;
+    overflow: hidden; background: var(--card); }
+  figure.card-screen figcaption { font-size: .74rem; color: var(--dim); padding: .35rem .6rem;
+    border-bottom: 1px solid var(--line); background: var(--bg); }
+  figure.card-screen .none { font-size: .82rem; color: var(--dim); font-style: italic; margin: 0; padding: .6rem; }
+  /**
+   * ⛔ SCALED, NOT SHRUNK. zoom reflows the copy at a smaller size, so a wide table stays legible
+   * instead of being squeezed into unreadable columns; transform: scale would leave the layout at
+   * full width and paint it small, clipping everything past the card.
+   */
+  .card-proto { zoom: .62; max-height: 22rem; overflow: auto; }
+  .card-proto .proto { border: 0; border-radius: 0; }
+  /* The one thing the copy exists to show: which control this sentence is about. Amber, not the
+     accent — the accent is the application's own primary colour on half these screens. */
+  .card-proto .focus, figure.card-screen .focus { outline: 3px solid #f59e0b; outline-offset: 3px;
+    border-radius: 3px; box-shadow: 0 0 0 7px rgba(245,158,11,.22); }
   /* "show me the deal row" — the control this sentence is about, on the screen it lives on. */
   button.pt-go { font: inherit; font-size: .82rem; background: var(--accent); color: var(--bg);
     border: 0; border-radius: 4px; padding: .12rem .45rem; cursor: pointer; margin-left: .3rem; }

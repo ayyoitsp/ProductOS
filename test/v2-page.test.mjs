@@ -765,3 +765,86 @@ test("a label the browser writes as text is escaped once, not twice", () => {
   }
   void amp;
 });
+
+test("no backtick survives inside a template literal in the renderer", () => {
+  /**
+   * ⛔ SIX BUILDS LOST TO THIS, IN ONE FILE, IN ONE SESSION.
+   *
+   * `STYLE`, `PT_STYLE`, `VIEW_SWITCH`, `PROTOTYPE` and `liveScript` are all template literals
+   * holding CSS and JavaScript. A backtick anywhere inside one — including in a comment written out
+   * of habit, describing a CSS property — ends the string, and the parse error surfaces somewhere
+   * else entirely. Two prose warnings in the file did not stop it happening again.
+   *
+   * The build already catches it. What this adds is catching it on purpose, with the reason
+   * attached, so the next person does not have to rediscover why `zoom` cannot be quoted here.
+   */
+  const lines = fs.readFileSync("src/v2/page.ts", "utf-8").split("\n");
+
+  /**
+   * Each of these is declared as `const NAME = ` + a backtick, and closed by a line that is exactly
+   * a backtick and a semicolon. Everything between is CSS or JavaScript payload, where a backtick
+   * is fatal.
+   */
+  const NAMES = ["STYLE", "PT_STYLE", "VIEW_SWITCH", "PROTOTYPE", "INERT"];
+  let checked = 0;
+  for (const name of NAMES) {
+    const start = lines.findIndex((l) => new RegExp(`^const ${name}(: string)? = \``).test(l));
+    if (start < 0) continue;
+    // Closed either by a bare backtick-semicolon line or by one ending the payload tag.
+    const end = lines.findIndex((l, i) => i > start && /^\s*(<\/(?:style|script)>)?`;\s*$/.test(l));
+    assert.ok(end > start, `${name} is not closed the way this test expects — re-read it`);
+    checked++;
+    for (let i = start + 1; i < end; i++)
+      assert.doesNotMatch(
+        lines[i],
+        /`/,
+        `${name} line ${i + 1} holds a backtick, which ends the string: ${lines[i].trim()}`
+      );
+  }
+  assert.ok(checked >= 3, `expected to check at least three payload literals, checked ${checked}`);
+
+  /**
+   * And the two prose warnings that say so are still in the file. They are the only thing a person
+   * reads before writing the comment that breaks it.
+   */
+  const src = lines.join("\n");
+  assert.match(src, /No backticks in this comment/, "the CSS block lost its warning");
+  assert.match(src, /EVERYTHING BELOW THIS LINE IS INSIDE A TEMPLATE LITERAL/, "liveScript lost its warning");
+});
+
+test("every card about a screen carries that screen, focused on what the sentence is about", () => {
+  /**
+   * ⛔ Peter: "screens should be embedded into every card, relevant to the behavior it's talking
+   * about. don't see this happening."
+   *
+   * A link that scrolls elsewhere makes reading the sentence and seeing the thing it describes two
+   * acts with the page moving in between. The judgement is "is this true of THAT", so both halves
+   * have to be in front of somebody at once.
+   */
+  const scope = corpus.scopes.find((s) => s.scope.exchanges.some((e) => e.at?.view));
+  assert.ok(scope, "the seed has no behaviour anchored to a screen");
+  const html = renderScopePage(corpus, scope.scope.id, { linkBase: "/v2" });
+
+  for (const ex of scope.scope.exchanges) {
+    if (!ex.at?.view) continue;
+    const fig = new RegExp(`<figure class="card-screen" data-of="${ex.at.view}"${ex.at.part ? ` data-focus="${ex.at.part}"` : ""}`);
+    assert.match(html, fig, `${scope.scope.id}#${ex.id} arrives at ${ex.at.view} and its cards carry no screen`);
+  }
+
+  /**
+   * ⛔ A PLACEHOLDER, NOT A SECOND COPY OF THE MARKUP. Rendering the screen again inside each card
+   * would put one screen's controls in the DOM once per card, all with the same data-part — so
+   * selecting a control would resolve to whichever came first, possibly inside a hidden view.
+   */
+  const figures = [...html.matchAll(/<figure class="card-screen"[^>]*>([\s\S]*?)<\/figure>/g)];
+  assert.ok(figures.length, "no card carries a screen");
+  for (const [, inner] of figures) {
+    assert.doesNotMatch(inner, /data-part=/, "a card embeds a live copy of the controls");
+    assert.doesNotMatch(inner, /<template shadowrootmode/, "a card embeds a second shadow tree");
+    assert.match(inner, /<figcaption>/, "the embedded screen does not say which screen it is");
+  }
+
+  // ⛔ And the focus mark is NOT the accent colour: on a card's copy it landed on the application's
+  // own primary button — blue ring, blue button, invisible.
+  assert.match(html, /\.focus \{[^}]*#f59e0b/, "the focus mark shares the application's palette");
+});
