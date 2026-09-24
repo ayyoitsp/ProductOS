@@ -1278,6 +1278,23 @@ export const View = z.object({
    * "the picture shows the thing", which is where thin drawings lived.
    */
   shows: z.array(z.string()).default([]),
+  /**
+   * The component this drawing was generated from, and the commit it was generated at.
+   *
+   * ⛔ THE GENERATOR KNEW BOTH AND THREW THEM AWAY, which is why nothing could tell that a screen
+   * had moved on. A corpus recorded no ref at all: it could not say which commit its truth was
+   * written against, so it could not say the code had changed since — and a whole feature
+   * describing a screen somebody had deleted that morning was invisible until two people read the
+   * source by hand.
+   *
+   * With these, `productos v2 moved` walks the history between then and now for exactly the files
+   * this screen is about, and reports what the commits SAY. That is the part a diff cannot give:
+   * the commit that deleted the pricing grid quoted the operator — "Computed work and editable
+   * cells all need to be ripped out" — and said "this deletes rather than builds". A product
+   * decision, in its author's words, that the corpus had not heard about.
+   */
+  drawn_from: z.string().optional(),
+  drawn_at: z.string().optional(),
   /** ⛔ Not "I didn't feel like sketching" — it means nobody walked the screen, and it
    *  blocks readiness. */
   walked: z.boolean().default(false),

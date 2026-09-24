@@ -18,6 +18,7 @@ import { AGENTS, CASCADE, KINDS } from "../../core/jobs.js";
 import { agentsDoc } from "../../core/agents-doc.js";
 import { readChanges, writeChange, nextId, verify, missing } from "../../core/change.js";
 import { writeSketchHtml } from "../../v2/draw-write.js";
+import { whatMoved, repoOf } from "../../v2/moved.js";
 import { HOW } from "../../v2/record.js";
 import { renderScopePage, standalone } from "../../v2/page.js";
 import { migrate } from "../../v2/migrate.js";
@@ -850,6 +851,64 @@ export function v2Command(): Command {
    * kind must reach, each layer is verified by looking rather than by ticking, and `close` refuses
    * while one is unverified and unwaived.
    */
+  cmd
+    /**
+     * ⛔ WHAT THE CODE HAS DECIDED SINCE THIS TRUTH WAS WRITTEN.
+     *
+     * Peter: "we should also walk git history, right?" Right, and it is the stronger half —
+     * a recorded commit says THAT things moved, the history says WHAT and WHY. The commit that
+     * deleted the pricing grid quoted the operator and said "this deletes rather than builds";
+     * a diff could not have told anybody that, and the corpus describing that screen had not
+     * heard about it.
+     */
+    .command("moved")
+    .description("Walk what the code has decided since each screen was drawn, and what the commits say")
+    .option("--at <dir>", "corpus directory", "v2")
+    .option("--repo <dir>", "the codebase this corpus describes", ".")
+    .option("--full", "print each commit's whole message, not its subject")
+    .action((o: { at?: string; repo?: string; full?: boolean }) => {
+      const corpus = loadCorpus(at(o));
+      const repo = path.resolve(o.repo ?? ".");
+      const rows = whatMoved(corpus, repo);
+      if (!rows.length) {
+        console.log(pc.dim("no screen records where it was drawn from — run `productos v2 draw` and this can answer"));
+        return;
+      }
+      let moved = 0;
+      let blind = 0;
+      for (const r of rows) {
+        if (r.why) {
+          blind++;
+          console.log("");
+          console.log(`${pc.bold(`${r.scope}#${r.view}`)} ${pc.dim(r.from)}`);
+          console.log(pc.yellow(`  ? ${r.why}`));
+          continue;
+        }
+        if (!r.since.length) continue;
+        moved++;
+        console.log("");
+        console.log(
+          `${pc.bold(`${r.scope}#${r.view}`)} ${pc.dim(r.from)} ${pc.dim(`— ${r.since.length} commit${r.since.length === 1 ? "" : "s"} since it was drawn`)}`
+        );
+        for (const c of r.since) {
+          console.log(`  ${pc.cyan(c.sha)} ${pc.dim(c.when)} ${c.subject}`);
+          /**
+           * ⛔ THE BODY IS THE POINT, and it is what a diff cannot give. This codebase writes down
+           * why: the operator's words, what was deliberately deleted, what it refuses to do.
+           */
+          if (o.full && c.body) for (const l of c.body.split("\n").slice(0, 12)) console.log(pc.dim(`      ${l}`));
+        }
+      }
+      console.log("");
+      if (moved)
+        console.log(
+          pc.yellow("!"),
+          `${moved} screen${moved === 1 ? "" : "s"} the code has changed under. ${pc.dim("read what the commits say — the corpus may be behind, or the code may be")}`
+        );
+      else console.log(pc.green("✓"), "nothing has moved under a drawn screen");
+      if (blind) console.log(pc.dim(`  ${blind} could not be compared — see above`));
+    });
+
   const change = cmd.command("change").description("Record a piece of feedback and drive it into every layer it affects");
 
   change
@@ -1095,7 +1154,20 @@ export function v2Command(): Command {
         console.log(pc.dim("\ndry run — nothing written"));
         return;
       }
-      const written = writeSketchHtml(into, scopeId, viewId, drawn.html);
+      /**
+       * ⛔ RECORD WHERE IT CAME FROM AND WHEN. The generator knew both and threw them away, which
+       * is why nothing could say a screen had moved on — and a feature describing a screen somebody
+       * had deleted that morning was invisible until two people read the source by hand.
+       */
+      const origin = repoOf(route);
+      if (!origin) console.log(pc.yellow("!"), "the component is not in a git repository, so nothing records where this came from");
+      const written = writeSketchHtml(
+        into,
+        scopeId,
+        viewId,
+        drawn.html,
+        origin ? { from: path.relative(origin.root, route), at: origin.head } : undefined
+      );
       if (!written) {
         console.error(pc.red("✗"), `no view "${viewId}" under "${scopeId}" in ${into}`);
         process.exit(1);

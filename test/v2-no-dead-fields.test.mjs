@@ -30,7 +30,21 @@ import * as schema from "../dist/v2/schema.js";
  * write-only — `also_considered` was populated on every pick and rendered nowhere, which is
  * precisely the defect this test was written for.
  */
-const SURFACES = ["check.ts", "grid.ts", "packet.ts", "settle.ts", "stamp.ts", "ref.ts", "load.ts", "page.ts", "record.ts", "acts.ts"]
+const SURFACES = [
+  "check.ts",
+  "grid.ts",
+  "packet.ts",
+  "settle.ts",
+  "stamp.ts",
+  "ref.ts",
+  "load.ts",
+  "page.ts",
+  "record.ts",
+  "acts.ts",
+  // ⛔ A reader is a reader wherever it lives. `moved.ts` is what reads a drawing's provenance, and
+  // leaving it out would report both fields as read by nothing.
+  "moved.ts",
+]
   .map((f) => fs.readFileSync(path.join("src/v2", f), "utf-8"))
   .concat(fs.readFileSync("src/cli/commands/v2.ts", "utf-8"))
   .join("\n");

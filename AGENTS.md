@@ -206,7 +206,7 @@ Territory, not ownership. Nobody is assigned an area — an agent reads this to 
 | **model** | model | `src/v2/schema.ts` `src/v2/load.ts` `src/v2/ref.ts` `src/core/jobs.ts` `src/core/change.ts` |
 | **derive** | derive | `src/v2/grid.ts` `src/v2/stamp.ts` `src/v2/settle.ts` `src/v2/acts.ts` `src/v2/record.ts` |
 | **generate** | generate | `src/v2/migrate.ts` `src/v2/draw.ts` `src/v2/draw-write.ts` `src/v2/appcss.ts` |
-| **surface** | surface | `src/v2/page.ts` `src/v2/serve.ts` `src/v2/packet.ts` `src/v2/notes.ts` `src/v2/watch.ts` `src/v2/write.ts` `src/v2/wire.ts` `src/cli/commands/v2.ts` `src/mcp/v2-tools.ts` |
+| **surface** | surface | `src/v2/page.ts` `src/v2/serve.ts` `src/v2/packet.ts` `src/v2/notes.ts` `src/v2/watch.ts` `src/v2/write.ts` `src/v2/wire.ts` `src/v2/moved.ts` `src/cli/commands/v2.ts` `src/mcp/v2-tools.ts` |
 | **instruct** | instruct | `skills` |
 | **pin** | pin | `test` |
 | **check** | check | `src/v2/check.ts` |

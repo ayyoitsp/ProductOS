@@ -148,6 +148,9 @@ export const UxView = z.object({
    *  web.stylesheet) and looks like a real mock of the screen. The AI editor
    *  can generate this from the ASCII sketch + the user's CSS class names. */
   sketch_html: z.string().optional(),
+  /** Where a generated drawing came from, and at which commit. See the v2 schema for why. */
+  drawn_from: z.string().optional(),
+  drawn_at: z.string().optional(),
   notes: z.string().optional(),
   elements: z.array(Element).default([]),
 });

@@ -580,6 +580,36 @@ restyling the review page. Two consequences worth knowing: a design system defin
 stylesheet using `@import` will not work, because an import is a fetch and the CSP blocks it — name
 the imported files in the list instead.
 
+### ⛔ A drawing records where it came from, so the history can be walked
+
+`draw` writes two fields beside the drawing, and neither is typed:
+
+```yaml
+drawn_from: "frontend/app/components/cre/DealPricingMatrix.tsx"
+drawn_at: "6cb3ba69a3aaff07cd866758664bceca09b3e38f"
+```
+
+```bash
+productos v2 moved --at <corpus> --repo <the codebase> --full
+```
+
+It walks every commit that has touched each drawn screen's source **since the drawing was made**,
+and prints what those commits say about themselves.
+
+⛔ **The commit bodies are the point, and a diff cannot give you them.** A whole feature was once
+found to be describing a screen somebody had deleted that morning — and the commit that deleted it
+quoted the operator, *"Computed work and editable cells all need to be ripped out"*, and said of
+itself *"this deletes rather than builds"*. That is a product decision in its author's words. Two
+people found it by reading source by hand, after one disbelieved the other.
+
+⛔ **A drawing that cannot be compared says so.** No recorded commit, or a commit from a different
+repository, is reported in those words — reporting nothing would read as *nothing has changed*,
+which is the silence this exists to break.
+
+⛔ **It reports and never reconciles.** Whether the corpus should follow the code or the code should
+follow the corpus is a product judgement. This says: these commits touched what this feature is
+about, here is what they say, go and look.
+
 ⛔ **`@import` and remote fonts are dropped, and stylesheet paths are reported.** A mistyped path
 produces a mock with the right class names and browser-default styling, which reads as a badly
 written mock rather than a stale config line — so `publishable` prints what it loaded and warns

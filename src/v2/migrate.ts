@@ -372,6 +372,13 @@ export function migrate(v1Root: string, outDir: string, at: string): Migration {
          * across arrived with the low-fidelity half only and no sign the other half had existed.
          */
         ...(v.sketch_html ? { sketch_html: v.sketch_html } : {}),
+        /**
+         * ⛔ PROVENANCE TRAVELS WITH THE DRAWING. Carrying the drawing and dropping where it came
+         * from leaves a corpus that looks generated and cannot be compared with anything — which is
+         * the state that hid a whole feature describing a deleted screen.
+         */
+        ...(v.drawn_from ? { drawn_from: v.drawn_from } : {}),
+        ...(v.drawn_at ? { drawn_at: v.drawn_at } : {}),
         parts,
       };
     });

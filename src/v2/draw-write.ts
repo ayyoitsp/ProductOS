@@ -37,7 +37,14 @@ function candidates(root: string): string[] {
  * Replace (or insert) `sketch_html` on one view. Returns the file written, or undefined if the view
  * is nowhere in this corpus.
  */
-export function writeSketchHtml(root: string, scopeId: string, viewId: string, html: string): string | undefined {
+export interface Provenance {
+  /** The component it was generated from, relative to the repo. */
+  from: string;
+  /** The commit that component was at. ⛔ Absent where the repo could not be read, never guessed. */
+  at?: string;
+}
+
+export function writeSketchHtml(root: string, scopeId: string, viewId: string, html: string, prov?: Provenance): string | undefined {
   const scopeLeaf = scopeId.split("/").pop()!;
   for (const file of candidates(root)) {
     const raw = fs.readFileSync(file, "utf-8");
@@ -57,6 +64,14 @@ export function writeSketchHtml(root: string, scopeId: string, viewId: string, h
     }
 
     // Drop an existing drawing, whatever its indent.
+    // Drop the previous provenance lines too, or a regenerated drawing keeps the old one's.
+    for (const key of ["drawn_from", "drawn_at"]) {
+      const at = lines.findIndex((l, i) => i > start && i < end && new RegExp(`^\\s*${key}:`).test(l));
+      if (at >= 0) {
+        lines.splice(at, 1);
+        end--;
+      }
+    }
     const has = lines.findIndex((l, i) => i > start && i < end && /^\s*sketch_html:\s*\|/.test(l));
     if (has >= 0) {
       let stop = has + 1;
@@ -68,7 +83,22 @@ export function writeSketchHtml(root: string, scopeId: string, viewId: string, h
 
     const at = lines.findIndex((l, i) => i > start && i < end && /^\s*(elements|parts):\s*$/.test(l));
     const insert = at >= 0 ? at : end;
-    const block = [`${INDENT}sketch_html: |`, ...html.split("\n").map((l) => `${INDENT}  ${l}`)];
+    /**
+     * ⛔ WRITTEN BESIDE THE DRAWING, because provenance kept anywhere else is provenance that goes
+     * stale separately from the thing it describes.
+     */
+    const block = [
+      /**
+       * ⛔ QUOTED, BOTH OF THEM. A commit that happens to be all digits parses as a NUMBER in YAML,
+       * and the schema then refuses the whole file — a corpus that will not load because of a
+       * provenance line, on the one-in-however-many sha with no letters in it. A path can contain a
+       * colon or a leading digit for the same reason. Found by a test fixture using an all-zero sha.
+       */
+      ...(prov ? [`${INDENT}drawn_from: ${JSON.stringify(prov.from)}`] : []),
+      ...(prov?.at ? [`${INDENT}drawn_at: ${JSON.stringify(prov.at)}`] : []),
+      `${INDENT}sketch_html: |`,
+      ...html.split("\n").map((l) => `${INDENT}  ${l}`),
+    ];
     lines.splice(insert, 0, ...block);
     fs.writeFileSync(file, lines.join("\n"));
     return file;

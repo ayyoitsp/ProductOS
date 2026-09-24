@@ -155,6 +155,7 @@ export const AREAS: Area[] = [
       "src/v2/watch.ts",
       "src/v2/write.ts",
       "src/v2/wire.ts",
+      "src/v2/moved.ts",
       "src/cli/commands/v2.ts",
       "src/mcp/v2-tools.ts",
     ],
