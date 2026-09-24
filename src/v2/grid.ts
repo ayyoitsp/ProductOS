@@ -318,6 +318,18 @@ export interface ActCount {
   /** Gated: an exchange with an unsettled slot cannot be accepted yet. */
   gated: string[];
   /**
+   * Every settled sentence nobody has agreed to, WHETHER OR NOT it is currently offered.
+   *
+   * ⛔ THE CHIPS COUNTED WHAT IS OFFERED AND SO WENT BLANK. The purpose gate withholds a feature's
+   * behaviours until somebody agrees what it is for — correctly — and every count on the page was
+   * reading `behaviours`, so a product with a hundred written sentences rendered as "Product" with
+   * no chip at all. Peter: "we lost our menu chips showing # of questions."
+   *
+   * A chip has to say what is THERE. How much of it is currently askable is a different fact, and
+   * it already has its own line. So: two numbers, and neither pretends to be the other.
+   */
+  written: string[];
+  /**
    * Features whose behaviours are withheld because nobody has agreed what the feature is for.
    *
    * ⛔ REPORTED, NOT SILENT. Withholding the ask without saying why produces a feature full of
@@ -480,6 +492,7 @@ export function actsFor(corpus: Corpus): ActCount {
   const { inherited, reach } = resolveRules(corpus);
   const acceptable: string[] = [];
   const behaviours: string[] = [];
+  const written: string[] = [];
   const gated: string[] = [];
   const rulings: ActCount["rulings"] = [];
   const deferred: ActCount["deferred"] = [];
@@ -574,7 +587,13 @@ export function actsFor(corpus: Corpus): ActCount {
            * has confirmed must not put its details in it. The sentences are still SHOWN; what is
            * withheld is the ask.
            */
-          if (anything && contextFor(scope.id).ok) for (const r of refs) if (!isAccepted(r)) behaviours.push(r);
+          if (anything)
+            for (const r of refs)
+              if (!isAccepted(r)) {
+                written.push(r);
+                // Offered only once the feature's purpose is agreed — see contextAgreed above.
+                if (contextFor(scope.id).ok) behaviours.push(r);
+              }
         }
         if (k === "stated" || k === "out_of_scope") continue;
         settled = false;
@@ -634,6 +653,7 @@ export function actsFor(corpus: Corpus): ActCount {
   return {
     acceptable,
     behaviours,
+    written,
     ungrounded: corpus.scopes
       .filter(({ scope }) => scope.exchanges.length && !contextFor(scope.id).ok)
       .map(({ scope }) => ({ scope: scope.id, why: contextFor(scope.id).why })),

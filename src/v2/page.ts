@@ -1623,9 +1623,9 @@ function renderNav(
        */
       const ids = descendants(corpus, scope.id);
       const below = ids.filter((i) => i !== scope.id);
-      const toRead = acts.behaviours.filter((b) => b.startsWith(`${scope.id}#`)).length + rulesOwnedBy(scope.id, false);
+      const toRead = acts.written.filter((b) => b.startsWith(`${scope.id}#`)).length + rulesOwnedBy(scope.id, false);
       const ready = acts.acceptable.filter((r) => r.startsWith(`${scope.id}#`)).length;
-      const under = acts.behaviours.filter((b) => below.some((i) => b.startsWith(`${i}#`))).length;
+      const under = acts.written.filter((b) => below.some((i) => b.startsWith(`${i}#`))).length;
       const label = line(scope.title || scope.id);
       /**
        * ⛔ A SINGLE PAGE IS NAVIGABLE BY ANCHOR, AND THIS RENDERED SIXTEEN DEAD LABELS INSTEAD.
@@ -1727,7 +1727,12 @@ function renderNav(
           (n, d) => n + (corpus.scopes.find((y) => y.scope.id === d)?.scope.views.length ?? 0),
           0
         );
-        const toRead = acts.behaviours.filter((b: string) => under.some((u) => b.startsWith(`${u}#`))).length;
+        /**
+         * ⛔ `written`, NOT `behaviours`. The chip says how much is here; whether it is currently
+         * askable is the purpose gate's business and has its own line. Reading `behaviours` made a
+         * hundred written sentences render as no chip at all.
+         */
+        const toRead = acts.written.filter((b: string) => under.some((u) => b.startsWith(`${u}#`))).length;
         return { id: x.scope.id, label: line(x.scope.title || x.scope.id), screens, toRead };
       })
       .sort((a, b) => b.screens - a.screens)

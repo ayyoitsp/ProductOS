@@ -569,13 +569,21 @@ test("every section says how much it is holding", () => {
    * each row looked like it held something, and what it held was its children.
    */
   const homes = ruleHomes(corpus);
+  /**
+   * ⛔ `written`, NOT `behaviours` — the chips count what is HERE, not what is currently askable.
+   *
+   * The purpose gate withholds a feature's behaviours until somebody agrees what it is for, and
+   * every count on the page was reading the offered list — so a product with a hundred written
+   * sentences rendered with no chip at all. Peter: "we lost our menu chips showing # of questions."
+   * How much is askable is a different fact and has its own line.
+   */
   for (const { scope } of corpus.scopes) {
     if (scope.id === root) continue;
     const ownStated = [...homes].filter(([id, home]) => home === scope.id).map(([id]) => id)
       .filter((id) => !corpus.rules.find((r) => r.rule.id === id)?.rule.standing || corpus.rules.find((r) => r.rule.id === id)?.rule.standing?.kind === "stated").length;
-    const own = acts.behaviours.filter((b) => b.startsWith(`${scope.id}#`)).length + ownStated;
+    const own = acts.written.filter((b) => b.startsWith(`${scope.id}#`)).length + ownStated;
     const below = descendants(corpus, scope.id).filter((d) => d !== scope.id);
-    const under = acts.behaviours.filter((b) => below.some((u) => b.startsWith(`${u}#`))).length;
+    const under = acts.written.filter((b) => below.some((u) => b.startsWith(`${u}#`))).length;
     const row = new RegExp(`data-goto="${scope.id}"[^]*?</li>`).exec(nav);
     if (!own && !under) continue;
     assert.ok(row, `${scope.id} has no row`);
@@ -593,7 +601,7 @@ test("every section says how much it is holding", () => {
    */
   for (const half of corpus.scopes.filter((s) => s.scope.in === root)) {
     const under = descendants(corpus, half.scope.id);
-    const n = acts.behaviours.filter((b) => under.some((u) => b.startsWith(`${u}#`))).length;
+    const n = acts.written.filter((b) => under.some((u) => b.startsWith(`${u}#`))).length;
     if (n)
       assert.match(
         html,
@@ -990,4 +998,35 @@ test("a group renders how the part of the product beneath it fits together", () 
     const own = /<section class="group-ux">/.test(leafHtml.slice(leafHtml.indexOf(`data-view="${leaf.scope.id}"`)));
     assert.equal(own, false, "a leaf feature renders a group map of itself");
   }
+});
+
+test("a chip counts what is there, not what is currently askable", () => {
+  /**
+   * ⛔ Peter: "we lost our menu chips showing # of questions."
+   *
+   * The purpose gate withholds a feature's behaviours until somebody agrees what it is for, which
+   * is right — and every count on the page read the offered list, so the moment the gate landed a
+   * product with a hundred written sentences rendered as "Product" with no chip at all. The work
+   * did not go anywhere; the number describing it started describing something else.
+   *
+   * Two facts, two numbers, and neither pretends to be the other: how much is HERE, and how much is
+   * askable right now.
+   */
+  const bare = structuredClone(corpus);
+  // Nothing has agreed any purpose, so nothing is offered — and the chips must still count.
+  const a = actsFor(bare);
+  assert.equal(a.behaviours.length, 0, "the seed offers behaviours with no purpose agreed");
+  assert.ok(a.written.length > 0, "nothing is counted as written, so no chip can have a number");
+
+  const root = bare.scopes.find((s) => !s.scope.in).scope.id;
+  const html = renderScopePage(bare, root, { linkBase: "/v2" });
+  const pills = [...html.matchAll(/class="pill[^"]*">(\d+)</g)].map((m) => Number(m[1]));
+  assert.ok(pills.length > 0, "no chip carries a number while nothing is offered");
+  assert.ok(
+    pills.some((n) => n > 0),
+    `every chip reads zero while ${a.written.length} sentences are written: ${JSON.stringify(pills)}`
+  );
+
+  // ⛔ And the withholding is still SAID, on its own line, rather than being implied by a blank.
+  assert.ok(a.ungrounded.length > 0, "nothing reports which features are waiting on their purpose");
 });
