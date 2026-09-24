@@ -15,6 +15,7 @@ import { appStyleFor } from "../../v2/appcss.js";
 import { watchCorpus } from "../../v2/watch.js";
 import { drawFromRoute } from "../../v2/draw.js";
 import { AGENTS, CASCADE, KINDS } from "../../core/jobs.js";
+import { agentsDoc } from "../../core/agents-doc.js";
 import { readChanges, writeChange, nextId, verify, missing } from "../../core/change.js";
 import { writeSketchHtml } from "../../v2/draw-write.js";
 import { HOW } from "../../v2/record.js";
@@ -965,7 +966,20 @@ export function v2Command(): Command {
     .command("agents")
     .description("The reviewers: what each one asks, why it exists, and which model runs it")
     .option("--at <dir>", "corpus directory, for the model assignments", "v2")
-    .action((o: { at?: string }) => {
+    .option("--out <file>", "write the whole tree as a document instead of printing a summary")
+    .action((o: { at?: string; out?: string }) => {
+      /**
+       * ⛔ THE DOC IS GENERATED. Everything in it is already data in the registry, so a typed copy
+       * would be a second record of one fact — and the typed one wins, because it is the one people
+       * read, until it is wrong and nothing detects it.
+       */
+      if (o.out) {
+        fs.mkdirSync(path.dirname(path.resolve(o.out)), { recursive: true });
+        fs.writeFileSync(path.resolve(o.out), agentsDoc());
+        console.log(pc.green("✓"), `${o.out}`);
+        console.log(pc.dim("  generated from src/core/jobs.ts — a test fails if the committed file drifts"));
+        return;
+      }
       let cfg: ReturnType<typeof readConfig> | undefined;
       try {
         cfg = readConfig(resolvePathsOrThrow(at(o, false)));

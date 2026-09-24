@@ -14,6 +14,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import fs from "node:fs";
 import { AGENTS, AREAS, LAYERS, CASCADE, KINDS, CAPABILITIES, areaOf, unwritten } from "../dist/core/jobs.js";
+import { agentsDoc } from "../dist/core/agents-doc.js";
 
 test("every layer is somebody's territory, exactly once", () => {
   for (const layer of LAYERS) {
@@ -152,4 +153,37 @@ test("the host's frontmatter is generated, and a judge never gets a writing tool
   for (const t of mapped)
     assert.ok(!/^(Write|Edit|NotebookEdit|MultiEdit)$/.test(t), `a capability maps to "${t}", which writes`);
   assert.match(map[1], /"write-corpus":\s*\[\]/, "write-corpus gained a mapping — a judge could now be handed it");
+});
+
+test("the agent tree document is generated, and has not drifted from the registry", () => {
+  /**
+   * ⛔ Peter: "let's keep a dedicated doc showing what agents we have."
+   *
+   * A dedicated doc is the right thing to want and the wrong thing to type. Everything in it is
+   * already data — what each agent asks, why it exists, what it reads, what it may never do — so a
+   * typed copy is a second record of one fact, and the typed one wins because it is the one people
+   * read. Until it is wrong, which nothing detects.
+   *
+   * This is the same rule the framework applies to screens, turned on its own documentation: if it
+   * can be generated, generate it, and fail the build when the committed copy disagrees.
+   */
+  const committed = fs.readFileSync("AGENTS.md", "utf-8");
+  assert.equal(
+    committed,
+    agentsDoc(),
+    "AGENTS.md disagrees with src/core/jobs.ts — regenerate it with `productos v2 agents --out AGENTS.md` rather than editing it"
+  );
+
+  // ⛔ And it says it is generated, at the top, where somebody about to edit it will look.
+  assert.match(committed.split("\n").slice(0, 6).join("\n"), /Generated from `src\/core\/jobs\.ts`/);
+
+  // Every agent reaches the page, with the part that makes it useful: why it exists.
+  for (const a of AGENTS) {
+    assert.ok(committed.includes(`### \`${a.name}\``), `${a.name} is not in the document`);
+    assert.ok(committed.includes(a.asks), `${a.name}'s question is not in the document`);
+    assert.ok(committed.includes(a.because.slice(0, 60)), `${a.name} does not say what failure it exists to catch`);
+  }
+  // ⛔ And the ones with no prompt are named as such rather than listed as though they run.
+  for (const a of AGENTS.filter((x) => !x.prompt))
+    assert.match(committed, new RegExp(`\`${a.name}\`.{0,40}no prompt written`, "s"), `${a.name} is listed as though it runs`);
 });

@@ -82,6 +82,21 @@ productos v2 draw "<scope>#<view>" --route <component> --into <corpus>
 
 ---
 
+## The reviewers
+
+`AGENTS.md` — **generated from `src/core/jobs.ts`**, never edited. Seven reviewers, each asking one
+question about the whole system; four of them exist because of failures in this repo that no
+file-scoped review could have seen.
+
+```bash
+productos v2 agents                    # what each asks, and which model runs it here
+productos v2 agents --out AGENTS.md    # regenerate the document
+```
+
+⛔ **Every one judges and none may write** — enforced at install, because an agent's tools are
+derived from the capabilities it declares and no capability a judge can declare maps to a writing
+tool. ⛔ **And none names a model**: that is the project's choice, per agent, in its own config.
+
 ## ⛔ You cannot review your own explanations — run the newcomer
 
 By the time you have written a corpus you know what it meant to say, so your reading of
