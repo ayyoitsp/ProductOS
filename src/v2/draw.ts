@@ -83,6 +83,8 @@ interface Ctx {
   unresolved: string[];
   /** Sample values for a placeholder, by the identifier that produced it. */
   sample: (hint: string) => string | undefined;
+  /** The file being read, so a co-located component resolves before a same-named one elsewhere. */
+  sameFile?: string;
   /**
    * ⛔ THE CALL SITE'S PROPS, WITHOUT WHICH INLINING IS POINTLESS.
    *
@@ -98,18 +100,37 @@ interface Ctx {
 function returnedJsx(file: string, name?: string): ts.Node | undefined {
   const src = ts.createSourceFile(file, fs.readFileSync(file, "utf-8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   let found: ts.Node | undefined;
+  /**
+   * ⛔ THE BIGGEST RETURN, NOT THE FIRST.
+   *
+   * Taking the first `return` that holds JSX gets the guard: real components open with
+   * `if (isPending) return <Skeleton/>` or `if (!data) return <Empty/>`, so the drawing came out as
+   * a loading skeleton. Three screens regenerated to 101, 111 and 233 bytes — smaller and emptier
+   * than the hand-typed ones they replaced, which is a generator producing a worse artefact while
+   * reporting success.
+   *
+   * The main render is the largest by source span. That is a heuristic and it is a good one: a
+   * guard is a line, a screen is a page. Where it is wrong the drawing is visibly a guard, which a
+   * reviewer can see — unlike the silent version, where it looked like the screen.
+   */
   const fromBody = (body: ts.Node): ts.Node | undefined => {
-    let jsx: ts.Node | undefined;
+    let best: ts.Node | undefined;
+    let widest = 0;
     const seek = (n: ts.Node): void => {
-      if (jsx) return;
       if (ts.isReturnStatement(n) && n.expression) {
         const e = ts.isParenthesizedExpression(n.expression) ? n.expression.expression : n.expression;
-        if (ts.isJsxElement(e) || ts.isJsxSelfClosingElement(e) || ts.isJsxFragment(e)) jsx = e;
+        if (ts.isJsxElement(e) || ts.isJsxSelfClosingElement(e) || ts.isJsxFragment(e)) {
+          const span = e.getEnd() - e.getStart();
+          if (span > widest) {
+            widest = span;
+            best = e;
+          }
+        }
       }
       ts.forEachChild(n, seek);
     };
     seek(body);
-    return jsx;
+    return best;
   };
   /**
    * ⛔ A NAMED EXPORT IS AS ORDINARY AS A DEFAULT ONE. Looking only for `export default` refused
@@ -201,7 +222,13 @@ function emit(node: ts.Node, ctx: Ctx): string {
 
   // A component of the app's own: inline what it returns, one level at a time.
   if (/^[A-Z]/.test(tag)) {
-    const file = ctx.resolve(tag);
+    /**
+     * ⛔ THE SAME FILE FIRST. A component directory is full of files whose exported component is a
+     * thin wrapper over a co-located one — `export default function X() { return <XCard/> }` — and
+     * resolving only by filename missed every one of them. `FannieMaeProgramSettings` is 1,162
+     * lines and generated to 111 bytes: a wrapper, and an unresolved div where the screen was.
+     */
+    const file = ctx.sameFile && returnedJsx(ctx.sameFile, tag) ? ctx.sameFile : ctx.resolve(tag);
     if (file && ctx.depth < 4) {
       ctx.from.add(path.basename(file));
       const inner = returnedJsx(file, tag) ?? returnedJsx(file);
@@ -220,7 +247,7 @@ function emit(node: ts.Node, ctx: Ctx): string {
               bound.set(name, emit(v, { ...ctx, depth: ctx.depth + 1 }));
           }
         }
-        const sub: Ctx = { ...ctx, depth: ctx.depth + 1, props: bound };
+        const sub: Ctx = { ...ctx, depth: ctx.depth + 1, props: bound, sameFile: file };
         const body = emit(inner, sub);
         // `{children}` inside the primitive is where this element's own children belong.
         return body.includes("<!--children-->") ? body.replace("<!--children-->", children) : body + children;
@@ -289,6 +316,7 @@ export function drawFromRoute(routeFile: string, opts: DrawOptions = {}): DrawRe
   }
   const ctx: Ctx = {
     resolve: (name) => index.get(name),
+    sameFile: routeFile,
     depth: 0,
     from: new Set([path.basename(routeFile)]),
     unresolved: [],

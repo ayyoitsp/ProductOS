@@ -193,6 +193,32 @@ export function migrate(v1Root: string, outDir: string, at: string): Migration {
   const carried: Carried = { scopes: 0, exchanges: 0, views: 0, criteria: 0, answered: 0, blank: 0 };
   const taken = new Map<string, string>();
 
+  /**
+   * ⛔ V1 HAS NO WAY TO SAY WHAT A FEATURE IS FOR, AND THE GATE THAT NEEDS IT REFUSES EVERYTHING.
+   *
+   * `happy_path` is the context every other judgement in a feature rests on, and a feature without
+   * one offers none of its behaviours — deliberately, because agreeing to a detail of an
+   * unconfirmed purpose is a stamp spent twice. A migrated corpus therefore arrives reviewable in
+   * name only: measured on a real 34-scope corpus, nineteen features waiting on a purpose, zero
+   * behaviours to read, zero exchanges acceptable.
+   *
+   * ⛔ THE MIGRATOR MUST NOT INVENT ONE. What a feature is for is a product judgement; a generator
+   * writing it would be manufacturing the one sentence the whole gate exists to get agreed. What it
+   * can do — and did not — is say out loud that the source expresses nothing of the kind, so the
+   * silence is a recorded refusal rather than a corpus that looks migrated and reviews as empty.
+   */
+  const sayNoPurpose = (id: string, from: string): void => {
+    refused.push({
+      what: `${id} — what it is for`,
+      from,
+      why:
+        "v1 has no way to say what a feature is for, so nothing was carried. Until somebody writes its " +
+        "happy_path — what gets accomplished, what the person arrives with, what they leave with, and the " +
+        "screens in order — none of its behaviours are offered for agreement, because a detail of an " +
+        "unconfirmed purpose is a stamp about to be spent twice",
+    });
+  };
+
   // Pass one: every container's scope id, so `depends_on` and `leads_to` can resolve.
   const idOf = new Map<string, string>();
   const parentsOf = new Map<string, string[]>();
@@ -613,6 +639,12 @@ export function migrate(v1Root: string, outDir: string, at: string): Migration {
      * pointing at capabilities whose asks could not be carried — the migration manufacturing findings
      * out of its own omissions, which is the worst kind of noise: it looks like corpus trouble.
      */
+    /**
+     * ⛔ Carried where the source has one, and reported where it does not. Only the second half
+     * existed, which made the absence honest and the presence impossible.
+     */
+    const purpose = v1.happy_path;
+    if (!purpose && exchanges.length) sayNoPurpose(id, d.filepath);
     pending.push({
       id,
       parents,
@@ -623,6 +655,7 @@ export function migrate(v1Root: string, outDir: string, at: string): Migration {
         was: v1.id,
         exists: v1.status === "planned" ? "intended" : "kept",
         dependsOn,
+        ...(purpose ? { happy_path: purpose } : {}),
         ...(views.length ? { views } : {}),
         ...(exchanges.length ? { exchanges } : {}),
       },

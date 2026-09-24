@@ -605,6 +605,26 @@ const FeatureFrontmatterRaw = z.object({
       })
     )
     .default([]),
+  /**
+   * What this feature is FOR — the thing every other judgement in it rests on.
+   *
+   * ⛔ ADDED TO V1 SO IT CAN BE CARRIED ACROSS, not because v1 needs a new concept. The Exchange
+   * model gates a feature's behaviours on its purpose being agreed, and v1 had no way to say one —
+   * so a migrated corpus arrived with nineteen features waiting on a sentence that could not exist
+   * in the source. The migrator must not invent it; the source had to be able to hold it.
+   *
+   * Shape matches the Exchange model's `happy_path` exactly, because a field that means two
+   * slightly different things either side of a migration is a field that loses its meaning in it.
+   */
+  happy_path: z
+    .object({
+      accomplishes: z.string().min(20),
+      brings: z.string().min(3),
+      ends_with: z.string().min(10),
+      through: z.array(z.string()).default([]),
+      not: z.string().optional(),
+    })
+    .optional(),
   suspected_depends_on: z
     .array(
       z.object({
