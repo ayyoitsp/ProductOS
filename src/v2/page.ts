@@ -19,6 +19,7 @@ import { resolveRules, type Corpus } from "./load.js";
 import { SLOTS, SLOT_ASKS_SHORT, statements, saysText, type SlotName, type Scope, type View, type Part, type Says } from "./schema.js";
 import { gridFor, gateFor, actsFor, ruleHomes, type Grid, type Cell } from "./grid.js";
 import { stampFor } from "./stamp.js";
+import { wireParts } from "./wire.js";
 import { questionsFor, descendants, type Question } from "./settle.js";
 import { decisionsOn, decisionsUnder, howItWasDecided, type Decision } from "./record.js";
 
@@ -180,7 +181,15 @@ function renderQuestion(q: Question, i: number, past: Decision[], ctx: Ctx): str
                 ? `<p class="opt-flag">answers only the part in question — a ruling here becomes the whole sentence, so this one has to be written out</p>`
                 : ""
             }
-            <button class="act" data-act="rule" data-ref="${esc(q.ref)}" data-pick="${n + 1}" data-q="${id}">
+            <button class="act" data-act="rule" data-ref="${esc(q.ref)}" data-pick="${n + 1}" data-q="${id}"${
+              /**
+               * ⛔ A RULE-GRAINED QUESTION IS THE COMMON CASE IN THE QUEUE AND IT WAS THE BROKEN ONE.
+               * An org-wide ruling owes what would show it holding; a slot's demonstration is a
+               * criterion on its exchange and is not asked for here. The ref tells them apart: a
+               * rule id carries no `#`.
+               */
+              q.ref.includes("#") ? "" : ` data-owes="then"`
+            }>
               This one
             </button>
           </div>
@@ -567,75 +576,15 @@ function liveSketch(view: View, matched: Map<string, boolean>): string {
  * than leave it to a text match, and one that does is exempt from all of this.
  */
 function wireHtml(view: View, matched: Map<string, boolean>): string {
-  let html = view.sketch_html!;
-
-  // Anything the author already labelled is done: mark it wired and give it the class.
-  for (const pt of view.parts) {
-    const hasAttr = new RegExp(`data-part\\s*=\\s*["']${pt.id}["']`).test(html);
-    if (!hasAttr) continue;
-    matched.set(pt.id, true);
-    html = html.replace(
-      new RegExp(`(<[a-zA-Z][^>]*data-part\\s*=\\s*["']${pt.id}["'][^>]*)>`),
-      (_m, open: string) => `${open.includes("class=") ? open.replace(/class\s*=\s*"([^"]*)"/, `class="$1 pt pt-${pt.role}"`) : `${open} class="pt pt-${pt.role}"`}${pt.leads_to ? ` data-goes="${esc(pt.leads_to)}"` : ""}>`
-    );
-  }
-
   /**
-   * ⛔ AN INPUT CARRIES ITS NAME IN AN ATTRIBUTE, NOT IN TEXT.
-   *
-   * The deals list wires its New Deal button, its stage filter and its clear button by text and
-   * leaves the search field unwired — because "Search deals" lives in a `placeholder`. Every form
-   * on every screen has that shape, so text matching alone can never point at an entry control,
-   * which is most of what a person actually touches.
-   *
-   * Narrow on purpose: the three attributes that NAME a control to a person, on elements that take
-   * input. Matching any attribute would wire a class name or a test id.
+   * ⛔ THE FALLBACK, NOT THE MECHANISM. `draw` writes `data-part` into the corpus at generation
+   * time, so a generated drawing arrives already wired. This runs for drawings written before the
+   * generator existed, which carry no attribute and would otherwise be unclickable — and it calls
+   * the same function, so the two cannot drift.
    */
-  for (const pt of view.parts.filter((x) => !matched.get(x.id))) {
-    const label = esc(pt.label ?? pt.id);
-    const named = new RegExp(
-      `<(input|textarea|select|button)\\b([^>]*\\b(?:placeholder|aria-label|title)\\s*=\\s*["'][^"']*${label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[^"']*["'][^>]*)>`,
-      "i"
-    );
-    const hit = named.exec(html);
-    if (!hit) continue;
-    matched.set(pt.id, true);
-    const goes = pt.leads_to ? ` data-goes="${esc(pt.leads_to)}"` : "";
-    const attrs = hit[2]!;
-    const withClass = /class\s*=\s*"([^"]*)"/.test(attrs)
-      ? attrs.replace(/class\s*=\s*"([^"]*)"/, `class="$1 pt pt-${pt.role}"`)
-      : `${attrs} class="pt pt-${pt.role}"`;
-    html = html.replace(hit[0], `<${hit[1]}${withClass} data-part="${esc(pt.id)}"${goes}>`);
-  }
-
-  const byLength = [...view.parts]
-    .filter((pt) => !matched.get(pt.id))
-    .sort((a, b) => (b.label ?? b.id).length - (a.label ?? a.id).length);
-
-  for (const pt of byLength) {
-    const label = pt.label ?? pt.id;
-    if (!label) continue;
-    const probes = [label, ...label.split(/\s+/).slice(0, 1).filter((w) => w.length >= 5)];
-    let done = false;
-    for (const probe of probes) {
-      if (done) break;
-      const needle = esc(probe);
-      // Scan only the text between tags, and only the first free occurrence.
-      html = html.replace(/>([^<]+)</g, (whole: string, text: string) => {
-        if (done) return whole;
-        const at = text.indexOf(needle);
-        if (at < 0) return whole;
-        const before = text[at - 1] ?? "";
-        const after = text[at + needle.length] ?? "";
-        if (/[a-z0-9]/i.test(before) || /[a-z0-9]/i.test(after)) return whole;
-        done = true;
-        matched.set(pt.id, true);
-        const goes = pt.leads_to ? ` data-goes="${esc(pt.leads_to)}"` : "";
-        return `>${text.slice(0, at)}<span class="pt pt-${esc(pt.role)}" data-part="${esc(pt.id)}"${goes} role="button" tabindex="0">${needle}</span>${text.slice(at + needle.length)}<`;
-      });
-    }
-  }
-  return html;
+  const wired = wireParts(view.sketch_html!, view.parts);
+  for (const id of wired.matched) matched.set(id, true);
+  return wired.html;
 }
 
 /** Everything the corpus states at one part of one screen, and the slots that say nothing. */
@@ -957,7 +906,7 @@ function renderBehaviours(
         const sref = shown.length > 1 && said.id !== "it" ? `${ref}#${slot}#${said.id}` : `${ref}#${slot}`;
         const past = decisionsOn(corpus, sref);
         cards.push(`
-        <article class="beh" id="${anchorOf(sref)}" data-beh="${esc(sref)}" data-ref="${esc(sref)}" data-label="${esc(`${SLOT_ASKS_SHORT[slot] ?? slot} · ${plain(ex.title)}`)}">
+        <article class="beh" id="beh-${slug(sref)}" data-beh="${esc(sref)}" data-ref="${esc(sref)}" data-label="${esc(`${SLOT_ASKS_SHORT[slot] ?? slot} · ${plain(ex.title)}`)}">
           <div class="beh-says">${shown.length > 1 ? line(said.says) : says}</div>
           <p class="beh-where">
             ${esc(SLOT_ASKS_SHORT[slot] ?? slot)} · on ${refLink(ref, ctx, ex.title)}${
@@ -1365,7 +1314,7 @@ function renderGroupRules(corpus: Corpus, scopeId: string, ctx: Ctx, homes: Map<
               ? `<p class="owes">Nobody has answered this. Answering it once settles it everywhere it reaches.</p>`
               : `<footer class="beh-acts">
                    <button class="act" data-act="accept" data-ref="${esc(r.rule.id)}">That is right, everywhere</button>
-                   <button class="act ghost" data-act="say" data-ref="${esc(r.rule.id)}">Not quite — reword it</button>
+                   <button class="act ghost" data-act="say" data-ref="${esc(r.rule.id)}" data-owes="then">Not quite — reword it</button>
                    <button class="act ghost" data-act="waive" data-ref="${esc(r.rule.id)}">Not ours to say</button>
                  </footer>`
           }
@@ -1444,7 +1393,9 @@ function renderGrid(g: Grid, ctx: Ctx): string {
               .sort((a, b) => (g.number.get(a[0]) ?? 0) - (g.number.get(b[0]) ?? 0))
               .map(
                 ([id, r]) =>
-                  `<p id="${anchorOf(id)}"><span class="rn">R${g.number.get(id)}</span> <code>${esc(id)}</code>
+                  /* ⛔ Scoped per view: one rule is listed inside every feature that inherits it,
+                     so a bare rule id here is the same id in as many places as it reaches. */
+                  `<p id="rl-${slug(g.scope)}-${slug(id)}"><span class="rn">R${g.number.get(id)}</span> <code>${esc(id)}</code>
                     <span class="fills">${esc(r.fills.join(" + "))}</span><br>${line(r.statement)}</p>`
               )
               .join("")}</div>`
@@ -2194,6 +2145,15 @@ function liveScript(opts: PageOptions): string {
   const mode = opts.records ?? "http";
   return `<script>
 const OWED = ${JSON.stringify(OWED)};
+/** Fields a particular target owes on top of its act's own. */
+const EXTRA = ${JSON.stringify({
+  then: {
+    name: "then",
+    label: "What would show this holding — an org-wide sentence owes its own demonstration",
+    floor: 15,
+    long: true,
+  },
+})};
 const BY = ${JSON.stringify(opts.by ?? "")};
 const MODE = ${JSON.stringify(mode)};
 
@@ -2439,7 +2399,20 @@ document.addEventListener("click", (ev) => {
   if (!b || b.disabled) return;
   const act = b.dataset.act;
   const ref = b.dataset.ref;
-  const fields = OWED[act] || [];
+  let fields = OWED[act] || [];
+  /**
+   * ⛔ A RULING ON AN ORG-WIDE RULE OWES A DEMONSTRATION, AND THE PAGE HAD NO FIELD FOR IT.
+   *
+   * Every "decide this" press on a rule was refused — "needs what would show this holding" — with
+   * nothing on the page that could satisfy it, so the only exit was hand-editing YAML. That is the
+   * shape this codebase has hit three times: a refusal printing a remedy the tool then rejects,
+   * this time on the surface a person actually reviews in.
+   *
+   * The button says what its target owes, because the button is the only thing that knows whether
+   * the ref is a rule.
+   */
+  const owes = (b.dataset.owes || "").split(",").map((x) => x.trim()).filter(Boolean);
+  if (owes.length) fields = [...fields, ...owes.map((name) => (EXTRA[name] ? EXTRA[name] : { name, label: name, long: true }))];
   const host = b.closest(".opt-body") || b.closest("footer") || b.parentElement;
   if (host.querySelector("form.act-form")) { host.querySelector("form.act-form").remove(); return; }
 

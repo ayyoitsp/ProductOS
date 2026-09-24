@@ -1040,7 +1040,20 @@ export function v2Command(): Command {
         console.error(pc.red("✗"), `no component at ${route}`);
         process.exit(1);
       }
-      const drawn = drawFromRoute(route, { componentsDir });
+      /**
+       * ⛔ THE PART LIST GOES IN. The generator stamps `data-part` itself now — the skill used to
+       * tell the author to add it afterwards, which is an edit on generator output in a field the
+       * next run discards.
+       */
+      let parts: Array<{ id: string; role: string; label?: string; leads_to?: string; decorative?: boolean }> = [];
+      try {
+        const c = loadCorpus(into);
+        const sc = c.scopes.find((x) => x.scope.id === scopeId || x.scope.id === scopeId.split("/").pop())?.scope;
+        parts = sc?.views.find((v) => v.id === viewId)?.parts ?? [];
+      } catch {
+        parts = [];
+      }
+      const drawn = drawFromRoute(route, { componentsDir, parts });
       if (!drawn.html.trim()) {
         console.error(pc.red("✗"), "nothing could be read out of that component");
         for (const u of drawn.unresolved) console.error(pc.dim(`  ${u}`));
@@ -1054,6 +1067,11 @@ export function v2Command(): Command {
        * rather than a guess, and the count belongs in the report — a drawing full of placeholders
        * is the thin drawing again, and the only honest thing is to say so at the moment it is made.
        */
+      if (parts.length)
+        console.log(
+          pc.dim(`  wired ${parts.length - drawn.undrawn.length} of ${parts.length} parts`) +
+            (drawn.undrawn.length ? pc.yellow(`  — the drawing does not show ${drawn.undrawn.join(", ")}`) : "")
+        );
       if (drawn.unresolved.length) {
         console.log(pc.yellow("!"), `${drawn.unresolved.length} thing${drawn.unresolved.length === 1 ? "" : "s"} it could not read, left marked in the drawing`);
         for (const u of drawn.unresolved.slice(0, 8)) console.log(pc.dim(`    ${u}`));

@@ -61,7 +61,12 @@ was: cre/deals/deal-list      # where it came from, when a migration or a move r
 tags: [cre, table]            # free labels a rule's selector can match on
 depends_on: [deal-pipeline]   # scopes this one cannot be built without
 terms:                        # the words THIS scope defines, and a rule may select on
-  deal: A financing request against one property.
+  deal:
+    means: A financing request against one property.     # ⛔ an object, not a string
+    closed: false             # true = the members below are the only allowed values
+    members: []               # the values, when closed
+    set_outside: false        # something outside this product decides it
+    read_outside: false       # something outside this product reads it
 views:                        # the screens. See "Screens" below
   - id: deals-list
     title: CRE Deals
@@ -305,6 +310,9 @@ still means it.
 is copy-onto-every-feature wearing a selector's clothes, which `check` flags. Reach for a dimension
 that describes WHY those exchanges are alike (`term:`, `part_role:`, `asked_by:`) before naming them.
 
+⛔ **A rule owes at least one conformance criterion** — see below. Without one the schema refuses
+it outright, and a rule with no demonstration is an aspiration that fills a slot and shows nothing.
+
 `mode` has no default on purpose. A `supplies` rule read as `constrains` bolts a requirement
 onto stated answers; a `constrains` rule read as `supplies` governs almost nothing, because
 any exchange that states its answer escapes it.
@@ -351,6 +359,132 @@ answer.
 **Where a rule lands is derived, not declared twice.** A rule belongs to the narrowest scope
 containing everything its selector reaches. Reach the whole product and it is genuinely
 org-wide — reported once, in the shared queue, not on every row.
+
+### ⛔ Criteria — what would show a sentence holding
+
+**The concept these instructions left out entirely, for as long as there have been instructions.** A
+reviewer caught it: `criteria` appeared zero times here while the schema, the derivation, the
+generator, the page, the packet and eight checks all knew about it — so the rule example below was a
+parse refusal, and a session authoring from this file produced corpora where
+`nothing-demonstrates-this` fired on every stated slot.
+
+```yaml
+criteria:
+  - slot: answer                             # ⛔ which slot this demonstrates. Required
+    of: a-deal-with-no-size-shows-a-dash     # which STATEMENT, where the slot says several things
+    given: a multifamily deal that has never been sized
+    when: the list renders with the loan column shown
+    then: its loan-amount cell reads as a dash
+    level: e2e                               # unit | integration | api | e2e
+    example: |                               # ⛔ an illustration, never the demonstration
+      Northgate, created today, never sized
+    steps: |                                 # freeform, where given/when/then is the wrong shape
+      1. open the list with no filters
+```
+
+⛔ **`then` is the whole thing.** `given` and `when` set it up; `then` is what somebody could observe
+being false. A criterion with no `then` demonstrates nothing.
+
+⛔ **`of:` when a slot says several things.** Without it a criterion attaches to the slot, and a slot
+saying eleven things reads as fully demonstrated by one criterion — the exact failure `of` exists to
+fix.
+
+⛔ **`example` is not evidence.** `check` refuses a slot whose only criterion leans on one: an
+example shows what it might look like; a demonstration says what must be true.
+
+### ⛔ A slot that says several things
+
+```yaml
+answer:
+  says:                                      # a list, when one slot carries several claims
+    - id: a-row-identifies-the-deal
+      says: Each row shows the deal's name, the sponsor and the property.
+    - id: a-deal-with-no-size-shows-a-dash
+      says: A deal that has not been sized shows a dash, not a zero.
+```
+
+One card per statement on the page, one acceptance each, and a criterion attaches to one by `of:`.
+⛔ **Flattening several claims into one sentence is the failure this replaced** — thirteen claims
+under one "That is right" is not review.
+
+### ⛔ Everything else a slot can carry
+
+```yaml
+answer:
+  says: …
+  within: 2 seconds          # ⛔ a budget a PERSON would notice, never an engineering target
+fails:
+  cannot_fail: true          # ⛔ a claim, not a blank: nothing here can fail
+again:
+  none: true                 # asked twice, nothing further happens
+refuses:
+  outcomes:                  # only on `refuses`
+    - name: not-yours
+      when: the reader is not on the deal
+      told: that it is not theirs to change
+      standing:              # a named case can itself be undecided
+        kind: open
+        asks: whether a manager may override
+```
+
+And a slot's standing, where it is not simply `stated`:
+
+```yaml
+standing:
+  kind: open                 # open | disputed | out_of_scope | stated
+  asks: what a reader without the permission is told    # required while it is open
+  targets: [money#spend#refuses]   # ⛔ required by `disputed` — what it contradicts
+  cost: what guessing wrong costs
+  asked_of: the Chief Underwriter
+  asked_at: 2026-09-01
+  raised_by: a-nolan
+  answered_by: peter         # filled in when it is settled
+  answered_at: 2026-09-24
+```
+
+⛔ **`asks` is required while a standing is open**, and `targets` while it is disputed — a dispute
+with nothing on the other side blocks a sentence nobody can find.
+
+### ⛔ Readings — what was actually observed. Never truth
+
+```yaml
+# readings/<something>.yaml
+observes: analysts re-type the sponsor name rather than search for it
+bears_on: deal-list#see-the-list            # the scope or exchange it speaks to
+basis:
+  kind: trial                               # trial | interview | support | telemetry | log | test | inspection
+  what: eleven sessions watched in September
+```
+
+A reading is evidence, not a claim: it is shown beside a question so whoever answers is answering
+against something. ⛔ **These instructions never named it either, so `readings/` stays empty in every
+corpus and the "what has actually been observed" half of every question is blank.**
+
+### ⛔ An exchange, with every key
+
+```yaml
+exchanges:
+  - id: see-the-list
+    title: Somebody looks at the deals list
+    asked_by: person                        # person | machinery
+    at: { view: deals-list, part: deal-row }
+    reads: [deal, stage]                    # terms this ask reads
+    changes: [deal]                         # terms it changes
+    excepts:
+      - rule: only-a-parent-moves-money
+        because: an administrator repairing a bad import is not the parent
+    when:                                   # machinery, instead of `at:`
+      triggered_by: a nightly job
+      cadence: daily
+      follows: money#record-earning         # ⛔ what sets this off, so the two are read together
+    exists: kept
+    slots:                                  # the eight, below
+      answer:
+        says: …
+    criteria: []                            # what would show them holding, above
+```
+
+And a rule carries `why` beside its statement — the argument, not a restatement of the sentence.
 
 ## Screens
 

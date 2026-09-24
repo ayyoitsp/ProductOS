@@ -77,7 +77,18 @@ test("no link on the page points at an anchor the page does not render", () => {
   for (const id of SCOPES) {
     for (const opts of [{}, { linkBase: "/v2" }]) {
       const html = renderScopePage(corpus, id, opts);
-      const ids = new Set([...html.matchAll(/\sid="([^"]+)"/g)].map((m) => m[1]));
+      /**
+   * ⛔ A SET COLLAPSES DUPLICATES, AND THAT IS WHAT THIS TEST WAS BLIND TO.
+   *
+   * Written to catch "a link and its target computing the anchor separately", it built a Set of
+   * every emitted id and asked only whether each href was in it — so nine elements sharing an id
+   * passed, and a "decide it" link resolved into a view the switcher marks hidden. One ref had two
+   * homes; the test could not see either.
+   */
+  const emitted = [...html.matchAll(/\sid="([^"]+)"/g)].map((m) => m[1]);
+  const twice = [...new Set(emitted.filter((x, i) => emitted.indexOf(x) !== i))];
+  assert.deepEqual(twice, [], `these ids are emitted more than once, so a link to one lands on whichever came first:\n  ${twice.join("\n  ")}`);
+  const ids = new Set(emitted);
       const dead = [...html.matchAll(/href="#([^"]+)"/g)].map((m) => m[1]).filter((a) => !ids.has(a));
       assert.deepEqual(dead, [], `${id}${opts.linkBase ? " (served)" : " (standalone)"}: dead anchors`);
     }
@@ -108,7 +119,18 @@ test("a slot answered at a rule is named, not linked", () => {
   const corpus = loadCorpus(dir);
   for (const id of corpus.scopes.map((s) => s.scope.id)) {
     const html = renderScopePage(corpus, id, { linkBase: "/v2" });
-    const ids = new Set([...html.matchAll(/\sid="([^"]+)"/g)].map((m) => m[1]));
+    /**
+   * ⛔ A SET COLLAPSES DUPLICATES, AND THAT IS WHAT THIS TEST WAS BLIND TO.
+   *
+   * Written to catch "a link and its target computing the anchor separately", it built a Set of
+   * every emitted id and asked only whether each href was in it — so nine elements sharing an id
+   * passed, and a "decide it" link resolved into a view the switcher marks hidden. One ref had two
+   * homes; the test could not see either.
+   */
+  const emitted = [...html.matchAll(/\sid="([^"]+)"/g)].map((m) => m[1]);
+  const twice = [...new Set(emitted.filter((x, i) => emitted.indexOf(x) !== i))];
+  assert.deepEqual(twice, [], `these ids are emitted more than once, so a link to one lands on whichever came first:\n  ${twice.join("\n  ")}`);
+  const ids = new Set(emitted);
     const dead = [...html.matchAll(/href="#([^"]+)"/g)].map((m) => m[1]).filter((a) => !ids.has(a));
     assert.deepEqual(dead, [], `${id}: linked at an anchor it never renders`);
   }
@@ -470,8 +492,14 @@ test("a feature offers its behaviours one at a time, and the slot machinery is f
         return f && (f.says || f.none || f.cannot_fail || f.outcomes?.length);
       }).map((sl) => `${scope.id}#${ex.id}#${sl}`)
     );
+    /**
+     * ⛔ `beh-`, NOT `at-`. A behaviour card and the question card for the same ref both claimed
+     * `at-<ref>`, so nine ids were emitted twice on one page and a "decide it" link resolved into a
+     * hidden view. The undecided slot's home is the question — it is the thing being jumped to — so
+     * the card took a prefix of its own.
+     */
     for (const ref of said)
-      assert.match(html, new RegExp(`id="at-${ref.replace(/[^a-z0-9]+/gi, "-")}"`), `${ref} is stated and not offered`);
+      assert.match(html, new RegExp(`id="beh-${ref.replace(/[^a-z0-9]+/gi, "-")}"`), `${ref} is stated and not offered`);
 
     /**
      * ⛔ ONE CARD PER STATEMENT, not per slot. A slot may say thirteen things; thirteen claims and

@@ -27,6 +27,10 @@ const scratch = () => {
   fs.mkdirSync(path.join(d, "test"), { recursive: true });
   fs.writeFileSync(path.join(d, "src/v2/schema.ts"), "export const X = { widget: 1 };\n");
   fs.writeFileSync(path.join(d, "src/v2/page.ts"), "function renderWidget() {}\n");
+  // ⛔ A concept reaches derive and generate too — it did not, and that is how happy_path skipped
+  // the migrator while the gate that needs it refused every behaviour in a real corpus.
+  fs.writeFileSync(path.join(d, "src/v2/grid.ts"), "const widgetGate = 1;\n");
+  fs.writeFileSync(path.join(d, "src/v2/migrate.ts"), "carry widgetGate across\n");
   fs.writeFileSync(path.join(d, "src/v2/check.ts"), 'kind: "no-widget-anywhere",\n');
   fs.writeFileSync(path.join(d, "skills/x/SKILL.md"), "author it as `widget:` in the file\n");
   fs.writeFileSync(path.join(d, "test/widget.test.mjs"), 'test("a widget is offered", () => {});\n');
@@ -50,6 +54,13 @@ test("the words are kept verbatim and the kind routes to the layers", () => {
   // A concept has to reach the layer that was skipped four times, and something that fails.
   assert.ok(CASCADE.concept.includes("instruct"), "a new concept can be finished without telling anyone to write it");
   assert.ok(CASCADE.concept.includes("pin"), "a new concept can be finished without pinning anything");
+  /**
+   * ⛔ AND `generate`. It was missing, so a concept was never required to reach the migrator —
+   * which is exactly how `happy_path` did not, while the gate that depends on it refused every
+   * behaviour in a 34-scope corpus: nineteen features waiting on a purpose, nothing offered.
+   */
+  assert.ok(CASCADE.concept.includes("generate"), "a new concept can be finished without reaching the generators");
+  assert.ok(CASCADE.concept.includes("derive"), "a new concept can be finished without reaching what is computed from it");
   for (const k of KINDS) assert.ok(CASCADE[k].length, `"${k}" routes nowhere`);
 });
 
@@ -65,7 +76,15 @@ test("a layer is verified by looking, and says what it looked for", () => {
   // Named and present: reached, with the search reported so a wrong pass is arguable.
   const named = ChangeRecord.parse({
     ...rec,
-    reaches: { model: "widget", surface: "renderWidget", check: "no-widget-anywhere", instruct: "widget:", pin: "a widget is offered" },
+    reaches: {
+      model: "widget",
+      derive: "widgetGate",
+      generate: "widgetGate",
+      surface: "renderWidget",
+      check: "no-widget-anywhere",
+      instruct: "widget:",
+      pin: "a widget is offered",
+    },
   });
   const full = verify(dir, named);
   assert.deepEqual(missing(full), [], JSON.stringify(full.filter((f) => !f.ok)));
@@ -89,7 +108,15 @@ test("a waived layer carries a reason, and waiving is not free", () => {
     said: "we need a widget",
     at: "2026-09-24",
     kind: "concept",
-    reaches: { model: "widget", surface: "renderWidget", check: "no-widget-anywhere", instruct: "widget:", pin: "nothing" },
+    reaches: {
+      model: "widget",
+      derive: "widgetGate",
+      generate: "widgetGate",
+      surface: "renderWidget",
+      check: "no-widget-anywhere",
+      instruct: "widget:",
+      pin: "nothing",
+    },
     waived: { pin: "this one is exercised by the browser drive, which lives outside the suite" },
   });
   const v = verify(dir, rec);

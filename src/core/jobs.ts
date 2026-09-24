@@ -106,7 +106,12 @@ export const AREAS: Area[] = [
       "make a field required on the day it lands — a schema change nobody can adopt gets reverted",
     ],
     owns: ["model"],
-    files: ["src/v2/schema.ts", "src/v2/load.ts", "src/v2/ref.ts"],
+    /**
+     * ⛔ `core/jobs.ts` AND `core/change.ts` ARE ON THE MAP TOO. They were not, and the coverage
+     * test that makes the map trustworthy only walks `src/v2` — so the file that implements the map
+     * was the one place it did not cover, which a reviewer caught immediately.
+     */
+    files: ["src/v2/schema.ts", "src/v2/load.ts", "src/v2/ref.ts", "src/core/jobs.ts", "src/core/change.ts"],
     needs: ["read-files", "run-commands", "search-files"],
   },
   {
@@ -142,7 +147,17 @@ export const AREAS: Area[] = [
       "show a filename, a table name or a branch name. The hosted service has no files",
     ],
     owns: ["surface"],
-    files: ["src/v2/page.ts", "src/v2/serve.ts", "src/v2/packet.ts", "src/v2/notes.ts", "src/v2/watch.ts", "src/v2/write.ts", "src/cli/commands/v2.ts", "src/mcp/v2-tools.ts"],
+    files: [
+      "src/v2/page.ts",
+      "src/v2/serve.ts",
+      "src/v2/packet.ts",
+      "src/v2/notes.ts",
+      "src/v2/watch.ts",
+      "src/v2/write.ts",
+      "src/v2/wire.ts",
+      "src/cli/commands/v2.ts",
+      "src/mcp/v2-tools.ts",
+    ],
     needs: ["read-files", "run-commands", "show-a-page"],
   },
   {
@@ -380,8 +395,23 @@ export function areaOf(layer: Layer): Area | undefined {
  * to feel finished.
  */
 export const CASCADE: Record<string, Layer[]> = {
-  /** A new thing the model can say. */
-  concept: ["model", "surface", "check", "instruct", "pin"],
+  /**
+   * A new thing the model can say.
+   *
+   * ⛔ `derive` AND `generate` WERE MISSING, AND THAT IS HOW `happy_path` SKIPPED THE MIGRATOR.
+   *
+   * The first cut routed a concept to model, surface, check, instruct and pin. So by construction a
+   * new field was never required to reach the migrator — and `happy_path` did not, while the gate
+   * that depends on it refuses to offer any behaviour in a scope without one. The result, measured
+   * on a real 34-scope corpus: nineteen features waiting on a purpose, zero behaviours offered,
+   * zero exchanges acceptable. A whole corpus made unreviewable by a routing table that could not
+   * ask the question.
+   *
+   * Every layer, for a concept. If one genuinely does not apply — plenty of concepts are nothing to
+   * do with a generator — waive it with a reason, which is a decision somebody can disagree with
+   * rather than a gap nobody was asked about.
+   */
+  concept: ["model", "derive", "generate", "surface", "check", "instruct", "pin"],
   /** A change to what is computed, inherited or gated. */
   derivation: ["derive", "surface", "check", "pin"],
   /** A change to how something is shown or offered. */

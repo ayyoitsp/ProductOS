@@ -22,6 +22,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import ts from "typescript";
+import { wireParts, type WireablePart } from "./wire.js";
 
 export interface DrawResult {
   html: string;
@@ -29,6 +30,8 @@ export interface DrawResult {
   from: string[];
   /** Expressions that could not be read, left as marked placeholders. */
   unresolved: string[];
+  /** Parts the corpus declares that the drawing does not show. */
+  undrawn: string[];
 }
 
 const VOID = new Set(["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"]);
@@ -256,6 +259,15 @@ function emit(node: ts.Node, ctx: Ctx): string {
 export interface DrawOptions {
   /** Where the app's components live, from `web.components_dir`. */
   componentsDir?: string;
+  /**
+   * The parts the corpus says this screen has.
+   *
+   * ⛔ WITHOUT THESE THE GENERATOR PRODUCES A DRAWING NOBODY CAN POINT AT, and the instruction that
+   * filled the gap was "say which element is which part, with data-part=" — an edit applied on top
+   * of generator output, in a field the next run overwrites. The part list is at the call site; the
+   * generator should use it rather than ask.
+   */
+  parts?: WireablePart[];
   /** Values for expressions, so a placeholder can be a real-looking figure where the author gave one. */
   sample?: Record<string, string>;
 }
@@ -288,9 +300,15 @@ export function drawFromRoute(routeFile: string, opts: DrawOptions = {}): DrawRe
     },
   };
   const jsx = returnedJsx(routeFile);
-  if (!jsx) return { html: "", from: [...ctx.from], unresolved: ["the route exports no component this can read"] };
-  const html = emit(jsx, ctx);
-  return { html, from: [...ctx.from], unresolved: [...new Set(ctx.unresolved)] };
+  if (!jsx) return { html: "", from: [...ctx.from], unresolved: ["the route exports no component this can read"], undrawn: [] };
+  const plain = emit(jsx, ctx);
+  const wired = opts.parts?.length ? wireParts(plain, opts.parts) : { html: plain, matched: new Set<string>() };
+  /**
+   * ⛔ A PART THE DRAWING DOES NOT SHOW IS REPORTED, NEVER DROPPED. Silently omitting it makes the
+   * drawing look complete while a control the corpus claims exists is nowhere on it.
+   */
+  const undrawn = (opts.parts ?? []).filter((p) => !wired.matched.has(p.id) && !p.decorative).map((p) => p.id);
+  return { html: wired.html, from: [...ctx.from], unresolved: [...new Set(ctx.unresolved)], undrawn };
 }
 
 /**

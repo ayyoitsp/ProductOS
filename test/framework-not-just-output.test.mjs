@@ -50,15 +50,58 @@ const NOT_AUTHORED = new Map([
 ]);
 
 /** Every object in the model an author actually writes by hand. */
-const AUTHORED_SHAPES = ["Scope", "Exchange", "View", "Part", "Rule", "Selector", "Criterion", "Charter", "Statement"];
+const AUTHORED_SHAPES = [
+  "Scope",
+  "Exchange",
+  "View",
+  "Part",
+  "Rule",
+  "Selector",
+  "Criterion",
+  "Charter",
+  "CharterSection",
+  "Statement",
+  "SlotFill",
+  "Standing",
+  "RefusalOutcome",
+  "Reading",
+  "HappyPath",
+];
+
+/**
+ * ⛔ UNWRAP TO THE OBJECT, AND THIS IS WHERE THIS TEST WAS A LIE.
+ *
+ * It read `obj._def?.shape?.() ?? obj.shape ?? obj._def?.innerType?.shape` and then `continue`d on
+ * anything it could not unwrap. A shape ending in `.superRefine(...)` is a ZodEffects whose inner
+ * schema lives at `_def.schema`, NOT `_def.innerType` — so Exchange, Part, Rule and Criterion, the
+ * four highest-field-count objects in the model, were silently skipped. The test passed, and
+ * `Criterion` — the entire concept — was missing from the authoring instructions the whole time.
+ *
+ * `v2-no-dead-fields.test.mjs` answers the same question, correctly, in the same directory: two
+ * implementations of one predicate diverging by one clause, which is the exact defect
+ * `src/core/jobs.ts` names as recurring. Landed inside the test built to stop it.
+ *
+ * ⛔ AND IT NO LONGER SKIPS QUIETLY. An unwrappable shape is a failure, because a shape this cannot
+ * read is a shape it is not checking, and the whole value of this test is that it is not vacuous.
+ */
+function shapeOf(name, obj) {
+  let cur = obj;
+  const seen = new Set();
+  while (cur?._def && !seen.has(cur)) {
+    seen.add(cur);
+    if (cur._def.typeName === "ZodObject") break;
+    cur = cur._def.schema ?? cur._def.innerType ?? cur._def.type;
+  }
+  assert.equal(cur?._def?.typeName, "ZodObject", `${name} could not be unwrapped to an object — this test would skip it`);
+  return cur._def.shape();
+}
 
 test("no field in the model is invisible to the skill that authors it", () => {
   const missing = [];
   for (const name of AUTHORED_SHAPES) {
     const obj = schema[name];
-    if (!obj) continue;
-    const shape = obj._def?.shape?.() ?? obj.shape ?? obj._def?.innerType?.shape;
-    if (!shape) continue;
+    assert.ok(obj, `${name} is declared here and not exported by the schema`);
+    const shape = shapeOf(name, obj);
     for (const field of Object.keys(shape)) {
       if (NOT_AUTHORED.has(field)) continue;
       /**
