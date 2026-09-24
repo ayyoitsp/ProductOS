@@ -1,4 +1,36 @@
-# Turning presses on a published page into product truth
+# Hearing about a press, and turning it into product truth
+
+## ⛔ WAIT; DO NOT POLL
+
+```bash
+productos v2 watch --at <corpus>     # blocks, prints one line per new act or note
+```
+
+On the **served** page a press writes to disk synchronously, so this waits on the filesystem and
+says nothing until something is recorded. Run it under the host's monitor facility if you have one:
+nothing is spent while it is quiet, and when somebody presses something you get one line saying who
+did what.
+
+⛔ **A loop that asks "has anything happened yet" costs a model call per tick and answers "no"
+almost every time.** One session ran forty of those in a row. If you find yourself scheduling a
+recurring check, the question to ask first is whether the thing you are waiting for can push —
+and on the served surface it can.
+
+⛔ **On a PUBLISHED page it cannot, and that is a platform fact rather than a missing feature.** The
+artifact's database is reachable only through the tool that published it; no process can subscribe
+to it and nothing can notify you. Three honest options, in order of preference:
+
+1. **Review on the served page** (`productos serve --v2 <corpus>`) and watch it. Push works, the
+   corpus never leaves the machine, and no permission is needed.
+2. **Let the page call ProductOS directly.** A published artifact may declare the `mcp` capability
+   with `server: "host:productos"` — a local MCP server on the viewer's own device, Claude app only.
+   If that resolves, a press performs the act with no database and no carry-in at all. It needs the
+   server configured in the viewer's Claude app; check before promising it.
+3. **Ask to be told.** "Press it and say so" costs one message. It is not worse than forty.
+
+The rest of this file is the carry-in for a published page, for when option 3 is what happened.
+
+## Turning presses on a published page into product truth
 
 A published page's buttons write to the artifact's own database and nothing else — a strict CSP
 stops it reaching the machine the corpus lives on. So a press is **not truth**. It is a row

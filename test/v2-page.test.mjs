@@ -694,18 +694,27 @@ test("a generated screen keeps the app's CSS out of the review page", () => {
     appCss: ":root { --x: red } .flex { display: flex } * { box-sizing: border-box }",
   });
 
-  // The app's CSS is inside a shadow root, not in the page's own <style>.
+  // Isolated from the page: the mock is a shadow tree, so the app's CSS cannot restyle the page.
   assert.match(html, /<template shadowrootmode="open">/, "the mock is not isolated from the page");
   const shadow = /<template shadowrootmode="open">([\s\S]*?)<\/template>/.exec(html);
   assert.ok(shadow, "no shadow tree was emitted");
-  assert.match(shadow[1], /\.flex \{ display: flex \}/, "the app's CSS did not travel with the mock");
+
+  /**
+   * ⛔ THE STYLESHEET SHIPS ONCE. Inlining it inside each shadow root put 370 KB into the page
+   * eleven times — a 4.7 MB document and eleven parses of one stylesheet. It travels as a single
+   * template that every shadow root adopts by reference.
+   */
+  const copies = [...html.matchAll(/\.flex \{ display: flex \}/g)].length;
+  assert.equal(copies, 1, `the app's stylesheet is in the page ${copies} times`);
+  const tpl = /<template id="app-css">([\s\S]*?)<\/template>/.exec(html);
+  assert.ok(tpl, "the app's CSS does not travel with the page at all");
 
   /**
    * ⛔ `:root` does not match inside a shadow tree, so a design system defining its tokens there
    * would hand the mock variables that resolve to nothing — every colour and spacing value empty,
    * which renders as an unstyled page rather than as an error.
    */
-  assert.match(shadow[1], /:host, :root \{ --x: red \}/, ":root was left unreachable inside the shadow tree");
+  assert.match(tpl[1], /:host, :root \{ --x: red \}/, ":root was left unreachable inside the shadow tree");
 
   // The selection marker has to be inside too: page CSS does not cross the boundary.
   assert.match(shadow[1], /\.pt\.on \{/, "nothing inside the mock can show which control is selected");
@@ -715,7 +724,7 @@ test("a generated screen keeps the app's CSS out of the review page", () => {
 
   // ⛔ And where no CSS is supplied, nothing claims otherwise.
   const bare = renderScopePage(withHtml, scope.scope.id, { linkBase: "/v2" });
-  assert.doesNotMatch(bare, /:host, :root/, "a page with no app CSS emitted an empty style block");
+  assert.doesNotMatch(bare, /id="app-css"/, "a page with no app CSS emitted an empty stylesheet template");
 });
 
 test("a label the browser writes as text is escaped once, not twice", () => {

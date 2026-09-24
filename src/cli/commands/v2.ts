@@ -12,6 +12,7 @@ import { questionsFor, descendants } from "../../v2/settle.js";
 import { perform, preview, optionText, VIA, type Via, type Outcome, type Refused } from "../../v2/acts.js";
 import { fileNote, closeNote } from "../../v2/notes.js";
 import { appStyleFor } from "../../v2/appcss.js";
+import { watchCorpus } from "../../v2/watch.js";
 import { HOW } from "../../v2/record.js";
 import { renderScopePage, standalone } from "../../v2/page.js";
 import { migrate } from "../../v2/migrate.js";
@@ -813,6 +814,32 @@ export function v2Command(): Command {
       console.log("");
       console.log(pc.dim(`  productos v2 check --at ${o.out}`));
       console.log(pc.dim(`  productos serve --v2 ${o.out}   → review it at /v2`));
+    });
+
+  cmd
+    /**
+     * ⛔ BLOCK UNTIL SOMETHING HAPPENS, RATHER THAN ASKING WHETHER IT HAS.
+     *
+     * Peter, after forty-odd empty checks: "we need a better way to monitor than to poll endlessly."
+     * Polling was never the design — it was the only thing available for a PUBLISHED page, whose
+     * database can only be read through the tool that published it. Nothing there can push, so each
+     * tick costs a model call and reports nothing.
+     *
+     * A press on the served page writes to disk synchronously, so this waits on the filesystem and
+     * prints one line per new act or note. Nothing is spent until something is recorded, and when it
+     * is, the line says who did what.
+     */
+    .command("watch")
+    .description("Wait, and print a line whenever somebody records an act or asks for a change")
+    .option("--at <dir>", "corpus directory", "v2")
+    .option("--replay", "print what is already recorded before waiting")
+    .action(async (o: { at?: string; replay?: boolean }) => {
+      const dir = at(o);
+      console.log(pc.dim(`watching ${dir} — acts and notes only. nothing is printed until something is recorded.`));
+      const { stopped, stop } = watchCorpus(dir, { replay: o.replay });
+      process.on("SIGINT", stop);
+      process.on("SIGTERM", stop);
+      await stopped;
     });
 
   /**

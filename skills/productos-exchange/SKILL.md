@@ -451,9 +451,14 @@ productos v2 notes add "<what should change>" \
 productos v2 notes done <id> --outcome "<what you did>" # close it
 ```
 
-A press on a **published** page writes to the artifact's database rather than to disk, so those
-have to be carried in — `WATCHING_PRESSES.md` has the loop, including the `--id` that makes
-carrying the same row in twice file one note.
+```bash
+productos v2 watch --at <corpus>   # ⛔ blocks. says nothing until somebody records something
+```
+
+A press on the **served** page writes to disk, so `watch` hears it — run that rather than asking
+repeatedly whether anything has happened. A press on a **published** page writes to the artifact's
+database instead and has to be carried in; `WATCHING_PRESSES.md` has both, and says why polling a
+published page is the option of last resort.
 
 A **note** is a request: *"the tab strip should also show the pinned version"*, *"this sketch is two
 releases out of date"*, *"this behaviour belongs on the other screen"*. It carries `about` — the ref
