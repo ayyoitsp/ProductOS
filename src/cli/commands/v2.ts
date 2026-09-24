@@ -14,6 +14,7 @@ import { fileNote, closeNote } from "../../v2/notes.js";
 import { appStyleFor } from "../../v2/appcss.js";
 import { watchCorpus } from "../../v2/watch.js";
 import { drawFromRoute } from "../../v2/draw.js";
+import { AGENTS } from "../../core/jobs.js";
 import { writeSketchHtml } from "../../v2/draw-write.js";
 import { HOW } from "../../v2/record.js";
 import { renderScopePage, standalone } from "../../v2/page.js";
@@ -832,6 +833,51 @@ export function v2Command(): Command {
       console.log("");
       console.log(pc.dim(`  productos v2 check --at ${o.out}`));
       console.log(pc.dim(`  productos serve --v2 ${o.out}   → review it at /v2`));
+    });
+
+  cmd
+    /**
+     * ⛔ THE AGENT MODEL, PRINTED — because a division of labour nobody can list is one nobody uses.
+     *
+     * Peter: "each agent should understand the context of what they're supposed to do, like an agent
+     * that validates everything is consistent, agent that validates test coverage is there." This is
+     * what answers "which of those exist, what does each one ask, and who runs it".
+     */
+    .command("agents")
+    .description("The reviewers: what each one asks, why it exists, and which model runs it")
+    .option("--at <dir>", "corpus directory, for the model assignments", "v2")
+    .action((o: { at?: string }) => {
+      let cfg: ReturnType<typeof readConfig> | undefined;
+      try {
+        cfg = readConfig(resolvePathsOrThrow(at(o, false)));
+      } catch {
+        cfg = undefined;
+      }
+      const models = cfg?.agents.model ?? {};
+      const dflt = cfg?.agents.default_model;
+      const off = cfg?.agents.off ?? {};
+      for (const a of AGENTS) {
+        const who = models[a.name] ?? dflt;
+        console.log("");
+        console.log(
+          `${pc.bold(a.name)}  ${pc.dim(who ? `model: ${who}` : "model: whatever the host uses")}${
+            off[a.name] ? pc.yellow("  off") : ""
+          }${a.prompt ? "" : pc.yellow("  no prompt yet")}`
+        );
+        console.log(`  ${a.asks}`);
+        if (off[a.name]) console.log(pc.dim(`  turned off here: ${off[a.name]}`));
+        for (const n of a.never) console.log(pc.dim(`  never ${n}`));
+      }
+      console.log("");
+      const missing = AGENTS.filter((a) => !a.prompt);
+      if (missing.length) {
+        console.log(
+          pc.yellow("!"),
+          `${missing.length} of ${AGENTS.length} have no prompt written: ${missing.map((m) => m.name).join(", ")}`
+        );
+        console.log(pc.dim("  they are named here so their absence is visible rather than implied"));
+      }
+      console.log(pc.dim(`  assign a model per agent in productos/config.yaml under agents.model`));
     });
 
   cmd

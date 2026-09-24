@@ -165,6 +165,34 @@ export type StackConfig = z.infer<typeof StackConfig>;
  * sketches can render as real-looking mocks (when sketch_html is provided
  * on the UX view) instead of just ASCII art.
  */
+/**
+ * ⛔ WHICH MODEL RUNS EACH AGENT, AND IT IS THE CONSUMER'S CHOICE.
+ *
+ * Peter: "ideally in the future these job agents will be portable - model agnostic. we should let
+ * people assign whatever model they want to each task."
+ *
+ * So no agent definition names a model. The spec says what the agent is for, what it must never do,
+ * and which capabilities it needs; this says who runs it, per agent, per project. An adapter reads
+ * both at install time and emits whatever the host wants.
+ *
+ * ⛔ AN UNKNOWN NAME IS REFUSED AT INSTALL, NOT AT RUN. A typo here otherwise surfaces as an agent
+ * that fails halfway through a review somebody is waiting on.
+ */
+export const AgentsConfig = z.object({
+  /** Used for any agent with nothing of its own. Absent means "whatever the host would use anyway". */
+  default_model: z.string().optional(),
+  /**
+   * Per agent, by name — `consistency`, `coverage`, `generated`, `truthfulness`, `newcomer`,
+   * `architecture`, `sufficiency`.
+   */
+  model: z.record(z.string(), z.string()).default({}),
+  /** Per agent, how hard it should think, where the host understands such a thing. */
+  effort: z.record(z.string(), z.enum(["low", "medium", "high", "max"])).default({}),
+  /** ⛔ Agents a project has deliberately turned off, with the reason it is safe to. */
+  off: z.record(z.string(), z.string()).default({}),
+});
+export type AgentsConfig = z.infer<typeof AgentsConfig>;
+
 export const WebConfig = z.object({
   /** Path (relative to repo root) to a CSS file the user wants loaded into
    *  productos serve so UX mocks pick up their app's design system. The
@@ -225,6 +253,7 @@ export const ProductosConfig = z.object({
   byok: ByokConfig.default({}),
   operations: OperationsConfig.default({}),
   web: WebConfig.default({}),
+  agents: AgentsConfig.default({}),
   grouping: GroupingConfig.default({}),
   exchange: ExchangeConfig.default({}),
 });
