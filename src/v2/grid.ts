@@ -317,6 +317,13 @@ export interface ActCount {
   acceptable: string[];
   /** Gated: an exchange with an unsettled slot cannot be accepted yet. */
   gated: string[];
+  /**
+   * Features whose behaviours are withheld because nobody has agreed what the feature is for.
+   *
+   * ⛔ REPORTED, NOT SILENT. Withholding the ask without saying why produces a feature full of
+   * sentences and no buttons, which reads as finished. The reason is the next act somebody owes.
+   */
+  ungrounded: Array<{ scope: string; why: string }>;
   /** One accept per rule. ⛔ The reach is shown, because one stamp here goes furthest. */
   rules: Array<{ id: string; reaches: number }>;
   /** Rulings owed — a standing only a person can move, and nobody has parked. */
@@ -490,6 +497,40 @@ export function actsFor(corpus: Corpus): ActCount {
    */
   const deferrals = new Map(corpus.verdicts.filter((v) => v.kind === "defer").map((v) => [v.target!, v]));
 
+  /**
+   * ⛔ THE CONTEXT IS AGREED BEFORE ITS DETAILS. Peter: "we need to make sure the context is correct
+   * before the behaviors get validated — because that could change."
+   *
+   * Agreeing to a detail of a purpose nobody has confirmed is the expensive kind of wasted review:
+   * if the purpose is wrong, every stamp underneath it was spent on a sentence about to change. So a
+   * feature's behaviours are not offered until its happy path has been accepted — and a feature with
+   * no happy path at all offers nothing, because there is no context to have agreed.
+   */
+  const contextAgreed = (scopeId: string): { ok: boolean; why: string } => {
+    const sc = corpus.scopes.find((x) => x.scope.id === scopeId)?.scope;
+    if (!sc?.happy_path) return { ok: false, why: "nothing says what this feature is for yet" };
+    const st = stampFor(corpus, `${scopeId}#happy-path`);
+    if (st.state === "accepted") return { ok: true, why: "" };
+    if (st.state === "never") return { ok: false, why: "nobody has agreed what this feature is for" };
+    return { ok: false, why: `what this feature is for was agreed and has changed since — ${st.state}` };
+  };
+  const context = new Map<string, { ok: boolean; why: string }>();
+  /**
+   * ⛔ A BROKEN HAPPY-PATH STAMP BELONGS IN `stale` TOO. That list is where a person looks for
+   * "agreed, and then the thing changed" — and this is the widest instance of it in the model,
+   * because it withdraws every ask in the feature at once.
+   */
+  for (const { scope } of corpus.scopes) {
+    if (!scope.happy_path) continue;
+    const st = stampFor(corpus, `${scope.id}#happy-path`);
+    if (st.state !== "never" && st.state !== "accepted")
+      stale.push({ where: `${scope.id}#happy-path`, was: st.state, by: st.by, at: st.at });
+  }
+  const contextFor = (id: string) => {
+    if (!context.has(id)) context.set(id, contextAgreed(id));
+    return context.get(id)!;
+  };
+
   for (const { scope } of corpus.scopes) {
     for (const ex of scope.exchanges) {
       const ref = `${scope.id}#${ex.id}`;
@@ -527,7 +568,13 @@ export function actsFor(corpus: Corpus): ActCount {
           const said = statements(fill.says);
           const refs = said.length > 1 ? said.map((x) => `${ref}#${slot}#${x.id}`) : [`${ref}#${slot}`];
           const anything = said.length || fill.none || fill.cannot_fail || (fill.outcomes ?? []).length;
-          if (anything) for (const r of refs) if (!isAccepted(r)) behaviours.push(r);
+          /**
+           * ⛔ NOT OFFERED UNTIL THE CONTEXT IS AGREED. `behaviours` is the list a person is handed
+           * — "one sentence each, settled and not yet agreed to" — so a feature whose purpose nobody
+           * has confirmed must not put its details in it. The sentences are still SHOWN; what is
+           * withheld is the ask.
+           */
+          if (anything && contextFor(scope.id).ok) for (const r of refs) if (!isAccepted(r)) behaviours.push(r);
         }
         if (k === "stated" || k === "out_of_scope") continue;
         settled = false;
@@ -576,12 +623,20 @@ export function actsFor(corpus: Corpus): ActCount {
       // ⛔ THE GATE. An exchange with an unsettled slot is never offered for acceptance —
       // accepting a claim that is disputed or underdetermined stamps intent onto a
       // sentence with two meanings, which is worse than leaving it unstamped.
-      (settled ? acceptable : gated).push(ref);
+      /**
+       * ⛔ AND THE WHOLE-EXCHANGE ACCEPT IS GATED THE SAME WAY. Withholding the per-behaviour asks
+       * while still offering "agree to all eight slots of this at once" would leave the widest stamp
+       * on the page as the one exception to the rule the narrow ones follow.
+       */
+      (settled && contextFor(scope.id).ok ? acceptable : gated).push(ref);
     }
   }
   return {
     acceptable,
     behaviours,
+    ungrounded: corpus.scopes
+      .filter(({ scope }) => scope.exchanges.length && !contextFor(scope.id).ok)
+      .map(({ scope }) => ({ scope: scope.id, why: contextFor(scope.id).why })),
     gated,
     deferred,
     stale,

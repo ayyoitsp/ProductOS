@@ -32,6 +32,8 @@ export type Ref =
   | { kind: "rule"; id: string; rule: string }
   | { kind: "rule-case"; id: string; rule: string; name: string }
   | { kind: "scope"; id: string; scope: string }
+  /** What a feature is for — the one thing agreed before anything in it. `<scope>#happy-path`. */
+  | { kind: "happy-path"; id: string; scope: string }
   | { kind: "exchange"; id: string; scope: string; exchange: string }
   | { kind: "slot"; id: string; scope: string; exchange: string; slot: SlotName }
   | { kind: "case"; id: string; scope: string; exchange: string; slot: SlotName; name: string }
@@ -112,6 +114,15 @@ export function resolveRef(corpus: Corpus, raw: string): Resolved | { error: str
   const [scopeId, exId, slotName, caseName] = parts;
   const scope = corpus.scopes.find((s) => s.scope.id === scopeId)?.scope;
   if (!scope) return { error: `no scope "${scopeId}"` };
+  /**
+   * ⛔ THE GRAMMAR HAS TO KNOW THE HAPPY PATH, or the one act everything else waits on is
+   * unreachable. `money#happy-path` read as an exchange and came back "no exchange happy-path in
+   * money" — an error about a thing nobody was talking about, on the act that ungates the feature.
+   */
+  if (parts.length === 2 && exId === "happy-path") {
+    if (!scope.happy_path) return { error: `nothing says what "${scopeId}" is for yet` };
+    return { ref: { kind: "happy-path", id: raw, scope: scopeId! }, unsettled: false };
+  }
   const ex = scope.exchanges.find((e) => e.id === exId);
   if (!ex) return { error: `no exchange "${exId}" in ${scopeId}` };
   if (parts.length === 2)

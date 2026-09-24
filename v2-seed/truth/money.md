@@ -3,6 +3,14 @@ id: money
 title: Money
 in: family-wallet
 exists: kept
+happy_path:
+  accomplishes: A parent moves money into or out of a kid's pocket money and both of them can see
+    what it is now and where it came from.
+  brings: the kid it is for, an amount, and what it was for
+  ends_with: the kid's money is different by that amount, and the movement is on the list with its
+    reason and the date
+  through: [balance, earn-form]
+  not: setting up the allowance that runs on its own — that is a standing arrangement, not a movement
 views:
   - id: balance
     title: A kid's money

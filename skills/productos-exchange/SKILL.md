@@ -93,6 +93,39 @@ imagined, and it is rendered on the page in those terms.
 `view_kind:` and `part_role:` in a selector. A label nothing selects on is decoration; add one when
 a rule needs it, not in advance.
 
+### ⛔ The happy path — what the feature is FOR, and it is agreed first
+
+```yaml
+happy_path:
+  accomplishes: A parent moves money into or out of a kid's pocket money and both of them can see
+    what it is now and where it came from.
+  brings: the kid it is for, an amount, and what it was for
+  ends_with: the kid's money is different by that amount, and the movement is on the list with its
+    reason and the date
+  through: [balance, earn-form]     # the screens, IN ORDER — a sequence, not a set
+  not: setting up the allowance that runs on its own
+```
+
+This is the meat of the feature: what gets accomplished, what the person arrives with, what they
+leave with, and the flow. The eight slots are the **details** of it.
+
+⛔ **IT GATES EVERYTHING BENEATH IT.** A feature's behaviours are not offered for agreement until
+its happy path has been accepted — `productos v2 accept "<scope>#happy-path"`. Agreeing to a detail
+of a purpose nobody has confirmed is the expensive kind of wasted review: if the purpose turns out
+wrong, every stamp underneath it was spent on a sentence that is about to change.
+
+⛔ **AND REWORDING IT WITHDRAWS THEM AGAIN.** The acceptance is hashed over the whole happy path, so
+changing what a feature is for breaks the stamp and takes every ask in the feature back out of the
+queue. That is not friction; it is the reason the gate is worth having.
+
+⛔ **It is not a ninth slot.** A slot answers one question about one ask. This answers "what is this
+feature for", which is a question about the feature — folding it into a slot would make it agreeable
+at the same grain as the details it exists to frame.
+
+⛔ **A group gets one too, derived.** A container scope renders "how this part of the product fits
+together" from the screens beneath it and the `leads_to` of their parts — so record `leads_to`, or
+the group's high-level view is a list of screens rather than a flow.
+
 ### The eight slots, all required
 
 | | asks |

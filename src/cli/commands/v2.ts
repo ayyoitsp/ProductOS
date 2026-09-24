@@ -187,6 +187,22 @@ export function v2Command(): Command {
       );
       console.log(pc.bold("What a person is asked to do"));
       /**
+       * ⛔ FIRST OF ALL, BECAUSE IT COMES FIRST. A feature whose purpose nobody has agreed offers
+       * none of its behaviours — and reporting "0 behaviours to read" without saying why reads as
+       * a finished corpus rather than as one waiting on the act that has to happen before any
+       * other.
+       */
+      if (a.ungrounded.length) {
+        console.log(
+          `  ${pc.yellow(String(a.ungrounded.length))} feature${a.ungrounded.length === 1 ? "" : "s"} waiting on what ${
+            a.ungrounded.length === 1 ? "it is" : "they are"
+          } for ${pc.dim("— their behaviours are not offered until somebody agrees to that")}`
+        );
+        for (const u of a.ungrounded.slice(0, 6)) console.log(pc.dim(`      · ${u.scope} — ${u.why}`));
+        if (a.ungrounded.length > 6) console.log(pc.dim(`      …and ${a.ungrounded.length - 6} more`));
+        console.log(pc.dim(`      productos v2 accept "<feature>#happy-path" --by <who> --via <how>`));
+      }
+      /**
        * ⛔ FIRST, BECAUSE IT IS THE ONE THAT IS USUALLY OWED. Exchange- and rule-grained
        * acceptances are the wide stamps; a behaviour is the atom, and on any corpus that is not
        * finished it is where all the review actually is.

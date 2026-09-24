@@ -1203,6 +1203,51 @@ export const Part = z
 
 export type Part = z.infer<typeof Part>;
 
+
+/**
+ * ⛔ THE HAPPY PATH — WHAT THE FEATURE IS FOR, AGREED BEFORE ANY DETAIL OF IT.
+ *
+ * Peter: "we should highlight 'Happy path' for each feature. this describes the 'meat' of the
+ * feature — what should be accomplished in the happy path, input, desired output, and with screens
+ * that describes this flow. the behaviors get into the 'details'. but we need to make sure the
+ * context is correct before the behaviors get validated — because that could change."
+ *
+ * The model had nothing at this altitude. A feature was a title, a paragraph of prose nobody had to
+ * read, and then eight slots per ask — so the first thing a reviewer was handed was
+ * *"the stage filter offers the stages of the CRE funnel that this organization uses"*, with no
+ * agreed statement anywhere of what the screen is for. Every one of those judgements rests on a
+ * context that was never stated, let alone agreed.
+ *
+ * ⛔ AND IT GATES. Agreeing to a detail of a purpose nobody has confirmed is the expensive kind of
+ * wasted review: if the purpose turns out wrong, every stamp underneath it was spent on a sentence
+ * that is about to change. So the behaviours of a feature are not offered for acceptance until its
+ * happy path has been — which is the same gate the eight slots already have, one level up.
+ *
+ * ⛔ IT IS NOT A NINTH SLOT. A slot answers one question about one ask. This answers "what is this
+ * feature FOR", which is a question about the feature, and folding it into a slot would make it
+ * agreeable at the same grain as the details it is supposed to frame.
+ */
+export const HappyPath = z
+  .object({
+    /** What the person gets done. The reason the feature exists, in one sentence. */
+    accomplishes: z.string().min(20, "say what gets done here — a few words is a label, not a purpose"),
+    /** What they arrive with. */
+    brings: z.string().min(3, "say what the person arrives with, or `nothing` if they arrive empty-handed"),
+    /** What they leave with. ⛔ The desired OUTPUT, which is what makes the path checkable. */
+    ends_with: z.string().min(10, "say what they leave with — a path with no stated outcome cannot be judged right or wrong"),
+    /**
+     * The screens, in the order they are met.
+     *
+     * ⛔ ORDERED, AND THAT IS THE POINT. A set of screens is a list; a sequence is a flow, and a
+     * flow is the thing a reviewer can say is wrong before a single detail is argued.
+     */
+    through: z.array(z.string()).default([]),
+    /** What is deliberately NOT part of the happy path, where somebody would otherwise assume it is. */
+    not: z.string().optional(),
+  })
+  .strict();
+export type HappyPath = z.infer<typeof HappyPath>;
+
 export const View = z.object({
   id: z.string(),
   title: z.string(),
@@ -1564,6 +1609,16 @@ export type Rule = z.infer<typeof Rule>;
 export const Scope = z.object({
   id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/, "scope ids are kebab-case slugs, not paths"),
   title: z.string().min(2),
+  /**
+   * What this feature is FOR, agreed before any detail of it. See `HappyPath`.
+   *
+   * ⛔ OPTIONAL IN THE SCHEMA AND REQUIRED BY THE GATE, deliberately. Making it required would
+   * refuse every corpus that exists on the day it is added, including the pristine seed, and a
+   * schema change that cannot be adopted gets reverted. Making it absent-but-gating says the true
+   * thing instead: the feature can be written without one, and nobody can agree to its details
+   * until somebody says what it is for.
+   */
+  happy_path: HappyPath.optional(),
   /**
    * Where this scope is filed.
    *

@@ -1354,6 +1354,50 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
   }
 
   /**
+   * ---- what a feature is for ----
+   *
+   * ⛔ THE CONTEXT EVERY OTHER JUDGEMENT RESTS ON, AND THE MODEL HAD NOWHERE TO PUT IT.
+   *
+   * Peter: "we need to make sure the context is correct before the behaviors get validated —
+   * because that could change." A reviewer's first sentence used to be a detail — "the stage filter
+   * offers the stages of the CRE funnel this organization uses" — with no agreed statement anywhere
+   * of what the screen is for. The context got supplied from memory, differently each time.
+   *
+   * A note, not a refusal: a feature can be written before anybody has settled what it is for, and
+   * the gate in `actsFor` already withholds its behaviours until they have. Refusing here as well
+   * would stop a corpus being handed over for exactly the review that produces the answer.
+   */
+  {
+    const without = corpus.scopes.filter(({ scope }) => scope.exchanges.length && !scope.happy_path).map(({ scope }) => scope.id);
+    if (without.length)
+      add({
+        severity: "note",
+        kind: "nothing-says-what-this-feature-is-for",
+        where: without[0]!,
+        what: `${without.length} feature${without.length === 1 ? "" : "s"} state behaviours and nothing says what ${without.length === 1 ? "it is" : "they are"} for: ${without.slice(0, 6).join(", ")}${without.length > 6 ? ` …and ${without.length - 6} more` : ""}`,
+        fix: "write its happy_path — what gets accomplished, what the person arrives with, what they leave with, and the screens in order. Its behaviours are not offered for agreement until somebody has agreed to it, because a detail of an unconfirmed purpose is a stamp about to be spent twice",
+      });
+
+    /**
+     * ⛔ A FLOW THROUGH A SCREEN THAT DOES NOT EXIST IS WORSE THAN NAMING NONE. It reads as a walked
+     * path, and the step nobody can follow is the one an engineer invents.
+     */
+    for (const { scope } of corpus.scopes) {
+      const hp = scope.happy_path;
+      if (!hp) continue;
+      const unknown = hp.through.filter((v) => !scope.views.some((x) => x.id === v));
+      if (unknown.length)
+        add({
+          severity: "refuse",
+          kind: "the-happy-path-runs-through-a-screen-that-does-not-exist",
+          where: `${scope.id}#happy-path`,
+          what: `goes through ${unknown.join(", ")}, which ${unknown.length === 1 ? "is not a screen" : "are not screens"} this feature has`,
+          fix: "name a screen this feature declares, or declare the screen — a flow reads as walked, and a step nobody can follow is the one an engineer invents",
+        });
+    }
+  }
+
+  /**
    * ---- a drawing that does not show what the screen states ----
    *
    * ⛔ "SCREENS OVERALL ARE VERY THIN", AND NOTHING COULD HAVE SAID SO.

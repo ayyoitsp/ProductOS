@@ -17,6 +17,8 @@ import { loadCorpus, resolveRules, lineageOf } from "../dist/v2/load.js";
 import { gridFor, actsFor, ruleHomes } from "../dist/v2/grid.js";
 import { descendants, questionsFor } from "../dist/v2/settle.js";
 import { renderScopePage } from "../dist/v2/page.js";
+import { coveredBy } from "../dist/v2/stamp.js";
+import { perform } from "../dist/v2/acts.js";
 import { SLOTS, statements } from "../dist/v2/schema.js";
 import fs from "node:fs";
 import path from "node:path";
@@ -393,7 +395,7 @@ test("a queue with no questions says how much is unwritten", () => {
   // One behaviour, one slot said, the rest blank — a migration's output in miniature.
   fs.writeFileSync(
     path.join(dir, "truth", "thing.md"),
-    `---\nid: thing\ntitle: A thing\nexists: kept\nviews:\n  - id: a-screen\n    title: A screen\n    walked: true\n    parts:\n      - id: go\n        role: commits\n        label: Go\nexchanges:\n  - id: press-go\n    title: Somebody presses Go\n    asked_by: person\n    at: { view: a-screen, part: go }\n    slots:\n      answer:\n        says: Something is recorded, and the person is told it was.\n    criteria: []\n---\n\nA scope with one sentence and seven blanks.\n`
+    `---\nid: thing\ntitle: A thing\nexists: kept\nhappy_path:\n  accomplishes: Somebody records that a thing happened, and can see afterwards that it did.\n  brings: the thing that happened\n  ends_with: the thing is recorded and they were told so\n  through: [a-screen]\nviews:\n  - id: a-screen\n    title: A screen\n    walked: true\n    parts:\n      - id: go\n        role: commits\n        label: Go\nexchanges:\n  - id: press-go\n    title: Somebody presses Go\n    asked_by: person\n    at: { view: a-screen, part: go }\n    slots:\n      answer:\n        says: Something is recorded, and the person is told it was.\n    criteria: []\n---\n\nA scope with one sentence and seven blanks.\n`
   );
   const bare = loadCorpus(dir);
   assert.equal(bare.broken.length, 0, JSON.stringify(bare.broken));
@@ -412,8 +414,27 @@ test("a queue with no questions says how much is unwritten", () => {
    * An earlier version asserted "nothing can be agreed to", which was true only while a stamp had
    * to cover a whole exchange — it stopped being true the moment one behaviour became acceptable.
    */
-  assert.match(flat, /behaviours? nobody has agreed to yet/, "it does not say what is waiting to be read");
+  /**
+   * ⛔ THE PURPOSE COMES FIRST, SO THE QUEUE SAYS SO BEFORE IT COUNTS ANYTHING.
+   *
+   * Peter: "we need to make sure the context is correct before the behaviors get validated —
+   * because that could change." Until the happy path is agreed, the feature's sentences are shown
+   * and NOT offered — so a queue reporting "1 behaviour to read" here would be offering a detail of
+   * a purpose nobody has confirmed, which is the stamp this gate exists to prevent.
+   */
+  assert.match(flat, /What this feature is for/, "the purpose is not put in front of the reader");
+  assert.match(flat, /Nothing below can be agreed to until this is/, "the page does not say the purpose gates the rest");
   assert.match(flat, /slots carry a sentence/, "it does not say how much is unwritten");
+
+  // ⛔ And once the purpose IS agreed, the detail is offered — the gate opens rather than blocks.
+  fs.writeFileSync(
+    path.join(dir, "verdicts", "accepts.yaml"),
+    `verdicts:\n  - kind: accept\n    target: thing#happy-path\n    by: peter\n    at: 2026-09-24\n    via: cli\n    covers_slots: ${
+      coveredBy(loadCorpus(dir), "thing#happy-path").slots
+    }\n    covers_criteria: ${coveredBy(loadCorpus(dir), "thing#happy-path").criteria}\n`
+  );
+  const opened = renderScopePage(loadCorpus(dir), "thing").replace(/\s+/g, " ");
+  assert.match(opened, /behaviours? nobody has agreed to yet/, "agreeing the purpose did not open the queue");
   assert.match(flat, /say nothing at all/, "an empty queue read as a finished corpus");
   /**
    * ⛔ And it says what to DO. "Somebody should write it down" is a diagnosis; a reviewer facing 539
@@ -847,4 +868,57 @@ test("every card about a screen carries that screen, focused on what the sentenc
   // ⛔ And the focus mark is NOT the accent colour: on a card's copy it landed on the application's
   // own primary button — blue ring, blue button, invisible.
   assert.match(html, /\.focus \{[^}]*#f59e0b/, "the focus mark shares the application's palette");
+});
+
+test("the context is agreed before its details, and rewording it withdraws them", () => {
+  /**
+   * ⛔ Peter: "we need to make sure the context is correct before the behaviors get validated —
+   * because that could change."
+   *
+   * The first thing a reviewer used to be handed was a detail — "the stage filter offers the stages
+   * of the CRE funnel this organization uses" — with no agreed statement anywhere of what the screen
+   * is for. The context got supplied from memory, differently each time, and never recorded. Worse,
+   * every stamp underneath an unconfirmed purpose is spent twice the moment the purpose changes.
+   */
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "v2hp-"));
+  fs.cpSync("v2-seed", dir, { recursive: true });
+  const acts = () => actsFor(loadCorpus(dir));
+
+  // Nothing is offered while nobody has agreed what the features are for.
+  const before = acts();
+  assert.equal(before.behaviours.length, 0, "a detail was offered before its purpose was agreed");
+  assert.equal(before.acceptable.length, 0, "a whole exchange was offered before its purpose was agreed");
+  assert.ok(before.ungrounded.length >= 2, "the page does not say which features are waiting on their purpose");
+  for (const u of before.ungrounded) assert.match(u.why, /what this feature is for/i, `"${u.why}" does not say what is owed`);
+
+  // Agreeing it opens that feature and only that feature.
+  const one = before.ungrounded[0].scope;
+  const r = perform(dir, "accept", { target: `${one}#happy-path` }, { by: "peter", via: "cli" });
+  assert.equal(r.ok, true, r.ok ? "" : r.why);
+  const after = acts();
+  assert.ok(after.behaviours.length > 0, "agreeing the purpose did not offer its details");
+  assert.ok(
+    after.behaviours.every((b) => b.startsWith(`${one}#`)),
+    `agreeing one feature's purpose offered another's details: ${after.behaviours.filter((b) => !b.startsWith(`${one}#`)).join(", ")}`
+  );
+  assert.ok(after.ungrounded.some((u) => u.scope !== one), "the other feature stopped waiting on its own purpose");
+
+  /**
+   * ⛔ AND REWORDING IT TAKES THEM BACK. The acceptance is hashed over the whole happy path, so
+   * changing what a feature is for breaks the stamp and withdraws every ask in it. That is not
+   * friction — it is the only thing that makes agreeing to the context worth doing first.
+   */
+  const file = path.join(dir, "truth", `${one}.md`);
+  const src = fs.readFileSync(file, "utf-8");
+  const hp = /accomplishes: (.+)/.exec(src);
+  assert.ok(hp, "the seed feature has no happy path to reword");
+  fs.writeFileSync(file, src.replace(hp[1], `Something else entirely, ${hp[1]}`));
+  const reworded = acts();
+  assert.equal(reworded.behaviours.filter((b) => b.startsWith(`${one}#`)).length, 0, "rewording the purpose left its details offered");
+  assert.ok(
+    reworded.stale.some((s) => s.where === `${one}#happy-path`),
+    "a broken purpose stamp is not reported as stale, so nobody would know the ground moved"
+  );
+
+  fs.rmSync(dir, { recursive: true, force: true });
 });

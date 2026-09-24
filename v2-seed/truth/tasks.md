@@ -4,6 +4,13 @@ title: Tasks
 in: family-wallet
 exists: kept
 tags: [consumer]
+happy_path:
+  accomplishes: A parent puts a job on a kid's list with what it is worth, and the kid marks it done
+    and gets paid for it.
+  brings: what the job is, which kid it is for, and what it pays
+  ends_with: the job is off the kid's list and what it paid has moved into their money
+  through: [task-list, add-a-task]
+  not: deciding whether a job was done well — nothing here judges the work
 views:
   - id: add-a-task
     title: Offer a task

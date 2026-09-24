@@ -18,6 +18,7 @@
 import { resolveRules, type Corpus } from "./load.js";
 import { SLOTS, SLOT_ASKS_SHORT, statements, saysText, type SlotName, type Scope, type View, type Part, type Says } from "./schema.js";
 import { gridFor, gateFor, actsFor, ruleHomes, type Grid, type Cell } from "./grid.js";
+import { stampFor } from "./stamp.js";
 import { questionsFor, descendants, type Question } from "./settle.js";
 import { decisionsOn, decisionsUnder, howItWasDecided, type Decision } from "./record.js";
 
@@ -1106,6 +1107,218 @@ function renderNotePanel(_corpus: Corpus, _ids: string[], opts: PageOptions): st
 }
 
 
+
+
+/**
+ * ⛔ WHAT THE FEATURE IS FOR, AT THE TOP, AGREED FIRST.
+ *
+ * Peter: "this describes the 'meat' of the feature — what should be accomplished in the happy path,
+ * input, desired output, and with screens that describes this flow. the behaviors get into the
+ * 'details'. but we need to make sure the context is correct before the behaviors get validated —
+ * because that could change."
+ *
+ * The first thing a reviewer used to be handed was a detail: *"the stage filter offers the stages of
+ * the CRE funnel this organization uses"*. Judging that requires knowing what the screen is for, and
+ * nothing on the page said — so the context was supplied from the reviewer's memory, differently
+ * each time, and never recorded.
+ */
+function renderHappyPath(corpus: Corpus, scopeId: string, ctx: Ctx, past: Decision[]): string {
+  const sc = corpus.scopes.find((s) => s.scope.id === scopeId)?.scope;
+  if (!sc) return "";
+  const ref = `${scopeId}#happy-path`;
+  if (!sc.happy_path)
+    return sc.exchanges.length
+      ? `<section class="happy none">
+          <h3>What this feature is for</h3>
+          <p class="owes">Nothing says what this feature is for — what gets accomplished, what the
+          person arrives with, what they leave with. Until somebody does, the sentences below cannot
+          be agreed to: a detail of a purpose nobody has confirmed is a stamp spent on something
+          about to change.</p>
+        </section>`
+      : "";
+  const hp = sc.happy_path;
+  const stamp = stampFor(corpus, ref);
+  const agreed = stamp.state === "accepted";
+  return `
+    <section class="happy${agreed ? " agreed" : ""}" id="${anchorOf(ref)}" data-ref="${esc(ref)}" data-label="what it is for">
+      <h3>What this feature is for</h3>
+      <p class="happy-does">${line(hp.accomplishes)}</p>
+      <dl class="happy-io">
+        <dt>arrives with</dt><dd>${line(hp.brings)}</dd>
+        <dt>leaves with</dt><dd>${line(hp.ends_with)}</dd>
+        ${hp.not ? `<dt>deliberately not</dt><dd>${line(hp.not)}</dd>` : ""}
+      </dl>
+      ${
+        /**
+         * ⛔ THE SCREENS, IN ORDER, ON THE SAME CARD. A flow described in prose is a flow a reader
+         * has to assemble; named in order and clickable, it is one they can walk before arguing
+         * about any of it.
+         */
+        hp.through.length
+          ? `<ol class="happy-through">${hp.through
+              .map((v) => {
+                const view = sc.views.find((x) => x.id === v);
+                return `<li><button type="button" class="show-part" data-show-part="${esc(`${v}/`)}">${line(
+                  view?.title || v
+                )}</button>${view ? "" : `<span class="ux-flag">no such screen</span>`}</li>`;
+              })
+              .join("")}</ol>`
+          : `<p class="owes">No screens are named, so the flow cannot be walked.</p>`
+      }
+      ${renderRecord(past)}
+      ${
+        agreed
+          ? `<p class="happy-ok">Agreed by ${esc(stamp.by ?? "somebody")} on ${esc(stamp.at ?? "")} — the sentences below can be read against it.</p>`
+          : `<footer class="beh-acts">
+               <button class="act" data-act="accept" data-ref="${esc(ref)}">That is what it is for</button>
+               <button class="act ghost" data-act="say" data-ref="${esc(ref)}">Not quite — reword it</button>
+             </footer>
+             <p class="happy-why">${
+               stamp.state === "never"
+                 ? "Nothing below can be agreed to until this is."
+                 : "This was agreed and has changed since, so everything below is waiting on it again."
+             }</p>`
+      }
+    </section>`;
+}
+
+/**
+ * ⛔ A GROUP'S HIGH-LEVEL VIEW, DERIVED — because a group's UX is not a screen, it is how the
+ * screens beneath it fit together.
+ *
+ * Peter: "our 'feature groups' should also have UX describing a high level view."
+ *
+ * A group page was prose, a list of what is filed under it, and the rules it states. Everything
+ * visual lived on the leaves, so the question a group exists to answer — what does this part of the
+ * product look like, and how does a person move through it — had no surface at all. Somebody
+ * reviewing "Versioned Inputs" could read eight features one at a time and never see the shape.
+ *
+ * ⛔ AND IT IS GENERATED, NOT AUTHORED. Every fact it needs is already in the corpus: the screens
+ * beneath the group, and the parts that say where they lead. Asking an author to draw it would make
+ * a second copy of the navigation that goes stale the first time a screen moves — which is the
+ * hand-authoring trap the drawing generator exists to close.
+ */
+function renderGroupUx(corpus: Corpus, scopeId: string, ctx: Ctx): string {
+  const ids = descendants(corpus, scopeId);
+  interface Node {
+    scope: string;
+    scopeTitle: string;
+    view: string;
+    title: string;
+    intended: boolean;
+    walked: boolean;
+    drawn: boolean;
+    controls: number;
+    silent: number;
+    said: number;
+    goes: string[];
+  }
+  const nodes: Node[] = [];
+  for (const id of ids) {
+    const sc = corpus.scopes.find((s) => s.scope.id === id)?.scope;
+    if (!sc) continue;
+    for (const v of sc.views) {
+      if (v.exists === "withdrawn") continue;
+      const live = v.parts.filter((p) => !p.decorative && p.role !== "display" && p.role !== "region");
+      nodes.push({
+        scope: sc.id,
+        scopeTitle: plain(sc.title || sc.id),
+        view: v.id,
+        title: plain(v.title || v.id),
+        intended: v.exists === "intended",
+        walked: v.walked,
+        drawn: Boolean(v.sketch || v.sketch_html),
+        controls: live.length,
+        silent: live.filter((p) => !sc.exchanges.some((e) => e.at?.view === v.id && e.at?.part === p.id)).length,
+        said: sc.exchanges.filter((e) => e.at?.view === v.id).length,
+        goes: v.parts.filter((p) => p.leads_to).map((p) => p.leads_to!),
+      });
+    }
+  }
+  if (nodes.length < 2) return "";
+
+  const byView = new Map(nodes.map((n) => [n.view, n]));
+  /** A destination names a view, or a scope, or a scope and a view. Resolve to a node on this map. */
+  const landsOn = (dest: string): Node | undefined => {
+    const bare = dest.split("#");
+    for (const part of [...bare].reverse()) if (byView.has(part)) return byView.get(part);
+    return nodes.find((n) => n.scope === bare[0]);
+  };
+
+  /**
+   * ⛔ LAYERED FROM WHAT NOTHING LEADS TO. A group's entry screens are the ones no recorded
+   * navigation arrives at; everything else sits behind however many steps it takes to reach. That
+   * ordering is the only thing on this map that is an inference rather than a fact, and it is one
+   * a reader can check by eye against the arrows.
+   */
+  const arrivedAt = new Set<string>();
+  for (const n of nodes) for (const d of n.goes) { const t = landsOn(d); if (t && t.view !== n.view) arrivedAt.add(t.view); }
+  const layers: Node[][] = [];
+  const placed = new Set<string>();
+  let front = nodes.filter((n) => !arrivedAt.has(n.view));
+  if (!front.length) front = nodes.slice(0, 1);
+  while (front.length) {
+    for (const n of front) placed.add(n.view);
+    layers.push(front);
+    const next: Node[] = [];
+    for (const n of front)
+      for (const d of n.goes) {
+        const t = landsOn(d);
+        if (t && !placed.has(t.view) && !next.includes(t)) next.push(t);
+      }
+    front = next;
+  }
+  // Anything no arrow reaches, in corpus order, so nothing is silently dropped off the map.
+  const loose = nodes.filter((n) => !placed.has(n.view));
+  if (loose.length) layers.push(loose);
+
+  const edges = nodes.reduce((k, n) => k + n.goes.length, 0);
+  const box = (n: Node): string => `
+    <li class="ux-node${n.intended ? " intended" : ""}">
+      <button type="button" class="show-part" data-show-part="${esc(`${n.view}/`)}">${line(n.title)}</button>
+      <span class="ux-in">${refLink(n.scope, ctx, line(n.scopeTitle))}</span>
+      <span class="ux-n">${n.controls} control${n.controls === 1 ? "" : "s"}${
+        n.silent ? ` · <span class="warn">${n.silent} say nothing</span>` : ""
+      } · ${n.said} behaviour${n.said === 1 ? "" : "s"}</span>
+      ${!n.drawn ? `<span class="ux-flag">not drawn</span>` : ""}
+      ${n.intended ? `<span class="ux-flag">not built</span>` : ""}
+      ${!n.walked ? `<span class="ux-flag">not walked</span>` : ""}
+      ${
+        n.goes.length
+          ? `<span class="ux-goes">${n.goes
+              .map((d) => {
+                const t = landsOn(d);
+                return t
+                  ? `→ <button type="button" class="show-part" data-show-part="${esc(`${t.view}/`)}">${line(t.title)}</button>`
+                  : `→ <span class="unlinked" title="nothing on this map">${esc(d)}</span>`;
+              })
+              .join(" ")}</span>`
+          : `<span class="ux-goes none">nothing records where this leads</span>`
+      }
+    </li>`;
+
+  return `
+    <section class="group-ux">
+      <h3>How this part of the product fits together</h3>
+      <p class="lede">${nodes.length} screen${nodes.length === 1 ? "" : "s"} beneath this group, laid out by
+      what leads where. ${
+        edges
+          ? `${edges} step${edges === 1 ? "" : "s"} recorded.`
+          : `<strong>No step between them is recorded</strong>, so this is a list of screens rather than a flow — a control that navigates and does not say where is one an engineer will invent.`
+      }</p>
+      <div class="ux-map">
+        ${layers
+          .map(
+            (layer, i) => `<ol class="ux-layer" style="--layer:${i}">
+              <li class="ux-layer-name">${i === 0 ? "arrived at first" : i === layers.length - 1 && loose.length ? "no arrow reaches these" : `${i} step${i === 1 ? "" : "s"} in`}</li>
+              ${layer.map(box).join("")}
+            </ol>`
+          )
+          .join("")}
+      </div>
+    </section>`;
+}
+
 /**
  * ⛔ WHAT A GROUP STATES IN ITS OWN RIGHT.
  *
@@ -1859,6 +2072,7 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
           (g) => `<section class="view" id="${anchorOf(g.scope)}" data-view="${esc(g.scope)}" data-ref="${esc(g.scope)}" data-label="${esc(plain(g.title))}">
             <h2>${line(g.title)}</h2>
             ${renderProse(corpus.scopes.find((x) => x.scope.id === g.scope)?.body ?? "")}
+            ${renderHappyPath(corpus, g.scope, ctx, decisionsOn(corpus, `${g.scope}#happy-path`))}
             ${
               /* ⛔ A leaf shows this only when it owns something. "Nothing holds everywhere in here"
                  on a feature with no children is noise, and noise is what stops the real blanks
@@ -1891,6 +2105,16 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
             return `<section class="view" id="${anchorOf(id)}" data-view="${esc(id)}" data-ref="${esc(id)}" data-label="${esc(plain(sc.title || id))}">
               <h2>${line(sc.title || id)}</h2>
               ${renderProse(corpus.scopes.find((x) => x.scope.id === id)?.body ?? "")}
+              ${
+                /**
+                 * ⛔ A GROUP'S OWN SCREEN RENDERS TOO. `views` is on every Scope and only leaf
+                 * features ever drew theirs, so a group that genuinely has a screen — an area
+                 * landing page, a shell the whole group lives in — could hold one in the file and
+                 * see nothing on the page.
+                 */
+                renderScreens(sc, ctx, id, opts)
+              }
+              ${renderGroupUx(corpus, id, ctx)}
               ${renderGroupRules(corpus, id, ctx, homesOf)}
               <h3 class="sub">What is filed under it</h3>
               <ul class="contents">${kids
@@ -3045,6 +3269,44 @@ const STYLE = `<style>
     display: flex; gap: .7rem; align-items: baseline; flex-wrap: wrap; }
   ul.contents a { font-size: 1.05rem; }
   ul.contents .n { font-size: .82rem; color: var(--dim); }
+  /* ---- a group's high-level view ---------------------------------------- */
+  /* ---- what the feature is for --------------------------------------- */
+  .happy { border: 1px solid var(--accent); border-radius: 10px; padding: .9rem 1rem;
+    margin: 0 0 1.4rem; background: var(--card); }
+  .happy.agreed { border-color: var(--ok); }
+  .happy.none { border-color: var(--warn); }
+  .happy h3 { font-size: .74rem; text-transform: uppercase; letter-spacing: .06em; color: var(--dim);
+    margin: 0 0 .4rem; }
+  .happy-does { font-size: 1.05rem; line-height: 1.45; margin: 0 0 .7rem; }
+  dl.happy-io { display: grid; grid-template-columns: max-content 1fr; gap: .2rem .7rem;
+    margin: 0 0 .7rem; font-size: .92rem; }
+  dl.happy-io dt { font-size: .72rem; text-transform: uppercase; letter-spacing: .05em;
+    color: var(--dim); padding-top: .15rem; }
+  dl.happy-io dd { margin: 0; }
+  /* The flow, walkable: each screen in order, each one a way in. */
+  ol.happy-through { list-style: none; display: flex; flex-wrap: wrap; gap: .3rem .1rem;
+    margin: 0 0 .7rem; padding: 0; font-size: .92rem; }
+  ol.happy-through li + li::before { content: "→"; color: var(--dim); margin: 0 .45rem 0 .35rem; }
+  .happy-ok { font-size: .82rem; color: var(--ok); margin: .5rem 0 0; }
+  .happy-why { font-size: .82rem; color: var(--dim); margin: .5rem 0 0; }
+  .group-ux { margin: 1.4rem 0 1.8rem; }
+  .group-ux h3 { font-size: 1rem; margin: 0 0 .3rem; }
+  .group-ux .lede { font-size: .9rem; color: var(--dim); margin: 0 0 .9rem; }
+  /* Layers left to right, so the flow reads the way a person walks it; wraps on a narrow pane. */
+  .ux-map { display: flex; gap: .9rem; align-items: flex-start; overflow-x: auto; padding-bottom: .4rem; }
+  ol.ux-layer { list-style: none; margin: 0; padding: 0; display: grid; gap: .5rem; min-width: 15rem; }
+  .ux-layer-name { font-size: .68rem; text-transform: uppercase; letter-spacing: .06em; color: var(--dim); }
+  .ux-node { border: 1px solid var(--line); border-radius: 8px; background: var(--card);
+    padding: .55rem .7rem; display: grid; gap: .15rem; }
+  .ux-node.intended { border-style: dashed; }
+  .ux-node > button.show-part { font-size: .95rem; font-weight: 600; text-align: left; }
+  .ux-in { font-size: .76rem; color: var(--dim); }
+  .ux-n { font-size: .74rem; color: var(--dim); }
+  .ux-n .warn { color: var(--warn); }
+  .ux-flag { font-size: .68rem; text-transform: uppercase; letter-spacing: .05em; color: var(--dim);
+    border: 1px solid var(--line); border-radius: 99px; padding: 0 .35rem; justify-self: start; }
+  .ux-goes { font-size: .78rem; margin-top: .2rem; }
+  .ux-goes.none { color: var(--dim); font-style: italic; }
   .group-rules { margin: 1.2rem 0 1.6rem; }
   .group-rules h3 { font-size: 1rem; margin: 0 0 .3rem; }
   .group-rules .lede { font-size: .9rem; color: var(--dim); margin: 0 0 .8rem; }

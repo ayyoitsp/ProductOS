@@ -209,9 +209,19 @@ export function preview(dir: string, act: Act, payload: Payload): { ok: true; re
 
   if (act === "accept") {
     const { target } = payload as AcceptPayload;
+    /**
+     * ⛔ THE PREVIEW HAS TO KNOW IT TOO. `perform` learned the happy-path ref and `preview` did
+     * not, so the surface that shows somebody what they are about to agree to refused the one act
+     * the whole feature waits on — and the CLI, which previews before it records, refused with it.
+     * Two doors on one act is the divergence this module exists to prevent.
+     */
+    const c = coveredBy(corpus, target);
+    if (target.endsWith("#happy-path")) {
+      if (!c) return no(`nothing says what "${target.slice(0, -"#happy-path".length)}" is for yet`);
+      return { ok: true, reads: c.reads };
+    }
     const aim = aimOf(corpus, target);
     if ("ok" in aim) return aim;
-    const c = coveredBy(corpus, target);
     if (!c) return no(`no exchange or rule "${target}"`);
     return { ok: true, reads: c.reads };
   }
@@ -300,6 +310,42 @@ function doAccept(dir: string, { target }: AcceptPayload, consent: Consent): Out
   const { corpus, findings } = checkCorpus(dir);
   const bad = gatesOf(consent, corpus, "an acceptance");
   if (bad) return bad;
+
+  /**
+   * ⛔ THE HAPPY PATH IS ACCEPTED BEFORE ANYTHING UNDER IT, so `accept` has to know the ref.
+   *
+   * Without this branch `aimOf` read `money#happy-path` as an exchange and refused with
+   * "no exchange happy-path in money" — the one act that everything else in the feature waits on,
+   * unavailable, with an error message about a thing nobody was talking about.
+   */
+  if (target.endsWith("#happy-path")) {
+    const scopeId = target.slice(0, -"#happy-path".length);
+    const sc = corpus.scopes.find((x) => x.scope.id === scopeId)?.scope;
+    if (!sc) return no(`no feature "${scopeId}"`);
+    if (!sc.happy_path)
+      return no(`nothing says what "${scopeId}" is for yet`, [
+        "write its happy_path first: what gets accomplished, what the person arrives with, what they leave with, and the screens in order",
+      ]);
+    const cover = coveredBy(corpus, target);
+    if (!cover) return no(`what "${scopeId}" is for cannot be read`);
+    writeVerdict(dir, "accepts.yaml", [
+      `  - kind: accept`,
+      `    target: ${target}`,
+      `    by: ${consent.by}`,
+      `    at: ${today()}`,
+      `    via: ${consent.via}`,
+      `    covers_slots: ${cover.slots}`,
+      `    covers_criteria: ${cover.criteria}`,
+    ]);
+    return {
+      ok: true,
+      said: `agreed what ${scopeId} is for`,
+      detail: [
+        "every sentence in this feature can now be read against it, and is offered for agreement",
+        "⛔ reword what it is for and this stamp breaks — along with the ground under everything agreed beneath it",
+      ],
+    };
+  }
 
   const aim = aimOf(corpus, target);
   if ("ok" in aim) return aim;

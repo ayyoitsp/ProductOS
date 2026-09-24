@@ -68,6 +68,32 @@ export interface Covered {
 export function coveredBy(corpus: Corpus, target: string): Covered | null {
   const { inherited, constrained } = resolveRules(corpus);
 
+  /**
+   * ⛔ THE HAPPY PATH IS COVERABLE, AND ITS HASH IS THE WHOLE POINT. A stamp on "what this feature
+   * is for" has to break the moment the purpose is reworded — otherwise the acceptance that gates
+   * every behaviour beneath it goes on standing for a sentence nobody agreed to.
+   */
+  if (target.endsWith("#happy-path")) {
+    const scopeId = target.slice(0, -"#happy-path".length);
+    const sc = corpus.scopes.find((x) => x.scope.id === scopeId)?.scope;
+    const hp = sc?.happy_path;
+    if (!sc || !hp) return null;
+    return {
+      slots: h(canon(hp)),
+      // Nothing demonstrates a purpose; the screens it runs through are part of the sentence.
+      criteria: h(canon([])),
+      parts: ["accomplishes", "brings", "ends_with", `through: ${hp.through.join(" → ") || "no screens named"}`],
+      criteriaCount: 0,
+      reads: [
+        `${norm(hp.accomplishes)}`,
+        `  arrives with: ${norm(hp.brings)}`,
+        `  leaves with: ${norm(hp.ends_with)}`,
+        `  through: ${hp.through.length ? hp.through.map((v) => norm(sc.views.find((x) => x.id === v)?.title || v)).join(" → ") : "⛔ no screens named"}`,
+        ...(hp.not ? [`  deliberately not: ${norm(hp.not)}`] : []),
+      ],
+    };
+  }
+
   const rule = corpus.rules.find((r) => r.rule.id === target);
   if (rule) {
     // A rule's own statement and criteria. ⛔ Its statement is hashed here AND into every
