@@ -292,3 +292,25 @@ export function drawFromRoute(routeFile: string, opts: DrawOptions = {}): DrawRe
   const html = emit(jsx, ctx);
   return { html, from: [...ctx.from], unresolved: [...new Set(ctx.unresolved)] };
 }
+
+/**
+ * ⛔ HAS THIS DRAWING BEEN TYPED OVER, OR HAS ITS SOURCE MOVED?
+ *
+ * The clause that catches the thing that keeps happening. A generated artefact sitting in a corpus
+ * is only trustworthy while it still matches what the generator produces — and the two ways it
+ * stops matching are the two things worth knowing:
+ *
+ *   somebody edited the drawing      → the edit is about to be lost, and was the wrong fix anyway
+ *   somebody changed the component   → the drawing is describing an application that has moved on
+ *
+ * Both look identical in the file, which is why neither was ever noticed. This cannot tell them
+ * apart either — but it can say the drawing and the code disagree, which is the part nobody knew.
+ *
+ * ⛔ It compares content, not timestamps. A modification time says who wrote last, not whether what
+ * they wrote is still right, and it is destroyed by a checkout.
+ */
+export function driftedFrom(routeFile: string, inCorpus: string, opts: DrawOptions = {}): { drifted: boolean; now: string; was: string } {
+  const now = drawFromRoute(routeFile, opts).html;
+  const norm = (h: string) => h.replace(/\s+/g, " ").trim();
+  return { drifted: norm(now) !== norm(inCorpus), now, was: inCorpus };
+}

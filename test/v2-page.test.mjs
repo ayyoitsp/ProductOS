@@ -922,3 +922,44 @@ test("the context is agreed before its details, and rewording it withdraws them"
 
   fs.rmSync(dir, { recursive: true, force: true });
 });
+
+test("a group renders how the part of the product beneath it fits together", () => {
+  /**
+   * ⛔ Peter: "our 'feature groups' shoudl also have UX describing a high level view."
+   *
+   * A group page was prose, a list of what is filed under it, and the rules it states. Everything
+   * visual lived on the leaves, so the question a group exists to answer — what does this part of
+   * the product look like and how does a person move through it — had no surface at all.
+   *
+   * ⛔ AND THIS TEST EXISTS BECAUSE `productos v2 change check` SAID IT DID NOT. The group-ux
+   * section was built, rendered, and driven in a browser, and nothing asserted a line of it — which
+   * the cascade record caught on its first real run, on my own work, one commit later.
+   */
+  const root = corpus.scopes.find((s) => !s.scope.in).scope.id;
+  const html = renderScopePage(corpus, root, { linkBase: "/v2" });
+  const map = /<section class="group-ux">([\s\S]*?)<\/section>/.exec(html);
+  assert.ok(map, "a group renders no high-level view of what is beneath it");
+
+  // Every screen beneath the group is on the map — a screen missing from it is one nobody can reach.
+  const screens = corpus.scopes.flatMap(({ scope }) => scope.views.filter((v) => v.exists !== "withdrawn").map((v) => v.id));
+  for (const v of screens)
+    assert.match(map[1], new RegExp(`data-show-part="${v}/"`), `${v} is beneath this group and not on its map`);
+
+  /**
+   * ⛔ IT IS DERIVED, NOT AUTHORED. Asking somebody to draw this would make a second copy of the
+   * navigation that goes stale the first time a screen moves — so the arrows come from the parts'
+   * own leads_to, and a screen that records nowhere says exactly that.
+   */
+  const withNav = corpus.scopes.flatMap(({ scope }) => scope.views.flatMap((v) => v.parts.filter((p) => p.leads_to)));
+  assert.ok(withNav.length, "the seed records no navigation, so this cannot be checked against it");
+  assert.match(map[1], /ux-goes/, "the map shows no steps between screens");
+  assert.match(map[1], /step(s)? recorded/, "the map does not say how much of the flow is recorded");
+
+  // ⛔ And a leaf feature has no such section: a map of one screen is a screen.
+  const leaf = corpus.scopes.find((s) => s.scope.exchanges.length && !corpus.scopes.some((x) => x.scope.in === s.scope.id));
+  if (leaf) {
+    const leafHtml = renderScopePage(corpus, leaf.scope.id, { linkBase: "/v2" });
+    const own = /<section class="group-ux">/.test(leafHtml.slice(leafHtml.indexOf(`data-view="${leaf.scope.id}"`)));
+    assert.equal(own, false, "a leaf feature renders a group map of itself");
+  }
+});

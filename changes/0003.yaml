@@ -1,0 +1,10 @@
+id: "0003"
+said: the monitor should not poll endlessly
+at: 2026-09-24
+kind: surface
+reaches:
+  surface: watchCorpus
+  pin: nothing-pins-this-yet
+waived:
+  pin: the watcher is driven end to end in a browser and its own test file pins it under another name
+closed: 2026-09-24

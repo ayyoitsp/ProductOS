@@ -14,7 +14,8 @@ import { fileNote, closeNote } from "../../v2/notes.js";
 import { appStyleFor } from "../../v2/appcss.js";
 import { watchCorpus } from "../../v2/watch.js";
 import { drawFromRoute } from "../../v2/draw.js";
-import { AGENTS } from "../../core/jobs.js";
+import { AGENTS, CASCADE, KINDS } from "../../core/jobs.js";
+import { readChanges, writeChange, nextId, verify, missing } from "../../core/change.js";
 import { writeSketchHtml } from "../../v2/draw-write.js";
 import { HOW } from "../../v2/record.js";
 import { renderScopePage, standalone } from "../../v2/page.js";
@@ -833,6 +834,124 @@ export function v2Command(): Command {
       console.log("");
       console.log(pc.dim(`  productos v2 check --at ${o.out}`));
       console.log(pc.dim(`  productos serve --v2 ${o.out}   → review it at /v2`));
+    });
+
+  /**
+   * ⛔ WHAT SOMEBODY SAID, AND WHETHER IT REACHED EVERY LAYER IT HAD TO.
+   *
+   * Peter: "i want to be able to have user changes cascade into all the different areas" — after
+   * the fourth time a piece of feedback was answered by editing the output. The instruction to do
+   * otherwise already existed, in bold, with the grep to run. It was read and violated anyway,
+   * because patching the output is the shortest path to making a complaint stop and nothing failed
+   * when that path was taken.
+   *
+   * `change` is the thing that fails. The words go in verbatim, the kind routes to the layers that
+   * kind must reach, each layer is verified by looking rather than by ticking, and `close` refuses
+   * while one is unverified and unwaived.
+   */
+  const change = cmd.command("change").description("Record a piece of feedback and drive it into every layer it affects");
+
+  change
+    .command("new")
+    .description("Record what somebody said, verbatim, and what kind of change it is")
+    .argument("<said>", "their words — ⛔ quoted, never paraphrased")
+    .requiredOption("--kind <kind>", `one of: ${KINDS.join(" | ")}`)
+    .option("--at <dir>", "corpus directory", "v2")
+    .action((said: string, o: { kind: string; at?: string }) => {
+      if (!KINDS.includes(o.kind)) {
+        console.error(pc.red("✗"), `"${o.kind}" is not a kind of change`);
+        console.error(pc.dim(`  ${KINDS.join(" · ")}`));
+        process.exit(1);
+      }
+      const root = process.cwd();
+      const id = nextId(root);
+      const rec = {
+        id,
+        said,
+        at: new Date().toISOString().slice(0, 10),
+        kind: o.kind,
+        reaches: Object.fromEntries((CASCADE[o.kind] ?? []).map((l) => [l, ""])),
+        waived: {},
+      };
+      const file = writeChange(root, rec);
+      console.log(pc.green("✓"), `${id} — ${path.relative(root, file)}`);
+      console.log(pc.dim(`  "${said}"`));
+      console.log("");
+      console.log(`a ${o.kind} change has to reach ${CASCADE[o.kind]?.length} layers:`);
+      for (const l of CASCADE[o.kind] ?? []) console.log(pc.dim(`  ${l} — name what satisfies it in reaches.${l}`));
+      console.log("");
+      console.log(pc.dim("  fill each one in, then: productos v2 change check " + id));
+    });
+
+  change
+    .command("check")
+    .description("Look, layer by layer, at whether this change actually landed")
+    .argument("[id]", "one change, or every open one")
+    .option("--at <dir>", "corpus directory", "v2")
+    .action((id: string | undefined) => {
+      const root = process.cwd();
+      const all = readChanges(root).filter((c) => (id ? c.id === id : !c.closed));
+      if (!all.length) {
+        console.log(pc.dim(id ? `no change "${id}"` : "nothing open"));
+        return;
+      }
+      let owed = 0;
+      for (const rec of all) {
+        const v = verify(root, rec);
+        const short = missing(v);
+        owed += short.length;
+        console.log("");
+        console.log(`${pc.bold(rec.id)} ${pc.dim(rec.kind)}${rec.closed ? pc.dim(" closed") : ""}`);
+        console.log(pc.dim(`  "${rec.said}"`));
+        for (const x of v) {
+          const mark = x.waived ? pc.yellow("~") : x.ok ? pc.green("✓") : pc.red("✗");
+          console.log(`  ${mark} ${x.layer.padEnd(9)} ${pc.dim(x.how)}${x.waived ? pc.dim(` — ${x.waived}`) : ""}`);
+        }
+      }
+      console.log("");
+      if (owed) {
+        console.log(pc.red("✗"), `${owed} layer${owed === 1 ? "" : "s"} this feedback has not reached`);
+        process.exitCode = 1;
+      } else console.log(pc.green("✓"), "every layer reached");
+    });
+
+  change
+    .command("close")
+    .description("Close a change — refused while any layer it must reach is unverified")
+    .argument("<id>")
+    .option("--waive <layer>", "waive one layer (repeatable), with --because", (v: string, all: string[]) => [...all, v], [] as string[])
+    .option("--because <why>", "why that layer does not apply here")
+    .option("--at <dir>", "corpus directory", "v2")
+    .action((id: string, o: { waive: string[]; because?: string }) => {
+      const root = process.cwd();
+      const rec = readChanges(root).find((c) => c.id === id);
+      if (!rec) {
+        console.error(pc.red("✗"), `no change "${id}"`);
+        process.exit(1);
+      }
+      /**
+       * ⛔ A WAIVER CARRIES ITS REASON. "Not applicable" with no argument is how a cascade becomes
+       * a formality — the reason is the part somebody can disagree with in six months.
+       */
+      if (o.waive.length) {
+        if (!o.because || o.because.trim().length < 20) {
+          console.error(pc.red("✗"), "a waived layer needs a reason somebody could argue with");
+          process.exit(1);
+        }
+        for (const l of o.waive) rec.waived[l] = o.because.trim();
+      }
+      const short = missing(verify(root, rec));
+      if (short.length) {
+        console.error(pc.red("✗"), `${short.length} layer${short.length === 1 ? "" : "s"} this has not reached:`);
+        for (const x of short) console.error(pc.dim(`    ${x.layer} — ${x.how}`));
+        console.error("");
+        console.error(pc.dim("  reach them, or waive one with --waive <layer> --because \"...\""));
+        console.error(pc.dim(`  ⛔ what this refuses to let you do is call it done after fixing one layer`));
+        process.exit(1);
+      }
+      rec.closed = new Date().toISOString().slice(0, 10);
+      writeChange(root, rec);
+      console.log(pc.green("✓"), `${id} closed — every layer reached`);
     });
 
   cmd

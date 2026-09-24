@@ -2043,6 +2043,18 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
              }
            </div>
            <div class="sub-view" data-sub-view="screens" data-ref="screens" data-label="Screens">
+             ${
+               /**
+                * ⛔ THE PRODUCT ROOT IS A GROUP TOO, AND IT WAS THE ONE WITHOUT A MAP.
+                *
+                * Every other container renders "how this part of the product fits together"; the
+                * root does not get a container view at all, because Overview stands in for it. So
+                * the largest group in the corpus — the whole product — was the only one whose shape
+                * was never drawn, and the seed could not even test the feature because its root is
+                * its only container.
+                */
+               renderGroupUx(corpus, scopeId, ctx)
+             }
              ${renderScreenIndex(corpus, ids, ctx)}
            </div>
            <div class="sub-view" data-sub-view="about" data-ref="${esc(scopeId)}" data-label="Product Truth">

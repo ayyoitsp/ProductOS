@@ -48,6 +48,25 @@ same way: feedback arrives about a rendered corpus, the corpus gets edited, the 
 away, and nothing about ProductOS changed. Prose with a ⛔ on it did not stop that. A failing
 build does.
 
+### ⛔ Record what he said, then drive it — `productos v2 change`
+
+```bash
+productos v2 change new "<his words, verbatim>" --kind concept|derivation|surface|generator|instruction
+productos v2 change check <id>      # layer by layer, by looking
+productos v2 change close <id>      # refused while any layer is unreached
+```
+
+The kind routes to the layers that kind must reach; each is verified by looking for a named thing
+in the file that would hold it; `close` refuses while one is short. Waiving a layer needs a reason
+somebody could argue with.
+
+**Quote him. Never paraphrase.** A summary is where the requirement quietly becomes the thing that
+was convenient to build — "screens overall are very thin" rendered as "improve the screens" loses
+the only part that was checkable.
+
+On its first real run this caught a layer I had skipped in the previous commit: a group's
+high-level view, built and rendered and driven in a browser, with nothing asserting a line of it.
+
 ### ⛔ If it can be generated, generate it — hand-authoring is the trap
 
 The specific thing that went wrong four times was hand-writing screens into a corpus. A typed

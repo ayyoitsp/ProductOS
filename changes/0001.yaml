@@ -1,0 +1,11 @@
+id: "0001"
+said: screens overall are very thin
+at: 2026-09-24
+kind: concept
+reaches:
+  model: shows
+  surface: renderScreens
+  check: a-drawing-does-not-show-what-the-screen-states
+  instruct: "shows:"
+  pin: a screen is a prototype
+waived: {}
