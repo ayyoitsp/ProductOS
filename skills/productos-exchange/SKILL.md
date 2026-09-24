@@ -45,6 +45,54 @@ A **Scope** holds terms, views and exchanges. An **Exchange** is one ask with on
 `asked_by` decides whether a person triggers it (then `at:` names the screen and control) or
 machinery does (then `when:` names what hands it over and whether it repeats).
 
+### Every key, so nothing is only ever written by hand
+
+⛔ **A field the skill does not name is a field no session writes.** The schema can support a
+concept perfectly and still have it appear only where somebody typed it — which is the
+most-missed layer in this repo and is now checked by a test. So, the whole file shape:
+
+```yaml
+# truth/<scope>.md
+id: deal-list                 # one segment, kebab-case
+title: The deals list
+in: deals                     # the scope above this one. Absent on the product root only
+exists: kept                  # kept | intended | withdrawn — whether the thing is really there
+was: cre/deals/deal-list      # where it came from, when a migration or a move renamed it
+tags: [cre, table]            # free labels a rule's selector can match on
+depends_on: [deal-pipeline]   # scopes this one cannot be built without
+terms:                        # the words THIS scope defines, and a rule may select on
+  deal: A financing request against one property.
+views:                        # the screens. See "Screens" below
+  - id: deals-list
+    title: CRE Deals
+    view_kind: list           # form | list | detail | modal | strip — a rule can select on it
+    exists: kept
+    walked: false             # ⛔ has a person opened this screen and confirmed what it holds?
+    sketch_html: |            # generated — see below. Never typed
+      …
+    shows:                    # which of this scope's sentences the drawing demonstrates
+      - see-the-list#answer#a-deal-with-no-size-shows-a-dash
+    parts:
+      - id: new-deal-button
+        role: commits         # commits | entry | navigates | display | region
+        label: New Deal
+exchanges:                    # the asks. Eight slots each
+  - id: see-the-list
+    …
+```
+
+⛔ **`exists` is not a status.** `intended` means the thing is not built and everything about it is
+intent; `withdrawn` means it was real and is gone, and it stays in the file so the ids it owned
+cannot be reused. `kept` is the ordinary case.
+
+⛔ **`walked: false` means nobody has opened the screen.** It is not "I did not get round to
+sketching" — it is the difference between a drawing somebody confirmed and a drawing somebody
+imagined, and it is rendered on the page in those terms.
+
+⛔ **`tags`, `view_kind` and a part's `role` exist so a rule can select on them** — `tag:`,
+`view_kind:` and `part_role:` in a selector. A label nothing selects on is decoration; add one when
+a rule needs it, not in advance.
+
 ### The eight slots, all required
 
 | | asks |
@@ -220,6 +268,10 @@ clock-triggered exchange promised *"Only a parent may change what a kid has"* ab
 no parent touches. Say `everywhere: true` if you genuinely mean it; it is still sayable and it
 still means it.
 
+⛔ **`only:` names exchanges one by one, as `<scope>#<exchange>`** — and a hand-typed list of twenty
+is copy-onto-every-feature wearing a selector's clothes, which `check` flags. Reach for a dimension
+that describes WHY those exchanges are alike (`term:`, `part_role:`, `asked_by:`) before naming them.
+
 `mode` has no default on purpose. A `supplies` rule read as `constrains` bolts a requirement
 onto stated answers; a `constrains` rule read as `supplies` governs almost nothing, because
 any exchange that states its answer escapes it.
@@ -324,17 +376,36 @@ web:
     - frontend/.next/static/chunks/*.css    # ⛔ a glob: build output is content-hashed
 ```
 
-How to write one:
+⛔ **GENERATE IT. DO NOT TYPE IT.**
 
-1. **Find the route** the screen corresponds to and read its component. Then read the UI primitives
-   it composes — that is where the class names live, not in the page.
-2. **Mirror them.** Same elements, same classes, same nesting. Never invent a class name: an
-   invented one resolves to nothing and renders as a broken app.
-3. **Static only.** No script, no handlers, no fetch. Realistic sample data, never real customer
-   data — the page gets published.
-4. **Say which element is which part**, with `data-part="<part id>"` on it. The renderer will fall
-   back to matching the part's label in the text, and to `placeholder` / `aria-label` / `title` on
-   inputs, but an explicit attribute is the only way that cannot be guessed wrong.
+```bash
+productos v2 draw "<scope>#<view>" --route <the component that renders it> --into <corpus>
+```
+
+It reads the route, inlines the primitives it composes, binds the props the call site passes, and
+writes the drawing into the corpus. **Re-run it after the component changes** — the drawing is
+output, and output is regenerated.
+
+⛔ **A hand-typed drawing is the single most-repeated mistake in this repo.** It cannot be
+re-derived when the application changes, so it is wrong the day after it is written and nothing
+says so; and when somebody reports that a screen is wrong, the shortest path becomes typing it
+again, which leaves the next corpus and the next session with nothing. If `draw` produces the wrong
+drawing, **the defect is in `draw`**.
+
+What it cannot do, and says so: it transforms source, it does not run it. An expression behind a
+hook, or a third-party icon, becomes a marked placeholder — hatched on the page — rather than a
+guess. A drawing that is mostly placeholders is a thin drawing, and the count is printed when it is
+made.
+
+Then:
+
+1. **Say which element is which part**, with `data-part="<part id>"`. The renderer falls back to
+   matching the part's label in the text, and to `placeholder` / `aria-label` / `title` on inputs,
+   but an explicit attribute is the only way that cannot be guessed wrong.
+2. **List what the drawing shows**, in `shows:`. `check` reports the sentences anchored at a screen
+   that its drawing does not claim to demonstrate — which is how "this screen is thin" becomes
+   something the tool says rather than something a person has to notice.
+3. **Never real customer data.** The page gets published.
 
 ⛔ **The mock renders in a shadow root with the app's CSS inside it.** That is what stops Tailwind
 restyling the review page. Two consequences worth knowing: a design system defining tokens on

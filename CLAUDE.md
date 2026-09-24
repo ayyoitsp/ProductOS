@@ -34,17 +34,32 @@ wrote it.
 scope run in any repo regenerates the original defect, and now there are two shapes in
 circulation with nothing recording which is correct.
 
-### The skills are the most-missed layer
-
-After changing the schema or the model, ask: *does the skill that authors this know the
-concept exists?* Check it rather than assume:
+### The skills are the most-missed layer — and it is now a test, because prose failed
 
 ```bash
-grep -ril "<the new concept>" skills/
+npm test -- test/framework-not-just-output.test.mjs
 ```
 
-A schema field no skill writes is a field that only ever appears where someone typed it
-by hand.
+It walks every field of every object an author writes and fails if the skill does not name it.
+A schema field no skill writes is a field that only ever appears where someone typed it by hand.
+
+**This test exists because the rule above was violated four times in one session**, each time the
+same way: feedback arrives about a rendered corpus, the corpus gets edited, the complaint goes
+away, and nothing about ProductOS changed. Prose with a ⛔ on it did not stop that. A failing
+build does.
+
+### ⛔ If it can be generated, generate it — hand-authoring is the trap
+
+The specific thing that went wrong four times was hand-writing screens into a corpus. A typed
+artefact cannot be re-derived when the source changes, so it is wrong the day after it is written;
+and when somebody says it is wrong, typing it again is always the shortest path.
+
+```bash
+productos v2 draw "<scope>#<view>" --route <component> --into <corpus>
+```
+
+**When a generated thing is wrong, fix the generator.** Ask, before editing any corpus file:
+*could a command have produced this?* If yes, the edit is the bug.
 
 ---
 

@@ -13,6 +13,8 @@ import { perform, preview, optionText, VIA, type Via, type Outcome, type Refused
 import { fileNote, closeNote } from "../../v2/notes.js";
 import { appStyleFor } from "../../v2/appcss.js";
 import { watchCorpus } from "../../v2/watch.js";
+import { drawFromRoute } from "../../v2/draw.js";
+import { writeSketchHtml } from "../../v2/draw-write.js";
 import { HOW } from "../../v2/record.js";
 import { renderScopePage, standalone } from "../../v2/page.js";
 import { migrate } from "../../v2/migrate.js";
@@ -814,6 +816,79 @@ export function v2Command(): Command {
       console.log("");
       console.log(pc.dim(`  productos v2 check --at ${o.out}`));
       console.log(pc.dim(`  productos serve --v2 ${o.out}   → review it at /v2`));
+    });
+
+  cmd
+    /**
+     * ⛔ THE SCREEN IS GENERATED. NOBODY TYPES IT.
+     *
+     * Peter, four times over, the last one in capitals: feedback on a rendered screen is a bug
+     * report against ProductOS, and the fix is to regenerate rather than to edit the output. He is
+     * right about the mechanism and not only the etiquette — eleven screens had been hand-written
+     * into a corpus, so when he said they were thin the shortest path was to hand-write them again,
+     * and the next corpus and the next session get nothing from it. A typed mock also cannot be
+     * re-derived when the application changes, so it is wrong the day after and nothing says so.
+     *
+     * This reads the route, inlines the primitives it composes, and writes the result into the
+     * corpus. Re-run it and the drawing follows the code.
+     */
+    .command("draw")
+    .description("Generate a screen from the codebase and write it into the corpus")
+    .argument("<view>", "which screen, as <scope>#<view>")
+    .requiredOption("--route <file>", "the component that renders it, relative to the repo root")
+    .option("--into <dir>", "the corpus to write into — a v1 products tree or a v2 truth tree", ".")
+    .option("-n, --dry-run", "print what would be written and change nothing")
+    .action((ref: string, o: { route: string; into?: string; dryRun?: boolean }) => {
+      const [scopeId, viewId] = ref.split("#");
+      if (!scopeId || !viewId) {
+        console.error(pc.red("✗"), "name the screen as <scope>#<view>");
+        process.exit(1);
+      }
+      const into = path.resolve(o.into ?? ".");
+      let componentsDir: string | undefined;
+      try {
+        const paths = resolvePathsOrThrow(into);
+        const root = path.dirname(path.dirname(paths.configFile));
+        const cfg = readConfig(paths);
+        componentsDir = cfg.web.components_dir ? path.resolve(root, cfg.web.components_dir) : undefined;
+      } catch {
+        componentsDir = undefined;
+      }
+      const route = path.resolve(o.route);
+      if (!fs.existsSync(route)) {
+        console.error(pc.red("✗"), `no component at ${route}`);
+        process.exit(1);
+      }
+      const drawn = drawFromRoute(route, { componentsDir });
+      if (!drawn.html.trim()) {
+        console.error(pc.red("✗"), "nothing could be read out of that component");
+        for (const u of drawn.unresolved) console.error(pc.dim(`  ${u}`));
+        process.exit(1);
+      }
+      console.log(pc.green("✓"), `${scopeId}#${viewId} — ${drawn.html.length} bytes`);
+      console.log(pc.dim(`  built from ${drawn.from.join(", ")}`));
+      /**
+       * ⛔ SAY WHAT IT COULD NOT READ. This is a transform, not a renderer: it does not run hooks
+       * or resolve data. An unreadable expression becomes a marked placeholder in the drawing
+       * rather than a guess, and the count belongs in the report — a drawing full of placeholders
+       * is the thin drawing again, and the only honest thing is to say so at the moment it is made.
+       */
+      if (drawn.unresolved.length) {
+        console.log(pc.yellow("!"), `${drawn.unresolved.length} thing${drawn.unresolved.length === 1 ? "" : "s"} it could not read, left marked in the drawing`);
+        for (const u of drawn.unresolved.slice(0, 8)) console.log(pc.dim(`    ${u}`));
+        if (drawn.unresolved.length > 8) console.log(pc.dim(`    …and ${drawn.unresolved.length - 8} more`));
+      }
+      if (o.dryRun) {
+        console.log(pc.dim("\ndry run — nothing written"));
+        return;
+      }
+      const written = writeSketchHtml(into, scopeId, viewId, drawn.html);
+      if (!written) {
+        console.error(pc.red("✗"), `no view "${viewId}" under "${scopeId}" in ${into}`);
+        process.exit(1);
+      }
+      console.log(pc.dim(`  written into ${path.relative(process.cwd(), written)}`));
+      console.log(pc.dim("  re-run this after the component changes — the drawing is output, not a document"));
     });
 
   cmd

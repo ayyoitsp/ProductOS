@@ -10,7 +10,7 @@
  *   note     worth a person's attention; never blocks
  *   shape    an observation about proportions, which no single page can show
  */
-import { SLOTS, SLOT_ASKS, type SlotName , type Says} from "./schema.js";
+import { SLOTS, SLOT_ASKS, statements, type SlotName, type Says } from "./schema.js";
 import {
   DOWNSTREAM_OF_ANSWER,
   answerIsUnknown,
@@ -724,6 +724,8 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
               kind: "dispute-targets-nothing",
               where: `${ref}#${slot}`,
               what: `disputes "${t}", which does not exist`,
+              fix:
+                "name the slot it disputes as <scope>#<exchange>#<slot>, or drop the dispute — a contradiction with nothing on the other side blocks a sentence nobody can find",
             });
         }
         for (const b of ex.slots[slot]?.standing.blocks ?? []) {
@@ -979,6 +981,8 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
             kind: "excepts-nothing",
             where: ref,
             what: `is excepted from "${x.rule}", which is not a rule`,
+            fix:
+              "name the rule it excepts, or drop the exception — an exception to nothing reads as a rule having been considered and is checked by nothing",
           });
           continue;
         }
@@ -1347,6 +1351,76 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
       fix:
         "a scope is a thing that states behaviours, or a container for things that do. If this is vocabulary, declare those words on the scope whose behaviours use them; if something ought to state this, that behaviour is what is missing",
     });
+  }
+
+  /**
+   * ---- a drawing that does not show what the screen states ----
+   *
+   * ⛔ "SCREENS OVERALL ARE VERY THIN", AND NOTHING COULD HAVE SAID SO.
+   *
+   * Every check passed on a deals list whose drawing had three fully-sized rows, while its own
+   * sentences asserted a dash for an unsized deal, an error banner above a kept page, and an empty
+   * state for a filtered list matching nothing. A screen either had a drawing or it did not, and
+   * this one did — so the gap between "there is a picture" and "the picture shows the thing" was
+   * invisible to the tool and visible to the first person who looked.
+   *
+   * `View.shows` closes it: a drawing claims which sentences it demonstrates, and this reports the
+   * ones it does not claim. A note, not a refusal — a screen may legitimately not show every state
+   * of every behaviour that lands on it, and the author is the one who knows which.
+   */
+  {
+    const thin: string[] = [];
+    for (const { scope } of corpus.scopes) {
+      for (const v of scope.views) {
+        if (v.exists === "withdrawn") continue;
+        if (!v.sketch && !v.sketch_html) continue; // no drawing at all is a different finding
+        const landing = scope.exchanges.filter((e) => e.at?.view === v.id);
+        if (!landing.length) continue;
+        /**
+         * ⛔ Counted per STATEMENT, because that is the grain a reviewer agrees at. A slot saying
+         * eleven things whose drawing shows one is the exact shape of the complaint.
+         */
+        const owed: string[] = [];
+        for (const ex of landing)
+          for (const slot of SLOTS) {
+            const f = ex.slots[slot];
+            if (!f) continue;
+            const said = statements(f.says);
+            if (said.length > 1) owed.push(...said.map((st) => `${ex.id}#${slot}#${st.id}`));
+            else if (said.length || f.none || f.cannot_fail || f.outcomes?.length) owed.push(`${ex.id}#${slot}`);
+          }
+        if (!owed.length) continue;
+        // A claim on the slot covers its statements, so a broader ref satisfies a narrower one.
+        const claimed = new Set(v.shows);
+        const missing = owed.filter((ref) => {
+          if (claimed.has(ref)) return false;
+          const parts = ref.split("#");
+          return !(parts.length === 3 && claimed.has(`${parts[0]}#${parts[1]}`));
+        });
+        /**
+         * ⛔ A drawing claiming a ref that does not exist is worse than claiming none — it reads as
+         * covered. Reported as its own line rather than folded into the count.
+         */
+        const unknown = v.shows.filter((ref) => !owed.includes(ref) && !owed.some((o) => o.startsWith(`${ref}#`)));
+        if (unknown.length)
+          add({
+            severity: "refuse",
+            kind: "a-drawing-claims-to-show-something-nothing-states",
+            where: `${scope.id}#${v.id}`,
+            what: `shows ${unknown.join(", ")}, which ${unknown.length === 1 ? "is not a sentence" : "are not sentences"} this screen states`,
+            fix: "fix the ref or drop it — a claim that resolves to nothing reads as covered and is checked by nothing",
+          });
+        if (missing.length) thin.push(`${scope.id}#${v.id} (${missing.length} of ${owed.length})`);
+      }
+    }
+    if (thin.length)
+      add({
+        severity: "note",
+        kind: "a-drawing-does-not-show-what-the-screen-states",
+        where: thin[0]!.split(" ")[0]!,
+        what: `${thin.length} screen${thin.length === 1 ? "" : "s"} do not claim to show everything stated on them: ${thin.slice(0, 6).join(", ")}${thin.length > 6 ? ` …and ${thin.length - 6} more` : ""}`,
+        fix: "draw the states the sentences describe — the dash, the empty list, the error, the greyed row — and list each in the screen's `shows`. A drawing of the happy path alone lets somebody agree to a sentence about a case it does not contain",
+      });
   }
 
   /**
@@ -2164,6 +2238,8 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
         kind: "reading-bears-on-nothing",
         where: r.id,
         what: `bears on "${r.bears_on}", which does not exist`,
+        fix:
+          "name what was read as <scope> or <scope>#<exchange> — an observation about nothing cannot be weighed against the truth it was meant to test",
       });
   }
 

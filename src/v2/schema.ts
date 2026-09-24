@@ -1211,6 +1211,28 @@ export const View = z.object({
   /* ⛔ `runtime` REMOVED. Read by nothing, and what it meant was never written down. */
   sketch: z.string().optional(),
   sketch_html: z.string().optional(),
+  /**
+   * Which of this scope's sentences this drawing actually shows, as `<exchange>#<slot>` or
+   * `<exchange>#<slot>#<statement>`.
+   *
+   * ⛔ WITHOUT THIS, A THIN DRAWING IS INDISTINGUISHABLE FROM A COMPLETE ONE.
+   *
+   * Peter: "screens overall are very thin." He was right, and nothing in the model could have told
+   * him so — or told me. The deals list asserts that an unsized deal shows a dash rather than a
+   * zero, that a load failure is reported above the table with the previous page kept, and that a
+   * filtered list matching nothing says so. The drawing had three fully-sized rows and none of it,
+   * and every check passed: a screen either has a drawing or it does not, and this one did.
+   *
+   * So a drawing says what it demonstrates, and `check` reports the sentences anchored at a screen
+   * that the screen does not claim to show. A mock drawn from the happy path alone now fails to
+   * claim eight of eleven things and says so out loud.
+   *
+   * ⛔ IT IS A CLAIM, NOT A PROOF. Listing a ref here says the author drew that state; nobody can
+   * verify from the markup that the dash is really in it. That is what `walked` is for — a person
+   * confirming the screen holds what it says. This closes the gap between "there is a picture" and
+   * "the picture shows the thing", which is where thin drawings lived.
+   */
+  shows: z.array(z.string()).default([]),
   /** ⛔ Not "I didn't feel like sketching" — it means nobody walked the screen, and it
    *  blocks readiness. */
   walked: z.boolean().default(false),

@@ -452,6 +452,16 @@ const PT_STYLE = `<style>
   .pt-region:hover, .pt-display:hover { outline: 1px dashed rgba(37,99,235,.55); outline-offset: 2px; }
   .pt.on { background: rgba(37,99,235,.10); box-shadow: inset 0 0 0 2px rgba(37,99,235,.9); }
   /**
+   * ⛔ WHAT THE GENERATOR COULD NOT READ IS SHOWN AS UNREAD, not left blank. It transforms source,
+   * it does not run it: an expression behind a hook or a third-party icon cannot be resolved, and a
+   * silent gap there is exactly how a drawing looks finished while showing nothing. Hatched, so a
+   * reviewer can see at a glance how much of the screen is actually drawn.
+   */
+  .productos-unknown { display: inline-block; min-width: 1.5em; border-radius: 2px; color: #92400e;
+    background: repeating-linear-gradient(45deg, rgba(245,158,11,.18) 0 4px, transparent 4px 8px);
+    outline: 1px dashed rgba(245,158,11,.6); }
+  [data-component] { display: block; padding: .25rem .4rem; font-size: .75rem; }
+  /**
    * ⛔ THE FOCUS MARK CANNOT BE THE ACCENT COLOUR. On a card's copy it landed on the primary
    * button — blue ring, blue button, invisible. The one job of the copy is to say WHICH control the
    * sentence is about, so the mark has to read against the application's own palette rather than
