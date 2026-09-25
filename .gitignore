@@ -44,3 +44,21 @@ planning/
 # Logs
 *.log
 logs/
+
+# ProductOS local-only state
+productos/.local/
+
+# Running `productos init` in this repo root scaffolds a corpus. That is derived state —
+# anyone who runs init gets it — so it is not committed. The leading slash matters: the
+# worked example at docs/example/productos/ IS committed.
+/productos/
+
+# The worked-example corpus is committed; its scratch install is not
+docs/example/.claude/
+docs/example/.git/
+docs/example/productos/.local/
+
+# The v2 working corpus is regenerated from v2-seed/ by `productos v2 reset` before every
+# review run, so committing it would only ever record whichever run finished last.
+# v2-seed/ IS committed — it is the pristine copy every run starts from.
+/v2/

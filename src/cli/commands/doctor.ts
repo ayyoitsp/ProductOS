@@ -6,7 +6,10 @@ import pc from "picocolors";
 import { findRepoRoot, pathsFor } from "../../core/paths.js";
 import { ByokProvider, readConfig, resolveCodeScanningByok, resolveTruthVerificationByok } from "../../core/config.js";
 import { envConfigFile, readEnvConfig } from "../../core/env.js";
-import { listAreas, listFeatures, productsRoot } from "../../core/product.js";
+import { readFrameworkGaps } from "../../core/framework-gaps.js";
+import YAML from "yaml";
+import { FeatureTracking, listTrackingFiles } from "../../core/tracking.js";
+import { listAllContainers, listAreas, listFeatures, productsRoot } from "../../core/product.js";
 
 export function doctorCommand(): Command {
   return new Command("doctor")
@@ -123,8 +126,45 @@ export function doctorCommand(): Command {
       // 6. Product truth state
       if (fs.existsSync(productsRoot(paths))) {
         const areas = listAreas(paths);
-        const features = listFeatures(paths);
-        const totalBehaviors = features.reduce((s, f) => s + f.frontmatter.behaviors.length, 0);
+        const features = listAllContainers(paths);
+
+        // ⛔ Tracking is validated too. It was not, so a malformed sidecar left
+        // `doctor` reporting a healthy corpus while every other command crashed
+        // on it.
+        const trackingFiles = listTrackingFiles(paths);
+        let badTracking = 0;
+        for (const fp of trackingFiles) {
+          try {
+            FeatureTracking.parse(YAML.parse(fs.readFileSync(fp, "utf-8")) ?? {});
+          } catch (e) {
+            badTracking++;
+            console.log(
+              pc.red("✗"),
+              `${path.relative(paths.repoRoot, fp)} — ${(e as Error).message.split("\n")[0]}`
+            );
+          }
+        }
+        if (trackingFiles.length) {
+          console.log(
+            badTracking === 0 ? pc.green("✓") : pc.yellow("!"),
+            `Tracking: ${trackingFiles.length} sidecar(s)${
+              badTracking ? `, ${badTracking} unreadable` : " readable"
+            }`
+          );
+        }
+
+        const fwGaps = readFrameworkGaps(paths).filter(
+          (g) => g.status !== "closed" && g.status !== "wont-fix"
+        );
+        if (fwGaps.length) {
+          // Flagged, never counted as a corpus problem: these are ProductOS's
+          // to fix, not the user's.
+          console.log(
+            pc.yellow("!"),
+            `${fwGaps.length} framework gap${fwGaps.length === 1 ? "" : "s"} recorded ` +
+              pc.dim("(ProductOS's to fix — productos todo)")
+          );
+        }        const totalBehaviors = features.reduce((s, f) => s + f.frontmatter.behaviors.length, 0);
         ok(`Product truth: ${areas.length} area(s), ${features.length} feature(s), ${totalBehaviors} behavior(s)`);
       } else {
         warn("productos/products/ not scaffolded");

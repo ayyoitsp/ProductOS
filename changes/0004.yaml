@@ -1,0 +1,13 @@
+id: "0004"
+said: "happy_path never reaches the migrator, so a migrated corpus offers a reviewer nothing: 19 features waiting on a purpose, 0 behaviours, 0 acceptable"
+at: 2026-09-24
+kind: concept
+reaches:
+  model: happy_path
+  derive: contextAgreed
+  generate: ""
+  surface: renderHappyPath
+  check: nothing-says-what-this-feature-is-for
+  instruct: "happy_path:"
+  pin: the context is agreed before its details
+waived: {}

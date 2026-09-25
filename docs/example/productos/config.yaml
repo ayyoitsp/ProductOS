@@ -1,0 +1,23 @@
+version: 0.0.1
+stack:
+  language: typescript
+  test_framework: jest
+  test_command: npm test
+targets:
+  local-dev:
+    url: http://localhost:3000
+default_target: local-dev
+ui_port: 7878
+byok:
+  active: anthropic
+  providers:
+    anthropic:
+      api_key_env: ANTHROPIC_API_KEY
+      default_model: claude-sonnet-4-6
+  max_steps: 5
+operations:
+  code_scanning:
+    handler: claude
+  truth_verification:
+    handler: queue
+web: {}

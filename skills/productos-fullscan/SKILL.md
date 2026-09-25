@@ -6,9 +6,129 @@ version: 0.1.0
 
 # ProductOS — Fullscan Skill (BROAD codebase pass)
 
+> **The model is defined outside this skill.** `OVERVIEW.md` introduces it, `EXAMPLE.md`
+> shows it as real files one concept at a time, and `GLOSSARY.md` defines every term and
+> what it refuses — feature area, capability system, feature, capability, surface, stub,
+> behavior, claim, undefined behavior, `depends_on` vs `affected_by`, validation,
+> readiness, framework gap.
+>
+> Read them before classifying anything, and do not re-derive a definition here: this
+> skill and the glossary disagreeing is how six words ended up circulating for one
+> concept.
+
+
 ProductOS holds the **product truth** for this codebase as a tree of markdown files under `productos/products/`. **Implementation tracking is separate** — it lives in YAML sidecars under `productos/tracking/`. **Feedback** (free-form notes from humans or external sources) lives as queue entries under `productos/feedback/`.
 
 Your job is to consult, propose, update, and process these three things via MCP. You do not write tests; you do not run tests as the validation core.
+
+
+
+
+## Before handing the corpus back
+
+```bash
+productos check
+```
+
+It refuses a product / area / capability system with no description, a container at the
+wrong depth, any high audit finding, and any `depends_on` / `affected_by` / `leads_to`
+that resolves to nothing. **Do not tell the user a corpus is ready to review until this
+passes** — the structural claims the model makes are not the reviewer's job to catch.
+
+
+## When something has no clean home
+
+Do not force it into the nearest category. Run:
+
+```
+productos todo add "<what the model cannot express>" --forced-into <where it had to go>
+```
+
+That records a **framework gap** — a TODO for ProductOS's developers, distinct from the
+user's queue. `productos todo scan` also detects forced fits mechanically (a capability
+behavior demonstrable only through a screen; a behavior anchored to a surface nothing
+declares), because this instruction alone has repeatedly not been enough.
+
+A hand-placed compromise is worse than a recorded gap: it looks correct, so the evidence
+that the framework was deficient disappears and the same hole is rediscovered next time.
+
+
+## Concepts you must author (same as `productos-scope`)
+
+Read `productos-scope` §2b, §3b and §5 for the full treatment. The three most-missed:
+
+**Two symmetric trees, and a fullscan is where the system tree gets missed.**
+
+| | Product tree | System tree |
+|---|---|---|
+| grouping | **feature area** `products/<product>/<area…>/` — nests freely | **capability system** `capabilities/<system>/` — a subsystem, one level |
+| container | **feature** — user action, has screens | **capability** — an input from elsewhere, no screens, unanchored behaviors |
+| path | `products/<product>/<area…>/<slug>.md` | `capabilities/<system>/<slug>.md` |
+
+A capability system is **never inside a feature area** — a subsystem serves many of
+them. Capabilities are the easiest thing to miss in a fullscan, because there is no
+route to find them by; **several features depending on the same guarantee** is the
+signal.
+
+**Depth is yours to choose, and size is the rule.** A feature's id is its path —
+`<product>/<area…>/<slug>` — with one product segment and at least one area segment,
+nesting as deep as the product needs. A fullscan is where this matters most: a broad
+pass over a real codebase finds far more than eight features per concern, and dumping
+them into one flat area produces a page nobody reads.
+
+Target **2–8 features per area** (configurable as `grouping:` in
+`productos/config.yaml`). Past that, nest. Below it, don't — an area holding one
+feature is a name, not a grouping, and `productos check` flags both directions and
+names the clusters it would split out. Re-file with `productos move <id> <dest>`,
+never `mv`: the id **is** the path, so a hand move strands every edge pointing at it.
+
+**Undefined behaviors** — when you cannot tell what a claim should be, write
+`question:` with **no `claim:`**. Never guess, never omit. A behavior has one or the
+other, never both and never neither. It renders as *undefined*, blocks the feature from
+reading ready-to-build, and answering it fills in the claim on the same stable id. A
+fullscan produces more of these than a single-feature scope does — that is correct, and
+they are the most valuable thing it finds.
+
+**Undecided behaviors carry three more fields, and a fullscan is where they matter
+most** — a broad pass produces more questions than any other mode, and an unowned,
+undated question with no blast radius is a question that stays open forever:
+
+```yaml
+  - id: who-may-acknowledge-an-exception
+    question: >
+      May any analyst acknowledge an exception, or does acknowledging one require a role?
+    asked_of: the customer     # NEVER as prose. `notes: Settled by X.` cannot be chased.
+    asked_at: 2026-09-18
+    blocks: []                 # [] means "the rest can ship" — write it, don't omit it
+```
+
+Omitting `blocks` says nobody worked it out; `blocks: []` says the rest can ship without
+it. Those are different facts and a reader needs the second one. See `productos-scope`
+§"When you can't tell what the claim should be" for the full treatment, including
+`holds_for` and why it is usually the wrong fix for a claim full of one customer's
+numbers.
+
+**You never answer a question.** `productos decide` does, and only a person runs it.
+
+**⛔ Run the capability pass, and print the ratio.** A fullscan is where the machinery
+layer is lost, because features have routes to find them by and capabilities have none.
+One real fullscan produced 111 behaviors of screen against 35 of machinery and shipped
+with *upload, parse, extract and confidence-score* referenced by four features and owned
+by nothing.
+
+The method is in `productos-scope` §3e: list every verb your feature claims attribute to
+the system, name the page that owns each one, and treat every unowned verb as a missing
+capability page. Then check the ratio — `productos check` prints it — and report it in
+your handoff. Under a third machinery, for a product that does real work underneath,
+means the pass is not finished.
+
+**⛔ And one surface per thing a user sees**, not one per feature — `productos-scope` §3f.
+A broad pass is where 25 behaviors end up anchored to a single box, because reading code
+finds the route and not the modals.
+
+**A substantive body** — required, not optional. What the thing is, how the domain
+works, the boundary, who works here. Never a table of contents, never a filename.
+
 
 ## When to use this skill vs other ProductOS skills
 
@@ -24,13 +144,13 @@ If the user said "analyze/scope the X feature" (singular), they probably want `p
 ## The split
 
 ```
-productos/products/<area>/<feature>.md       ← PRODUCT TRUTH
+productos/products/<product>/<area…>/<feature>.md       ← PRODUCT TRUTH
   - claims: what the user does, what the user sees, in product language
   - no API/endpoint/file references in the claim text
   - status (planned | shipped | deprecated), title, description
   - body: OPTIONAL short product-language context (a sentence or two). DEFAULT TO NOTHING. Never put implementation rationale ("why derived not stored"), out-of-scope catalogs, design discussion, or related-feature lists in the body. UX + behaviors + description ARE the spec.
 
-productos/tracking/<area>/<feature>.yaml     ← IMPLEMENTATION + VERIFICATION
+productos/tracking/<product>/<area…>/<feature>.yaml     ← IMPLEMENTATION + VERIFICATION
   - implements: [code paths]
   - per-behavior: code_refs, status (planned|proposed|verified|stale|contested|deprecated),
                   last_verified, verified_by, full transition history
@@ -228,7 +348,7 @@ You write **product truth** (`productos/products/auth/signup.md`):
 ```yaml
 id: auth/signup
 title: User signup
-status: shipped
+status: built
 description: Users create accounts with email + password.
 behaviors:
   - id: duplicate-email-rejected
@@ -291,8 +411,8 @@ Both surfaces use the same MCP tools and produce the same DB state.
 Pick whichever fits the moment.
 
 Files to review:
-  - Product truth diffs:        productos/products/<area>/<feature>.md
-  - Tracking sidecar updates:   productos/tracking/<area>/<feature>.yaml
+  - Product truth diffs:        productos/products/<product>/<area…>/<feature>.md
+  - Tracking sidecar updates:   productos/tracking/<product>/<area…>/<feature>.yaml
   - Processed feedback:         productos/feedback/<id>.md (state: processed)
 ```
 

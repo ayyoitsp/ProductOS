@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { FlatList, Image, Pressable, RefreshControl, StyleSheet } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Link, useFocusEffect, useRouter } from "expo-router";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { Surface, Text, View } from "@/components/Themed";
@@ -14,6 +15,7 @@ import { useColorScheme } from "@/components/useColorScheme";
 export default function FamilyScreen() {
   const cs = useColorScheme() ?? "light";
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [kids, setKids] = useState<Kid[]>([]);
   const [balances, setBalances] = useState<Record<number, number>>({});
   const [refreshing, setRefreshing] = useState(false);
@@ -37,7 +39,7 @@ export default function FamilyScreen() {
   }, [load]);
 
   return (
-    <View style={styles.screen}>
+    <View style={[styles.screen, { paddingTop: insets.top }]}>
       <FlatList
         contentContainerStyle={styles.list}
         data={kids}

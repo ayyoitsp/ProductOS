@@ -2,10 +2,141 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { fileURLToPath } from "node:url";
+import { AGENTS, type Capability } from "../core/jobs.js";
+import type { ProductosConfig } from "../core/config.js";
 
 const HOME = os.homedir();
 const CLAUDE_DIR = path.join(HOME, ".claude");
 const SKILLS_DIR = path.join(CLAUDE_DIR, "skills");
+const AGENTS_DIR = path.join(CLAUDE_DIR, "agents");
+
+/**
+ * Where the bundled agent definitions live.
+ *
+ * ⛔ Agents are installed separately from skills and are NOT skills. A skill loads
+ * into whatever context invokes it, which is exactly wrong for the fresh-eyes
+ * reviewer: its whole value is not knowing what ProductOS is, and a skill read by the
+ * main agent has already lost that. It has to be a subagent with its own context.
+ */
+function bundledAgentsRoot(): string {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  return path.resolve(here, "../../agents");
+}
+
+/** Install the agent definitions. Same copy-or-symlink rule as skills. */
+/**
+ * ⛔ THE HOST'S FRONTMATTER IS GENERATED, NOT CARRIED BY THE PROMPT.
+ *
+ * Peter: "ideally in the future these job agents will be portable - model agnostic. we should let
+ * people assign whatever model they want to each task."
+ *
+ * So a prompt file holds the prompt and nothing else. The name, the one-line description, the tool
+ * list and the model are this host's dialect, and they are produced here from two portable inputs:
+ * the agent's own spec in `core/jobs.ts`, and the project's config. Copying a hand-written
+ * Claude-shaped file — which is what this did — makes every agent a Claude agent and makes the
+ * model a thing somebody edits in a prompt.
+ */
+const TOOL_FOR: Record<Capability, string[]> = {
+  "read-files": ["Read"],
+  "run-commands": ["Bash"],
+  "search-files": ["Grep", "Glob"],
+  "fetch-url": ["WebFetch"],
+  "ask-the-human": ["AskUserQuestion"],
+  "show-a-page": ["Read"],
+  /**
+   * ⛔ NO MAPPING, DELIBERATELY. Every agent in the registry judges, and the test enforces that
+   * none asks for this — so if it is ever reached, the registry has grown an author wearing a
+   * reviewer's clothes and the install should stop rather than hand it Write.
+   */
+  "write-corpus": [],
+};
+
+/**
+ * ⛔ AGENTS BELONG TO THE PROJECT, NOT THE MACHINE.
+ *
+ * They installed into `~/.claude/agents/` while the model assignment they carry comes from a
+ * project's own config — so two projects wanting different models for the same reviewer wrote over
+ * each other, last install wins, silently. And an agent a project had switched off stayed on disk
+ * from whichever project installed it last.
+ *
+ * So: the project's own agent directory when run inside a project, and the machine's only when
+ * there is no project to belong to.
+ */
+function agentsDirFor(cfgRoot?: string): string {
+  return cfgRoot ? path.join(cfgRoot, ".claude", "agents") : AGENTS_DIR;
+}
+
+function installClaudeAgents(dev: boolean, update?: boolean, cfg?: ProductosConfig, cfgRoot?: string): string[] {
+  const root = bundledAgentsRoot();
+  if (!fs.existsSync(root)) return [];
+  const AGENT_TARGET = agentsDirFor(cfgRoot);
+  fs.mkdirSync(AGENT_TARGET, { recursive: true });
+  /** The real paths, so the report cannot claim a directory the files are not in. */
+  const written: string[] = [];
+  const out: string[] = [];
+  const off = cfg?.agents.off ?? {};
+  const models = cfg?.agents.model ?? {};
+  const dflt = cfg?.agents.default_model;
+
+  for (const agent of AGENTS) {
+    if (!agent.prompt) continue; // named in the registry, prompt not written — said out loud elsewhere
+    if (off[agent.name]) continue; // turned off for this project, with a recorded reason
+    const src = path.join(root, path.basename(agent.prompt));
+    if (!fs.existsSync(src)) continue;
+
+    const tools = [...new Set(agent.needs.flatMap((c) => TOOL_FOR[c] ?? []))];
+    if (!tools.length) continue;
+    /**
+     * ⛔ A JUDGE NEVER GETS Write OR Edit, and this is where that is enforced rather than hoped:
+     * the tool list is derived from declared capabilities, and no capability a judge may declare
+     * maps to a writing tool.
+     */
+    const model = models[agent.name] ?? dflt;
+    const name = path.basename(agent.prompt).replace(/\.md$/, "");
+    const front = [
+      "---",
+      `name: ${name}`,
+      // The registry's own question, so the host's chooser shows what the agent is for.
+      `description: ${agent.asks} ${agent.judges ? "Reviews only — never writes, edits or fixes anything." : ""}`.trim(),
+      `tools: ${tools.join(", ")}`,
+      ...(model ? [`model: ${model}`] : []),
+      "---",
+      "",
+    ].join("\n");
+
+    const dst = path.join(AGENT_TARGET, `${name}.md`);
+    const exists = !!fs.lstatSync(dst, { throwIfNoEntry: false });
+    if (exists) {
+      if (!update) continue;
+      fs.rmSync(dst, { force: true });
+    }
+    /**
+     * ⛔ ALWAYS WRITTEN, NEVER SYMLINKED — even in a dev install. The file the host reads is
+     * frontmatter this generated plus a body from the repo; a symlink would serve the raw prompt
+     * with no frontmatter at all, and the host would refuse it or run it with every tool.
+     */
+    fs.writeFileSync(dst, front + fs.readFileSync(src, "utf-8"));
+    out.push(name);
+    written.push(dst);
+  }
+  /**
+   * ⛔ TURNING AN AGENT OFF HAS TO REMOVE IT. Skipping the write left a file from a previous
+   * install sitting in the host's agent directory, so an agent a project had deliberately switched
+   * off was still there to be run — and the config said otherwise, which is worse than either
+   * state on its own.
+   */
+  if (update)
+    for (const agent of AGENTS) {
+      if (!agent.prompt) continue;
+      const name = path.basename(agent.prompt).replace(/\.md$/, "");
+      if (out.includes(name)) continue;
+      const dst = path.join(AGENT_TARGET, `${name}.md`);
+      if (fs.lstatSync(dst, { throwIfNoEntry: false })) fs.rmSync(dst, { force: true });
+    }
+  void dev;
+  void written;
+  return out;
+}
 
 /** Where this binary's bundled skill content lives, regardless of install mode. */
 function bundledSkillsRoot(): string {
@@ -20,6 +151,10 @@ function bundledSkillsRoot(): string {
 
 export interface ClaudeInstallResult {
   installed: string[];
+  /** Agent definitions installed into ~/.claude/agents/. */
+  agents: string[];
+  /** ⛔ Where they actually went. The report claimed ~/.claude/agents while writing to a project. */
+  agentsDir: string;
   mcpRegisteredAt: string;
   /** True if installed via symlink (dev install) instead of copy. */
   symlinked: boolean;
@@ -39,7 +174,7 @@ function isDevInstall(skillsRoot: string): boolean {
   return fs.existsSync(path.join(repoRoot, "src"));
 }
 
-export function installClaudeSkills(opts: { update?: boolean } = {}): ClaudeInstallResult {
+export function installClaudeSkills(opts: { update?: boolean; config?: ProductosConfig; configRoot?: string } = {}): ClaudeInstallResult {
   if (!fs.existsSync(CLAUDE_DIR)) {
     throw new Error(
       `Claude Code not detected at ${CLAUDE_DIR}. Install Claude Code first, then re-run.`
@@ -91,22 +226,63 @@ export function installClaudeSkills(opts: { update?: boolean } = {}): ClaudeInst
     ? settingsPath
     : path.join(CLAUDE_DIR, "settings.json");
 
-  fs.mkdirSync(path.dirname(target), { recursive: true });
-  const existing = fs.existsSync(target)
-    ? JSON.parse(fs.readFileSync(target, "utf-8"))
-    : {};
-  existing.mcpServers = existing.mcpServers ?? {};
-  existing.mcpServers.productos = {
-    command: "productos",
-    args: ["serve", "--mcp"],
+  /**
+   * ⛔ IT REGISTERED THE MCP SERVER WHERE NOTHING READS IT.
+   *
+   * `settings.json` has no `mcpServers` key in anything that consumes it — so `productos` has
+   * never appeared in `claude mcp list`, the desktop app has never seen it, and the whole MCP
+   * surface has been installed and unreachable since it shipped. It failed silently because the
+   * file was written successfully; nobody checked that anything read it.
+   *
+   * Written to every place that is actually consulted, each for a different reader:
+   *
+   *   .mcp.json                 project scope, and it is the one a team shares in the repo
+   *   ~/.claude.json            user scope, for sessions outside any project
+   *   claude_desktop_config     the Claude app — ⛔ and the ONLY one a published artifact can
+   *                             reach, via the `mcp` capability's `host:` form. Without this a
+   *                             page can never call the machine it is describing.
+   */
+  const server = { command: "productos", args: ["serve", "--mcp"] };
+  const wrote: string[] = [];
+  const register = (file: string, make = true): void => {
+    if (!make && !fs.existsSync(file)) return;
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    let doc: Record<string, unknown> = {};
+    if (fs.existsSync(file)) {
+      try {
+        doc = JSON.parse(fs.readFileSync(file, "utf-8"));
+      } catch {
+        // ⛔ Never overwrite a file we cannot parse — it is somebody's configuration.
+        return;
+      }
+    }
+    const servers = (doc.mcpServers ?? {}) as Record<string, unknown>;
+    servers.productos = server;
+    doc.mcpServers = servers;
+    fs.writeFileSync(file, JSON.stringify(doc, null, 2) + "\n", "utf-8");
+    wrote.push(file);
   };
-  fs.writeFileSync(target, JSON.stringify(existing, null, 2) + "\n", "utf-8");
 
-  return { installed, mcpRegisteredAt: target, symlinked: dev };
+  const inRepo = fs.existsSync(path.join(process.cwd(), ".git"));
+  if (inRepo) register(path.join(process.cwd(), ".mcp.json"));
+  register(path.join(os.homedir(), ".claude.json"), false);
+  register(path.join(os.homedir(), "Library", "Application Support", "Claude", "claude_desktop_config.json"), false);
+  void target;
+
+  const agents = installClaudeAgents(dev, opts.update, opts.config, opts.configRoot);
+  return { installed, agents, agentsDir: agentsDirFor(opts.configRoot), mcpRegisteredAt: wrote.join(", ") || "nowhere — no config file was found to register in", symlinked: dev };
 }
 
 export function uninstallClaudeSkills(): { removed: string[] } {
   const removed: string[] = [];
+  if (fs.existsSync(AGENTS_DIR)) {
+    for (const f of fs.readdirSync(AGENTS_DIR)) {
+      if (f.startsWith("productos") && f.endsWith(".md")) {
+        fs.rmSync(path.join(AGENTS_DIR, f), { force: true });
+        removed.push(`agents/${f.replace(/\.md$/, "")}`);
+      }
+    }
+  }
   if (!fs.existsSync(SKILLS_DIR)) return { removed };
   for (const d of fs.readdirSync(SKILLS_DIR)) {
     if (d.startsWith("productos")) {

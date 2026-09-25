@@ -1,0 +1,16 @@
+id: "0019"
+said: a corpus records no git ref, so nothing can say which commit its truth was scoped against or that the code has moved since — the whole deal-pricing divergence was invisible until somebody read both by hand
+at: 2026-09-24
+kind: concept
+reaches:
+  model: drawn_from
+  derive: ""
+  generate: drawn_at
+  surface: whatMoved
+  check: ""
+  instruct: "drawn_from:"
+  pin: it walks what happened to the source since the drawing was made
+waived:
+  derive: nothing is computed from provenance — it is read at the moment somebody asks, against a repository that is not part of the corpus
+  check: check reads a corpus alone and cannot reach a git repository — v2 moved is the surface that answers this, and it is its own command
+closed: 2026-09-24

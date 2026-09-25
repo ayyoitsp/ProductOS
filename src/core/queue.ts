@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import matter from "gray-matter";
+import { parseFrontmatter } from "./frontmatter.js";
 import YAML from "yaml";
 import { z } from "zod";
 import { ProductosPaths } from "./paths.js";
@@ -98,7 +98,7 @@ function serialize(entry: TaskEntry): string {
 
 function readFile(filepath: string): TaskEntry {
   const raw = fs.readFileSync(filepath, "utf-8");
-  const parsed = matter(raw);
+  const parsed = parseFrontmatter(raw);
   return {
     frontmatter: TaskFrontmatter.parse(parsed.data),
     body: parsed.content.trim(),

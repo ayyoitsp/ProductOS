@@ -15,11 +15,18 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.productos.familywallet"
+      "bundleIdentifier": "com.productos.familywallet",
+      "infoPlist": {
+        "NFCReaderUsageDescription": "Tap a kid's card to ring up a charge."
+      },
+      "entitlements": {
+        "com.apple.developer.nfc.readersession.formats": ["NDEF"]
+      }
     },
     "android": {
       "package": "com.productos.familywallet",
       "edgeToEdgeEnabled": true,
+      "permissions": ["android.permission.NFC"],
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/icon.png",
         "backgroundColor": "#fff7ed"
@@ -31,7 +38,14 @@
     },
     "plugins": [
       "expo-router",
-      "expo-sqlite"
+      "expo-sqlite",
+      [
+        "react-native-nfc-manager",
+        {
+          "nfcPermission": "Tap a kid's card to ring up a charge."
+        }
+      ],
+      "./plugins/withNfcIntentFilter.js"
     ],
     "experiments": {
       "typedRoutes": true

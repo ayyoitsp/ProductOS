@@ -7,6 +7,7 @@ import {
   Switch,
   TextInput,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect } from "expo-router";
 import { Surface, Text, View } from "@/components/Themed";
 import { useToast } from "@/components/Toast";
@@ -28,6 +29,7 @@ const PREVIEW_BALANCES_CENTS = [100, 500, 2000, 5000, 10000, 20000];
 export default function SettingsScreen() {
   const cs = useColorScheme() ?? "light";
   const toast = useToast();
+  const insets = useSafeAreaInsets();
   const [enabled, setEnabled] = useState(false);
   const [rateText, setRateText] = useState("5");
   const [days, setDays] = useState<number[]>([0]);
@@ -94,7 +96,7 @@ export default function SettingsScreen() {
   const groupOpacity = enabled ? 1 : 0.45;
 
   return (
-    <View style={styles.screen}>
+    <View style={[styles.screen, { paddingTop: insets.top }]}>
       <ScrollView contentContainerStyle={styles.container}>
         <Text style={styles.section}>Interest</Text>
 

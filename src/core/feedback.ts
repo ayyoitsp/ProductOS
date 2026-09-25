@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import matter from "gray-matter";
+import { parseFrontmatter } from "./frontmatter.js";
 import YAML from "yaml";
 import { z } from "zod";
 import { ProductosPaths } from "./paths.js";
@@ -73,7 +73,7 @@ export function ensureFeedbackDir(paths: ProductosPaths): void {
 
 export function readFeedback(filepath: string): FeedbackEntry {
   const raw = fs.readFileSync(filepath, "utf-8");
-  const parsed = matter(raw);
+  const parsed = parseFrontmatter(raw);
   return {
     frontmatter: FeedbackFrontmatter.parse(parsed.data),
     body: parsed.content.trim(),

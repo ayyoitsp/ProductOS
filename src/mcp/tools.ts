@@ -8,13 +8,17 @@ import {
   TestCase,
   UxView,
   listAreas,
+  listCapabilities,
+  listProducts,
+  walkGroups,
+  groupFeatures,
   listFeatureSnapshots,
   listFeatures,
   nowIso,
   readFeatureById,
   restoreFeatureSnapshot,
   writeFeature,
-} from "../core/product.js";
+  listAllContainers,} from "../core/product.js";
 import {
   BehaviorStatus,
   emptyTrackingFor,
@@ -43,6 +47,8 @@ import {
 } from "../core/queue.js";
 import { readEnvConfig, resolveEnv } from "../core/env.js";
 import { readConfig } from "../core/config.js";
+import { runMove, MoveRefused } from "../core/move.js";
+import { groupingAdvice } from "../core/grouping.js";
 import {
   getStrategy,
   listContext,
@@ -59,6 +65,7 @@ import {
 } from "../core/test-results.js";
 import fs from "node:fs";
 import path from "node:path";
+import { exchangeTools } from "./v2-tools.js";
 
 export interface McpTool {
   name: string;
@@ -153,7 +160,7 @@ const listFeaturesTool: McpTool = {
   inputSchema: zodToInputSchema(ListFeaturesInput),
   handler: async (raw, paths) => {
     const args = ListFeaturesInput.parse(raw);
-    let features = listFeatures(paths);
+    let features = listAllContainers(paths);
     if (args.area) features = features.filter((f) => f.frontmatter.id.startsWith(args.area + "/"));
     if (args.status) features = features.filter((f) => f.frontmatter.status === args.status);
     return {
@@ -170,11 +177,71 @@ const listFeaturesTool: McpTool = {
 
 const listAreasTool: McpTool = {
   name: "productos_list_areas",
-  description: "List product areas (top-level groupings under productos/products/).",
+  description:
+    "List the feature areas — the groupings features are filed in. Areas nest to any depth, so an area's id may be several segments deep (`cre/pricing/agency`); `depth` says how deep, `parent` says what it is inside, and `sub_areas` counts what is inside it. Read this before filing anything, so you file into an area that exists rather than inventing a level.",
   inputSchema: zodToInputSchema(z.object({})),
   handler: async (_raw, paths) => {
-    const areas = listAreas(paths);
-    return { count: areas.length, areas: areas.map((a) => ({ slug: a.slug, title: a.title, feature_count: a.features.length })) };
+    const products = listProducts(paths);
+    const areas: Array<Record<string, unknown>> = [];
+    for (const p of products) {
+      walkGroups(p.groups, (g) => {
+        areas.push({
+          id: g.id,
+          product: p.slug,
+          title: g.title,
+          depth: g.depth,
+          parent: g.segments.slice(0, -1).join("/"),
+          sub_areas: g.groups.length,
+          feature_count: g.features.length,
+          features_below: groupFeatures(g).length,
+        });
+      });
+    }
+    return { count: areas.length, areas };
+  },
+};
+
+/**
+ * ⛔ Re-filing is a tool, not an instruction. A container's id IS its path, so an
+ * agent told "move this file" will `mv` it and leave the id claiming the old
+ * location with every `depends_on` / `affected_by` / `leads_to` edge aimed at a
+ * container that no longer exists. That state passes validation on the moved file.
+ * The only safe move is the whole-corpus one, so this is the only one offered.
+ */
+const MoveContainerInput = z.object({
+  id: z.string().describe("What to move — a feature id, or an area id to move the whole area"),
+  destination: z.string().describe("The area or product to move it into, e.g. 'cre/pricing/agency'"),
+  as: z.string().optional().describe("Rename the last segment while moving"),
+  dry_run: z.boolean().default(false).describe("Return the plan without writing anything"),
+});
+
+const moveContainerTool: McpTool = {
+  name: "productos_move",
+  description:
+    "Re-file a feature or a whole area, repointing every reference to it — the file, the id inside it, the tracking sidecar, and every depends_on / affected_by / leads_to edge that names it. Use this instead of editing paths or ids by hand: a container's id IS its path, so a manual move silently breaks every edge pointing at it. The destination area must already exist. Pass dry_run to see the plan first.",
+  inputSchema: zodToInputSchema(MoveContainerInput),
+  handler: async (raw, paths) => {
+    const args = MoveContainerInput.parse(raw);
+    try {
+      return runMove(paths, args.id, args.destination, { as: args.as, dryRun: args.dry_run });
+    } catch (e) {
+      // Surface the refusal as the refusal, with its reason — an agent that gets a
+      // bare stack trace tries the edit by hand, which is the exact failure this
+      // tool exists to prevent.
+      if (e instanceof MoveRefused) throw new Error(`${e.message} ${e.why}`);
+      throw e;
+    }
+  },
+};
+
+const groupingAdviceTool: McpTool = {
+  name: "productos_grouping_advice",
+  description:
+    "Is the tree readable? Measures every area against the target size in productos/config.yaml and returns specific edits: which features cluster into a proposed sub-area, which level separates nothing, which feature has grown into two. Advice, never a score — each entry names the `productos move` that carries it out. Read this before creating a new area, and after a fullscan.",
+  inputSchema: zodToInputSchema(z.object({})),
+  handler: async (_raw, paths) => {
+    const advice = groupingAdvice(listProducts(paths), readConfig(paths).grouping, listCapabilities(paths));
+    return { count: advice.length, advice };
   },
 };
 
@@ -237,9 +304,21 @@ const proposeFeature: McpTool = {
     if (readFeatureById(paths, args.id)) {
       throw new Error(`Feature ${args.id} already exists. Use productos_update_feature / productos_update_behavior / productos_add_behavior to edit it — or have the human run \`productos review ${args.id}\` for interactive edits.`);
     }
-    // Every NON-deprecated behavior must ship with at least one test case.
+    // Every NON-deprecated, DECIDED behavior must ship with at least one test case.
+    // ⛔ AN UNDECIDED BEHAVIOR IS EXEMPT, and without this exemption the concept the
+    // framework is proudest of was unreachable through the interface the docs name as the
+    // agent's path. Two rules were mutually exclusive: this one demanded a test case, and
+    // the schema plus `undefined-with-test-cases` (high) forbade one on a behavior that
+    // carries a question. So an agent asked to record "we do not know what this should
+    // claim" could not, and the only way out was to guess — which is precisely what the
+    // undecided behavior exists to prevent.
+    //
+    // There is nothing to demonstrate: a question has no claim.
     const missingTests = (args.behaviors || []).filter(
-      (b) => !b.deprecated && (!b.test_cases || b.test_cases.length === 0)
+      (b) =>
+        !b.deprecated &&
+        !(b as { question?: string }).question &&
+        (!b.test_cases || b.test_cases.length === 0)
     );
     if (missingTests.length > 0) {
       throw new Error(
@@ -298,7 +377,7 @@ const AddBehaviorInput = z.object({
 const addBehavior: McpTool = {
   name: "productos_add_behavior",
   description:
-    "Add a behavior (an atomic claim) to a feature. Behaviors live in product truth and are written in product language. REQUIRED: the behavior must include at least one test_case (id + description, plus given/when/then or steps) — behaviors without test cases are wishes; they have no falsification path. Aim for 1–3 cases: happy path + one error/edge case for shipped features. Verification status and code refs are tracked separately — use productos_update_tracking to set them after adding the behavior.",
+    "Add a behavior to a feature or capability, in product language. A DECIDED behavior needs a `claim` and at least one `test_case` (id + description, plus given/when/then or steps) — one without cases is a wish with no falsification path; aim for 1–3, happy path plus an error or edge case. An UNDECIDED behavior is different: when you cannot tell what the claim should be, send `question` with NO claim and NO test cases, plus `asked_of` (who owes the answer) and `blocks` (what cannot be built until it is answered — `[]` is a real answer meaning the rest can ship). Never guess a claim to satisfy the test-case rule. You may not answer a question you or anyone else wrote: only a person does that, with `productos decide`. Verification status and code refs are tracked separately — use productos_update_tracking.",
   inputSchema: zodToInputSchema(AddBehaviorInput),
   handler: async (raw, paths) => {
     const args = AddBehaviorInput.parse(raw);
@@ -306,9 +385,23 @@ const addBehavior: McpTool = {
     if (!doc) throw new Error(`Feature "${args.feature_id}" not found`);
     if (doc.frontmatter.behaviors.some((b) => b.id === args.behavior.id))
       throw new Error(`Behavior "${args.behavior.id}" already exists on ${args.feature_id}`);
-    if (!args.behavior.deprecated && (!args.behavior.test_cases || args.behavior.test_cases.length === 0)) {
+    // ⛔ AN UNDECIDED BEHAVIOR IS EXEMPT, and without this exemption the concept the
+    // framework is proudest of was unreachable through the interface the docs name as the
+    // agent's path. Two rules were mutually exclusive: this one demanded a test case, and
+    // the schema plus `undefined-with-test-cases` (high) forbade one on a behavior that
+    // carries a question. So an agent asked to record "we do not know what this should
+    // claim" could not, and the only way out was to guess — which is precisely what the
+    // undecided behavior exists to prevent.
+    //
+    // There is nothing to demonstrate: a question has no claim.
+    const asksAQuestion = !!(args.behavior as { question?: string }).question;
+    if (
+      !args.behavior.deprecated &&
+      !asksAQuestion &&
+      (!args.behavior.test_cases || args.behavior.test_cases.length === 0)
+    ) {
       throw new Error(
-        `Behavior "${args.behavior.id}" must include at least one test_case. Don't propose behaviors without falsification. Build the test cases inline.`
+        `Behavior "${args.behavior.id}" must include at least one test_case. Don't propose behaviors without falsification — or, if you cannot tell what it should claim, write a \`question\` instead of guessing, and it needs no cases.`
       );
     }
     doc.frontmatter.behaviors.push(args.behavior);
@@ -326,12 +419,60 @@ const UpdateBehaviorInput = z.object({
   element: z.string().optional().describe("Element id within the anchored UX view. Pass empty string to clear."),
   interaction: z.string().optional().describe("Interaction word (tap, submit, view, load, etc). Pass empty string to clear."),
   test_cases: z.array(TestCase).optional().describe("Replace the FULL test_cases array. To add/remove/edit individual cases, pass the full new array (read current, mutate, send)."),
+  // ⛔ THE FIELDS THAT CATCH WHAT NOTHING COMPUTES HAD NO WRITER. `contradicts`,
+  // `same_as`, `holds_for` and `suspected_depends_on` existed in the schema and the
+  // renderer and nowhere else: the only way to put one in a corpus was to hand-edit
+  // markdown. An architect reviewing the model counted the result — 1 contradiction, 1
+  // same_as group and 0 holds_for across 146 behaviors — and named the cause: "the four
+  // fields the framework invented specifically to catch the failures nothing computes
+  // are the four fields nothing can write."
+  //
+  // Worse in a design whose stated storage has no files at all, and worse still because
+  // all four are discovered AFTER a claim exists, so the update path is the one that
+  // matters. A reviewer hit it precisely: `holds_for` had shipped, they still could not
+  // use it, and they filed the framework gap anyway.
+  holds_for: z
+    .string()
+    .optional()
+    .describe(
+      "The scope this claim is asserted over, when it is NOT the whole product — e.g. 'the Colliers template'. Absent means universal. ⛔ Usually the WRONG fix: if the claim states values that vary by customer, those values are that customer's data and belong nowhere in product truth — the claim is the rule about them. Use this when the RULE itself is narrower than the product. Pass empty string to clear."
+    ),
+  contradicts: z
+    .array(z.string())
+    .optional()
+    .describe(
+      "Behaviors this one cannot both hold with — `<container>#<behavior>`. Declared on one side and rendered on both. Requires contradiction_note. Makes `productos check` refuse the corpus, deliberately: one of the two is wrong and neither should be built from."
+    ),
+  contradiction_note: z.string().optional().describe("Why the two cannot both hold. Required with contradicts."),
+  same_as: z
+    .array(z.string())
+    .optional()
+    .describe(
+      "Other OPEN QUESTIONS that are this same hole — `<container>#<behavior>`. One decision closes the group; answered separately they become that many inconsistent answers."
+    ),
+  ambiguous: z
+    .array(
+      z.object({
+        readings: z
+          .array(z.string().min(5))
+          .min(2)
+          .describe(
+            "At least two ways this claim can be read. Refused with fewer: 'this is vague' is not a finding, 'it could mean X or Y' is one somebody can rule on."
+          ),
+        cost: z.string().optional().describe("What it costs to guess wrong."),
+        raised_by: z.string().optional(),
+      })
+    )
+    .optional()
+    .describe(
+      "The claim is DECIDED and two competent readers would build different things from it. Not `contested` (which says the claim is false) and not a question (which says nothing is decided). Needs at least two readings — 'this is vague' is not a finding."
+    ),
 });
 
 const updateBehavior: McpTool = {
   name: "productos_update_behavior",
   description:
-    "Update a behavior's claim, notes, anchor (surface/element/interaction), or test_cases array. To update verification status or code refs, use productos_update_tracking — that data lives in the sidecar, not product truth. To edit test cases: pass the FULL new test_cases array (read current, mutate, send back) — partial test-case edits aren't supported.",
+    "Update a behavior's claim, notes, anchor, test_cases — or the fields that record what nothing can compute: `holds_for` (scope), `contradicts` + `contradiction_note` (two claims that cannot both hold), `same_as` (open questions that are one hole), `ambiguous` (decided, and two readers would build differently). To update verification status or code refs, use productos_update_tracking — that data lives in the sidecar, not product truth. To edit test cases: pass the FULL new test_cases array (read current, mutate, send back) — partial test-case edits aren't supported.",
   inputSchema: zodToInputSchema(UpdateBehaviorInput),
   handler: async (raw, paths) => {
     const args = UpdateBehaviorInput.parse(raw);
@@ -345,6 +486,19 @@ const updateBehavior: McpTool = {
     if (args.element !== undefined) b.element = args.element || undefined;
     if (args.interaction !== undefined) b.interaction = args.interaction || undefined;
     if (args.test_cases !== undefined) b.test_cases = args.test_cases;
+    if (args.holds_for !== undefined) b.holds_for = args.holds_for || undefined;
+    if (args.contradicts !== undefined) b.contradicts = args.contradicts;
+    if (args.contradiction_note !== undefined) b.contradiction_note = args.contradiction_note || undefined;
+    if (args.same_as !== undefined) b.same_as = args.same_as;
+    if (args.ambiguous !== undefined) {
+      // Re-parsed through the schema so the two-readings rule is enforced here too, not
+      // only in the CLI. An ambiguity with one reading is an opinion.
+      b.ambiguous = args.ambiguous.map((a) => ({
+        readings: a.readings,
+        cost: a.cost,
+        raised_by: a.raised_by,
+      }));
+    }
     writeFeature(paths, doc);
     return { ok: true };
   },
@@ -909,7 +1063,7 @@ const getGaps: McpTool = {
   description: "Find gaps in product truth + tracking: behaviors awaiting verification, stale, contested; features marked planned with no implementation; open feedback entries.",
   inputSchema: zodToInputSchema(z.object({})),
   handler: async (_raw, paths) => {
-    const features = listFeatures(paths);
+    const features = listAllContainers(paths);
     const gaps: Array<{ kind: string; feature_id: string; behavior_id?: string; detail?: string }> = [];
     for (const f of features) {
       const fm = f.frontmatter;
@@ -1081,6 +1235,15 @@ const recordTestResultsTool: McpTool = {
 // Registry
 
 export const tools: McpTool[] = [
+  /**
+   * The Exchange model — reads, and the five acts of human judgement.
+   *
+   * ⛔ THE ACTS ARE HERE ON PURPOSE, and a boundary test used to forbid exactly that. What
+   * replaced the old guarantee is `Verdict.via`: every act records which surface obtained the
+   * person's consent, so a corpus can be read for the quality of its validation rather than only
+   * its presence. See the header of `v2-tools.ts` for the full trade.
+   */
+  ...exchangeTools,
   // context (overarching — read first)
   listContextTool,
   getContextTool,
@@ -1088,6 +1251,8 @@ export const tools: McpTool[] = [
   proposeContext,
   // product truth
   listAreasTool,
+  moveContainerTool,
+  groupingAdviceTool,
   listFeaturesTool,
   getFeatureTool,
   proposeFeature,
@@ -1095,7 +1260,29 @@ export const tools: McpTool[] = [
   addBehavior,
   updateBehavior,
   removeBehavior,
-  verifyBehavior,
+  // ⛔ `verifyBehavior` IS DELIBERATELY NOT REGISTERED. Validation is the framework's
+  // trust anchor, and three documents state flatly that no such tool exists:
+  //
+  //   README.md      "Agents propose. Only humans validate — there is no tool for a
+  //                   model to do it."
+  //   GLOSSARY.md    "The trust anchor: agents propose, only humans validate, and there
+  //                   is no tool a model can call to mark something true."
+  //
+  // It was registered anyway, guarded by a sentence in its own description ("never set
+  // this from an AI's own judgment") — which is precisely the thing the framework's own
+  // stated principle refuses: enforce at the tool boundary, because an agent can ignore
+  // an instruction and cannot ignore a rejected call. An architect reviewing the model
+  // found it and ranked it first: "the one bit the docs call sacred is enforced by a
+  // sentence in a tool description… a model that decides it has confirmation stamps
+  // verified: true into product truth, and there is no residue."
+  //
+  // The human paths are unaffected: the Accept button in the UI and `productos verify`
+  // on the CLI both still work, and both are driven by a person.
+  //
+  // `unverifyBehavior` DOES stay, and the asymmetry is the point: removing a stamp can
+  // only ever reduce what the corpus claims to be true. An agent that notices a claim no
+  // longer matches the product should be able to say so; an agent that decides a claim is
+  // intended should not.
   unverifyBehavior,
   // UX views + elements (parity with the CLI BYOK editor)
   addOrReplaceUx,
