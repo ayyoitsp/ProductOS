@@ -77,6 +77,22 @@ export interface PageOptions {
   /** Where a press is recorded, shown to the reader so consent is informed. */
   recordsTo?: string;
   /**
+   * ⛔ THE PAGE CALLS PRODUCTOS DIRECTLY, ON THE READER'S OWN MACHINE.
+   *
+   * Peter: "still kind of awkward — you update it, then i need to manually update the page?
+   * there's no first class claude UX we can tap into?"
+   *
+   * There is, and it was unreachable for a reason that was ours: ProductOS registered its MCP
+   * server in a file nothing reads, so it had never appeared to any host and a published page had
+   * nothing to call. With it registered where the Claude app looks, a press can invoke the act
+   * tool on the viewer's own device — no database, no carrying rows in, nobody in the loop.
+   *
+   * Set on `records: "mcp"`. The corpus never leaves the machine and the press lands in it
+   * synchronously, which is the only arrangement where the page a person reviews in and the truth
+   * they are reviewing are the same thing.
+   */
+  mcpServer?: string;
+  /**
    * The application's own CSS, to be inlined inside each mock's shadow root.
    *
    * ⛔ The BYTES, not a path. Whoever builds the page decides whether to read the user's files —
@@ -107,7 +123,7 @@ export interface PageOptions {
    * which is the only channel available to a published page: a strict CSP blocks every request
    * to another host, so a page rendered inside Claude cannot reach localhost at all.
    */
-  records?: "http" | "db";
+  records?: "http" | "db" | "mcp";
 }
 
 /**
@@ -2177,6 +2193,9 @@ const EXTRA = ${JSON.stringify({
 })};
 const BY = ${JSON.stringify(opts.by ?? "")};
 const MODE = ${JSON.stringify(mode)};
+/** ⛔ The local server a press calls, and the corpus on that machine it writes into. */
+const MCP_SERVER = ${JSON.stringify(opts.mcpServer ?? "host:productos")};
+const CORPUS = ${JSON.stringify(opts.recordsTo ?? "v2")};
 
 /**
  * ⛔ The buttons start disabled and light up only once a channel exists. A press that records
@@ -2240,6 +2259,34 @@ async function record(payload, form, button) {
         return;
       }
       status.textContent = body.said || "recorded";
+    } else if (MODE === "mcp") {
+      /**
+       * ⛔ STRAIGHT INTO THE CORPUS ON THE READER'S OWN MACHINE. No database, no row to carry in,
+       * nobody in the loop. The press calls the same act every other surface calls, and the truth
+       * it changes is the truth the page is rendering.
+       */
+      const mcp = await claude.use("mcp");
+      if (!mcp) throw new Error("this view cannot reach your machine — open it in the Claude app, where a local server can be called");
+      const TOOL = { accept: "productos_exchange_agree_to", rule: "productos_exchange_settle", waive: "productos_exchange_grant_latitude", defer: "productos_exchange_park", read: "productos_exchange_record_read_through" };
+      const tool = TOOL[payload.act];
+      if (!tool) throw new Error("no tool for " + payload.act);
+      let res;
+      try {
+        res = await mcp.callTool(MCP_SERVER, tool, { ...payload, via: "page", at: CORPUS });
+      } catch (err) {
+        /**
+         * ⛔ BRANCH ON THE CODE, NEVER ON THE MESSAGE — and never collapse them into one banner,
+         * because each has a different thing a person can do about it.
+         */
+        const code = err && err.code;
+        if (code === "server_not_connected")
+          throw new Error("ProductOS is not connected here. Run: productos init claude --update, then reopen the Claude app.");
+        if (code === "not_granted") throw new Error("you declined this page access to ProductOS — reload to be asked again");
+        if (code === "tool_error") throw new Error((err.message || "ProductOS refused it") + " — it says what to do instead");
+        throw err;
+      }
+      const said = res && res.payload;
+      status.textContent = (said && (said.said || said.message)) || "recorded in your corpus";
     } else {
       /**
        * ⛔ One row per press, and never the live DOM. What a viewer typed is kept only because

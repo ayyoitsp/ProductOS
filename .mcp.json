@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "productos": {
+      "command": "productos",
+      "args": [
+        "serve",
+        "--mcp"
+      ]
+    }
+  }
+}

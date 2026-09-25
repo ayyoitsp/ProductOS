@@ -842,6 +842,14 @@ test("no backtick survives inside a template literal in the renderer", () => {
    * a backtick and a semicolon. Everything between is CSS or JavaScript payload, where a backtick
    * is fatal.
    */
+  /**
+   * ⛔ `liveScript` WAS MISSING FROM THIS LIST AND IT IS THE BIGGEST ONE.
+   *
+   * The test scanned the `const` literals and not the one a function RETURNS — so the largest
+   * payload in the file, four hundred lines of browser JavaScript, was unchecked. A backtick went
+   * into it the very next time somebody wrote a user-facing string containing a shell command.
+   * Seventh build lost to this in one file.
+   */
   const NAMES = ["STYLE", "PT_STYLE", "VIEW_SWITCH", "PROTOTYPE", "INERT"];
   let checked = 0;
   for (const name of NAMES) {
@@ -858,7 +866,27 @@ test("no backtick survives inside a template literal in the renderer", () => {
         `${name} line ${i + 1} holds a backtick, which ends the string: ${lines[i].trim()}`
       );
   }
-  assert.ok(checked >= 3, `expected to check at least three payload literals, checked ${checked}`);
+  /** The returned literals: `function name(...) {` … `return ` + backtick, closed the same way. */
+  for (const fn of ["liveScript"]) {
+    const start = lines.findIndex((l) => new RegExp(`^function ${fn}\\(`).test(l));
+    assert.ok(start >= 0, `${fn} moved — re-read it before trusting this test`);
+    const open = lines.findIndex((l, i) => i > start && /return `/.test(l));
+    const end = lines.findIndex((l, i) => i > open && /^\s*(<\/(?:style|script)>)?`;\s*$/.test(l));
+    assert.ok(end > open && open > start, `${fn}'s payload is not closed the way this test expects`);
+    checked++;
+    for (let i = open + 1; i < end; i++)
+      /**
+       * ⛔ An ESCAPED backtick is legal and is how the existing comments quote code. What ends the
+       * string is an unescaped one — so this looks for a backtick with no backslash before it,
+       * rather than for the character.
+       */
+      assert.doesNotMatch(
+        lines[i],
+        /(^|[^\\])`/,
+        `${fn} line ${i + 1} holds an unescaped backtick, which ends the string: ${lines[i].trim()}`
+      );
+  }
+  assert.ok(checked >= 4, `expected to check at least four payload literals, checked ${checked}`);
 
   /**
    * And the two prose warnings that say so are still in the file. They are the only thing a person

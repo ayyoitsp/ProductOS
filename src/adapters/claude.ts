@@ -226,19 +226,51 @@ export function installClaudeSkills(opts: { update?: boolean; config?: Productos
     ? settingsPath
     : path.join(CLAUDE_DIR, "settings.json");
 
-  fs.mkdirSync(path.dirname(target), { recursive: true });
-  const existing = fs.existsSync(target)
-    ? JSON.parse(fs.readFileSync(target, "utf-8"))
-    : {};
-  existing.mcpServers = existing.mcpServers ?? {};
-  existing.mcpServers.productos = {
-    command: "productos",
-    args: ["serve", "--mcp"],
+  /**
+   * ⛔ IT REGISTERED THE MCP SERVER WHERE NOTHING READS IT.
+   *
+   * `settings.json` has no `mcpServers` key in anything that consumes it — so `productos` has
+   * never appeared in `claude mcp list`, the desktop app has never seen it, and the whole MCP
+   * surface has been installed and unreachable since it shipped. It failed silently because the
+   * file was written successfully; nobody checked that anything read it.
+   *
+   * Written to every place that is actually consulted, each for a different reader:
+   *
+   *   .mcp.json                 project scope, and it is the one a team shares in the repo
+   *   ~/.claude.json            user scope, for sessions outside any project
+   *   claude_desktop_config     the Claude app — ⛔ and the ONLY one a published artifact can
+   *                             reach, via the `mcp` capability's `host:` form. Without this a
+   *                             page can never call the machine it is describing.
+   */
+  const server = { command: "productos", args: ["serve", "--mcp"] };
+  const wrote: string[] = [];
+  const register = (file: string, make = true): void => {
+    if (!make && !fs.existsSync(file)) return;
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    let doc: Record<string, unknown> = {};
+    if (fs.existsSync(file)) {
+      try {
+        doc = JSON.parse(fs.readFileSync(file, "utf-8"));
+      } catch {
+        // ⛔ Never overwrite a file we cannot parse — it is somebody's configuration.
+        return;
+      }
+    }
+    const servers = (doc.mcpServers ?? {}) as Record<string, unknown>;
+    servers.productos = server;
+    doc.mcpServers = servers;
+    fs.writeFileSync(file, JSON.stringify(doc, null, 2) + "\n", "utf-8");
+    wrote.push(file);
   };
-  fs.writeFileSync(target, JSON.stringify(existing, null, 2) + "\n", "utf-8");
+
+  const inRepo = fs.existsSync(path.join(process.cwd(), ".git"));
+  if (inRepo) register(path.join(process.cwd(), ".mcp.json"));
+  register(path.join(os.homedir(), ".claude.json"), false);
+  register(path.join(os.homedir(), "Library", "Application Support", "Claude", "claude_desktop_config.json"), false);
+  void target;
 
   const agents = installClaudeAgents(dev, opts.update, opts.config, opts.configRoot);
-  return { installed, agents, agentsDir: agentsDirFor(opts.configRoot), mcpRegisteredAt: target, symlinked: dev };
+  return { installed, agents, agentsDir: agentsDirFor(opts.configRoot), mcpRegisteredAt: wrote.join(", ") || "nowhere — no config file was found to register in", symlinked: dev };
 }
 
 export function uninstallClaudeSkills(): { removed: string[] } {

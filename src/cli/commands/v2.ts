@@ -681,8 +681,9 @@ export function v2Command(): Command {
     .argument("<scope>")
     .requiredOption("--by <who>", "the name a press will be recorded under")
     .option("--out <file>", "write the page here instead of stdout")
+    .option("--via-db", "record presses into the artifact's own database instead of calling ProductOS directly")
     .option("--at <dir>", "corpus directory", "v2")
-    .action((scope: string, o: { by: string; out?: string; at?: string }) => {
+    .action((scope: string, o: { by: string; out?: string; at?: string; viaDb?: boolean }) => {
       const dir = at(o);
       let allowed = false;
       let where = "productos/config.yaml";
@@ -731,9 +732,14 @@ export function v2Command(): Command {
       for (const m of app.missing) console.error(pc.yellow("!"), `web.stylesheets names ${m}, which is not there — mocks will render unstyled`);
       const page = renderScopePage(corpus, scope, {
         interactive: true,
-        records: "db",
+        /**
+         * ⛔ `mcp` — the press calls ProductOS on the reader's own machine, so there is no database
+         * round-trip and nothing to carry in. `db` remains for a page shared with somebody who has
+         * no ProductOS; `--via-db` picks it.
+         */
+        records: o.viaDb ? "db" : "mcp",
         by: o.by,
-        recordsTo: "read back from this page and written into the product truth",
+        recordsTo: o.viaDb ? "read back from this page and written into the product truth" : dir,
         appCss: app.css || undefined,
         mockClass: app.mockClass,
       });
@@ -756,7 +762,12 @@ export function v2Command(): Command {
       fs.mkdirSync(path.dirname(path.resolve(o.out)), { recursive: true });
       fs.writeFileSync(path.resolve(o.out), doc);
       console.log(pc.green("✓"), `${o.out}`);
-      console.log(pc.dim("  publish it with capabilities {db:{}}; presses land in the artifact's database"));
+      if (o.viaDb) console.log(pc.dim("  publish it with capabilities {db:{}}; presses land in the artifact's database"));
+      else {
+        console.log(pc.dim('  publish it with capabilities {mcp:{servers:[{server:"host:productos",tools:[...]}]}}'));
+        console.log(pc.dim("  a press then calls ProductOS on the reader's own machine — no database, nothing to carry in"));
+        console.log(pc.dim("  ⛔ Claude app only. Elsewhere the page says so rather than failing silently."));
+      }
       console.log(pc.dim(`  every press is recorded as ${o.by}, via: page`));
     });
 

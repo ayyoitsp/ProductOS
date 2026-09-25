@@ -416,6 +416,15 @@ export function migrate(v1Root: string, outDir: string, at: string): Migration {
        * Without this the corpus had one ask per claimed element, each owing eight slots, so 16
        * screens became 77 asks and 539 blanks. Most of those asks did not exist.
        */
+      /**
+       * ⛔ A DEPRECATED BEHAVIOUR IS WITHDRAWN TRUTH, NOT ABSENT TRUTH — and the migrator did not
+       * look at the field at all, so a claim somebody had retired came across as current.
+       *
+       * v1 says `deprecated: true` with a reason; this model says `exists: withdrawn`, which keeps
+       * the id so nothing reuses it and keeps the sentence so a reader can see that the product
+       * once promised it. Deleting it would make a stamp against it dangle and make the history of
+       * what changed unrecoverable.
+       */
       const el = b.element ? v1.ux.find((x) => x.id === b.surface)?.elements.find((x) => x.id === b.element) : undefined;
       const isAct = el ? ROLE[el.kind] === "commits" : false;
       const key = isAct ? `${b.surface}::${b.element}` : `${b.surface}::`;
@@ -432,6 +441,9 @@ export function migrate(v1Root: string, outDir: string, at: string): Migration {
       slots: Record<string, unknown>;
       criteria: Array<Record<string, unknown>>;
     }
+    /** True where every claim behind an ask has been retired — the ask itself is then withdrawn. */
+    const allRetired = (group: Array<{ deprecated?: boolean }>): boolean => group.length > 0 && group.every((b) => b.deprecated);
+
     const exchanges: Built[] = [...byAnchor.entries()].flatMap(([key, group]): Built[] => {
       if (key.startsWith("!")) {
         const b = group[0]!;
@@ -454,7 +466,7 @@ export function migrate(v1Root: string, outDir: string, at: string): Migration {
               // what a capability IS rather than from a guess about this one.
               cadence: "on-an-event",
             },
-            exists: v1.status === "planned" ? "intended" : "kept",
+            exists: allRetired(group) ? "withdrawn" : v1.status === "planned" ? "intended" : "kept",
             slots: { answer: { says: flat(b.claim) } },
             criteria: b.test_cases.map((t, i) => {
               carried.criteria++;
