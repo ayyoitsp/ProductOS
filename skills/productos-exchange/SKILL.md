@@ -679,11 +679,35 @@ Every refusal carries `instead`: the acts that WOULD be honest there. Offer thos
 around a refusal and do not soften what the person said to get past a floor** — if a refusal has
 no honest answer, that is a finding about the model and worth saying so.
 
-### Driving it in a browser instead
+### ⛔ `productos serve` is the one place somebody goes. Send them there and stay out of the way
 
-`productos serve` puts the same page at `/v2`, with buttons that record on this machine. Nothing
-leaves it, so this is the only surface for a corpus that must not be published — and product truth
-routinely names a real client.
+```bash
+productos serve --v2 <dir>        #  → http://localhost:<port>/v2
+```
+
+Everything a person needs happens on that page and nowhere else: they read the feature with its
+screens, they press, the press is written to the corpus **synchronously**, and — because the page
+holds a connection open — **it tells them when the truth changes underneath**, whoever changed it.
+Nothing leaves the machine, so this is also the only surface for a corpus that must not be
+published, and product truth routinely names a real client.
+
+**Why it has to be one place.** Reading, deciding and authoring used to live on three surfaces: a
+published page to read, a question interface to decide, a session to author. Every handoff between
+them was a person carrying something by hand, and the one they felt worst was the reload — the
+truth had already changed and their page went on showing the old one until they thought to check.
+
+So when someone is reviewing:
+
+1. Start the server and give them the URL. **Once.**
+2. Work from what arrives — a press, or a note the composer filed. Do not ask them to re-describe
+   what they already pressed.
+3. Author the change, regenerate, and **say nothing**: their page announces it and offers to show
+   it. A message from you here is a second notification about the same event.
+
+⛔ **Do not hand a human a flag, and do not ask in chat what the page is already asking.** A
+question in prose next to an unanswered question on the page gives the same decision two records
+and no way to tell which is current. `AskUserQuestion` carries no feature — an option list with no
+screen next to it asks somebody to judge something they cannot see.
 
 ### A published page, with buttons, inside Claude
 

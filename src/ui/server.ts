@@ -681,8 +681,17 @@ export async function startUiServer(opts: StartUiServerOptions = {}): Promise<vo
     console.log(pc.dim(`  product:  ${path.relative(process.cwd(), paths.productsDir)}/`));
     console.log(pc.dim(`  tracking: ${path.relative(process.cwd(), paths.trackingDir)}/`));
     console.log(pc.dim(`  feedback: ${path.relative(process.cwd(), paths.feedbackDir)}/`));
-    if (fs.existsSync(v2Dir))
+    if (fs.existsSync(v2Dir)) {
       console.log(pc.dim(`  exchange: ${path.relative(process.cwd(), v2Dir)}/ → ${pc.cyan(`http://localhost:${port}/v2`)}`));
+      /**
+       * ⛔ SAID ONCE, HERE, because the whole point is that a reviewer has one place to be.
+       * Somebody who does not know the page records instantly and follows the truth will keep
+       * asking whether their press landed — and that question is the seam this removes.
+       */
+      console.log(
+        pc.dim("            presses record as you make them, and the page tells you when the truth changes")
+      );
+    }
   });
 }
 

@@ -2178,6 +2178,73 @@ const OWED: Record<string, Array<{ name: string; label: string; floor?: number; 
  * not in a comment. A backtick here ends the string mid-script and the build fails somewhere else
  * entirely. That has cost five builds in this file; the same warning sits above the CSS block.
  */
+/**
+ * ⛔ EMITTED ONLY WHERE THERE IS A SERVER TO ASK, decided here rather than guarded at runtime.
+ *
+ * A runtime guard still ships the code. In a published page — no server, nothing to connect to —
+ * a live indicator that can never light reads as "nothing has changed", which is the precise false
+ * reassurance this mechanism exists to remove. So absence is the honest state there, and the page
+ * says where it records instead.
+ */
+const FOLLOWS_THE_TRUTH = `/**
+ * ⛔ THE PAGE FOLLOWS THE TRUTH, so this is one interface rather than three.
+ *
+ * A press already writes to the corpus and a watcher already tells whoever is working — but when
+ * the truth changed underneath, the page went on showing the old one until somebody reloaded by
+ * hand. That reload is the seam a person feels as "I have to go and check".
+ *
+ * ⛔ IT SAYS WHAT CHANGED AND WAITS, rather than reloading under somebody mid-sentence. Swapping
+ * the page out while a reviewer is typing a reason would lose the reason — and losing what a person
+ * wrote is the one thing this surface must never do.
+ */
+if (typeof EventSource !== "undefined") {
+  const bar = document.createElement("div");
+  bar.className = "live-bar";
+  bar.hidden = true;
+  document.body.appendChild(bar);
+  let pending = 0;
+  const typing = () => {
+    const el = document.activeElement;
+    if (!el) return false;
+    if (el.tagName === "TEXTAREA" || el.tagName === "INPUT") return (el.value || "").trim().length > 0;
+    return false;
+  };
+  const show = () => {
+    bar.innerHTML =
+      "<span>" + pending + (pending === 1 ? " change" : " changes") + " to the truth under this page</span>" +
+      '<button type="button" class="live-go">Show it</button>' +
+      '<button type="button" class="live-later">Later</button>';
+    bar.hidden = false;
+    bar.querySelector(".live-go").onclick = () => {
+      /** ⛔ Come back to the same view and the same place in it, or "show it" costs the reader their place. */
+      const view = [...document.querySelectorAll("section.view")].find((v) => !v.hidden);
+      try {
+        sessionStorage.setItem("productos-at", JSON.stringify({ view: view && view.dataset.view, y: window.scrollY }));
+      } catch (e) {}
+      location.reload();
+    };
+    bar.querySelector(".live-later").onclick = () => {
+      bar.hidden = true;
+      pending = 0;
+    };
+  };
+  const es = new EventSource("/api/v2/live");
+  es.addEventListener("changed", () => {
+    pending++;
+    if (!typing()) show();
+  });
+  // Restore where they were, after a reload they asked for.
+  try {
+    const back = JSON.parse(sessionStorage.getItem("productos-at") || "null");
+    if (back) {
+      sessionStorage.removeItem("productos-at");
+      const go = back.view && document.querySelector('nav.scopes a[data-goto="' + CSS.escape(back.view) + '"]');
+      if (go) go.click();
+      if (typeof back.y === "number") window.scrollTo(0, back.y);
+    }
+  } catch (e) {}
+}`;
+
 function liveScript(opts: PageOptions): string {
   const mode = opts.records ?? "http";
   return `<script>
@@ -2312,6 +2379,8 @@ async function record(payload, form, button) {
  * reconstruct an hour later is the ref they were looking at, so that is captured automatically and
  * shown before they send.
  */
+${mode === "http" ? FOLLOWS_THE_TRUTH : ""}
+
 const noteBar = document.getElementById("note-bar");
 if (noteBar) {
   document.body.classList.add("has-note-bar");
@@ -3294,6 +3363,13 @@ const STYLE = `<style>
    * (No backticks in this comment: it lives inside a template literal, and a backtick here ends
    * the string. That has now cost four builds.)
    */
+  /* The truth moved under you — said, not done to you. */
+  .live-bar { position: fixed; left: 0; right: 0; top: 0; z-index: 40; display: flex; gap: .6rem;
+    align-items: center; justify-content: center; padding: .5rem .8rem; font-size: .88rem;
+    background: var(--accent); color: var(--bg); }
+  .live-bar button { font: inherit; font-size: .85rem; border: 0; border-radius: 5px; padding: .2rem .7rem;
+    cursor: pointer; background: var(--bg); color: var(--ink); }
+  .live-bar button.live-later { background: transparent; color: var(--bg); text-decoration: underline; }
   .note-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; display: grid;
     gap: .3rem; padding: .5rem .8rem .55rem;
     background: var(--card); border-top: 1px solid var(--line);

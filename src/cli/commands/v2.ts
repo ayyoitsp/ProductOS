@@ -4,7 +4,7 @@ import { Command } from "commander";
 import pc from "picocolors";
 import { checkCorpus, summarise } from "../../v2/check.js";
 import { loadCorpus } from "../../v2/load.js";
-import { SLOTS, SLOT_ASKS_SHORT, type SlotName } from "../../v2/schema.js";
+import { SLOTS, SLOT_ASKS_SHORT, type SlotName, statements } from "../../v2/schema.js";
 import { gridFor, renderGridText, actsFor, gateFor } from "../../v2/grid.js";
 import { compilePacket } from "../../v2/packet.js";
 
@@ -15,6 +15,9 @@ import { appStyleFor } from "../../v2/appcss.js";
 import { watchCorpus } from "../../v2/watch.js";
 import { drawFromRoute } from "../../v2/draw.js";
 import { AGENTS, CASCADE, KINDS } from "../../core/jobs.js";
+
+/** ⛔ Plain text for a terminal and for JSON — never HTML-escaped, which is the page's business. */
+const plain = (x: unknown): string => String(x ?? "").replace(/\s+/g, " ").trim();
 import { agentsDoc } from "../../core/agents-doc.js";
 import { readChanges, writeChange, nextId, verify, missing } from "../../core/change.js";
 import { writeSketchHtml } from "../../v2/draw-write.js";
@@ -1023,6 +1026,140 @@ export function v2Command(): Command {
       rec.closed = new Date().toISOString().slice(0, 10);
       writeChange(root, rec);
       console.log(pc.green("✓"), `${id} closed — every layer reached`);
+    });
+
+  cmd
+    /**
+     * ⛔ WHAT TO ASK THIS PERSON NEXT, IN ORDER — because the review surface is the conversation.
+     *
+     * Peter: "what's the best claude native approach here?" This is the answer's missing half. A
+     * published page cannot push and cannot reach his machine; the question interface is native,
+     * synchronous and needs no plumbing at all — but nothing handed over WHAT to ask, so every
+     * round was improvised, and an improvised order is one where the purpose gets asked after the
+     * details it was supposed to frame.
+     *
+     * So: one feature, in the order the model already gates. The purpose first, alone, because
+     * nothing under it is offered until it is agreed. Then its sentences, one at a time.
+     */
+    .command("next")
+    .description("What to ask somebody next about one feature, in the order the model gates it")
+    .argument("[scope]", "the feature — omit to be told which one is closest to reviewable")
+    .option("--take <n>", "how many to hand over", "4")
+    .option("--json", "as data, for driving a question interface")
+    .option("--at <dir>", "corpus directory", "v2")
+    .action((scopeId: string | undefined, o: { take?: string; json?: boolean; at?: string }) => {
+      const dir = at(o);
+      const corpus = loadCorpus(dir);
+      refuseIfBroken(corpus, "a review round");
+      const a = actsFor(corpus);
+      const take = Math.max(1, Number(o.take ?? 4));
+
+      if (!scopeId) {
+        /**
+         * ⛔ CLOSEST TO REVIEWABLE FIRST, not first in the corpus. A reviewer facing nineteen
+         * features is asking which one to start on, and the honest answer is the one where the
+         * fewest acts stand between here and a feature somebody could build from.
+         */
+        const ranked = corpus.scopes
+          .filter((x) => x.scope.exchanges.length)
+          .map((x) => ({
+            id: x.scope.id,
+            title: plain(x.scope.title || x.scope.id),
+            purpose: !a.ungrounded.some((u) => u.scope === x.scope.id),
+            owed: a.written.filter((b) => b.startsWith(`${x.scope.id}#`)).length,
+          }))
+          .filter((x) => x.owed || !x.purpose)
+          .sort((x, y) => Number(y.purpose) - Number(x.purpose) || x.owed - y.owed);
+        if (o.json) {
+          console.log(JSON.stringify(ranked.slice(0, take), null, 2));
+          return;
+        }
+        console.log(pc.bold("Where to start"));
+        for (const r of ranked.slice(0, take))
+          console.log(
+            `  ${pc.cyan(r.id.padEnd(30))} ${r.purpose ? pc.dim("purpose agreed · ") : pc.yellow("purpose first · ")}${r.owed} sentence${r.owed === 1 ? "" : "s"}`
+          );
+        return;
+      }
+
+      const entry = corpus.scopes.find((x) => x.scope.id === scopeId);
+      if (!entry) {
+        console.error(pc.red("✗"), `no feature "${scopeId}"`);
+        process.exit(1);
+      }
+      const sc = entry.scope;
+      const ungrounded = a.ungrounded.find((u) => u.scope === scopeId);
+
+      /**
+       * ⛔ THE PURPOSE IS HANDED OVER ALONE. Offering it beside the details it frames invites
+       * somebody to answer them in the same breath, which is the ordering this gate exists to stop.
+       */
+      if (ungrounded) {
+        const hp = sc.happy_path;
+        const item = {
+          ref: `${scopeId}#happy-path`,
+          asks: `Is this what ${plain(sc.title || scopeId)} is for?`,
+          why: ungrounded.why,
+          says: hp
+            ? {
+                accomplishes: plain(hp.accomplishes),
+                brings: plain(hp.brings),
+                ends_with: plain(hp.ends_with),
+                through: hp.through.map((v) => plain(sc.views.find((x) => x.id === v)?.title || v)),
+                not: hp.not ? plain(hp.not) : undefined,
+              }
+            : undefined,
+          screens: sc.views.filter((v) => v.exists !== "withdrawn").map((v) => ({ id: v.id, title: plain(v.title), drawn: Boolean(v.sketch_html || v.sketch) })),
+          act: `productos v2 accept "${scopeId}#happy-path" --by <who> --via question`,
+        };
+        if (o.json) {
+          console.log(JSON.stringify({ scope: scopeId, gate: "purpose", items: [item] }, null, 2));
+          return;
+        }
+        console.log(pc.bold(item.asks));
+        console.log(pc.dim(`  ${item.why}`));
+        if (hp) {
+          console.log("");
+          console.log(`  ${plain(hp.accomplishes)}`);
+          console.log(pc.dim(`    arrives with: ${plain(hp.brings)}`));
+          console.log(pc.dim(`    leaves with:  ${plain(hp.ends_with)}`));
+          if (item.says?.through?.length) console.log(pc.dim(`    through:      ${item.says.through.join(" → ")}`));
+        }
+        console.log("");
+        console.log(pc.dim(`  ${item.act}`));
+        return;
+      }
+
+      /** Its sentences, in reading order, with what would show each holding. */
+      const owed = a.written.filter((b) => b.startsWith(`${scopeId}#`)).slice(0, take);
+      const items = owed.map((ref) => {
+        const [, exId, slot, said] = ref.split("#");
+        const ex = sc.exchanges.find((e) => e.id === exId);
+        const fill = ex?.slots[slot as SlotName];
+        const shown = statements(fill?.says);
+        const one = said ? shown.find((x: { id: string }) => x.id === said) : shown[0];
+        const shows = (ex?.criteria ?? []).filter((c) => c.slot === slot && (!c.of || c.of === said));
+        return {
+          ref,
+          asks: SLOT_ASKS_SHORT[slot as SlotName] ?? slot,
+          on: plain(ex?.title ?? exId),
+          at: ex?.at ? { view: ex.at.view, part: ex.at.part } : undefined,
+          says: plain(one?.says ?? (fill?.none ? "nothing happens" : fill?.cannot_fail ? "this cannot fail" : "")),
+          shown_by: shows.map((c) => plain([c.given && `given ${c.given}`, c.when && `when ${c.when}`, c.then && `then ${c.then}`].filter(Boolean).join(", "))),
+          act: `productos v2 accept "${ref}" --by <who> --via question`,
+        };
+      });
+      if (o.json) {
+        console.log(JSON.stringify({ scope: scopeId, gate: "none", items }, null, 2));
+        return;
+      }
+      console.log(pc.bold(`${plain(sc.title || scopeId)} — ${a.written.filter((b) => b.startsWith(`${scopeId}#`)).length} sentences nobody has agreed to`));
+      for (const it of items) {
+        console.log("");
+        console.log(`  ${pc.cyan(it.asks)} ${pc.dim("on " + it.on)}`);
+        console.log(`    ${it.says}`);
+        if (!it.shown_by.length) console.log(pc.yellow("    nothing here says what would show this working"));
+      }
     });
 
   cmd

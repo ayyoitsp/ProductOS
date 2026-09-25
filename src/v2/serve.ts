@@ -17,6 +17,7 @@ import { renderScopePage, standalone } from "./page.js";
 import { perform, VIA, type Act, type Payload, type Via } from "./acts.js";
 import { fileNote } from "./notes.js";
 import { appStyleFor } from "./appcss.js";
+import { watchCorpus } from "./watch.js";
 
 export interface V2Routes {
   /** The corpus directory this server is serving. */
@@ -63,7 +64,46 @@ const whoIsPressing = (): string => os.userInfo().username || "whoever-is-at-thi
  * on — v2 is a parallel track and must not shadow a single v1 route.
  */
 export async function v2Route(req: http.IncomingMessage, res: http.ServerResponse, p: string, { dir }: V2Routes): Promise<boolean> {
-  if (p !== "/v2" && !p.startsWith("/v2/") && p !== "/api/v2/act" && p !== "/api/v2/note") return false;
+  if (p !== "/v2" && !p.startsWith("/v2/") && p !== "/api/v2/act" && p !== "/api/v2/note" && p !== "/api/v2/live") return false;
+
+  /**
+   * ⛔ THE PAGE UPDATES ITSELF, WHICH IS WHAT MAKES THIS ONE INTERFACE RATHER THAN THREE.
+   *
+   * Peter: "there's still no 'single interface' to go through ProductOS. that's the root ask here."
+   *
+   * He was right and I had been answering a transport question. Everything he needs happens in
+   * three places — read it in one, decide it in another, have the consequence authored in a third —
+   * and the only surface where all three can converge is this one: it shows the feature, a press
+   * writes to the corpus synchronously, and a watcher tells whoever is working. The single thing
+   * missing was that when the truth changed underneath, the page went on showing the old one until
+   * somebody reloaded by hand.
+   *
+   * So the corpus pushes. One connection, held open, an event per change — the same `watchCorpus`
+   * the terminal watcher uses, so a page and a terminal cannot disagree about what happened.
+   */
+  if (req.method === "GET" && p === "/api/v2/live") {
+    res.writeHead(200, {
+      "content-type": "text/event-stream",
+      "cache-control": "no-cache",
+      connection: "keep-alive",
+    });
+    res.write("retry: 2000\n\n");
+    const send = (line: string): void => {
+      res.write(`event: changed\ndata: ${JSON.stringify(line)}\n\n`);
+    };
+    const { stop } = watchCorpus(dir, { emit: send });
+    /**
+     * ⛔ A HEARTBEAT, because a silent stream is indistinguishable from a dead one to every proxy
+     * between here and the browser — and a reader whose page has quietly stopped updating is worse
+     * off than one who knows it never did.
+     */
+    const beat = setInterval(() => res.write(": beat\n\n"), 25_000);
+    req.on("close", () => {
+      clearInterval(beat);
+      stop();
+    });
+    return true;
+  }
 
   /**
    * ⛔ A NOTE IS NOT AN ACT, so it is a different route and a different file.
