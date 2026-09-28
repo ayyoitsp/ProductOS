@@ -1,0 +1,10 @@
+id: "0030"
+said: A criterion was refused for pluralising a word its slot uses. The slot said 'each pane reads it out of the file'; the then said 'both panes name the same held version', and the detector reported 'panes', 'name' and 'having' as behaviour the slot never promised. It compares surface words, so an author is pushed to match inflections rather than meaning — and the cheapest way past it is to reword a correct sentence until the matcher is satisfied.
+at: 2026-09-28
+kind: derivation
+reaches:
+  derive: ""
+  surface: ""
+  check: ""
+  pin: ""
+waived: {}
