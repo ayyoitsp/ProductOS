@@ -61,14 +61,82 @@ export interface Corpus {
   broken: Array<{ file: string; why: string }>;
 }
 
-function readDir(dir: string, ext: string[]): string[] {
-  if (!fs.existsSync(dir)) return [];
-  return fs
-    .readdirSync(dir)
-    .filter((f) => ext.some((e) => f.endsWith(e)))
-    .map((f) => path.join(dir, f))
-    .sort();
+/**
+ * ⛔ WHERE THE BYTES COME FROM, AS A PARAMETER — because the hosted design says the filesystem is
+ * STORAGE BEHIND THE API, not something a client knows about.
+ *
+ * Peter: "let's go hosted first."
+ *
+ * A corpus that must never leave the machine runs an instance on the machine and gets the identical
+ * loop; a corpus on an instance is reached over HTTP. If those two used different parsers, the local
+ * case would degrade into a lesser experience and the gate that protects a corpus naming a real
+ * client would become a punishment for using it. So there is one loader, one set of refusals, one
+ * set of `broken` messages — and exactly two implementations of "give me these bytes".
+ */
+export interface Store {
+  /** Files directly under `dir` with one of these extensions, as full keys, sorted. */
+  list: (dir: string, ext: string[]) => string[];
+  read: (file: string) => string;
 }
+
+/** The corpus as a directory. What every local command uses. */
+export const diskStore: Store = {
+  list: (dir, ext) =>
+    !fs.existsSync(dir)
+      ? []
+      : fs
+          .readdirSync(dir)
+          .filter((f) => ext.some((e) => f.endsWith(e)))
+          .map((f) => path.join(dir, f))
+          .sort(),
+  read: (file) => fs.readFileSync(file, "utf-8"),
+};
+
+/**
+ * A corpus somebody already handed us, keyed by the same paths a directory would use.
+ *
+ * ⛔ THE KEYS ARE PATHS AND THAT IS NOT A LEAK. Nothing a READER sees mentions them — this is the
+ * wire between two halves of one program, and a file-shaped key here is no more product truth than
+ * a column name is. What would be a leak is one of these reaching a page.
+ */
+/**
+ * Every file a corpus is made of, keyed by the path a directory would give it.
+ *
+ * ⛔ THE COUNTERPART OF `memoryStore`, AND THEY MUST STAY THAT WAY. An instance reads a corpus with
+ * this and a remote client parses it with that, so a directory this misses is a directory the
+ * remote copy silently does not have — and the two would disagree about what the corpus says while
+ * both reported themselves healthy.
+ */
+export const CORPUS_DIRS = ["truth", "rules", "charter", "readings", "notes", "verdicts"] as const;
+
+export function corpusFiles(root: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const sub of CORPUS_DIRS) {
+    const here = path.join(root, sub);
+    if (!fs.existsSync(here)) continue;
+    for (const f of fs.readdirSync(here)) {
+      if (!/\.(md|ya?ml)$/.test(f)) continue;
+      out[`${sub}/${f}`] = fs.readFileSync(path.join(here, f), "utf-8");
+    }
+  }
+  return out;
+}
+
+export const memoryStore = (root: string, files: Record<string, string>): Store => {
+  /** Keys are relative to the corpus root; `v2Paths` hands absolute ones in. One conversion, here. */
+  const rel = (p: string): string => (p.startsWith(root) ? p.slice(root.length).replace(/^[/\\]/, "") : p);
+  return {
+    list: (dir, ext) => {
+      const base = rel(dir);
+      return Object.keys(files)
+        .filter((k) => k.startsWith(base + "/") && !k.slice(base.length + 1).includes("/"))
+        .filter((k) => ext.some((e) => k.endsWith(e)))
+        .sort()
+        .map((k) => path.join(root, k));
+    },
+    read: (file) => files[rel(file)] ?? "",
+  };
+};
 
 
 /**
@@ -89,8 +157,10 @@ function why(e: unknown): string {
   return (e as Error).message.split("\n")[0]!;
 }
 
-export function loadCorpus(root: string): Corpus {
+export function loadCorpus(root: string, store: Store = diskStore): Corpus {
   const paths = v2Paths(root);
+  const readDir = (dir: string, ext: string[]): string[] => store.list(dir, ext);
+  const readFile = (file: string): string => store.read(file);
   const broken: Corpus["broken"] = [];
   const scopes: Corpus["scopes"] = [];
   const rules: Corpus["rules"] = [];
@@ -99,7 +169,7 @@ export function loadCorpus(root: string): Corpus {
   for (const file of readDir(paths.truth, [".md"])) {
     if (path.basename(file).toLowerCase() === "readme.md") continue;
     try {
-      const p = parseFrontmatter(fs.readFileSync(file, "utf-8"));
+      const p = parseFrontmatter(readFile(file));
       scopes.push({ scope: Scope.parse(p.data), body: p.content.trim(), file });
     } catch (e) {
       broken.push({ file, why: why(e) });
@@ -107,7 +177,7 @@ export function loadCorpus(root: string): Corpus {
   }
   for (const file of readDir(paths.rules, [".md"])) {
     try {
-      const p = parseFrontmatter(fs.readFileSync(file, "utf-8"));
+      const p = parseFrontmatter(readFile(file));
       rules.push({ rule: Rule.parse(p.data), body: p.content.trim(), file });
     } catch (e) {
       broken.push({ file, why: why(e) });
@@ -117,7 +187,7 @@ export function loadCorpus(root: string): Corpus {
   for (const file of readDir(path.join(paths.root, "charter"), [".md"])) {
     if (path.basename(file).toLowerCase() === "readme.md") continue;
     try {
-      const p = parseFrontmatter(fs.readFileSync(file, "utf-8"));
+      const p = parseFrontmatter(readFile(file));
       charter.push({ charter: Charter.parse(p.data), body: p.content.trim(), file });
     } catch (e) {
       broken.push({ file, why: why(e) });
@@ -128,7 +198,7 @@ export function loadCorpus(root: string): Corpus {
   const readings: Reading[] = [];
   for (const file of readDir(paths.readings, [".yaml", ".yml"])) {
     try {
-      const raw = YAML.parse(fs.readFileSync(file, "utf-8")) ?? {};
+      const raw = YAML.parse(readFile(file)) ?? {};
       for (const r of raw.readings ?? []) readings.push(Reading.parse(r));
     } catch (e) {
       broken.push({ file, why: why(e) });
@@ -137,7 +207,7 @@ export function loadCorpus(root: string): Corpus {
   const notes: Note[] = [];
   for (const file of readDir(path.join(paths.root, "notes"), [".yaml", ".yml"])) {
     try {
-      const raw = YAML.parse(fs.readFileSync(file, "utf-8")) ?? {};
+      const raw = YAML.parse(readFile(file)) ?? {};
       for (const n of raw.notes ?? []) notes.push(Note.parse(n));
     } catch (e) {
       broken.push({ file, why: why(e) });
@@ -146,7 +216,7 @@ export function loadCorpus(root: string): Corpus {
   const verdicts: Verdict[] = [];
   for (const file of readDir(paths.verdicts, [".yaml", ".yml"])) {
     try {
-      const raw = YAML.parse(fs.readFileSync(file, "utf-8")) ?? {};
+      const raw = YAML.parse(readFile(file)) ?? {};
       for (const v of raw.verdicts ?? []) verdicts.push(Verdict.parse(v));
     } catch (e) {
       broken.push({ file, why: why(e) });

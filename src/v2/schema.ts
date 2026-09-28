@@ -1828,6 +1828,19 @@ export const Verdict = z
      * cannot help and software whose help is indistinguishable from a person's agreement.
      */
     via: z.enum(["page", "question", "chat", "cli", "agent"]),
+    /**
+     * ⛔ WHO CARRIED IT, WHEN THIS INSTANCE DID NOT WATCH IT HAPPEN.
+     *
+     * A person can press somewhere this instance cannot see — a published page's database, another
+     * instance — and losing that press because the courier was automated would be worse than
+     * carrying it. But `by` and `via` then describe somebody the recorder is taking on trust, and a
+     * corpus that cannot tell those apart claims every stamp was observed.
+     *
+     * So a relayed verdict keeps the PRESSER's name and `via`, and names the courier here. Present
+     * means: a person really did agree to this, and this instance has somebody's word for it rather
+     * than its own record. Absent means the instance issued the session that pressed the button.
+     */
+    relayed_by: z.string().optional(),
     covers_slots: z.string().optional(),
     covers_criteria: z.string().optional(),
     // rule
@@ -2073,6 +2086,23 @@ export const Note = z
      */
     state: z.enum(["open", "done"]).default("open"),
     outcome: z.string().optional(),
+    /**
+     * ⛔ WHO IS WORKING ON IT, AND UNTIL WHEN — because a note is the only thing in this model that
+     * two sessions can both pick up.
+     *
+     * A session on a laptop and one in the cloud both read the same inbox. Without a claim both
+     * author the same note and the second overwrites the first, and neither of them ever finds out.
+     * So reading the inbox takes a lease.
+     *
+     * ⛔ THE LEASE EXPIRES, and that is the whole reason it is a time and not a flag. A session that
+     * dies mid-authoring would otherwise strand the request forever — the one failure the queue must
+     * survive, because it is the one nobody is watching for. When it lapses the note comes back.
+     *
+     * ⛔ AND THE LEASE IS ON THE NOTE, NOT ON THE INBOX. Locking the feed would make a second
+     * session useless when its entire value is being a second pair of hands.
+     */
+    claimed_by: z.string().optional(),
+    claimed_until: z.string().optional(),
   })
   .strict()
   .superRefine((n, ctx) => {
@@ -2081,6 +2111,16 @@ export const Note = z
         code: z.ZodIssueCode.custom,
         path: ["outcome"],
         message: "say what was done about it — a closed note with no outcome cannot be told apart from one that was dropped",
+      });
+    /**
+     * ⛔ A HALF-WRITTEN LEASE IS WORSE THAN NONE. A claim with no expiry strands the note the first
+     * time the session holding it dies, and an expiry with no claimant cannot say who to ask.
+     */
+    if (Boolean(n.claimed_by) !== Boolean(n.claimed_until))
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["claimed_until"],
+        message: "a claim is a name and an expiry — one without the other is a note nobody can get back",
       });
   });
 export type Note = z.infer<typeof Note>;

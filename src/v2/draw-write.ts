@@ -44,7 +44,7 @@ export interface Provenance {
   at?: string;
 }
 
-export function writeSketchHtml(root: string, scopeId: string, viewId: string, html: string, prov?: Provenance): string | undefined {
+export function writeSketchHtml(root: string, scopeId: string, viewId: string, html: string, prov?: Provenance, text?: string): string | undefined {
   const scopeLeaf = scopeId.split("/").pop()!;
   for (const file of candidates(root)) {
     const raw = fs.readFileSync(file, "utf-8");
@@ -72,8 +72,21 @@ export function writeSketchHtml(root: string, scopeId: string, viewId: string, h
         end--;
       }
     }
-    const has = lines.findIndex((l, i) => i > start && i < end && /^\s*sketch_html:\s*\|/.test(l));
-    if (has >= 0) {
+    /**
+     * ⛔ BOTH RENDERINGS ARE REPLACED, AND THAT IS THE WHOLE POINT OF THIS CHANGE.
+     *
+     * This used to drop `sketch_html` alone and leave `sketch` — the hand-drawn ASCII — exactly
+     * where it was. So regenerating a screen produced one file holding the new drawing beside an
+     * ASCII sketch of the screen that had been deleted, with nothing marking which was current. It
+     * happened on a real corpus: a pricing grid redrawn from the panel that replaced it, with
+     * "2 staged pricing edits" and a "Review and publish" button still in the sketch underneath.
+     *
+     * A packet reads the ASCII, so it cannot simply be dropped — it is generated instead, from the
+     * same parse, and neither is anybody's to maintain.
+     */
+    for (const key of ["sketch_html", "sketch"]) {
+      const has = lines.findIndex((l, i) => i > start && i < end && new RegExp(`^\\s*${key}:\\s*[|>]`).test(l));
+      if (has < 0) continue;
       let stop = has + 1;
       const pad = (/^(\s*)/.exec(lines[has]!)![1] ?? "").length;
       while (stop < end && (lines[stop] === "" || (/^\s/.test(lines[stop]!) && (/^(\s*)/.exec(lines[stop]!)![1] ?? "").length > pad))) stop++;
@@ -96,6 +109,13 @@ export function writeSketchHtml(root: string, scopeId: string, viewId: string, h
        */
       ...(prov ? [`${INDENT}drawn_from: ${JSON.stringify(prov.from)}`] : []),
       ...(prov?.at ? [`${INDENT}drawn_at: ${JSON.stringify(prov.at)}`] : []),
+      /**
+       * ⛔ THE TEXT FIRST, because it is the one a person reads in a packet and in a terminal, and
+       * the HTML below it is one very long line nobody scrolls past.
+       */
+      ...(text
+        ? [`${INDENT}sketch: |`, ...text.split("\n").map((l) => `${INDENT}  ${l}`)]
+        : []),
       `${INDENT}sketch_html: |`,
       ...html.split("\n").map((l) => `${INDENT}  ${l}`),
     ];

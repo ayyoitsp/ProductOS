@@ -14,6 +14,7 @@ import path from "node:path";
 import { Note, type Note as NoteT } from "./schema.js";
 import type { Via } from "./acts.js";
 import { loadCorpus } from "./load.js";
+import { append } from "./log.js";
 
 export interface Filed {
   ok: true;
@@ -39,6 +40,12 @@ const asYaml = (n: NoteT): string =>
     `    via: ${n.via}`,
     `    state: ${n.state}`,
     ...(n.outcome ? [`    outcome: ${JSON.stringify(n.outcome)}`] : []),
+    /**
+     * ⛔ WRITTEN BACK, or a claim would survive exactly until the next thing rewrote this file —
+     * which is a lease that silently stops existing at the moment a second session appears.
+     */
+    ...(n.claimed_by ? [`    claimed_by: ${JSON.stringify(n.claimed_by)}`] : []),
+    ...(n.claimed_until ? [`    claimed_until: ${JSON.stringify(n.claimed_until)}`] : []),
   ].join("\n") + "\n";
 
 export interface Filing {
@@ -85,6 +92,20 @@ export function fileNote(dir: string, f: Filing): Filed | NotFiled {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const existing = fs.existsSync(file) ? fs.readFileSync(file, "utf-8") : "notes:\n";
   fs.writeFileSync(file, existing.trimEnd() + "\n" + asYaml(parsed.data));
+  /**
+   * ⛔ THE ONE EVENT THAT CARRIES WORK, and `work` is why: an inbox cursor must not advance past
+   * this until somebody has authored the change and said what they did. Every other event is
+   * information — the truth moved before it was written.
+   */
+  append(dir, {
+    kind: "note",
+    at: new Date().toISOString(),
+    by: parsed.data.by,
+    via: parsed.data.via,
+    ref: parsed.data.about,
+    says: `${parsed.data.by} asked for a change to ${parsed.data.about} — ${parsed.data.says}`,
+    work: parsed.data.id,
+  });
   return { ok: true, note: parsed.data, said: `noted against ${parsed.data.about}` };
 }
 
@@ -108,11 +129,64 @@ export function closeNote(dir: string, id: string, outcome: string): Filed | Not
    * ⛔ Rewritten in place, not appended. This is the one mutation notes allow, and it is the state
    * of a request rather than the record of it — the words the person wrote never change.
    */
-  const closed = { ...n, state: "done" as const, outcome: said };
+  /**
+   * ⛔ The claim goes with it. A done note holding a lease is a lease nothing will ever release,
+   * and the next reader has to special-case "claimed, but finished" to know it is not work.
+   */
+  const closed = { ...n, state: "done" as const, outcome: said, claimed_by: undefined, claimed_until: undefined };
   const rest = notes.map((x) => (x.id === id ? closed : x));
   fs.writeFileSync(fileOf(dir), "notes:\n" + rest.map(asYaml).join(""));
+  /**
+   * ⛔ ANNOUNCED, because the person who asked is reading the page and has no other way to learn
+   * that anything happened. A queue that empties silently is the one they stop trusting.
+   */
+  append(dir, {
+    kind: "note-closed",
+    at: new Date().toISOString(),
+    by: n.by,
+    ref: n.about,
+    says: `${id} dealt with — ${said}`,
+  });
   return { ok: true, note: closed, said: `${id} dealt with` };
 }
+
+/** Every note as it currently stands — the inbox needs the lease, not just the words. */
+export const readNotes = (dir: string): NoteT[] => read(dir);
+
+/**
+ * Take a lease on a note, or say who already holds one.
+ *
+ * ⛔ CHECKED AND TAKEN IN ONE PLACE. Two sessions asking "is it free?" and then separately saying
+ * "mine" is the race this exists to close; a caller that did its own check first would reintroduce
+ * it however carefully the second half was written.
+ *
+ * ⛔ AN EXPIRED LEASE IS NOT A LEASE. Comparing against now rather than clearing expired claims on
+ * a timer means nothing has to be running for a dead session's work to come back.
+ */
+export function claimNote(dir: string, id: string, by: string, until: string): { ok: true; note: NoteT } | { ok: false; heldBy: string; until: string } {
+  const notes = read(dir);
+  const n = notes.find((x) => x.id === id);
+  if (!n) return { ok: false, heldBy: "", until: "" };
+  if (n.claimed_by && n.claimed_by !== by && n.claimed_until && n.claimed_until > new Date().toISOString())
+    return { ok: false, heldBy: n.claimed_by, until: n.claimed_until };
+  const held = { ...n, claimed_by: by, claimed_until: until };
+  fs.writeFileSync(fileOf(dir), "notes:\n" + notes.map((x) => (x.id === id ? held : x)).map(asYaml).join(""));
+  return { ok: true, note: held };
+}
+
+/** Hand a note back without closing it — the session is stopping, and somebody else may as well go. */
+export function releaseNote(dir: string, id: string): void {
+  const notes = read(dir);
+  if (!notes.some((x) => x.id === id)) return;
+  fs.writeFileSync(
+    fileOf(dir),
+    "notes:\n" + notes.map((x) => (x.id === id ? { ...x, claimed_by: undefined, claimed_until: undefined } : x)).map(asYaml).join("")
+  );
+}
+
+/** Whether a note is being worked on right now, by somebody other than the asker. */
+export const heldNow = (n: NoteT, now = new Date().toISOString()): boolean =>
+  Boolean(n.claimed_by && n.claimed_until && n.claimed_until > now);
 
 const read = (dir: string): NoteT[] => (fs.existsSync(fileOf(dir)) ? loadCorpus(dir).notes : []);
 

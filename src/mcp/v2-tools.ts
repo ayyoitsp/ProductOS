@@ -34,6 +34,9 @@ import { questionsFor, descendants } from "../v2/settle.js";
 import { decisionsUnder, howItWasDecided } from "../v2/record.js";
 import { renderScopePage, standalone } from "../v2/page.js";
 import { perform, preview, VIA, type Act, type Payload } from "../v2/acts.js";
+import { inbox, DEFAULT_LEASE_MS } from "../v2/inbox.js";
+import { closeNote, releaseNote } from "../v2/notes.js";
+import { howYouWillBeTold } from "./push-state.js";
 
 export interface McpTool {
   name: string;
@@ -343,8 +346,81 @@ const readThroughAct = act(
   })
 );
 
+// ===========================================================================
+// THE LOOP — how a session finds out that a person pressed something.
+//
+// ⛔ MCP IS THE SESSION'S WHOLE INTERFACE, which is why this is here and not only on the CLI. A
+// session's relationship with ProductOS is these tools against an instance; a loop that existed
+// only as a shell command would be a loop that only runs when somebody remembers to run it.
+// ===========================================================================
+
+const inboxTool = tool(
+  "productos_exchange_inbox",
+  "What has happened since you last looked: presses a person made, questions they answered, and notes asking for a change. ⛔ READING THIS CLAIMS THE WORK IN IT — pass your session id as `claim` and every note you are handed is leased to you, so a second session does not author the same thing. Carry `head` between polls while you are running; carry `next_cursor` if you restarted and lost your place. A note is the ONLY thing here that owes you work: author the change, then close it with productos_exchange_close_note. Everything else is information — the truth already moved.",
+  AtDir.extend({
+    since: z.number().describe("the last position you handled. 0 or absent reads from the beginning").optional(),
+    claim: z
+      .string()
+      .describe("your session id — present means 'lease the notes you hand me'. Omit to look without taking anything, which is what a status display wants")
+      .optional(),
+    limit: z.number().describe("most events in one answer").optional(),
+  }),
+  (a, paths) => {
+    const dir = dirOf(a, paths);
+    const r = inbox(dir, { since: a.since, claim: a.claim, limit: a.limit, leaseMs: DEFAULT_LEASE_MS });
+    return {
+      dir,
+      ...r,
+      /**
+       * ⛔ WHETHER ANYTHING WILL EVER WAKE YOU, SAID EVERY TIME. An empty inbox and an inbox that
+       * cannot reach you look identical from here, and a session will read the second as the first
+       * and stop asking — which is exactly what happened.
+       */
+      how_you_will_be_told: howYouWillBeTold(dir),
+      /**
+       * ⛔ SAID OUT LOUD, because an empty `events` and an inbox somebody else is working through
+       * look identical from here, and they call for opposite behaviour.
+       */
+      owed: r.events.filter((e) => e.work).map((e) => ({ note: e.work, says: e.says })),
+      held_elsewhere: r.held.length
+        ? r.held.map((h) => `${h.work} is being worked on by ${h.by} until ${h.until}`)
+        : [],
+    };
+  }
+);
+
+const closeNoteTool = tool(
+  "productos_exchange_close_note",
+  "Say that a note has been dealt with, and what was done about it. ⛔ THE OUTCOME IS REQUIRED and it is not a formality: a closed note with no account of what happened cannot be told apart from one somebody dropped because they did not fancy it. Closing also releases your lease and advances the inbox cursor past it — until you close it, that note comes back on every restart, which is the point.",
+  AtDir.extend({
+    id: z.string().describe("the note id, as the inbox gave it to you"),
+    outcome: z.string().describe("what was actually done — the truth you rewrote, or why this is not being done"),
+  }),
+  (a, paths) => closeNote(dirOf(a, paths), a.id, a.outcome)
+);
+
+const releaseNoteTool = tool(
+  "productos_exchange_release_note",
+  "Hand a note back without closing it — you claimed it and are not going to finish it. ⛔ Use this rather than going quiet: a lease that has to expire on its own strands the request for as long as the lease lasts, and the person who asked is watching a queue that looks like somebody is on it.",
+  AtDir.extend({ id: z.string() }),
+  (a, paths) => {
+    releaseNote(dirOf(a, paths), a.id);
+    return { ok: true, said: `${a.id} is back in the queue` };
+  }
+);
+
 /** ⛔ Named so the act tools are identifiable as a group by anything auditing this surface. */
 export const EXCHANGE_ACT_TOOLS: McpTool[] = [agreeAct, settleAct, latitudeAct, parkAct, readThroughAct];
+
+/**
+ * ⛔ THE LOOP IS ITS OWN FAMILY, not a read and not an act.
+ *
+ * Reading the inbox takes a lease, so it is not a read; closing a note records that work was done,
+ * not that a person judged anything, so it is not one of the five acts. Filed under either, the
+ * boundary the whole design rests on — a session can never mint consent, only carry one — would be
+ * one refactor away from being argued about.
+ */
+export const EXCHANGE_LOOP_TOOLS: McpTool[] = [inboxTool, closeNoteTool, releaseNoteTool];
 
 export const EXCHANGE_READ_TOOLS: McpTool[] = [
   scopesTool,
@@ -358,4 +434,4 @@ export const EXCHANGE_READ_TOOLS: McpTool[] = [
   gateTool,
 ];
 
-export const exchangeTools: McpTool[] = [...EXCHANGE_READ_TOOLS, ...EXCHANGE_ACT_TOOLS];
+export const exchangeTools: McpTool[] = [...EXCHANGE_READ_TOOLS, ...EXCHANGE_ACT_TOOLS, ...EXCHANGE_LOOP_TOOLS];

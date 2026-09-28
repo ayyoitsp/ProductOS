@@ -103,7 +103,23 @@ test("the composer is docked, always there, and never asks what you are looking 
 
   // Docked, not floated, and the body makes room so it never covers the last card.
   assert.match(live, /\.note-bar \{[^}]*position: fixed/, "the composer is not pinned to the viewport");
-  assert.match(live, /\.note-bar \{[^}]*bottom: 0/, "the composer is not at the bottom of the screen");
+  /**
+   * ⛔ AT THE BOTTOM, AND ABOVE ANYTHING STACKED THERE — which is a correction, not a loosening.
+   *
+   * It was `bottom: 0` and so were the two status bars, so on the first real corpus this was
+   * pointed at the presence bar sat on top of the Send button: the page announced "nobody is
+   * working on this" while making it impossible to say anything about it. Docked still means
+   * docked — the offset is zero until something is stacked under it.
+   */
+  assert.match(live, /\.note-bar \{[^}]*bottom: var\(--bottom-h\)/, "the composer is not at the bottom of the screen");
+  assert.match(live, /:root \{ --bottom-h: 0px; \}/, "with no bar showing, the composer must sit flush at the bottom");
+  assert.match(live, /\.bottom-bars \{[^}]*position: fixed[^}]*bottom: 0/, "the status bars are not a stack, so they will cover each other");
+  for (const bar of ["stale-bar", "who-bar"])
+    assert.doesNotMatch(
+      live,
+      new RegExp(`\\.${bar} \\{[^}]*position: fixed`),
+      `${bar} is still fixed on its own, so it can land on top of the composer`
+    );
   assert.match(live, /body\.has-note-bar \{ padding-bottom/, "nothing makes room for the composer");
 
   // ⛔ And not on a read-only render, where it would collect words that go nowhere.

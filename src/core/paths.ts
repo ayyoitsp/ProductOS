@@ -58,6 +58,23 @@ export function ensureDirs(p: ProductosPaths): void {
   }
 }
 
+/**
+ * The codebase a corpus describes, from the corpus's own location.
+ *
+ * ⛔ ONE ANSWER, because three callers were about to compute it three ways. A drawing records its
+ * source as a path relative to this root — `frontend/app/components/…` — and a caller that resolved
+ * that root differently would be checking a file that is not the one the drawing named, and
+ * reporting either a phantom absence or a phantom presence. Returns undefined where there is no
+ * project, which is a corpus with no codebase and not an error.
+ */
+export function projectRootOf(corpusDir: string): string | undefined {
+  try {
+    return path.dirname(path.dirname(resolvePathsOrThrow(corpusDir).configFile));
+  } catch {
+    return undefined;
+  }
+}
+
 export function resolvePathsOrThrow(start: string = process.cwd()): ProductosPaths {
   const repoRoot = findRepoRoot(start);
   if (!repoRoot) {

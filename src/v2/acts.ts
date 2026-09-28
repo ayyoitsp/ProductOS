@@ -25,6 +25,7 @@ import { gateFor } from "./grid.js";
 import { coveredBy, stampFor, staleReason } from "./stamp.js";
 import { questionsFor, settle, waive as applyWaiver, govern } from "./settle.js";
 import { resolveRef, nothingToDecide } from "./ref.js";
+import { append } from "./log.js";
 
 /**
  * How the human's consent was obtained.
@@ -70,6 +71,11 @@ export interface Consent {
   /** ⛔ Recorded, never authenticated. See `requireName`. */
   by: string;
   via: Via;
+  /**
+   * ⛔ Set ONLY when this instance did not observe the press and is carrying somebody's word for
+   * it. `by` and `via` stay the PRESSER's — see `relayed_by` in the schema, and `mayRelay`.
+   */
+  relayedBy?: string;
 }
 
 /**
@@ -153,7 +159,13 @@ export const optionText = (c: {
       ? "nothing to refuse"
       : (c.outcomes ?? []).map((o) => `refuses ${o.name} when ${o.when} → ${o.told}`).join("; ");
 
-const writeVerdict = (dir: string, file: string, lines: string[]): void => {
+const writeVerdict = (dir: string, file: string, lines: string[], consent?: Consent): void => {
+  /**
+   * ⛔ APPENDED HERE, NOT AT EIGHT CALL SITES. Every handler assembles its own YAML, so a field
+   * added to seven of them and forgotten in the eighth is a verdict that silently claims this
+   * instance watched a press it only heard about — and it is the eighth one nobody looks at.
+   */
+  if (consent?.relayedBy) lines = [...lines, `    relayed_by: ${consent.relayedBy}`];
   const full = path.join(dir, "verdicts", file);
   const existing = fs.existsSync(full) ? fs.readFileSync(full, "utf-8") : "verdicts:\n";
   fs.mkdirSync(path.dirname(full), { recursive: true });
@@ -311,7 +323,82 @@ function aimOf(corpus: Corpus, target: string): Refused | { kind: string } {
 
 // ---------------------------------------------------------------------------
 
+/**
+ * ⛔ The payload shape per act, assembled from the wire rather than trusted from it. `perform`
+ * validates everything that matters, but a field arriving under the wrong name would be silently
+ * dropped — and a dropped `because` is a ruling recorded with no reasoning.
+ *
+ * ⛔ ONE BUILDER FOR BOTH WRITE ROUTES. A press and a carried press differ in WHOSE consent is being
+ * recorded and in nothing else; two copies of this would drift by one field, and the one that drifted
+ * would be the relay, which is the path nobody exercises by hand.
+ */
+export function payloadFrom(act: Act, ref: string, body: Record<string, unknown>): Payload {
+  return act === "accept"
+    ? { target: ref }
+    : act === "read"
+      ? {
+          scope: ref,
+          buildable: body.buildable === true || body.buildable === "yes",
+          blockedBy: Array.isArray(body.blockedBy) ? body.blockedBy.map(String) : undefined,
+          note: body.note === undefined ? undefined : String(body.note),
+        }
+      : act === "waive"
+        ? { slot: ref, because: String(body.because ?? "") }
+        : act === "defer"
+          ? { slot: ref, because: String(body.because ?? ""), until: String(body.until ?? "") }
+          : {
+              slot: ref,
+              because: String(body.because ?? ""),
+              /**
+               * ⛔ CARRIED, AND IT WAS NOT. The HTTP act route assembled every other field of a
+               * ruling and dropped this one, so a ruling recorded from the page lost what its
+               * author had rejected and why it lost — silently, into a field the schema accepts as
+               * absent. The whole point of the field is that a decision is not relitigated.
+               */
+              alsoConsidered: body.alsoConsidered === undefined ? undefined : String(body.alsoConsidered),
+              says: body.says === undefined || String(body.says).trim() === "" ? undefined : String(body.says),
+              pick: body.pick === undefined ? undefined : Number(body.pick),
+              stands: body.stands === undefined ? undefined : String(body.stands),
+              then: body.then === undefined ? undefined : String(body.then),
+              defersTo: body.defersTo === undefined ? undefined : String(body.defersTo),
+              insteadOf: body.insteadOf === undefined ? undefined : String(body.insteadOf),
+              refuses: body.refuses === undefined ? undefined : body.refuses === true || body.refuses === "yes",
+            };
+}
+
 export function perform(dir: string, act: Act, payload: Payload, consent: Consent): Outcome {
+  const outcome = run(dir, act, payload, consent);
+  /**
+   * ⛔ ANNOUNCED HERE AND NOWHERE ELSE, for the same reason the five acts exist here and nowhere
+   * else. There are eight verdict writes across five handlers; logging at each would be eight
+   * chances to forget one, and the one that got forgotten would be a press a session never hears
+   * about — indistinguishable, from the page, from a press that never happened.
+   *
+   * ⛔ Only on success. An event is the record that something HAPPENED; a refused act is a thing
+   * that did not, and a reader woken for it would find a corpus that has not moved.
+   */
+  if (outcome.ok)
+    append(dir, {
+      /**
+       * ⛔ A RULING IS ITS OWN KIND. Every other act records agreement with truth that was already
+       * there; a ruling answers a question that was blocking every behaviour its selector touches,
+       * so what a session owes it is different — go and see what it just unblocked.
+       */
+      kind: act === "rule" ? "question-answered" : "press",
+      at: new Date().toISOString(),
+      by: consent.by,
+      via: consent.via,
+      ref: refOf(act, payload),
+      says: `${consent.by} ${act === "accept" ? "agreed to" : act === "read" ? "read" : act === "rule" ? "ruled" : act === "waive" ? "waived" : "parked"} ${refOf(act, payload)}`,
+    });
+  return outcome;
+}
+
+/** What the act was about, whatever name its payload gives it. */
+const refOf = (act: Act, p: Payload): string =>
+  act === "accept" ? (p as AcceptPayload).target : act === "read" ? (p as ReadPayload).scope : (p as WaivePayload).slot;
+
+function run(dir: string, act: Act, payload: Payload, consent: Consent): Outcome {
   switch (act) {
     case "accept":
       return doAccept(dir, payload as AcceptPayload, consent);
@@ -356,7 +443,7 @@ function doAccept(dir: string, { target }: AcceptPayload, consent: Consent): Out
       `    via: ${consent.via}`,
       `    covers_slots: ${cover.slots}`,
       `    covers_criteria: ${cover.criteria}`,
-    ]);
+    ], consent);
     /**
      * ⛔ THE REPORT MUST NOT CLAIM AGREEMENT SOFTWARE DID NOT GIVE. This said "agreed what X is for
      * — every sentence is now offered" for a `via: agent` record, while the gate correctly stayed
@@ -432,7 +519,7 @@ function doAccept(dir: string, { target }: AcceptPayload, consent: Consent): Out
       `    via: ${consent.via}`,
       `    covers_slots: ${covered.slots}`,
       `    covers_criteria: ${covered.criteria}`,
-    ]);
+    ], consent);
     return {
       ok: true,
       said: `agreed: ${target}`,
@@ -513,7 +600,7 @@ function doAccept(dir: string, { target }: AcceptPayload, consent: Consent): Out
     `    via: ${consent.via}`,
     `    covers_slots: ${c.slots}`,
     `    covers_criteria: ${c.criteria}`,
-  ]);
+  ], consent);
   return {
     ok: true,
     said: `accepted ${target}`,
@@ -559,7 +646,7 @@ function doRule(dir: string, o: RulePayload, consent: Consent): Outcome {
       `    via: ${consent.via}`,
       `    says: ${JSON.stringify(`${o.defersTo ?? o.insteadOf} ${o.defersTo ? "still holds here" : "does not hold here"}`)}`,
       `    because: ${JSON.stringify(o.because)}`,
-    ]);
+    ], consent);
     return {
       ok: true,
       said: o.defersTo
@@ -763,7 +850,7 @@ function doRule(dir: string, o: RulePayload, consent: Consent): Outcome {
             ]),
         ]
       : []),
-  ]);
+  ], consent);
 
   return {
     ok: true,
@@ -844,7 +931,7 @@ function doRead(dir: string, o: ReadPayload, consent: Consent): Outcome {
     `    buildable: ${o.buildable}`,
     ...(blocked.length ? [`    blocked_by: [${blocked.join(", ")}]`] : []),
     ...(o.note ? [`    note: ${JSON.stringify(o.note)}`] : []),
-  ]);
+  ], consent);
   return {
     ok: true,
     said: `${consent.by} read ${o.scope} and ${o.buildable ? "could" : "could NOT"} build from it`,
@@ -871,7 +958,7 @@ function doWaive(dir: string, o: WaivePayload, consent: Consent): Outcome {
     `    at: ${today()}`,
     `    via: ${consent.via}`,
     `    because: ${JSON.stringify(o.because)}`,
-  ]);
+  ], consent);
   return {
     ok: true,
     said: `waived ${o.slot} — the packet will tell a builder this is their latitude`,
@@ -911,7 +998,7 @@ function doDefer(dir: string, o: DeferPayload, consent: Consent): Outcome {
     `    via: ${consent.via}`,
     `    because: ${JSON.stringify(o.because)}`,
     `    until: ${JSON.stringify(o.until)}`,
-  ]);
+  ], consent);
   return {
     ok: true,
     said: `parked ${o.slot} — it stays unsettled and its exchange stays gated`,

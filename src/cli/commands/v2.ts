@@ -9,10 +9,13 @@ import { gridFor, renderGridText, actsFor, gateFor } from "../../v2/grid.js";
 import { compilePacket } from "../../v2/packet.js";
 
 import { questionsFor, descendants } from "../../v2/settle.js";
-import { perform, preview, optionText, VIA, type Via, type Outcome, type Refused } from "../../v2/acts.js";
+import { perform, preview, payloadFrom, optionText, VIA, type Act, type Via, type Outcome, type Refused } from "../../v2/acts.js";
 import { fileNote, closeNote } from "../../v2/notes.js";
 import { appStyleFor } from "../../v2/appcss.js";
 import { watchCorpus } from "../../v2/watch.js";
+import { inbox } from "../../v2/inbox.js";
+import { looksLikeInstance, instanceOf, mirror, act as remoteAct, note as remoteNote, inbox as remoteInbox, preview as remotePreview, whoami as remoteWhoami, presence as remotePresence } from "../../v2/client.js";
+import { lineFor } from "../../v2/log.js";
 import { drawFromRoute } from "../../v2/draw.js";
 import { AGENTS, CASCADE, KINDS } from "../../core/jobs.js";
 
@@ -94,7 +97,43 @@ export function v2Command(): Command {
    * has to look like a corpus, and the refusal names both where it looked and where it was run
    * from — because the two differing is the whole failure.
    */
+  /**
+   * ⛔ AN INSTANCE URL HANDED TO A COMMAND THAT CANNOT SPEAK TO ONE IS REFUSED, NOT RESOLVED.
+   *
+   * `path.resolve("https://x.productos.dev/cre")` is a perfectly good directory name, so without
+   * this a command would report "no corpus at /Users/…/https:/x.productos.dev/cre" — which reads as
+   * a typo and sends somebody looking for a folder. Worse, on a machine that happened to have one,
+   * it would quietly read the wrong corpus and report ✓.
+   *
+   * Refusing here means a command gets instance support by CALLING `openAt`, never by forgetting to.
+   */
+  const refuseUrl = (o: { at?: string }, verb: string) => {
+    if (!looksLikeInstance(o.at)) return;
+    console.error(pc.red("✗"), `${verb} works on a corpus you have, and ${o.at} is an instance`);
+    console.error(pc.dim("  the truth is there, not here — and reading a local copy instead is how two"));
+    console.error(pc.dim("  people agree to two different corpora and both see a tick"));
+    console.error(pc.dim("  these speak to an instance: check · grid · acts · page · next · packet · inbox · notes · the five acts"));
+    process.exit(1);
+  };
+
+  /**
+   * A corpus to read, wherever it is.
+   *
+   * ⛔ A MIRROR IS A CACHE OF A READ, NOT A WORKING COPY. It goes to a scratch directory and is
+   * thrown away; nothing writes back into it, because every act goes to the instance over HTTP.
+   */
+  const openAt = async (o: { at?: string; token?: string }): Promise<string> => {
+    if (!looksLikeInstance(o.at)) return at(o);
+    try {
+      return await mirror(instanceOf(o.at!, o.token));
+    } catch (e) {
+      console.error(pc.red("✗"), e instanceof Error ? e.message : String(e));
+      process.exit(1);
+    }
+  };
+
   const at = (o: { at?: string }, mustExist = true) => {
+    refuseUrl(o, "this");
     const dir = path.resolve(o.at ?? "v2");
     if (mustExist && !fs.existsSync(path.join(dir, "truth"))) {
       console.error(pc.red("✗"), `no corpus at ${dir}`);
@@ -108,9 +147,10 @@ export function v2Command(): Command {
   cmd
     .command("check")
     .description("What this corpus refuses, and what it merely notes")
-    .option("--at <dir>", "corpus directory", "v2")
-    .action((o: { at?: string }) => {
-      const { corpus, findings } = checkCorpus(at(o));
+    .option("--at <dir|url>", "corpus directory, or an instance URL", "v2")
+    .option("--token <t>", "bearer token for an instance (or $PRODUCTOS_TOKEN)")
+    .action(async (o: { at?: string; token?: string }) => {
+      const { corpus, findings } = checkCorpus(await openAt(o));
       const s = summarise(findings);
       const ex = corpus.scopes.reduce((n, x) => n + x.scope.exchanges.length, 0);
       console.log(
@@ -139,8 +179,8 @@ export function v2Command(): Command {
     .description("The behaviours a scope states, and where each came from")
     .argument("[scope]", "scope id; omit to show every scope")
     .option("--at <dir>", "corpus directory", "v2")
-    .action((scope: string | undefined, o: { at?: string }) => {
-      const corpus = loadCorpus(at(o));
+    .action(async (scope: string | undefined, o: { at?: string; token?: string }) => {
+      const corpus = loadCorpus(await openAt(o));
       warnIfBroken(corpus);
       /**
        * ⛔ DESCENDS, like `decide`, `read` and `packet` already do.
@@ -180,9 +220,10 @@ export function v2Command(): Command {
   cmd
     .command("acts")
     .description("How many acts of human judgement this corpus demands, and which are gated")
-    .option("--at <dir>", "corpus directory", "v2")
-    .action((o: { at?: string }) => {
-      const corpus = loadCorpus(at(o));
+    .option("--at <dir|url>", "corpus directory, or an instance URL", "v2")
+    .option("--token <t>", "bearer token for an instance (or $PRODUCTOS_TOKEN)")
+    .action(async (o: { at?: string; token?: string }) => {
+      const corpus = loadCorpus(await openAt(o));
       warnIfBroken(corpus);
       const a = actsFor(corpus);
       // ⛔ From `SLOTS`, not a literal. A hardcoded 7 here would have under-reported the corpus by one
@@ -285,8 +326,8 @@ export function v2Command(): Command {
     .description("Compile the execution packet for one scope — step 1 of the roadmap")
     .argument("<scope>")
     .option("--at <dir>", "corpus directory", "v2")
-    .action((scope: string, o: { at?: string }) => {
-      const corpus = loadCorpus(at(o));
+    .action(async (scope: string, o: { at?: string; token?: string }) => {
+      const corpus = loadCorpus(await openAt(o));
       refuseIfBroken(corpus, "a packet handed to a builder");
       // ⛔ A container compiles a packet with a glossary and no behaviours, which reads as a
       // finished specification for a thing that has none. Say so before printing it.
@@ -331,6 +372,45 @@ export function v2Command(): Command {
    * "accepted" alone, and why `check` refuses a stamp whose content moved — the only defence
    * that does not depend on trusting the caller.
    */
+  /**
+   * ⛔ RECORD IT WHERE THE TRUTH IS. A directory performs locally; an instance is POSTed to.
+   *
+   * One helper for all five acts, because the alternative is five places that each have to remember
+   * the remote path exists — and the one that forgot would silently write a local file for a corpus
+   * that lives somewhere else, which is the divergence this whole client is built to prevent.
+   */
+  const recordAt = async (
+    o: { at?: string; token?: string; by: string; via?: string },
+    action: Act,
+    ref: string,
+    wire: Record<string, unknown> = {}
+  ): Promise<Outcome> => {
+    const c = consentFrom(o);
+    const done = (r: Outcome | Refused): Outcome => {
+      // ⛔ `report` exits on a refusal, so anything after it is an act that landed.
+      report(r);
+      return r as Outcome;
+    };
+    if (!looksLikeInstance(o.at)) return done(perform(at(o), action, payloadFrom(action, ref, wire), c));
+    try {
+      return done((await remoteAct(instanceOf(o.at!, o.token), action, ref, c.via, { by: c.by, ...wire })) as Outcome | Refused);
+    } catch (e) {
+      console.error(pc.red("✗"), e instanceof Error ? e.message : String(e));
+      process.exit(1);
+    }
+  };
+
+  /** What a press would cover, wherever the corpus is. ⛔ Shown before the write, never with it. */
+  const previewAt = async (o: { at?: string; token?: string }, action: Act, ref: string, wire: Record<string, unknown> = {}) => {
+    if (!looksLikeInstance(o.at)) return preview(at(o), action, payloadFrom(action, ref, wire));
+    try {
+      return (await remotePreview(instanceOf(o.at!, o.token), action, ref, wire)) as ReturnType<typeof preview>;
+    } catch (e) {
+      console.error(pc.red("✗"), e instanceof Error ? e.message : String(e));
+      process.exit(1);
+    }
+  };
+
   const consentFrom = (o: { by: string; via?: string }) => {
     const via = (o.via ?? "cli") as Via;
     if (!VIA.includes(via)) {
@@ -384,9 +464,9 @@ export function v2Command(): Command {
     .argument("<target>", "scope#exchange, or a rule id")
     .requiredOption("--by <who>", "who is accepting")
     .option("--via <how>", "how consent was obtained: page | question | chat | cli", "cli")
-    .option("--at <dir>", "corpus directory", "v2")
-    .action((target: string, o: { by: string; via?: string; at?: string }) => {
-      const dir = at(o);
+    .option("--at <dir|url>", "corpus directory, or an instance URL", "v2")
+    .option("--token <t>", "bearer token for an instance (or $PRODUCTOS_TOKEN)")
+    .action(async (target: string, o: { by: string; via?: string; at?: string; token?: string }) => {
       /**
        * ⛔ THE SENTENCES, NOT THEIR PROVENANCE, AND BEFORE THE WRITE.
        *
@@ -396,13 +476,13 @@ export function v2Command(): Command {
        * point at which a person can decline."* `preview` is now a separate call, so a page can
        * show this before a button exists and a question can carry it in the choice itself.
        */
-      const shown = preview(dir, "accept", { target });
+      const shown = await previewAt(o, "accept", target);
       if (!shown.ok) return report(shown);
       console.log(pc.bold(`You are accepting ${target}. Read what you are agreeing to:`));
       console.log("");
       for (const l of shown.reads) console.log(`  ${l}`);
       console.log("");
-      report(perform(dir, "accept", { target }, consentFrom(o)));
+      await recordAt(o, "accept", target);
     });
 
   cmd
@@ -548,27 +628,20 @@ export function v2Command(): Command {
     .option("--stands <which>", "for a disputed slot: this | the other | neither")
     .option("--then <what>", "for an org-wide rule: what would show it holding")
     .option("--refuses <yes|no>", "for a case asking `whether`: does it refuse at all? `no` retires the case")
-    .option("--at <dir>", "corpus directory", "v2")
-    .action((slot: string, o: Record<string, string | undefined> & { at?: string }) => {
-      const dir = at(o as { at?: string });
-      const r = perform(
-        dir,
-        "rule",
-        {
-          slot,
-          says: o.says,
-          pick: o.pick === undefined ? undefined : Number(o.pick),
-          because: o.because!,
-          alsoConsidered: o.alsoConsidered,
-          defersTo: o.defersTo,
-          insteadOf: o.insteadOf,
-          stands: o.stands,
-          then: o.then,
-          refuses: o.refuses === undefined ? undefined : /^(y|yes|true)$/i.test(o.refuses),
-        },
-        consentFrom(o as { by: string; via?: string })
-      );
-      report(r);
+    .option("--at <dir|url>", "corpus directory, or an instance URL", "v2")
+    .option("--token <t>", "bearer token for an instance (or $PRODUCTOS_TOKEN)")
+    .action(async (slot: string, o: Record<string, string | undefined> & { at?: string; token?: string }) => {
+      const r = await recordAt(o as never, "rule", slot, {
+        says: o.says,
+        pick: o.pick,
+        because: o.because!,
+        alsoConsidered: o.alsoConsidered,
+        defersTo: o.defersTo,
+        insteadOf: o.insteadOf,
+        stands: o.stands,
+        then: o.then,
+        refuses: o.refuses === undefined ? undefined : /^(y|yes|true)$/i.test(o.refuses),
+      });
       /**
        * ⛔ A ruling that displaces an org-wide rule has to say which way, and the remedy is
        * printed WITHOUT a sentence — a governance declaration needs none, so the remedy this
@@ -594,23 +667,14 @@ export function v2Command(): Command {
     .option("--via <how>", "how consent was obtained: page | question | chat | cli", "cli")
     .option("--blocked-by <refs>", "comma-separated slot refs that stopped you")
     .option("--note <text>")
-    .option("--at <dir>", "corpus directory", "v2")
-    .action((scope: string, o: Record<string, string | undefined> & { at?: string }) => {
-      const dir = at(o as { at?: string });
-      const buildable = /^(y|yes|true)$/i.test(o.buildable ?? "");
-      report(
-        perform(
-          dir,
-          "read",
-          {
-            scope,
-            buildable,
-            blockedBy: (o.blockedBy ?? "").split(",").map((x) => x.trim()).filter(Boolean),
-            note: o.note,
-          },
-          consentFrom(o as { by: string; via?: string })
-        )
-      );
+    .option("--at <dir|url>", "corpus directory, or an instance URL", "v2")
+    .option("--token <t>", "bearer token for an instance (or $PRODUCTOS_TOKEN)")
+    .action(async (scope: string, o: Record<string, string | undefined> & { at?: string; token?: string }) => {
+      await recordAt(o as never, "read", scope, {
+        buildable: /^(y|yes|true)$/i.test(o.buildable ?? ""),
+        blockedBy: (o.blockedBy ?? "").split(",").map((x) => x.trim()).filter(Boolean),
+        note: o.note,
+      });
     });
 
   cmd
@@ -620,9 +684,10 @@ export function v2Command(): Command {
     .requiredOption("--because <why>", "why this is not ours to answer")
     .requiredOption("--by <who>", "who decided")
     .option("--via <how>", "how consent was obtained: page | question | chat | cli", "cli")
-    .option("--at <dir>", "corpus directory", "v2")
-    .action((slot: string, o: { because: string; by: string; via?: string; at?: string }) => {
-      report(perform(at(o), "waive", { slot, because: o.because }, consentFrom(o)));
+    .option("--at <dir|url>", "corpus directory, or an instance URL", "v2")
+    .option("--token <t>", "bearer token for an instance (or $PRODUCTOS_TOKEN)")
+    .action(async (slot: string, o: { because: string; by: string; via?: string; at?: string; token?: string }) => {
+      await recordAt(o, "waive", slot, { because: o.because });
     });
 
   cmd
@@ -633,9 +698,10 @@ export function v2Command(): Command {
     .requiredOption("--until <what>", "what brings it back — an event, not a date")
     .requiredOption("--by <who>", "who parked it")
     .option("--via <how>", "how consent was obtained: page | question | chat | cli", "cli")
-    .option("--at <dir>", "corpus directory", "v2")
-    .action((slot: string, o: { because: string; until: string; by: string; via?: string; at?: string }) => {
-      report(perform(at(o), "defer", { slot, because: o.because, until: o.until }, consentFrom(o)));
+    .option("--at <dir|url>", "corpus directory, or an instance URL", "v2")
+    .option("--token <t>", "bearer token for an instance (or $PRODUCTOS_TOKEN)")
+    .action(async (slot: string, o: { because: string; until: string; by: string; via?: string; at?: string; token?: string }) => {
+      await recordAt(o, "defer", slot, { because: o.because, until: o.until });
     });
 
   cmd
@@ -652,8 +718,8 @@ export function v2Command(): Command {
     .argument("<scope>")
     .requiredOption("--out <file>", "where to write the HTML")
     .option("--at <dir>", "corpus directory", "v2")
-    .action((scope: string, o: { out: string; at?: string }) => {
-      const dir = at(o);
+    .action(async (scope: string, o: { out: string; at?: string; token?: string }) => {
+      const dir = await openAt(o);
       const corpus = loadCorpus(dir);
       warnIfBroken(corpus);
       const app = appStyleFor(dir);
@@ -890,7 +956,29 @@ export function v2Command(): Command {
       }
       let moved = 0;
       let blind = 0;
+      let gone = 0;
       for (const r of rows) {
+        /**
+         * ⛔ FIRST, LOUDEST, AND WITH THE COMMAND THAT FIXES IT.
+         *
+         * A deleted source used to print as "2 commits since it was drawn" — the same sentence a
+         * renamed label gets. It was a 1,192-line component that no longer exists, and the corpus
+         * went on describing its five editable controls until somebody read it and wrote "this is
+         * all wrong". A report whose strongest finding is phrased as its weakest is a report that
+         * gets skimmed.
+         */
+        if (r.gone) {
+          gone++;
+          console.log("");
+          console.log(`${pc.bold(`${r.scope}#${r.view}`)} ${pc.red(r.from)}`);
+          console.log(pc.red("  ✗ the file this was drawn from no longer exists — this screen describes something that was deleted"));
+          for (const c of r.since.slice(0, 3)) console.log(`      ${pc.cyan(c.sha)} ${pc.dim(c.when)} ${c.subject}`);
+          if (o.full) for (const c of r.since) if (c.body) for (const l of c.body.split("\n").slice(0, 12)) console.log(pc.dim(`        ${l}`));
+          /** ⛔ Runnable. A finding that leaves somebody to work out the command is a finding they defer. */
+          console.log(pc.dim(`      draw it again:  productos v2 draw "${r.scope}#${r.view}" --route <the component that renders it now> --into ${o.at ?? "v2"}`));
+          console.log(pc.dim(`      or, if the screen is genuinely gone:  mark it exists: withdrawn`));
+          continue;
+        }
         if (r.why) {
           blind++;
           console.log("");
@@ -914,13 +1002,20 @@ export function v2Command(): Command {
         }
       }
       console.log("");
+      if (gone)
+        console.log(
+          pc.red("✗"),
+          `${gone} screen${gone === 1 ? "" : "s"} drawn from a file that is no longer there. ${pc.dim("this corpus describes something that was deleted")}`
+        );
       if (moved)
         console.log(
           pc.yellow("!"),
           `${moved} screen${moved === 1 ? "" : "s"} the code has changed under. ${pc.dim("read what the commits say — the corpus may be behind, or the code may be")}`
         );
-      else console.log(pc.green("✓"), "nothing has moved under a drawn screen");
+      if (!gone && !moved) console.log(pc.green("✓"), "nothing has moved under a drawn screen");
       if (blind) console.log(pc.dim(`  ${blind} could not be compared — see above`));
+      /** ⛔ A non-zero exit, so this can gate something. A report nothing can fail on is a report. */
+      if (gone) process.exitCode = 1;
     });
 
   const change = cmd.command("change").description("Record a piece of feedback and drive it into every layer it affects");
@@ -1047,8 +1142,8 @@ export function v2Command(): Command {
     .option("--take <n>", "how many to hand over", "4")
     .option("--json", "as data, for driving a question interface")
     .option("--at <dir>", "corpus directory", "v2")
-    .action((scopeId: string | undefined, o: { take?: string; json?: boolean; at?: string }) => {
-      const dir = at(o);
+    .action(async (scopeId: string | undefined, o: { take?: string; json?: boolean; at?: string; token?: string }) => {
+      const dir = await openAt(o);
       const corpus = loadCorpus(dir);
       refuseIfBroken(corpus, "a review round");
       const a = actsFor(corpus);
@@ -1267,10 +1362,14 @@ export function v2Command(): Command {
        * next run discards.
        */
       let parts: Array<{ id: string; role: string; label?: string; leads_to?: string; decorative?: boolean }> = [];
+      /** Whether a hand-drawn sketch sits beside the generated one — see the warning below. */
+      let hasAscii = false;
       try {
         const c = loadCorpus(into);
         const sc = c.scopes.find((x) => x.scope.id === scopeId || x.scope.id === scopeId.split("/").pop())?.scope;
-        parts = sc?.views.find((v) => v.id === viewId)?.parts ?? [];
+        const v = sc?.views.find((x) => x.id === viewId);
+        parts = v?.parts ?? [];
+        hasAscii = Boolean(v?.sketch);
       } catch {
         parts = [];
       }
@@ -1293,6 +1392,33 @@ export function v2Command(): Command {
           pc.dim(`  wired ${parts.length - drawn.undrawn.length} of ${parts.length} parts`) +
             (drawn.undrawn.length ? pc.yellow(`  — the drawing does not show ${drawn.undrawn.join(", ")}`) : "")
         );
+      /**
+       * ⛔ REGENERATING ONE OF THREE RENDERINGS AND SAYING NOTHING IS HOW A FILE COMES TO
+       * CONTRADICT ITSELF.
+       *
+       * This writes `sketch_html`, `drawn_from` and `drawn_at`. It does NOT write the hand-drawn
+       * ASCII `sketch`, and it does NOT touch `parts`. So a screen redrawn after its component was
+       * replaced ends up holding the new HTML beside an ASCII sketch of the old screen and a parts
+       * list naming controls that were deleted — in one file, with nothing saying which is current.
+       *
+       * That happened: a grid was redrawn from the panel that replaced it, and the ASCII sketch in
+       * the same file went on showing "2 staged pricing edits" and a "Review and publish" button
+       * that no longer exist. Peter asked "why didn't moved properly regenerate?" — the honest
+       * answer is that `draw` does not fully regenerate either, and until it does, it has to say so
+       * at the moment it half-does.
+       */
+      /**
+       * ⛔ THE SKETCH IS NO LONGER ON THIS LIST, because this now writes it. What is left is the
+       * parts list, which is still somebody's to keep — and when a component is replaced wholesale,
+       * every part in it is a control that no longer exists. Saying so is the difference between a
+       * regenerated screen and a regenerated screen with a dead vocabulary attached.
+       */
+      void hasAscii;
+      if (!o.dryRun && parts.length && drawn.undrawn.length === parts.length)
+        console.log(
+          pc.yellow("!"),
+          `every declared part is missing from the new drawing — the parts list still describes the old screen, and this does not write it`
+        );
       if (drawn.unresolved.length) {
         console.log(pc.yellow("!"), `${drawn.unresolved.length} thing${drawn.unresolved.length === 1 ? "" : "s"} it could not read, left marked in the drawing`);
         for (const u of drawn.unresolved.slice(0, 8)) console.log(pc.dim(`    ${u}`));
@@ -1314,7 +1440,8 @@ export function v2Command(): Command {
         scopeId,
         viewId,
         drawn.html,
-        origin ? { from: path.relative(origin.root, route), at: origin.head } : undefined
+        origin ? { from: path.relative(origin.root, route), at: origin.head } : undefined,
+        drawn.text
       );
       if (!written) {
         console.error(pc.red("✗"), `no view "${viewId}" under "${scopeId}" in ${into}`);
@@ -1348,6 +1475,92 @@ export function v2Command(): Command {
       process.on("SIGINT", stop);
       process.on("SIGTERM", stop);
       await stopped;
+    });
+
+  cmd
+    /**
+     * ⛔ WHAT THE INSTANCE THINKS YOU ARE. A client that cannot ask has to infer its permissions
+     * from a refusal it gets halfway through doing something — and the refusal that matters most
+     * here is the one saying a token may never record a person's agreement.
+     */
+    .command("whoami")
+    .description("What an instance thinks you are, and what it will let you do")
+    .option("--at <dir|url>", "an instance URL", "v2")
+    .option("--token <t>", "bearer token (or $PRODUCTOS_TOKEN)")
+    .action(async (o: { at?: string; token?: string }) => {
+      if (!looksLikeInstance(o.at)) {
+        console.log(pc.dim(`${at(o)} is a directory — there is nobody to be. Point --at at an instance URL.`));
+        return;
+      }
+      const inst = instanceOf(o.at!, o.token);
+      try {
+        const me = (await remoteWhoami(inst)) as { kind: string; actor: string; scopes: string[] };
+        const now = (await remotePresence(inst)) as { working: Array<{ session: string; at: string }>; waiting: number };
+        console.log(`${pc.bold(me.actor)} ${pc.dim(`(${me.kind})`)} — may: ${me.scopes.join(" · ") || pc.red("nothing")}`);
+        if (me.kind === "token")
+          console.log(
+            pc.dim("  ⛔ a token can never record that a person agreed. It may author, it may land a default as `agent`,")
+          );
+        if (me.kind === "token") console.log(pc.dim("     and it may carry a press somebody actually made — never mint one."));
+        console.log(pc.dim(`  ${now.working.length} session(s) working · ${now.waiting} request(s) waiting`));
+      } catch (e) {
+        console.error(pc.red("✗"), e instanceof Error ? e.message : String(e));
+        process.exit(1);
+      }
+    });
+
+  cmd
+    /**
+     * ⛔ THE SESSION'S HALF OF THE LOOP, ON THE TERMINAL TOO.
+     *
+     * The same read MCP offers, so what a session sees and what a person can check are one thing.
+     * A loop whose state could only be inspected through the interface that consumes it is a loop
+     * nobody can debug when it goes quiet — and going quiet is exactly the failure that matters.
+     */
+    .command("inbox")
+    .description("What has happened since a given position — presses, answered questions, and notes still owed")
+    .option("--at <dir|url>", "corpus directory, or an instance URL", "v2")
+    .option("--token <t>", "bearer token for an instance (or $PRODUCTOS_TOKEN)")
+    .option("--since <n>", "the last position handled", (v) => Number(v), 0)
+    .option("--claim <session>", "lease the notes this hands back, as this session")
+    .option("--limit <n>", "most events in one answer", (v) => Number(v))
+    .option("--json", "the whole answer, for a relay rather than a person")
+    .action(async (o: { at?: string; token?: string; since?: number; claim?: string; limit?: number; json?: boolean }) => {
+      /**
+       * ⛔ THE INBOX IS NOT MIRRORED. Reading it CLAIMS the work in it, so answering from a
+       * scratch copy would hand a session a lease that exists on this machine and nowhere else —
+       * two sessions would then both believe they held the same note.
+       */
+      const r = looksLikeInstance(o.at)
+        ? await (async () => {
+            try {
+              return (await remoteInbox(instanceOf(o.at!, o.token), { since: o.since, claim: o.claim, limit: o.limit })) as ReturnType<typeof inbox>;
+            } catch (e) {
+              console.error(pc.red("✗"), e instanceof Error ? e.message : String(e));
+              process.exit(1);
+            }
+          })()
+        : inbox(at(o), { since: o.since, claim: o.claim, limit: o.limit });
+      if (o.json) return console.log(JSON.stringify(r, null, 2));
+      if (!r.events.length && !r.held.length)
+        return console.log(pc.dim(`nothing since ${o.since ?? 0} — the log is at ${r.head}`));
+      for (const e of r.events) {
+        const owed = e.work ? pc.yellow(`  ← owes work: ${e.work}`) : "";
+        console.log(`${pc.dim(String(e.seq).padStart(4))}  ${lineFor(e)}${owed}`);
+      }
+      /**
+       * ⛔ PRINTED, NOT OMITTED. An empty inbox and one another session is working through look
+       * identical otherwise, and they call for opposite behaviour.
+       */
+      for (const h of r.held)
+        console.log(pc.dim(`${String(h.seq).padStart(4)}  ${h.work} — being worked on by ${h.by} until ${h.until}`));
+      console.log(
+        pc.dim(
+          `\n  head ${r.head} · resume from ${r.next_cursor} after a restart${
+            r.next_cursor < r.head ? ` — ${r.head - r.next_cursor} event(s) still carry unfinished work` : ""
+          }${r.more ? " · more to read" : ""}`
+        )
+      );
     });
 
   /**
@@ -1405,7 +1618,17 @@ export function v2Command(): Command {
      * ⛔ NO `--at` HERE. The parent declares it; declaring it again is what made the value vanish.
      * `optsWithGlobals` reads it whichever side of the verb it was typed.
      */
-    .action((says: string, o: { about: string; by: string; via?: string; on?: string; id?: string }, self: Command) => {
+    .action(async (says: string, o: { about: string; by: string; via?: string; on?: string; id?: string }, self: Command) => {
+      const g = self.optsWithGlobals() as { at?: string; token?: string };
+      if (looksLikeInstance(g.at)) {
+        try {
+          const r = (await remoteNote(instanceOf(g.at!, g.token), o.about, says, o.by)) as Outcome | Refused;
+          return report(r);
+        } catch (e) {
+          console.error(pc.red("✗"), e instanceof Error ? e.message : String(e));
+          process.exit(1);
+        }
+      }
       if (!VIA.includes(o.via as Via)) {
         console.error(pc.red("✗"), `"${o.via}" is not a way somebody could have asked`);
         console.error(pc.dim(`  ${VIA.join(" · ")}`));

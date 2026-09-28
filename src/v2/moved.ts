@@ -18,6 +18,7 @@
  */
 import { execFileSync } from "node:child_process";
 import path from "node:path";
+import fs from "node:fs";
 import type { Corpus } from "./load.js";
 
 export interface Moved {
@@ -31,6 +32,12 @@ export interface Moved {
   since: Array<{ sha: string; when: string; subject: string; body: string }>;
   /** ⛔ Said out loud rather than implied by an empty list. */
   why?: string;
+  /**
+   * ⛔ THE STRONGEST THING THIS CAN FIND, and it needs its own field rather than a sentence in
+   * `why`. The screen this drawing describes has been deleted from the codebase: no amount of
+   * reading the commits changes what has to happen, which is that it is drawn again or withdrawn.
+   */
+  gone?: boolean;
 }
 
 const git = (repo: string, args: string[]): string => {
@@ -74,6 +81,20 @@ export function whatMoved(corpus: Corpus, repo: string): Moved[] {
       if (v.exists === "withdrawn" || !v.drawn_from) continue;
       const rel = path.isAbsolute(v.drawn_from) ? path.relative(repo, v.drawn_from) : v.drawn_from;
       const row: Moved = { scope: scope.id, view: v.id, from: rel, at: v.drawn_at, since: [] };
+
+      /**
+       * ⛔ A SOURCE THAT IS GONE IS NOT "SOME COMMITS HAPPENED", AND READING IT AS THAT COST A REAL
+       * REVIEW.
+       *
+       * A 1,192-line component was deleted — the screen it drew does not exist any more — and this
+       * reported `2 commits since it was drawn`, in the same words and the same shape it uses for a
+       * file somebody renamed a label in. Peter found it by reading the corpus and writing "this is
+       * all wrong" twice. The evidence was here the whole time and was phrased as a shrug.
+       *
+       * Checked before the log, because once the file is gone the commit list is a description of
+       * how it died and no longer the point.
+       */
+      row.gone = !fs.existsSync(path.resolve(repo, rel));
 
       if (!v.drawn_at) {
         /**

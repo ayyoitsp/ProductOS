@@ -30,6 +30,10 @@ import { resolveRef } from "./ref.js";
 import { descendants } from "./settle.js";
 import { ruleHomes } from "./grid.js";
 import { appStyleFor } from "./appcss.js";
+import { readLog } from "./log.js";
+import fs from "node:fs";
+import path from "node:path";
+import { projectRootOf } from "../core/paths.js";
 
 export type Severity = "refuse" | "note" | "shape";
 
@@ -2302,6 +2306,101 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
       what: `${machinery} of ${exCount} exchanges are asked by something other than a person`,
       fix: "the machinery is where the hard failures live; a corpus drifts this way unless somebody goes looking",
     });
+
+  /**
+   * ---- a screen drawn from something that is no longer there ----
+   *
+   * ⛔ THE GATE LET A DELETED SCREEN THROUGH, AND A PERSON CAUGHT IT INSTEAD.
+   *
+   * A 1,192-line component was deleted on the 24th. The corpus went on describing its coordinate
+   * rows, its editable limits, its staged edits and its publish button, and `check` reported 403
+   * findings about other things without one word about it. Peter read the page and wrote "this is
+   * all wrong - pricing happens in the excel" — twice, four days apart, because nothing else was
+   * ever going to say it.
+   *
+   * ⛔ AND IT DOES NOT NEED GIT. That was the reasoning that left this open: `moved` owns the
+   * comparison with history and is its own command, so `check` was waived out of the whole
+   * question. But whether a named file EXISTS is not a question about history — it is one
+   * `existsSync` against a path the corpus itself records, and it is the single strongest signal
+   * there is. The waiver was right about commits and wrong about absence.
+   */
+  const project = projectRootOf(root);
+  if (project) {
+    for (const { scope } of corpus.scopes) {
+      for (const v of scope.views) {
+        if (v.exists === "withdrawn") continue;
+        /**
+         * ⛔ A SCREEN NOBODY DREW FROM THE CODE IS A SCREEN NOTHING CAN TELL YOU HAS GONE STALE.
+         *
+         * The gate below catches a drawing whose source was deleted. It cannot catch this: a screen
+         * typed by hand records no source, so `moved` skips it and the deletion check has nothing to
+         * look at. It is invisible to every drift check there is, permanently.
+         *
+         * Found the moment the first one mattered. A pricing screen was corrected from its
+         * component, and the scope beside it went on describing a gate the product had inverted
+         * months earlier — reasons and approvers collected before publishing, when the code says
+         * the departure has already happened in Excel by the time anything sees it. Nothing could
+         * have reported that, because nobody ever wrote down where that screen came from.
+         */
+        if (!v.drawn_from) {
+          add({
+            severity: "note",
+            kind: "never-drawn-from-the-code",
+            where: `${scope.id}#${v.id}`,
+            what: "this screen records no source, so nothing can tell you when it stopped matching the product — it is invisible to every drift check",
+            fix: `draw it: productos v2 draw "${scope.id}#${v.id}" --route <the component that renders it> --into <corpus>`,
+          });
+          continue;
+        }
+        if (fs.existsSync(path.resolve(project, v.drawn_from))) continue;
+        add({
+          severity: "refuse",
+          kind: "drawn-from-something-that-is-gone",
+          where: `${scope.id}#${v.id}`,
+          what: `the file this screen was drawn from is not in the codebase any more, so everything it describes — its parts, and every behaviour that arrives at it — is about a screen that was deleted`,
+          fix: `draw it again from whatever renders it now: productos v2 draw "${scope.id}#${v.id}" --route <component> --into <corpus> — or, if the screen is genuinely gone, mark it exists: withdrawn. "productos v2 moved" shows the commits that took it`,
+        });
+      }
+    }
+  }
+
+  /**
+   * ---- the loop: work nobody can finish, and work nobody came back to ----
+   *
+   * ⛔ THE CURSOR IS THE THING BEING PROTECTED. A note's position in the event log does not advance
+   * until the note is closed, which is what stops "I saw your feedback" meaning "your feedback
+   * happened". The cost of that is a note nobody can ever close pins the cursor forever, and every
+   * poll from then on re-delivers the whole tail of the log — silently, because an inbox with too
+   * much in it looks exactly like a busy one.
+   */
+  const nowIso = new Date().toISOString();
+  const noteIds = new Set(corpus.notes.map((n) => n.id));
+  for (const e of readLog(root)) {
+    if (!e.work || noteIds.has(e.work)) continue;
+    add({
+      severity: "note",
+      kind: "work-nothing-can-close",
+      where: `event ${e.seq}`,
+      what: `carries work on note "${e.work}", and no such note exists — every inbox read from here on re-delivers everything after it`,
+      fix: "file the note back under that id, or accept that this event will never settle — a cursor cannot advance past work it cannot see finished",
+    });
+  }
+  for (const n of corpus.notes) {
+    if (n.state !== "open" || !n.claimed_by || !n.claimed_until) continue;
+    if (n.claimed_until > nowIso) continue;
+    /**
+     * ⛔ REPORTED, BECAUSE THE QUEUE LOOKS BUSY AND IS NOT. The lease has lapsed so the note is back
+     * in the queue and nothing is broken — but somebody picked this up and never came back, and
+     * that is a fact about the loop nobody else has a way to notice.
+     */
+    add({
+      severity: "note",
+      kind: "picked-up-and-dropped",
+      where: n.id,
+      what: `${n.claimed_by} claimed this and the lease lapsed at ${n.claimed_until} without it being closed`,
+      fix: "it is back in the queue and the next read will hand it out again — but if this keeps happening to the same note, the request is one nobody can act on and it owes an outcome saying so",
+    });
+  }
 
   return { corpus, findings };
 }

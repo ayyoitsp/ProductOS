@@ -1,0 +1,12 @@
+id: "0025"
+said: and why didn't moved properly regenerate?
+at: 2026-09-28
+kind: derivation
+reaches:
+  derive: ""
+  surface: the file this was drawn from no longer exists
+  check: drawn-from-something-that-is-gone
+  pin: moved reports a vanished source as its own thing
+waived:
+  derive: nothing new is computed. What was missing was that the strongest finding available — the file is gone — was reported in the same words as the weakest, and that the gate had been waived out of the question entirely. Both are what a surface says and what a check refuses, not a derivation
+closed: 2026-09-28

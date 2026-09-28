@@ -145,6 +145,8 @@ export const AREAS: Area[] = [
       "derive: ask the derive layer rather than computing a second answer",
       "offer an act the gate has not allowed — an enabled-looking button that records nothing is worse than no button",
       "show a filename, a table name or a branch name. The hosted service has no files",
+      "record that a person agreed on anything but a person's press. A token may author, may land a default as `agent`, and may carry a press somebody made — it may never mint one, and no scope grants that",
+      "fall back to a local corpus when an instance cannot be reached. Refuse, and say the truth is elsewhere",
     ],
     owns: ["surface"],
     files: [
@@ -153,6 +155,22 @@ export const AREAS: Area[] = [
       "src/v2/packet.ts",
       "src/v2/notes.ts",
       "src/v2/watch.ts",
+      /**
+       * ⛔ THE LOOP BELONGS HERE, NOT UNDER THE MODEL. An event is not product truth — it is the
+       * record that something happened and that somebody may owe work because of it. What it is
+       * for is putting a press in front of whoever can act on it, which is this job exactly.
+       */
+      "src/v2/log.ts",
+      "src/v2/inbox.ts",
+      "src/v2/presence.ts",
+      /**
+       * ⛔ IDENTITY IS A SURFACE CONCERN AND THAT IS THE POINT. Who is asking is decided where a
+       * request arrives — not in the model, which has no notion of a request, and not in derive,
+       * which would then be computing over a principal. `mayRecord` is the one function the
+       * guarantee lives in, and it belongs beside the routes that ask it.
+       */
+      "src/v2/identity.ts",
+      "src/v2/client.ts",
       "src/v2/write.ts",
       "src/v2/wire.ts",
       "src/v2/moved.ts",

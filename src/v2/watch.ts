@@ -12,6 +12,22 @@
  * the filesystem and prints one line per NEW record — no model call until something actually
  * happens, and then one, with the record in it.
  *
+ * ⛔ THIS IS NOT THE LOOP, AND THE DIFFERENCE MATTERS.
+ *
+ * The hosted round trip runs on the event log (`log.ts`): the page streams it and a session polls
+ * it as an inbox, one record of what happened with two readers. This watcher answers a narrower
+ * question the log cannot — *did the corpus on disk move for some reason that never went through
+ * the API* — which is a hand edit, a migration, or CI. It is a developer's terminal convenience,
+ * not a client of the loop, and nothing downstream reads it.
+ *
+ * ⛔ Those two only partly meet. An open NOTE written outside the API is now carried into the log
+ * on the next inbox read (`carryOpenNotesIntoTheLog` — a corpus older than the log was the first
+ * real one this was pointed at, and it held a request no session would ever have been told about).
+ * A VERDICT or a change to truth written outside the API still does not enter the log, so a session
+ * polling the inbox will not hear about it. That remainder is recorded as a framework gap rather
+ * than half-closed here — feeding this watcher's findings in would double-announce every press,
+ * which `perform` already logs.
+ *
  * ⛔ PER RECORD, NOT PER FILE CHANGE. A file event says "verdicts.yaml is different", which is not
  * something anybody can act on: the append-only logs are rewritten wholesale by a close, an editor
  * touches them, and a single act can fire several events. What a person wants to know is "peter

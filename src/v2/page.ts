@@ -1570,6 +1570,36 @@ function renderExchanges(corpus: Corpus, scopeIds: string[], cellOf: Map<string,
 }
 
 /**
+ * ⛔ WHERE THE MENU LIVES IS READ BEFORE THE FRAME PAINTS.
+ *
+ * A placement applied by a script that runs after the body has rendered draws the menu across the
+ * top, then throws it down the side a frame later — every load, on the placement the reader chose.
+ * So this is the first thing in the body, ahead of the frame it governs.
+ *
+ * ⛔ And it is an attribute on the root, not a second rendering. The frame's markup is identical in
+ * both placements; only the stylesheet differs. Two markups for one menu is two things to keep in
+ * step, and one of them is always the one nobody opened.
+ */
+const NAV_PLACEMENT_BOOT = `<script>
+(function () {
+  var p = "top";
+  try { p = localStorage.getItem("productos:nav") === "left" ? "left" : "top"; } catch (e) {}
+  document.documentElement.dataset.nav = p;
+})();
+</script>`;
+
+/**
+ * ⛔ BOTH LABELS ARE RENDERED AND THE STYLESHEET PICKS ONE, so the button says the right thing on
+ * the first paint rather than after a script has caught up with it. It names where the menu is
+ * going, not where it is — a control labelled with the state you are already in is read backwards.
+ */
+const NAV_PLACE_BUTTON =
+  `<button type="button" class="navplace" title="Move the menu between the top and the side">` +
+  `<span class="to-left">&#8676; Side menu</span>` +
+  `<span class="to-top">&#8677; Top menu</span>` +
+  `</button>`;
+
+/**
  * Every scope, as a tree, with how much work each one is holding.
  *
  * ⛔ THE COUNTS ARE ON THE NAV, because "which feature do I look at next" is the first question
@@ -1798,6 +1828,7 @@ function renderNav(
      * threw, and every breadcrumb silently fell back to a bare scope id. Nothing errored — the trail
      * just quietly stopped knowing where anything was.
      */
+    NAV_PLACEMENT_BOOT +
     `<div class="topframe" data-trails="${esc(JSON.stringify(trails))}" data-sections="${esc(JSON.stringify(sectionOf))}">` +
     `<div class="tabs">${sections
       .map(
@@ -1816,7 +1847,7 @@ function renderNav(
                 : ""
           }</button>`
       )
-      .join("")}</div>` +
+      .join("")}${NAV_PLACE_BUTTON}</div>` +
     /**
      * ⛔ OVERVIEW'S OWN MENU BELONGS IN THE FRAME, NOT IN THE PAGE.
      *
@@ -2148,7 +2179,7 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
       }
     </main>`;
 
-  return `${STYLE}${body}${appCssOnce(opts)}${partFacts(corpus, ids)}${renderNotePanel(corpus, ids, opts)}${VIEW_SWITCH}${PROTOTYPE}${opts.interactive ? liveScript(opts) : INERT}`;
+  return `${STYLE}${body}${appCssOnce(opts)}${partFacts(corpus, ids)}${renderNotePanel(corpus, ids, opts)}${VIEW_SWITCH}${NAV_PLACE}${PROTOTYPE}${opts.interactive ? liveScript(opts) : INERT}`;
 }
 
 
@@ -2202,6 +2233,50 @@ if (typeof EventSource !== "undefined") {
   bar.className = "live-bar";
   bar.hidden = true;
   document.body.appendChild(bar);
+  /**
+   * ⛔ THE BOTTOM BARS STACK; THEY DO NOT SIT ON EACH OTHER OR ON THE COMPOSER.
+   *
+   * Both of these are fixed to the bottom, and so is the box a person types a request into. Left to
+   * z-index they covered its Send button — so the surface announced "nobody is working on this"
+   * while making it impossible to say anything about it, which is the worst possible pairing. Same
+   * defect as the change bar over the top nav, found the same way: by driving the page.
+   */
+  const bottom = document.createElement("div");
+  bottom.className = "bottom-bars";
+  document.body.appendChild(bottom);
+  const stale = document.createElement("div");
+  stale.className = "stale-bar";
+  stale.hidden = true;
+  bottom.appendChild(stale);
+  /**
+   * ⛔ A PRESS INTO NOTHING LOOKS EXACTLY LIKE A PRESS SOMEBODY PICKED UP.
+   *
+   * If no session is open, a request sits — possibly for days — and this page said the same thing it
+   * says when somebody authors it within the second. They press three more times and then stop
+   * trusting the surface. So: whether anybody is working, and how much is waiting.
+   *
+   * ⛔ It is not a promise about response time. It is the difference between a queue and a void.
+   */
+  const who = document.createElement("div");
+  who.className = "who-bar";
+  who.hidden = true;
+  bottom.appendChild(who);
+  const askWho = () =>
+    fetch("/api/v2/presence")
+      .then((r) => r.json())
+      .then((p) => {
+        const n = p.waiting || 0;
+        if ((p.working || []).length || !n) { who.hidden = true; fit(); return; }
+        who.textContent =
+          "Nobody is working on this right now — " + n + (n === 1 ? " request is" : " requests are") +
+          " waiting. They are recorded and will be picked up; nothing has been lost.";
+        who.hidden = false;
+        fit();
+      })
+      .catch(() => { who.hidden = true; fit(); });
+  askWho();
+  setInterval(askWho, 20000);
+  let heard = Date.now();
   let pending = 0;
   const typing = () => {
     const el = document.activeElement;
@@ -2209,12 +2284,36 @@ if (typeof EventSource !== "undefined") {
     if (el.tagName === "TEXTAREA" || el.tagName === "INPUT") return (el.value || "").trim().length > 0;
     return false;
   };
+  /**
+   * ⛔ IT MOVES THE PAGE DOWN; IT DOES NOT SIT ON TOP OF IT.
+   *
+   * Fixed to the top of the viewport, this bar covered the frame — the tabs, the breadcrumb, and
+   * the control that moves the menu. So the moment the truth changed, every way of navigating the
+   * page stopped responding to clicks, and nothing said why. It was found by driving the page and
+   * watching a click time out against "live-bar intercepts pointer events"; nobody reading the CSS
+   * would have seen it, because both rules are correct on their own.
+   *
+   * ⛔ Measured rather than assumed. A guessed height is right until the text wraps on a narrow
+   * window, and then the bar covers the tabs again on exactly the screens with least room.
+   */
+  const fit = () => {
+    document.documentElement.style.setProperty("--live-h", (bar.hidden ? 0 : bar.offsetHeight) + "px");
+    document.documentElement.classList.toggle("live-showing", !bar.hidden);
+    // ⛔ Measured, not assumed: these wrap to two lines on a narrow window, which is exactly where
+    // there is least room and most to cover.
+    document.documentElement.style.setProperty("--bottom-h", bottom.offsetHeight + "px");
+  };
+  // ⛔ Registered here, after fit() exists. Above the declaration it is a temporal-dead-zone throw
+  // that kills this whole block — and with it the stream, the change bar and the presence bar, on a
+  // page that otherwise looks perfectly fine. That is exactly how it failed once.
+  window.addEventListener("resize", fit);
   const show = () => {
     bar.innerHTML =
       "<span>" + pending + (pending === 1 ? " change" : " changes") + " to the truth under this page</span>" +
       '<button type="button" class="live-go">Show it</button>' +
       '<button type="button" class="live-later">Later</button>';
     bar.hidden = false;
+    fit();
     bar.querySelector(".live-go").onclick = () => {
       /** ⛔ Come back to the same view and the same place in it, or "show it" costs the reader their place. */
       const view = [...document.querySelectorAll("section.view")].find((v) => !v.hidden);
@@ -2226,13 +2325,43 @@ if (typeof EventSource !== "undefined") {
     bar.querySelector(".live-later").onclick = () => {
       bar.hidden = true;
       pending = 0;
+      fit();
     };
   };
   const es = new EventSource("/api/v2/live");
   es.addEventListener("changed", () => {
+    heard = Date.now();
+    stale.hidden = true;
+    // ⛔ Straight away, not on the next tick: filing a request is exactly when they want to know.
+    askWho();
     pending++;
     if (!typing()) show();
   });
+  /**
+   * ⛔ A PAGE THAT HAS SILENTLY STOPPED FOLLOWING IS THE ONE FAILURE A READER CANNOT DETECT.
+   *
+   * It is indistinguishable from a page where nothing has happened — and they will go on pressing
+   * against truth that moved half an hour ago. So the stream says "still here" on a timer, and this
+   * says so out loud when it stops hearing it. How long since it last heard, because "disconnected"
+   * with no duration does not tell a reader whether to trust what is on the screen.
+   */
+  es.addEventListener("beat", () => {
+    heard = Date.now();
+    stale.hidden = true;
+    fit();
+  });
+  setInterval(() => {
+    const since = Math.round((Date.now() - heard) / 1000);
+    // Two missed beats, not one — a single late beat is a slow network, not a dead stream.
+    if (since < 60) return;
+    fit();
+    stale.textContent =
+      "Not following any more — nothing heard for " +
+      (since < 120 ? since + "s" : Math.round(since / 60) + " min") +
+      ". What is on this page may already be out of date.";
+    stale.hidden = false;
+    fit();
+  }, 15000);
   // Restore where they were, after a reload they asked for.
   try {
     const back = JSON.parse(sessionStorage.getItem("productos-at") || "null");
@@ -2923,8 +3052,20 @@ const VIEW_SWITCH = `<script>
    */
   const setOpen = (open) => {
     if (!tree) return;
-    tree.hidden = !open;
     const c = frame.querySelector(".chev");
+    /**
+     * ⛔ A TREE WITH NO CONTROL TO REOPEN IT IS NEVER CLOSED.
+     *
+     * The side placement hides the chevron, so collapsing there leaves a 19rem column holding one
+     * breadcrumb and no way back to the tree — the menu is gone and the button that took it away
+     * was a navigation press. The breakpoint that decides this lives in the stylesheet and is read
+     * from there; a second copy of "62rem" in script is two answers to one question, and they drift.
+     *
+     * The hidden ATTRIBUTE is the other reason the chevron disappears — Overview has no tree — and that one
+     * must still close.
+     */
+    if (c && !c.hidden && getComputedStyle(c).display === "none") open = true;
+    tree.hidden = !open;
     if (c) c.setAttribute("aria-expanded", String(open));
     frame.classList.toggle("open", open);
   };
@@ -2977,6 +3118,13 @@ const VIEW_SWITCH = `<script>
 
   const chev = frame && frame.querySelector(".chev");
   if (chev) chev.addEventListener("click", () => setOpen(tree.hidden));
+  /**
+   * ⛔ Re-asked, not re-decided. Moving the menu — or dragging the window across the breakpoint —
+   * changes whether the chevron exists, and setOpen is the one place that knows what that means.
+   */
+  const reask = () => setOpen(!tree || !tree.hidden);
+  window.addEventListener("productos:nav", reask);
+  window.addEventListener("resize", reask);
 
   let sectionOf = {};
   try { sectionOf = JSON.parse(frame.dataset.sections); } catch {}
@@ -3060,6 +3208,27 @@ const VIEW_SWITCH = `<script>
   // ⛔ Opens on Overview: what the product is, and what it owes. Landing in a feature's grid with
   // no idea what the product is was the shape this replaced.
   show(fromHash || "overview", true);
+})();
+</script>`;
+
+/**
+ * ⛔ ITS OWN SCRIPT, because the view switcher gives up on a page with fewer than two views and the
+ * menu still has to be movable there. It owns one fact — the placement — and announces it; what a
+ * placement means for the tree belongs to the switcher, which is the only thing that knows.
+ */
+const NAV_PLACE = `<script>
+(function () {
+  const root = document.documentElement;
+  const btn = document.querySelector(".navplace");
+  if (!btn) return;
+  btn.addEventListener("click", () => {
+    const now = root.dataset.nav === "left" ? "top" : "left";
+    root.dataset.nav = now;
+    // ⛔ Remembered, because it is a reading posture and not a per-page choice. Being asked again
+    // on every feature is the same as not being asked.
+    try { localStorage.setItem("productos:nav", now); } catch (e) {}
+    window.dispatchEvent(new Event("productos:nav"));
+  });
 })();
 </script>`;
 
@@ -3264,6 +3433,55 @@ const STYLE = `<style>
     transition: transform .12s ease; }
   .topframe .chev:hover { color: var(--ink); border-color: var(--accent); }
   .topframe.open .chev { transform: rotate(180deg); }
+  /* ── Where the menu lives: one attribute on the root, one set of markup. ──
+     ⛔ NOT A SECOND FRAME. Everything below re-lays out the frame that is already there; nothing
+     here adds a row, a count or a link that the top placement does not also have, so a reader who
+     moves the menu cannot lose a way in that only one placement knew about. */
+  .navplace { margin-left: auto; align-self: center; font: inherit; font-size: .8rem;
+    background: none; border: 1px solid var(--line); border-radius: 6px; color: var(--dim);
+    cursor: pointer; padding: .25rem .55rem; white-space: nowrap; }
+  .navplace:hover { color: var(--ink); border-color: var(--accent); }
+  .navplace .to-top { display: none; }
+  /* ⛔ NO BUTTON WHERE THERE IS NO CHOICE. Below the breakpoint the menu is at the top whatever
+     was remembered, and a control still offering to move it there is offering a move that has
+     already happened — it reads as broken rather than as unavailable. */
+  @media (max-width: 61.999rem) { .navplace { display: none; } }
+  :root[data-nav="left"] .navplace .to-left { display: none; }
+  :root[data-nav="left"] .navplace .to-top { display: inline; }
+  /* ⛔ THE COLUMN NEEDS THE WIDTH TO EXIST. Below this, a 19rem sidebar and a 52rem page cannot
+     both fit, and the choice is not the reader's to get wrong — the menu goes back to the top and
+     the button simply has no effect until there is room for the other answer. */
+  @media (min-width: 62rem) {
+    :root[data-nav="left"] body { padding-left: 19rem; }
+    /* The column starts below the bar too: a top offset alone does not move a fixed element's inset. */
+    :root[data-nav="left"] .topframe { position: fixed; inset: var(--live-h) auto 0 0; width: 19rem;
+      overflow-y: auto; border-bottom: 0; border-right: 1px solid var(--line); padding-bottom: 2rem; }
+    :root[data-nav="left"] .topframe .tabs { flex-direction: column; align-items: stretch;
+      gap: .1rem; padding: .7rem .9rem .4rem; }
+    :root[data-nav="left"] .topframe .tab { text-align: left; border-bottom: 0;
+      border-left: 2px solid transparent; border-radius: 0 4px 4px 0; padding: .35rem .6rem; }
+    :root[data-nav="left"] .topframe .tab.on { border-left-color: var(--accent); }
+    /* First in the column, because the control that moves the menu belongs at the top of it —
+       last in a flex row is the right edge, and last in a flex column is the bottom of the page. */
+    :root[data-nav="left"] .navplace { order: -1; margin: 0 0 .5rem; align-self: flex-start; }
+    :root[data-nav="left"] .topframe .subtabs { flex-direction: column; align-items: stretch;
+      padding: .35rem .9rem .5rem; }
+    :root[data-nav="left"] .subtab { text-align: left; border-bottom: 0;
+      border-left: 2px solid transparent; padding: .3rem .6rem; }
+    :root[data-nav="left"] .subtab.on { border-left-color: var(--accent); }
+    :root[data-nav="left"] .topframe .crumbs { padding: .5rem .9rem; align-items: flex-start; }
+    /* A column is narrow and tall, so the trail wraps rather than losing its head to an ellipsis. */
+    :root[data-nav="left"] .topframe .trail { white-space: normal; overflow: visible;
+      text-overflow: clip; }
+    /* ⛔ THE CHEVRON IS A TOP-MENU ECONOMY. It exists because sixteen rows cannot sit permanently
+       across a page above the thing being read. Down the side there is nothing to compete with, so
+       the tree stays open and the control that would close it goes away — and the script reads
+       exactly this rule to know it must not collapse. */
+    :root[data-nav="left"] .topframe .chev { display: none; }
+    :root[data-nav="left"] .topframe nav.scopes { max-height: none; margin: .4rem 0 0;
+      padding: 0 .9rem 1rem; }
+    :root[data-nav="left"] .topframe nav.scopes li { padding-left: calc(var(--d) * .75rem); }
+  }
   .prose { margin: .6rem 0 1.4rem; max-width: 42rem; }
   .prose p { margin: .6rem 0; }
   h3.sub { font-size: .8rem; text-transform: uppercase; letter-spacing: .07em; color: var(--dim);
@@ -3364,13 +3582,29 @@ const STYLE = `<style>
    * the string. That has now cost four builds.)
    */
   /* The truth moved under you — said, not done to you. */
+  /* ⛔ The frame and the page both move down by exactly the bar's height while it is up, because a
+     bar that covers the navigation takes every way off the page with it. See fit(), above. */
+  :root { --live-h: 0px; }
+  :root.live-showing body { padding-top: var(--live-h); }
+  :root.live-showing .topframe { top: var(--live-h); }
   .live-bar { position: fixed; left: 0; right: 0; top: 0; z-index: 40; display: flex; gap: .6rem;
     align-items: center; justify-content: center; padding: .5rem .8rem; font-size: .88rem;
     background: var(--accent); color: var(--bg); }
   .live-bar button { font: inherit; font-size: .85rem; border: 0; border-radius: 5px; padding: .2rem .7rem;
     cursor: pointer; background: var(--bg); color: var(--ink); }
   .live-bar button.live-later { background: transparent; color: var(--bg); text-decoration: underline; }
-  .note-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; display: grid;
+  /* ⛔ The colour of a problem, not of an update. A page that has stopped following looked exactly
+     like one that was up to date, which is the failure nobody can see for themselves. */
+  :root { --bottom-h: 0px; }
+  .bottom-bars { position: fixed; left: 0; right: 0; bottom: 0; z-index: 41; }
+  .stale-bar { padding: .5rem .8rem; font-size: .88rem; text-align: center;
+    background: var(--bad); color: var(--bg); }
+  /* ⛔ Quiet, not alarming. Nobody being at the keyboard is ordinary; what is not ordinary is a
+     page that hides it. The red is reserved for the page having stopped following. */
+  .who-bar { padding: .45rem .8rem;
+    font-size: .84rem; text-align: center; background: var(--warn-bg); color: var(--warn);
+    border-top: 1px solid var(--line); }
+  .note-bar { position: fixed; left: 0; right: 0; bottom: var(--bottom-h); z-index: 30; display: grid;
     gap: .3rem; padding: .5rem .8rem .55rem;
     background: var(--card); border-top: 1px solid var(--line);
     box-shadow: 0 -2px 14px rgba(0,0,0,.14); }
@@ -3387,7 +3621,7 @@ const STYLE = `<style>
   .note-bar .status { font-size: .8rem; white-space: nowrap; padding-bottom: .45rem; }
   .note-bar .status.ok { color: var(--ok); } .note-bar .status.bad { color: var(--bad); }
   /* Clearance for the composer, so it never covers the last thing on the page. */
-  body.has-note-bar { padding-bottom: 4.5rem; }
+  body.has-note-bar { padding-bottom: calc(4.5rem + var(--bottom-h)); }
 
   .gate-note { background: var(--warn-bg); border-left: 3px solid var(--warn); border-radius: 0 6px 6px 0;
     padding: .7rem .9rem; margin: .9rem 0 1.4rem; font-size: .92rem; }

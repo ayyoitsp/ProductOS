@@ -32,6 +32,19 @@ export interface DrawResult {
   unresolved: string[];
   /** Parts the corpus declares that the drawing does not show. */
   undrawn: string[];
+  /**
+   * ⛔ THE SAME SCREEN AS PLAIN TEXT, FROM THE SAME PARSE — not a second drawing somebody keeps up.
+   *
+   * A packet is text handed to whoever builds the thing, and HTML is no use there, so the corpus
+   * has always carried an ASCII sketch beside the generated one. It was hand-typed, and it was
+   * therefore wrong the day after the component changed: a grid redrawn from the panel that
+   * replaced it sat in one file beside an ASCII sketch still showing "2 staged pricing edits" and a
+   * "Review and publish" button that had been deleted. Two renderings of one screen, one generated
+   * and one typed, with nothing saying which was current.
+   *
+   * So both come from here. Nobody maintains this.
+   */
+  text: string;
 }
 
 const VOID = new Set(["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"]);
@@ -328,7 +341,7 @@ export function drawFromRoute(routeFile: string, opts: DrawOptions = {}): DrawRe
     },
   };
   const jsx = returnedJsx(routeFile);
-  if (!jsx) return { html: "", from: [...ctx.from], unresolved: ["the route exports no component this can read"], undrawn: [] };
+  if (!jsx) return { html: "", from: [...ctx.from], unresolved: ["the route exports no component this can read"], undrawn: [], text: "" };
   const plain = emit(jsx, ctx);
   const wired = opts.parts?.length ? wireParts(plain, opts.parts) : { html: plain, matched: new Set<string>() };
   /**
@@ -336,8 +349,158 @@ export function drawFromRoute(routeFile: string, opts: DrawOptions = {}): DrawRe
    * drawing look complete while a control the corpus claims exists is nowhere on it.
    */
   const undrawn = (opts.parts ?? []).filter((p) => !wired.matched.has(p.id) && !p.decorative).map((p) => p.id);
-  return { html: wired.html, from: [...ctx.from], unresolved: [...new Set(ctx.unresolved)], undrawn };
+  return { html: wired.html, from: [...ctx.from], unresolved: [...new Set(ctx.unresolved)], undrawn, text: asText(wired.html) };
 }
+
+/**
+ * The drawing as plain text.
+ *
+ * ⛔ DERIVED FROM THE DRAWING, NOT FROM THE COMPONENT A SECOND TIME. Two passes over the same source
+ * is two things that can disagree, and they would — one would learn about a new element and the
+ * other would not. This reads what was just emitted, so the two renderings cannot describe different
+ * screens.
+ *
+ * ⛔ AN OUTLINE, NOT A BOX. The sketches this replaces were box-drawn by hand and beautiful, and
+ * that is precisely why nobody regenerated them. Column widths cannot be computed from markup
+ * without inventing a layout, and an invented layout is a claim about a screen nobody made. Indented
+ * text says what is there and in what order, which is the part a builder needs, and it says nothing
+ * it does not know.
+ */
+export function asText(html: string): string {
+  const out: string[] = [];
+  const stack: string[] = [];
+  /** Inside a marker we have already printed: its children would repeat what the marker said. */
+  let skipBelow = -1;
+  /** A component marker whose next text child would just repeat its name. */
+  let skipComponentName = "";
+  let text = "";
+  const indent = (): string => "  ".repeat(Math.min(stack.length, 8));
+  const flush = (): void => {
+    const t = text.replace(/\s+/g, " ").trim();
+    if (t) out.push(indent() + t);
+    text = "";
+  };
+  /** The tags that start their own line. Anything else is part of the sentence it sits in. */
+  const BLOCK = /^(div|section|header|footer|main|aside|nav|form|ul|ol|li|table|thead|tbody|tr|p|h[1-6]|details|summary|dl|dt|dd|figure|blockquote)$/;
+
+  for (const tok of html.split(/(<[^>]+>)/)) {
+    if (!tok) continue;
+    if (tok[0] !== "<") {
+      if (skipBelow >= 0) continue;
+      const t = decode(tok);
+      /** ⛔ A component marker's only child is usually its own name. Once is enough. */
+      if (skipComponentName && t.trim() === skipComponentName) {
+        skipComponentName = "";
+        continue;
+      }
+      skipComponentName = "";
+      text += t;
+      continue;
+    }
+    const close = tok[1] === "/";
+    const name = (tok.match(/^<\/?([a-zA-Z0-9]+)/) ?? [])[1]?.toLowerCase() ?? "";
+    const selfClosing = /\/>$/.test(tok) || VOID.has(name);
+
+    if (close) {
+      const depth = stack.length - 1;
+      stack.pop();
+      /** ⛔ The marker's own close is what ends the skip — nested closes inside it must not. */
+      if (skipBelow >= 0 && depth <= skipBelow) skipBelow = -1;
+      else if (skipBelow >= 0) continue;
+      if (name === "button") text += text.trimEnd().endsWith("[") ? " … ]" : " ]";
+      else if (BLOCK.test(name)) flush();
+      continue;
+    }
+
+    if (skipBelow >= 0) {
+      if (!selfClosing) stack.push(name);
+      continue;
+    }
+
+    /**
+     * ⛔ A PLACEHOLDER KEEPS WHAT IT COULD NOT READ. "…" alone tells a builder nothing; the
+     * expression tells them which part of the screen is a guess and what it was going to be.
+     */
+    const component = (tok.match(/data-component="([^"]*)"/) ?? [])[1];
+    const title = (tok.match(/title="([^"]*)"/) ?? [])[1];
+    if (/productos-unknown/.test(tok) || component) {
+      text += component ? ` «${component}» ` : ` …(${decode(title ?? "")}) `;
+      if (!selfClosing) {
+        stack.push(name);
+        /**
+         * ⛔ ONLY A PLACEHOLDER WITH NOTHING IN IT IS SKIPPED.
+         *
+         * A `productos-unknown` span for an expression holds one ellipsis, and printing it after the
+         * marker gives "…(rows.map(…))…". But the SAME class wraps a component the drawer could not
+         * inline — `«TableShell»` — and that one has the real table under it. Skipping both dropped
+         * the entire options grid out of the text, which is the one thing a builder most needs to
+         * see, in exchange for tidying up a duplicate ellipsis.
+         */
+        if (!component) skipBelow = stack.length - 1;
+        else skipComponentName = component;
+      }
+      continue;
+    }
+
+    if (name === "input" || name === "textarea") {
+      const ph = (tok.match(/placeholder="([^"]*)"/) ?? [])[1];
+      text += ph ? ` [ ${decode(ph)} ] ` : " [            ] ";
+      if (!selfClosing) stack.push(name);
+      continue;
+    }
+    if (name === "br") {
+      flush();
+      continue;
+    }
+    if (name === "button") {
+      /** Spaces both sides so the label reads as a thing you press once whitespace is collapsed. */
+      text += " [ ";
+      stack.push(name);
+      continue;
+    }
+    if (name === "td" || name === "th") {
+      if (text.trim()) text += "  |  ";
+      stack.push(name);
+      continue;
+    }
+    if (BLOCK.test(name)) {
+      flush();
+      if (!selfClosing) stack.push(name);
+      continue;
+    }
+    if (!selfClosing) stack.push(name);
+  }
+  flush();
+  /** ⛔ Consecutive blanks collapse: nesting produces them and they are not information. */
+  const lines = out.filter((l, i) => l.trim() || (out[i - 1] ?? "").trim());
+  if (!lines.length) return "";
+  /**
+   * ⛔ THE FIRST LINE CANNOT BE DEEPER THAN ANY AFTER IT, OR THE CORPUS WILL NOT LOAD.
+   *
+   * A YAML literal block takes its indentation from its first non-empty line, and a later line
+   * shallower than that ends the block mid-sentence — so the scope stops parsing and every command
+   * reports it as broken. It is not a formatting nicety: this drawing opens inside two nested
+   * elements and closes at the top level, so the natural outline is exactly the shape YAML refuses.
+   *
+   * Caught by the test that loads the corpus back after drawing into it, which is why that test
+   * loads it rather than reading the file. Writing a generated artefact that the parser then
+   * refuses is the one failure a generator must not have.
+   */
+  const min = Math.min(...lines.filter((l) => l.trim()).map((l) => l.length - l.trimStart().length));
+  const flat = lines.map((l) => l.slice(min));
+  flat[0] = flat[0]!.trimStart();
+  return flat.join("\n");
+}
+
+const decode = (s: string): string =>
+  s
+    .replace(/&hellip;/g, "…")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&rsquo;|&apos;/g, "'")
+    .replace(/&nbsp;/g, " ");
 
 /**
  * ⛔ HAS THIS DRAWING BEEN TYPED OVER, OR HAS ITS SOURCE MOVED?

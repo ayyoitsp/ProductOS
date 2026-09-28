@@ -1,0 +1,9 @@
+id: "0021"
+said: I'd like to update product OS rendering to have a toggle button for a left menu or a top menu.  right now it's always top
+at: 2026-09-26
+kind: surface
+reaches:
+  surface: navplace
+  pin: one frame serves both placements
+waived: {}
+closed: 2026-09-26

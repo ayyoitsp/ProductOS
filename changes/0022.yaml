@@ -1,0 +1,15 @@
+id: "0022"
+said: after that, let's implemented @planning/hosted-plan.md
+at: 2026-09-26
+kind: concept
+reaches:
+  model: relayed_by
+  derive: question-answered
+  generate: ""
+  surface: mayRecord
+  check: work-nothing-can-close
+  instruct: No token scope grants it
+  pin: no scope in the vocabulary mints human consent
+waived:
+  generate: nothing produces an event from a source — the log is written at the moment an act or a note happens, by the thing that performed it. A generator here would mean deriving history from the corpus's current state, which is exactly the claim an event log exists to stop anybody making
+closed: 2026-09-27
