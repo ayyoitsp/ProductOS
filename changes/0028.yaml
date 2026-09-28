@@ -1,0 +1,9 @@
+id: "0028"
+said: "'enter' on the keyboard in the product os page should send, not newline. shift+enter is newline."
+at: 2026-09-28
+kind: surface
+reaches:
+  surface: ENTER SENDS. SHIFT+ENTER IS A NEW LINE
+  pin: Shift+Enter is left alone, so it makes a new line
+waived: {}
+closed: 2026-09-28

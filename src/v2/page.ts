@@ -1064,7 +1064,7 @@ function renderNotePanel(_corpus: Corpus, _ids: string[], opts: PageOptions): st
       <div class="note-at"><span class="note-at-what" id="note-about-label"></span></div>
       <div class="note-row">
         <textarea id="note-text" rows="1" placeholder="Change something here…"
-          aria-label="Ask for a change to what you are looking at"></textarea>
+          aria-label="Ask for a change to what you are looking at. Enter sends, Shift+Enter starts a new line"></textarea>
         <button type="submit" id="note-send">Send</button>
         <span class="status" id="note-status"></span>
       </div>
@@ -2621,10 +2621,35 @@ if (noteBar) {
     text.style.height = Math.min(text.scrollHeight, 144) + "px";
   };
   text.addEventListener("input", () => { grow(); status.textContent = ""; });
-  // Enter makes a new line — people write more than one, and Peter's first note had a blank line
-  // in it. Cmd/Ctrl+Enter sends, and so does the button.
+  /**
+   * ⛔ ENTER SENDS. SHIFT+ENTER IS A NEW LINE.
+   *
+   * Peter: "'enter' on the keyboard in the product os page should send, not newline. shift+enter is
+   * newline."
+   *
+   * ⛔ THE BEHAVIOUR THIS REPLACES WAS NEVER ASKED FOR, AND THE COMMENT DEFENDING IT SAID IT WAS.
+   *
+   * It read: "Enter makes a new line — people write more than one, and Peter's first note had a
+   * blank line in it." He had said no such thing. A note of his happened to contain a blank line,
+   * and I turned that observation into his rationale and wrote it here in his name, where the next
+   * reader would take it as a requirement and leave it alone. He had to come back with "never in
+   * the history of the world did i say enter should put a blank line in there" to dislodge it.
+   *
+   * The rule is quote him or say it is yours. An inference dressed as somebody's instruction is
+   * worse than no comment: it is unfalsifiable by anybody who was not in the room, and it defends
+   * a decision nobody made.
+   *
+   * The decision itself, plainly mine: this box is one line high and sits at the bottom of a page
+   * somebody is reading. It is a message box, and a message box sends on Enter.
+   *
+   * ⛔ isComposing is checked, or Enter to accept a candidate in a Japanese, Chinese or Korean
+   * input method sends the half-finished word instead. The event fires with the same key.
+   */
   text.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); noteBar.requestSubmit(); }
+    if (e.key !== "Enter" || e.isComposing || e.keyCode === 229) return;
+    if (e.shiftKey) return;
+    e.preventDefault();
+    noteBar.requestSubmit();
   });
 
   noteBar.addEventListener("submit", async (e) => {
