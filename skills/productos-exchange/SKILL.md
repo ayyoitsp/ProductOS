@@ -225,6 +225,31 @@ cannot, and it still constrains how the product is built, it is a charter sectio
 
 ```bash
 productos v2 migrate --from productos --out v2      # add --force to redo it
+
+### ⛔ `--force` takes what people said as truth, not what v1 remembers
+
+```bash
+productos v2 migrate --from productos --out v2 --force
+```
+
+It rebuilds from v1 — **except any scope somebody has spoken about.** A note filed against it, or a
+stamp a person made on it, holds that scope back exactly as it stands; the rebuild of it is
+discarded and the reason is printed.
+
+**Why, measured:** v1's `deal-pricing.md` carried ninety-seven mentions of staged edits, overrides
+and a publish gate — the model Peter corrected twice, on the page — while v2 had been rewritten to
+say nothing on that screen can be typed into. Rebuilding from v1 restored the rejected shape, and
+the notes recording the rejection were *closed*, so nothing objected. With the human record removed
+from that corpus the rejected wording came back twenty-eight times; with it present, none.
+
+⛔ **A closed request counts, and counts most** — it means the truth was already changed because of
+it, which is exactly what a rebuild throws away. ⛔ **`via: agent` does not count**: software may
+decide, and letting its own verdict hold a scope back would let generated output outrank the corpus
+it came from.
+
+**The cost, stated:** a held scope stops following v1 improvements. The only way it moves after that
+is somebody authoring it here. Say that when you run it.
+
 ```
 
 It carries what v1 recorded and **refuses the rest by name**, into `not-carried.yaml`. Read that

@@ -18,6 +18,7 @@ import { looksLikeInstance, instanceOf, mirror, act as remoteAct, note as remote
 import { lineFor } from "../../v2/log.js";
 import { drawFromRoute } from "../../v2/draw.js";
 import { everyView, isResolved, resolveRoute } from "../../v2/routes.js";
+import { spokenFor } from "../../v2/spoken.js";
 import { AGENTS, CASCADE, KINDS } from "../../core/jobs.js";
 
 /** ⛔ Plain text for a terminal and for JSON — never HTML-escaped, which is the page's business. */
@@ -911,6 +912,41 @@ export function v2Command(): Command {
       }
       const m = migrate(from, out, new Date().toISOString().slice(0, 10));
       if (setAside) {
+        /**
+         * ⛔ WHAT A PERSON SAID OUTRANKS WHAT v1 REMEMBERS.
+         *
+         * Peter: *"--force should only take the user feedback and regenerate based on it, taking the
+         * user feedback as truth."*
+         *
+         * v1 is the OLD understanding. Its `deal-pricing.md` still carries ninety-seven mentions of
+         * staged edits, overrides and a publish gate — the model he corrected twice, on the page —
+         * while v2 now says nothing on that screen can be typed into. Rebuilding it from v1 restores
+         * exactly what he rejected, and the notes recording the rejection are CLOSED, so nothing
+         * objects. A regeneration that can undo a human correction is worse than none: the corpus
+         * looks freshly derived and is quietly back to a shape somebody already refused.
+         *
+         * So a scope the human record has touched is put back as it stood, and the rebuild of it is
+         * discarded. The cost is real and stated: such a scope stops picking up genuine v1
+         * improvements, and the only way it moves again is somebody authoring it here.
+         */
+        const held: Array<{ file: string; because: string[] }> = [];
+        for (const sp of spokenFor(out)) {
+          const file = `${sp.scope}.md`;
+          const wasAt = path.join(setAside, "truth", file);
+          if (!fs.existsSync(wasAt)) continue;
+          fs.mkdirSync(path.join(out, "truth"), { recursive: true });
+          fs.cpSync(wasAt, path.join(out, "truth", file));
+          held.push({ file, because: sp.because });
+        }
+        if (held.length) {
+          console.log(pc.cyan("⤺"), `${held.length} scope(s) kept as they stood — somebody has spoken about these, and what they said outranks v1:`);
+          for (const h of held) {
+            console.log(pc.dim(`    truth/${h.file}`));
+            for (const b of h.because) console.log(pc.dim(`      ${b}`));
+          }
+          console.log(pc.dim("  the rebuild of these was discarded. They no longer follow v1 — author them here."));
+        }
+
         const restored: string[] = [];
         for (const d of ["truth", "rules", "charter"]) {
           const was = path.join(setAside, d);

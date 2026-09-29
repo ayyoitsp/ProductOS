@@ -1,0 +1,10 @@
+id: "0033"
+said: --force should only take the user feedback and regenerate based on it, taking the user feedback as truth
+at: 2026-09-29
+kind: derivation
+reaches:
+  derive: ""
+  surface: ""
+  check: ""
+  pin: ""
+waived: {}
