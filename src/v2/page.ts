@@ -16,6 +16,7 @@
  * would be the MCP boundary broken by a longer path.
  */
 import { resolveRules, type Corpus } from "./load.js";
+import { promisesOf, screensOf, type ProtoPromise, type ProtoScreen } from "./prototype.js";
 import { SLOTS, SLOT_ASKS_SHORT, statements, saysText, type SlotName, type Scope, type View, type Part, type Says } from "./schema.js";
 import { gridFor, gateFor, actsFor, ruleHomes, type Grid, type Cell } from "./grid.js";
 import { stampFor, decidedFor } from "./stamp.js";
@@ -1773,8 +1774,17 @@ function renderNav(
    * deeper, which is the thing a tree is good at.
    */
   const rootId = corpus.scopes.find((x) => !x.scope.in)?.scope.id;
+  const protoScreens = screensOf(corpus);
+  const protoPromises = promisesOf(corpus);
   const sections: Array<{ id: string; label: string; toRead?: number }> = [
     { id: "overview", label: "Overview" },
+    /**
+     * ⛔ ITS OWN PLACE, BESIDE OVERVIEW. Peter: *"let's add a separate 'top level' menu item for the
+     * prototype"*. Everywhere else a screen is evidence inside a behaviour card; here the screen is
+     * the subject and the sentences are what a press gives you. A surface trying to be both puts the
+     * screen in a column too narrow to judge.
+     */
+    { id: "prototype", label: "Prototype", toRead: protoScreens.length },
     /**
      * ⛔ WHAT A PERSON SEES, THEN THE MACHINERY UNDERNEATH. File order put the subsystems first,
      * which is backwards for every reader: the behaviours are the product, and the machinery is what
@@ -1884,6 +1894,8 @@ function renderNav(
  * the named scope alone would show a finished-looking product with nothing in it.
  */
 export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptions = {}): string | null {
+  const protoScreens = screensOf(corpus);
+  const protoPromises = promisesOf(corpus);
   const entry = corpus.scopes.find((s) => s.scope.id === scopeId);
   if (!entry) return null;
   const ids = descendants(corpus, scopeId);
@@ -2008,6 +2020,7 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
          * under seven open questions and nobody reads them. A second row of items, at the level
          * they belong to.
          */
+        renderPrototype(protoScreens, protoPromises) +
         `<section class="view" id="view-overview" data-view="overview" data-ref="${esc(scopeId)}" data-label="Overview">
            <div class="sub-view" data-sub-view="queue" data-ref="queue" data-label="Queue">
              ${
@@ -2179,7 +2192,7 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
       }
     </main>`;
 
-  return `${STYLE}${body}${appCssOnce(opts)}${partFacts(corpus, ids)}${renderNotePanel(corpus, ids, opts)}${VIEW_SWITCH}${NAV_PLACE}${PROTOTYPE}${opts.interactive ? liveScript(opts) : INERT}`;
+  return `${STYLE}${body}${appCssOnce(opts)}${partFacts(corpus, ids)}${renderNotePanel(corpus, ids, opts)}${VIEW_SWITCH}${NAV_PLACE}${PROTOTYPE}${DRIVE}${opts.interactive ? liveScript(opts) : INERT}`;
 }
 
 
@@ -3058,6 +3071,66 @@ const PROTOTYPE = `<script>
 })();
 </script>`;
 
+/**
+ * ⛔ DRIVING THE PROTOTYPE. Picking a screen, isolating its mock, and turning a press into the
+ * sentences that govern that control.
+ *
+ * The truth is read out of the DOM this page already carries — `data-proto-says` — rather than
+ * fetched or duplicated into a second structure. A second copy is a copy that goes stale the first
+ * time a sentence is reworded, which is the whole hand-authoring trap one layer over.
+ */
+const DRIVE = `<script>
+(function () {
+  const stage = document.querySelector(".proto-stage");
+  if (!stage) return;
+  const pane = document.querySelector(".proto-truth");
+  const says = JSON.parse(document.getElementById("proto-says").textContent || "{}");
+
+  /**
+   * ⛔ EACH MOCK IN ITS OWN SHADOW ROOT. The drawings are written in the application's class names;
+   * left in this document its stylesheet restyles the review surface around them. That happened
+   * once and the page came apart.
+   */
+  for (const host of document.querySelectorAll(".proto-mock")) {
+    const tpl = host.querySelector("template");
+    if (!tpl || host.shadowRoot) continue;
+    const root = host.attachShadow({ mode: "open" });
+    const app = document.getElementById("app-css");
+    if (app) root.appendChild(app.content.cloneNode(true));
+    root.appendChild(tpl.content.cloneNode(true));
+    /** A press inside the shadow tree has to be heard here, where the truth is. */
+    root.addEventListener("click", (ev) => {
+      const path = ev.composedPath();
+      for (const el of path) {
+        const id = el instanceof Element ? el.getAttribute && el.getAttribute("data-part") : null;
+        if (id) { show(host.dataset.mock, id); ev.preventDefault(); return; }
+      }
+    });
+  }
+
+  function show(screen, part) {
+    const rows = (says[screen] || []).filter((r) => !r.part || r.part === part);
+    const label = (says[screen] || []).find((r) => r.part === part);
+    pane.innerHTML =
+      '<h4>' + esc(part) + '</h4>' +
+      (rows.length
+        ? '<ul>' + rows.map((r) =>
+            '<li><span class="slot">' + esc(r.slot) + '</span><br>' + esc(r.text) + '</li>').join("") + '</ul>'
+        : '<p class="none">Nothing in the corpus says anything about this control. That is a gap, not a bug.</p>');
+  }
+  function esc(t) { const d = document.createElement("div"); d.textContent = t == null ? "" : String(t); return d.innerHTML; }
+
+  for (const b of document.querySelectorAll(".proto-pick")) {
+    b.addEventListener("click", () => {
+      const want = b.dataset.proto;
+      for (const f of stage.querySelectorAll(".proto-frame")) f.hidden = f.dataset.proto !== want;
+      for (const li of document.querySelectorAll(".proto-list li")) li.classList.toggle("on", li.contains(b));
+      pane.innerHTML = '<p class="none">Press a control on the screen.</p>';
+    });
+  }
+})();
+</script>`;
+
 const VIEW_SWITCH = `<script>
 (function () {
   const views = [...document.querySelectorAll("section.view")];
@@ -3606,6 +3679,28 @@ const STYLE = `<style>
    * (No backticks in this comment: it lives inside a template literal, and a backtick here ends
    * the string. That has now cost four builds.)
    */
+  /* ── The prototype: the screen is the subject, the truth is one press away. ───────────── */
+  .proto { display: grid; grid-template-columns: 15rem minmax(0, 1fr) 20rem; gap: 1rem; align-items: start; }
+  .proto-list ul, .proto-promises ul { list-style: none; margin: 0; padding: 0; }
+  .proto-list li { border-bottom: 1px solid var(--rule); }
+  .proto-pick { display: block; width: 100%; text-align: left; background: none; border: 0; cursor: pointer;
+    padding: .5rem .4rem; font: inherit; color: inherit; }
+  .proto-pick:hover, .proto-list li.on .proto-pick { background: var(--soft); }
+  .proto-list li.on .proto-pick { box-shadow: inset 3px 0 0 var(--accent); }
+  .pp-t { display: block; font-weight: 600; font-size: .9rem; }
+  .pp-in, .pp-m { display: block; font-size: .76rem; color: var(--dim); }
+  .proto-stage { min-width: 0; }
+  .proto-head h3 { margin: 0; font-size: 1.05rem; }
+  .proto-where, .proto-prov { margin: .1rem 0 0; font-size: .78rem; color: var(--dim); }
+  .proto-mock { margin-top: .7rem; border: 1px solid var(--rule); border-radius: 8px; overflow: auto; background: #fff; }
+  .proto-truth { border-left: 1px solid var(--rule); padding-left: .8rem; font-size: .85rem; position: sticky; top: 1rem; }
+  .proto-truth h4 { margin: 0 0 .2rem; font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; color: var(--dim); }
+  .proto-truth li { margin-bottom: .6rem; }
+  .proto-truth .slot { font-size: .72rem; color: var(--dim); text-transform: uppercase; letter-spacing: .04em; }
+  .proto-promises { margin-top: 1.4rem; border-top: 1px solid var(--rule); padding-top: .8rem; }
+  .proto-promises li { padding: .35rem 0; border-bottom: 1px solid var(--rule); }
+  @media (max-width: 1100px) { .proto { grid-template-columns: 1fr; } .proto-truth { border-left: 0; padding-left: 0; position: static; } }
+
   /* The truth moved under you — said, not done to you. */
   /* ⛔ The frame and the page both move down by exactly the bar's height while it is up, because a
      bar that covers the navigation takes every way off the page with it. See fit(), above. */
@@ -3741,3 +3836,91 @@ const STYLE = `<style>
     .legend dl { grid-template-columns: 2.5rem 1fr; }
   }
 </style>`;
+
+/**
+ * The prototype view: every screen, driveable, with the truth a press away.
+ *
+ * ⛔ THE SCREEN IS THE SUBJECT HERE. Full width, one at a time, and the sentences arrive in the side
+ * pane when you press part of it — the inversion of every other view on this page, where a screen is
+ * evidence inside a behaviour card.
+ */
+function renderPrototype(screens: ProtoScreen[], promises: ProtoPromise[]): string {
+  if (!screens.length && !promises.length) return "";
+  const list = screens
+    .map(
+      (s, i) => `<li${i === 0 ? ' class="on"' : ""}>
+        <button type="button" class="proto-pick" data-proto="${esc(s.scope + "#" + s.view)}">
+          <span class="pp-t">${line(s.title)}</span>
+          <span class="pp-in">${line(s.scopeTitle)}</span>
+          <span class="pp-m">${s.parts.length} control${s.parts.length === 1 ? "" : "s"} · ${s.says.length} behaviour${s.says.length === 1 ? "" : "s"}${
+            s.from === "nobody" ? ' · <span class="warn">no picture</span>' : ""
+          }${!s.walked ? ' · <span class="quiet">not walked</span>' : ""}</span>
+        </button>
+      </li>`
+    )
+    .join("");
+
+  /**
+   * ⛔ THE PICTURE IS ISOLATED, because it is written in the application's own class names and this
+   * page has its own. Without a shadow root the app's CSS restyles the review surface around it —
+   * which happened, and the page came apart.
+   */
+  const frames = screens
+    .map(
+      (s, i) => `<div class="proto-frame" data-proto="${esc(s.scope + "#" + s.view)}"${i === 0 ? "" : " hidden"}>
+        <header class="proto-head">
+          <h3>${line(s.title)}</h3>
+          <p class="proto-where">${s.areas.map((a) => line(a)).join(" › ")}${s.areas.length ? " › " : ""}${line(s.scopeTitle)}</p>
+          <p class="proto-prov">${
+            s.from === "the code"
+              ? "drawn from the component that renders it"
+              : s.from === "the truth"
+                ? "generated from what this screen says it holds — nothing renders it yet"
+                : "nothing to look at yet"
+          }</p>
+        </header>
+        ${
+          s.html
+            ? `<div class="proto-mock" data-mock="${esc(s.scope + "#" + s.view)}"><template>${s.html}</template></div>`
+            : `<p class="none">This screen has no picture. Give it its parts, then: <code>productos v2 propose "${esc(s.scope + "#" + s.view)}"</code></p>`
+        }
+      </div>`
+    )
+    .join("");
+
+  /** ⛔ What nothing renders, on the same surface. A prototype that hid the promises would be a design tool. */
+  const unseen = promises.length
+    ? `<section class="proto-promises">
+        <h3>Nothing renders these</h3>
+        <p class="lede">Promises the screens rest on. They have no picture because they are not screens — and they are the highest altitude here.</p>
+        <ul>${promises
+          .map(
+            (p) => `<li><button type="button" class="show-part" data-show-part="">${line(p.title)}</button>
+              <span class="pp-m">${p.said} statement${p.said === 1 ? "" : "s"}${
+                p.restsUnder.length ? ` · rests under ${p.restsUnder.map((r) => line(r)).join(", ")}` : ""
+              }</span></li>`
+          )
+          .join("")}</ul>
+      </section>`
+    : "";
+
+  /**
+   * ⛔ ONE INDEX, READ BY THE SCRIPT — not a copy of the sentences written into the markup twice.
+   * `part` is the control a statement's exchange arrives at, so a press can filter to what governs
+   * that control while a screen-wide rule stays visible on every press.
+   */
+  const index: Record<string, Array<{ part?: string; slot: string; text: string }>> = {};
+  for (const sc of screens)
+    index[`${sc.scope}#${sc.view}`] = sc.says.map((y) => ({ part: y.part, slot: y.slot, text: y.text }));
+
+  return `<script type="application/json" id="proto-says">${JSON.stringify(index).replace(/</g, "\\u003c")}</script>
+  <section class="view" id="view-prototype" data-view="prototype" data-ref="prototype" data-label="Prototype">
+    <p class="lede">Every screen in the product. Press anything on one to see what the truth says about it.</p>
+    <div class="proto">
+      <nav class="proto-list"><ul>${list}</ul></nav>
+      <div class="proto-stage">${frames}</div>
+      <aside class="proto-truth"><p class="none">Press a control on the screen.</p></aside>
+    </div>
+    ${unseen}
+  </section>`;
+}

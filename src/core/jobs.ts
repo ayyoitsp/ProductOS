@@ -151,6 +151,7 @@ export const AREAS: Area[] = [
     owns: ["surface"],
     files: [
       "src/v2/page.ts",
+      "src/v2/prototype.ts",
       "src/v2/serve.ts",
       "src/v2/packet.ts",
       "src/v2/notes.ts",

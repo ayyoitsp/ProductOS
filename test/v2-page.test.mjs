@@ -335,6 +335,12 @@ test("the frame has tabs for each half, and Overview carries the queue", () => {
 
   const tabs = [...html.matchAll(/class="tab" data-tab="([^"]+)"/g)].map((m) => m[1]);
   assert.equal(tabs[0], "overview", "Overview is not the first thing offered");
+  /**
+   * ⛔ Prototype is a FIXED tab, like Overview — it is not a half of the product, so it takes no
+   * part in the ordering below. Peter: *"let's add a separate 'top level' menu item for the
+   * prototype"*, and it sits second because it is the way in: a person can tell a screen is wrong.
+   */
+  assert.equal(tabs[1], "prototype", "the prototype is not offered beside Overview");
   for (const half of corpus.scopes.filter((s) => s.scope.in === root))
     assert.ok(tabs.includes(half.scope.id), `${half.scope.id} is a half of the product and has no tab`);
 
@@ -344,7 +350,8 @@ test("the frame has tabs for each half, and Overview carries the queue", () => {
       (n, d) => n + (corpus.scopes.find((y) => y.scope.id === d)?.scope.views.length ?? 0),
       0
     );
-  const halves = tabs.slice(1);
+  const FIXED = new Set(["overview", "prototype"]);
+  const halves = tabs.filter((t) => !FIXED.has(t));
   for (let i = 1; i < halves.length; i++)
     assert.ok(
       screensUnder(halves[i - 1]) >= screensUnder(halves[i]),
