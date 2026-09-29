@@ -85,6 +85,23 @@ function classOf(node: ts.JsxAttributeValue | undefined): string {
       walk(n.right);
     } else if (ts.isJsxExpression(n) && n.expression) walk(n.expression);
     else if (ts.isParenthesizedExpression(n)) walk(n.expression);
+    /**
+     * ⛔ A CLASSNAME IS USUALLY WRAPPED IN A CALL, AND THIS WALKED PAST EVERY ONE OF THEM.
+     *
+     * `className={`flex items-center …${className}`.trim()}` is a CallExpression, not a template —
+     * so `TableToolbar`'s outer div came out with NO CLASS, its flex went with it, and the deals
+     * list drew its search field, stage filter and Clear filters button stacked down the page. The
+     * flex container was not overridden or beaten on specificity; it was never emitted.
+     *
+     * The same hole swallowed every `clsx(…)`, `cn(…)` and `[…].join(" ")` in the codebase, which
+     * is how most real components write a class list. Walking into the callee and its arguments
+     * picks the literals out of all of them.
+     */
+    else if (ts.isCallExpression(n)) {
+      walk(n.expression);
+      for (const a of n.arguments) walk(a);
+    } else if (ts.isPropertyAccessExpression(n)) walk(n.expression);
+    else if (ts.isArrayLiteralExpression(n)) for (const el of n.elements) walk(el);
   };
   walk(node);
   return [...new Set(out.join(" ").split(/\s+/).filter(Boolean))].join(" ");
@@ -284,6 +301,15 @@ function emit(node: ts.Node, ctx: Ctx): string {
     };
     if (ts.isBinaryExpression(e) && e.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken) {
       const c = e.left.getText();
+      /**
+       * ⛔ A GUARD ON A PROP THE CALLER DID NOT PASS IS FALSE, and we know exactly what was passed.
+       *
+       * Inside an inlined component, `{required && <span>*</span>}` was drawn unconditionally — so
+       * the deals list wore two red required-markers floating above a search box and a stage filter
+       * that are not required. This is not a guess about the product: the call site is right there,
+       * and it did not pass `required`. Only applied while inlining, where that list is real.
+       */
+      if (ctx.depth > 0 && ts.isIdentifier(e.left) && ctx.props.size && !ctx.props.has(e.left.text)) return "";
       /** `{!deals.length && <Empty/>}` — a state, not the screen. Recorded and not drawn. */
       if (GUARD.test(c) || EMPTY.test(c)) {
         ctx.states.push(`when ${c.replace(/\s+/g, " ").slice(0, 50)}: ${e.right.getText().replace(/\s+/g, " ").slice(0, 60)}`);
