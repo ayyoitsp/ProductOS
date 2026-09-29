@@ -266,7 +266,9 @@ function emit(node: ts.Node, ctx: Ctx): string {
      * controls the product has is the thin drawing again, reached by trying to fix the opposite
      * problem. These match the two things that genuinely are other states, and nothing else.
      */
-    const GUARD = /\b(isLoading|loading|isPending|pending|isFetching|busy|skeleton)\b/i;
+    /** ⛔ An ERROR state is a state too — it drew as an empty pink bar across every screen that has
+     *  one, which reads as a defect in the product rather than as a branch nobody is in. */
+    const GUARD = /\b(isLoading|loading|isPending|pending|isFetching|busy|skeleton|isError|error)\b/i;
     const EMPTY = /(===\s*0|!\s*\w+(?:\.\w+)*\.length\b|\blength\s*===\s*0\b|\bisEmpty\b|\bnoResults\b)/i;
     const pick = (cond: ts.Node, a: ts.Node, b: ts.Node): string => {
       const c = cond.getText();
@@ -407,7 +409,24 @@ function emit(node: ts.Node, ctx: Ctx): string {
         const sub: Ctx = { ...ctx, depth: ctx.depth + 1, props: bound, sameFile: file };
         const body = emit(inner, sub);
         // `{children}` inside the primitive is where this element's own children belong.
-        return body.includes("<!--children-->") ? body.replace("<!--children-->", children) : body + children;
+        if (body.includes("<!--children-->")) return body.replace("<!--children-->", children);
+        if (!children) return body;
+        /**
+         * ⛔ CHILDREN GO INSIDE THE COMPONENT, NOT AFTER IT.
+         *
+         * `body + children` makes them SIBLINGS of the component's own root — so everything the
+         * component was going to lay out escapes its layout. The deals list toolbar is
+         * `<div className="flex flex-wrap items-center gap-2">` and its search field, stage filter
+         * and Clear filters button all landed outside it, stacked down the page, each on its own
+         * line. Peter: *"does this look right?"*
+         *
+         * It happens whenever a component does not write a literal `{children}` — this one splits
+         * them with `React.Children.toArray`, which is ordinary React and unreadable from here.
+         * Placing them before the root's closing tag keeps them in the box that was built for them.
+         */
+        const close = body.lastIndexOf("</");
+        if (close > 0 && /^<\w/.test(body.trim())) return body.slice(0, close) + children + body.slice(close);
+        return body + children;
       }
     }
     /**
@@ -446,8 +465,25 @@ function emit(node: ts.Node, ctx: Ctx): string {
       ctx.unresolved.push(`<${tag}> (icon)`);
       return `<span class="productos-icon" role="img" aria-label="${text(tag)}"></span>`;
     }
+    /**
+     * ⛔ KEEP THE APPLICATION'S OWN CLASSES ON IT, OR THE LAYOUT GOES WITH THE COMPONENT.
+     *
+     * An unresolved component became a bare `<div class="productos-unknown">`, which throws away the
+     * `className` the call site wrote. `<TableToolbar className="flex items-center gap-2">` lost its
+     * flex, so the deals list drew its New Deal button, its search field, its stage filter and Clear
+     * filters stacked down the page, each on its own line — a toolbar rendered as a column. Peter,
+     * looking at it: *"does this look right?"*. It did not.
+     *
+     * The marker class rides ALONGSIDE the application's classes rather than replacing them, so the
+     * drawing keeps the layout it was given and still says it could not read the component.
+     */
     ctx.unresolved.push(`<${tag}>`);
-    return `<div class="productos-unknown" data-component="${text(tag)}">${children || text(tag)}</div>`;
+    const own = classOf(
+      open.attributes.properties.find((a): a is ts.JsxAttribute => ts.isJsxAttribute(a) && a.name.getText() === "className")
+        ?.initializer
+    );
+    const cls = own ? `${text(own)} productos-unknown` : "productos-unknown";
+    return `<div class="${cls}" data-component="${text(tag)}">${children || ""}</div>`;
   }
 
   const attrs: string[] = [];
@@ -562,7 +598,31 @@ export function drawFromRoute(routeFile: string, opts: DrawOptions = {}): DrawRe
         if (e.isDirectory()) {
           if (e.name === "node_modules" || e.name === "__tests__") continue;
           walk(p);
-        } else if (/\.tsx$/.test(e.name) && !/\.test\.tsx$/.test(e.name)) index.set(e.name.replace(/\.tsx$/, ""), p);
+        } else if (/\.tsx$/.test(e.name) && !/\.test\.tsx$/.test(e.name)) {
+          index.set(e.name.replace(/\.tsx$/, ""), p);
+          /**
+           * ⛔ AND BY EVERY COMPONENT THE FILE EXPORTS, NOT ONLY ITS NAMESAKE.
+           *
+           * One file routinely exports several components — `TableToolbar.tsx` exports
+           * `TableToolbar` AND `TableToolbarActions`; a table file exports `TableShell`, `THead`,
+           * `TBody`, `Td` and `Th`. Indexed by filename alone, every one of those was unresolvable,
+           * so the deals list drew its toolbar contents as loose siblings with the layout thrown
+           * away and its table as generic divs. Six unresolved components on one screen, all of
+           * them sitting in files this index had already walked.
+           *
+           * A namesake still wins: it is set first and only missing names are added.
+           */
+          let body = "";
+          try {
+            body = fs.readFileSync(p, "utf-8");
+          } catch {
+            body = "";
+          }
+          for (const m of body.matchAll(/export\s+(?:default\s+)?(?:function|const)\s+([A-Z][A-Za-z0-9_]*)/g)) {
+            const name = m[1]!;
+            if (!index.has(name)) index.set(name, p);
+          }
+        }
       }
     };
     walk(root);

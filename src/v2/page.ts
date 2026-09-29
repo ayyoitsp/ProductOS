@@ -484,7 +484,9 @@ const PT_STYLE = `<style>
    * silent gap there is exactly how a drawing looks finished while showing nothing. Hatched, so a
    * reviewer can see at a glance how much of the screen is actually drawn.
    */
-  .productos-unknown { display: inline-block; min-width: 1.5em; border-radius: 2px; color: #92400e;
+  /** ⛔ A wrapper it could not read still holds the real screen — painting it striped the table. */
+  .productos-unknown { border-radius: 2px; }
+  .productos-unknown:not(:has(*)) { display: inline-block; min-width: 1.5em; color: #92400e;
     background: repeating-linear-gradient(45deg, rgba(245,158,11,.18) 0 4px, transparent 4px 8px);
     outline: 1px dashed rgba(245,158,11,.6); }
   [data-component] { display: block; padding: .25rem .4rem; font-size: .75rem; }
@@ -3138,9 +3140,17 @@ const DRIVE = `<script>
       "tr:nth-child(2n) .productos-value{min-width:5.5em}" +
       "tr:nth-child(3n) .productos-value{min-width:3.6em}" +
       ".productos-icon{display:inline-block;width:1em;height:1em;vertical-align:-.12em;border-radius:2px;background:currentColor;opacity:.3}" +
-      ".productos-unknown{display:inline-block;min-width:1.2em;border-radius:2px;color:#92400e;" +
-        "background:repeating-linear-gradient(45deg,rgba(245,158,11,.18) 0 4px,transparent 4px 8px);outline:1px dashed rgba(245,158,11,.6)}" +
-      "[data-component]{display:block;padding:.2rem .35rem;font-size:.75rem}"
+      /* ⛔ Only an EMPTY placeholder is painted. A wrapper that could not be read still contains the
+         real screen, and hatching it drew orange stripes across the whole deals table. */
+      /* ⛔ No colour on a wrapper either: the value bars draw in currentColor, so an unresolved
+         wrapper turned every row of the deals table amber. */
+      ".productos-unknown{border-radius:2px}" +
+      ".productos-unknown:empty,.productos-unknown:not(:has(*)){display:inline-block;min-width:1.2em;" +
+        "color:#92400e;background:repeating-linear-gradient(45deg,rgba(245,158,11,.18) 0 4px,transparent 4px 8px);outline:1px dashed rgba(245,158,11,.6)}" +
+      /* ⛔ Only a component with no layout of its own gets the placeholder box. One carrying the
+         app's classes keeps them — forcing display:block on a flex child is how a toolbar became a
+         column. */
+      "[data-component]:not([class*=' ']){display:inline-block;padding:.1rem .3rem;font-size:.75rem}"
     );
   } catch (e) { marks = null; }
 
@@ -3162,6 +3172,30 @@ const DRIVE = `<script>
     return root;
   }
   for (const host of board.querySelectorAll(".proto-mock")) hydrate(host);
+
+  /**
+   * ⛔ ONE SOURCE OF STYLE FOR EVERY MOCK ON THE PAGE, because there were two and they diverged.
+   *
+   * The prototype tiles adopt the application's stylesheet here. The screens embedded in a feature
+   * view are hydrated by older code that appends a 3KB marker <style> and no app CSS — so half the
+   * mocks on this page were styled by the product and half by nothing. The deals list in the
+   * Product view had no flex utility at all: its toolbar stacked, its spacing vanished, buttons were
+   * grey boxes. Peter: *"does this look right?"*. Thirteen hosts adopted, thirteen not.
+   *
+   * Rather than keep two paths in step, every host is swept: anything with a shadow root and no
+   * adopted sheet gets the same two sheets the tiles get. Whoever built the root, the styling is the
+   * same styling.
+   */
+  const dressAll = () => {
+    for (const h of document.querySelectorAll(".proto-mock, .proto.html, [data-mock]")) {
+      const root = h.shadowRoot;
+      if (!root || root.adoptedStyleSheets.length || !("adoptedStyleSheets" in root)) continue;
+      root.adoptedStyleSheets = [sheet, marks].filter(Boolean);
+    }
+  };
+  dressAll();
+  /** Those roots are built on demand when a card is opened, so sweep again as they appear. */
+  new MutationObserver(dressAll).observe(document.body, { childList: true, subtree: true });
 
   function esc(t) { const d = document.createElement("div"); d.textContent = t == null ? "" : String(t); return d.innerHTML; }
 

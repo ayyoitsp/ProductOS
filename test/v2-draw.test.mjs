@@ -34,7 +34,8 @@ test("a parenthesised branch is drawn, not dropped", () => {
        return (
          <div className="wrap">
            <h1 className="title">Deals</h1>
-           {isError && (<div className="err">could not load</div>)}
+           {hasBanner && (<div className="err">a notice</div>)}
+           {isError && (<div className="boom">could not load</div>)}
            {empty ? (<p className="none">nothing here</p>) : (<table className="rows"><tbody/></table>)}
          </div>
        )
@@ -42,6 +43,13 @@ test("a parenthesised branch is drawn, not dropped", () => {
   );
   const r = drawFromRoute(route);
   assert.match(r.html, /class="err"/, "an && branch was dropped");
+  /**
+   * ⛔ But an ERROR branch is a STATE, not the screen. Drawn, it put an empty pink bar across every
+   * screen that has one — which reads as a defect in the product rather than a branch nobody is in.
+   * Skipped and reported, like loading and empty.
+   */
+  assert.doesNotMatch(r.html, /class="boom"/, "the error state was drawn as part of the screen");
+  assert.ok(r.states.some((st) => st.includes("could not load")), "and it must be reported as a state");
   /**
    * ⛔ THIS TEST USED TO DEMAND BOTH ARMS, reasoning that *"taking one silently draws one state and
    * calls it the screen."* The operative word was SILENTLY, and drawing both is worse: the deals
