@@ -857,13 +857,31 @@ test("no backtick survives inside a template literal in the renderer", () => {
    * into it the very next time somebody wrote a user-facing string containing a shell command.
    * Seventh build lost to this in one file.
    */
-  const NAMES = ["STYLE", "PT_STYLE", "VIEW_SWITCH", "PROTOTYPE", "INERT"];
+  /**
+   * ⛔ DISCOVERED, NOT LISTED — because the list was the bug twice.
+   *
+   * `liveScript` was missing and took the seventh build. Then `DRIVE` was added for the prototype
+   * board, was not on this list either, and took the eighth: a backtick in a comment describing a
+   * CSS custom property, which ended the string and blanked every screen on the page. A guard that
+   * has to be extended by hand every time somebody adds a payload is a guard that is one commit out
+   * of date by construction.
+   */
+  const NAMES = lines.flatMap((l) => {
+    const m = /^const ([A-Z_a-z0-9]+)(?:: string)? = `/.exec(l);
+    return m ? [m[1]] : [];
+  });
+  assert.ok(NAMES.length >= 5, `only found ${NAMES.length} payload literals — the declaration shape changed`);
   let checked = 0;
   for (const name of NAMES) {
     const start = lines.findIndex((l) => new RegExp(`^const ${name}(: string)? = \``).test(l));
     if (start < 0) continue;
-    // Closed either by a bare backtick-semicolon line or by one ending the payload tag.
-    const end = lines.findIndex((l, i) => i > start && /^\s*(<\/(?:style|script)>)?`;\s*$/.test(l));
+    /**
+     * ⛔ Closed by ANY line ending in a backtick-semicolon — a bare one, one closing a payload tag,
+     * or one closing a brace first (`}` + backtick + `;`). Matching only the bare form made the
+     * scan overrun the end of `FOLLOWS_THE_TRUTH` and report the closing backtick itself as a
+     * defect, which is the shape of false alarm that gets a guard deleted.
+     */
+    const end = lines.findIndex((l, i) => i > start && /`;\s*$/.test(l));
     assert.ok(end > start, `${name} is not closed the way this test expects — re-read it`);
     checked++;
     for (let i = start + 1; i < end; i++)
@@ -1064,4 +1082,55 @@ test("a chip counts what is there, not what is currently askable", () => {
 
   // ⛔ And the withholding is still SAID, on its own line, rather than being implied by a blank.
   assert.ok(a.ungrounded.length > 0, "nothing reports which features are waiting on their purpose");
+});
+
+/**
+ * ⛔ EVERY SCRIPT THE PAGE EMITS ACTUALLY PARSES.
+ *
+ * The lexical scan above catches a backtick. It does not catch a broken escape — and that is what
+ * shipped: `class=\"slot\"` inside a JavaScript string inside a template literal collapsed to a bare
+ * quote, ended the string, and the whole prototype board rendered as nothing at all. Peter saw it
+ * before any test did: *"I don't see a single rendering when I click the screens. just a list of
+ * screens? wtf?"*
+ *
+ * A parser is the only thing that knows whether JavaScript is JavaScript. This is strictly stronger
+ * than scanning for one character, and it needs no list of anything.
+ */
+test("every script the page emits is parseable JavaScript", () => {
+  const html = renderScopePage(corpus, corpus.scopes.find((s) => !s.scope.in).scope.id, {
+    interactive: true,
+    records: "http",
+    linkBase: "/v2",
+  });
+  const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]);
+  assert.ok(scripts.length >= 4, `only ${scripts.length} scripts found — the emission shape changed`);
+  for (const [i, src] of scripts.entries()) {
+    try {
+      // eslint-disable-next-line no-new-func
+      new Function(src);
+    } catch (e) {
+      assert.fail(`script ${i} does not parse: ${e.message}\n${src.slice(0, 400)}`);
+    }
+  }
+});
+
+/**
+ * ⛔ AND THE STYLESHEET IS ADOPTED, NOT APPENDED AS TEXT.
+ *
+ * `app-css` holds RAW CSS, not a <style> element — parsed once and shared by reference, because
+ * 370KB times thirteen mocks is not a page. Cloning that template into a shadow root puts the
+ * stylesheet SOURCE in as a text node, and every tile renders as a wall of colour-token
+ * declarations. That is exactly what shipped, and it was visible from across the room.
+ */
+test("a mock adopts the application's stylesheet rather than printing it", () => {
+  const src = fs.readFileSync("src/v2/page.ts", "utf-8");
+  const drive = src.slice(src.indexOf("const DRIVE = "), src.indexOf("const VIEW_SWITCH = "));
+  assert.ok(drive.length > 200, "DRIVE moved — re-read this before trusting it");
+  assert.match(drive, /new CSSStyleSheet\(\)/, "the app CSS must be parsed into a sheet");
+  assert.match(drive, /adoptedStyleSheets/, "and adopted by each shadow root");
+  assert.doesNotMatch(
+    drive,
+    /appCss\.content\.cloneNode/,
+    "cloning the app-css template into a shadow root prints the stylesheet as text"
+  );
 });

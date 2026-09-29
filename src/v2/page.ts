@@ -3081,53 +3081,92 @@ const PROTOTYPE = `<script>
  */
 const DRIVE = `<script>
 (function () {
-  const stage = document.querySelector(".proto-stage");
-  if (!stage) return;
-  const pane = document.querySelector(".proto-truth");
+  const board = document.querySelector(".pboard");
+  if (!board) return;
   const says = JSON.parse(document.getElementById("proto-says").textContent || "{}");
+  const titles = JSON.parse(document.getElementById("proto-titles").textContent || "{}");
+  const big = document.querySelector(".pbig");
+  const bigStage = big.querySelector(".pbig-stage");
+  const bigTruth = big.querySelector(".pbig-truth");
+  const bigTitle = big.querySelector(".pbig-t");
+  /**
+   * ⛔ THE APP'S CSS IS ADOPTED, NOT APPENDED — and getting that wrong was visible from across the
+   * room. Cloning the app-css template into a shadow root puts 370KB of stylesheet SOURCE in as a
+   * text node, so every tile rendered as a wall of colour-token declarations. The template
+   * holds raw CSS, not a <style> element, because it is parsed once here and shared by reference.
+   */
+  let sheet = null;
+  (function () {
+    const tpl = document.getElementById("app-css");
+    if (!tpl || !tpl.innerHTML.trim()) return;
+    try { sheet = new CSSStyleSheet(); sheet.replaceSync(tpl.innerHTML); } catch (e) { sheet = null; }
+  })();
 
   /**
-   * ⛔ EACH MOCK IN ITS OWN SHADOW ROOT. The drawings are written in the application's class names;
-   * left in this document its stylesheet restyles the review surface around them. That happened
+   * ⛔ EACH DRAWING IN ITS OWN SHADOW ROOT. They are written in the application's class names, and
+   * loose in this document its stylesheet restyles the review surface around them. That happened
    * once and the page came apart.
    */
-  for (const host of document.querySelectorAll(".proto-mock")) {
+  function hydrate(host) {
     const tpl = host.querySelector("template");
-    if (!tpl || host.shadowRoot) continue;
+    if (!tpl || host.shadowRoot) return host.shadowRoot;
     const root = host.attachShadow({ mode: "open" });
-    const app = document.getElementById("app-css");
-    if (app) root.appendChild(app.content.cloneNode(true));
+    if (sheet && "adoptedStyleSheets" in root) root.adoptedStyleSheets = [sheet, ...root.adoptedStyleSheets];
+    else {
+      const src = document.getElementById("app-css");
+      if (src) { const st = document.createElement("style"); st.textContent = src.innerHTML; root.appendChild(st); }
+    }
     root.appendChild(tpl.content.cloneNode(true));
-    /** A press inside the shadow tree has to be heard here, where the truth is. */
-    root.addEventListener("click", (ev) => {
-      const path = ev.composedPath();
-      for (const el of path) {
-        const id = el instanceof Element ? el.getAttribute && el.getAttribute("data-part") : null;
-        if (id) { show(host.dataset.mock, id); ev.preventDefault(); return; }
-      }
-    });
+    return root;
   }
+  for (const host of board.querySelectorAll(".proto-mock")) hydrate(host);
 
-  function show(screen, part) {
-    const rows = (says[screen] || []).filter((r) => !r.part || r.part === part);
-    const label = (says[screen] || []).find((r) => r.part === part);
-    pane.innerHTML =
-      '<h4>' + esc(part) + '</h4>' +
-      (rows.length
-        ? '<ul>' + rows.map((r) =>
-            '<li><span class="slot">' + esc(r.slot) + '</span><br>' + esc(r.text) + '</li>').join("") + '</ul>'
-        : '<p class="none">Nothing in the corpus says anything about this control. That is a gap, not a bug.</p>');
-  }
   function esc(t) { const d = document.createElement("div"); d.textContent = t == null ? "" : String(t); return d.innerHTML; }
 
-  for (const b of document.querySelectorAll(".proto-pick")) {
-    b.addEventListener("click", () => {
-      const want = b.dataset.proto;
-      for (const f of stage.querySelectorAll(".proto-frame")) f.hidden = f.dataset.proto !== want;
-      for (const li of document.querySelectorAll(".proto-list li")) li.classList.toggle("on", li.contains(b));
-      pane.innerHTML = '<p class="none">Press a control on the screen.</p>';
-    });
+  function truthFor(screen, part) {
+    const rows = (says[screen] || []).filter((r) => !part || !r.part || r.part === part);
+    bigTruth.innerHTML =
+      (part ? "<h4>" + esc(part) + "</h4>" : "<h4>Everything about this screen</h4>") +
+      (rows.length
+        ? "<ul>" + rows.map((r) => "<li><span class='slot'>" + esc(r.slot) + "</span><br>" + esc(r.text) + "</li>").join("") + "</ul>"
+        : '<p class="none">Nothing in the corpus says anything about this control. That is a gap, not a bug.</p>');
   }
+
+  function open(screen) {
+    bigTitle.textContent = titles[screen] || screen;
+    bigStage.innerHTML = "";
+    const host = document.createElement("div");
+    host.className = "proto-mock";
+    /** Cloned from the tile's own template, so the big view and the tile can never disagree. */
+    const src = board.querySelector('.proto-mock[data-mock="' + screen.replace(/"/g, '\\"') + '"] template');
+    if (src) {
+      const tpl = document.createElement("template");
+      tpl.innerHTML = src.innerHTML;
+      host.appendChild(tpl);
+    }
+    bigStage.appendChild(host);
+    const root = hydrate(host);
+    if (root)
+      root.addEventListener("click", (ev) => {
+        for (const el of ev.composedPath()) {
+          const id = el instanceof Element && el.getAttribute ? el.getAttribute("data-part") : null;
+          if (id) { truthFor(screen, id); ev.preventDefault(); return; }
+        }
+      });
+    truthFor(screen, null);
+    big.hidden = false;
+    document.body.style.overflow = "hidden";
+  }
+
+  board.addEventListener("click", (ev) => {
+    const t = ev.target instanceof Element ? ev.target.closest(".ptile") : null;
+    if (t) open(t.dataset.proto);
+  });
+  big.querySelector(".pbig-x").addEventListener("click", () => {
+    big.hidden = true;
+    document.body.style.overflow = "";
+  });
+  document.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && !big.hidden) big.querySelector(".pbig-x").click(); });
 })();
 </script>`;
 
@@ -3679,27 +3718,41 @@ const STYLE = `<style>
    * (No backticks in this comment: it lives inside a template literal, and a backtick here ends
    * the string. That has now cost four builds.)
    */
-  /* ── The prototype: the screen is the subject, the truth is one press away. ───────────── */
-  .proto { display: grid; grid-template-columns: 15rem minmax(0, 1fr) 20rem; gap: 1rem; align-items: start; }
-  .proto-list ul, .proto-promises ul { list-style: none; margin: 0; padding: 0; }
-  .proto-list li { border-bottom: 1px solid var(--rule); }
-  .proto-pick { display: block; width: 100%; text-align: left; background: none; border: 0; cursor: pointer;
-    padding: .5rem .4rem; font: inherit; color: inherit; }
-  .proto-pick:hover, .proto-list li.on .proto-pick { background: var(--soft); }
-  .proto-list li.on .proto-pick { box-shadow: inset 3px 0 0 var(--accent); }
+  /* ── The prototype: the product as a board of real screens. ──────────────────────────── */
+  /* ⛔ The width goes to the SCREENS. A surface whose job is being visual cannot spend it on nav. */
+  .pboard { display: grid; grid-template-columns: repeat(auto-fill, minmax(22rem, 1fr)); gap: 1.1rem; margin-top: .8rem; }
+  .ptile { margin: 0; cursor: pointer; }
+  /**
+   * A drawing is a whole page of markup. Shown at its own size it is one screen per scroll, so each
+   * tile renders it at full width and scales the result down — the layout stays the real layout
+   * rather than a narrow-viewport reflow of it.
+   */
+  .ptile-glass { height: 15rem; overflow: hidden; border: 1px solid var(--rule); border-radius: 8px;
+    background: #fff; position: relative; }
+  .ptile-scale { width: 200%; transform: scale(.5); transform-origin: top left; pointer-events: none; }
+  .ptile:hover .ptile-glass { border-color: var(--accent); }
+  .ptile figcaption { padding: .4rem .1rem 0; }
   .pp-t { display: block; font-weight: 600; font-size: .9rem; }
-  .pp-in, .pp-m { display: block; font-size: .76rem; color: var(--dim); }
-  .proto-stage { min-width: 0; }
-  .proto-head h3 { margin: 0; font-size: 1.05rem; }
-  .proto-where, .proto-prov { margin: .1rem 0 0; font-size: .78rem; color: var(--dim); }
-  .proto-mock { margin-top: .7rem; border: 1px solid var(--rule); border-radius: 8px; overflow: auto; background: #fff; }
-  .proto-truth { border-left: 1px solid var(--rule); padding-left: .8rem; font-size: .85rem; position: sticky; top: 1rem; }
-  .proto-truth h4 { margin: 0 0 .2rem; font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; color: var(--dim); }
-  .proto-truth li { margin-bottom: .6rem; }
-  .proto-truth .slot { font-size: .72rem; color: var(--dim); text-transform: uppercase; letter-spacing: .04em; }
-  .proto-promises { margin-top: 1.4rem; border-top: 1px solid var(--rule); padding-top: .8rem; }
-  .proto-promises li { padding: .35rem 0; border-bottom: 1px solid var(--rule); }
-  @media (max-width: 1100px) { .proto { grid-template-columns: 1fr; } .proto-truth { border-left: 0; padding-left: 0; position: static; } }
+  .pp-m { display: block; font-size: .76rem; color: var(--dim); }
+
+  .pnone { margin-top: 1.6rem; border-top: 1px solid var(--rule); padding-top: .7rem; }
+  .pnone h3 { margin: 0 0 .2rem; font-size: .95rem; }
+  .pnone ul { list-style: none; margin: .4rem 0 0; padding: 0; }
+  .pnone li { padding: .3rem 0; border-bottom: 1px solid var(--rule); }
+
+  /* Opened big: the screen at full width, the truth beside it. */
+  .pbig { position: fixed; inset: 0; z-index: 60; background: var(--bg); display: flex; flex-direction: column; }
+  .pbig-bar { display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+    padding: .6rem .9rem; border-bottom: 1px solid var(--rule); }
+  .pbig-x { font: inherit; font-size: .85rem; cursor: pointer; background: none; border: 1px solid var(--rule);
+    border-radius: 6px; padding: .2rem .7rem; color: inherit; }
+  .pbig-body { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) 22rem; overflow: hidden; }
+  .pbig-stage { overflow: auto; padding: 1rem; background: #fff; }
+  .pbig-truth { overflow: auto; padding: 1rem; border-left: 1px solid var(--rule); font-size: .88rem; }
+  .pbig-truth h4 { margin: 0 0 .3rem; font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; color: var(--dim); }
+  .pbig-truth li { margin-bottom: .7rem; }
+  .pbig-truth .slot { font-size: .72rem; color: var(--dim); text-transform: uppercase; letter-spacing: .04em; }
+  @media (max-width: 900px) { .pbig-body { grid-template-columns: 1fr; } .pbig-truth { border-left: 0; border-top: 1px solid var(--rule); } }
 
   /* The truth moved under you — said, not done to you. */
   /* ⛔ The frame and the page both move down by exactly the bar's height while it is up, because a
@@ -3846,81 +3899,80 @@ const STYLE = `<style>
  */
 function renderPrototype(screens: ProtoScreen[], promises: ProtoPromise[]): string {
   if (!screens.length && !promises.length) return "";
-  const list = screens
-    .map(
-      (s, i) => `<li${i === 0 ? ' class="on"' : ""}>
-        <button type="button" class="proto-pick" data-proto="${esc(s.scope + "#" + s.view)}">
-          <span class="pp-t">${line(s.title)}</span>
-          <span class="pp-in">${line(s.scopeTitle)}</span>
-          <span class="pp-m">${s.parts.length} control${s.parts.length === 1 ? "" : "s"} · ${s.says.length} behaviour${s.says.length === 1 ? "" : "s"}${
-            s.from === "nobody" ? ' · <span class="warn">no picture</span>' : ""
-          }${!s.walked ? ' · <span class="quiet">not walked</span>' : ""}</span>
-        </button>
-      </li>`
-    )
-    .join("");
 
   /**
-   * ⛔ THE PICTURE IS ISOLATED, because it is written in the application's own class names and this
-   * page has its own. Without a shadow root the app's CSS restyles the review surface around it —
-   * which happened, and the page came apart.
+   * ⛔ A BOARD OF RENDERED SCREENS, NOT A LIST WITH A PREVIEW.
+   *
+   * The first version was a list down the left, one screen at a time in the middle, truths on the
+   * right. Peter opened it: *"I don't see a single rendering when I click the screens. just a list
+   * of screens? wtf? It's ONLY supposed to be screens. like the whole project as a prototype
+   * here"*, and then: *"the entire complaint I had is that this is not VISUAL enough — this feature
+   * serves to RESOLVE that."*
+   *
+   * Two things were wrong and both came from the same mistake. The three-column grid left the
+   * screen 198 pixels wide at an ordinary window size, and corpus order put a screen with NO
+   * picture first, so the one pane that mattered opened empty. A surface whose whole job is being
+   * visual cannot spend its width on navigation.
+   *
+   * So: every screen rendered, at once, tiled. The product as a board. Pressing one opens it big.
    */
-  const frames = screens
-    .map(
-      (s, i) => `<div class="proto-frame" data-proto="${esc(s.scope + "#" + s.view)}"${i === 0 ? "" : " hidden"}>
-        <header class="proto-head">
-          <h3>${line(s.title)}</h3>
-          <p class="proto-where">${s.areas.map((a) => line(a)).join(" › ")}${s.areas.length ? " › " : ""}${line(s.scopeTitle)}</p>
-          <p class="proto-prov">${
-            s.from === "the code"
-              ? "drawn from the component that renders it"
-              : s.from === "the truth"
-                ? "generated from what this screen says it holds — nothing renders it yet"
-                : "nothing to look at yet"
-          }</p>
-        </header>
-        ${
-          s.html
-            ? `<div class="proto-mock" data-mock="${esc(s.scope + "#" + s.view)}"><template>${s.html}</template></div>`
-            : `<p class="none">This screen has no picture. Give it its parts, then: <code>productos v2 propose "${esc(s.scope + "#" + s.view)}"</code></p>`
-        }
-      </div>`
-    )
-    .join("");
+  const withPictures = screens.filter((s) => s.html);
+  const without = screens.filter((s) => !s.html);
 
-  /** ⛔ What nothing renders, on the same surface. A prototype that hid the promises would be a design tool. */
-  const unseen = promises.length
-    ? `<section class="proto-promises">
-        <h3>Nothing renders these</h3>
-        <p class="lede">Promises the screens rest on. They have no picture because they are not screens — and they are the highest altitude here.</p>
-        <ul>${promises
+  const tile = (s: ProtoScreen): string => `<figure class="ptile" data-proto="${esc(s.scope + "#" + s.view)}">
+      <div class="ptile-glass"><div class="ptile-scale"><div class="proto-mock" data-mock="${esc(s.scope + "#" + s.view)}"><template>${s.html}</template></div></div></div>
+      <figcaption>
+        <span class="pp-t">${line(s.title)}</span>
+        <span class="pp-m">${line(s.scopeTitle)} · ${s.says.length} behaviour${s.says.length === 1 ? "" : "s"}${
+          s.from === "the truth" ? ' · <span class="quiet">not built</span>' : ""
+        }</span>
+      </figcaption>
+    </figure>`;
+
+  /** ⛔ Named, not hidden: a screen with no picture is the gap this surface exists to make obvious. */
+  const blanks = without.length
+    ? `<section class="pnone">
+        <h3>${without.length} screen${without.length === 1 ? " has" : "s have"} no picture yet</h3>
+        <ul>${without
           .map(
-            (p) => `<li><button type="button" class="show-part" data-show-part="">${line(p.title)}</button>
-              <span class="pp-m">${p.said} statement${p.said === 1 ? "" : "s"}${
-                p.restsUnder.length ? ` · rests under ${p.restsUnder.map((r) => line(r)).join(", ")}` : ""
-              }</span></li>`
+            (s) => `<li><span class="pp-t">${line(s.title)}</span> <span class="pp-m">${line(s.scopeTitle)} — ${
+              s.parts.length ? "nothing renders it and nothing has generated it" : "declares no controls, so there is nothing to place"
+            }</span></li>`
           )
           .join("")}</ul>
       </section>`
     : "";
 
-  /**
-   * ⛔ ONE INDEX, READ BY THE SCRIPT — not a copy of the sentences written into the markup twice.
-   * `part` is the control a statement's exchange arrives at, so a press can filter to what governs
-   * that control while a screen-wide rule stays visible on every press.
-   */
+  const unseen = promises.length
+    ? `<section class="pnone">
+        <h3>Nothing renders these</h3>
+        <p class="lede">Promises the screens rest on — not screens, and the highest altitude here.</p>
+        <ul>${promises
+          .map(
+            (p) => `<li><span class="pp-t">${line(p.title)}</span> <span class="pp-m">${p.said} statement${
+              p.said === 1 ? "" : "s"
+            }${p.restsUnder.length ? ` · rests under ${p.restsUnder.map((r) => line(r)).join(", ")}` : ""}</span></li>`
+          )
+          .join("")}</ul>
+      </section>`
+    : "";
+
   const index: Record<string, Array<{ part?: string; slot: string; text: string }>> = {};
   for (const sc of screens)
     index[`${sc.scope}#${sc.view}`] = sc.says.map((y) => ({ part: y.part, slot: y.slot, text: y.text }));
+  const titles: Record<string, string> = {};
+  for (const sc of screens) titles[`${sc.scope}#${sc.view}`] = sc.title;
 
   return `<script type="application/json" id="proto-says">${JSON.stringify(index).replace(/</g, "\\u003c")}</script>
+  <script type="application/json" id="proto-titles">${JSON.stringify(titles).replace(/</g, "\\u003c")}</script>
   <section class="view" id="view-prototype" data-view="prototype" data-ref="prototype" data-label="Prototype">
-    <p class="lede">Every screen in the product. Press anything on one to see what the truth says about it.</p>
-    <div class="proto">
-      <nav class="proto-list"><ul>${list}</ul></nav>
-      <div class="proto-stage">${frames}</div>
-      <aside class="proto-truth"><p class="none">Press a control on the screen.</p></aside>
-    </div>
+    <p class="lede">${withPictures.length} screen${withPictures.length === 1 ? "" : "s"} of this product, as it looks. Open one to press its controls and read what the truth says about each.</p>
+    <div class="pboard">${withPictures.map(tile).join("")}</div>
+    ${blanks}
     ${unseen}
+    <div class="pbig" hidden>
+      <div class="pbig-bar"><strong class="pbig-t"></strong><button type="button" class="pbig-x">Close</button></div>
+      <div class="pbig-body"><div class="pbig-stage"></div><aside class="pbig-truth"><p class="none">Press a control on the screen.</p></aside></div>
+    </div>
   </section>`;
 }
