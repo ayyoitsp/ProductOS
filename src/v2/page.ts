@@ -493,6 +493,17 @@ const PT_STYLE = `<style>
    * shape of the hole — and a neutral square is a wireframe convention every reader already knows,
    * where the word "ChevronRight" in running text is not.
    */
+  /** A cell whose value the drawing does not know: the row's SHAPE is what a reader is judging. */
+  /**
+   * ⛔ VISIBLE AT TILE SCALE, which is the size it is actually read at. At opacity .14 the rows were
+   * in the DOM, correct, and invisible — a list that still looked empty, which is the complaint this
+   * whole change exists to answer. Varied widths so a column reads as data rather than as a ruler.
+   */
+  .productos-value { display: inline-block; min-width: 3.2em; height: .66em; border-radius: 3px;
+    background: currentColor; opacity: .3; vertical-align: -.05em; }
+  td .productos-value, th .productos-value { min-width: 4.5em; }
+  tr:nth-child(2n) .productos-value { min-width: 5.5em; }
+  tr:nth-child(3n) .productos-value { min-width: 3.6em; }
   .productos-icon { display: inline-block; width: 1em; height: 1em; vertical-align: -.12em;
     border-radius: 2px; background: currentColor; opacity: .3; }
   /**
@@ -2820,7 +2831,7 @@ const PROTOTYPE = `<script>
     for (const h of hosts()) {
       const root = h.shadowRoot;
       if (!root) continue;
-      if (sheet && "adoptedStyleSheets" in root) root.adoptedStyleSheets = [sheet, ...root.adoptedStyleSheets];
+      if ("adoptedStyleSheets" in root) root.adoptedStyleSheets = [sheet, marks, ...root.adoptedStyleSheets].filter(Boolean);
       else {
         const el = document.createElement("style");
         el.textContent = css;
@@ -3110,6 +3121,30 @@ const DRIVE = `<script>
   })();
 
   /**
+   * ⛔ THE MARKER STYLES HAVE TO CROSS THE SHADOW BOUNDARY TOO, and this is why three rows of a
+   * deals list were in the document, correctly nested, and still invisible.
+   *
+   * A shadow root does not inherit this page's stylesheet. The mocks adopt the APPLICATION's CSS —
+   * which knows nothing about productos-value, productos-icon or productos-unknown, because those
+   * are ours. So every value bar computed as a bare inline span with no width and no height, and a
+   * table with three rows of eight cells collapsed to nothing. The markup was right the whole time.
+   */
+  let marks = null;
+  try {
+    marks = new CSSStyleSheet();
+    marks.replaceSync(
+      ".productos-value{display:inline-block;min-width:3.2em;height:.66em;border-radius:3px;background:currentColor;opacity:.3;vertical-align:-.05em}" +
+      "td .productos-value,th .productos-value{min-width:4.5em}" +
+      "tr:nth-child(2n) .productos-value{min-width:5.5em}" +
+      "tr:nth-child(3n) .productos-value{min-width:3.6em}" +
+      ".productos-icon{display:inline-block;width:1em;height:1em;vertical-align:-.12em;border-radius:2px;background:currentColor;opacity:.3}" +
+      ".productos-unknown{display:inline-block;min-width:1.2em;border-radius:2px;color:#92400e;" +
+        "background:repeating-linear-gradient(45deg,rgba(245,158,11,.18) 0 4px,transparent 4px 8px);outline:1px dashed rgba(245,158,11,.6)}" +
+      "[data-component]{display:block;padding:.2rem .35rem;font-size:.75rem}"
+    );
+  } catch (e) { marks = null; }
+
+  /**
    * ⛔ EACH DRAWING IN ITS OWN SHADOW ROOT. They are written in the application's class names, and
    * loose in this document its stylesheet restyles the review surface around them. That happened
    * once and the page came apart.
@@ -3118,7 +3153,7 @@ const DRIVE = `<script>
     const tpl = host.querySelector("template");
     if (!tpl || host.shadowRoot) return host.shadowRoot;
     const root = host.attachShadow({ mode: "open" });
-    if (sheet && "adoptedStyleSheets" in root) root.adoptedStyleSheets = [sheet, ...root.adoptedStyleSheets];
+    if ("adoptedStyleSheets" in root) root.adoptedStyleSheets = [sheet, marks, ...root.adoptedStyleSheets].filter(Boolean);
     else {
       const src = document.getElementById("app-css");
       if (src) { const st = document.createElement("style"); st.textContent = src.innerHTML; root.appendChild(st); }
@@ -3734,7 +3769,9 @@ const STYLE = `<style>
    * tile renders it at full width and scales the result down — the layout stays the real layout
    * rather than a narrow-viewport reflow of it.
    */
-  .ptile-glass { height: 15rem; overflow: hidden; border: 1px solid var(--rule); border-radius: 8px;
+  /** ⛔ Tall enough to reach the CONTENT. At 15rem the deals list clipped one row below its column
+   *  headers, so a table that renders correctly still read as an empty list. */
+  .ptile-glass { height: 21rem; overflow: hidden; border: 1px solid var(--rule); border-radius: 8px;
     background: #fff; position: relative; }
   .ptile-scale { width: 200%; transform: scale(.5); transform-origin: top left; pointer-events: none; }
   .ptile:hover .ptile-glass { border-color: var(--accent); }

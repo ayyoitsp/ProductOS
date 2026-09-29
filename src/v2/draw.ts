@@ -98,6 +98,11 @@ interface Ctx {
   unresolved: string[];
   /** Branches not drawn: the screen's other states, named so they are not lost silently. */
   states: string[];
+  /**
+   * Inside a repeated row, where an unreadable value is the POINT rather than a defect — the shape
+   * of the data is what a reader judges, and a hatch per cell would bury it.
+   */
+  inRow?: boolean;
   /** Sample values for a placeholder, by the identifier that produced it. */
   sample: (hint: string) => string | undefined;
   /** The file being read, so a co-located component resolves before a same-named one elsewhere. */
@@ -220,9 +225,23 @@ function emit(node: ts.Node, ctx: Ctx): string {
     const t = n.text.replace(/\s+/g, " ");
     return t.trim() ? text(t) : t === " " ? " " : "";
   }
-  if (ts.isJsxExpression(n)) {
-    if (!n.expression) return "";
-    const e = n.expression;
+  /**
+   * ⛔ AN EXPRESSION REACHED DIRECTLY IS STILL AN EXPRESSION.
+   *
+   * Everything below was gated on the node being a `JsxExpression` — the `{…}` wrapper. But once a
+   * ternary picks a branch, that branch is handed back here as a BARE node, and a nested ternary
+   * (`isPending ? … : total === 0 ? … : <table>`) is a conditional, not JSX. It fell through to the
+   * bottom and returned "", so every deals list drew a header, a filter bar, and a hole where the
+   * rows go. Peter: *"not a single deal added to the list"*.
+   */
+  const asExpression =
+    ts.isJsxExpression(n) ||
+    ts.isConditionalExpression(n) ||
+    ts.isCallExpression(n) ||
+    (ts.isBinaryExpression(n) && n.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken);
+  if (asExpression) {
+    const e = ts.isJsxExpression(n) ? n.expression : n;
+    if (!e) return "";
     // `{cond && <X/>}` — draw the element: a mock exists to show the states, not to hide them.
     /**
      * ⛔ A SCREEN IS ONE STATE AT A TIME, AND THIS USED TO DRAW ALL OF THEM AT ONCE.
@@ -271,6 +290,32 @@ function emit(node: ts.Node, ctx: Ctx): string {
       return emit(e.right, ctx);
     }
     if (ts.isConditionalExpression(e)) return pick(e.condition, e.whenTrue, e.whenFalse);
+    /**
+     * ⛔ A LIST DRAWS AS A LIST. Peter: *"nothing renders right for 'deal list'. all screenshots are
+     * the same - not a single deal added to the list, just the empty list state..."*
+     *
+     * `{deals.map(deal => <tr>…</tr>)}` could not be evaluated, so the body of every table in the
+     * product was empty — a header, a filter bar, and a hole where the content goes. That is the
+     * one part of a deals list a reviewer is actually looking at.
+     *
+     * ⛔ AND IT INVENTS NOTHING. The ROW is in the source: its cells, their order, which columns are
+     * conditional. Repeating that structure draws what the code says the list is made of; the
+     * VALUES stay unknown and render as neutral bars, so nobody can mistake a drawn row for real
+     * data. The rule this file has always held — never guess a figure — is about values, and it is
+     * untouched.
+     */
+    if (ts.isCallExpression(e) && ts.isPropertyAccessExpression(e.expression) && e.expression.name.text === "map") {
+      const cb = e.arguments[0];
+      if (cb && (ts.isArrowFunction(cb) || ts.isFunctionExpression(cb))) {
+        const body = ts.isBlock(cb.body) ? returnedFrom(cb.body) : cb.body;
+        const inner = body && ts.isParenthesizedExpression(body) ? body.expression : body;
+        if (inner && (ts.isJsxElement(inner) || ts.isJsxSelfClosingElement(inner) || ts.isJsxFragment(inner))) {
+          const row = emit(inner, { ...ctx, inRow: true });
+          /** Three: enough to read as a list, few enough that a tile is not all one screen. */
+          return row.repeat(3);
+        }
+      }
+    }
     if (ts.isJsxElement(e) || ts.isJsxSelfClosingElement(e) || ts.isJsxFragment(e)) return emit(e, ctx);
     if (ts.isStringLiteral(e)) return text(e.text);
     /**
@@ -294,6 +339,11 @@ function emit(node: ts.Node, ctx: Ctx): string {
     if (ts.isIdentifier(e) && ctx.sameFile) {
       const local = localJsx(ctx.sameFile, e.text);
       if (local) return emit(local, ctx);
+    }
+    if (ctx.inRow) {
+      /** A cell whose value is unknown, drawn as a bar: the shape is the information here. */
+      ctx.unresolved.push(hint);
+      return `<span class="productos-value" title="${text(hint)}"></span>`;
     }
     ctx.unresolved.push(hint);
     /**
@@ -371,6 +421,27 @@ function emit(node: ts.Node, ctx: Ctx): string {
      * screen. It is still recorded as unresolved, because the drawing genuinely does not know what
      * the glyph looks like; what changes is that it stops lying about the screen's text.
      */
+    /**
+     * ⛔ A TABLE PRIMITIVE DRAWS AS THE ELEMENT IT IS, OR THE ROWS ARE NOT IN THE DOCUMENT AT ALL.
+     *
+     * `TableShell`, `THead`, `TBody`, `Td`, `Th` are this application's table components, and drawn
+     * as generic <div>s they leave every <tr> outside a <table> — which an HTML parser silently
+     * DISCARDS. So the deals list held three rows and twenty-four cells in its markup and rendered
+     * none of them: twenty-four bars in the source, zero rows in the DOM. Peter had looked at three
+     * successive screenshots of the same empty list.
+     *
+     * This is a structural guess and a narrow one: a component whose name IS a table part almost
+     * certainly renders that part, and the alternative is a table that cannot exist.
+     */
+    const TABLE_PART: Record<string, string> = {
+      table: "table", tableshell: "table", thead: "thead", tbody: "tbody",
+      tfoot: "tfoot", tr: "tr", td: "td", th: "th", row: "tr",
+    };
+    const asTable = TABLE_PART[tag.toLowerCase()];
+    if (asTable) {
+      ctx.unresolved.push(`<${tag}> (drawn as <${asTable}>)`);
+      return `<${asTable}>${children}</${asTable}>`;
+    }
     if (ctx.icons.has(tag)) {
       ctx.unresolved.push(`<${tag}> (icon)`);
       return `<span class="productos-icon" role="img" aria-label="${text(tag)}"></span>`;
@@ -443,6 +514,21 @@ export interface DrawOptions {
  * Cached per file: `emit` asks for several names per render and re-parsing a 1,200-line route for
  * each one is the difference between a drawing and a pause.
  */
+/** The JSX a block-bodied callback returns, if it returns any. */
+function returnedFrom(block: ts.Block): ts.Node | undefined {
+  let found: ts.Node | undefined;
+  const walk = (n: ts.Node): void => {
+    if (found) return;
+    if (ts.isReturnStatement(n) && n.expression) {
+      const e = ts.isParenthesizedExpression(n.expression) ? n.expression.expression : n.expression;
+      if (ts.isJsxElement(e) || ts.isJsxSelfClosingElement(e) || ts.isJsxFragment(e)) found = e;
+    }
+    ts.forEachChild(n, walk);
+  };
+  walk(block);
+  return found;
+}
+
 const localCache = new Map<string, Map<string, ts.Node>>();
 function localJsx(file: string, name: string): ts.Node | undefined {
   let found = localCache.get(file);
