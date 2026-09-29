@@ -19,6 +19,7 @@ import { lineFor } from "../../v2/log.js";
 import { drawFromRoute } from "../../v2/draw.js";
 import { everyView, isResolved, resolveRoute } from "../../v2/routes.js";
 import { spokenFor } from "../../v2/spoken.js";
+import { idiomOf, proposeScreen } from "../../v2/propose.js";
 import { AGENTS, CASCADE, KINDS } from "../../core/jobs.js";
 
 /** ⛔ Plain text for a terminal and for JSON — never HTML-escaped, which is the page's business. */
@@ -1394,6 +1395,62 @@ export function v2Command(): Command {
         console.log(pc.dim("  they are named here so their absence is visible rather than implied"));
       }
       console.log(pc.dim(`  assign a model per agent in productos/config.yaml under agents.model`));
+    });
+
+  cmd
+    /**
+     * ⛔ THE OTHER DIRECTION FROM `draw`. `draw` needs a component; this needs only the truth, which
+     * is what makes a screen possible for a feature nobody has built — and the corpus is the target
+     * state, so that screen is not a lesser artefact than a drawn one.
+     */
+    .command("propose")
+    .description("Generate a screen from a view's own parts, in the application's idiom")
+    .argument("[view]", "which screen, as <scope>#<view> — omit with --all")
+    .option("--all", "every screen that has no picture yet")
+    .option("--into <dir>", "the corpus to write into", ".")
+    .action((ref: string | undefined, o: { all?: boolean; into?: string }) => {
+      const into = path.resolve(o.into ?? ".");
+      let repoRoot = into;
+      let componentsDir: string | undefined;
+      try {
+        const paths = resolvePathsOrThrow(into);
+        repoRoot = path.dirname(path.dirname(paths.configFile));
+        const dir = readConfig(paths).web.components_dir;
+        componentsDir = dir ? path.resolve(repoRoot, dir) : undefined;
+      } catch {
+        componentsDir = undefined;
+      }
+      const corpus = loadCorpus(into);
+      const idiom = idiomOf(componentsDir);
+      const targets = everyView(corpus).filter((x) =>
+        o.all ? !x.view.sketch_html && !x.view.sketch : ref === `${x.scope}#${x.view.id}`
+      );
+      if (!targets.length) {
+        console.error(pc.red("✗"), o.all ? "every screen already has a picture" : `no screen "${ref}"`);
+        process.exit(1);
+      }
+      console.log(
+        pc.dim(
+          idiom.from.length
+            ? `  idiom learned from ${idiom.from.length} of this app's own components`
+            : "  no components directory configured — using plain markup"
+        )
+      );
+      let made = 0;
+      for (const { scope, view } of targets) {
+        const { html, placed } = proposeScreen(view, idiom);
+        if (!placed) {
+          console.log(pc.yellow("?"), `${scope}#${view.id} — declares no parts, so there is nothing to place. Give it its parts.`);
+          continue;
+        }
+        if (!writeSketchHtml(into, scope, view.id, html)) {
+          console.log(pc.red("✗"), `${scope}#${view.id} — the corpus would not take it`);
+          continue;
+        }
+        made++;
+        console.log(pc.green("✓"), `${scope}#${view.id}  ${pc.dim(`${placed} part(s) placed`)}`);
+      }
+      if (made) console.log(pc.dim(`\n  ${made} screen(s) generated from the truth. Re-run after the parts or the design system change — these are output.`));
     });
 
   cmd

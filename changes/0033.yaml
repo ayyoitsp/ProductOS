@@ -3,8 +3,9 @@ said: --force should only take the user feedback and regenerate based on it, tak
 at: 2026-09-29
 kind: derivation
 reaches:
-  derive: ""
-  surface: ""
-  check: ""
-  pin: ""
-waived: {}
+  derive: spokenFor
+  surface: outranks v1
+  pin: a CLOSED request counts
+waived:
+  check: the guard belongs in the regeneration itself — by the time check ran, the overwrite would already have happened
+closed: 2026-09-29

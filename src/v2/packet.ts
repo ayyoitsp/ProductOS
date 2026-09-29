@@ -253,7 +253,12 @@ function compileOne(corpus: Corpus, scopeId: string): string | null {
           "",
           `> ⛔ Behaviours from elsewhere arrive on this screen: ${here.map((x) => `\`${x}\``).join(", ")}. Building this screen without reading them ships a control that answers to nothing.`
         );
-      if (v.exists === "intended") out.push("", "> ⛔ This screen does not exist yet. Everything here is intent, not observation.");
+      /**
+       * ⛔ "INTENT, NOT OBSERVATION" HAD IT BACKWARDS. Every screen here is intent — the corpus is
+       * the target state. What is true of an unbuilt one is that there is nothing to compare it
+       * against, which is a fact about the build and worth saying to whoever is about to build it.
+       */
+      if (v.exists === "intended") out.push("", "> ⛔ Nothing renders this screen yet. You are building it, not changing it.");
       if (!v.walked) out.push("", "> ⛔ Nobody has walked this screen. Treat what follows as incomplete.");
       if (v.sketch) {
         out.push("");

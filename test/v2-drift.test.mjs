@@ -58,20 +58,33 @@ function project(sourceExists) {
   return { root, dir, scope: entry.scope.id, view: view.id, rel };
 }
 
-test("check refuses a screen drawn from a file that is no longer there", () => {
+test("a deleted component is reported as DRIFT, not as a fault in the truth", () => {
+  /**
+   * ⛔ THIS TEST USED TO DEMAND A REFUSAL, AND THAT MADE THE CODE AUTHORITATIVE OVER THE TARGET.
+   *
+   * The corpus is the target state. A component disappearing means the BUILD moved away from what
+   * the product is meant to have — and the usual resolution is that the code is behind. Refusing
+   * pressures an author into withdrawing target state to make a check pass, which is backwards.
+   *
+   * It bit once and got the right answer for the wrong reason: the pricing grid was deleted and the
+   * truth about it was indeed wrong — because Peter decided the target had changed. The deletion was
+   * evidence; the tool treated it as the decision.
+   */
   const p = project(false);
-  const f = checkCorpus(p.dir).findings.find((x) => x.kind === "drawn-from-something-that-is-gone");
-  assert.ok(f, "a corpus describing a deleted screen passed the gate that exists to stop exactly that");
-  assert.equal(f.severity, "refuse", "it was reported as an opinion rather than a refusal");
+  const f = checkCorpus(p.dir).findings.find((x) => x.kind === "the-code-dropped-this-screen");
+  assert.ok(f, "a corpus whose component vanished was told nothing at all");
+  assert.equal(f.severity, "note", "drift must not refuse the corpus — the target is not what is wrong");
   assert.equal(f.where, `${p.scope}#${p.view}`);
-  /** ⛔ Runnable. A finding somebody has to work the command out from is a finding they defer. */
-  assert.match(f.fix, /productos v2 draw/);
-  assert.match(f.fix, /withdrawn/, "it does not offer the other honest answer — that the screen is genuinely gone");
+  assert.match(f.what, /drift/, "it must name what this is");
+  /** ⛔ And it must leave the decision with a person, naming both ways it can go. */
+  assert.match(f.fix, /decide which side is wrong/);
+  assert.match(f.fix, /the code is behind/, "the likelier reading must be offered first");
+  assert.doesNotMatch(f.fix, /exists: withdrawn/, "it must not push the author to delete target state");
 });
 
 test("check says nothing when the source is still there", () => {
   const p = project(true);
-  const f = checkCorpus(p.dir).findings.find((x) => x.kind === "drawn-from-something-that-is-gone");
+  const f = checkCorpus(p.dir).findings.find((x) => x.kind === "the-code-dropped-this-screen");
   assert.equal(f, undefined, "a screen whose source exists was reported as deleted");
 });
 
@@ -82,7 +95,7 @@ test("a corpus with no codebase behind it is not accused of anything", () => {
    */
   const dir = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "productos-nocode-")), "v2");
   execFileSync("node", [CLI, "v2", "reset", "--at", dir], { stdio: "pipe" });
-  const findings = checkCorpus(dir).findings.filter((x) => x.kind === "drawn-from-something-that-is-gone");
+  const findings = checkCorpus(dir).findings.filter((x) => x.kind === "the-code-dropped-this-screen");
   assert.deepEqual(findings, []);
 });
 

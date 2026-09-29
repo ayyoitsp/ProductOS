@@ -3,6 +3,7 @@ said: why isn't this done? we've re-idnexed multiple times. fix product OS so th
 at: 2026-09-29
 kind: generator
 reaches:
-  generate: ""
-  pin: ""
+  generate: resolveRoute
+  pin: a screen finds its own component
 waived: {}
+closed: 2026-09-29

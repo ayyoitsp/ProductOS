@@ -123,7 +123,7 @@ export const AREAS: Area[] = [
       "treat a deferral as an answer",
     ],
     owns: ["derive"],
-    files: ["src/v2/grid.ts", "src/v2/stamp.ts", "src/v2/settle.ts", "src/v2/acts.ts", "src/v2/record.ts"],
+    files: ["src/v2/grid.ts", "src/v2/stamp.ts", "src/v2/settle.ts", "src/v2/acts.ts", "src/v2/record.ts", "src/v2/spoken.ts"],
     needs: ["read-files", "run-commands", "search-files"],
   },
   {
@@ -135,7 +135,7 @@ export const AREAS: Area[] = [
       "be replaced by hand-authoring. If the output is wrong, the generator is wrong",
     ],
     owns: ["generate"],
-    files: ["src/v2/migrate.ts", "src/v2/draw.ts", "src/v2/draw-write.ts", "src/v2/routes.ts", "src/v2/spoken.ts", "src/v2/appcss.ts"],
+    files: ["src/v2/migrate.ts", "src/v2/draw.ts", "src/v2/draw-write.ts", "src/v2/routes.ts", "src/v2/propose.ts", "src/v2/appcss.ts"],
     needs: ["read-files", "run-commands", "search-files", "write-corpus"],
   },
   {
@@ -323,20 +323,34 @@ export const AGENTS: Agent[] = [
   },
   {
     name: "truthfulness",
-    asks: "Does the corpus say what the code actually does?",
+    /**
+     * ⛔ THIS ASKED "does the corpus say what the code actually does?" AND THAT MADE THE CODE THE
+     * STANDARD.
+     *
+     * It was the only explicit statement anywhere about how the corpus and the codebase relate, so
+     * in the absence of the target-state principle it became the definition: a session inherited it
+     * and shipped a check that refused any screen not drawn from a component.
+     *
+     * The corpus is the TARGET. Where it and the code disagree, that is drift, and which one is
+     * wrong is a person's call — usually the code, since the corpus is what should be built. So this
+     * reviewer reports the disagreement and never adjudicates it.
+     */
+    asks: "Where does what was built disagree with the target the corpus describes?",
     because:
-      "Both tenets rest on this and nothing checks it. A corpus can be internally perfect, fully agreed, " +
-      "and describe a product that does not exist — and the only surface that would notice is somebody " +
-      "reading both, which nobody does.",
+      "Both tenets rest on knowing this and nothing checks it. A corpus can be internally perfect, " +
+      "fully agreed, and have drifted from what shipped — and the only surface that would notice is " +
+      "somebody reading both, which nobody does. ⛔ A disagreement is NOT a corpus defect: the corpus " +
+      "is the target, so the usual resolution is that the code has not caught up. Report the gap and " +
+      "let a person say which side moves.",
     reads: [
       "the corpus under review — every claim",
       "the codebase it describes — the routes, the components, the handlers",
       "productos/config.yaml — where the code is",
     ],
     finds: [
-      "a claim the code contradicts",
+      "a claim the built product contradicts — which may mean the code is behind, not that the claim is wrong",
       "a behaviour the code exhibits that no claim mentions",
-      "a screen the corpus draws that the application does not have, or the reverse",
+      "a screen the corpus calls for that the application does not have, or a screen it has that no truth describes",
       "a happy path whose stated outcome the code does not produce",
     ],
     never: [

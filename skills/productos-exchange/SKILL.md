@@ -549,12 +549,33 @@ is unjudgeable — and was the exact complaint that made this exist. In a real 4
 named a screen and **7** named a control; `productos v2 check` reports the controls no behaviour
 says anything about, which is where the holes are.
 
-### Generate the screen from the codebase — `sketch_html`
+### ⛔ Every screen gets a picture. The corpus is the target state, so being unbuilt is no excuse
 
-⛔ **Prefer this to ASCII wherever there is code to read.** ASCII is for a screen nobody has built
-and nobody has designed. If the application exists, the screen can be rendered in its own markup
-and its own CSS, and the difference is not cosmetic: a reviewer looking at a wireframe is asked to
-imagine the product, and what they agree to is their imagination.
+**A corpus may never require code to exist.** A screen in the corpus is the screen the product
+*should* have; the codebase is one way to **populate** it and never what it is tied to. So there are
+two generators and both produce the same kind of artefact:
+
+```bash
+productos v2 draw --all --into <corpus>       # from the components, where something renders it
+productos v2 propose --all --into <corpus>    # from the truth, where nothing does yet
+```
+
+`propose` reads the view's own parts — labels are the product's own words, roles say what each
+control *is* — and dresses them in the **idiom of the application**, learned from its own components
+(how this codebase writes a card, a field, a primary button). ⛔ **It extrapolates style, never
+content.** Every word on a generated screen comes from the corpus; inventing copy would put
+sentences nobody wrote in front of a reviewer whose whole job is judging sentences.
+
+⛔ **A generated screen is NOT a lesser screen.** It is the same target screen as a drawn one. What
+differs is only whether there is code to compare it against yet — a fact about the build, reported
+as drift, never as a fault in the truth.
+
+⛔ **Never offer `exists: intended` as a way out of a gap.** Whether something ships is not a fact
+about the target, and asking an author to declare a screen unbuilt so a check will pass is the code
+made authoritative over the truth. If a screen has no picture, generate one.
+
+A screen with no parts cannot be generated from — there is nothing to place. Give it its parts;
+that is authoring, and it is also what lets a screen find its own component.
 
 ```yaml
 # productos/config.yaml

@@ -14,9 +14,23 @@ disagrees with this one, **this one wins** — fix the other place.
 
 ## Product truth
 
-The human-validated record of what a product does. The artifact ProductOS exists to
+The human-validated record of what a product is **meant** to do. The artifact ProductOS exists to
 produce, held as `productos/products/**` plus `productos/capabilities/**` plus
 `productos/context/**`.
+
+⛔ **It is the TARGET STATE, always, and whether any of it is built is a different question.** Truth
+is an input to building, not a report on what was built. A feature nobody has started is as real
+here as one that shipped this morning; a screen in the corpus is the screen the product *should*
+have, not a picture of a component that exists.
+
+The codebase is one way to **populate** truth — the only cheap way to retrofit a product that
+already exists — and never what truth is tied to. Comparing the target against what was built is
+**drift**, which is downstream and separate: a deleted component is evidence about the product,
+never proof the truth is wrong. Only a person deciding the target has changed makes it wrong.
+
+So **nothing in a corpus may require code to exist.** A check that refuses a screen for naming no
+component is not a standard; it is the code made authoritative over the target, which inverts what
+this artifact is for.
 
 **Never** implementation. No services, queues, schemas, endpoints or file layouts, at
 any altitude, ever. When an agent builds the wrong thing the fix is a more precise

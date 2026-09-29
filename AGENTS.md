@@ -14,7 +14,7 @@ flowchart LR
   consistency["consistency<br/><i>Is every concept present in every layer it needs to be, or does it exist in one and nowhere else?</i>"]
   coverage["coverage<br/><i>Is each defect and each behaviour pinned by something that fails on its own?</i>"]
   generated["generated<br/><i>Is anything in a corpus hand-authored that a generator should have produced?</i>"]
-  truthfulness["truthfulness<br/><i>Does the corpus say what the code actually does?</i>"]
+  truthfulness["truthfulness<br/><i>Where does what was built disagree with the target the corpus describes?</i>"]
   newcomer["newcomer<br/><i>Could a PM handed this and told to build from it actually do it?</i>"]
   architecture["architecture<br/><i>Are these the right subsystems, with the right boundaries, and would it work?</i>"]
   sufficiency["sufficiency<br/><i>Can this model express a real product, and can a person actually review what it produces?</i>"]
@@ -111,9 +111,9 @@ flowchart LR
 
 ### `truthfulness`
 
-**Asks:** Does the corpus say what the code actually does?
+**Asks:** Where does what was built disagree with the target the corpus describes?
 
-**Exists because:** Both tenets rest on this and nothing checks it. A corpus can be internally perfect, fully agreed, and describe a product that does not exist — and the only surface that would notice is somebody reading both, which nobody does.
+**Exists because:** Both tenets rest on knowing this and nothing checks it. A corpus can be internally perfect, fully agreed, and have drifted from what shipped — and the only surface that would notice is somebody reading both, which nobody does. ⛔ A disagreement is NOT a corpus defect: the corpus is the target, so the usual resolution is that the code has not caught up. Report the gap and let a person say which side moves.
 
 **Reads, in this order:**
 - the corpus under review — every claim
@@ -121,9 +121,9 @@ flowchart LR
 - productos/config.yaml — where the code is
 
 **A finding is:**
-- a claim the code contradicts
+- a claim the built product contradicts — which may mean the code is behind, not that the claim is wrong
 - a behaviour the code exhibits that no claim mentions
-- a screen the corpus draws that the application does not have, or the reverse
+- a screen the corpus calls for that the application does not have, or a screen it has that no truth describes
 - a happy path whose stated outcome the code does not produce
 
 **⛔ Never:**
@@ -204,8 +204,8 @@ Territory, not ownership. Nobody is assigned an area — an agent reads this to 
 | area | layers | files |
 |---|---|---|
 | **model** | model | `src/v2/schema.ts` `src/v2/load.ts` `src/v2/ref.ts` `src/core/jobs.ts` `src/core/change.ts` |
-| **derive** | derive | `src/v2/grid.ts` `src/v2/stamp.ts` `src/v2/settle.ts` `src/v2/acts.ts` `src/v2/record.ts` |
-| **generate** | generate | `src/v2/migrate.ts` `src/v2/draw.ts` `src/v2/draw-write.ts` `src/v2/routes.ts` `src/v2/spoken.ts` `src/v2/appcss.ts` |
+| **derive** | derive | `src/v2/grid.ts` `src/v2/stamp.ts` `src/v2/settle.ts` `src/v2/acts.ts` `src/v2/record.ts` `src/v2/spoken.ts` |
+| **generate** | generate | `src/v2/migrate.ts` `src/v2/draw.ts` `src/v2/draw-write.ts` `src/v2/routes.ts` `src/v2/propose.ts` `src/v2/appcss.ts` |
 | **surface** | surface | `src/v2/page.ts` `src/v2/serve.ts` `src/v2/packet.ts` `src/v2/notes.ts` `src/v2/watch.ts` `src/v2/log.ts` `src/v2/inbox.ts` `src/v2/presence.ts` `src/v2/identity.ts` `src/v2/client.ts` `src/v2/write.ts` `src/v2/wire.ts` `src/v2/moved.ts` `src/cli/commands/v2.ts` `src/mcp/v2-tools.ts` |
 | **instruct** | instruct | `skills` |
 | **pin** | pin | `test` |

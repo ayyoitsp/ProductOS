@@ -3,11 +3,37 @@
 > **The canonical conceptual reference** — *why the model is shaped this way*. Term definitions live in [`GLOSSARY.md`](./GLOSSARY.md), which wins on any disagreement. *Why we're building it* is `planning/STRATEGY.md`; *how* is `planning/ARCHITECTURE.md`.
 > **Revised 2026-08-03.**
 
-ProductOS holds a **human-validated record of what your product does**, structured so AI agents can build from it and check against it.
+ProductOS holds a **human-validated record of what your product is meant to do**, structured so AI
+agents can build from it and check against it.
 
 > **AI agents autonomously deliver code based on human-validated product truths.**
 
-Truth is an **input to building**, not a report on what was built. Everything below serves that.
+## ⛔ Product truth is the TARGET STATE. Always. Whether it is built is a different question
+
+Truth is an **input to building**, not a report on what was built. Everything below serves that, and
+it is the one principle most easily lost, because a corpus retrofitted onto an existing product
+looks exactly like a description of that product.
+
+**What follows, and none of it is optional:**
+
+- **A screen in the corpus is the screen the product should have** — not a picture of a component
+  that exists. Screens are truth, so screens are target state too.
+- **The codebase is one way to POPULATE truth**, and a good one: reading what was built is the only
+  cheap way to retrofit a product that already exists. It is never what truth is *tied to*. A
+  feature nobody has built is as real in the corpus as one that shipped this morning.
+- **Drift is downstream and separate.** Comparing the target against what exists is its own
+  question, asked after the fact, by `moved` and by the truthfulness reviewer. A component that was
+  deleted is *evidence about the product*, never proof that the truth is wrong — only a person
+  deciding the target changed can make it wrong.
+- **So nothing in the corpus may require code to exist.** A check that refuses a screen for having
+  no component is not a standard, it is the code quietly made authoritative over the target.
+
+⛔ **This document used to say "a record of what your product does" four lines above "not a report on
+what was built", and resolved the contradiction nowhere.** A session read the first sentence,
+inherited the code as the standard, and shipped a check that refused any screen not drawn from a
+component — with `exists: intended` as the escape, which made it worse: it forced an author to
+declare something *not built* just to get the target state accepted. The principle being implied by
+tenet 2 was not enough. It is stated here now because its absence was load-bearing.
 
 ---
 

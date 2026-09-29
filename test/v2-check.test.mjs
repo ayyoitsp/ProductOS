@@ -155,7 +155,14 @@ test("the seed's queue stays small enough to work", () => {
    * getting worse. The thing that must stay small is the list of decisions somebody owes.
    */
   const { corpus, findings } = checkCorpus("v2-seed");
-  const INFORMATIONAL = new Set(["leans-on-an-example", "parked-by-a-person", "one-word-defined-twice"]);
+  /**
+   * ⛔ `nothing-to-compare-this-against` is a fact about the BUILD, not a decision anybody owes. It
+   * says no component renders this screen yet, so no drift check can speak about it — the only way
+   * to act on it is to build the product, which is not review work.
+   */
+  const INFORMATIONAL = new Set([
+    "leans-on-an-example", "parked-by-a-person", "one-word-defined-twice", "nothing-to-compare-this-against",
+  ]);
   const questions = findings.filter((f) => f.severity === "note" && !INFORMATIONAL.has(f.kind));
   const exchanges = corpus.scopes.reduce((n, s) => n + s.scope.exchanges.length, 0);
   // ⛔ Rules are in the denominator because a rule is a thing a person reviews, and an

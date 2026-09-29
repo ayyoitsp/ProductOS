@@ -17,6 +17,14 @@ views:
     view_kind: form
     exists: intended
     walked: false
+    sketch_html: |
+      <div class="pp">
+            <h2 class="text-lg font-semibold">Offer a task</h2>
+            <p class="pp-from">Generated from this screen's own parts — nothing renders it yet.</p>
+            <div class="pp-row"><label class="text-sm font-medium">What needs doing</label><input class="w-full rounded-md border px-3 py-2" data-part="what" placeholder="What needs doing" /></div>
+            <div class="pp-row"><label class="text-sm font-medium">Worth</label><input class="w-full rounded-md border px-3 py-2" data-part="amount" placeholder="Worth" /></div>
+            <button type="button" class="rounded-md px-3 py-2" data-part="offer">Offer it</button>
+          </div>
     parts:
       - id: what
         role: entry

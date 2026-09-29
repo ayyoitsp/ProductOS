@@ -19,6 +19,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
+import { areaOf } from "./jobs.js";
 import YAML from "yaml";
 import { z } from "zod";
 import { CASCADE, KINDS, LAYERS, type Layer } from "./jobs.js";
@@ -115,22 +116,31 @@ export function verify(root: string, rec: ChangeRecord): LayerVerdict[] {
     if (waived) return { layer, by, ok: true, how: "waived", waived };
     if (!by) return { layer, ok: false, how: `nothing named for ${layer}` };
 
+    /**
+     * ⛔ THE FILES COME FROM THE ARCHITECTURE MAP, NOT FROM A LIST HERE.
+     *
+     * These were hardcoded per layer, so a change that genuinely reached a layer through a NEW file
+     * could not be verified: `routes.ts`, `propose.ts` and `spoken.ts` all landed in the generate
+     * and derive layers and none of them was on any list. `close` refuses while a layer is
+     * unreached, so the only way past it was to waive something that was actually done — which
+     * turns the waiver from a decision into paperwork and empties it of meaning.
+     *
+     * `src/core/jobs.ts` already declares which files each layer owns, and a test fails when
+     * AGENTS.md drifts from it. One home for that fact; this reads it.
+     */
+    const owned = (): string[] => {
+      const area = areaOf(layer);
+      return area?.files ?? [];
+    };
+    const inOwnedFiles = (): boolean => {
+      for (const f of owned()) {
+        const body = read(f);
+        if (body && body.includes(by)) return true;
+      }
+      return false;
+    };
+
     switch (layer) {
-      case "model":
-        return { layer, by, ok: anyUnder("src/v2/schema.ts".replace(/\/[^/]+$/, ""), by) || read("src/v2/schema.ts").includes(by), how: `"${by}" in src/v2/` };
-      case "derive":
-        return { layer, by, ok: ["grid", "stamp", "settle", "acts", "record"].some((f) => read(`src/v2/${f}.ts`).includes(by)), how: `"${by}" in the derive files` };
-      case "generate":
-        return { layer, by, ok: ["migrate", "draw", "draw-write"].some((f) => read(`src/v2/${f}.ts`).includes(by)), how: `"${by}" in the generators` };
-      case "surface":
-        return {
-          layer,
-          by,
-          ok: ["src/v2/page.ts", "src/v2/packet.ts", "src/v2/serve.ts", "src/cli/commands/v2.ts", "src/mcp/v2-tools.ts"].some((f) => read(f).includes(by)),
-          how: `"${by}" in a surface`,
-        };
-      case "check":
-        return { layer, by, ok: read("src/v2/check.ts").includes(by), how: `"${by}" in src/v2/check.ts` };
       case "instruct":
         /**
          * ⛔ THE LAYER THAT GETS SKIPPED. A concept perfect in the schema that no future session
@@ -139,8 +149,18 @@ export function verify(root: string, rec: ChangeRecord): LayerVerdict[] {
         return { layer, by, ok: anyUnder("skills", by), how: `"${by}" in skills/` };
       case "pin":
         return { layer, by, ok: anyUnder("test", by), how: `"${by}" in test/` };
-      default:
-        return { layer, by, ok: false, how: "no verifier" };
+      default: {
+        /**
+         * Every other layer is a set of source files, declared by the area that owns it. A directory
+         * on the list is walked, so an area can name `src/v2/` and gain files without editing this.
+         */
+        const files = owned();
+        if (!files.length) return { layer, by, ok: false, how: `no files declared for ${layer} in jobs.ts` };
+        const hit =
+          inOwnedFiles() ||
+          files.some((f) => f.endsWith("/") && anyUnder(f.replace(/\/$/, ""), by));
+        return { layer, by, ok: hit, how: `"${by}" in ${files.length === 1 ? files[0] : `the ${layer} files`}` };
+      }
     }
   });
 }

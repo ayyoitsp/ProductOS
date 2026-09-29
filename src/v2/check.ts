@@ -1030,13 +1030,20 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
     }
 
     for (const v of scope.views) {
-      if (!v.walked && v.exists !== "intended")
+      /**
+       * ⛔ NOT ESCAPABLE BY DECLARING IT UNBUILT. This used to end *"or set exists: intended so a
+       * reader knows it does not exist yet"* — offering a statement about the BUILD as the way out
+       * of a gap in the TRUTH. Whether a screen ships has no bearing on whether anybody has
+       * confirmed its picture shows what it claims, and a screen generated from the truth can be
+       * walked exactly as a drawn one can.
+       */
+      if (!v.walked)
         add({
           severity: "note",
           kind: "view-never-walked",
           where: `${scope.id}#${v.id}`,
-          what: "nobody has walked this screen, and it is not marked as intended",
-          fix: "walk it, or set exists: intended so a reader knows it does not exist yet",
+          what: "nobody has confirmed that the picture of this screen shows what the screen claims",
+          fix: "walk it — read the picture against the behaviours that arrive at it, and set walked: true",
         });
       for (const p of v.parts) {
         // ⛔ `commits` only. An `entry` part is described by the `with` slot of whatever
@@ -2358,47 +2365,74 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
          * the departure has already happened in Excel by the time anything sees it. Nothing could
          * have reported that, because nobody ever wrote down where that screen came from.
          */
+        /**
+         * ⛔ IT NEEDS A PICTURE, NOT A COMPONENT — and requiring the component inverted what a
+         * corpus is for.
+         *
+         * Peter: *"product truth is supposed to represent the 'target state' always, doesn't matter
+         * what's been built. the drift resolution is downstream. the existing codebase is useful for
+         * trying to populate product truth based on what was built, but no reason it needs to be
+         * tied to that."*
+         *
+         * This refused any screen with no `drawn_from`, which requires every screen in the TARGET
+         * to point at code that exists — so a screen that should exist and is not built could never
+         * satisfy it. The escape hatch made it worse: it asked the author to declare the screen
+         * `intended` (a statement about what is BUILT) to get their target state accepted.
+         *
+         * A screen with no picture is a real defect: nobody can review a title. A screen with no
+         * component is not a defect at all — it is a screen the code has not caught up with. So the
+         * refusal is about the drawing, and either source satisfies it: the component where one
+         * exists, the truth and the design system where one does not.
+         */
+        if (!v.sketch_html && !v.sketch) {
+          add({
+            severity: "refuse",
+            kind: "no-picture-of-this-screen",
+            where: `${scope.id}#${v.id}`,
+            what: "this screen has nothing anybody can look at — a title and a parts list is not something a person can tell is wrong",
+            fix: `draw every screen that can be: productos v2 draw --all --into <corpus>. Where no component renders it yet, generate it from the truth: productos v2 propose "${scope.id}#${v.id}" --into <corpus>`,
+          });
+          continue;
+        }
         if (!v.drawn_from) {
           /**
-           * ⛔ A REFUSAL, NOT A NOTE — and filing it as a note is most of why it went unfixed.
+           * ⛔ ONLY WHERE THERE IS A CODEBASE. Telling a corpus with no repository behind it that
+           * nothing renders its screens is saying the obvious five times — of course nothing does.
+           * It is a drift statement, and drift needs two sides.
            *
-           * Peter: *"why isn't this done? we've re-idnexed multiple times. fix product OS so that
-           * it ALWAYS generates."* Six of sixteen screens had ever been drawn, across a corpus
-           * re-indexed several times, and nothing ever blocked on it: `check` said "note", so a
-           * corpus with ten hand-typed screens passed the gate that exists to stop it being handed
-           * over. Advice nobody is forced to take is advice nobody takes.
-           *
-           * ⛔ EXCEPT WHERE THERE IS NOTHING TO DRAW FROM. A screen that is `intended` has not been
-           * built, so demanding its source would punish somebody for describing a screen before it
-           * exists — which is exactly when describing it is most useful. Those stay notes.
+           * ⛔ A NOTE, AND ONLY ABOUT DRIFT. Having no code source is not a gap in the target — it
+           * means there is nothing to compare the target against yet, which is a fact about the
+           * BUILD. Worth saying once, because it is why no drift check can speak about this screen.
            */
-          /**
-           * ⛔ ONLY WHERE THERE IS CODE TO DRAW FROM. A corpus with no components directory
-           * configured — the pristine seed, a product being described before it is built — has no
-           * source for any screen, so demanding one is not a standard, it is an unpassable gate.
-           * Refusing there would make the first thing a newcomer runs report a broken corpus.
-           */
-          const notBuilt = v.exists === "intended" || !hasCode;
-          add({
-            severity: notBuilt ? "note" : "refuse",
-            kind: "never-drawn-from-the-code",
+          if (hasCode)
+            add({
+            severity: "note",
+            kind: "nothing-to-compare-this-against",
             where: `${scope.id}#${v.id}`,
-            what: notBuilt
-              ? "this screen is not built, so it has no source to be drawn from — nothing will notice when the product changes underneath it"
-              : "this screen records no source, so nothing can tell you when it stopped matching the product — it is invisible to every drift check",
-            fix: notBuilt
-              ? `when it is built, draw it: productos v2 draw "${scope.id}#${v.id}" --route <file> --into <corpus>`
-              : `draw every screen that can be drawn: productos v2 draw --all --into <corpus>. This one alone: productos v2 draw "${scope.id}#${v.id}" --route <the component that renders it> --into <corpus>`,
+            what: "no component renders this screen yet, so no drift check can tell you when the product diverges from it — this is a fact about what is built, not a gap in the truth",
+            fix: `when something renders it: productos v2 draw "${scope.id}#${v.id}" --route <file> --into <corpus>`,
           });
           continue;
         }
         if (fs.existsSync(path.resolve(project, v.drawn_from))) continue;
+        /**
+         * ⛔ THIS REFUSED THE CORPUS, WHICH MADE THE CODE AUTHORITATIVE OVER THE TARGET.
+         *
+         * Its old wording said everything the screen describes "is about a screen that was deleted"
+         * — and refused, which pressures an author into withdrawing target state to make a check
+         * pass. But the corpus is what the product SHOULD have. A component being deleted says the
+         * build moved away from the target; the usual resolution is that the code is wrong.
+         *
+         * It bit exactly once, and got the right answer for the wrong reason: the pricing grid was
+         * deleted and the truth about it WAS wrong — because Peter decided the target had changed.
+         * The deletion was evidence. This tool treated it as the decision.
+         */
         add({
-          severity: "refuse",
-          kind: "drawn-from-something-that-is-gone",
+          severity: "note",
+          kind: "the-code-dropped-this-screen",
           where: `${scope.id}#${v.id}`,
-          what: `the file this screen was drawn from is not in the codebase any more, so everything it describes — its parts, and every behaviour that arrives at it — is about a screen that was deleted`,
-          fix: `draw it again from whatever renders it now: productos v2 draw "${scope.id}#${v.id}" --route <component> --into <corpus> — or, if the screen is genuinely gone, mark it exists: withdrawn. "productos v2 moved" shows the commits that took it`,
+          what: `the component this screen was populated from is gone from the codebase. That is drift: the build has moved away from what the corpus calls for. It does not make the target wrong — only somebody deciding the target changed does that`,
+          fix: `decide which side is wrong. If the product still needs this screen, the code is behind — leave the truth alone. If the target really changed, rewrite it and say so. "productos v2 moved" shows the commits that took the component`,
         });
       }
     }

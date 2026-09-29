@@ -87,18 +87,40 @@ test("⛔ a worktree copy is not a second candidate", () => {
   assert.ok(!r.file.includes(".claude"), "and the real file wins, not the copy");
 });
 
-test("a screen with no source is a REFUSAL where there is code to draw from", async () => {
+test("⛔ a screen needs a PICTURE, not a component — the earlier version of this test had it inverted", () => {
   const src = fs.readFileSync("src/v2/check.ts", "utf-8");
   /**
-   * ⛔ The whole defect in one line. `severity: "note"` here is why sixty screens stayed hand-typed
-   * through several re-indexings: advice nobody is forced to take is advice nobody takes.
+   * ⛔ THIS TEST USED TO ASSERT THE OPPOSITE, AND THAT IS THE POINT OF THIS COMMENT.
+   *
+   * It pinned `severity: notBuilt ? "note" : "refuse"` on a screen having no `drawn_from` — which
+   * requires every screen in the TARGET STATE to point at code that exists, so a screen that should
+   * exist and is not built could never satisfy it. Worse, the escape was `exists: intended`: the
+   * author had to declare something about the BUILD to get their target state accepted.
+   *
+   * Peter: *"product truth is supposed to represent the 'target state' always, doesn't matter
+   * what's been built. the drift resolution is downstream."*
+   *
+   * So the refusal is about the picture, and either source satisfies it.
    */
-  const at = src.indexOf('kind: "never-drawn-from-the-code"');
-  assert.ok(at > 0, "the check must still exist");
-  const around = src.slice(at - 600, at);
-  assert.match(around, /severity: notBuilt \? "note" : "refuse"/, "it must refuse when the screen is supposed to exist");
-  assert.match(around, /v\.exists === "intended" \|\| !hasCode/, "and stay advice where there is nothing to draw from");
-  assert.match(src.slice(at, at + 900), /draw --all/, "and the fix must point at the sweep, not at one screen");
+  assert.match(src, /kind: "no-picture-of-this-screen"/, "a screen nobody can look at must refuse");
+  assert.match(src, /if \(!v\.sketch_html && !v\.sketch\)/, "and having no COMPONENT must not be what triggers it");
+  assert.match(src, /v2 propose/, "the fix must offer generating from the truth, not only from code");
+
+  /** Having no code source says something about the build, so it is a note about drift. */
+  assert.match(src, /kind: "nothing-to-compare-this-against"/, "no component is a drift fact, not a truth gap");
+
+  /** ⛔ And a deleted component is evidence, never authority over the target. */
+  assert.match(src, /kind: "the-code-dropped-this-screen"/, "a deleted component must not refuse the corpus");
+  assert.doesNotMatch(src, /drawn-from-something-that-is-gone/, "the old refusal must be gone, not merely downgraded");
+
+  /**
+   * ⛔ Nothing may OFFER `exists: intended` as a way out of a gap in the truth — checked on the
+   * `fix:` lines only, because the comment above the corrected check quotes the old wording on
+   * purpose, and a test that cannot tell a quotation from a live instruction would force that
+   * history to be deleted to go green.
+   */
+  const fixes = [...src.matchAll(/fix:\s*(`[^`]*`|"[^"]*")/g)].map((m) => m[1]).join("\n");
+  assert.doesNotMatch(fixes, /exists: intended/, "built-ness must never be offered as an escape from a truth-level finding");
 });
 
 test("the sweep exists and is reachable without naming a component", () => {

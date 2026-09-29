@@ -3,8 +3,9 @@ said: migrate --force deletes the whole truth, rules and charter trees and regen
 at: 2026-09-29
 kind: derivation
 reaches:
-  derive: ""
-  surface: ""
-  check: ""
-  pin: ""
-waived: {}
+  surface: setAside
+  pin: set the trees aside
+waived:
+  derive: nothing is derived differently — the fix is that a regeneration stops deleting what it cannot rebuild, and that lives in the command
+  check: "there is nothing left for a check to catch: the file is restored before anything could observe it missing"
+closed: 2026-09-29

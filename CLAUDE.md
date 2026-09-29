@@ -151,6 +151,28 @@ and the same hole gets rediscovered from scratch next session. The skills have a
 said "don't paper over ambiguity"; that instruction alone has repeatedly not been
 enough, which is why the scan exists.
 
+## ⛔ Product truth is the target state — never gate it on what exists
+
+`GLOSSARY.md` and `OVERVIEW.md` both say it now; this is the operational form.
+
+**A corpus may never require code to exist.** Screens are truth, so a screen is the screen the
+product *should* have. The codebase is one way to **populate** a corpus, never what it is tied to,
+and comparing target against built is **drift** — downstream, separate, and never authority.
+
+- A deleted component is **evidence about the product**, not proof the truth is wrong. Report it and
+  ask; do not refuse the corpus, and never pressure an author into withdrawing target state to make
+  a check pass.
+- A screen with no picture is a real defect. A screen with no *component* is not. Generate the
+  picture — from code where code exists, from the truth and the design system where it does not.
+- Whether something is built is not a fact about the target. Do not read `exists: intended` as
+  permission for a truth-level gap, and do not ask an author to set it to get target state accepted.
+
+**Why this is here:** OVERVIEW said "a record of what your product does" four lines above "not a
+report on what was built" and resolved it nowhere, while the only explicit statement about the
+corpus-to-code relationship was a reviewer asking *"does the corpus say what the code actually
+does?"*. A session inherited the code as the standard and shipped a check refusing any screen not
+drawn from a component. Nothing in the docs contradicted it.
+
 ## The output is product truth; keep the substrate out of it
 
 Nothing a reader sees should mention the storage. No `.md` filenames, no table or column
