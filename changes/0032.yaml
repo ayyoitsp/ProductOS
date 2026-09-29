@@ -1,0 +1,10 @@
+id: "0032"
+said: migrate --force deletes the whole truth, rules and charter trees and regenerates from v1, so any scope authored directly in v2 is destroyed without being named. Two scopes written yesterday — master-worksheet and price-a-deal, with the pull behaviour drawn from the add-in code — were gone this morning, and nothing anywhere recorded that they had been removed or that authoring into v2 was unsafe.
+at: 2026-09-29
+kind: derivation
+reaches:
+  derive: ""
+  surface: ""
+  check: ""
+  pin: ""
+waived: {}

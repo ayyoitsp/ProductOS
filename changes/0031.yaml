@@ -1,0 +1,8 @@
+id: "0031"
+said: why isn't this done? we've re-idnexed multiple times. fix product OS so that it ALWAYS generates. why hasn't it been generating properly?
+at: 2026-09-29
+kind: generator
+reaches:
+  generate: ""
+  pin: ""
+waived: {}

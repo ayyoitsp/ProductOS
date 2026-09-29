@@ -135,7 +135,7 @@ export const AREAS: Area[] = [
       "be replaced by hand-authoring. If the output is wrong, the generator is wrong",
     ],
     owns: ["generate"],
-    files: ["src/v2/migrate.ts", "src/v2/draw.ts", "src/v2/draw-write.ts", "src/v2/appcss.ts"],
+    files: ["src/v2/migrate.ts", "src/v2/draw.ts", "src/v2/draw-write.ts", "src/v2/routes.ts", "src/v2/appcss.ts"],
     needs: ["read-files", "run-commands", "search-files", "write-corpus"],
   },
   {

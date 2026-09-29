@@ -136,12 +136,28 @@ test("a regenerate discards derived truth and keeps what people said", () => {
    * Verdicts and notes are the exception, and for the same reason: a person's judgement and a
    * person's request are the only things in a corpus nothing can reconstruct. `notes/` was outside
    * the clear list by omission rather than by decision, which is not a protection.
+   *
+   * ⛔ AND `truth/` TURNED OUT NOT TO BE ALL DERIVED, WHICH THIS TEST DID NOT COVER AND COST TWO
+   * SCOPES. A scope authored in v2 has no v1 source, so a re-migration cannot produce it — and the
+   * old clear list deleted the whole tree. `master-worksheet` and `price-a-deal`, written one
+   * afternoon and drawn from the add-in code, were gone the next morning with nothing recording
+   * that anything had been removed. So the guarantee this pins is now stronger than a list of
+   * directories: whatever the run cannot rebuild comes back, and is named.
    */
   const src = fs.readFileSync("src/cli/commands/v2.ts", "utf-8");
-  const clause = /if \(o\.force\) for \(const d of \[([^\]]*)\]\)/.exec(src);
+  const clause = /for \(const d of \[([^\]]*)\]\) \{\s*\n\s*const dir = path\.join\(out, d\)/.exec(src);
   assert.ok(clause, "the force-clear list moved — find it and re-pin what it must never delete");
   const cleared = clause[1].split(",").map((s) => s.trim().replace(/["']/g, ""));
   for (const sacred of ["verdicts", "notes"])
     assert.ok(!cleared.includes(sacred), `--force would delete ${sacred}/, which nothing can reconstruct`);
   assert.deepEqual(cleared, ["truth", "rules", "charter"], "the clear list changed — decide deliberately, then update this");
+
+  /** ⛔ Set aside before anything is removed, so the removal is recoverable by construction. */
+  assert.match(src, /\.superseded/, "--force must set the trees aside rather than delete them outright");
+  assert.match(src, /cpSync\(dir, keep, \{ recursive: true \}\)/, "it must copy before it removes");
+
+  /** ⛔ And put back whatever the migration did not produce, saying what it kept. */
+  assert.match(src, /if \(fs\.existsSync\(back\)\) continue;/, "anything the run DID produce stays regenerated");
+  assert.match(src, /restored\.push/, "anything it did not produce must come back");
+  assert.match(src, /this migration does not produce/, "and the person must be told which files those were");
 });

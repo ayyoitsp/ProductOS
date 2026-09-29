@@ -32,6 +32,8 @@ import { ruleHomes } from "./grid.js";
 import { appStyleFor } from "./appcss.js";
 import { readLog } from "./log.js";
 import fs from "node:fs";
+import { resolvePathsOrThrow } from "../core/paths.js";
+import { readConfig } from "../core/config.js";
 import path from "node:path";
 import { projectRootOf } from "../core/paths.js";
 
@@ -133,6 +135,20 @@ function resolveRefSafely(c: Corpus, raw: string) {
 const norm = (s?: string) => (s ?? "").replace(/\s+/g, " ").trim();
 
 export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[] } {
+  /**
+   * Is there a codebase behind this corpus at all? Decides whether "no screen records its source"
+   * is a defect or simply the truth about a product nobody has built yet.
+   */
+  let hasCode = false;
+  try {
+    const paths = resolvePathsOrThrow(root);
+    const cfgRoot = path.dirname(path.dirname(paths.configFile));
+    const dir = readConfig(paths).web.components_dir;
+    hasCode = Boolean(dir) && fs.existsSync(path.resolve(cfgRoot, dir!));
+  } catch {
+    hasCode = false;
+  }
+
   const corpus = loadCorpus(root);
   /**
    * ⛔ Read from the corpus's own project, not asked for as an argument. A finding that says "render
@@ -2343,12 +2359,36 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
          * have reported that, because nobody ever wrote down where that screen came from.
          */
         if (!v.drawn_from) {
+          /**
+           * ⛔ A REFUSAL, NOT A NOTE — and filing it as a note is most of why it went unfixed.
+           *
+           * Peter: *"why isn't this done? we've re-idnexed multiple times. fix product OS so that
+           * it ALWAYS generates."* Six of sixteen screens had ever been drawn, across a corpus
+           * re-indexed several times, and nothing ever blocked on it: `check` said "note", so a
+           * corpus with ten hand-typed screens passed the gate that exists to stop it being handed
+           * over. Advice nobody is forced to take is advice nobody takes.
+           *
+           * ⛔ EXCEPT WHERE THERE IS NOTHING TO DRAW FROM. A screen that is `intended` has not been
+           * built, so demanding its source would punish somebody for describing a screen before it
+           * exists — which is exactly when describing it is most useful. Those stay notes.
+           */
+          /**
+           * ⛔ ONLY WHERE THERE IS CODE TO DRAW FROM. A corpus with no components directory
+           * configured — the pristine seed, a product being described before it is built — has no
+           * source for any screen, so demanding one is not a standard, it is an unpassable gate.
+           * Refusing there would make the first thing a newcomer runs report a broken corpus.
+           */
+          const notBuilt = v.exists === "intended" || !hasCode;
           add({
-            severity: "note",
+            severity: notBuilt ? "note" : "refuse",
             kind: "never-drawn-from-the-code",
             where: `${scope.id}#${v.id}`,
-            what: "this screen records no source, so nothing can tell you when it stopped matching the product — it is invisible to every drift check",
-            fix: `draw it: productos v2 draw "${scope.id}#${v.id}" --route <the component that renders it> --into <corpus>`,
+            what: notBuilt
+              ? "this screen is not built, so it has no source to be drawn from — nothing will notice when the product changes underneath it"
+              : "this screen records no source, so nothing can tell you when it stopped matching the product — it is invisible to every drift check",
+            fix: notBuilt
+              ? `when it is built, draw it: productos v2 draw "${scope.id}#${v.id}" --route <file> --into <corpus>`
+              : `draw every screen that can be drawn: productos v2 draw --all --into <corpus>. This one alone: productos v2 draw "${scope.id}#${v.id}" --route <the component that renders it> --into <corpus>`,
           });
           continue;
         }

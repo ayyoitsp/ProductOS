@@ -546,8 +546,25 @@ web:
 ⛔ **GENERATE IT. DO NOT TYPE IT.**
 
 ```bash
-productos v2 draw "<scope>#<view>" --route <the component that renders it> --into <corpus>
+productos v2 draw --all --into <corpus>      # every screen, finding each one's component itself
+productos v2 draw "<scope>#<view>" --route <file> --into <corpus>    # one, when the sweep could not
 ```
+⛔ **Sweep, never draw one screen and stop.** `--all` is the default gesture; the single-screen form
+is the exception for what the sweep could not resolve. Six of sixteen screens in a corpus
+re-indexed several times had ever been drawn, because drawing had to be aimed by hand once per
+screen — so it ran for the first screen somebody cared about and for none of the others.
+
+It resolves a screen from **what that screen says it shows** — its parts' labels, found verbatim in
+a component — never from a filename, because the name `overview-tab` points at a different
+product's tab and a wrong drawing is worse than none: it reads as what the product looks like and
+nothing downstream can tell it is false. A screen it cannot resolve is **reported, never guessed**,
+and the commonest reason is worth knowing: a view with no labelled parts has nothing to be found
+by. Give it its parts and it resolves itself.
+
+⛔ **A screen with no `drawn_from` is now a refusal**, not advice — `check` will not let the corpus
+be handed over. The exception is a screen that is not built: set `exists: intended` and it stays a
+note, because demanding a source for a screen nobody has written is an unpassable gate.
+
 
 It reads the route, inlines the primitives it composes, binds the props the call site passes, and
 writes the drawing into the corpus. **Re-run it after the component changes** — the drawing is

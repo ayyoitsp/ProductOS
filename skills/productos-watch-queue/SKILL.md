@@ -172,7 +172,8 @@ productos v2 moved --at <corpus>    # and the commits that took it
 exact one to run:
 
 ```bash
-productos v2 draw "<scope>#<view>" --route <the component that renders it now> --into <corpus>
+productos v2 draw --all --into <corpus>      # every screen, finding each one's component itself
+productos v2 draw "<scope>#<view>" --route <file> --into <corpus>    # one, when the sweep could not
 ```
 
 ⛔ **If the screen is genuinely gone, say so — `exists: withdrawn`.** Drawing it again from some

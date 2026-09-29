@@ -17,6 +17,7 @@ import { inbox } from "../../v2/inbox.js";
 import { looksLikeInstance, instanceOf, mirror, act as remoteAct, note as remoteNote, inbox as remoteInbox, preview as remotePreview, whoami as remoteWhoami, presence as remotePresence } from "../../v2/client.js";
 import { lineFor } from "../../v2/log.js";
 import { drawFromRoute } from "../../v2/draw.js";
+import { everyView, isResolved, resolveRoute } from "../../v2/routes.js";
 import { AGENTS, CASCADE, KINDS } from "../../core/jobs.js";
 
 /** ⛔ Plain text for a terminal and for JSON — never HTML-escaped, which is the page's business. */
@@ -882,8 +883,52 @@ export function v2Command(): Command {
        * derived output. `notes/` survived this list by omission rather than by decision until it was
        * written down here; anyone adding to the list should have to argue past this sentence.
        */
-      if (o.force) for (const d of ["truth", "rules", "charter"]) fs.rmSync(path.join(out, d), { recursive: true, force: true });
+      /**
+       * ⛔ AND `truth/` IS NOT ALL DERIVED EITHER, WHICH THIS ASSUMED AND COST TWO SCOPES.
+       *
+       * The paragraph above is right that `--force` discards derived output and that a person's acts
+       * and requests can never be reconstructed. What it missed is that a scope AUTHORED IN v2 —
+       * with no v1 source, because it was written here — is equally unreconstructable and lives in
+       * `truth/`. Two of them, written one afternoon and drawn from the add-in code, were gone the
+       * next morning: deleted by a re-migration that had no way to produce them and no record that
+       * it had removed anything.
+       *
+       * So nothing is deleted outright. The trees are set aside first, and afterwards anything the
+       * run did not produce is PUT BACK and named. A regeneration may discard what it can rebuild;
+       * removing what it cannot is destroying input, and doing it silently is the whole defect.
+       */
+      let setAside: string | undefined;
+      if (o.force) {
+        setAside = path.join(out, ".superseded", new Date().toISOString().replace(/[:.]/g, "-"));
+        for (const d of ["truth", "rules", "charter"]) {
+          const dir = path.join(out, d);
+          if (!fs.existsSync(dir)) continue;
+          const keep = path.join(setAside, d);
+          fs.mkdirSync(path.dirname(keep), { recursive: true });
+          fs.cpSync(dir, keep, { recursive: true });
+          fs.rmSync(dir, { recursive: true, force: true });
+        }
+      }
       const m = migrate(from, out, new Date().toISOString().slice(0, 10));
+      if (setAside) {
+        const restored: string[] = [];
+        for (const d of ["truth", "rules", "charter"]) {
+          const was = path.join(setAside, d);
+          if (!fs.existsSync(was)) continue;
+          for (const f of fs.readdirSync(was)) {
+            const back = path.join(out, d, f);
+            if (fs.existsSync(back)) continue;
+            fs.mkdirSync(path.dirname(back), { recursive: true });
+            fs.cpSync(path.join(was, f), back);
+            restored.push(`${d}/${f}`);
+          }
+        }
+        if (restored.length) {
+          console.log(pc.yellow("!"), `kept ${restored.length} file(s) this migration does not produce — written in v2, with no v1 source:`);
+          for (const r of restored) console.log(pc.dim(`    ${r}`));
+          console.log(pc.dim("  they were set aside and put back. A regeneration may discard what it can rebuild, never what it cannot."));
+        }
+      }
       const c = m.carried;
       console.log(pc.green("✓"), `${o.out}`);
       console.log(`  ${c.scopes} scopes · ${c.views} screens · ${c.exchanges} asks · ${c.criteria} criteria`);
@@ -1331,11 +1376,26 @@ export function v2Command(): Command {
      */
     .command("draw")
     .description("Generate a screen from the codebase and write it into the corpus")
-    .argument("<view>", "which screen, as <scope>#<view>")
-    .requiredOption("--route <file>", "the component that renders it, relative to the repo root")
+    .argument("[view]", "which screen, as <scope>#<view> — omit with --all")
+    .option("--route <file>", "the component that renders it, relative to the repo root")
+    /**
+     * ⛔ THE SWEEP IS WHY SIXTY SCREENS WERE NEVER DRAWN. A generator that has to be aimed, once
+     * per screen, with the component named by hand, runs for the first screen somebody cares about
+     * and for none of the others. `--all` is the whole answer to "make it ALWAYS generate".
+     */
+    .option("--all", "every screen in the corpus, finding each one's component from what it declares")
     .option("--into <dir>", "the corpus to write into — a v1 products tree or a v2 truth tree", ".")
     .option("-n, --dry-run", "print what would be written and change nothing")
-    .action((ref: string, o: { route: string; into?: string; dryRun?: boolean }) => {
+    .action((ref: string | undefined, o: { route?: string; into?: string; dryRun?: boolean; all?: boolean }) => {
+      if (o.all) return drawEverything(path.resolve(o.into ?? "."), Boolean(o.dryRun));
+      if (!ref) {
+        console.error(pc.red("✗"), "name a screen as <scope>#<view>, or pass --all");
+        process.exit(1);
+      }
+      if (!o.route) {
+        console.error(pc.red("✗"), "say which component renders it with --route, or pass --all to find them");
+        process.exit(1);
+      }
       const [scopeId, viewId] = ref.split("#");
       if (!scopeId || !viewId) {
         console.error(pc.red("✗"), "name the screen as <scope>#<view>");
@@ -1351,7 +1411,7 @@ export function v2Command(): Command {
       } catch {
         componentsDir = undefined;
       }
-      const route = path.resolve(o.route);
+      const route = path.resolve(o.route!);
       if (!fs.existsSync(route)) {
         console.error(pc.red("✗"), `no component at ${route}`);
         process.exit(1);
@@ -1699,4 +1759,123 @@ export function v2Command(): Command {
     });
 
   return cmd;
+}
+
+/**
+ * Draw every screen in a corpus, working out each one's component itself.
+ *
+ * ⛔ THE REPORT IS THE POINT AS MUCH AS THE DRAWING. A sweep that quietly draws what it can and
+ * says nothing about the rest leaves a corpus that looks fully generated and is not — which is the
+ * state this whole change exists to end. So every screen lands in exactly one column, and the ones
+ * it would not resolve say why, in words somebody can act on.
+ */
+function drawEverything(into: string, dryRun: boolean): void {
+  let corpus;
+  try {
+    corpus = loadCorpus(into);
+  } catch (e) {
+    console.error(pc.red("✗"), `cannot read a corpus at ${into}: ${(e as Error).message}`);
+    process.exit(1);
+  }
+
+  let repoRoot = into;
+  let componentsDir: string | undefined;
+  try {
+    const paths = resolvePathsOrThrow(into);
+    repoRoot = path.dirname(path.dirname(paths.configFile));
+    const cfg = readConfig(paths);
+    componentsDir = cfg.web.components_dir;
+  } catch {
+    /* a corpus with no config still gets swept — it just searches from where it sits */
+  }
+
+  const views = everyView(corpus);
+  const drew: string[] = [];
+  const redrew: string[] = [];
+  const stuck: Array<{ ref: string; why: string; detail: string; candidates?: Array<{ file: string; matched: number }> }> = [];
+
+  for (const { scope, view } of views) {
+    const ref = `${scope}#${view.id}`;
+    /**
+     * ⛔ A SCREEN THAT IS NOT BUILT YET CANNOT BE DRAWN FROM CODE, and saying so is not a failure.
+     * Refusing here would make `intended` unusable, and a model that punishes somebody for
+     * describing a screen before it exists is a model that gets described after the fact.
+     */
+    if (view.exists === "intended" || view.exists === "withdrawn") continue;
+
+    /** Already knows where it comes from: redraw it, so a sweep keeps the corpus current. */
+    let route: string | undefined;
+    let evidence = "";
+    if (view.drawn_from && fs.existsSync(path.resolve(repoRoot, view.drawn_from))) {
+      route = path.resolve(repoRoot, view.drawn_from);
+    } else {
+      /**
+       * ⛔ SEARCHED WIDER THAN `components_dir`. The screen that proved this resolver — the deals
+       * list — is rendered by a route page, not a component, and holds five of five of its labels.
+       * A search limited to the configured components directory would have missed it and reported
+       * the corpus as unresolvable.
+       */
+      const roots = [componentsDir, "."].filter(Boolean) as string[];
+      const r = resolveRoute(view, { repoRoot, searchRoots: roots });
+      if (!isResolved(r)) {
+        stuck.push({ ref, why: r.why, detail: r.detail, candidates: r.candidates });
+        continue;
+      }
+      route = path.resolve(repoRoot, r.file);
+      evidence = `${r.matched.length}/${r.of} of what it says`;
+    }
+
+    const parts = view.parts ?? [];
+    let drawn;
+    try {
+      drawn = drawFromRoute(route, { componentsDir: componentsDir ? path.resolve(repoRoot, componentsDir) : undefined, parts });
+    } catch (e) {
+      stuck.push({ ref, why: "no-candidate", detail: `could not read ${path.relative(repoRoot, route)}: ${(e as Error).message}` });
+      continue;
+    }
+    if (!drawn.html.trim()) {
+      stuck.push({ ref, why: "no-candidate", detail: `nothing could be read out of ${path.relative(repoRoot, route)}` });
+      continue;
+    }
+
+    const line = `${ref}  ←  ${path.relative(repoRoot, route)}${evidence ? pc.dim(`  (${evidence})`) : ""}`;
+    if (dryRun) {
+      (view.drawn_from ? redrew : drew).push(line);
+      continue;
+    }
+    const origin = repoOf(route);
+    const written = writeSketchHtml(
+      into,
+      scopeId(scope),
+      view.id,
+      drawn.html,
+      origin ? { from: path.relative(origin.root, route), at: origin.head } : undefined,
+      drawn.text
+    );
+    if (!written) {
+      stuck.push({ ref, why: "no-candidate", detail: "the corpus would not take the drawing" });
+      continue;
+    }
+    (view.drawn_from ? redrew : drew).push(line);
+  }
+
+  const total = drew.length + redrew.length + stuck.length;
+  console.log(pc.green("✓"), `${drew.length + redrew.length} of ${total} screens drawn from the code${dryRun ? pc.dim(" (nothing written)") : ""}`);
+  for (const l of drew) console.log(pc.dim("  new    ") + l);
+  for (const l of redrew) console.log(pc.dim("  redrew ") + l);
+  if (stuck.length) {
+    console.log("");
+    console.log(pc.yellow(`${stuck.length} could not be resolved — each one says why, and none was guessed:`));
+    for (const s of stuck) {
+      console.log(`  ${pc.yellow("?")} ${s.ref}`);
+      console.log(pc.dim(`      ${s.detail}`));
+      for (const c of s.candidates ?? []) console.log(pc.dim(`      closest: ${c.file} (${c.matched})`));
+    }
+    console.log(pc.dim("\n  name one by hand with: productos v2 draw \"<scope>#<view>\" --route <file> --into <corpus>"));
+  }
+}
+
+/** A scope id as the corpus files hold it. */
+function scopeId(id: string): string {
+  return id;
 }
