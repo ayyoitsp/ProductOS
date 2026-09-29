@@ -1540,6 +1540,15 @@ export function v2Command(): Command {
        * rather than a guess, and the count belongs in the report — a drawing full of placeholders
        * is the thin drawing again, and the only honest thing is to say so at the moment it is made.
        */
+      /**
+       * ⛔ THE STATES IT DID NOT DRAW. A screen has more than one appearance and a drawing holds
+       * one; saying which were skipped is the difference between a picture of the loaded state and
+       * a picture claiming to be the whole screen.
+       */
+      if (drawn.states.length) {
+        console.log(pc.dim(`  drew one state; ${drawn.states.length} other${drawn.states.length === 1 ? "" : "s"} not drawn:`));
+        for (const st of drawn.states.slice(0, 6)) console.log(pc.dim(`    ${st}`));
+      }
       if (parts.length)
         console.log(
           pc.dim(`  wired ${parts.length - drawn.undrawn.length} of ${parts.length} parts`) +

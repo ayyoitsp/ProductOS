@@ -30,6 +30,8 @@ export interface DrawResult {
   from: string[];
   /** Expressions that could not be read, left as marked placeholders. */
   unresolved: string[];
+  /** Branches not drawn: the screen's other states, named so they are not lost silently. */
+  states: string[];
   /** Parts the corpus declares that the drawing does not show. */
   undrawn: string[];
   /**
@@ -94,10 +96,22 @@ interface Ctx {
   depth: number;
   from: Set<string>;
   unresolved: string[];
+  /** Branches not drawn: the screen's other states, named so they are not lost silently. */
+  states: string[];
   /** Sample values for a placeholder, by the identifier that produced it. */
   sample: (hint: string) => string | undefined;
   /** The file being read, so a co-located component resolves before a same-named one elsewhere. */
   sameFile?: string;
+  /**
+   * ⛔ NAMES THAT ARE ICONS, WHICH THE DRAWING MUST NOT SPELL OUT.
+   *
+   * An unresolved component is named rather than dropped — right for a control, wrong for an icon.
+   * The deals list came out reading "Building2", "SearchIcon", "XIcon", "ChevronLeft",
+   * "ChevronRight" in the middle of the screen, which is not a wireframe of anything. Peter, on
+   * seeing it: *"what renders there is ass"*. Known by where they are imported from, which is a
+   * fact in the file rather than a guess about the name.
+   */
+  icons: Set<string>;
   /**
    * ⛔ THE CALL SITE'S PROPS, WITHOUT WHICH INLINING IS POINTLESS.
    *
@@ -210,8 +224,53 @@ function emit(node: ts.Node, ctx: Ctx): string {
     if (!n.expression) return "";
     const e = n.expression;
     // `{cond && <X/>}` — draw the element: a mock exists to show the states, not to hide them.
-    if (ts.isBinaryExpression(e) && e.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken) return emit(e.right, ctx);
-    if (ts.isConditionalExpression(e)) return emit(e.whenTrue, ctx) + emit(e.whenFalse, ctx);
+    /**
+     * ⛔ A SCREEN IS ONE STATE AT A TIME, AND THIS USED TO DRAW ALL OF THEM AT ONCE.
+     *
+     * `emit(whenTrue) + emit(whenFalse)` put the loading skeleton, the empty state and the populated
+     * table on one screen, stacked — so the deals list showed "No deals yet" directly above a search
+     * field and a pager. Peter: *"what renders there is ass"*. A superposition of three states is
+     * not a picture of any of them, and a reviewer cannot tell which parts belong together.
+     *
+     * So one branch is chosen, and the rule is the one this file already argues for elsewhere: the
+     * bigger side is the screen, the smaller is the guard. Loading and empty guards are skipped by
+     * name first, because a skeleton can be long.
+     *
+     * ⛔ WHAT IS SKIPPED IS REPORTED. Those branches are the view's other STATES — the thing this
+     * drawing cannot yet hold — and losing them silently is how a screen comes to claim it has one
+     * appearance. `draw` says what it left out.
+     */
+    /**
+     * ⛔ NARROW ON PURPOSE. The first version treated any condition containing `!` as an empty-state
+     * guard, which threw away `rightIcon && !rightElement` and `hint && !error` — ordinary optional
+     * content — and the deals list lost its search field and its New Deal button. A drawing missing
+     * controls the product has is the thin drawing again, reached by trying to fix the opposite
+     * problem. These match the two things that genuinely are other states, and nothing else.
+     */
+    const GUARD = /\b(isLoading|loading|isPending|pending|isFetching|busy|skeleton)\b/i;
+    const EMPTY = /(===\s*0|!\s*\w+(?:\.\w+)*\.length\b|\blength\s*===\s*0\b|\bisEmpty\b|\bnoResults\b)/i;
+    const pick = (cond: ts.Node, a: ts.Node, b: ts.Node): string => {
+      const c = cond.getText();
+      const span = (n: ts.Node): number => n.getEnd() - n.getStart();
+      let chosen: ts.Node;
+      let skipped: ts.Node;
+      if (GUARD.test(c) || EMPTY.test(c)) { chosen = b; skipped = a; }
+      else if (span(a) >= span(b)) { chosen = a; skipped = b; }
+      else { chosen = b; skipped = a; }
+      const other = skipped.getText().replace(/\s+/g, " ").slice(0, 60);
+      if (other.trim()) ctx.states.push(`when ${c.replace(/\s+/g, " ").slice(0, 50)}: ${other}`);
+      return emit(chosen, ctx);
+    };
+    if (ts.isBinaryExpression(e) && e.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken) {
+      const c = e.left.getText();
+      /** `{!deals.length && <Empty/>}` — a state, not the screen. Recorded and not drawn. */
+      if (GUARD.test(c) || EMPTY.test(c)) {
+        ctx.states.push(`when ${c.replace(/\s+/g, " ").slice(0, 50)}: ${e.right.getText().replace(/\s+/g, " ").slice(0, 60)}`);
+        return "";
+      }
+      return emit(e.right, ctx);
+    }
+    if (ts.isConditionalExpression(e)) return pick(e.condition, e.whenTrue, e.whenFalse);
     if (ts.isJsxElement(e) || ts.isJsxSelfClosingElement(e) || ts.isJsxFragment(e)) return emit(e, ctx);
     if (ts.isStringLiteral(e)) return text(e.text);
     /**
@@ -224,7 +283,29 @@ function emit(node: ts.Node, ctx: Ctx): string {
     if (ts.isIdentifier(e) && ctx.props.has(e.text)) return ctx.props.get(e.text)!;
     const s = ctx.sample(hint);
     if (s !== undefined) return text(s);
+    /**
+     * ⛔ A LOCAL JSX VARIABLE IS CONTENT, NOT A SLOT — and treating it as one deleted a button.
+     *
+     * `const newDealButton = (<button>…New Deal</button>)` used as `{newDealButton}` is an ordinary
+     * way to keep a long render readable. Dropping bare identifiers took the New Deal button and
+     * the search field straight off the deals list, which is the thin drawing arrived at while
+     * fixing placeholder noise. Looked up in the file being read, so it costs nothing when absent.
+     */
+    if (ts.isIdentifier(e) && ctx.sameFile) {
+      const local = localJsx(ctx.sameFile, e.text);
+      if (local) return emit(local, ctx);
+    }
     ctx.unresolved.push(hint);
+    /**
+     * ⛔ A SLOT IS NOT CONTENT. A bare identifier here is almost always a prop a caller would fill —
+     * `actions`, `title`, `label`, `rightIcon` — and marking each one put twenty hatched ellipses on
+     * a screen whose real text is four words. They are noise pretending to be information, and they
+     * crowd out the parts of the drawing that are real.
+     *
+     * An expression with structure — a call, a member access, `deals.map(...)` — IS content the
+     * screen would show, and stays marked, because omitting it silently produces the thin drawing.
+     */
+    if (ts.isIdentifier(e)) return "";
     return `<span class="productos-unknown" title="${text(hint)}">&hellip;</span>`;
   }
   if (!ts.isJsxElement(n) && !ts.isJsxSelfClosingElement(n)) return "";
@@ -258,6 +339,19 @@ function emit(node: ts.Node, ctx: Ctx): string {
             else if (ts.isNumericLiteral(v)) bound.set(name, v.text);
             else if (ts.isJsxElement(v) || ts.isJsxSelfClosingElement(v) || ts.isJsxFragment(v))
               bound.set(name, emit(v, { ...ctx, depth: ctx.depth + 1 }));
+            /**
+             * ⛔ AND A LOCAL HELD IN A VARIABLE, RESOLVED HERE WHERE IT STILL EXISTS.
+             *
+             * `<PageHeader actions={newDealButton} />` names something declared a few lines up in
+             * the ROUTE. By the time `{actions}` is reached the reader is inside PageHeader.tsx,
+             * where that name means nothing — so the New Deal button vanished from the deals list
+             * even after locals were resolvable, because it was resolved in the wrong file. Bound at
+             * the call site, which is the only place it is in scope.
+             */
+            else if (ts.isIdentifier(v) && ctx.sameFile) {
+              const local = localJsx(ctx.sameFile, v.text);
+              if (local) bound.set(name, emit(local, { ...ctx, depth: ctx.depth + 1 }));
+            }
           }
         }
         const sub: Ctx = { ...ctx, depth: ctx.depth + 1, props: bound, sameFile: file };
@@ -271,6 +365,16 @@ function emit(node: ts.Node, ctx: Ctx): string {
      * missing a control the application has — which is the thin drawing again, arrived at
      * mechanically.
      */
+    /**
+     * ⛔ AN ICON IS DRAWN AS A MARK. Spelling it out puts the word "ChevronRight" in the middle of a
+     * pagination control, which is not a wireframe of anything — and there were five of them on one
+     * screen. It is still recorded as unresolved, because the drawing genuinely does not know what
+     * the glyph looks like; what changes is that it stops lying about the screen's text.
+     */
+    if (ctx.icons.has(tag)) {
+      ctx.unresolved.push(`<${tag}> (icon)`);
+      return `<span class="productos-icon" role="img" aria-label="${text(tag)}"></span>`;
+    }
     ctx.unresolved.push(`<${tag}>`);
     return `<div class="productos-unknown" data-component="${text(tag)}">${children || text(tag)}</div>`;
   }
@@ -289,7 +393,28 @@ function emit(node: ts.Node, ctx: Ctx): string {
       attrs.push(name);
       continue;
     }
-    if (ts.isStringLiteral(a.initializer)) attrs.push(`${name}="${text(a.initializer.text)}"`);
+    if (ts.isStringLiteral(a.initializer)) {
+      attrs.push(`${name}="${text(a.initializer.text)}"`);
+      continue;
+    }
+    /**
+     * ⛔ AN ATTRIBUTE BOUND FROM THE CALL SITE IS STILL THE PRODUCT'S OWN WORDS.
+     *
+     * Only string literals survived here, so `<TextField placeholder="Search deals…" />` inlined to
+     * a bare `<input />`: the primitive writes `placeholder={placeholder}`, an expression, and the
+     * text was dropped one layer below where it was written. The deals list drew an empty box where
+     * the product has a labelled search field. Bound props are already resolved for children; this
+     * is the same lookup, for the attributes a reader can see.
+     */
+    if (ts.isJsxExpression(a.initializer) && a.initializer.expression) {
+      const v = a.initializer.expression;
+      if (ts.isStringLiteral(v) || ts.isNoSubstitutionTemplateLiteral(v)) attrs.push(`${name}="${text(v.text)}"`);
+      else if (ts.isIdentifier(v) && ctx.props.has(v.text)) {
+        const bound = ctx.props.get(v.text)!;
+        /** Only if it is plain text — a bound prop can be rendered markup, which is not an attribute. */
+        if (!/[<>]/.test(bound)) attrs.push(`${name}="${text(bound)}"`);
+      }
+    }
   }
   const attr = attrs.length ? ` ${attrs.join(" ")}` : "";
   if (VOID.has(tag)) return `<${tag}${attr} />`;
@@ -312,6 +437,35 @@ export interface DrawOptions {
   sample?: Record<string, string>;
 }
 
+/**
+ * `const <name> = (<jsx/>)` in a file, if it is there.
+ *
+ * Cached per file: `emit` asks for several names per render and re-parsing a 1,200-line route for
+ * each one is the difference between a drawing and a pause.
+ */
+const localCache = new Map<string, Map<string, ts.Node>>();
+function localJsx(file: string, name: string): ts.Node | undefined {
+  let found = localCache.get(file);
+  if (!found) {
+    found = new Map<string, ts.Node>();
+    try {
+      const src = ts.createSourceFile(file, fs.readFileSync(file, "utf-8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+      const walk = (n: ts.Node): void => {
+        if (ts.isVariableDeclaration(n) && ts.isIdentifier(n.name) && n.initializer) {
+          const init = ts.isParenthesizedExpression(n.initializer) ? n.initializer.expression : n.initializer;
+          if (ts.isJsxElement(init) || ts.isJsxSelfClosingElement(init) || ts.isJsxFragment(init)) found!.set(n.name.text, init);
+        }
+        ts.forEachChild(n, walk);
+      };
+      walk(src);
+    } catch {
+      /* an unreadable file simply has no locals */
+    }
+    localCache.set(file, found);
+  }
+  return found.get(name);
+}
+
 export function drawFromRoute(routeFile: string, opts: DrawOptions = {}): DrawResult {
   const root = opts.componentsDir;
   const index = new Map<string, string>();
@@ -327,12 +481,37 @@ export function drawFromRoute(routeFile: string, opts: DrawOptions = {}): DrawRe
     };
     walk(root);
   }
+  /**
+   * Names imported from an icon package, in this file and in anything it inlines. Collected up
+   * front because `emit` walks several files and an icon is an icon wherever it came from.
+   */
+  const icons = new Set<string>();
+  const learnIcons = (file: string): void => {
+    let body: string;
+    try {
+      body = fs.readFileSync(file, "utf-8");
+    } catch {
+      return;
+    }
+    for (const m of body.matchAll(/import\s*\{([^}]*)\}\s*from\s*["']([^"']+)["']/g)) {
+      if (!/lucide|heroicons|react-icons|@tabler\/icons|phosphor|@radix-ui\/react-icons/i.test(m[2] ?? "")) continue;
+      for (const raw of (m[1] ?? "").split(",")) {
+        const name = raw.split(" as ").pop()!.trim();
+        if (name) icons.add(name);
+      }
+    }
+  };
+  learnIcons(routeFile);
+  for (const f of index.values()) learnIcons(f);
+
   const ctx: Ctx = {
+    icons,
     resolve: (name) => index.get(name),
     sameFile: routeFile,
     depth: 0,
     from: new Set([path.basename(routeFile)]),
     unresolved: [],
+    states: [],
     props: new Map(),
     sample: (hint) => {
       const s = opts.sample ?? {};
@@ -341,7 +520,7 @@ export function drawFromRoute(routeFile: string, opts: DrawOptions = {}): DrawRe
     },
   };
   const jsx = returnedJsx(routeFile);
-  if (!jsx) return { html: "", from: [...ctx.from], unresolved: ["the route exports no component this can read"], undrawn: [], text: "" };
+  if (!jsx) return { html: "", from: [...ctx.from], unresolved: ["the route exports no component this can read"], undrawn: [], states: [], text: "" };
   const plain = emit(jsx, ctx);
   const wired = opts.parts?.length ? wireParts(plain, opts.parts) : { html: plain, matched: new Set<string>() };
   /**
@@ -349,7 +528,7 @@ export function drawFromRoute(routeFile: string, opts: DrawOptions = {}): DrawRe
    * drawing look complete while a control the corpus claims exists is nowhere on it.
    */
   const undrawn = (opts.parts ?? []).filter((p) => !wired.matched.has(p.id) && !p.decorative).map((p) => p.id);
-  return { html: wired.html, from: [...ctx.from], unresolved: [...new Set(ctx.unresolved)], undrawn, text: asText(wired.html) };
+  return { html: wired.html, from: [...ctx.from], unresolved: [...new Set(ctx.unresolved)], undrawn, states: [...new Set(ctx.states)], text: asText(wired.html) };
 }
 
 /**

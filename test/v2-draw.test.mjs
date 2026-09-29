@@ -42,9 +42,22 @@ test("a parenthesised branch is drawn, not dropped", () => {
   );
   const r = drawFromRoute(route);
   assert.match(r.html, /class="err"/, "an && branch was dropped");
-  // ⛔ BOTH arms of a ternary: taking one silently draws one state and calls it the screen.
-  assert.match(r.html, /class="none"/, "the true arm was dropped");
-  assert.match(r.html, /class="rows"/, "the false arm was dropped");
+  /**
+   * ⛔ THIS TEST USED TO DEMAND BOTH ARMS, reasoning that *"taking one silently draws one state and
+   * calls it the screen."* The operative word was SILENTLY, and drawing both is worse: the deals
+   * list came out with a loading skeleton, an empty state and a populated table stacked on one
+   * screen. Peter, looking at it: *"what renders there is ass"*. A superposition of three states is
+   * not a picture of any of them.
+   *
+   * So one arm is drawn — the larger, which is the screen rather than the guard — and the other is
+   * REPORTED as a state this drawing does not hold. Not silent, which was the real objection.
+   */
+  assert.match(r.html, /class="rows"/, "the screen arm was dropped");
+  assert.doesNotMatch(r.html, /class="none"/, "both arms were drawn, which is a picture of no state");
+  assert.ok(
+    r.states.some((st) => st.includes("nothing here")),
+    `the arm it did not draw must be reported as a state; got ${JSON.stringify(r.states)}`
+  );
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
@@ -104,7 +117,7 @@ test("what it cannot read is marked, never guessed — and parts are stamped", (
     dir,
     "page.tsx",
     `export default function P() {
-       return <div><button className="go">Save it</button><span>{total}</span><input placeholder="Search deals" /></div>
+       return <div><button className="go">Save it</button><span>{deal.total}</span><span>{total}</span><input placeholder="Search deals" /></div>
      }`
   );
   const r = drawFromRoute(route, {
@@ -114,8 +127,16 @@ test("what it cannot read is marked, never guessed — and parts are stamped", (
       { id: "ghost", role: "commits", label: "Nowhere To Be Found" },
     ],
   });
-  // ⛔ A value it cannot read becomes a marked placeholder: a mock that invents a figure teaches a
-  // reviewer something the product does not do, and they cannot tell which numbers were real.
+  /**
+   * ⛔ A value it cannot read becomes a marked placeholder: a mock that invents a figure teaches a
+   * reviewer something the product does not do, and they cannot tell which numbers were real.
+   *
+   * ⛔ BUT A BARE IDENTIFIER IS A SLOT, NOT CONTENT, and marking those put twenty hatched ellipses
+   * on a screen whose real text was four words — `actions`, `title`, `label`, `rightIcon`. They
+   * crowd out the parts of the drawing that are real. So the fixture asks about a MEMBER access,
+   * which is content the screen would show; a bare `{total}` renders as nothing and is still
+   * counted as unresolved.
+   */
   assert.match(r.html, /productos-unknown/, "an unreadable expression was guessed at");
   assert.ok(r.unresolved.includes("total"), `unresolved does not name it: ${JSON.stringify(r.unresolved)}`);
 

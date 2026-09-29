@@ -36,10 +36,21 @@ export function wireParts(html: string, parts: WireablePart[]): Wired {
 
   const attrs = (pt: WireablePart, existing: string): string => {
     const cls = `pt pt-${pt.role}`;
-    const withClass = /class\s*=\s*"([^"]*)"/.test(existing)
-      ? existing.replace(/class\s*=\s*"([^"]*)"/, (_m, had: string) => `class="${had} ${cls}"`)
-      : `${existing} class="${cls}"`;
-    return `${withClass} data-part="${esc(pt.id)}"${pt.leads_to ? ` data-goes="${esc(pt.leads_to)}"` : ""}`;
+    /**
+     * ⛔ A VOID ELEMENT'S SLASH COMES LAST, AND THIS USED TO WRITE PAST IT.
+     *
+     * `<input placeholder="…" />` came out as `<input placeholder="…" / class="pt" data-part="…">`
+     * — attributes after the self-closing slash, which is not markup any parser agrees about. It
+     * only appeared once inputs started carrying attributes at all, because before that there was
+     * nothing between the tag name and the slash to notice.
+     */
+    const selfClosing = /\/\s*$/.test(existing);
+    const body = selfClosing ? existing.replace(/\s*\/\s*$/, "") : existing;
+    const withClass = /class\s*=\s*"([^"]*)"/.test(body)
+      ? body.replace(/class\s*=\s*"([^"]*)"/, (_m, had: string) => `class="${had} ${cls}"`)
+      : `${body} class="${cls}"`;
+    const goes = pt.leads_to ? ` data-goes="${esc(pt.leads_to)}"` : "";
+    return `${withClass} data-part="${esc(pt.id)}"${goes}${selfClosing ? " /" : ""}`;
   };
 
   // 1. Anything already carrying the attribute is done — give it the class and move on.

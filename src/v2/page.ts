@@ -489,6 +489,13 @@ const PT_STYLE = `<style>
     outline: 1px dashed rgba(245,158,11,.6); }
   [data-component] { display: block; padding: .25rem .4rem; font-size: .75rem; }
   /**
+   * ⛔ AN ICON READS AS AN ICON. The drawing does not know the glyph, but it knows the size and the
+   * shape of the hole — and a neutral square is a wireframe convention every reader already knows,
+   * where the word "ChevronRight" in running text is not.
+   */
+  .productos-icon { display: inline-block; width: 1em; height: 1em; vertical-align: -.12em;
+    border-radius: 2px; background: currentColor; opacity: .3; }
+  /**
    * ⛔ THE FOCUS MARK CANNOT BE THE ACCENT COLOUR. On a card's copy it landed on the primary
    * button — blue ring, blue button, invisible. The one job of the copy is to say WHICH control the
    * sentence is about, so the mark has to read against the application's own palette rather than
