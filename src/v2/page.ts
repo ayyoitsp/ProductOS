@@ -3259,6 +3259,34 @@ const PROTOTYPE = `<script>
  * time a sentence is reworded, which is the whole hand-authoring trap one layer over.
  */
 const DRIVE = `<script>
+/**
+ * ⛔ CLOSING IS WIRED FIRST, AT THE DOCUMENT, AND NEVER LOCKS THE PAGE.
+ *
+ * Peter: *"now all i see is the prototype, i can't close it, do anything… you should NEVER STOP and
+ * leave this in a state like this."*
+ *
+ * The opened screen is a full-viewport overlay whose Close button was wired at the END of a long
+ * script — so anything throwing before that point left a page that could be covered and not
+ * uncovered. It also set body overflow to hidden, which turns a stuck overlay into a stuck page.
+ *
+ * So: the escape is registered before any of the work that could fail, it is delegated rather than
+ * bound to an element that may not exist yet, Escape and a press on the backdrop both close it, and
+ * the page is never locked. A surface that can trap a reviewer is worse than one that does nothing.
+ */
+(function () {
+  const shut = () => {
+    const box = document.querySelector(".pbig");
+    if (box) box.hidden = true;
+    document.body.style.overflow = "";
+  };
+  document.addEventListener("keydown", (ev) => { if (ev.key === "Escape") shut(); });
+  document.addEventListener("click", (ev) => {
+    const t = ev.target;
+    if (!(t instanceof Element)) return;
+    /** The button, or the backdrop itself — never a press inside the screen. */
+    if (t.closest(".pbig-x") || t.classList.contains("pbig")) shut();
+  });
+})();
 (function () {
   /**
    * ⛔ WALKING A SCREEN THROUGH ITS STATES. Every drawing is already in the page, one per state, so
@@ -3482,18 +3510,13 @@ const DRIVE = `<script>
       });
     truthFor(screen, null);
     big.hidden = false;
-    document.body.style.overflow = "hidden";
   }
 
   board.addEventListener("click", (ev) => {
     const t = ev.target instanceof Element ? ev.target.closest(".ptile") : null;
     if (t) open(t.dataset.proto);
   });
-  big.querySelector(".pbig-x").addEventListener("click", () => {
-    big.hidden = true;
-    document.body.style.overflow = "";
-  });
-  document.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && !big.hidden) big.querySelector(".pbig-x").click(); });
+
 })();
 </script>`;
 
@@ -4100,6 +4123,7 @@ const STYLE = `<style>
   .pbig { position: fixed; inset: 0; z-index: 60; background: var(--bg); display: flex; flex-direction: column; }
   .pbig-bar { display: flex; align-items: center; justify-content: space-between; gap: 1rem;
     padding: .6rem .9rem; border-bottom: 1px solid var(--rule); }
+  .pbig-esc { font-size: .76rem; color: var(--dim); margin-left: auto; margin-right: .6rem; }
   .pbig-x { font: inherit; font-size: .85rem; cursor: pointer; background: none; border: 1px solid var(--rule);
     border-radius: 6px; padding: .2rem .7rem; color: inherit; }
   .pbig-body { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) 22rem; overflow: hidden; }
@@ -4327,7 +4351,7 @@ function renderPrototype(screens: ProtoScreen[], promises: ProtoPromise[]): stri
     ${blanks}
     ${unseen}
     <div class="pbig" hidden>
-      <div class="pbig-bar"><strong class="pbig-t"></strong><button type="button" class="pbig-x">Close</button></div>
+      <div class="pbig-bar"><strong class="pbig-t"></strong><span class="pbig-esc">Esc, or click outside</span><button type="button" class="pbig-x">Close</button></div>
       <div class="pbig-body"><div class="pbig-stage"></div><aside class="pbig-truth"><p class="none">Press a control on the screen.</p></aside></div>
     </div>
   </section>`;
