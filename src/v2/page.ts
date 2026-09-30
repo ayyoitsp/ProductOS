@@ -17,7 +17,7 @@
  */
 import { resolveRules, type Corpus } from "./load.js";
 import { promisesOf, screensOf, type ProtoPromise, type ProtoScreen } from "./prototype.js";
-import { inferConnections, landingsFor } from "./connects.js";
+import { inferConnections, landingsFor, finishesFor } from "./connects.js";
 import { SLOTS, SLOT_ASKS_SHORT, statements, saysText, type SlotName, type Scope, type View, type Part, type Says } from "./schema.js";
 import { gridFor, gateFor, actsFor, ruleHomes, type Grid, type Cell } from "./grid.js";
 import { stampFor, decidedFor } from "./stamp.js";
@@ -778,6 +778,25 @@ function renderScreens(scope: Scope, ctx: Ctx, scopeId: string, opts: PageOption
                   return to ? `${whole} data-goes="${esc(to)}"` : whole;
                 })
               : html;
+          /**
+           * ⛔ A WALK THAT ENDS SAYS SO, WITH THE FEATURE'S OWN WORDS FOR FINISHING.
+           *
+           * Peter: *"we are going straight to the deals list on completion… awkwards to go back to
+           * the deals list feature from here"*. Arriving somewhere is not finishing, and the jump
+           * read as being dropped because the reviewer HAD finished and nothing said so.
+           *
+           * `happy_path.ends_with` is that sentence, authored and agreed to, and it had never been
+           * rendered at the end of a walk. Stamped onto the controls that end the path so the
+           * prototype can show it where the press happens.
+           */
+          const finishes = new Set(finishesFor(scope, v));
+          const ends = scope.happy_path?.ends_with ?? "";
+          const withFinish = (html: string): string =>
+            finishes.size && ends
+              ? html.replace(/data-part="([^"]+)"/g, (whole, id: string) =>
+                  finishes.has(id) ? `${whole} data-finishes="${esc(ends)}"` : whole
+                )
+              : html;
           const withLands = (html: string, here: number): string =>
             lands.reduce(
               (acc, l) =>
@@ -803,11 +822,11 @@ function renderScreens(scope: Scope, ctx: Ctx, scopeId: string, opts: PageOption
                        )
                        .join("")}
                    </div>
-                   <div class="state-frame" data-state="0">${asMock(withLands(wireHtml(v, matched, derivedGoes, scopeId), 0))}</div>
+                   <div class="state-frame" data-state="0">${asMock(withFinish(withLands(wireHtml(v, matched, derivedGoes, scopeId), 0)))}</div>
                    ${states
                      .map(
                        (st, i) =>
-                         `<div class="state-frame" data-state="${i + 1}" hidden>${asMock(withLands(withGoes(st.sketch_html), i + 1))}</div>`
+                         `<div class="state-frame" data-state="${i + 1}" hidden>${asMock(withFinish(withLands(withGoes(st.sketch_html), i + 1)))}</div>`
                      )
                      .join("")}
                  </div>`
@@ -3275,7 +3294,20 @@ const PROTOTYPE = `<script>
       (target && target.querySelector("h2") && target.querySelector("h2").textContent.trim()) || to;
     const tip = document.createElement("div");
     tip.className = "arm-tip";
-    tip.innerHTML = "<strong>" + esc(name) + "</strong><span>Press again to go there</span>";
+    /**
+     * ⛔ FINISHING FIRST, LEAVING SECOND. A control that ends the happy path is not primarily a
+     * door to somewhere else — it is the end of the thing being reviewed, and saying "press again
+     * to go there" as the whole message is what made completion read as being dropped.
+     */
+    const done = btn.dataset && btn.dataset.finishes;
+    tip.innerHTML = done
+      ? '<strong class="arm-done">✓ That completes this feature</strong><span class="arm-ends">' +
+        esc(done) +
+        "</span><span>" +
+        esc(name) +
+        " is where it goes next — press again to follow it</span>"
+      : "<strong>" + esc(name) + "</strong><span>Press again to go there</span>";
+    if (done) tip.classList.add("is-done");
     document.body.appendChild(tip);
     const place = () => {
       const r = btn.getBoundingClientRect();
@@ -4360,6 +4392,10 @@ const STYLE = `<style>
     display: flex; flex-direction: column; gap: .1rem;
   }
   .arm-tip strong { font-weight: 600; }
+  /** ⛔ Wider and calmer when it is reporting completion — it is a sentence, not a label. */
+  .arm-tip.is-done { max-width: 26rem; gap: .3rem; }
+  .arm-tip .arm-done { color: #7fd48a; }
+  .arm-tip .arm-ends { opacity: 1; font-style: italic; }
   .arm-tip span { opacity: .75; }
   .arm-tip::after {
     content: ""; position: absolute; left: 50%; margin-left: -5px;

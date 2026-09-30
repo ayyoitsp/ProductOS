@@ -419,3 +419,29 @@ export function landingsFor(scope: Scope, view: View): Landing[] {
  * Two derivations of one fact is the thing this project keeps paying for. This one answers only the
  * question nothing else answered: which state of THIS screen a press moves to.
  */
+
+/**
+ * ⛔ WHICH CONTROL FINISHES THE FLOW — so a walk can END rather than just stop being here.
+ *
+ * Peter: *"we are going straight to the deals list on completion. but we should be showing a
+ * completion screen here.. or maybe we should have a placeholder indicating that the flow is
+ * complete? awkwards to go back to the deals list feature from here"*.
+ *
+ * ⛔ NOT A PLACEHOLDER. The feature already says what finishing means — `happy_path.ends_with`,
+ * authored, agreed to, and never once rendered at the end of a walk. A placeholder saying "flow
+ * complete" would be a second thing to maintain that says less than the sentence already there.
+ *
+ * ⛔ AND ARRIVING SOMEWHERE IS NOT FINISHING. A control in the middle of a flow lands on the next
+ * screen and the walk continues; a control on the LAST screen of `through` whose destination is
+ * another feature is the end of this one. The difference is what makes the jump feel like being
+ * dropped: the reviewer had finished and nothing said so, so leaving read as losing their place.
+ */
+export function finishesFor(scope: Scope, view: View): string[] {
+  const through = scope.happy_path?.through ?? [];
+  if (!through.length) return [];
+  /** Only the last screen of the path can finish it. */
+  if (through[through.length - 1] !== view.id) return [];
+  const ends = scope.happy_path?.ends_with;
+  if (!ends) return [];
+  return view.parts.filter((pt) => pt.role === "commits" && !pt.returns).map((pt) => pt.id);
+}

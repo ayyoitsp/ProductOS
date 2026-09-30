@@ -133,6 +133,28 @@ happy_path:
   not: setting up the allowance that runs on its own
 ```
 
+⛔ **`ends_with` is what a reviewer reads when the walk finishes, so write it for them.** The
+prototype shows it at the moment somebody presses the control that ends the path — *"✓ That
+completes this feature — the kid's money is different by that amount, and the movement is on the
+list with its reason and the date"*. It is the only sentence in the corpus a reviewer meets as a
+result of something they did.
+
+This came from a walk ending by jumping into another feature. Peter: *"we are going straight to the
+deals list on completion… awkwards to go back to the deals list feature from here"*. Arriving
+somewhere is not finishing, and the jump read as being dropped because the reviewer HAD finished
+and nothing said so. So: the last control in the path ends the walk in place, states what was
+accomplished, and offers the onward screen as a second press rather than taking it.
+
+Two things follow for you:
+
+- **Write `ends_with` as a state of the world, not a navigation.** "the deal exists on the list and
+  its model is in the folder" — not "they land on the workspace". Where they land next is the
+  `answer` of the control they pressed; those are different facts and they have different homes.
+- **The last screen in `through` needs the control somebody presses to finish**, with the role
+  `commits`. Where the feature genuinely ends by ARRIVING somewhere — a log somebody reads, a list
+  somebody checks — nothing needs pressing and nothing is wrong; `check` knows the difference and
+  only asks where you act on the other screens and not on the last one.
+
 This is the meat of the feature: what gets accomplished, what the person arrives with, what they
 leave with, and the flow. The eight slots are the **details** of it.
 

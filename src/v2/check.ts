@@ -31,7 +31,7 @@ import { descendants } from "./settle.js";
 import { ruleHomes } from "./grid.js";
 import { appStyleFor } from "./appcss.js";
 import { readLog } from "./log.js";
-import { landingsFor } from "./connects.js";
+import { landingsFor, finishesFor } from "./connects.js";
 import fs from "node:fs";
 import { resolvePathsOrThrow } from "../core/paths.js";
 import { readConfig } from "../core/config.js";
@@ -2530,6 +2530,44 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
         fix: `say which control takes them on, and where it leaves them — in the \`answer\` of the exchange at that control. If the path really is one screen, take the next one out of \`through\``,
       });
     }
+  }
+
+  /**
+   * ⛔ A FEATURE NOBODY CAN FINISH. `ends_with` is required, so every happy path SAYS what
+   * completion is — and a reviewer can only ever see it if some control on the last screen ends
+   * the path. Where none does, the sentence is written, agreed to, and unreachable: the walk
+   * simply stops being anywhere, which is what made leaving feel like being dropped.
+   *
+   * Peter: *"we should be showing a completion screen here… awkwards to go back to the deals list
+   * feature from here"*.
+   */
+  for (const { scope } of corpus.scopes) {
+    const through = scope.happy_path?.through ?? [];
+    if (!through.length || !scope.happy_path?.ends_with) continue;
+    const last = scope.views.find((v) => v.id === through[through.length - 1]);
+    if (!last || last.exists === "withdrawn") continue;
+    if (finishesFor(scope, last).length) continue;
+    /**
+     * ⛔ NOT ON A FEATURE SOMEBODY READS. This fires exactly when the last screen has no `commits`
+     * control, and plenty of features legitimately end that way: *"they have seen every exclusion
+     * and its reason"* is finished by ARRIVING. Firing there told three authors to add a button to
+     * a screen whose whole point is that there is nothing to press.
+     *
+     * What is genuinely odd is a feature you ACT in — commits controls on its other screens — whose
+     * path then ends somewhere with nothing to press. That is either a missing last step or a
+     * `through` that stops early, and both are worth a look.
+     */
+    const actsElsewhere = scope.views.some(
+      (v) => v.id !== last.id && v.exists !== "withdrawn" && v.parts.some((pt) => pt.role === "commits")
+    );
+    if (!actsElsewhere) continue;
+    add({
+      severity: "note",
+      kind: "nothing-finishes-this-feature",
+      where: `${scope.id}#${last.id}`,
+      what: `this feature says it ends with "${scope.happy_path.ends_with}" — but somebody acts on its other screens and there is nothing to press on this one, so a walk ends here without anybody finishing anything`,
+      fix: `if a control here finishes it, give that control the role \`commits\`. If the feature really ends by arriving on this screen, nothing needs changing. If the path stops early, say which screen it ends on in \`through\``,
+    });
   }
 
   const project = projectRootOf(root);

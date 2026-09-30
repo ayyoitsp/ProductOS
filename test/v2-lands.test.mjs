@@ -116,3 +116,46 @@ test("a returning control needs nothing said about it", () => {
   assert.equal(lands.length, 1, "a returning control needed an exchange it should not need");
   assert.equal(lands[0].index, 0);
 });
+
+/**
+ * ⛔ ARRIVING SOMEWHERE IS NOT FINISHING, AND THE DIFFERENCE IS WHY LEAVING FELT LIKE BEING DROPPED.
+ *
+ * Peter: *"we are going straight to the deals list on completion. but we should be showing a
+ * completion screen here.. or maybe we should have a placeholder indicating that the flow is
+ * complete? awkwards to go back to the deals list feature from here"*.
+ *
+ * ⛔ NOT A PLACEHOLDER. `happy_path.ends_with` is required by the schema, so every feature already
+ * says what finishing means — authored, agreed to, and never once rendered at the end of a walk. A
+ * placeholder reading "flow complete" would be a second thing to maintain that says less.
+ */
+const { finishesFor } = await import(path.resolve("dist/v2/connects.js"));
+
+const withPath = (through, ends) => ({
+  ...screen({}),
+  happy_path: { accomplishes: "An analyst starts a deal", brings: "a name", ends_with: ends, through },
+});
+
+test("the control that ends the happy path is the one that finishes the feature", () => {
+  const done = finishesFor(withPath(["the-form"], "the deal exists on the list"), view);
+  assert.deepEqual(done, ["continue"], `expected the commit to finish it, got ${JSON.stringify(done)}`);
+});
+
+/** ⛔ Only the LAST screen of the path. A commit in the middle lands on the next step. */
+test("a commit part-way through the path does not finish it", () => {
+  const done = finishesFor(withPath(["the-form", "a-later-screen"], "the deal exists"), view);
+  assert.deepEqual(done, [], "a control in the middle of a flow was treated as the end of it");
+});
+
+/** ⛔ And a control that RETURNS never finishes anything — it puts somebody back where they were. */
+test("a returning control does not finish the feature", () => {
+  const done = finishesFor(withPath(["the-form"], "the deal exists"), {
+    ...view,
+    parts: [{ id: "back", role: "navigates", label: "Back", returns: true }],
+  });
+  assert.deepEqual(done, []);
+});
+
+/** ⛔ Nothing to show means nothing is claimed — a path with no stated end finishes nowhere. */
+test("a feature that never says what finishing is finishes nowhere", () => {
+  assert.deepEqual(finishesFor({ ...screen({}), happy_path: { through: ["the-form"] } }, view), []);
+});
