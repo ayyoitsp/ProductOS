@@ -27,6 +27,7 @@ flowchart LR
   newcomer["newcomer<br/><i>Could a PM handed this and told to build from it actually do it?</i>"]
   architecture["architecture<br/><i>Are these the right subsystems, with the right boundaries, and would it work?</i>"]
   sufficiency["sufficiency<br/><i>Can this model express a real product, and can a person actually review what it produces?</i>"]
+  completeness["completeness<br/><i>Can somebody get from the start of this feature to the end of it, or does the path stop somewhere?</i>"]
   end
   subgraph MAP["the map — territory every role reads"]
     direction TB
@@ -447,6 +448,33 @@ Held three ways rather than one: no author declares `ask-the-human`, so no host 
 - judge whether one particular product is ready
 
 **Needs:** read-files · search-files · run-commands  ·  **Prompt:** `agents/productos-framework.md`
+
+### `completeness`
+
+**Asks:** Can somebody get from the start of this feature to the end of it, or does the path stop somewhere?
+
+**Exists because:** Peter found two dead ends by hand, one after the other, on a corpus all seven other reviewers would have passed: a folder step with no way out, then a folder step with no way on. Every existing reviewer looks at the PARTS — is the concept everywhere, is the claim pinned, could a PM build this screen. A PM can build a screen that goes nowhere, because the screen is fully described. Nobody was looking at the path, and a feature whose steps are each correct and do not join up is a feature nobody can use.
+
+**Reads, in this order:**
+- each scope's happy path — what it says somebody accomplishes, and the screens it passes through
+- those screens in order: what a person has when they arrive, and which control takes them on
+- where each control leaves somebody — the `answer` and `after` of the exchange it performs
+- the prototype as rendered, because a path that is described and not walkable is the failure
+
+**A finding is:**
+- a screen in the happy path with no control that leads to the next one
+- a state a control puts somebody in with no way out of it
+- a happy path whose last screen does not reach what `ends_with` claims
+- a step that needs something no earlier step gives somebody
+- a screen reachable only by pressing a tab a real product would not have
+- a feature whose screens are each fully described and do not join into anything
+
+**⛔ Never:**
+- write anything, or fix a path it finds broken
+- treat a missing step as an authoring mistake without saying so — a path that cannot be expressed is ours, and the two need different people
+- judge whether the destination is the RIGHT destination — that is a product decision, and this asks only whether somebody can get there
+
+**Needs:** read-files · search-files · run-commands  ·  **Prompt:** `agents/productos-completeness.md`
 
 ## The map they read
 

@@ -441,8 +441,60 @@ export const AGENTS: Agent[] = [
     judges: true,
     prompt: "agents/productos-framework.md",
   },
+  {
+    name: "completeness",
+    asks: "Can somebody get from the start of this feature to the end of it, or does the path stop somewhere?",
+    because:
+      "Peter found two dead ends by hand, one after the other, on a corpus all seven other reviewers " +
+      "would have passed: a folder step with no way out, then a folder step with no way on. Every " +
+      "existing reviewer looks at the PARTS — is the concept everywhere, is the claim pinned, could " +
+      "a PM build this screen. A PM can build a screen that goes nowhere, because the screen is " +
+      "fully described. Nobody was looking at the path, and a feature whose steps are each correct " +
+      "and do not join up is a feature nobody can use.",
+    reads: [
+      "each scope's happy path — what it says somebody accomplishes, and the screens it passes through",
+      "those screens in order: what a person has when they arrive, and which control takes them on",
+      "where each control leaves somebody — the `answer` and `after` of the exchange it performs",
+      "the prototype as rendered, because a path that is described and not walkable is the failure",
+    ],
+    finds: [
+      "a screen in the happy path with no control that leads to the next one",
+      "a state a control puts somebody in with no way out of it",
+      "a happy path whose last screen does not reach what `ends_with` claims",
+      "a step that needs something no earlier step gives somebody",
+      "a screen reachable only by pressing a tab a real product would not have",
+      "a feature whose screens are each fully described and do not join into anything",
+    ],
+    never: [
+      "write anything, or fix a path it finds broken",
+      "treat a missing step as an authoring mistake without saying so — a path that cannot be expressed is ours, and the two need different people",
+      "judge whether the destination is the RIGHT destination — that is a product decision, and this asks only whether somebody can get there",
+    ],
+    needs: ["read-files", "search-files", "run-commands"],
+    judges: true,
+    prompt: "agents/productos-completeness.md",
+  },
 ];
 
+/**
+ * ⛔ THE ONE QUESTION NOBODY WAS ASKING, FOUND BY A PERSON WALKING INTO IT TWICE.
+ *
+ * Peter: *"one of our agents most assuredly should check that the happy path is 'complete'. this
+ * most certainly isn't."* He is right, and the evidence is how he found out: by pressing Continue
+ * on a prototype, reaching the folder step, and having nowhere to go. Twice in one session — a dead
+ * end, then a screen he could not get past.
+ *
+ * Seven reviewers, and every one of them would have passed that corpus. `consistency` asks whether
+ * a concept reaches every layer. `coverage` asks whether each claim is pinned. `truthfulness` asks
+ * where the build disagrees with the target. `newcomer` asks whether a PM could build from it — and
+ * a PM CAN build a folder step that goes nowhere, because the screen is fully described. Each of
+ * them looks at the parts. Nobody was looking at the path.
+ *
+ * ⛔ COMPLETENESS IS A PROPERTY OF THE WHOLE FEATURE, WHICH IS WHY IT NEEDS AN AGENT. A check can
+ * ask whether each step leads to the next — and one now does. It cannot ask whether the sequence
+ * adds up to the thing the happy path claims somebody accomplishes, because that is a reading of
+ * what the product is for against what the screens actually let somebody do.
+ */
 /**
  * ⛔ THE AUTHORS — AND THEY ARE A SEPARATE REGISTRY, NOT A FLAG ON THE ONE ABOVE.
  *

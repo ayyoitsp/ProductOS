@@ -934,6 +934,21 @@ file:
 | `productos-newcomer` | could a PM handed this build from it |
 | `productos-architect` | are these the right subsystems with the right boundaries |
 | `productos-framework` | can the model express a real product, and can a person review it |
+| `productos-completeness` | can somebody get from the start of a feature to the end of it |
+
+⛔ **Run `productos-completeness` before you say a feature is scoped.** It is the newest of these
+and it exists because two dead ends were found by a person clicking through a prototype — a step
+with no way out, then a step with no way on — on a corpus every other reviewer would have passed.
+
+Every other reviewer looks at the **parts**: is this concept in every layer, is this claim pinned,
+could a PM build this screen. All of those are yes for a screen that leads nowhere, because the
+screen itself is completely described. Nobody was looking at the path, and a feature whose steps
+are each correct and do not join up is a feature nobody can use — and it looks finished from every
+angle except the one that matters.
+
+Mechanically, `productos check` now reports `the-happy-path-stops-here` when a screen in `through:`
+has nothing that says how to reach the next one. That catches the missing link. It cannot say
+whether the sequence adds up to what `accomplishes` claims, which is the reading the reviewer does.
 
 ⛔ **Every one of them judges and none may write.** Enforced at install: the tool list is derived
 from declared capabilities and no capability a judge can declare maps to a writing tool. So a

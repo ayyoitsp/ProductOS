@@ -76,12 +76,44 @@ function words(text: string): Set<string> {
 }
 
 /** Everything the corpus says about this control: its label, and every sentence anchored to it. */
-function saidAbout(scope: Scope, view: View, partId: string): { all: string; sentences: string } {
+function saidAbout(
+  scope: Scope,
+  view: View,
+  partId: string
+): { all: string; sentences: string; anchored: boolean } {
   const part = (view.parts ?? []).find((p) => p.id === partId);
   const bits: string[] = [part?.label ?? partId];
   const sentences: string[] = [];
-  for (const ex of scope.exchanges) {
-    if (ex.at?.view !== view.id || ex.at?.part !== partId) continue;
+  /**
+   * ⛔ AN EXCHANGE ANCHORED AT A CONTROL IS ALREADY ABOUT THAT CONTROL, and requiring the prose to
+   * repeat the control's name inside its own slot is asking an author to write a fact twice.
+   *
+   * Peter: *"you can't go past the folder selection screen. is that a framework issue or indexing
+   * issue?"* — this half is the framework. The rule below demands a sentence shaped "<the control's
+   * label> <a going-verb>" before a commit may reach a screen. That is the right test for a
+   * sentence in a SCREEN-level exchange, where several controls share the prose and something has
+   * to say which one it is about. It is the wrong test for a slot on an exchange whose `at` names
+   * the control: the anchor IS the statement of what it is about.
+   */
+  /**
+   * ⛔ AND A SCREEN-LEVEL EXCHANGE COUNTS, WHERE THE CONTROL HAS NONE OF ITS OWN.
+   *
+   * A commit control is how a screen's exchange gets ASKED — the detail panel has said so since
+   * the last round, in those words. The folder step is one exchange with three ways of answering
+   * it: Use This Folder, Create Folder, Choose Different Folder. Its `after` says the analyst is
+   * taken to the deal workspace, and requiring each control to carry its own copy of that sentence
+   * is asking for three records of one fact so that a matcher can find it.
+   *
+   * ⛔ ONLY WHERE THE CONTROL HAS NOTHING OF ITS OWN. A control with its own exchange has said
+   * what it does, and the screen's sentence is about a different ask.
+   */
+  const own = scope.exchanges.filter((ex) => ex.at?.view === view.id && ex.at?.part === partId);
+  const performs = own.length
+    ? own
+    : scope.exchanges.filter((ex) => ex.at?.view === view.id && !ex.at?.part);
+  let anchored = false;
+  for (const ex of performs) {
+    anchored = true;
     bits.push(ex.title ?? "");
     for (const body of Object.values(ex.slots ?? {})) {
       const says = (body as { says?: unknown } | undefined)?.says;
@@ -94,7 +126,7 @@ function saidAbout(scope: Scope, view: View, partId: string): { all: string; sen
    * for "the label, then a navigation verb" matched whatever happened to follow — which is how
    * "Add columns" acquired a destination from a sentence about what the statement shows on arrival.
    */
-  return { all: bits.join(" "), sentences: sentences.join(" ") };
+  return { all: bits.join(" "), sentences: sentences.join(" "), anchored };
 }
 
 /**
@@ -134,10 +166,16 @@ export function inferConnections(corpus: Corpus): { made: Connection[]; missed: 
     for (const v of s.scope.views)
       for (const p of v.parts ?? []) {
         if (p.leads_to) continue;
+        /**
+         * ⛔ A RETURNING CONTROL HAS ALREADY SAID WHERE IT GOES — back to this screen as it was.
+         * Scoring it against other screens gave Back and "Choose Different Folder" a destination on
+         * the deal workspace, purely because they sit on a screen whose prose mentions it.
+         */
+        if (p.returns) continue;
         /** ⛔ Only a control that GOES somewhere. A `commits` part lands where its answer slot says. */
         if (p.role !== "navigates" && p.role !== "commits") continue;
         const from = `${s.scope.id}#${v.id}#${p.id}`;
-        const { all: said, sentences } = saidAbout(s.scope, v, p.id);
+        const { all: said, sentences, anchored } = saidAbout(s.scope, v, p.id);
         /**
          * ⛔ DOES THE SENTENCE SAY IT GOES ANYWHERE? Most controls on a screen act in place —
          * Clear filters, Acknowledge, Publish, Bulk map — and the first run happily connected every
@@ -156,9 +194,33 @@ export function inferConnections(corpus: Corpus): { made: Connection[]; missed: 
          */
         const label = (p.label ?? p.id).trim();
         const NAV = "(begins?|opens?|takes?|goes?|returns?|leads?|starts?|creat\\w*|navigat\\w*)";
-        const aboutIt = label.length >= 3
-          ? new RegExp(`${label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b[^.]{0,40}?\\b${NAV}\\b`, "i").test(sentences)
-          : false;
+        /**
+         * ⛔ SKIPPED WHERE THE EXCHANGE IS ANCHORED AT THE CONTROL — see `saidAbout`. What is still
+         * required is a going-verb SOMEWHERE in its own slots: a control whose answer describes
+         * only what becomes true acts in place, and most of them do.
+         */
+        /**
+         * ⛔ THE PERSON MOVES, NOT THE THING. Reusing NAV here connected "Continue" to the deals
+         * list on the strength of *"the deal is CREATED on the CRE deals list"* — a sentence about
+         * where a record appears, not about where anybody goes. `creat` belongs in NAV because the
+         * label-shaped test reads "New Deal begins CREATING a deal", where the control's own name
+         * carries the aboutness. With the anchor carrying it instead, the verb has to do the rest
+         * of the work, so it has to be a verb of arrival and take a destination after it.
+         */
+        const ARRIVES = /\b(takes?|taken|brings?|brought|lands?|arrives?|returns?|goes?|sends?|sent)\b[^.]{0,40}?\b(to|on|at|onto)\b/i;
+        const goes = ARRIVES.test(sentences);
+        /**
+         * ⛔ ADDITIVE, NEVER INSTEAD OF. Replacing the label-shaped test with the arrival test
+         * dropped the one link in this corpus a person would draw without thinking — "New Deal
+         * begins creating a deal" names its control and its verb, and says nothing about anybody
+         * ARRIVING anywhere. Two shapes of evidence, either of which is enough: the control's own
+         * name beside a going-verb, or an exchange anchored at the control whose slots say somebody
+         * is taken somewhere.
+         */
+        const namedHere =
+          label.length >= 3 &&
+          new RegExp(`${label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b[^.]{0,40}?\\b${NAV}\\b`, "i").test(sentences);
+        const aboutIt = namedHere || (anchored && goes);
         if (!aboutIt) {
           missed.push({ from, label: p.label ?? p.id, why: "nothing here says this control goes anywhere — it acts on the screen it is on" });
           continue;

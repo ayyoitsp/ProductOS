@@ -762,6 +762,22 @@ function renderScreens(scope: Scope, ctx: Ctx, scopeId: string, opts: PageOption
            * A button that does nothing visible is exactly the complaint.
            */
           const lands = landingsFor(scope, v);
+          /**
+           * ⛔ A DERIVED DESTINATION BELONGS ON EVERY STATE, NOT ONLY THE FIRST.
+           *
+           * Peter: *"you can't go past the folder selection screen"*. The two controls that reach
+           * the deal workspace live on the FOLDER state, and `wireHtml` stamps derived destinations
+           * only onto the base drawing — so the walk existed, was reported by `generate`, and was
+           * nowhere a reviewer could press it. A flow whose last step is on a state is the ordinary
+           * case, not an exotic one: that is what a state IS.
+           */
+          const withGoes = (html: string): string =>
+            derivedGoes
+              ? html.replace(/data-part="([^"]+)"/g, (whole, id: string) => {
+                  const to = derivedGoes.get(`${scopeId}#${v.id}#${id}`);
+                  return to ? `${whole} data-goes="${esc(to)}"` : whole;
+                })
+              : html;
           const withLands = (html: string, here: number): string =>
             lands.reduce(
               (acc, l) =>
@@ -791,7 +807,7 @@ function renderScreens(scope: Scope, ctx: Ctx, scopeId: string, opts: PageOption
                    ${states
                      .map(
                        (st, i) =>
-                         `<div class="state-frame" data-state="${i + 1}" hidden>${asMock(withLands(st.sketch_html, i + 1))}</div>`
+                         `<div class="state-frame" data-state="${i + 1}" hidden>${asMock(withLands(withGoes(st.sketch_html), i + 1))}</div>`
                      )
                      .join("")}
                  </div>`

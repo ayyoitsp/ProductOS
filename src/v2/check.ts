@@ -2467,6 +2467,57 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
    * `existsSync` against a path the corpus itself records, and it is the single strongest signal
    * there is. The waiver was right about commits and wrong about absence.
    */
+  /**
+   * ⛔ THE HAPPY PATH HAS TO JOIN UP, AND NOTHING ASKED WHETHER IT DID.
+   *
+   * Peter: *"one of our agents most assuredly should check that the happy path is 'complete'. this
+   * most certainly isn't."* He found it the only way it could be found — by pressing Continue on a
+   * prototype and having nowhere to go.
+   *
+   * Every other finding in this file is about a PART: a slot nobody filled, a claim nothing
+   * demonstrates, a screen with no picture. All of those can pass on a feature whose screens do not
+   * join into anything, because each screen is individually complete. The path is a property of the
+   * sequence and it was nobody's question.
+   *
+   * ⛔ MECHANICAL, AND ONLY THE MECHANICAL HALF. This asks whether each screen in `through` has a
+   * control that reaches the next one. Whether the sequence adds up to what `accomplishes` claims
+   * is a reading, and that is the `completeness` reviewer's job — a check cannot do it and should
+   * not pretend to.
+   */
+  for (const { scope } of corpus.scopes) {
+    const through = scope.happy_path?.through ?? [];
+    if (through.length < 2) continue;
+    for (let i = 0; i < through.length - 1; i++) {
+      const here = scope.views.find((v) => v.id === through[i]);
+      const next = through[i + 1]!;
+      if (!here) continue;
+      /**
+       * A way on is a control that says it reaches the next screen — by a link where the model
+       * allows one, or by an exchange whose answer names it. Where the next screen is reached some
+       * other way entirely, saying so is the fix.
+       */
+      const leads = here.parts.some((pt) => pt.leads_to && pt.leads_to.split("#")[0] === next.split("#")[0]);
+      const said = scope.exchanges
+        .filter((e) => e.at?.view === here.id)
+        .some((e) =>
+          Object.values(e.slots ?? {}).some((b) => {
+            const says = (b as { says?: unknown } | undefined)?.says;
+            const text = typeof says === "string" ? says : Array.isArray(says) ? (says as Array<{ says: string }>).map((x) => x.says).join(" ") : "";
+            const words = (next.split("#").pop() ?? next).split(/[-_]/).filter((w) => w.length > 3);
+            return words.length ? words.every((w) => text.toLowerCase().includes(w)) : false;
+          })
+        );
+      if (leads || said) continue;
+      add({
+        severity: "note",
+        kind: "the-happy-path-stops-here",
+        where: `${scope.id}#${here.id}`,
+        what: `the happy path goes from "${here.title ?? here.id}" to "${next}" and nothing on this screen says how — no control leads there and no statement here names it. Somebody walking this feature stops at this screen`,
+        fix: `say which control takes them on, and where it leaves them — in the \`answer\` of the exchange at that control. If the path really is one screen, take the next one out of \`through\``,
+      });
+    }
+  }
+
   const project = projectRootOf(root);
   if (project) {
     for (const { scope } of corpus.scopes) {
