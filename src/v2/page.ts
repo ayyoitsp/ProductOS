@@ -3229,8 +3229,22 @@ const DRIVE = `<script>
     hydrateAll();
     for (const h of document.querySelectorAll(".proto-mock, .proto.html, [data-mock]")) {
       const root = h.shadowRoot;
-      if (!root || root.adoptedStyleSheets.length || !("adoptedStyleSheets" in root)) continue;
-      root.adoptedStyleSheets = [sheet, marks].filter(Boolean);
+      if (!root || !("adoptedStyleSheets" in root)) continue;
+      /**
+       * ⛔ ENSURE BOTH SHEETS, DO NOT SKIP A ROOT THAT HAS ONE.
+       *
+       * The older path adopts the application's stylesheet only. Skipping any root that already had
+       * a sheet therefore left every mock outside the board with the app CSS and NO marker styles —
+       * so the value bars in a table row computed as bare inline spans with no size, and the deals
+       * list rendered its rows as nothing at all. Correct markup, correct app styling, invisible
+       * content: the same failure as before, arrived at from the opposite direction.
+       */
+      const have = [...root.adoptedStyleSheets];
+      let changed = false;
+      for (const want of [sheet, marks]) {
+        if (want && !have.includes(want)) { have.push(want); changed = true; }
+      }
+      if (changed) root.adoptedStyleSheets = have;
     }
   };
   dressAll();

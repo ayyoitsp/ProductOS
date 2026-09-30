@@ -450,6 +450,26 @@ function emit(node: ts.Node, ctx: Ctx): string {
          * them with `React.Children.toArray`, which is ordinary React and unreadable from here.
          * Placing them before the root's closing tag keeps them in the box that was built for them.
          */
+        /**
+         * ⛔ THE SLOT IS THE EMPTY ELEMENT, NOT THE OUTERMOST ONE.
+         *
+         * Inserting before the LAST closing tag puts children inside the component's root — which
+         * is right for a single box and wrong for every wrapper. `<div class="overflow"><table/></div>`
+         * took the deals table's rows AFTER `</table>`, so the markup read
+         * `<table></table></div><thead><tr></tr><th>…` — and an HTML parser discards a `<thead>`
+         * and a `<tr>` that are not inside a table. Three rows and twenty-four cells, gone at parse
+         * time, in a drawing that looked correct as text.
+         *
+         * A component that renders a container and no content has exactly one empty element, and
+         * that is where its children go. `TableToolbar` proves the same rule from the other side:
+         * its empty inner `<div class="flex …">` is precisely where `{left}` belongs.
+         */
+        const empty = [...body.matchAll(/<([a-zA-Z][\w-]*)\b[^>]*>\s*<\/\1>/g)];
+        const slot = empty.length ? empty[empty.length - 1]! : undefined;
+        if (slot) {
+          const at = slot.index! + slot[0].lastIndexOf("</");
+          return body.slice(0, at) + children + body.slice(at);
+        }
         const close = body.lastIndexOf("</");
         if (close > 0 && /^<\w/.test(body.trim())) return body.slice(0, close) + children + body.slice(close);
         return body + children;
