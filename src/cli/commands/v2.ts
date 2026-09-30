@@ -20,6 +20,8 @@ import { drawFromRoute } from "../../v2/draw.js";
 import { everyView, isResolved, resolveRoute } from "../../v2/routes.js";
 import { spokenFor } from "../../v2/spoken.js";
 import { idiomOf, proposeScreen } from "../../v2/propose.js";
+import { inferConnections, type Connection } from "../../v2/connects.js";
+import { writeLeadsTo } from "../../v2/draw-write.js";
 import { AGENTS, CASCADE, KINDS } from "../../core/jobs.js";
 
 /** ⛔ Plain text for a terminal and for JSON — never HTML-escaped, which is the page's business. */
@@ -1395,6 +1397,78 @@ export function v2Command(): Command {
         console.log(pc.dim("  they are named here so their absence is visible rather than implied"));
       }
       console.log(pc.dim(`  assign a model per agent in productos/config.yaml under agents.model`));
+    });
+
+  cmd
+    /**
+     * ⛔ THE GRAPH COMES FROM THE TRUTH, NOT THE CODE.
+     *
+     * Peter: *"doesn't matter what code says. it should be obvious what connects to what… there's
+     * only one thing 'add deal' should do, right?"* and *"code is ONLY reference for
+     * initializing/onboarding"*. A graph read out of `router.push` can only join screens that exist;
+     * the corpus describes the target, so it can join screens nobody has built.
+     */
+    .command("connect")
+    .description("Work out what each control leads to, from what the corpus says about it")
+    .option("--into <dir>", "the corpus", ".")
+    .option("-n, --dry-run", "say what it would connect and change nothing")
+    .action((o: { into?: string; dryRun?: boolean }) => {
+      const into = path.resolve(o.into ?? ".");
+      const corpus = loadCorpus(into);
+      const { made, missed } = inferConnections(corpus);
+
+      console.log(pc.green("✓"), `${made.length} connection${made.length === 1 ? "" : "s"} the corpus already implies`);
+      for (const c of made) {
+        console.log(`  ${c.from}  →  ${pc.bold(c.to)}`);
+        console.log(pc.dim(`      because both say: ${c.because.join(", ")}${c.runnerUp ? ` (next best: ${c.runnerUp.to})` : ""}`));
+      }
+      /**
+       * ⛔ WHAT IT WOULD NOT SAY, AND WHY — because a graph that quietly connects what it is sure of
+       * reads as a complete map. Most controls act on the screen they are on and correctly have no
+       * destination; that is a finding, not a gap.
+       */
+      if (missed.length) {
+        const byWhy = new Map<string, number>();
+        for (const m of missed) byWhy.set(m.why, (byWhy.get(m.why) ?? 0) + 1);
+        console.log("");
+        console.log(pc.dim(`${missed.length} left alone:`));
+        for (const [why, n] of byWhy) console.log(pc.dim(`  ${n} · ${why}`));
+      }
+      if (o.dryRun || !made.length) return;
+
+      /**
+       * ⛔ ONLY A CONTROL THAT NAVIGATES MAY CARRY A LINK, AND THE MODEL WAS RIGHT ABOUT IT.
+       *
+       * Writing `leads_to` onto "New Deal" made the corpus refuse to load: a part that COMMITS does
+       * work, and where it lands afterwards belongs to its answer slot rather than to a link. That
+       * rule is not in the way of a walkable prototype — it says where the walk is written down.
+       *
+       * So a navigating control gets the line; a committing one keeps its destination DERIVED, and
+       * the page reads it from the same inference at render time. Nothing is stored that the model
+       * refuses, and nothing is lost.
+       */
+      let wrote = 0;
+      const derived: Connection[] = [];
+      for (const c of made) {
+        const [scopeId, viewId, partId] = c.from.split("#");
+        const part = corpus.scopes
+          .find((x) => x.scope.id === scopeId)
+          ?.scope.views.find((v) => v.id === viewId)
+          ?.parts.find((p) => p.id === partId);
+        if (part?.role === "navigates") {
+          if (writeLeadsTo(into, c.from, c.to)) wrote++;
+        } else derived.push(c);
+      }
+      console.log("");
+      if (wrote) {
+        console.log(pc.green("✓"), `${wrote} written onto the control that navigates`);
+        console.log(pc.dim("  a decision, not an agreement — change any line that is wrong, and it stays changed"));
+      }
+      if (derived.length) {
+        console.log(pc.cyan("⤳"), `${derived.length} left derived — these controls COMMIT, and where they land belongs to their answer slot, not to a link`);
+        for (const c of derived) console.log(pc.dim(`    ${c.from} → ${c.to}`));
+        console.log(pc.dim("  the prototype walks them from this same reading, so nothing is lost by not writing them down"));
+      }
     });
 
   cmd

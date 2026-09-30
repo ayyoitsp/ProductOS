@@ -17,6 +17,7 @@
  */
 import { resolveRules, type Corpus } from "./load.js";
 import { promisesOf, screensOf, type ProtoPromise, type ProtoScreen } from "./prototype.js";
+import { inferConnections } from "./connects.js";
 import { SLOTS, SLOT_ASKS_SHORT, statements, saysText, type SlotName, type Scope, type View, type Part, type Says } from "./schema.js";
 import { gridFor, gateFor, actsFor, ruleHomes, type Grid, type Cell } from "./grid.js";
 import { stampFor, decidedFor } from "./stamp.js";
@@ -614,7 +615,7 @@ function liveSketch(view: View, matched: Map<string, boolean>): string {
  * ⛔ AN EXPLICIT `data-part` WINS. A generated mock should say which element is which part rather
  * than leave it to a text match, and one that does is exempt from all of this.
  */
-function wireHtml(view: View, matched: Map<string, boolean>): string {
+function wireHtml(view: View, matched: Map<string, boolean>, goes?: Map<string, string>, scopeId?: string): string {
   /**
    * ⛔ THE FALLBACK, NOT THE MECHANISM. `draw` writes `data-part` into the corpus at generation
    * time, so a generated drawing arrives already wired. This runs for drawings written before the
@@ -623,7 +624,16 @@ function wireHtml(view: View, matched: Map<string, boolean>): string {
    */
   const wired = wireParts(view.sketch_html!, view.parts);
   for (const id of wired.matched) matched.set(id, true);
-  return wired.html;
+  if (!goes || !scopeId) return wired.html;
+  /**
+   * ⛔ A DERIVED DESTINATION IS STAMPED ONTO THE DRAWING, NOT INTO THE CORPUS. A control that
+   * commits may not carry a `leads_to`, so the walk is worked out from what the corpus says and
+   * attached here — the drawing is output, and this is one more thing generated into it.
+   */
+  return wired.html.replace(/data-part="([^"]+)"/g, (whole, id: string) => {
+    const to = goes.get(`${scopeId}#${view.id}#${id}`);
+    return to ? `${whole} data-goes="${esc(to)}"` : whole;
+  });
 }
 
 /** Everything the corpus states at one part of one screen, and the slots that say nothing. */
@@ -649,7 +659,25 @@ function statedAt(scope: Scope, viewId: string, partId: string | undefined): Arr
     });
 }
 
-function renderScreens(scope: Scope, ctx: Ctx, scopeId: string, opts: PageOptions): string {
+/**
+ * Derived destinations, worked out once per corpus.
+ *
+ * ⛔ Memoised because this reads every screen against every control, and a page renders many
+ * screens — recomputing it per screen turned a render into a quadratic walk of the whole corpus.
+ */
+const goesCache = new WeakMap<object, Map<string, string>>();
+function goesFor(corpus: Corpus): Map<string, string> {
+  let had = goesCache.get(corpus as unknown as object);
+  if (!had) {
+    had = new Map<string, string>();
+    for (const c of inferConnections(corpus).made) had.set(c.from, c.to);
+    goesCache.set(corpus as unknown as object, had);
+  }
+  return had;
+}
+
+function renderScreens(scope: Scope, ctx: Ctx, scopeId: string, opts: PageOptions, corpus: Corpus): string {
+  const derivedGoes = goesFor(corpus);
   /**
    * ⛔ `:root` DOES NOT MATCH INSIDE A SHADOW TREE, so a design system that defines its tokens
    * there would hand the mock a stylesheet of variables that resolve to nothing — every colour and
@@ -728,7 +756,7 @@ function renderScreens(scope: Scope, ctx: Ctx, scopeId: string, opts: PageOption
                        )
                        .join("")}
                    </div>
-                   <div class="state-frame" data-state="0">${asMock(wireHtml(v, matched))}</div>
+                   <div class="state-frame" data-state="0">${asMock(wireHtml(v, matched, derivedGoes, scopeId))}</div>
                    ${states
                      .map(
                        (st, i) =>
@@ -1854,6 +1882,16 @@ function renderNav(
   const rootId = corpus.scopes.find((x) => !x.scope.in)?.scope.id;
   const protoScreens = screensOf(corpus);
   const protoPromises = promisesOf(corpus);
+  /**
+   * ⛔ WHERE A CONTROL GOES, WORKED OUT FROM THE TRUTH AT RENDER TIME.
+   *
+   * A control that COMMITS may not carry a `leads_to` — the model refuses it, because where it
+   * lands belongs to its answer slot. That rule is about where the fact is written down, not about
+   * whether the prototype can walk it. So the same inference the `connect` command reports is read
+   * here and stamped onto the drawing, and the corpus keeps exactly the shape the model allows.
+   */
+  const derivedGoes = new Map<string, string>();
+  for (const c of inferConnections(corpus).made) derivedGoes.set(c.from, c.to);
   const sections: Array<{ id: string; label: string; toRead?: number }> = [
     { id: "overview", label: "Overview" },
     /**
@@ -2202,7 +2240,7 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
               [...homesOf.values()].includes(g.scope) ? renderGroupRules(corpus, g.scope, ctx, homesOf) : ""
             }
             ${renderBehaviours(corpus, g.scope, cellOf, ctx)}
-            ${renderScreens(corpus.scopes.find((x) => x.scope.id === g.scope)!.scope, ctx, g.scope, opts)}
+            ${renderScreens(corpus.scopes.find((x) => x.scope.id === g.scope)!.scope, ctx, g.scope, opts, corpus)}
             <details class="fold"><summary>Every slot, and where each came from — the authoring view</summary>
               ${renderGrid(g, ctx)}
               ${renderExchanges(corpus, [g.scope], cellOf, ctx, false)}
@@ -2234,7 +2272,7 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
                  * landing page, a shell the whole group lives in — could hold one in the file and
                  * see nothing on the page.
                  */
-                renderScreens(sc, ctx, id, opts)
+                renderScreens(sc, ctx, id, opts, corpus)
               }
               ${renderGroupUx(corpus, id, ctx)}
               ${renderGroupRules(corpus, id, ctx, homesOf)}
@@ -2911,6 +2949,13 @@ const PROTOTYPE = `<script>
       }
     }
   })();
+  /** What a feature is CALLED, for a callout somebody has to act on. */
+  const featureName = (screen, ref) => {
+    const id = ref ? (ref.indexOf("#") > 0 ? ref.slice(0, ref.indexOf("#")) : ref)
+                   : (screen && screen.closest("section.view") ? screen.closest("section.view").dataset.view : "");
+    const nav = document.querySelector('nav.scopes a[data-goto="' + (window.CSS && CSS.escape ? CSS.escape(id) : id) + '"]');
+    return nav ? nav.textContent.trim() : id;
+  };
   const deepPath = (ev) => (ev.composedPath ? ev.composedPath() : [ev.target]);
   const inPath = (ev, sel) => deepPath(ev).find((n) => n && n.matches && n.matches(sel));
 
@@ -2965,7 +3010,7 @@ const PROTOTYPE = `<script>
     }).join("");
   };
 
-  const select = (btn) => {
+  const select = (btn, leavingTo) => {
     const screen = screenOf(btn);
     if (!screen) return;
     const viewId = screen.dataset.screen;
@@ -2975,13 +3020,51 @@ const PROTOTYPE = `<script>
     if (wasOn) return;
     btn.classList.add("on");
     const panel = screen.querySelector(".pt-detail");
-    if (panel) { panel.innerHTML = describePart(viewId, partId); panel.hidden = false; }
+    if (panel) {
+      /**
+       * ⛔ THE CALLOUT NAMES THE FEATURE, not the screen id. A reviewer is deciding whether to leave
+       * what they are reading, and "create-deal#create-deal-form" is not something anybody weighs.
+       */
+      const out = leavingTo
+        ? '<p class="leaving">This leaves <strong>' + esc(featureName(screenOf(btn))) + '</strong> for <strong>' +
+          esc(featureName(null, leavingTo)) + '</strong>. Press again to go there.</p>'
+        : "";
+      panel.innerHTML = out + describePart(viewId, partId);
+      panel.hidden = false;
+    }
   };
 
   document.addEventListener("click", (ev) => {
     const btn = inPath(ev, "button.pt, [data-part]");
     if (!btn) return;
     ev.preventDefault();
+
+    /**
+     * ⛔ CROSSING INTO ANOTHER FEATURE IS A DECISION; MOVING INSIDE ONE IS NOT.
+     *
+     * Peter: *"linking to a new 'feature' should require clicking twice - once will bring up a
+     * callout pointing to the new feature, otherwise the prototype just navigates within this
+     * single feature"*.
+     *
+     * The difference is real rather than cosmetic. A reviewer walking one feature is still reading
+     * that feature; leaving it drops everything they have in their head and puts them somewhere
+     * they did not ask to be. So a control that goes somewhere in THIS feature simply goes, and one
+     * that leaves says where it would take them and waits to be asked twice.
+     */
+    const dest = btn.dataset && btn.dataset.goes;
+    if (dest) {
+      const screen = screenOf(btn);
+      const here = screen && screen.closest("section.view") ? screen.closest("section.view").dataset.view : null;
+      const leaving = dest.indexOf("#") > 0 ? dest.slice(0, dest.indexOf("#")) : dest;
+      const sameFeature = here && (leaving === here || dest.indexOf(here + "#") === 0);
+      if (sameFeature) { walk(dest, btn); return; }
+      /** Armed by the first press; the second one goes. */
+      if (btn.dataset.armed === "1") { walk(dest, btn); return; }
+      for (const other of document.querySelectorAll("[data-armed]")) other.removeAttribute("data-armed");
+      btn.dataset.armed = "1";
+      select(btn, dest);
+      return;
+    }
     select(btn);
   });
 
@@ -3917,6 +4000,10 @@ const STYLE = `<style>
     background: var(--bg); color: var(--dim); border-radius: 999px; padding: .12rem .6rem; }
   .state-tab:hover { color: var(--ink); }
   .state-tab.on { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+  /* Leaving one feature for another — said before it happens, not after. */
+  .pt-detail .leaving { margin: 0 0 .4rem; padding: .35rem .55rem; border-radius: 6px;
+    background: var(--soft); border: 1px solid var(--accent); font-size: .85rem; }
+  [data-armed="1"] { outline: 2px solid var(--accent); outline-offset: 1px; }
 
   /* A node on the screen map carries the screen itself. */
   .ux-shot { height: 11rem; overflow: hidden; border: 1px solid var(--rule); border-radius: 6px;

@@ -123,7 +123,7 @@ export const AREAS: Area[] = [
       "treat a deferral as an answer",
     ],
     owns: ["derive"],
-    files: ["src/v2/grid.ts", "src/v2/stamp.ts", "src/v2/settle.ts", "src/v2/acts.ts", "src/v2/record.ts", "src/v2/spoken.ts"],
+    files: ["src/v2/grid.ts", "src/v2/stamp.ts", "src/v2/settle.ts", "src/v2/acts.ts", "src/v2/record.ts", "src/v2/spoken.ts", "src/v2/connects.ts"],
     needs: ["read-files", "run-commands", "search-files"],
   },
   {

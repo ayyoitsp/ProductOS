@@ -1,0 +1,226 @@
+/**
+ * What connects to what — worked out from the product truth, not from the code.
+ *
+ * ⛔ WHY NOT THE CODE. Peter: *"doesn't matter what code says. it should be obvious what connects to
+ * what, right? like productos should be able to figure this out itself. there's only one thing 'add
+ * deal' should do, right?"* — and then: *"code is ONLY reference for initializing/onboarding to
+ * product OS"*.
+ *
+ * He is right, and the reason is the target-state principle: the corpus describes what the product
+ * SHOULD be, so a graph derived from `router.push` can only ever connect the screens that happen to
+ * exist today. A button on an unbuilt screen leading to another unbuilt screen is a fact about the
+ * product, and the corpus already holds it — the control is called "New Deal", the sentence beneath
+ * it says it begins creating a deal, and there is a feature called "Creating a deal" with a screen
+ * called "Create a deal". Nothing in there requires a codebase.
+ *
+ * ⛔ AND IT DECIDES, IT DOES NOT AGREE. Software may work this out; a person may overrule it. So a
+ * proposed destination carries WHY, in the corpus's own words, and is easy to argue with.
+ */
+import type { Corpus } from "./load.js";
+import type { Scope, View } from "./schema.js";
+
+export interface Connection {
+  /** `<scope>#<view>#<part>` — the control. */
+  from: string;
+  /** `<scope>#<view>` — where it goes. */
+  to: string;
+  /** The words that made this the answer, so a reader can disagree with it. */
+  because: string[];
+  score: number;
+  /** The next best, and its score, so a close call is visible rather than hidden. */
+  runnerUp?: { to: string; score: number };
+}
+
+export interface Unconnected {
+  from: string;
+  label: string;
+  why: string;
+  closest?: Array<{ to: string; score: number }>;
+}
+
+/**
+ * ⛔ Words that carry meaning. Without this every control matches every screen through "the", "a"
+ * and "of", and the margin rule that keeps this honest never gets a chance to fire.
+ */
+const STOP = new Set(
+  ("a an the of to in on at for from by with and or not is are be been was were this that these those it its" +
+   " they them their what which who whom when where how why all any both each few more most other some such" +
+   " no nor only own same so than too very can will just should now do does did done has have had having" +
+   " begins begin their there here then out up down into over under again once about against between during" +
+   " before after above below off further one two three first second new").split(/\s+/)
+);
+
+/** Light stemming: enough that "creating" meets "create" and "deals" meets "deal". */
+function stem(word: string): string {
+  let w = word.toLowerCase().replace(/[^a-z0-9]/g, "");
+  for (const suffix of ["ing", "ers", "er", "ed", "es", "s"]) {
+    if (w.length > 4 && w.endsWith(suffix)) {
+      w = w.slice(0, -suffix.length);
+      break;
+    }
+  }
+  if (w.length > 4 && w.endsWith("e")) w = w.slice(0, -1);
+  return w;
+}
+
+function words(text: string): Set<string> {
+  const out = new Set<string>();
+  for (const raw of String(text).split(/[^A-Za-z0-9]+/)) {
+    if (!raw) continue;
+    if (STOP.has(raw.toLowerCase())) continue;
+    const w = stem(raw);
+    if (w.length >= 3) out.add(w);
+  }
+  return out;
+}
+
+/** Everything the corpus says about this control: its label, and every sentence anchored to it. */
+function saidAbout(scope: Scope, view: View, partId: string): { all: string; sentences: string } {
+  const part = (view.parts ?? []).find((p) => p.id === partId);
+  const bits: string[] = [part?.label ?? partId];
+  const sentences: string[] = [];
+  for (const ex of scope.exchanges) {
+    if (ex.at?.view !== view.id || ex.at?.part !== partId) continue;
+    bits.push(ex.title ?? "");
+    for (const body of Object.values(ex.slots ?? {})) {
+      const says = (body as { says?: unknown } | undefined)?.says;
+      if (typeof says === "string") { bits.push(says); sentences.push(says); }
+      else if (Array.isArray(says)) for (const st of says as Array<{ says: string }>) { bits.push(st.says); sentences.push(st.says); }
+    }
+  }
+  /**
+   * ⛔ THE SENTENCES SEPARATELY FROM THE LABEL. The blob starts with the control's name, so any test
+   * for "the label, then a navigation verb" matched whatever happened to follow — which is how
+   * "Add columns" acquired a destination from a sentence about what the statement shows on arrival.
+   */
+  return { all: bits.join(" "), sentences: sentences.join(" ") };
+}
+
+/**
+ * What a screen IS, weighted by where it is said.
+ *
+ * ⛔ A WORD IN A TITLE IS WORTH MORE THAN A WORD IN A PARAGRAPH, and flat scoring is why the first
+ * run linked "Clear filters" to "Create a deal": both mention deals somewhere, and a happy path is
+ * long enough to mention almost anything. A screen's NAME is what it is; its purpose sentence is
+ * context.
+ */
+function weightedOf(scope: Scope, view: View): Map<string, number> {
+  const out = new Map<string, number>();
+  const add = (text: string, weight: number): void => {
+    for (const w of words(text)) out.set(w, Math.max(out.get(w) ?? 0, weight));
+  };
+  add(scope.happy_path?.accomplishes ?? "", 1);
+  add(scope.title ?? scope.id, 3);
+  add(view.title ?? view.id, 4);
+  return out;
+}
+
+/**
+ * ⛔ A MARGIN, NOT A MAXIMUM — the same rule the route resolver keeps, for the same reason. A
+ * two-to-one call reported as confidently as five-to-nothing is how a wrong arrow gets drawn on a
+ * map somebody then trusts.
+ */
+export function inferConnections(corpus: Corpus): { made: Connection[]; missed: Unconnected[] } {
+  const screens: Array<{ id: string; scope: Scope; view: View; weights: Map<string, number> }> = [];
+  for (const s of corpus.scopes)
+    for (const v of s.scope.views)
+      screens.push({ id: `${s.scope.id}#${v.id}`, scope: s.scope, view: v, weights: weightedOf(s.scope, v) });
+
+  const made: Connection[] = [];
+  const missed: Unconnected[] = [];
+
+  for (const s of corpus.scopes)
+    for (const v of s.scope.views)
+      for (const p of v.parts ?? []) {
+        if (p.leads_to) continue;
+        /** ⛔ Only a control that GOES somewhere. A `commits` part lands where its answer slot says. */
+        if (p.role !== "navigates" && p.role !== "commits") continue;
+        const from = `${s.scope.id}#${v.id}#${p.id}`;
+        const { all: said, sentences } = saidAbout(s.scope, v, p.id);
+        /**
+         * ⛔ DOES THE SENTENCE SAY IT GOES ANYWHERE? Most controls on a screen act in place —
+         * Clear filters, Acknowledge, Publish, Bulk map — and the first run happily connected every
+         * one of them to whichever screen shared a word. The model already holds this rule from the
+         * other side: `leads_to` is refused on a control that commits, because where it lands is the
+         * answer slot rather than a link. So the corpus is asked, not guessed at.
+         */
+        /**
+         * ⛔ THE VERB HAS TO BE ABOUT THIS CONTROL, not merely present in the paragraph.
+         *
+         * Matching a navigation word anywhere linked "Add columns" to the publish modal, on the
+         * strength of a sentence reading *"The statement OPENS on the trailing twelve periods"* —
+         * which is what the screen shows when you arrive, not what the button does. The one link
+         * that is obviously right reads *"New Deal begins creating a deal"*: the control's own name,
+         * then the verb. That shape is the evidence.
+         */
+        const label = (p.label ?? p.id).trim();
+        const NAV = "(begins?|opens?|takes?|goes?|returns?|leads?|starts?|creat\\w*|navigat\\w*)";
+        const aboutIt = label.length >= 3
+          ? new RegExp(`${label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b[^.]{0,40}?\\b${NAV}\\b`, "i").test(sentences)
+          : false;
+        if (!aboutIt) {
+          missed.push({ from, label: p.label ?? p.id, why: "nothing here says this control goes anywhere — it acts on the screen it is on" });
+          continue;
+        }
+        const mine = words(said);
+        if (mine.size < 2) {
+          missed.push({ from, label: p.label ?? p.id, why: "nothing is said about this control, so there is nothing to match on" });
+          continue;
+        }
+        const scored = screens
+          .filter((sc) => sc.id !== `${s.scope.id}#${v.id}`)
+          .map((sc) => {
+            const hit = [...mine].filter((w) => sc.weights.has(w));
+            const score = hit.reduce((n, w) => n + (sc.weights.get(w) ?? 0), 0);
+            return { to: sc.id, score, because: hit };
+          })
+          .sort((a, b) => b.score - a.score);
+        const best = scored[0];
+        const next = scored[1];
+        /** ⛔ At least one TITLE word. A screen matched only through its purpose paragraph is a
+         *  coincidence of vocabulary, which is exactly what produced the first run's nonsense. */
+        if (!best || best.score < 4) {
+          missed.push({
+            from,
+            label: p.label ?? p.id,
+            why: "no screen shares enough of what this control says it does",
+            closest: scored.slice(0, 2).map((x) => ({ to: x.to, score: x.score })),
+          });
+          continue;
+        }
+        /**
+         * ⛔ THE WINNER MUST OWN A WORD OF THE DESTINATION'S NAME THAT THE RUNNER-UP DOES NOT.
+         *
+         * A margin alone called 9-against-7 a tie and refused to connect "New Deal" to "Create a
+         * deal" — which is the one link in this corpus a person would draw without thinking. What
+         * separates them is not the gap in the totals, it is that only one of them shares the VERB:
+         * both screens are about deals, one is about CREATING them.
+         */
+        const titleHits = (id: string): Set<string> => {
+          const sc = screens.find((x) => x.id === id)!;
+          return new Set([...mine].filter((w) => (sc.weights.get(w) ?? 0) >= 3));
+        };
+        const bestTitle = titleHits(best.to);
+        const nextTitle = next ? titleHits(next.to) : new Set<string>();
+        const distinguishing = [...bestTitle].filter((w) => !nextTitle.has(w));
+        if (next && !distinguishing.length) {
+          missed.push({
+            from,
+            label: p.label ?? p.id,
+            why: "two screens match it equally, so which one it goes to is a guess",
+            closest: [best, next].map((x) => ({ to: x.to, score: x.score })),
+          });
+          continue;
+        }
+        made.push({
+          from,
+          to: best.to,
+          /** ⛔ The words that SEPARATED it, not every word it happened to share. */
+          because: distinguishing.length ? distinguishing : best.because,
+          score: best.score,
+          runnerUp: next ? { to: next.to, score: next.score } : undefined,
+        });
+      }
+
+  return { made, missed };
+}

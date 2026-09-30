@@ -164,3 +164,45 @@ export function writeSketchHtml(
   }
   return undefined;
 }
+
+/**
+ * Record where a control leads, on the part itself.
+ *
+ * ⛔ WRITTEN INTO THE CORPUS RATHER THAN HELD IN THE RENDERER, because a graph the page works out
+ * fresh each time is a graph nobody can correct. This is a decision software made; a person
+ * overrules it by editing the line, and nothing regenerates it away.
+ */
+export function writeLeadsTo(root: string, from: string, to: string): boolean {
+  const [scopeId, viewId, partId] = from.split("#");
+  if (!scopeId || !viewId || !partId) return false;
+  const scopeLeaf = scopeId.split("/").pop()!;
+  for (const file of candidates(root)) {
+    const raw = fs.readFileSync(file, "utf-8");
+    if (!new RegExp(`^id:\\s*["']?[^\\n]*\\b${scopeLeaf}["']?\\s*$`, "m").test(raw)) continue;
+    const lines = raw.split("\n");
+    const viewAt = lines.findIndex((l) => l.trim() === `- id: ${viewId}`);
+    if (viewAt < 0) continue;
+    /** The part inside that view — the next `- id: <part>` before the next view or top-level key. */
+    let partAt = -1;
+    for (let i = viewAt + 1; i < lines.length; i++) {
+      const line = lines[i]!;
+      if (line && !/^\s/.test(line)) break;
+      if (/^  - id: /.test(line)) break;
+      if (line.trim() === `- id: ${partId}`) {
+        partAt = i;
+        break;
+      }
+    }
+    if (partAt < 0) continue;
+    const pad = /^(\s*)/.exec(lines[partAt]!)![1] ?? "";
+    /** Already recorded — a person's line wins, and this never overwrites one. */
+    for (let i = partAt + 1; i < lines.length; i++) {
+      if (/^\s*- id: /.test(lines[i]!) || (lines[i] && !/^\s/.test(lines[i]!))) break;
+      if (/^\s*leads_to:/.test(lines[i]!)) return false;
+    }
+    lines.splice(partAt + 1, 0, `${pad}  leads_to: ${JSON.stringify(to)}`);
+    fs.writeFileSync(file, lines.join("\n"));
+    return true;
+  }
+  return false;
+}
