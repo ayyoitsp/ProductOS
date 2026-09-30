@@ -446,3 +446,22 @@ test("a state is named in the product's words, never in the code's", () => {
   for (const l of labels) assert.doesNotMatch(l, /^when /, `"${l}" shows the reviewer code they are not reading`);
   fs.rmSync(dir, { recursive: true, force: true });
 });
+
+
+/** ⛔ JSX text is HTML. "We&apos;ll" meant an apostrophe and rendered as those nine characters. */
+test("an entity the source already wrote is not escaped twice", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "draw11-"));
+  const route = write(
+    dir,
+    "page.tsx",
+    `export default function P() {
+       return <div><p>We&apos;ll keep it up to date</p><p>Smith &amp; Co</p><p>Jones & Sons</p></div>
+     }`
+  );
+  const r = drawFromRoute(route);
+  assert.doesNotMatch(r.html, /&amp;apos;/, "a source entity was escaped a second time");
+  assert.match(r.html, /We&apos;ll/, "the entity itself was lost");
+  /** ⛔ And a bare ampersand in ordinary prose is still escaped, exactly as before. */
+  assert.match(r.html, /Jones &amp; Sons/, "a bare ampersand stopped being escaped");
+  fs.rmSync(dir, { recursive: true, force: true });
+});

@@ -65,7 +65,22 @@ const DROP_PROP = (name: string): boolean =>
   ["key", "ref", "draggable", "suppressHydrationWarning"].includes(name) ||
   name.startsWith("data-testid");
 
-const text = (s: string): string => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+/**
+ * ⛔ AN ENTITY THE SOURCE ALREADY WROTE IS NOT ESCAPED A SECOND TIME.
+ *
+ * JSX text is HTML: a component writes `We&apos;ll put the sizing model here` and means an
+ * apostrophe. Escaping the ampersand again put the literal characters "We&apos;ll" on the folder
+ * step of the create-a-deal prototype — the screen reading as though the product ships raw markup,
+ * which is a defect a reviewer would rightly report against the product rather than against us.
+ *
+ * Only a well-formed entity is spared, so a bare ampersand in ordinary prose — "Smith & Co" — is
+ * still escaped exactly as before.
+ */
+const text = (s: string): string =>
+  s
+    .replace(/&(?!(#\d{1,6}|#[xX][0-9a-fA-F]{1,5}|[a-zA-Z][a-zA-Z0-9]{1,31});)/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 
 /** The string parts of a className, whatever shape it is written in. */
 function classOf(node: ts.JsxAttributeValue | undefined): string {

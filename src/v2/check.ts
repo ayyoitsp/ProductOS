@@ -31,6 +31,7 @@ import { descendants } from "./settle.js";
 import { ruleHomes } from "./grid.js";
 import { appStyleFor } from "./appcss.js";
 import { readLog } from "./log.js";
+import { landingsFor } from "./connects.js";
 import fs from "node:fs";
 import { resolvePathsOrThrow } from "../core/paths.js";
 import { readConfig } from "../core/config.js";
@@ -1460,6 +1461,44 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
          * argument; it does not need a gate behind it.
          */
         const states = v.states ?? [];
+        /**
+         * ⛔ A COMMIT THE PROTOTYPE CANNOT DRIVE FROM IS A SENTENCE THAT DOES NOT SAY WHERE IT ENDS.
+         *
+         * Peter: *"i hit continue, and nothing changes. some text below changes, but the prototype
+         * doesn't drive."* Where a press lands is derived from its own `after` — never from a link,
+         * because `leads_to` is refused on a `commits` part for exactly the reason that its
+         * destination IS its answer. So a control that drives nowhere is not a defect in the
+         * prototype; it is a screen whose truth says what happened without saying where you are.
+         *
+         * ⛔ ONLY WHERE THERE IS SOMEWHERE TO GO. A screen with no states has nothing to drive to
+         * and reporting it would be five findings a page about nothing anybody can fix.
+         *
+         * ⛔ A NOTE. Plenty of commits genuinely end on the screen they are pressed on, and
+         * refusing a corpus over one would be this check deciding a product question.
+         */
+        if (states.length) {
+          const drives = new Set(landingsFor(scope, v).map((l) => l.part));
+          const dead = v.parts.filter(
+            (pt) =>
+              pt.role === "commits" &&
+              !drives.has(pt.id) &&
+              scope.exchanges.some((e) => e.at?.view === v.id && (e.at?.part === pt.id || !e.at?.part))
+          );
+          if (dead.length)
+            add({
+              severity: "note",
+              kind: "pressing-this-moves-nothing",
+              where: `${scope.id}#${v.id}`,
+              what: `${dead.length} control${dead.length === 1 ? "" : "s"} here commit${
+                dead.length === 1 ? "s" : ""
+              } and the prototype cannot follow ${dead.length === 1 ? "it" : "them"} — ${dead
+                .map((d) => d.label ?? d.id)
+                .join(", ")}. This screen has ${states.length} other appearance${
+                states.length === 1 ? "" : "s"
+              } and nothing said at ${dead.length === 1 ? "that control" : "those controls"} names which one a press leaves you on`,
+              fix: `say where it ends in the \`after\` slot of the exchange it performs — "the analyst is then asked where its folder is" is what lets a press move the picture. Where it genuinely stays put, nothing here needs changing`,
+            });
+        }
         if (states.length >= 2) {
           const spoken = scope.exchanges
             .filter((e) => e.at?.view === v.id)

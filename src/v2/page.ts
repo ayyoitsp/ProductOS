@@ -17,7 +17,7 @@
  */
 import { resolveRules, type Corpus } from "./load.js";
 import { promisesOf, screensOf, type ProtoPromise, type ProtoScreen } from "./prototype.js";
-import { inferConnections } from "./connects.js";
+import { inferConnections, landingsFor } from "./connects.js";
 import { SLOTS, SLOT_ASKS_SHORT, statements, saysText, type SlotName, type Scope, type View, type Part, type Says } from "./schema.js";
 import { gridFor, gateFor, actsFor, ruleHomes, type Grid, type Cell } from "./grid.js";
 import { stampFor, decidedFor } from "./stamp.js";
@@ -743,6 +743,36 @@ function renderScreens(scope: Scope, ctx: Ctx, scopeId: string, opts: PageOption
               opts.mockClass || "productos-mock"
             )}">${html}</div></template></div>`;
           const states = v.states ?? [];
+          /**
+           * ⛔ A PRESS HAS TO MOVE THE PICTURE, OR IT IS A DIAGRAM WITH EXTRA STEPS.
+           *
+           * Peter: *"i hit continue, and nothing changes. some text below changes, but the
+           * prototype doesn't drive."* Showing what a control promises was the previous fix and it
+           * was half of one — a reviewer validating a flow needs to SEE the next screen, not read
+           * that there is one.
+           *
+           * Where it lands is derived from the truth by `landingsFor`, never from a link: a
+           * `commits` part refuses `leads_to` precisely because its destination is its `answer`,
+           * and writing it twice is two records of one fact. Stamped onto the drawing here rather
+           * than at draw time, because a drawing is stored wired and this is a reading of the
+           * sentences beside it — which change without the component changing.
+           *
+           * ⛔ NOT ONTO A CONTROL ALREADY STANDING WHERE IT WOULD LAND. Four controls on the folder
+           * step read as landing on the folder step, because that is what their sentence is about.
+           * A button that does nothing visible is exactly the complaint.
+           */
+          const lands = landingsFor(scope, v);
+          const withLands = (html: string, here: number): string =>
+            lands.reduce(
+              (acc, l) =>
+                l.index === here
+                  ? acc
+                  : acc.replace(
+                      new RegExp(`data-part="${l.part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`, "g"),
+                      `data-part="${esc(l.part)}" data-lands="${l.index}" data-lands-why="${esc(l.because)}"`
+                    ),
+              html
+            );
           const body = v.sketch_html
             ? states.length
               ? `<div class="states" data-states="${esc(v.id)}">
@@ -757,11 +787,11 @@ function renderScreens(scope: Scope, ctx: Ctx, scopeId: string, opts: PageOption
                        )
                        .join("")}
                    </div>
-                   <div class="state-frame" data-state="0">${asMock(wireHtml(v, matched, derivedGoes, scopeId))}</div>
+                   <div class="state-frame" data-state="0">${asMock(withLands(wireHtml(v, matched, derivedGoes, scopeId), 0))}</div>
                    ${states
                      .map(
                        (st, i) =>
-                         `<div class="state-frame" data-state="${i + 1}" hidden>${asMock(st.sketch_html)}</div>`
+                         `<div class="state-frame" data-state="${i + 1}" hidden>${asMock(withLands(st.sketch_html, i + 1))}</div>`
                      )
                      .join("")}
                  </div>`
@@ -3146,6 +3176,42 @@ const PROTOTYPE = `<script>
   });
 
   /**
+   * ⛔ PRESSING A COMMIT MOVES THE PICTURE. Peter: *"i hit continue, and nothing changes. some text
+   * below changes, but the prototype doesn't drive."*
+   *
+   * The state it moves to is derived from the control's own sentence — see landingsFor — and
+   * stamped on the control as data-lands. One click, because this stays inside one screen; the
+   * two-click rule is about LEAVING a feature, and nothing here leaves anything.
+   *
+   * ⛔ AND IT SAYS WHY IT MOVED, in the panel it was already going to fill. A prototype that jumps
+   * without saying what it read is one a reviewer has to trust; this one can be argued with.
+   */
+  document.addEventListener("click", (ev) => {
+    const btn = inPath(ev, "[data-lands]");
+    if (!btn) return;
+    const box = btn.getRootNode().host ? btn.getRootNode().host.closest(".states") : btn.closest(".states");
+    if (!box) return;
+    const want = btn.dataset.lands;
+    const tab = box.querySelector('.state-tab[data-state="' + want + '"]');
+    const frame = box.querySelector('.state-frame[data-state="' + want + '"]');
+    if (!tab || !frame) return;
+    for (const t of box.querySelectorAll(".state-tab")) t.classList.toggle("on", t === tab);
+    for (const f of box.querySelectorAll(".state-frame")) f.hidden = f.dataset.state !== want;
+    /** ⛔ Say what moved and why, or a picture that changed on its own is a picture nobody trusts. */
+    const screen = box.closest("article.screen");
+    const panel = screen && screen.querySelector(".pt-detail");
+    if (panel) {
+      panel.innerHTML =
+        '<p class="pt-head"><strong>' + esc(btn.textContent.trim() || "This control") +
+        '</strong> <span class="role">lands on</span> ' + esc(tab.textContent.trim()) + "</p>" +
+        '<p class="pt-said"><span class="slot">because the truth says</span> ' + esc(btn.dataset.landsWhy || "") + "</p>";
+      panel.hidden = false;
+    }
+    frame.classList.add("arrived");
+    setTimeout(() => frame.classList.remove("arrived"), 900);
+  });
+
+  /**
    * ⛔ A CONTROL THAT GOES SOMEWHERE TAKES YOU THERE — that is what makes it a prototype rather
    * than a diagram. Walking the flow is how a reviewer finds the screen nobody wrote: the
    * destination either exists on this page or it does not, and either way they learn something.
@@ -4150,6 +4216,14 @@ const STYLE = `<style>
   .card-proto .focus, figure.card-screen .focus { outline: 3px solid #f59e0b; outline-offset: 3px;
     border-radius: 3px; box-shadow: 0 0 0 7px rgba(245,158,11,.22); }
   /* "show me the deal row" — the control this sentence is about, on the screen it lives on. */
+  /**
+   * ⛔ A CONTROL THAT DRIVES SAYS SO BEFORE IT IS PRESSED. Peter pressed Continue expecting
+   * movement and got none; a control that WILL move the picture and looks identical to one that
+   * will not is the same complaint one step later.
+   */
+  [data-lands] { cursor: pointer; }
+  .state-frame.arrived { animation: arrived 900ms ease-out; }
+  @keyframes arrived { from { box-shadow: 0 0 0 3px var(--accent); } to { box-shadow: 0 0 0 0 transparent; } }
   button.pt-go { font: inherit; font-size: .82rem; background: var(--accent); color: var(--bg);
     border: 0; border-radius: 4px; padding: .12rem .45rem; cursor: pointer; margin-left: .3rem; }
   button.show-part { font: inherit; font-size: inherit; background: none; border: 0; padding: 0;

@@ -1,0 +1,11 @@
+id: "0039"
+said: |-
+  i hit continue, and nothing changes.  some text below changes, but hte prototype doesn't drive
+at: 2026-09-30
+kind: derivation
+reaches:
+  derive: landingsFor
+  surface: data-lands
+  check: pressing-this-moves-nothing
+  pin: where a commit lands is read from what it leaves behind
+waived: {}

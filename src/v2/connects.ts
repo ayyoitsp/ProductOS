@@ -18,6 +18,7 @@
  */
 import type { Corpus } from "./load.js";
 import type { Scope, View } from "./schema.js";
+import { saysText } from "./schema.js";
 
 export interface Connection {
   /** `<scope>#<view>#<part>` — the control. */
@@ -224,3 +225,112 @@ export function inferConnections(corpus: Corpus): { made: Connection[]; missed: 
 
   return { made, missed };
 }
+
+/**
+ * ⛔ WHERE A PRESS LANDS, WORKED OUT FROM WHAT THE SLOT SAYS.
+ *
+ * Peter: *"i hit continue, and nothing changes. some text below changes, but the prototype doesn't
+ * drive."* He is right and it is the whole premise — a prototype that describes navigating instead
+ * of navigating is a diagram with extra steps.
+ *
+ * ⛔ AND IT CANNOT COME FROM A LINK, BY DESIGN. `leads_to` is REFUSED on a `commits` part, because
+ * where a commit lands is its `answer` — writing it twice is two records of one fact and they
+ * disagree within a week. So the destination is DERIVED from the sentence that already says it:
+ * *"the analyst is then asked where its folder is"* against a state called *Folder*.
+ *
+ * ⛔ FROM THE TRUTH, NEVER THE CODE. Peter: *"code is ONLY reference for initializing/onboarding to
+ * product OS"*. The component knows perfectly well that Continue calls `setPhase('folder')` and
+ * that is not what this reads — a prototype wired from the implementation shows a reviewer what was
+ * built, which is the one thing a target-state corpus must not be steered by.
+ *
+ * ⛔ AND IT SAYS WHAT IT READ. `because` carries the sentence, so an arrow a reviewer disagrees
+ * with is an arrow they can argue with rather than one they have to reverse-engineer.
+ */
+export interface Landing {
+  /** The control pressed. */
+  part: string;
+  /** Which state of this screen it lands on — index into `states`, so 1 is the first. */
+  index: number;
+  label: string;
+  /** The sentence this was read from, so an arrow can be argued with rather than reverse-engineered. */
+  because: string;
+}
+
+/**
+ * ⛔ A STATE'S NAME IS WHAT IT IS; ITS CONDITION IS CONTEXT — the same weighting the screen matcher
+ * above uses, for the same reason. A `when` is code, and code mentions whatever code mentions.
+ */
+function stateWeights(label: string, when: string): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const w of words(when)) out.set(w, Math.max(out.get(w) ?? 0, 1));
+  for (const w of words(label)) out.set(w, Math.max(out.get(w) ?? 0, 4));
+  return out;
+}
+
+export function landingsFor(scope: Scope, view: View): Landing[] {
+  const states = view.states ?? [];
+  if (!states.length) return [];
+  const out: Landing[] = [];
+
+  for (const pt of view.parts) {
+    if (pt.role !== "commits") continue;
+    /**
+     * ⛔ THE EXCHANGE AT THE CONTROL FIRST, THEN THE SCREEN'S OWN. A commit control is how a
+     * screen's exchange gets asked, so an exchange anchored at the view with no part of its own is
+     * the one this control performs — the same reasoning the detail panel uses.
+     */
+    const at =
+      scope.exchanges.find((e) => e.at?.view === view.id && e.at?.part === pt.id) ??
+      scope.exchanges.find((e) => e.at?.view === view.id && !e.at?.part);
+    if (!at) continue;
+    /**
+     * ⛔ `after` BEFORE `answer`. What a press LEAVES BEHIND is where you end up; what it GIVES you
+     * is usually the thing itself. Both of "the deal is created on the CRE deals list" and "the
+     * analyst is then asked where its folder is" are true, and only the second says where you are.
+     */
+    const because = saysText(at.slots?.after?.says) || saysText(at.slots?.answer?.says);
+    if (!because) continue;
+    const mine = words(because);
+    if (!mine.size) continue;
+
+    const scored = states.map((st, i) => {
+      const w = stateWeights(st.label, st.when);
+      const score = [...mine].reduce((n, x) => n + (w.get(x) ?? 0), 0);
+      /**
+       * ⛔ AND HOW MUCH OF THE STATE'S OWN NAME THE SENTENCE ACCOUNTS FOR. "Folder" and "Folder
+       * failure" both match the word folder and score identically, so the margin rule rejected
+       * both and the prototype drove nowhere. The sentence accounts for all of "Folder" and half
+       * of "Folder failure" — which is the difference between the state it names and a state that
+       * merely shares a word with it.
+       */
+      const nameWords = [...words(st.label)];
+      const covered = nameWords.length ? nameWords.filter((x) => mine.has(x)).length / nameWords.length : 0;
+      return { index: i + 1, label: st.label, score, covered };
+    });
+    scored.sort((a, b) => b.score - a.score || b.covered - a.covered);
+    const best = scored[0];
+    const next = scored[1];
+    /**
+     * ⛔ A MARGIN, NOT A MAXIMUM — the rule this file and the route resolver already keep. A
+     * prototype that drives on a two-to-one reading teaches a reviewer a flow the corpus does not
+     * claim, and they cannot tell it was a guess.
+     */
+    if (!best || best.score < 4 || best.covered < 1) continue;
+    if (next && next.score >= best.score && next.covered >= best.covered) continue;
+    out.push({ part: pt.id, index: best.index, label: best.label, because });
+  }
+  return out;
+}
+
+/**
+ * ⛔ CROSS-SCREEN LANDINGS ARE NOT DERIVED HERE, AND THE FIRST VERSION OF THIS DID.
+ *
+ * It scored a commit's `after` against every screen in the corpus and produced nine arrows, most of
+ * them wrong: a "Dismiss" notice landing on the source-versions screen, a "Sign in" landing there
+ * too, "Continue" on create-a-deal landing on the deals list because its sentence mentions the list
+ * the deal appears on. `inferConnections` above already answers "which screen does this control
+ * reach", conservatively, and produced exactly one arrow on the same corpus.
+ *
+ * Two derivations of one fact is the thing this project keeps paying for. This one answers only the
+ * question nothing else answered: which state of THIS screen a press moves to.
+ */
