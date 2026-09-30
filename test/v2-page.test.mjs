@@ -1134,3 +1134,4 @@ test("a mock adopts the application's stylesheet rather than printing it", () =>
     "cloning the app-css template into a shadow root prints the stylesheet as text"
   );
 });
+

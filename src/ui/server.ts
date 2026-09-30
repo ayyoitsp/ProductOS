@@ -711,7 +711,21 @@ function readJson(req: http.IncomingMessage): Promise<Record<string, unknown>> {
 }
 
 function html(res: http.ServerResponse, body: string, status = 200): void {
-  res.writeHead(status, { "content-type": "text/html; charset=utf-8" });
+  /**
+   * ⛔ NEVER CACHED. This page sent no cache headers at all, so a browser was free to serve a stale
+   * copy on reload — and did. Peter reloaded after a fix and saw the old screen: *"what is
+   * happening? i reloaded that page, there is no rendering for a deals list."* It cost most of an
+   * afternoon, twice, because the server had the new truth the whole time.
+   *
+   * A review surface whose premise is that it follows the truth cannot be cacheable. A page showing
+   * yesterday's corpus is indistinguishable from one where nothing has changed, which is the exact
+   * failure the live connection exists to remove.
+   */
+  res.writeHead(status, {
+    "content-type": "text/html; charset=utf-8",
+    "cache-control": "no-store, must-revalidate",
+    pragma: "no-cache",
+  });
   res.end(body);
 }
 

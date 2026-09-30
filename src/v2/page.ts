@@ -1214,6 +1214,8 @@ function renderGroupUx(corpus: Corpus, scopeId: string, ctx: Ctx): string {
     silent: number;
     said: number;
     goes: string[];
+    /** The screen itself, so the map shows the product rather than a box with its name on. */
+    html?: string;
   }
   const nodes: Node[] = [];
   for (const id of ids) {
@@ -1234,6 +1236,7 @@ function renderGroupUx(corpus: Corpus, scopeId: string, ctx: Ctx): string {
         silent: live.filter((p) => !sc.exchanges.some((e) => e.at?.view === v.id && e.at?.part === p.id)).length,
         said: sc.exchanges.filter((e) => e.at?.view === v.id).length,
         goes: v.parts.filter((p) => p.leads_to).map((p) => p.leads_to!),
+        html: v.sketch_html || undefined,
       });
     }
   }
@@ -1275,8 +1278,25 @@ function renderGroupUx(corpus: Corpus, scopeId: string, ctx: Ctx): string {
   if (loose.length) layers.push(loose);
 
   const edges = nodes.reduce((k, n) => k + n.goes.length, 0);
+  /**
+   * ⛔ THE MAP SHOWS THE SCREENS, NOT THEIR NAMES.
+   *
+   * Every node here was a box holding a title and two counts — a list of screens with boxes drawn
+   * round it, which is what made this page read as an inventory. Peter: *"make sure this PAGE has
+   * fully populated screenshots"*. The drawing already exists on the view; the map simply was not
+   * showing it.
+   *
+   * `proto-mock` is the same class the prototype tiles use, so the one hydration sweep dresses
+   * these too — one styling path, whoever built the root.
+   */
+  const shot = (n: Node): string =>
+    n.html
+      ? `<div class="ux-shot"><div class="ux-shot-scale"><div class="proto-mock" data-mock="${esc(`${n.scope}#${n.view}`)}"><template>${n.html}</template></div></div></div>`
+      : `<div class="ux-shot none">${n.intended ? "not built yet" : "no picture of this screen"}</div>`;
+
   const box = (n: Node): string => `
     <li class="ux-node${n.intended ? " intended" : ""}">
+      ${shot(n)}
       <button type="button" class="show-part" data-show-part="${esc(`${n.view}/`)}">${line(n.title)}</button>
       <span class="ux-in">${refLink(n.scope, ctx, line(n.scopeTitle))}</span>
       <span class="ux-n">${n.controls} control${n.controls === 1 ? "" : "s"}${
@@ -2833,7 +2853,19 @@ const PROTOTYPE = `<script>
     for (const h of hosts()) {
       const root = h.shadowRoot;
       if (!root) continue;
-      if ("adoptedStyleSheets" in root) root.adoptedStyleSheets = [sheet, marks, ...root.adoptedStyleSheets].filter(Boolean);
+      /**
+       * ⛔ THE OTHER SCRIPT'S VARIABLE, NAMED HERE, KILLED THIS ONE.
+       *
+       * A single edit meant for the board's hydration landed here too, where that variable does not
+       * exist — so this threw ReferenceError on every page load, and the script that hydrates every
+       * mock OUTSIDE the board stopped at line one. Fifty-nine screens on the map and every screen
+       * embedded in a feature view stayed inert template tags. It looked exactly like "the drawing
+       * is missing", it was thrown for over an hour, and I took screenshots of the board — the one
+       * surface with its own hydration — and called it verified.
+       *
+       * The marker styles are added below, from this script's own sheet.
+       */
+      if ("adoptedStyleSheets" in root) root.adoptedStyleSheets = [sheet, ...root.adoptedStyleSheets].filter(Boolean);
       else {
         const el = document.createElement("style");
         el.textContent = css;
@@ -3171,7 +3203,14 @@ const DRIVE = `<script>
     root.appendChild(tpl.content.cloneNode(true));
     return root;
   }
-  for (const host of board.querySelectorAll(".proto-mock")) hydrate(host);
+  /**
+   * ⛔ EVERY MOCK ON THE PAGE, not only the ones on the board. The screen map puts the same drawings
+   * in its nodes, and hydrating only the board left fifty-nine of them as inert <template> tags —
+   * present in the markup, invisible on the page, which is the third time this exact shape of bug
+   * has cost an afternoon.
+   */
+  const hydrateAll = () => { for (const host of document.querySelectorAll(".proto-mock")) hydrate(host); };
+  hydrateAll();
 
   /**
    * ⛔ ONE SOURCE OF STYLE FOR EVERY MOCK ON THE PAGE, because there were two and they diverged.
@@ -3187,6 +3226,7 @@ const DRIVE = `<script>
    * same styling.
    */
   const dressAll = () => {
+    hydrateAll();
     for (const h of document.querySelectorAll(".proto-mock, .proto.html, [data-mock]")) {
       const root = h.shadowRoot;
       if (!root || root.adoptedStyleSheets.length || !("adoptedStyleSheets" in root)) continue;
@@ -3794,6 +3834,13 @@ const STYLE = `<style>
    * (No backticks in this comment: it lives inside a template literal, and a backtick here ends
    * the string. That has now cost four builds.)
    */
+  /* A node on the screen map carries the screen itself. */
+  .ux-shot { height: 11rem; overflow: hidden; border: 1px solid var(--rule); border-radius: 6px;
+    background: #fff; margin-bottom: .45rem; }
+  .ux-shot-scale { width: 250%; transform: scale(.4); transform-origin: top left; pointer-events: none; }
+  .ux-shot.none { display: flex; align-items: center; justify-content: center; font-size: .78rem;
+    color: var(--dim); background: var(--soft); }
+
   /* ── The prototype: the product as a board of real screens. ──────────────────────────── */
   /* ⛔ The width goes to the SCREENS. A surface whose job is being visual cannot spend it on nav. */
   .pboard { display: grid; grid-template-columns: repeat(auto-fill, minmax(22rem, 1fr)); gap: 1.1rem; margin-top: .8rem; }
