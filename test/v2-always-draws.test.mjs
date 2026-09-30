@@ -104,7 +104,8 @@ test("⛔ a screen needs a PICTURE, not a component — the earlier version of t
    */
   assert.match(src, /kind: "no-picture-of-this-screen"/, "a screen nobody can look at must refuse");
   assert.match(src, /if \(!v\.sketch_html && !v\.sketch\)/, "and having no COMPONENT must not be what triggers it");
-  assert.match(src, /v2 propose/, "the fix must offer generating from the truth, not only from code");
+  /** ⛔ ONE command in the fix, not a sequence to assemble — see `productos v2 generate`. */
+  assert.match(src, /v2 generate/, "the fix must name the single regeneration pass");
 
   /** Having no code source says something about the build, so it is a note about drift. */
   assert.match(src, /kind: "nothing-to-compare-this-against"/, "no component is a drift fact, not a truth gap");
@@ -129,4 +130,36 @@ test("the sweep exists and is reachable without naming a component", () => {
   assert.match(cli, /if \(o\.all\) return drawEverything/, "and --all must sweep");
   /** ⛔ `--route` stopped being required, or --all could never run. */
   assert.ok(!/requiredOption\("--route/.test(cli), "--route must not be required any more");
+});
+
+/**
+ * ⛔ THE FRAMEWORK GENERATES IT — NOBODY ASKS FOR IT PIECE BY PIECE.
+ *
+ * Peter: *"the framework will now generate these, not me asking you to do it, right?"* — and the
+ * answer was no: drawing, proposing and connecting were three commands somebody had to know about,
+ * order correctly, and choose to run. That is how six of sixteen screens stayed hand-typed through
+ * several re-indexings. One pass, named in the skill, named in the fix text of the check that
+ * refuses a corpus without it.
+ */
+test("one command regenerates everything generable, and every layer points at it", () => {
+  const cli = fs.readFileSync("src/cli/commands/v2.ts", "utf-8");
+  assert.match(cli, /\.command\("generate"\)/, "there must be a single regeneration pass");
+  /** It has to do all three, and in an order where each feeds the next. */
+  const body = cli.slice(cli.indexOf('.command("generate")'), cli.indexOf('.command("generate")') + 2000);
+  const draw = body.indexOf("drawEverything");
+  const propose = body.indexOf("proposeScreens");
+  const connect = body.indexOf("connectAll");
+  assert.ok(draw > 0 && propose > draw, "it must draw before it proposes — a drawn screen needs no proposal");
+  assert.ok(connect > propose, "and connect last: a screen must exist before anything can lead to it");
+
+  /** ⛔ One body per pass, or the single command and the standalone one drift. */
+  assert.match(cli, /function proposeScreens\(/, "propose must be a function both callers share");
+  assert.match(cli, /function connectAll\(/, "connect must be a function both callers share");
+
+  assert.match(fs.readFileSync("src/v2/check.ts", "utf-8"), /v2 generate/, "check must name it in its fix");
+  assert.match(
+    fs.readFileSync("skills/productos-exchange/SKILL.md", "utf-8"),
+    /productos v2 generate/,
+    "the skill must name it, or the next session assembles the sequence by hand again"
+  );
 });

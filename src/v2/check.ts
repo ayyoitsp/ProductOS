@@ -2390,7 +2390,12 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
             kind: "no-picture-of-this-screen",
             where: `${scope.id}#${v.id}`,
             what: "this screen has nothing anybody can look at — a title and a parts list is not something a person can tell is wrong",
-            fix: `draw every screen that can be: productos v2 draw --all --into <corpus>. Where no component renders it yet, generate it from the truth: productos v2 propose "${scope.id}#${v.id}" --into <corpus>`,
+            /**
+             * ⛔ ONE COMMAND IN THE FIX, NOT THREE. A finding that asks somebody to assemble a
+             * sequence is a finding they defer — and drawing, proposing and connecting were three
+             * things to know about before a corpus was current.
+             */
+            fix: `regenerate everything generable: productos v2 generate --into <corpus>`,
           });
           continue;
         }

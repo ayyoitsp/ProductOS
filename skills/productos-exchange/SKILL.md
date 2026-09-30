@@ -556,9 +556,26 @@ says anything about, which is where the holes are.
 two generators and both produce the same kind of artefact:
 
 ```bash
-productos v2 draw --all --into <corpus>       # from the components, where something renders it
-productos v2 propose --all --into <corpus>    # from the truth, where nothing does yet
+productos v2 generate --into <corpus>         # ⛔ the one command: screens, their states, and the graph
 ```
+
+It runs three passes in order, and you do not run them separately unless you are debugging one:
+
+```bash
+productos v2 draw --all --into <corpus>       # screens from the components, where something renders one
+productos v2 propose --all --into <corpus>    # screens from the truth, where nothing does yet
+productos v2 connect --into <corpus>          # what leads where, read out of what the corpus says
+```
+
+⛔ **Run `generate` after anything moves** — the code, the parts, a title, a purpose. All of it is
+output; none of it is anybody's to maintain. `check` refuses a screen with no picture and its fix
+names this one command.
+
+⛔ **The graph comes from the truth, never from the code.** A control called "New Deal" whose
+sentence says it *begins creating a deal*, and a feature called "Creating a deal" — that is the
+whole derivation, and it works for a screen nobody has built. It declines far more often than it
+connects: most controls act on the screen they are on, and a wrong arrow on a map somebody trusts is
+worse than no arrow.
 
 `propose` reads the view's own parts — labels are the product's own words, roles say what each
 control *is* — and dresses them in the **idiom of the application**, learned from its own components

@@ -1401,6 +1401,37 @@ export function v2Command(): Command {
 
   cmd
     /**
+     * ⛔ ONE PASS THAT REGENERATES EVERYTHING GENERABLE.
+     *
+     * Peter: *"the framework will now generate these, not me asking you to do it, right?"* — and the
+     * honest answer was no. Drawing, proposing and connecting were three commands somebody had to
+     * know about, remember the order of, and choose to run. A generator you have to assemble by hand
+     * runs on the day somebody is paying attention and never again, which is precisely how six of
+     * sixteen screens stayed hand-typed through several re-indexings.
+     *
+     * So: one command. Screens from the code, then a screen from the truth wherever no code renders
+     * one, then the graph from what the corpus says — in that order, because each feeds the next. A
+     * screen has to exist before anything can connect to it.
+     */
+    .command("generate")
+    .description("Regenerate everything generable: screens, their states, and what connects to what")
+    .option("--into <dir>", "the corpus", ".")
+    .action((o: { into?: string }) => {
+      const into = path.resolve(o.into ?? ".");
+      console.log(pc.bold("Screens, from the code"));
+      drawEverything(into, false);
+      console.log("");
+      console.log(pc.bold("Screens, from the truth — where no code renders them"));
+      proposeScreens(into);
+      console.log("");
+      console.log(pc.bold("What connects to what"));
+      connectAll(into, false);
+      console.log("");
+      console.log(pc.dim("  all of it is output. Re-run after the code or the truth moves; nothing here is anybody's to maintain."));
+    });
+
+  cmd
+    /**
      * ⛔ THE GRAPH COMES FROM THE TRUTH, NOT THE CODE.
      *
      * Peter: *"doesn't matter what code says. it should be obvious what connects to what… there's
@@ -1413,62 +1444,7 @@ export function v2Command(): Command {
     .option("--into <dir>", "the corpus", ".")
     .option("-n, --dry-run", "say what it would connect and change nothing")
     .action((o: { into?: string; dryRun?: boolean }) => {
-      const into = path.resolve(o.into ?? ".");
-      const corpus = loadCorpus(into);
-      const { made, missed } = inferConnections(corpus);
-
-      console.log(pc.green("✓"), `${made.length} connection${made.length === 1 ? "" : "s"} the corpus already implies`);
-      for (const c of made) {
-        console.log(`  ${c.from}  →  ${pc.bold(c.to)}`);
-        console.log(pc.dim(`      because both say: ${c.because.join(", ")}${c.runnerUp ? ` (next best: ${c.runnerUp.to})` : ""}`));
-      }
-      /**
-       * ⛔ WHAT IT WOULD NOT SAY, AND WHY — because a graph that quietly connects what it is sure of
-       * reads as a complete map. Most controls act on the screen they are on and correctly have no
-       * destination; that is a finding, not a gap.
-       */
-      if (missed.length) {
-        const byWhy = new Map<string, number>();
-        for (const m of missed) byWhy.set(m.why, (byWhy.get(m.why) ?? 0) + 1);
-        console.log("");
-        console.log(pc.dim(`${missed.length} left alone:`));
-        for (const [why, n] of byWhy) console.log(pc.dim(`  ${n} · ${why}`));
-      }
-      if (o.dryRun || !made.length) return;
-
-      /**
-       * ⛔ ONLY A CONTROL THAT NAVIGATES MAY CARRY A LINK, AND THE MODEL WAS RIGHT ABOUT IT.
-       *
-       * Writing `leads_to` onto "New Deal" made the corpus refuse to load: a part that COMMITS does
-       * work, and where it lands afterwards belongs to its answer slot rather than to a link. That
-       * rule is not in the way of a walkable prototype — it says where the walk is written down.
-       *
-       * So a navigating control gets the line; a committing one keeps its destination DERIVED, and
-       * the page reads it from the same inference at render time. Nothing is stored that the model
-       * refuses, and nothing is lost.
-       */
-      let wrote = 0;
-      const derived: Connection[] = [];
-      for (const c of made) {
-        const [scopeId, viewId, partId] = c.from.split("#");
-        const part = corpus.scopes
-          .find((x) => x.scope.id === scopeId)
-          ?.scope.views.find((v) => v.id === viewId)
-          ?.parts.find((p) => p.id === partId);
-        if (part?.role === "navigates") {
-          if (writeLeadsTo(into, c.from, c.to)) wrote++;
-        } else derived.push(c);
-      }
-      console.log("");
-      if (wrote) {
-        console.log(pc.green("✓"), `${wrote} written onto the control that navigates`);
-        console.log(pc.dim("  a decision, not an agreement — change any line that is wrong, and it stays changed"));
-      }
-      if (derived.length) {
-        console.log(pc.cyan("⤳"), `${derived.length} left derived — these controls COMMIT, and where they land belongs to their answer slot, not to a link`);
-        for (const c of derived) console.log(pc.dim(`    ${c.from} → ${c.to}`));
-        console.log(pc.dim("  the prototype walks them from this same reading, so nothing is lost by not writing them down"));
-      }
+      connectAll(path.resolve(o.into ?? "."), Boolean(o.dryRun));
     });
 
   cmd
@@ -1483,48 +1459,7 @@ export function v2Command(): Command {
     .option("--all", "every screen that has no picture yet")
     .option("--into <dir>", "the corpus to write into", ".")
     .action((ref: string | undefined, o: { all?: boolean; into?: string }) => {
-      const into = path.resolve(o.into ?? ".");
-      let repoRoot = into;
-      let componentsDir: string | undefined;
-      try {
-        const paths = resolvePathsOrThrow(into);
-        repoRoot = path.dirname(path.dirname(paths.configFile));
-        const dir = readConfig(paths).web.components_dir;
-        componentsDir = dir ? path.resolve(repoRoot, dir) : undefined;
-      } catch {
-        componentsDir = undefined;
-      }
-      const corpus = loadCorpus(into);
-      const idiom = idiomOf(componentsDir);
-      const targets = everyView(corpus).filter((x) =>
-        o.all ? !x.view.sketch_html && !x.view.sketch : ref === `${x.scope}#${x.view.id}`
-      );
-      if (!targets.length) {
-        console.error(pc.red("✗"), o.all ? "every screen already has a picture" : `no screen "${ref}"`);
-        process.exit(1);
-      }
-      console.log(
-        pc.dim(
-          idiom.from.length
-            ? `  idiom learned from ${idiom.from.length} of this app's own components`
-            : "  no components directory configured — using plain markup"
-        )
-      );
-      let made = 0;
-      for (const { scope, view } of targets) {
-        const { html, placed } = proposeScreen(view, idiom);
-        if (!placed) {
-          console.log(pc.yellow("?"), `${scope}#${view.id} — declares no parts, so there is nothing to place. Give it its parts.`);
-          continue;
-        }
-        if (!writeSketchHtml(into, scope, view.id, html)) {
-          console.log(pc.red("✗"), `${scope}#${view.id} — the corpus would not take it`);
-          continue;
-        }
-        made++;
-        console.log(pc.green("✓"), `${scope}#${view.id}  ${pc.dim(`${placed} part(s) placed`)}`);
-      }
-      if (made) console.log(pc.dim(`\n  ${made} screen(s) generated from the truth. Re-run after the parts or the design system change — these are output.`));
+      proposeScreens(path.resolve(o.into ?? "."), o.all ? undefined : ref);
     });
 
   cmd
@@ -2056,4 +1991,117 @@ function drawEverything(into: string, dryRun: boolean): void {
 /** A scope id as the corpus files hold it. */
 function scopeId(id: string): string {
   return id;
+}
+
+
+/**
+ * A screen generated from the truth — one view, or every view that has no picture.
+ *
+ * ⛔ ONE BODY, TWO CALLERS: the `propose` command and the single `generate` pass. Two copies is two
+ * behaviours the day somebody fixes one of them, which is the defect this codebase keeps finding in
+ * itself.
+ */
+function proposeScreens(into: string, ref?: string): void {
+      
+      let repoRoot = into;
+      let componentsDir: string | undefined;
+      try {
+        const paths = resolvePathsOrThrow(into);
+        repoRoot = path.dirname(path.dirname(paths.configFile));
+        const dir = readConfig(paths).web.components_dir;
+        componentsDir = dir ? path.resolve(repoRoot, dir) : undefined;
+      } catch {
+        componentsDir = undefined;
+      }
+      const corpus = loadCorpus(into);
+      const idiom = idiomOf(componentsDir);
+      const targets = everyView(corpus).filter((x) =>
+        !ref ? !x.view.sketch_html && !x.view.sketch : ref === `${x.scope}#${x.view.id}`
+      );
+      if (!targets.length) {
+        console.error(pc.red("✗"), !ref ? "every screen already has a picture" : `no screen "${ref}"`);
+        process.exit(1);
+      }
+      console.log(
+        pc.dim(
+          idiom.from.length
+            ? `  idiom learned from ${idiom.from.length} of this app's own components`
+            : "  no components directory configured — using plain markup"
+        )
+      );
+      let made = 0;
+      for (const { scope, view } of targets) {
+        const { html, placed } = proposeScreen(view, idiom);
+        if (!placed) {
+          console.log(pc.yellow("?"), `${scope}#${view.id} — declares no parts, so there is nothing to place. Give it its parts.`);
+          continue;
+        }
+        if (!writeSketchHtml(into, scope, view.id, html)) {
+          console.log(pc.red("✗"), `${scope}#${view.id} — the corpus would not take it`);
+          continue;
+        }
+        made++;
+        console.log(pc.green("✓"), `${scope}#${view.id}  ${pc.dim(`${placed} part(s) placed`)}`);
+      }
+      if (made) console.log(pc.dim(`\n  ${made} screen(s) generated from the truth. Re-run after the parts or the design system change — these are output.`));
+}
+
+/** Work out the graph from the truth, and write the part of it the model allows to be written. */
+function connectAll(into: string, dryRun: boolean): void {
+      
+      const corpus = loadCorpus(into);
+      const { made, missed } = inferConnections(corpus);
+
+      console.log(pc.green("✓"), `${made.length} connection${made.length === 1 ? "" : "s"} the corpus already implies`);
+      for (const c of made) {
+        console.log(`  ${c.from}  →  ${pc.bold(c.to)}`);
+        console.log(pc.dim(`      because both say: ${c.because.join(", ")}${c.runnerUp ? ` (next best: ${c.runnerUp.to})` : ""}`));
+      }
+      /**
+       * ⛔ WHAT IT WOULD NOT SAY, AND WHY — because a graph that quietly connects what it is sure of
+       * reads as a complete map. Most controls act on the screen they are on and correctly have no
+       * destination; that is a finding, not a gap.
+       */
+      if (missed.length) {
+        const byWhy = new Map<string, number>();
+        for (const m of missed) byWhy.set(m.why, (byWhy.get(m.why) ?? 0) + 1);
+        console.log("");
+        console.log(pc.dim(`${missed.length} left alone:`));
+        for (const [why, n] of byWhy) console.log(pc.dim(`  ${n} · ${why}`));
+      }
+      if (dryRun || !made.length) return;
+
+      /**
+       * ⛔ ONLY A CONTROL THAT NAVIGATES MAY CARRY A LINK, AND THE MODEL WAS RIGHT ABOUT IT.
+       *
+       * Writing `leads_to` onto "New Deal" made the corpus refuse to load: a part that COMMITS does
+       * work, and where it lands afterwards belongs to its answer slot rather than to a link. That
+       * rule is not in the way of a walkable prototype — it says where the walk is written down.
+       *
+       * So a navigating control gets the line; a committing one keeps its destination DERIVED, and
+       * the page reads it from the same inference at render time. Nothing is stored that the model
+       * refuses, and nothing is lost.
+       */
+      let wrote = 0;
+      const derived: Connection[] = [];
+      for (const c of made) {
+        const [scopeId, viewId, partId] = c.from.split("#");
+        const part = corpus.scopes
+          .find((x) => x.scope.id === scopeId)
+          ?.scope.views.find((v) => v.id === viewId)
+          ?.parts.find((p) => p.id === partId);
+        if (part?.role === "navigates") {
+          if (writeLeadsTo(into, c.from, c.to)) wrote++;
+        } else derived.push(c);
+      }
+      console.log("");
+      if (wrote) {
+        console.log(pc.green("✓"), `${wrote} written onto the control that navigates`);
+        console.log(pc.dim("  a decision, not an agreement — change any line that is wrong, and it stays changed"));
+      }
+      if (derived.length) {
+        console.log(pc.cyan("⤳"), `${derived.length} left derived — these controls COMMIT, and where they land belongs to their answer slot, not to a link`);
+        for (const c of derived) console.log(pc.dim(`    ${c.from} → ${c.to}`));
+        console.log(pc.dim("  the prototype walks them from this same reading, so nothing is lost by not writing them down"));
+      }
 }
