@@ -2238,6 +2238,19 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
         .map(
           (g) => `<section class="view" id="${anchorOf(g.scope)}" data-view="${esc(g.scope)}" data-ref="${esc(g.scope)}" data-label="${esc(plain(g.title))}">
             <h2>${line(g.title)}</h2>
+            ${
+              /**
+               * ⛔ THE SCREEN COMES FIRST. Peter: *"when we are at a feature like 'create deal', we
+               * need prototypes as well. why is there no screen rendering at the top of this
+               * feature?"* — it was fifth of six blocks, below the prose, the purpose and every
+               * behaviour, about fourteen hundred pixels down.
+               *
+               * A reviewer opening a feature is trying to see the product. Reading four paragraphs
+               * before reaching a picture of it is reading a description of something you are not
+               * being shown, and it is the whole reason this surface felt like a document.
+               */
+              renderScreens(corpus.scopes.find((x) => x.scope.id === g.scope)!.scope, ctx, g.scope, opts, corpus)
+            }
             ${renderProse(corpus.scopes.find((x) => x.scope.id === g.scope)?.body ?? "")}
             ${renderHappyPath(corpus, g.scope, ctx, decisionsOn(corpus, `${g.scope}#happy-path`))}
             ${
@@ -2247,7 +2260,6 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
               [...homesOf.values()].includes(g.scope) ? renderGroupRules(corpus, g.scope, ctx, homesOf) : ""
             }
             ${renderBehaviours(corpus, g.scope, cellOf, ctx)}
-            ${renderScreens(corpus.scopes.find((x) => x.scope.id === g.scope)!.scope, ctx, g.scope, opts, corpus)}
             <details class="fold"><summary>Every slot, and where each came from — the authoring view</summary>
               ${renderGrid(g, ctx)}
               ${renderExchanges(corpus, [g.scope], cellOf, ctx, false)}
@@ -2271,7 +2283,6 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
             const kids = corpus.scopes.filter((x) => x.scope.in === id);
             return `<section class="view" id="${anchorOf(id)}" data-view="${esc(id)}" data-ref="${esc(id)}" data-label="${esc(plain(sc.title || id))}">
               <h2>${line(sc.title || id)}</h2>
-              ${renderProse(corpus.scopes.find((x) => x.scope.id === id)?.body ?? "")}
               ${
                 /**
                  * ⛔ A GROUP'S OWN SCREEN RENDERS TOO. `views` is on every Scope and only leaf
@@ -2281,6 +2292,7 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
                  */
                 renderScreens(sc, ctx, id, opts, corpus)
               }
+              ${renderProse(corpus.scopes.find((x) => x.scope.id === id)?.body ?? "")}
               ${renderGroupUx(corpus, id, ctx)}
               ${renderGroupRules(corpus, id, ctx, homesOf)}
               <h3 class="sub">What is filed under it</h3>
