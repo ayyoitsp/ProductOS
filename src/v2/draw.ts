@@ -120,6 +120,8 @@ interface Ctx {
    * of the data is what a reader judges, and a hatch per cell would bury it.
    */
   inRow?: boolean;
+  /** Which repeated row this is, so a list reads as several different things. */
+  row?: number;
   /** Sample values for a placeholder, by the identifier that produced it. */
   sample: (hint: string) => string | undefined;
   /** The file being read, so a co-located component resolves before a same-named one elsewhere. */
@@ -319,6 +321,16 @@ function emit(node: ts.Node, ctx: Ctx): string {
     }
     if (ts.isConditionalExpression(e)) return pick(e.condition, e.whenTrue, e.whenFalse);
     /**
+     * ⛔ `a || "—"` IS A VALUE WITH A FALLBACK, not a branch. Half the cells in a table are written
+     * that way — `deal.sponsorName || "—"`, `deal.address || "—"` — and treating the whole thing as
+     * one unreadable expression left those columns blank while the ones beside them read fine.
+     * The left side is the field; the right is what shows when it is missing.
+     */
+    if (ts.isBinaryExpression(e) && e.operatorToken.kind === ts.SyntaxKind.BarBarToken) {
+      const left = emit(ts.factory.createJsxExpression(undefined, e.left), ctx);
+      return left || emit(ts.factory.createJsxExpression(undefined, e.right), ctx);
+    }
+    /**
      * ⛔ A LIST DRAWS AS A LIST. Peter: *"nothing renders right for 'deal list'. all screenshots are
      * the same - not a single deal added to the list, just the empty list state..."*
      *
@@ -338,9 +350,8 @@ function emit(node: ts.Node, ctx: Ctx): string {
         const body = ts.isBlock(cb.body) ? returnedFrom(cb.body) : cb.body;
         const inner = body && ts.isParenthesizedExpression(body) ? body.expression : body;
         if (inner && (ts.isJsxElement(inner) || ts.isJsxSelfClosingElement(inner) || ts.isJsxFragment(inner))) {
-          const row = emit(inner, { ...ctx, inRow: true });
           /** Three: enough to read as a list, few enough that a tile is not all one screen. */
-          return row.repeat(3);
+          return [0, 1, 2].map((i) => emit(inner, { ...ctx, inRow: true, row: i })).join("");
         }
       }
     }
@@ -352,6 +363,19 @@ function emit(node: ts.Node, ctx: Ctx): string {
      * numbers were real.
      */
     const hint = e.getText().replace(/\s+/g, " ").slice(0, 40);
+    /**
+     * ⛔ `{children}` IS THE SLOT, AND NOTHING EVER EMITTED THE MARKER FOR IT.
+     *
+     * The inlining code has always looked for `<!--children-->` to decide where a component's
+     * children belong — and nothing produced it, so every `{children}` fell through to the
+     * placeholder path instead. Harmless-looking, and it is why the deals list wrapped every cell's
+     * text INSIDE a grey bar: `Td` renders `{children}`, that became a bar, and the real content was
+     * then inserted into it. Three rows of correct, legible data, painted over.
+     *
+     * Emitting the marker also retires the guesswork about which element is the slot: a component
+     * that says where its children go is believed.
+     */
+    if (ts.isIdentifier(e) && e.text === "children" && !ctx.props.has("children")) return "<!--children-->";
     // A prop bound at the call site: the value the application actually passes.
     if (ts.isIdentifier(e) && ctx.props.has(e.text)) return ctx.props.get(e.text)!;
     const s = ctx.sample(hint);
@@ -368,8 +392,31 @@ function emit(node: ts.Node, ctx: Ctx): string {
       const local = localJsx(ctx.sameFile, e.text);
       if (local) return emit(local, ctx);
     }
+    /**
+     * ⛔ A LIST OF GREY BARS IS NOT A LIST. Peter: *"ok, wtf, how are grey bars useful?"* — and he is
+     * right. A deals list whose every cell is a blank rectangle tells a reviewer nothing about
+     * whether the columns are the right columns, whether a name fits, whether the stage reads as a
+     * stage. The shape of a row is not the point; the row is.
+     *
+     * ⛔ AND IT IS MARKED, WHICH IS WHAT KEEPS THE OLD RULE INTACT. "Never guess a figure" exists so
+     * nobody mistakes an invented number for something the product does. A sample that announces
+     * itself cannot be mistaken — every one carries `productos-sample` and renders with a dotted
+     * underline, so a reviewer can tell at a glance which words are the product's and which are
+     * ours. What it must never do is quietly look real.
+     */
+    /**
+     * ⛔ ONLY INSIDE A REPEATED ROW. Sampling everywhere put "Northgate Apartments" beside the Stage
+     * filter and "Page of $12,400,000" in the pager — a screen that is legible and WRONG, which is
+     * worse than one that is blank. A list's cells are what a reviewer judges; the chrome around it
+     * holds counts and labels that nobody is reading for plausibility.
+     */
+    const made = ctx.inRow ? sampleValue(hint, ctx.row ?? 0) : undefined;
+    if (made !== undefined) {
+      ctx.unresolved.push(hint);
+      return `<span class="productos-sample" title="${text(hint)} — sample">${text(made)}</span>`;
+    }
     if (ctx.inRow) {
-      /** A cell whose value is unknown, drawn as a bar: the shape is the information here. */
+      /** Nothing plausible to put here: the shape is all that is left to show. */
       ctx.unresolved.push(hint);
       return `<span class="productos-value" title="${text(hint)}"></span>`;
     }
@@ -609,6 +656,42 @@ function returnedFrom(block: ts.Block): ts.Node | undefined {
   };
   walk(block);
   return found;
+}
+
+/**
+ * A believable stand-in for a value the drawing cannot read, chosen from what the expression is
+ * CALLED — `deal.name`, `formatLocation(deal)`, `row.loanAmount`.
+ *
+ * ⛔ Chosen by name, never invented from nothing, and always rendered marked. The aim is a screen a
+ * person can read and judge — whether the columns are right, whether a long sponsor name breaks the
+ * layout — not a screen that lies convincingly.
+ */
+const SAMPLES: Array<[RegExp, string[]]> = [
+  [/(sponsor|borrower|owner|company|firm|lender|organi[sz]ation)/i, ["Cedar Ridge Capital", "Northgate Holdings", "Harbor Point Partners"]],
+  [/(address|street|line1)/i, ["1420 Northgate Blvd", "88 Harbor Point Rd", "7 Cedar Ridge Way"]],
+  [/(city|location|market|region|place)/i, ["Sacramento, CA", "Tacoma, WA", "Mesa, AZ"]],
+  [/\bstate\b/i, ["CA", "WA", "AZ"]],
+  /** ⛔ `total` is a COUNT far more often than a sum — it put money in a pager. Money says money. */
+  [/(loanamount|amount|balance|price|proceeds|\bsum\b|\bcost\b)/i, ["$12,400,000", "$8,150,000", "$21,900,000"]],
+  [/(rate|yield|ltv|dscr|percent|spread|coupon)/i, ["6.25%", "5.80%", "6.05%"]],
+  [/(units|count|rooms|beds|quantity|docs|documents|total|pages?)/i, ["184", "76", "312"]],
+  [/(date|created|updated|modified|\bat\b|when|asof)/i, ["4 Mar 2026", "18 Feb 2026", "27 Jan 2026"]],
+  [/(stage|status|state|phase|step)/i, ["Underwriting", "Screening", "Term sheet"]],
+  [/(email|mail)/i, ["a.nguyen@example.com", "j.ruiz@example.com", "m.patel@example.com"]],
+  [/(user|author|by|analyst|officer|person|member)/i, ["A. Nguyen", "J. Ruiz", "M. Patel"]],
+  [/(title|name|label|deal|project|property|asset)/i, ["Northgate Apartments", "Cedar Ridge", "Harbor Point"]],
+];
+
+export function sampleValue(hint: string, row: number): string | undefined {
+  /** Only a value-shaped expression. A call with arguments or a ternary is structure, not a field. */
+  if (!/^[A-Za-z_$][\w$.?\[\]'"()]*$/.test(hint.trim())) {
+    /** …unless it is a formatter around one field, which is how most cells are written. */
+    const m = /^[A-Za-z_$][\w$]*\(\s*([A-Za-z_$][\w$.]*)\s*\)$/.exec(hint.trim());
+    if (!m) return undefined;
+    hint = m[1]!;
+  }
+  for (const [re, values] of SAMPLES) if (re.test(hint)) return values[row % values.length];
+  return undefined;
 }
 
 const localCache = new Map<string, Map<string, ts.Node>>();

@@ -125,7 +125,10 @@ test("what it cannot read is marked, never guessed — and parts are stamped", (
     dir,
     "page.tsx",
     `export default function P() {
-       return <div><button className="go">Save it</button><span>{deal.total}</span><span>{total}</span><input placeholder="Search deals" /></div>
+       return (<div><button className="go">Save it</button>
+         <table><tbody>{deals.map((deal) => (<tr><td>{deal.name}</td><td>{compute(a, b)}</td></tr>))}</tbody></table>
+         <p>{renderSortIcon()}</p>
+         <input placeholder="Search deals" /></div>)
      }`
   );
   const r = drawFromRoute(route, {
@@ -145,8 +148,30 @@ test("what it cannot read is marked, never guessed — and parts are stamped", (
    * which is content the screen would show; a bare `{total}` renders as nothing and is still
    * counted as unresolved.
    */
-  assert.match(r.html, /productos-unknown/, "an unreadable expression was guessed at");
-  assert.ok(r.unresolved.includes("total"), `unresolved does not name it: ${JSON.stringify(r.unresolved)}`);
+  /**
+   * ⛔ THE RULE CHANGED HERE, DELIBERATELY, AND THIS RECORDS WHY.
+   *
+   * It used to be "never supply a value at all". That produced a deals list whose every cell was a
+   * blank grey rectangle — Peter: *"ok, wtf, how are grey bars useful?"* — and he was right: a row
+   * of empty boxes cannot tell you whether the columns are the right columns or whether a long
+   * sponsor name breaks the layout.
+   *
+   * What the old rule was PROTECTING is that nobody mistakes an invented figure for something the
+   * product does. So a supplied value now announces itself: `productos-sample`, a dotted underline,
+   * and the expression it stands for in its title. Legible, and unmistakable. What it must never do
+   * is quietly look real.
+   */
+  /** ⛔ Inside a repeated row — and ONLY there, because a legible wrong value in the chrome around
+   *  a list ("Page of $12,400,000") is worse than a blank one. */
+  assert.match(r.html, /productos-sample/, "a value-shaped field in a row was left blank instead of sampled");
+  assert.match(r.html, /class="productos-sample" title="[^"]+ — sample"/, "a sample must say what it stands for");
+  /** In a row with nothing plausible to say: a bar, because the shape is all that is left. */
+  assert.match(r.html, /productos-value/, "an unsampled cell must still show the row's shape");
+  /** Outside a row: the marked placeholder, unchanged. */
+  assert.match(r.html, /productos-unknown/, "an expression outside a row must still be marked");
+  /** ⛔ A sampled value is still UNRESOLVED — the drawing supplied it, the product did not. */
+  assert.ok(r.unresolved.includes("deal.name"), `a sampled field must still be reported: ${JSON.stringify(r.unresolved)}`);
+  assert.ok(r.unresolved.includes("compute(a, b)"), `an unsampled one too: ${JSON.stringify(r.unresolved)}`);
 
   /**
    * ⛔ THE GENERATOR STAMPS `data-part`. The skill used to say "GENERATE IT. DO NOT TYPE IT." and

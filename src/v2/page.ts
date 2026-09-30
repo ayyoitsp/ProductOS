@@ -506,6 +506,8 @@ const PT_STYLE = `<style>
   td .productos-value, th .productos-value { min-width: 4.5em; }
   tr:nth-child(2n) .productos-value { min-width: 5.5em; }
   tr:nth-child(3n) .productos-value { min-width: 3.6em; }
+  /** ⛔ A sample announces itself. That is what lets the drawing be legible without lying. */
+  .productos-sample { text-decoration: underline dotted rgba(120,113,108,.55); text-underline-offset: 2px; }
   .productos-icon { display: inline-block; width: 1em; height: 1em; vertical-align: -.12em;
     border-radius: 2px; background: currentColor; opacity: .3; }
   /**
@@ -3171,6 +3173,16 @@ const DRIVE = `<script>
       "td .productos-value,th .productos-value{min-width:4.5em}" +
       "tr:nth-child(2n) .productos-value{min-width:5.5em}" +
       "tr:nth-child(3n) .productos-value{min-width:3.6em}" +
+      /**
+       * ⛔ A DRAWN TABLE NEEDS CELL SPACING OR ITS ROWS OVERLAP. Inlining a Td component loses the
+       * padding it would have applied, so three rows of real text stacked into twelve pixels and
+       * read as a grey smear. This is scoped to mock shadow roots, so it cannot touch the review
+       * page around them, and it only fills in what the reconstruction dropped.
+       */
+      "td,th{padding:.3rem .5rem;line-height:1.35;vertical-align:middle}" +
+      "table{border-collapse:collapse;width:100%}" +
+      /* A value we supplied, not one the product produced — legible, and never mistakable. */
+      ".productos-sample{text-decoration:underline dotted rgba(120,113,108,.55);text-underline-offset:2px}" +
       ".productos-icon{display:inline-block;width:1em;height:1em;vertical-align:-.12em;border-radius:2px;background:currentColor;opacity:.3}" +
       /* ⛔ Only an EMPTY placeholder is painted. A wrapper that could not be read still contains the
          real screen, and hatching it drew orange stripes across the whole deals table. */
