@@ -111,14 +111,29 @@ function saidAbout(
   const performs = own.length
     ? own
     : scope.exchanges.filter((ex) => ex.at?.view === view.id && !ex.at?.part);
+  /**
+   * ⛔ WHERE A PRESS LANDS IS IN `after` AND `answer`, SO ONLY THOSE ARE SCORED FOR IT.
+   *
+   * Scoring every slot sent "Create Folder" to the documents tab, on the strength of a sentence in
+   * its `with` about documents getting their own subfolder — a fact about what the folder contains,
+   * matched against a screen because they share a word. The model has always said a commit lands
+   * where its answer says; reading the rest of the exchange to decide that is reading the wrong
+   * sentences.
+   */
+  const LANDS_IN = new Set(["after", "answer"]);
   let anchored = false;
   for (const ex of performs) {
     anchored = true;
     bits.push(ex.title ?? "");
-    for (const body of Object.values(ex.slots ?? {})) {
+    for (const [slot, body] of Object.entries(ex.slots ?? {})) {
       const says = (body as { says?: unknown } | undefined)?.says;
-      if (typeof says === "string") { bits.push(says); sentences.push(says); }
-      else if (Array.isArray(says)) for (const st of says as Array<{ says: string }>) { bits.push(st.says); sentences.push(st.says); }
+      const texts = typeof says === "string" ? [says] : Array.isArray(says) ? (says as Array<{ says: string }>).map((x) => x.says) : [];
+      /**
+       * ⛔ AND THEY FEED THE SCORE TOO, NOT ONLY THE VERB TEST. Narrowing the verb test alone left
+       * "Create Folder" pointing at the documents tab: the word came from a `with` sentence about
+       * what the folder would contain, and that sentence was still in the bag being matched.
+       */
+      for (const t of texts) if (LANDS_IN.has(slot)) { bits.push(t); sentences.push(t); }
     }
   }
   /**

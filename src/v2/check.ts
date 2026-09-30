@@ -1672,7 +1672,21 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
       for (const v of scope.views) {
         if (v.exists === "withdrawn") continue;
         for (const pt of v.parts) {
+          /**
+           * ⛔ AND NOT AN `entry` OR A `navigates`, BECAUSE THE MODEL SAYS THOSE NEVER OWN AN ASK.
+           *
+           * The skill, in as many words: *"an `entry` part's accepted values belong to the `with`
+           * slot of whatever commits it, and a `navigates` part is fully described by `leads_to`."*
+           * This fired on every text field on the create-a-deal form — seven of them — telling an
+           * author to write an exchange the model forbids, on a screen that says everything about
+           * those fields in the `with` slot of the control that reads them.
+           *
+           * A check that asks for what the instructions refuse is worse than a check that misses
+           * something: it makes a corpus look unfinished when it is right, and the way to silence
+           * it is to make the corpus wrong.
+           */
           if (pt.decorative || pt.role === "display" || pt.role === "region") continue;
+          if (pt.role === "entry" || pt.role === "navigates") continue;
           if (!scope.exchanges.some((e) => e.at?.view === v.id && e.at?.part === pt.id))
             silentParts.push(`${scope.id}#${v.id}#${pt.id}`);
         }

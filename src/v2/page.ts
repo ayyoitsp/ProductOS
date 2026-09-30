@@ -3182,10 +3182,23 @@ const PROTOTYPE = `<script>
       const sameFeature = here && (leaving === here || dest.indexOf(here + "#") === 0);
       if (sameFeature) { walk(dest, btn); return; }
       /** Armed by the first press; the second one goes. */
-      if (btn.dataset.armed === "1") { walk(dest, btn); return; }
+      if (btn.dataset.armed === "1") { disarm(); walk(dest, btn); return; }
       for (const other of document.querySelectorAll("[data-armed]")) other.removeAttribute("data-armed");
       btn.dataset.armed = "1";
       select(btn, dest);
+      /**
+       * ⛔ AND THE CALLOUT GOES WHERE THE EYE IS, NOT WHERE THE PANEL IS.
+       *
+       * Peter, twice: *"i hit continue, and nothing changes"*, then *"still is incomplete"*. Both
+       * times the prototype had done exactly what it should — armed, and said so in the detail
+       * panel. The panel sits under the drawing, and the drawing is a whole screen tall, so the
+       * sentence explaining that a second press is needed rendered four hundred pixels below the
+       * button that needed pressing.
+       *
+       * A message a person has to scroll to find is a message that did not happen. Feedback for a
+       * press belongs at the press.
+       */
+      arm(btn, dest);
       return;
     }
     select(btn);
@@ -3245,6 +3258,60 @@ const PROTOTYPE = `<script>
     ev.preventDefault();
     walk(go.dataset.walk, go);
   });
+
+  /**
+   * The "press again" callout, anchored to the control that needs pressing again.
+   *
+   * ⛔ FIXED AND MEASURED FROM THE BUTTON, because the control is inside a shadow root and often
+   * inside a scaled mock. getBoundingClientRect reads through both — it is the one coordinate
+   * everything agrees on — so the callout is positioned against the viewport rather than being
+   * appended somewhere that would inherit the mock's transform and land in the wrong place.
+   */
+  function arm(btn, dest) {
+    disarm();
+    const to = String(dest).split("#")[0];
+    const target = document.getElementById("at-" + to.replace(/[^a-z0-9]+/gi, "-"));
+    const name =
+      (target && target.querySelector("h2") && target.querySelector("h2").textContent.trim()) || to;
+    const tip = document.createElement("div");
+    tip.className = "arm-tip";
+    tip.innerHTML = "<strong>" + esc(name) + "</strong><span>Press again to go there</span>";
+    document.body.appendChild(tip);
+    const place = () => {
+      const r = btn.getBoundingClientRect();
+      if (!r.width && !r.height) return disarm();
+      const t = tip.getBoundingClientRect();
+      /** Above the control where there is room, below it where there is not. */
+      const above = r.top > t.height + 12;
+      tip.style.left = Math.max(8, Math.min(window.innerWidth - t.width - 8, r.left + r.width / 2 - t.width / 2)) + "px";
+      tip.style.top = (above ? r.top - t.height - 8 : r.bottom + 8) + "px";
+      tip.dataset.side = above ? "above" : "below";
+    };
+    place();
+    requestAnimationFrame(place);
+    armState = { tip, place };
+    window.addEventListener("scroll", place, true);
+    window.addEventListener("resize", place);
+  }
+
+  let armState = null;
+  function disarm() {
+    if (!armState) return;
+    window.removeEventListener("scroll", armState.place, true);
+    window.removeEventListener("resize", armState.place);
+    armState.tip.remove();
+    armState = null;
+  }
+
+  /** ⛔ A second press anywhere else cancels it — an armed control nobody went back to is noise. */
+  document.addEventListener("click", (ev) => {
+    if (!armState) return;
+    const btn = inPath(ev, "[data-goes]");
+    if (!btn || btn.dataset.armed !== "1") {
+      for (const other of document.querySelectorAll("[data-armed]")) other.removeAttribute("data-armed");
+      disarm();
+    }
+  }, true);
 
   function walk(dest, from) {
     const bare = String(dest).split("#")[0];
@@ -4279,6 +4346,27 @@ const STYLE = `<style>
    * not, because the host is in the light DOM and the rule was being adopted into the shadow root.
    */
   .proto.html { transform: translateZ(0); contain: layout paint; position: relative; overflow: auto; }
+
+  /**
+   * ⛔ THE CALLOUT IS FIXED, so it is not clipped by the mock it points into and not scaled by it.
+   * It ignores pointer events, because it explains the next press rather than accepting one — a tip
+   * that swallows the click it is asking for is worse than no tip.
+   */
+  .arm-tip {
+    position: fixed; z-index: 60; pointer-events: none;
+    background: var(--ink); color: var(--bg); border-radius: 6px;
+    padding: .4rem .6rem; font-size: .82rem; line-height: 1.3;
+    box-shadow: 0 6px 18px rgba(0,0,0,.22); max-width: 18rem;
+    display: flex; flex-direction: column; gap: .1rem;
+  }
+  .arm-tip strong { font-weight: 600; }
+  .arm-tip span { opacity: .75; }
+  .arm-tip::after {
+    content: ""; position: absolute; left: 50%; margin-left: -5px;
+    border: 5px solid transparent;
+  }
+  .arm-tip[data-side="above"]::after { top: 100%; border-top-color: var(--ink); }
+  .arm-tip[data-side="below"]::after { bottom: 100%; border-bottom-color: var(--ink); }
 
   /* Walking a screen through its states. */
   .state-tabs { display: flex; flex-wrap: wrap; gap: .3rem; margin: 0 0 .45rem; }

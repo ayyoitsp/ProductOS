@@ -1,5 +1,6 @@
 import fs from "node:fs";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
+import { pathToFileURL } from "node:url";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import pc from "picocolors";
@@ -22,6 +23,25 @@ import pc from "picocolors";
  */
 
 export const RESTART_CODE = 50;
+
+/**
+ * Does this built module actually load?
+ *
+ * ⛔ EXPORTED SO IT CAN BE PROVEN WITH A REAL BROKEN FILE. The thing being prevented is a dead port
+ * mid-review, and a test that greps the source for the word "spawnSync" proves nothing about
+ * whether a file that will not parse is caught. This one writes an unparseable module and asks.
+ *
+ * ⛔ A SEPARATE PROCESS, because an import that throws in THIS one may already have run half of a
+ * module's side effects, and a failed probe must leave the running server exactly as it was.
+ */
+export function loads(file: string): { ok: true } | { ok: false; why: string } {
+  const probe = spawnSync(
+    process.execPath,
+    ["--input-type=module", "-e", `await import(${JSON.stringify(pathToFileURL(file).href)})`],
+    { encoding: "utf-8", timeout: 10_000, env: process.env }
+  );
+  return probe.status === 0 ? { ok: true } : { ok: false, why: probe.stderr || "it did not load, and said nothing" };
+}
 const DEBOUNCE_MS = 300;
 
 export function maybeEnableHotReload(): void {
@@ -68,6 +88,35 @@ export function maybeEnableHotReload(): void {
        * path still works — it sees the same exit code — and the unsupervised path stops being a
        * silent failure.
        */
+      /**
+       * ⛔ AND IT CHECKS THE NEW BUILD BEFORE HANDING OVER, BECAUSE A BROKEN ONE KILLED THE SERVER
+       * THREE TIMES IN ONE SESSION.
+       *
+       * The comment above fixed "exit and hope nobody is watching". This is the next failure along:
+       * spawn a replacement, exit immediately, and if the replacement cannot LOAD — a syntax error
+       * in the file that just changed — the old server is gone and the new one dies on startup. The
+       * port goes dead mid-review, and the person at the browser sees a page that will not load with
+       * nothing saying why.
+       *
+       * It happened three times here on the same defect: a backtick inside a template literal, which
+       * this repo has broken itself on repeatedly. Each time the review surface went down and stayed
+       * down until somebody noticed.
+       *
+       * ⛔ SO THE CHANGED FILE IS IMPORTED IN A THROWAWAY PROCESS FIRST. If it will not load, the
+       * old server KEEPS SERVING the previous build and says what is wrong. A stale page somebody
+       * can read beats a dead port every time, and the error arrives where the person is looking.
+       */
+      const changed = filename ? path.join(distDir, filename) : undefined;
+      if (changed && /\.m?js$/.test(changed) && fs.existsSync(changed)) {
+        const probe = loads(changed);
+        if (!probe.ok) {
+          const why = probe.why.split("\n").filter(Boolean).slice(0, 3).join("\n   ");
+          console.log(pc.red(`✗ the new build does not load — staying on the previous one, which is still serving`));
+          console.log(pc.dim(`   ${why}`));
+          console.log(pc.dim(`   fix it and save again; this will pick the next build up automatically`));
+          return;
+        }
+      }
       try {
         const child = spawn(process.execPath, process.argv.slice(1), {
           detached: true,
@@ -77,6 +126,7 @@ export function maybeEnableHotReload(): void {
         child.unref();
       } catch (e) {
         console.log(pc.yellow(`(could not restart automatically: ${(e as Error).message} — run productos serve again)`));
+        return;
       }
       process.exit(RESTART_CODE);
     }, DEBOUNCE_MS);
