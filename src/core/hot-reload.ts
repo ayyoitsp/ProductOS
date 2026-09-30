@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { spawn } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import pc from "picocolors";
@@ -53,6 +54,30 @@ export function maybeEnableHotReload(): void {
     restartScheduled = true;
     setTimeout(() => {
       console.log(pc.dim(`\n↻ ${filename} changed — restarting productos serve...`));
+      /**
+       * ⛔ RESTART ITSELF. THIS USED TO EXIT AND HOPE.
+       *
+       * Exiting with a restart code only works under a supervisor that watches for it. Started any
+       * other way — a shell, a background job, anything — the process simply DIED on the first
+       * rebuild, and the person at the browser was left with a dead port and no message. It cost an
+       * entire session: every rebuild silently killed the server, so a page that looked stale was
+       * actually a page nobody was serving, and I kept explaining fixes to somebody looking at the
+       * previous build.
+       *
+       * Spawning a replacement first means the restart happens whoever started it. The supervisor
+       * path still works — it sees the same exit code — and the unsupervised path stops being a
+       * silent failure.
+       */
+      try {
+        const child = spawn(process.execPath, process.argv.slice(1), {
+          detached: true,
+          stdio: "inherit",
+          env: process.env,
+        });
+        child.unref();
+      } catch (e) {
+        console.log(pc.yellow(`(could not restart automatically: ${(e as Error).message} — run productos serve again)`));
+      }
       process.exit(RESTART_CODE);
     }, DEBOUNCE_MS);
   };
