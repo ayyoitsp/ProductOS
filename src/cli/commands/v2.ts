@@ -1603,7 +1603,8 @@ export function v2Command(): Command {
         viewId,
         drawn.html,
         origin ? { from: path.relative(origin.root, route), at: origin.head } : undefined,
-        drawn.text
+        drawn.text,
+        drawn.drawnStates.map((st) => ({ when: st.when, label: st.label, html: st.html }))
       );
       if (!written) {
         console.error(pc.red("✗"), `no view "${viewId}" under "${scopeId}" in ${into}`);
@@ -1952,7 +1953,8 @@ function drawEverything(into: string, dryRun: boolean): void {
       view.id,
       drawn.html,
       origin ? { from: path.relative(origin.root, route), at: origin.head } : undefined,
-      drawn.text
+      drawn.text,
+      drawn.drawnStates.map((st) => ({ when: st.when, label: st.label, html: st.html }))
     );
     if (!written) {
       stuck.push({ ref, why: "no-candidate", detail: "the corpus would not take the drawing" });

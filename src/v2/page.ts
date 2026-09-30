@@ -697,10 +697,46 @@ function renderScreens(scope: Scope, ctx: Ctx, scopeId: string, opts: PageOption
            *
            * Declarative, so it works with no script: the markup IS the shadow tree on parse.
            */
+          /**
+           * ⛔ A SCREEN IS WALKED THROUGH ITS STATES, NOT SHOWN IN ONE OF THEM.
+           *
+           * Peter: *"a clickable screenshot at the top of this deals list screen that walks through
+           * the various states"*, and *"the framework should be able to generate these on a per
+           * feature basis"*. `draw` generates one drawing per state it finds in the component, so
+           * this offers them all — the screen first, because the exception must not become the
+           * subject.
+           *
+           * ⛔ EVERY STATE IS ISOLATED SEPARATELY. They are written in the application's own class
+           * names, so they need a shadow root each, exactly as the main drawing does.
+           */
+          const asMock = (html: string): string =>
+            `<div class="proto html"><template shadowrootmode="open">${PT_STYLE}<div class="${esc(
+              opts.mockClass || "productos-mock"
+            )}">${html}</div></template></div>`;
+          const states = v.states ?? [];
           const body = v.sketch_html
-            ? `<div class="proto html"><template shadowrootmode="open">${PT_STYLE}<div class="${esc(
-                opts.mockClass || "productos-mock"
-              )}">${wireHtml(v, matched)}</div></template></div>`
+            ? states.length
+              ? `<div class="states" data-states="${esc(v.id)}">
+                   <div class="state-tabs">
+                     <button type="button" class="state-tab on" data-state="0">As it is</button>
+                     ${states
+                       .map(
+                         (st, i) =>
+                           `<button type="button" class="state-tab" data-state="${i + 1}" title="${esc(
+                             `in the code: ${st.when}`
+                           )}">${line(st.label)}</button>`
+                       )
+                       .join("")}
+                   </div>
+                   <div class="state-frame" data-state="0">${asMock(wireHtml(v, matched))}</div>
+                   ${states
+                     .map(
+                       (st, i) =>
+                         `<div class="state-frame" data-state="${i + 1}" hidden>${asMock(st.sketch_html)}</div>`
+                     )
+                     .join("")}
+                 </div>`
+              : asMock(wireHtml(v, matched))
             : v.sketch
               ? `<pre class="proto sketch">${liveSketch(v, matched)}</pre>`
               : `<p class="owes">Nobody has drawn this screen, so there is nothing here to point at.</p>`;
@@ -3135,6 +3171,21 @@ const PROTOTYPE = `<script>
  */
 const DRIVE = `<script>
 (function () {
+  /**
+   * ⛔ WALKING A SCREEN THROUGH ITS STATES. Every drawing is already in the page, one per state, so
+   * this only swaps which is shown — no fetching, no second source, and the states cannot drift
+   * from the screen because the same pass wrote them.
+   */
+  document.addEventListener("click", (ev) => {
+    const tab = ev.target instanceof Element ? ev.target.closest(".state-tab") : null;
+    if (!tab) return;
+    const box = tab.closest(".states");
+    if (!box) return;
+    const want = tab.dataset.state;
+    for (const t of box.querySelectorAll(".state-tab")) t.classList.toggle("on", t === tab);
+    for (const f of box.querySelectorAll(".state-frame")) f.hidden = f.dataset.state !== want;
+  });
+
   const board = document.querySelector(".pboard");
   if (!board) return;
   const says = JSON.parse(document.getElementById("proto-says").textContent || "{}");
@@ -3860,6 +3911,13 @@ const STYLE = `<style>
    * (No backticks in this comment: it lives inside a template literal, and a backtick here ends
    * the string. That has now cost four builds.)
    */
+  /* Walking a screen through its states. */
+  .state-tabs { display: flex; flex-wrap: wrap; gap: .3rem; margin: 0 0 .45rem; }
+  .state-tab { font: inherit; font-size: .78rem; cursor: pointer; border: 1px solid var(--rule);
+    background: var(--bg); color: var(--dim); border-radius: 999px; padding: .12rem .6rem; }
+  .state-tab:hover { color: var(--ink); }
+  .state-tab.on { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+
   /* A node on the screen map carries the screen itself. */
   .ux-shot { height: 11rem; overflow: hidden; border: 1px solid var(--rule); border-radius: 6px;
     background: #fff; margin-bottom: .45rem; }

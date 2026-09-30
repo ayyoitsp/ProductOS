@@ -1297,6 +1297,29 @@ export const View = z.object({
   drawn_at: z.string().optional(),
   /** ⛔ Not "I didn't feel like sketching" — it means nobody walked the screen, and it
    *  blocks readiness. */
+  /**
+   * ⛔ A SCREEN IS NOT ONE PICTURE. Peter: *"a clickable screenshot at the top of this deals list
+   * screen that walks through the various states"* and *"the framework should be able to generate
+   * these on a per feature basis"*.
+   *
+   * Loading, empty, error and full are the same screen in different conditions, and a corpus that
+   * held only one of them made every statement about the others unjudgeable — "a deal that has not
+   * been sized shows a dash" cannot be checked against a picture that has no such deal.
+   *
+   * ⛔ GENERATED, NEVER TYPED: `when` is the condition in the code, kept verbatim so a reader can
+   * check the label against it, and the drawing is redrawn by `draw` whenever the component moves.
+   */
+  states: z
+    .array(
+      z
+        .object({
+          when: z.string().min(1).describe("the condition in the code that produces this state"),
+          label: z.string().min(2),
+          sketch_html: z.string().min(1),
+        })
+        .strict()
+    )
+    .default([]),
   walked: z.boolean().default(false),
   parts: z.array(Part).default([]),
 }).strict();

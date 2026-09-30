@@ -32,6 +32,8 @@ export interface DrawResult {
   unresolved: string[];
   /** Branches not drawn: the screen's other states, named so they are not lost silently. */
   states: string[];
+  /** Each of those states, DRAWN — the same walk, taking the arm it normally declines. */
+  drawnStates: DrawnState[];
   /** Parts the corpus declares that the drawing does not show. */
   undrawn: string[];
   /**
@@ -115,6 +117,8 @@ interface Ctx {
   unresolved: string[];
   /** Branches not drawn: the screen's other states, named so they are not lost silently. */
   states: string[];
+  /** The raw conditions behind those states, so each one can be drawn on a second pass. */
+  conditions: string[];
   /**
    * Inside a repeated row, where an unreadable value is the POINT rather than a defect — the shape
    * of the data is what a reader judges, and a hatch per cell would bury it.
@@ -122,6 +126,13 @@ interface Ctx {
   inRow?: boolean;
   /** Which repeated row this is, so a list reads as several different things. */
   row?: number;
+  /**
+   * ⛔ DRAW A DIFFERENT STATE WITH THE SAME WALK. A screen is not one picture — it is loading, or
+   * empty, or full, or broken — and reporting the branches it skipped told a reviewer they exist
+   * without ever showing them. Naming a condition here makes the walk take the arm it normally
+   * declines, so every state is drawn by the code that draws the screen.
+   */
+  prefer?: string;
   /** Sample values for a placeholder, by the identifier that produced it. */
   sample: (hint: string) => string | undefined;
   /** The file being read, so a co-located component resolves before a same-named one elsewhere. */
@@ -294,11 +305,21 @@ function emit(node: ts.Node, ctx: Ctx): string {
       const span = (n: ts.Node): number => n.getEnd() - n.getStart();
       let chosen: ts.Node;
       let skipped: ts.Node;
-      if (GUARD.test(c) || EMPTY.test(c)) { chosen = b; skipped = a; }
+      if (ctx.prefer && c.replace(/\s+/g, " ") === ctx.prefer) { chosen = a; skipped = b; }
+      else if (GUARD.test(c) || EMPTY.test(c)) { chosen = b; skipped = a; }
       else if (span(a) >= span(b)) { chosen = a; skipped = b; }
       else { chosen = b; skipped = a; }
       const other = skipped.getText().replace(/\s+/g, " ").slice(0, 60);
-      if (other.trim()) ctx.states.push(`when ${c.replace(/\s+/g, " ").slice(0, 50)}: ${other}`);
+      if (other.trim()) {
+        ctx.states.push(`when ${c.replace(/\s+/g, " ").slice(0, 50)}: ${other}`);
+        /**
+         * ⛔ ONLY THE ROUTE'S OWN BRANCHES ARE STATES OF THE SCREEN. A TextField's `hint && !error`
+         * is a state of a text field, and offering it as a state of the deals list put a whole
+         * second copy of the screen behind a button called "Error". Depth is the difference between
+         * a branch the page takes and one some component takes inside it.
+         */
+        if (ctx.depth === 0) ctx.conditions.push(c.replace(/\s+/g, " "));
+      }
       return emit(chosen, ctx);
     };
     if (ts.isBinaryExpression(e) && e.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken) {
@@ -314,7 +335,10 @@ function emit(node: ts.Node, ctx: Ctx): string {
       if (ctx.depth > 0 && ts.isIdentifier(e.left) && ctx.props.size && !ctx.props.has(e.left.text)) return "";
       /** `{!deals.length && <Empty/>}` — a state, not the screen. Recorded and not drawn. */
       if (GUARD.test(c) || EMPTY.test(c)) {
+        /** Preferred: this IS the state being drawn, so show what it shows. */
+        if (ctx.prefer && c.replace(/\s+/g, " ") === ctx.prefer) return emit(e.right, ctx);
         ctx.states.push(`when ${c.replace(/\s+/g, " ").slice(0, 50)}: ${e.right.getText().replace(/\s+/g, " ").slice(0, 60)}`);
+        if (ctx.depth === 0) ctx.conditions.push(c.replace(/\s+/g, " "));
         return "";
       }
       return emit(e.right, ctx);
@@ -694,6 +718,41 @@ export function sampleValue(hint: string, row: number): string | undefined {
   return undefined;
 }
 
+export interface DrawnState {
+  /** The condition in the code that produces it, kept verbatim so it can be checked. */
+  when: string;
+  /** What a reader calls it. */
+  label: string;
+  html: string;
+}
+
+/**
+ * What to call a state, from the condition that produces it.
+ *
+ * ⛔ Named from the code, never invented. Where the condition does not say plainly what it is, the
+ * condition itself is the label — an honest "when total === 0" beats a confident wrong word.
+ */
+function labelFor(cond: string): string {
+  /**
+   * ⛔ WHAT THE CONDITION ASSERTS, NOT WHICH WORDS IT CONTAINS.
+   *
+   * `!isPending && !isError && total === 0` is the EMPTY state — it says explicitly that it is not
+   * loading — and matching on any occurrence of "isPending" labelled it "Loading". Negated terms
+   * are what the state is NOT, so they are dropped before anything is read.
+   */
+  const asserted = cond
+    .split("&&")
+    .map((t) => t.trim())
+    .filter((t) => !t.startsWith("!"))
+    .join(" && ");
+  const read = asserted || cond;
+  if (/(===\s*0|\blength\s*===\s*0\b|\bisEmpty\b|\bnoResults\b)/i.test(read)) return "Empty";
+  if (/\b(isError|error)\b/i.test(read)) return "Error";
+  if (/\b(isLoading|loading|isPending|pending|isFetching|skeleton)\b/i.test(read)) return "Loading";
+  if (/\b(hasActiveFilters|filtered|search)\b/i.test(read)) return "Filtered";
+  return `when ${read.slice(0, 32)}`;
+}
+
 const localCache = new Map<string, Map<string, ts.Node>>();
 function localJsx(file: string, name: string): ts.Node | undefined {
   let found = localCache.get(file);
@@ -787,6 +846,7 @@ export function drawFromRoute(routeFile: string, opts: DrawOptions = {}): DrawRe
     from: new Set([path.basename(routeFile)]),
     unresolved: [],
     states: [],
+    conditions: [],
     props: new Map(),
     sample: (hint) => {
       const s = opts.sample ?? {};
@@ -795,15 +855,61 @@ export function drawFromRoute(routeFile: string, opts: DrawOptions = {}): DrawRe
     },
   };
   const jsx = returnedJsx(routeFile);
-  if (!jsx) return { html: "", from: [...ctx.from], unresolved: ["the route exports no component this can read"], undrawn: [], states: [], text: "" };
+  if (!jsx) return { html: "", from: [...ctx.from], unresolved: ["the route exports no component this can read"], undrawn: [], states: [], drawnStates: [], text: "" };
   const plain = emit(jsx, ctx);
+
+  /**
+   * ⛔ EVERY STATE THIS SCREEN HAS, DRAWN — not listed.
+   *
+   * Peter: *"a clickable screenshot at the top of this deals list screen that walks through the
+   * various states"*, and then: *"the framework should be able to generate these on a per feature
+   * basis"*. So this is not a deals-list feature: any screen whose code branches on loading, empty
+   * or error has those states drawn by the same walk that drew the main one, one pass each.
+   *
+   * ⛔ THE MAIN SCREEN IS A STATE TOO, and it is first. A switcher that opened on "Loading" would
+   * make the exception the subject.
+   */
+  const drawnStates: DrawnState[] = [];
+  for (const cond of [...new Set(ctx.conditions)].slice(0, 6)) {
+    const sub: Ctx = { ...ctx, prefer: cond, states: [], conditions: [], unresolved: [] };
+    let html = "";
+    try {
+      html = emit(jsx, sub);
+    } catch {
+      continue;
+    }
+    /** A state that draws the same thing as the main screen is not a state worth offering. */
+    if (!html.trim() || html === plain) continue;
+    drawnStates.push({ when: cond, label: labelFor(cond), html: opts.parts?.length ? wireParts(html, opts.parts).html : html });
+  }
+  /**
+   * ⛔ ONE PICTURE PER STATE, AND IT IS THE WHOLE SCREEN. Two conditions can describe the same state
+   * — an outer `total === 0` and the inner guard beneath it — and the inner one draws only the card
+   * that says "No deals yet", with no header, no filters, nothing around it. A switcher offering
+   * both has two buttons called Empty, one of which shows a fragment.
+   */
+  const best = new Map<string, DrawnState>();
+  for (const st of drawnStates) {
+    const had = best.get(st.label);
+    if (!had || st.html.length > had.html.length) best.set(st.label, st);
+  }
+  drawnStates.length = 0;
+  drawnStates.push(...best.values());
   const wired = opts.parts?.length ? wireParts(plain, opts.parts) : { html: plain, matched: new Set<string>() };
   /**
    * ⛔ A PART THE DRAWING DOES NOT SHOW IS REPORTED, NEVER DROPPED. Silently omitting it makes the
    * drawing look complete while a control the corpus claims exists is nowhere on it.
    */
   const undrawn = (opts.parts ?? []).filter((p) => !wired.matched.has(p.id) && !p.decorative).map((p) => p.id);
-  return { html: wired.html, from: [...ctx.from], unresolved: [...new Set(ctx.unresolved)], undrawn, states: [...new Set(ctx.states)], text: asText(wired.html) };
+  return {
+    html: wired.html,
+    from: [...ctx.from],
+    unresolved: [...new Set(ctx.unresolved)],
+    undrawn,
+    states: [...new Set(ctx.states)],
+    drawnStates,
+    text: asText(wired.html),
+  };
 }
 
 /**

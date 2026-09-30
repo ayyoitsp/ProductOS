@@ -570,6 +570,25 @@ sentences nobody wrote in front of a reviewer whose whole job is judging sentenc
 differs is only whether there is code to compare it against yet — a fact about the build, reported
 as drift, never as a fault in the truth.
 
+⛔ **A screen has STATES, and they are generated too.** `draw` finds every branch in the component —
+loading, empty, error — and writes each one as its own drawing under `states:`, with the `when`
+condition from the code kept verbatim beside the `label` a reader sees. The page turns those into a
+row of tabs above the screen, so a reviewer walks the same screen through its conditions instead of
+judging one of them.
+
+```yaml
+states:
+  - when: "isPending"          # the condition, verbatim from the code
+    label: Loading             # what a reader calls it
+    sketch_html: |             # generated — never typed
+      …
+```
+
+⛔ **Never author `states` by hand.** It is output, like the drawing above it, and re-running `draw`
+replaces the whole block — so a screen whose component loses its empty state stops offering one.
+Only the route's own branches count: a text field's internal `hint && !error` is a state of that
+field, not of the screen.
+
 ⛔ **Never offer `exists: intended` as a way out of a gap.** Whether something ships is not a fact
 about the target, and asking an author to declare a screen unbuilt so a check will pass is the code
 made authoritative over the truth. If a screen has no picture, generate one.

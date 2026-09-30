@@ -44,7 +44,21 @@ export interface Provenance {
   at?: string;
 }
 
-export function writeSketchHtml(root: string, scopeId: string, viewId: string, html: string, prov?: Provenance, text?: string): string | undefined {
+export interface WrittenState {
+  when: string;
+  label: string;
+  html: string;
+}
+
+export function writeSketchHtml(
+  root: string,
+  scopeId: string,
+  viewId: string,
+  html: string,
+  prov?: Provenance,
+  text?: string,
+  states?: WrittenState[]
+): string | undefined {
   const scopeLeaf = scopeId.split("/").pop()!;
   for (const file of candidates(root)) {
     const raw = fs.readFileSync(file, "utf-8");
@@ -84,6 +98,20 @@ export function writeSketchHtml(root: string, scopeId: string, viewId: string, h
      * A packet reads the ASCII, so it cannot simply be dropped — it is generated instead, from the
      * same parse, and neither is anybody's to maintain.
      */
+    /**
+     * ⛔ THE STATES ARE REGENERATED TOO, or a screen redrawn from a component that no longer has an
+     * empty state keeps offering one. They are output, exactly like the drawing above them.
+     */
+    {
+      const at = lines.findIndex((l, i) => i > start && i < end && /^\s*states:\s*$/.test(l));
+      if (at >= 0) {
+        let stop = at + 1;
+        const pad = (/^(\s*)/.exec(lines[at]!)![1] ?? "").length;
+        while (stop < end && (lines[stop] === "" || (/^\s/.test(lines[stop]!) && (/^(\s*)/.exec(lines[stop]!)![1] ?? "").length > pad))) stop++;
+        lines.splice(at, stop - at);
+        end -= stop - at;
+      }
+    }
     for (const key of ["sketch_html", "sketch"]) {
       const has = lines.findIndex((l, i) => i > start && i < end && new RegExp(`^\\s*${key}:\\s*[|>]`).test(l));
       if (has < 0) continue;
@@ -118,6 +146,17 @@ export function writeSketchHtml(root: string, scopeId: string, viewId: string, h
         : []),
       `${INDENT}sketch_html: |`,
       ...html.split("\n").map((l) => `${INDENT}  ${l}`),
+      ...(states?.length
+        ? [
+            `${INDENT}states:`,
+            ...states.flatMap((st) => [
+              `${INDENT}  - when: ${JSON.stringify(st.when)}`,
+              `${INDENT}    label: ${JSON.stringify(st.label)}`,
+              `${INDENT}    sketch_html: |`,
+              ...st.html.split("\n").map((l) => `${INDENT}      ${l}`),
+            ]),
+          ]
+        : []),
     ];
     lines.splice(insert, 0, ...block);
     fs.writeFileSync(file, lines.join("\n"));
