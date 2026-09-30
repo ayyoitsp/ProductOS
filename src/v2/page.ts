@@ -1927,7 +1927,13 @@ function renderNav(
       .map(({ id, label, toRead }) => ({ id, label, toRead })),
   ];
   /** view → the tab it lives under, so the row can show where you are without being told. */
-  const sectionOf: Record<string, string> = { overview: "overview" };
+  /**
+   * ⛔ THE PROTOTYPE IS ITS OWN SECTION, and leaving it out of this map is why the tab row went on
+   * highlighting Overview while the board was on screen — an unknown view falls back to "overview",
+   * so the frame said one thing and the page showed another, with Overview's sub-menu still under
+   * it. A fixed tab needs an entry exactly like a scope does.
+   */
+  const sectionOf: Record<string, string> = { overview: "overview", prototype: "prototype" };
   for (const { scope } of corpus.scopes) {
     const t = trails[scope.id]!;
     // ⛔ Index 0 now, because the root is no longer a crumb — see the trail comment above. Reading
@@ -3321,6 +3327,13 @@ const DRIVE = `<script>
        * it is fixed to the mock. No rewriting of their CSS, which is the thing that fails quietly.
        */
       ".productos-mock{contain:layout paint;position:relative}" +
+      /**
+       * ⛔ A BACKDROP IS NOT PART OF THE SCREEN. Every drawing composes something that renders a
+       * full-bleed dimming layer — a modal's scrim, a drawer's overlay — and inlined unconditionally
+       * it painted all twelve screens on the board black. A reviewer cannot judge a screen through a
+       * scrim, and the scrim belongs to a state nobody opened.
+       */
+      "[class*=inset-0][class*=bg-black],[class*=bg-black\\/],[class*=backdrop]{display:none!important}" +
       "td,th{padding:.3rem .5rem;line-height:1.35;vertical-align:middle}" +
       "table{border-collapse:collapse;width:100%}" +
       /* A value we supplied, not one the product produced — legible, and never mistakable. */
@@ -3363,7 +3376,37 @@ const DRIVE = `<script>
    * present in the markup, invisible on the page, which is the third time this exact shape of bug
    * has cost an afternoon.
    */
-  const hydrateAll = () => { for (const host of document.querySelectorAll(".proto-mock")) hydrate(host); };
+  /**
+   * ⛔ A SCRIM IS FOUND BY WHAT IT COMPUTES TO, NOT BY ITS CLASS NAME.
+   *
+   * Every one of the twelve screens on the board rendered black, because each composes something
+   * with a full-bleed dimming layer. Matching Tailwind's black-with-opacity class caught none: this
+   * design system forbids raw palette classes and uses semantic roles, so the class says nothing
+   * and only the computed colour does. A reviewer cannot judge a screen through a scrim, and the
+   * scrim belongs to a state nobody opened.
+   */
+  const unscrim = (root) => {
+    if (!root) return;
+    const host = root.host;
+    const wide = host ? host.getBoundingClientRect().width * 0.8 : 0;
+    for (const el of root.querySelectorAll("*")) {
+      const cs = getComputedStyle(el);
+      if (cs.position !== "fixed" && cs.position !== "absolute") continue;
+      const m = /^rgba?\((\d+), (\d+), (\d+)(?:, ([\d.]+))?\)$/.exec(cs.backgroundColor);
+      if (!m) continue;
+      const dark = Number(m[1]) < 60 && Number(m[2]) < 60 && Number(m[3]) < 60;
+      const translucent = m[4] !== undefined && Number(m[4]) > 0 && Number(m[4]) < 1;
+      if (!dark || !translucent) continue;
+      if (el.getBoundingClientRect().width < wide) continue;
+      el.style.display = "none";
+    }
+  };
+
+  const hydrateAll = () => {
+    for (const host of document.querySelectorAll(".proto-mock")) hydrate(host);
+    /** After layout, or every rect is zero and nothing qualifies as full-bleed. */
+    requestAnimationFrame(() => { for (const h of document.querySelectorAll(".proto-mock")) unscrim(h.shadowRoot); });
+  };
   hydrateAll();
 
   /**
