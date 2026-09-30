@@ -22,11 +22,11 @@ import { spokenFor } from "../../v2/spoken.js";
 import { idiomOf, proposeScreen } from "../../v2/propose.js";
 import { inferConnections, type Connection } from "../../v2/connects.js";
 import { writeLeadsTo } from "../../v2/draw-write.js";
-import { AGENTS, CASCADE, KINDS } from "../../core/jobs.js";
+import { AGENTS, AUTHORS, CASCADE, KINDS, SHIMS } from "../../core/jobs.js";
 
 /** ⛔ Plain text for a terminal and for JSON — never HTML-escaped, which is the page's business. */
 const plain = (x: unknown): string => String(x ?? "").replace(/\s+/g, " ").trim();
-import { agentsDoc } from "../../core/agents-doc.js";
+import { agentsDoc, withPreset } from "../../core/agents-doc.js";
 import { readChanges, writeChange, nextId, verify, missing } from "../../core/change.js";
 import { writeSketchHtml } from "../../v2/draw-write.js";
 import { whatMoved, repoOf } from "../../v2/moved.js";
@@ -1353,7 +1353,42 @@ export function v2Command(): Command {
     .description("The reviewers: what each one asks, why it exists, and which model runs it")
     .option("--at <dir>", "corpus directory, for the model assignments", "v2")
     .option("--out <file>", "write the whole tree as a document instead of printing a summary")
-    .action((o: { at?: string; out?: string }) => {
+    .option("--presets", "write each skill's preset into its SKILL.md, from the registry")
+    .action((o: { at?: string; out?: string; presets?: boolean }) => {
+      /**
+       * ⛔ THE PRESET REACHES THE SKILL, OR IT REACHES NOBODY. `instruct` is the layer this project
+       * skips, and a routing table that lives only in `jobs.ts` is a table a future session never
+       * meets — it reads the skill. Generated between markers so the hand-authored rest of a skill
+       * survives, and pinned by a test so a preset and its tree cannot disagree.
+       */
+      if (o.presets) {
+        const root = path.resolve("skills");
+        let wrote = 0;
+        for (const shim of SHIMS) {
+          const f = path.join(root, shim.skill, "SKILL.md");
+          if (!fs.existsSync(f)) {
+            console.log(pc.yellow("!"), `${shim.skill} has a preset and no skill — one of the two is wrong`);
+            continue;
+          }
+          const was = fs.readFileSync(f, "utf-8");
+          const now = withPreset(was, shim);
+          if (now === was) {
+            console.log(pc.dim(`  ${shim.skill} — current`));
+            continue;
+          }
+          fs.writeFileSync(f, now);
+          wrote++;
+          console.log(
+            pc.green("✓"),
+            `${shim.skill}  ${pc.dim(
+              shim.steps.length ? shim.steps.map((st) => st.role + (st.fan ? "×N" : "")).join(" → ") : "spawns nothing"
+            )}`
+          );
+        }
+        console.log("");
+        console.log(pc.dim(`  ${wrote} rewritten from src/core/jobs.ts — a test fails if one drifts`));
+        return;
+      }
       /**
        * ⛔ THE DOC IS GENERATED. Everything in it is already data in the registry, so a typed copy
        * would be a second record of one fact — and the typed one wins, because it is the one people
@@ -1375,6 +1410,27 @@ export function v2Command(): Command {
       const models = cfg?.agents.model ?? {};
       const dflt = cfg?.agents.default_model;
       const off = cfg?.agents.off ?? {};
+      /**
+       * ⛔ BOTH REGISTRIES, AND THE AUTHORS FIRST, BECAUSE THAT IS THE ORDER THE WORK HAPPENS IN.
+       *
+       * This printed reviewers alone for as long as reviewers were all there were — an accurate
+       * picture of a system where authoring had no role behind it.
+       */
+      console.log(pc.bold("AUTHORS") + pc.dim("  — every one writes, none may settle"));
+      for (const a of AUTHORS) {
+        const who = models[a.name] ?? dflt;
+        console.log("");
+        console.log(
+          `${pc.bold(a.name)}  ${pc.dim(who ? `model: ${who}` : "model: whatever the host uses")}${
+            off[a.name] ? pc.yellow("  off") : ""
+          }${a.prompt ? "" : pc.yellow("  no prompt yet")}${pc.dim(a.each ? `  · one per ${a.each}` : "  · runs once")}`
+        );
+        console.log(`  ${a.asks}`);
+        if (off[a.name]) console.log(pc.dim(`  turned off here: ${off[a.name]}`));
+        for (const n of a.never) console.log(pc.dim(`  never ${n}`));
+      }
+      console.log("");
+      console.log(pc.bold("REVIEWERS") + pc.dim("  — each asks one question about the whole; none may write"));
       for (const a of AGENTS) {
         const who = models[a.name] ?? dflt;
         console.log("");
@@ -1388,11 +1444,12 @@ export function v2Command(): Command {
         for (const n of a.never) console.log(pc.dim(`  never ${n}`));
       }
       console.log("");
-      const missing = AGENTS.filter((a) => !a.prompt);
+      const everyone = [...AUTHORS, ...AGENTS];
+      const missing = everyone.filter((a) => !a.prompt);
       if (missing.length) {
         console.log(
           pc.yellow("!"),
-          `${missing.length} of ${AGENTS.length} have no prompt written: ${missing.map((m) => m.name).join(", ")}`
+          `${missing.length} of ${everyone.length} have no prompt written: ${missing.map((m) => m.name).join(", ")}`
         );
         console.log(pc.dim("  they are named here so their absence is visible rather than implied"));
       }

@@ -123,7 +123,23 @@ export const AREAS: Area[] = [
       "treat a deferral as an answer",
     ],
     owns: ["derive"],
-    files: ["src/v2/grid.ts", "src/v2/stamp.ts", "src/v2/settle.ts", "src/v2/acts.ts", "src/v2/record.ts", "src/v2/spoken.ts", "src/v2/connects.ts"],
+    /**
+     * ⛔ `adapters/claude.ts` DERIVES, and what it derives is a guarantee rather than a number: an
+     * agent's tool list from the capabilities it declares. That is where "a judge never gets a
+     * writing tool" and "an author is never handed a question" are enforced rather than hoped, and
+     * it was on no area — so the file holding two of the model's load-bearing refusals was one no
+     * reviewer would think to open.
+     */
+    files: [
+      "src/v2/grid.ts",
+      "src/v2/stamp.ts",
+      "src/v2/settle.ts",
+      "src/v2/acts.ts",
+      "src/v2/record.ts",
+      "src/v2/spoken.ts",
+      "src/v2/connects.ts",
+      "src/adapters/claude.ts",
+    ],
     needs: ["read-files", "run-commands", "search-files"],
   },
   {
@@ -135,7 +151,23 @@ export const AREAS: Area[] = [
       "be replaced by hand-authoring. If the output is wrong, the generator is wrong",
     ],
     owns: ["generate"],
-    files: ["src/v2/migrate.ts", "src/v2/draw.ts", "src/v2/draw-write.ts", "src/v2/routes.ts", "src/v2/propose.ts", "src/v2/appcss.ts"],
+    /**
+     * ⛔ `core/agents-doc.ts` GENERATES TOO, AND WAS ON NO AREA AT ALL.
+     *
+     * It produces AGENTS.md and the preset block inside every skill — both from the registry, both
+     * with a test asserting the committed copy has not drifted. A generator missing from the map is
+     * a generator no reviewer will look at, which is the exact failure `core/jobs.ts` and
+     * `core/change.ts` were added here to stop.
+     */
+    files: [
+      "src/v2/migrate.ts",
+      "src/v2/draw.ts",
+      "src/v2/draw-write.ts",
+      "src/v2/routes.ts",
+      "src/v2/propose.ts",
+      "src/v2/appcss.ts",
+      "src/core/agents-doc.ts",
+    ],
     needs: ["read-files", "run-commands", "search-files", "write-corpus"],
   },
   {
@@ -411,8 +443,317 @@ export const AGENTS: Agent[] = [
   },
 ];
 
+/**
+ * ⛔ THE AUTHORS — AND THEY ARE A SEPARATE REGISTRY, NOT A FLAG ON THE ONE ABOVE.
+ *
+ * Peter: *"we should model them as subagents, that the skills are shims into.."*
+ *
+ * Before this, authoring was the one job with no role behind it. Eight skills did it, all in the
+ * main session, serially — so the first pass over a codebase was one context grinding through
+ * thirty features while five reviewers stood ready to judge the result. The reviewers were modelled
+ * and the authors were not, which is the wrong way round: authoring is where the parallelism is.
+ *
+ * ⛔ TWO REGISTRIES SO THAT BOTH GUARANTEES ARE STRUCTURAL. `Agent.judges: true` is a required
+ * literal — that is how "every one judges and none may write" is enforced by the type rather than
+ * by a check somebody has to remember to run. Adding `writes?: true` to the same interface would
+ * have dissolved it into a flag two agents could get wrong. So: a second interface, whose own
+ * required literal says the inverse.
+ *
+ * ⛔ EVERY AUTHOR WRITES AND NONE MAY SETTLE. The exact mirror of the judges' rule, and it is what
+ * makes this a model rather than a refactor. An author may propose, populate, draw and regenerate.
+ * It may never produce a verdict, answer an open question, or mark anything walked or validated —
+ * because a subagent that obtains consent is a consent path with no record of how consent was
+ * obtained, which is the whole thing `Verdict.via` exists to prevent.
+ *
+ * Held three ways, not one:
+ *   - no author declares `ask-the-human`, so no host hands one a question tool;
+ *   - what an author hits and cannot resolve becomes a `question:` with no claim, or a framework
+ *     gap — both of which are writing something down, which authors may do;
+ *   - anything an author does record carries `via: agent`, which never counts as agreement.
+ */
+export interface Author {
+  name: string;
+  /** The question it answers. ⛔ One question, same rule as a judge. */
+  asks: string;
+  /** Why this is a role and not a step in a script — the failure that made it one. */
+  because: string;
+  /** What it must load before it can write anything. */
+  reads: string[];
+  /** What it puts into the corpus, so two authors cannot both believe they own a field. */
+  writes: string[];
+  never: string[];
+  needs: Capability[];
+  /**
+   * What it is fanned out over, or absent when it runs once.
+   *
+   * ⛔ THE FIELD THE WHOLE IDEA IS FOR. A role with no axis is a step in a script; naming the axis
+   * is what tells a skill whether to spawn one of these or thirty.
+   */
+  each?: string;
+  /** true = writes and never settles. ⛔ The inverse literal of `Agent.judges`. */
+  authors: true;
+  /** Where its prompt lives, or absent if it has not been written — said out loud, never implied. */
+  prompt?: string;
+}
+
+export const AUTHORS: Author[] = [
+  {
+    name: "surveyor",
+    asks: "What does this product consist of — which areas, and which features in each?",
+    because:
+      "The first thing anybody does with a codebase is the thing least suited to being done feature " +
+      "by feature: deciding what the features ARE. Done inside a per-feature pass it is decided " +
+      "thirty times, differently, by whoever happens to be reading that file — which is how a whole " +
+      "product came to be filed as a single area and ten capabilities came out as a flat list of " +
+      "operations with no subsystem named anywhere.",
+    reads: [
+      "the codebase's routes and top-level directories — where the product divides itself",
+      "productos/config.yaml — what has already been said about where things live",
+      "any existing corpus, so a second run extends rather than re-partitions",
+    ],
+    writes: ["the areas, as scopes", "each feature as a scope inside its area, with a title and nothing else"],
+    never: [
+      "write what a feature promises — naming it and describing it are different jobs, and doing both in one pass is how a survey becomes thirty shallow scopes nobody can review",
+      "re-partition an area that already exists because a new reading of the code suggests a different cut — say so instead, and let somebody decide",
+      "file a whole product as one area, which is the failure this role exists to stop",
+    ],
+    needs: ["read-files", "search-files", "run-commands", "write-corpus"],
+    authors: true,
+    prompt: "agents/productos-surveyor.md",
+  },
+  {
+    name: "scoper",
+    asks: "What does this one feature promise, and where does somebody meet it?",
+    because:
+      "This is the role the whole idea is for: the only part of authoring that genuinely parallelises, " +
+      "and the part a single session does worst because by feature nine it is writing the shape it " +
+      "wrote for feature eight. Thirty features is thirty contexts, each reading only its own code.",
+    reads: [
+      "its own scope, and nothing about any other feature",
+      "the code that implements it, where code exists",
+      "GLOSSARY.md and the skill — what the eight slots are, and what belongs in each",
+    ],
+    writes: [
+      "the happy path — what the feature is FOR, first",
+      "views and their parts",
+      "exchanges, and what each slot says",
+      "criteria — what would show a sentence holding",
+      "`question:` on anything it cannot resolve, with no claim beside it",
+    ],
+    never: [
+      "answer a question it raised — an author that resolves its own ambiguity has recorded a decision nobody made",
+      "read another feature's scope to stay consistent with it: consistency across scopes is a reviewer's question, and an author reaching for it produces thirty copies of one guess",
+      "write a screen's picture — that is generated, and typing one is the defect this project has repeated most",
+      "stamp anything walked, validated or accepted",
+    ],
+    needs: ["read-files", "search-files", "run-commands", "write-corpus"],
+    each: "feature",
+    authors: true,
+    prompt: "agents/productos-scoper.md",
+  },
+  {
+    name: "designer",
+    asks: "What should this screen look like, where no code renders it?",
+    because:
+      "Peter: *\"why can't generate be an agent? like a designer type agent?\"* — and the objection " +
+      "this replaces was aimed at the wrong half. `draw` reads a component and is mechanical; it " +
+      "must never be an agent. The other half is not mechanical at all: a screen the product should " +
+      "have and nothing renders yet has to be drawn from what it promises and the application's own " +
+      "idiom. That branch was a switch statement stacking one part per row, which is why the corpus " +
+      "carries screens with no picture and why `check` refuses them — nobody can review a title.",
+    reads: [
+      "the screen's own truth — its parts, and what the exchanges at it promise",
+      "the idiom this application already uses, learned from its own components",
+      "sibling screens in the same area that DO have drawings, so it looks like the same product",
+    ],
+    writes: ["a drawing for a screen no component renders, stamped with what it was designed from"],
+    never: [
+      "draw a screen a component renders — `draw` wins wherever code exists, and a designed picture over real code is a claim about the product that nothing checked",
+      "invent what a screen promises: it draws what the truth already says, and a screen with nothing said gets a question, not a guess",
+      "write a drawing that does not say on its face that it was designed rather than observed — a reviewer who cannot tell which they are looking at may validate a screen the product does not have",
+    ],
+    needs: ["read-files", "search-files", "run-commands", "write-corpus"],
+    each: "screen no component renders",
+    authors: true,
+    prompt: "agents/productos-designer.md",
+  },
+  {
+    name: "evidencer",
+    asks: "What already demonstrates each of these claims?",
+    because:
+      "A corpus written from code arrives with every criterion unproven, and the proof usually " +
+      "already exists somewhere in the repository under a name nobody would search for. Left to the " +
+      "same pass that wrote the claim, it does not happen: the author has just finished deciding " +
+      "what is true and is the worst placed person to go looking for whether anything shows it.",
+    reads: [
+      "every criterion in the scope, and what each would take to demonstrate",
+      "the repository's existing tests, fixtures and recorded runs",
+    ],
+    writes: ["evidence against criteria, each naming what it is and where it came from"],
+    never: [
+      "write a test — it reports the hole; closing it is somebody's engineering decision",
+      "count a passing test as validation: a test says the code does this, and the corpus asks whether a person agreed it should",
+      "attach evidence it has not read, on the strength of a matching name",
+    ],
+    needs: ["read-files", "search-files", "run-commands", "write-corpus"],
+    authors: true,
+    prompt: "agents/productos-evidencer.md",
+  },
+];
+
+/**
+ * ⛔ THE PRESET — WHICH ROLES EACH SKILL ORCHESTRATES, AND WHAT IT MAY NOT HAND OFF.
+ *
+ * Peter: *"when the user sends a message we should ensure it flows through the agents as
+ * appropriate — so we should have a main orchestrator that determines which agents should be
+ * used, right?"* and then, sharper: *"so like a tree, for the old skills like 'align' or
+ * 'exchange', we have a preset for which agents to orchestrate consistently"*.
+ *
+ * ⛔ THE ORCHESTRATOR IS THE SESSION, AND IT CANNOT BE A SUBAGENT. It is the only thing talking to
+ * the person, and talking to the person is the one job that may never be delegated — an author
+ * that could obtain consent would be obtaining it with no record of how. So what is modelled here
+ * is not an orchestrating agent; it is the ROUTING, declared, so the session is reading a table
+ * rather than deciding from memory which roles a request needs.
+ *
+ * That distinction is the same one `CASCADE` makes and for the same reason: a routing decided from
+ * memory is decided differently every time, and the step that gets skipped is always the one
+ * nobody is watching. Here that step is `keeps` — the part the skill must do itself. Spawning four
+ * agents and forgetting that somebody still has to AGREE is exactly how a corpus ends up fully
+ * written, fully checked, and validated by nobody.
+ *
+ * ⛔ `keeps` IS THE LOAD-BEARING FIELD. A preset with an empty `keeps` is a skill that delegated
+ * everything, which for anything touching truth is a skill that has delegated the consent.
+ */
+export interface Shim {
+  /** The skill a person invokes. ⛔ The preset is keyed on what he types, not on a kind we inferred. */
+  skill: string;
+  does: string;
+  /** The roles it spawns, in order. `fan` = one per unit of its role's axis; otherwise one. */
+  steps: Array<{ role: string; fan?: boolean; why: string }>;
+  /**
+   * ⛔ What this skill performs ITSELF, because it may not be delegated. Every act of judgement
+   * lives here, and so does every question put to a person.
+   */
+  keeps: string[];
+}
+
+export const SHIMS: Shim[] = [
+  {
+    skill: "productos-fullscan",
+    does: "Turn a whole codebase into a first corpus",
+    steps: [
+      { role: "surveyor", why: "decide what the product consists of once, before anything describes a feature" },
+      { role: "scoper", fan: true, why: "every feature written in its own context, reading only its own code" },
+      { role: "designer", fan: true, why: "a picture for every screen no component renders — a screen with none cannot be reviewed" },
+      { role: "evidencer", why: "what the repository already demonstrates, found by somebody who did not write the claims" },
+    ],
+    keeps: [
+      "running `productos v2 generate`, because a screen a component renders is DRAWN and never designed",
+      "running `productos check` before anybody is asked to look",
+      "putting the survey in front of a person before thirty scopers start against a partition that is wrong",
+      "every act of judgement — nothing here is validated by having been written",
+    ],
+  },
+  {
+    skill: "productos-scope",
+    does: "Scope one in-flight feature",
+    steps: [
+      { role: "scoper", why: "the feature written in a context holding nothing but that feature" },
+      { role: "designer", fan: true, why: "screens the product should have and nothing renders yet" },
+    ],
+    keeps: [
+      "the conversation about what this feature is for — a purpose inferred from code is a purpose nobody chose",
+      "handing it over for review before any application code is touched",
+      "every act of judgement",
+    ],
+  },
+  {
+    skill: "productos-exchange",
+    does: "Write and settle product truth",
+    steps: [{ role: "scoper", fan: true, why: "the writing half, where there is more than one scope of it" }],
+    /**
+     * ⛔ THE CLEAREST CASE IN THE TABLE. This skill's whole second half is settling, and settling is
+     * the thing no author may do. A version of this that spawned an agent to "resolve the open
+     * questions" would have produced a corpus where every question is answered and none of the
+     * answers is anybody's.
+     */
+    keeps: [
+      "putting every open question to the person, in their own interface",
+      "recording each verdict with how consent was obtained — `via`, never defaulted",
+      "accepting, ruling, reading, waiving and deferring: all five acts",
+      "never answering a question on the person's behalf, however obvious the answer looks",
+    ],
+  },
+  {
+    skill: "productos-align",
+    does: "Map existing tests onto declared criteria",
+    steps: [{ role: "evidencer", why: "the whole of the search, by a role that cannot mistake a green test for agreement" }],
+    keeps: [
+      "the decision about what to do with a criterion nothing demonstrates",
+      "never letting coverage be reported as validation",
+    ],
+  },
+  {
+    skill: "productos-pmcheck",
+    does: "Find out whether a corpus communicates",
+    steps: [],
+    /**
+     * ⛔ NO AUTHORS AT ALL, AND THAT IS THE POINT. This skill runs the newcomer reviewers. An author
+     * anywhere in it would be answering the confusions the reviewers came back with, which is the
+     * single most valuable output there is — *"a newcomer coming back confused about something you
+     * could clear up in one sentence is the highest-value result available — write it down, do not
+     * answer it."*
+     */
+    keeps: [
+      "running the reviewers, which judge and never write",
+      "routing what comes back: a framework gap to us, a corpus finding to the author",
+      "never answering a newcomer's confusion — writing it down is the output",
+    ],
+  },
+  {
+    skill: "productos-edit",
+    does: "Surgical edits to existing truth",
+    steps: [],
+    /**
+     * ⛔ TOO SMALL TO DELEGATE, AND SAYING SO IS WORTH A ROW. A preset that spawned a scoper for a
+     * one-field change would cost a whole context to rename an id — and the reason to record it
+     * here is that a table with a hole in it reads as an oversight, which somebody later fills in.
+     */
+    keeps: ["the edit itself — one field is not worth a context, and a scoper would rewrite around it"],
+  },
+  {
+    skill: "productos-review",
+    does: "Look at and edit a feature conversationally",
+    steps: [],
+    keeps: ["the conversation, and every act of judgement in it"],
+  },
+  {
+    skill: "productos-watch-queue",
+    does: "Drain pending work in the queue",
+    steps: [],
+    /**
+     * ⛔ IT ROUTES TO OTHER PRESETS RATHER THAN HOLDING ONE. What a queued item needs depends on
+     * what the item is, so this reads the table rather than repeating a slice of it.
+     */
+    keeps: ["deciding which preset each queued item belongs to, and running it"],
+  },
+];
+
+/** The preset for a skill, or nothing — a skill with no preset orchestrates nothing and says so. */
+export const shimFor = (skill: string): Shim | undefined => SHIMS.find((s) => s.skill === skill);
+
+/**
+ * ⛔ A step naming a role that does not exist is a preset that fails when it is run rather than
+ * when it is written. Checked by a test, because the registry is the kind of thing edited by hand.
+ */
+export const danglingSteps = (): Array<{ skill: string; role: string }> =>
+  SHIMS.flatMap((s) => s.steps.filter((st) => !AUTHORS.some((a) => a.name === st.role)).map((st) => ({ skill: s.skill, role: st.role })));
+
 /** ⛔ Said out loud rather than implied: which agents exist as a prompt and which are named only here. */
 export const unwritten = (): Agent[] => AGENTS.filter((a) => !a.prompt);
+
+/** The same, for authors. A role named here with no prompt cannot be installed and says so. */
+export const unwrittenAuthors = (): Author[] => AUTHORS.filter((a) => !a.prompt);
 
 /** Which job owns a layer. ⛔ Exactly one, or the partition is broken. */
 export function areaOf(layer: Layer): Area | undefined {

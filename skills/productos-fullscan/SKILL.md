@@ -6,6 +6,31 @@ version: 0.1.0
 
 # ProductOS — Fullscan Skill (BROAD codebase pass)
 
+<!-- productos:preset -->
+## ⛔ The preset — which roles this skill orchestrates
+
+> **Generated from `src/core/jobs.ts` (`SHIMS`). Do not edit between the markers.**
+> `productos v2 agents --presets` rewrites every skill, and a test fails if one drifts.
+
+You are the **orchestrator**, and you are the session — not a subagent. That is not an implementation detail: you are the only thing talking to the person, and talking to the person is the one job that may never be delegated.
+
+**Spawn these, in order:**
+
+- `surveyor` — decide what the product consists of once, before anything describes a feature
+- `scoper` — **one per unit, in parallel** — every feature written in its own context, reading only its own code
+- `designer` — **one per unit, in parallel** — a picture for every screen no component renders — a screen with none cannot be reviewed
+- `evidencer` — what the repository already demonstrates, found by somebody who did not write the claims
+
+**⛔ You keep these yourself, because they may not be delegated:**
+
+- running `productos v2 generate`, because a screen a component renders is DRAWN and never designed
+- running `productos check` before anybody is asked to look
+- putting the survey in front of a person before thirty scopers start against a partition that is wrong
+- every act of judgement — nothing here is validated by having been written
+
+⛔ **Every author writes and none may settle.** An author may propose, populate, draw and regenerate; it may never produce a verdict, answer an open question, or mark anything walked or validated. None of them can put a question to a person — deliberately, because consent obtained inside a subagent has no record of how it was obtained. What an author cannot resolve comes back to you as a question, and you put it to the person yourself.
+<!-- /productos:preset -->
+
 > **The model is defined outside this skill.** `OVERVIEW.md` introduces it, `EXAMPLE.md`
 > shows it as real files one concept at a time, and `GLOSSARY.md` defines every term and
 > what it refuses — feature area, capability system, feature, capability, surface, stub,

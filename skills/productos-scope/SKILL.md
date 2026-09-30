@@ -6,6 +6,28 @@ version: 0.1.0
 
 # ProductOS — Scope Skill (one feature at a time)
 
+<!-- productos:preset -->
+## ⛔ The preset — which roles this skill orchestrates
+
+> **Generated from `src/core/jobs.ts` (`SHIMS`). Do not edit between the markers.**
+> `productos v2 agents --presets` rewrites every skill, and a test fails if one drifts.
+
+You are the **orchestrator**, and you are the session — not a subagent. That is not an implementation detail: you are the only thing talking to the person, and talking to the person is the one job that may never be delegated.
+
+**Spawn these, in order:**
+
+- `scoper` — the feature written in a context holding nothing but that feature
+- `designer` — **one per unit, in parallel** — screens the product should have and nothing renders yet
+
+**⛔ You keep these yourself, because they may not be delegated:**
+
+- the conversation about what this feature is for — a purpose inferred from code is a purpose nobody chose
+- handing it over for review before any application code is touched
+- every act of judgement
+
+⛔ **Every author writes and none may settle.** An author may propose, populate, draw and regenerate; it may never produce a verdict, answer an open question, or mark anything walked or validated. None of them can put a question to a person — deliberately, because consent obtained inside a subagent has no record of how it was obtained. What an author cannot resolve comes back to you as a question, and you put it to the person yourself.
+<!-- /productos:preset -->
+
 > **The model is defined outside this skill.** `OVERVIEW.md` introduces it, `EXAMPLE.md`
 > shows it as real files one concept at a time, and `GLOSSARY.md` defines every term and
 > what it refuses — feature area, capability system, feature, capability, surface, stub,

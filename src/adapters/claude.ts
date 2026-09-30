@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { fileURLToPath } from "node:url";
-import { AGENTS, type Capability } from "../core/jobs.js";
+import { AGENTS, AUTHORS, type Capability } from "../core/jobs.js";
 import type { ProductosConfig } from "../core/config.js";
 
 const HOME = os.homedir();
@@ -44,12 +44,33 @@ const TOOL_FOR: Record<Capability, string[]> = {
   "ask-the-human": ["AskUserQuestion"],
   "show-a-page": ["Read"],
   /**
-   * ⛔ NO MAPPING, DELIBERATELY. Every agent in the registry judges, and the test enforces that
-   * none asks for this — so if it is ever reached, the registry has grown an author wearing a
-   * reviewer's clothes and the install should stop rather than hand it Write.
+   * ⛔ THIS WAS DELIBERATELY EMPTY, AND THAT WAS THE RIGHT RULE FOR A REGISTRY OF JUDGES ONLY.
+   *
+   * The comment it replaces read: *"if it is ever reached, the registry has grown an author wearing
+   * a reviewer's clothes"*. That was true while `AGENTS` was the only registry. There is now a
+   * second one — `AUTHORS`, every member of which declares `authors: true` — and the guarantee is
+   * preserved by where the map is consulted, not by leaving it empty: `installClaudeAgents` walks
+   * `AGENTS`, whose members all declare `judges: true` and none of which may declare this
+   * capability; `installClaudeAuthors` walks `AUTHORS`. Two interfaces, two required literals, so
+   * neither list can quietly acquire a member of the other kind.
    */
-  "write-corpus": [],
+  "write-corpus": ["Write", "Edit"],
 };
+
+/**
+ * ⛔ WHAT NO AUTHOR MAY BE HANDED, AND WHY THIS IS A LIST RATHER THAN A HOPE.
+ *
+ * An author has `Bash`, so nothing stops it typing `productos v2 accept` — the prohibition in its
+ * prompt is a prohibition, not a mechanism. The mechanism is downstream and already load-bearing:
+ * every act records `Verdict.via`, and `agent` is one of its values precisely so that software
+ * deciding something is distinguishable from a person agreeing to it. An act an author performs is
+ * recorded as `via: agent` and never counts as agreement.
+ *
+ * What is enforced HERE is the one thing a prompt cannot cover: an author that could put a question
+ * to a person would be obtaining consent out of band, with no record of how. So no author may
+ * declare `ask-the-human`, and the install refuses one that does rather than installing it.
+ */
+const FORBIDDEN_TO_AUTHORS: Capability[] = ["ask-the-human"];
 
 /**
  * ⛔ AGENTS BELONG TO THE PROJECT, NOT THE MACHINE.
@@ -64,6 +85,68 @@ const TOOL_FOR: Record<Capability, string[]> = {
  */
 function agentsDirFor(cfgRoot?: string): string {
   return cfgRoot ? path.join(cfgRoot, ".claude", "agents") : AGENTS_DIR;
+}
+
+/**
+ * Install the authors. ⛔ Same derivation, opposite guarantee.
+ *
+ * Peter: *"we should model them as subagents, that the skills are shims into.."*. A skill that
+ * spawns one of these keeps the orchestration and the conversation with the person; the agent does
+ * the reading and the writing in a context of its own. What a skill may never delegate is settling,
+ * which is why no author gets a question tool.
+ */
+function installClaudeAuthors(update?: boolean, cfg?: ProductosConfig, cfgRoot?: string): string[] {
+  const root = bundledAgentsRoot();
+  if (!fs.existsSync(root)) return [];
+  const TARGET = agentsDirFor(cfgRoot);
+  fs.mkdirSync(TARGET, { recursive: true });
+  const out: string[] = [];
+  const off = cfg?.agents.off ?? {};
+  const models = cfg?.agents.model ?? {};
+  const dflt = cfg?.agents.default_model;
+
+  for (const author of AUTHORS) {
+    if (!author.prompt) continue;
+    if (off[author.name]) continue;
+    const src = path.join(root, path.basename(author.prompt));
+    if (!fs.existsSync(src)) continue;
+    /**
+     * ⛔ REFUSE, RATHER THAN INSTALL A NARROWED VERSION. Dropping the offending capability and
+     * carrying on would install an author whose prompt tells it to ask somebody something and whose
+     * tools cannot — which fails halfway through a run, in a way that reads as the host being
+     * broken rather than the spec being wrong.
+     */
+    const forbidden = author.needs.filter((c) => FORBIDDEN_TO_AUTHORS.includes(c));
+    if (forbidden.length)
+      throw new Error(
+        `author "${author.name}" declares ${forbidden.join(", ")} — an author may never put a question to a person, ` +
+          `because consent obtained inside a subagent has no record of how it was obtained. Record it as a question in the corpus instead.`
+      );
+
+    const tools = [...new Set(author.needs.flatMap((c) => TOOL_FOR[c] ?? []))];
+    if (!tools.length) continue;
+    const model = models[author.name] ?? dflt;
+    const name = path.basename(author.prompt).replace(/\.md$/, "");
+    const front = [
+      "---",
+      `name: ${name}`,
+      `description: ${author.asks} ${author.each ? `Spawn one per ${author.each}` : "Runs once"} — writes, but never settles, stamps or validates anything.`,
+      `tools: ${tools.join(", ")}`,
+      ...(model ? [`model: ${model}`] : []),
+      "---",
+      "",
+    ].join("\n");
+
+    const dst = path.join(TARGET, `${name}.md`);
+    const exists = !!fs.lstatSync(dst, { throwIfNoEntry: false });
+    if (exists) {
+      if (!update) continue;
+      fs.rmSync(dst, { force: true });
+    }
+    fs.writeFileSync(dst, front + fs.readFileSync(src, "utf-8"));
+    out.push(name);
+  }
+  return out;
 }
 
 function installClaudeAgents(dev: boolean, update?: boolean, cfg?: ProductosConfig, cfgRoot?: string): string[] {
@@ -269,7 +352,10 @@ export function installClaudeSkills(opts: { update?: boolean; config?: Productos
   register(path.join(os.homedir(), "Library", "Application Support", "Claude", "claude_desktop_config.json"), false);
   void target;
 
-  const agents = installClaudeAgents(dev, opts.update, opts.config, opts.configRoot);
+  const agents = [
+    ...installClaudeAgents(dev, opts.update, opts.config, opts.configRoot),
+    ...installClaudeAuthors(opts.update, opts.config, opts.configRoot),
+  ];
   return { installed, agents, agentsDir: agentsDirFor(opts.configRoot), mcpRegisteredAt: wrote.join(", ") || "nowhere — no config file was found to register in", symlinked: dev };
 }
 

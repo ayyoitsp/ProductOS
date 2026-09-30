@@ -6,6 +6,28 @@ version: 0.1.0
 
 # The Exchange model — authoring, and walking someone through what is undecided
 
+<!-- productos:preset -->
+## ⛔ The preset — which roles this skill orchestrates
+
+> **Generated from `src/core/jobs.ts` (`SHIMS`). Do not edit between the markers.**
+> `productos v2 agents --presets` rewrites every skill, and a test fails if one drifts.
+
+You are the **orchestrator**, and you are the session — not a subagent. That is not an implementation detail: you are the only thing talking to the person, and talking to the person is the one job that may never be delegated.
+
+**Spawn these, in order:**
+
+- `scoper` — **one per unit, in parallel** — the writing half, where there is more than one scope of it
+
+**⛔ You keep these yourself, because they may not be delegated:**
+
+- putting every open question to the person, in their own interface
+- recording each verdict with how consent was obtained — `via`, never defaulted
+- accepting, ruling, reading, waiving and deferring: all five acts
+- never answering a question on the person's behalf, however obvious the answer looks
+
+⛔ **Every author writes and none may settle.** An author may propose, populate, draw and regenerate; it may never produce a verdict, answer an open question, or mark anything walked or validated. None of them can put a question to a person — deliberately, because consent obtained inside a subagent has no record of how it was obtained. What an author cannot resolve comes back to you as a question, and you put it to the person yourself.
+<!-- /productos:preset -->
+
 > The model is defined in `src/v2/schema.ts`, and its comments carry the reasoning for every
 > field plus what went wrong before that field existed. **Read it before inventing shapes.**
 > Most apparent gaps are deliberate refusals, and mistaking a refusal for an omission wastes

@@ -1,0 +1,33 @@
+id: "0036"
+said: |-
+  we should model them as subagents, that the skills are shims into..
+
+  [on why generating cannot be one] i think 3, but why can't generate be an agent? like a
+  designer type agent?
+
+  [on routing] when the user sends a message we should ensure it flows through the agents as
+  appropriate - so we should have a main orchestrator that determines which agents should be used,
+  right?
+
+  [sharpening it] so like a tree, for the old skills like 'align' or 'exchange', we have a preset
+  for which agents to orchestrate consistently
+at: 2026-09-30
+kind: concept
+reaches:
+  model: AUTHORS
+  derive: FORBIDDEN_TO_AUTHORS
+  generate: presetBlock
+  surface: SHIMS
+  instruct: productos:preset
+  pin: every author writes, none may settle
+waived:
+  check: |-
+    The check layer is `src/v2/check.ts`, which reports what is wrong in somebody's CORPUS. This
+    concept adds nothing a corpus can be wrong about — an author is a role in the framework, and
+    whether a corpus was written by one is already recorded where it matters: every act carries
+    `via`, and `via: agent` never counts as agreement. What can go wrong here is structural — a
+    preset naming a role that does not exist, an author declaring a question tool, a skill whose
+    preset has drifted from the registry — and all three are detected by `danglingSteps` and the
+    registry tests rather than by a corpus check. Arguable: if presets ever become per-project
+    configuration rather than framework data, a project could hold an invalid one and this would
+    need a real check.

@@ -13,8 +13,22 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import fs from "node:fs";
-import { AGENTS, AREAS, LAYERS, CASCADE, KINDS, CAPABILITIES, areaOf, unwritten } from "../dist/core/jobs.js";
-import { agentsDoc } from "../dist/core/agents-doc.js";
+import {
+  AGENTS,
+  AREAS,
+  AUTHORS,
+  SHIMS,
+  LAYERS,
+  CASCADE,
+  KINDS,
+  CAPABILITIES,
+  areaOf,
+  unwritten,
+  unwrittenAuthors,
+  shimFor,
+  danglingSteps,
+} from "../dist/core/jobs.js";
+import { agentsDoc, withPreset } from "../dist/core/agents-doc.js";
 
 test("every layer is somebody's territory, exactly once", () => {
   for (const layer of LAYERS) {
@@ -119,7 +133,8 @@ test("the host's frontmatter is generated, and a judge never gets a writing tool
    * config. They used to be hand-written into each prompt, which made every agent a Claude agent
    * and made the model something somebody edits inside a prompt.
    */
-  for (const a of AGENTS) {
+  /** ⛔ Both registries: an author's prompt is as much a portable spec as a judge's. */
+  for (const a of [...AGENTS, ...AUTHORS]) {
     if (!a.prompt) continue;
     const body = fs.readFileSync(a.prompt, "utf-8");
     assert.doesNotMatch(body, /^---\n/, `${a.prompt} carries frontmatter — that belongs to the adapter`);
@@ -150,9 +165,49 @@ test("the host's frontmatter is generated, and a judge never gets a writing tool
     m[1].split(",").map((t) => t.trim().replace(/"/g, "")).filter(Boolean)
   );
   assert.ok(mapped.length >= 5, `the capability map reads as ${mapped.length} tools — re-read it`);
-  for (const t of mapped)
-    assert.ok(!/^(Write|Edit|NotebookEdit|MultiEdit)$/.test(t), `a capability maps to "${t}", which writes`);
-  assert.match(map[1], /"write-corpus":\s*\[\]/, "write-corpus gained a mapping — a judge could now be handed it");
+
+  /**
+   * ⛔ THE GUARANTEE MOVED WHEN A SECOND REGISTRY ARRIVED, AND IT MUST NOT HAVE WEAKENED.
+   *
+   * This used to assert `"write-corpus": []` — nothing anywhere maps to a writing tool — which was
+   * the right rule while every agent judged. Authors now exist and `write-corpus` maps to Write and
+   * Edit, so the same guarantee has to be stated where it is actually true: no member of the JUDGE
+   * registry may declare the capability that reaches a writing tool.
+   *
+   * Asserting it on the registry rather than on the map is also stronger than what it replaces.
+   * The old form could be satisfied by a map with no writing tool in it while an agent went on
+   * declaring `write-corpus` and silently installed with no tools at all.
+   */
+  const WRITES = /^(Write|Edit|NotebookEdit|MultiEdit)$/;
+  const writingCaps = [...map[1].replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/"([\w-]+)":\s*\[([^\]]*)\]/g)]
+    .filter(([, , tools]) => tools.split(",").some((t) => WRITES.test(t.trim().replace(/"/g, ""))))
+    .map(([, cap]) => cap);
+  assert.deepEqual(writingCaps, ["write-corpus"], `these capabilities reach a writing tool: ${writingCaps.join(", ")}`);
+  for (const a of AGENTS)
+    assert.ok(
+      !a.needs.includes("write-corpus"),
+      `the judge "${a.name}" declares write-corpus — a reviewer that repairs hides how often it fires`
+    );
+
+  /**
+   * ⛔ AND THE INVERSE, WHICH IS THE NEW HALF: no author may be handed a question tool.
+   *
+   * An author has Bash and could type an act command, and the prohibition in its prompt is a
+   * prohibition rather than a mechanism — that case is held downstream, because every act records
+   * `via`, and an act an author performs records `via: agent`, which never counts as agreement.
+   *
+   * Asking a person something has no such downstream record. Consent obtained inside a subagent is
+   * consent with no account of how it was obtained, which is the whole thing `Verdict.via` exists
+   * to prevent. So it is refused here, at the registry.
+   */
+  for (const a of AUTHORS)
+    assert.ok(
+      !a.needs.includes("ask-the-human"),
+      `the author "${a.name}" declares ask-the-human — a subagent that obtains consent has no record of how`
+    );
+  assert.ok(AUTHORS.length, "the author registry is empty — authoring has no role behind it again");
+  for (const a of AUTHORS)
+    assert.ok(a.needs.includes("write-corpus"), `the author "${a.name}" cannot write, which is what an author is`);
 });
 
 test("the agent tree document is generated, and has not drifted from the registry", () => {
@@ -186,4 +241,103 @@ test("the agent tree document is generated, and has not drifted from the registr
   // ⛔ And the ones with no prompt are named as such rather than listed as though they run.
   for (const a of AGENTS.filter((x) => !x.prompt))
     assert.match(committed, new RegExp(`\`${a.name}\`.{0,40}no prompt written`, "s"), `${a.name} is listed as though it runs`);
+});
+
+
+/**
+ * ⛔ AUTHORING HAD NO ROLE BEHIND IT, AND THAT WAS INVISIBLE BECAUSE NOTHING ASKED.
+ *
+ * Peter: *"we should model them as subagents, that the skills are shims into.."*. For as long as
+ * `AGENTS` was the only registry, eight skills did all the authoring serially in one context while
+ * five reviewers stood ready to judge the result. Nothing was wrong in any file; the shape was
+ * wrong, and a shape is exactly what no file-scoped check can see.
+ */
+test("every author writes, none may settle, and none can ask a person anything", () => {
+  assert.ok(AUTHORS.length >= 3, "the author registry is empty or nearly so — authoring lost its roles again");
+
+  for (const a of AUTHORS) {
+    /** ⛔ The inverse of the judges' literal. Structural: an author that cannot write is not one. */
+    assert.equal(a.authors, true, `${a.name} is in AUTHORS without declaring authors: true`);
+    assert.ok(a.needs.includes("write-corpus"), `${a.name} cannot write, which is what an author is`);
+    assert.ok(
+      !a.needs.includes("ask-the-human"),
+      `${a.name} declares ask-the-human — consent obtained inside a subagent has no record of how`
+    );
+    /**
+     * ⛔ THE `never` LIST IS THE DEFINING FIELD, same as it is for an area. A role with no
+     * prohibition is a role nobody has thought about, and a prompt written from it says nothing.
+     */
+    assert.ok(a.never.length >= 2, `${a.name} declares fewer than two prohibitions — it has not been thought about`);
+    assert.ok(a.asks.trim().endsWith("?"), `${a.name} does not ask a question; a role with no question is a step`);
+  }
+
+  /** ⛔ And the two registries stay disjoint — a name in both is an agent wearing the other's clothes. */
+  for (const a of AUTHORS)
+    assert.ok(!AGENTS.some((j) => j.name === a.name), `"${a.name}" is registered as both an author and a judge`);
+
+  assert.deepEqual(unwrittenAuthors().map((a) => a.name), [], "an author is named in the registry with no prompt");
+});
+
+/**
+ * ⛔ THE PRESET IS THE ROUTING, AND A ROUTING WITH A HOLE IN IT READS AS AN OVERSIGHT SOMEBODY
+ * FILLS IN LATER.
+ *
+ * Peter: *"so like a tree, for the old skills like 'align' or 'exchange', we have a preset for
+ * which agents to orchestrate consistently"*. Every skill gets a row, including the ones that
+ * orchestrate nothing — `productos-edit` spawns nobody because one field is not worth a context,
+ * and recording that is what stops somebody adding a scoper to it.
+ */
+test("every skill has a preset, every preset names real roles, and none delegates the settling", () => {
+  const skills = fs.readdirSync("skills").filter((d) => fs.existsSync(`skills/${d}/SKILL.md`));
+  for (const skill of skills)
+    assert.ok(shimFor(skill), `the skill "${skill}" has no preset — nothing says which roles it orchestrates`);
+  for (const sh of SHIMS)
+    assert.ok(skills.includes(sh.skill), `the preset "${sh.skill}" names a skill that does not exist`);
+
+  assert.deepEqual(danglingSteps(), [], "a preset names a role that is not in the author registry");
+
+  /**
+   * ⛔ `keeps` IS WHAT MAKES THIS A MODEL RATHER THAN A FAN-OUT. Spawning four agents and forgetting
+   * somebody still has to AGREE is how a corpus ends up fully written, fully checked, and validated
+   * by nobody — so a preset that keeps nothing is refused.
+   */
+  for (const sh of SHIMS)
+    assert.ok(sh.keeps.length, `the preset "${sh.skill}" keeps nothing — it has delegated the consent`);
+
+  /**
+   * ⛔ AND EVERY SKILL THAT SETTLES KEEPS THE SETTLING BY NAME. The clearest case is
+   * `productos-exchange`, whose entire second half is the five acts; a version of it that spawned
+   * an agent to "resolve the open questions" would produce a corpus where every question is
+   * answered and none of the answers is anybody's.
+   */
+  const settles = ["productos-exchange", "productos-scope", "productos-fullscan", "productos-review"];
+  for (const name of settles) {
+    const sh = shimFor(name);
+    assert.ok(
+      sh.keeps.some((k) => /judgement|verdict|accept|consent|question|agree|validat/i.test(k)),
+      `"${name}" touches truth and nothing in its keeps says the settling stays with the session`
+    );
+  }
+});
+
+/**
+ * ⛔ THE PRESET HAS TO REACH THE SKILL, BECAUSE `instruct` IS THE LAYER THIS PROJECT SKIPS.
+ *
+ * A routing table living only in `jobs.ts` is a table a future session never meets: it reads the
+ * skill. So the block is generated into each SKILL.md between markers, and this fails if one has
+ * drifted from the registry — the same guarantee AGENTS.md already has.
+ */
+test("each skill carries its own preset, generated, and none has drifted", () => {
+  for (const sh of SHIMS) {
+    const f = `skills/${sh.skill}/SKILL.md`;
+    const body = fs.readFileSync(f, "utf-8");
+    assert.match(body, /<!-- productos:preset -->/, `${f} carries no preset block`);
+    assert.equal(
+      body,
+      withPreset(body, sh),
+      `${f} has drifted from the registry — regenerate with: productos v2 agents --presets`
+    );
+    /** ⛔ The part outside the markers is hand-authored and must survive regeneration. */
+    assert.ok(body.split("<!-- /productos:preset -->")[1].trim().length > 200, `${f} lost its authored body`);
+  }
 });

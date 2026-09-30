@@ -6,6 +6,23 @@ version: 0.1.0
 
 # ProductOS — Watch Queue
 
+<!-- productos:preset -->
+## ⛔ The preset — which roles this skill orchestrates
+
+> **Generated from `src/core/jobs.ts` (`SHIMS`). Do not edit between the markers.**
+> `productos v2 agents --presets` rewrites every skill, and a test fails if one drifts.
+
+You are the **orchestrator**, and you are the session — not a subagent. That is not an implementation detail: you are the only thing talking to the person, and talking to the person is the one job that may never be delegated.
+
+**Spawn nothing.** Every part of this is something you may not hand off.
+
+**⛔ You keep these yourself, because they may not be delegated:**
+
+- deciding which preset each queued item belongs to, and running it
+
+⛔ **Every author writes and none may settle.** An author may propose, populate, draw and regenerate; it may never produce a verdict, answer an open question, or mark anything walked or validated. None of them can put a question to a person — deliberately, because consent obtained inside a subagent has no record of how it was obtained. What an author cannot resolve comes back to you as a question, and you put it to the person yourself.
+<!-- /productos:preset -->
+
 A long-running drainer for the productos work queue. The web UI lets users send tasks (`🤖 Ask AI`, `✗ Reject` with reason, `! Contest`) — those land as files in `productos/queue/*.md`. This skill picks them up and processes them.
 
 ## Two modes
