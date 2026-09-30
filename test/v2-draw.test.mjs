@@ -288,3 +288,88 @@ test("a counter samples as a number, whatever it hangs off", () => {
   assert.equal(sampleValue("step.label", 0), "Underwriting");
   assert.equal(sampleValue("deal.stage", 1), "Screening");
 });
+
+/**
+ * ⛔ THE ONLY FAILURE HERE THAT PRODUCES A DRAWING NOBODY CAN TELL IS WRONG.
+ *
+ * Peter, on CRE create-a-deal: *"creating a CRE/multifamily deal does NOT go through a term sheet.
+ * it is a manual form only, asking for property and borrower name."* He was right, and the corpus
+ * had said otherwise for months.
+ *
+ * The create route switches on project type and returns one of six unrelated screens, then falls
+ * through to a default. `guardedBy` recognised only `if`, so every switch arm read as an UNGUARDED
+ * return and the pick became largest-by-span — it drew the processing wizard: a five-step
+ * term-sheet flow belonging to a different product, in full, and reported success.
+ *
+ * Everything else this generator gets wrong makes a drawing that looks thin. This one made a
+ * drawing that looked like the product.
+ */
+test("a switch arm is a state, and drawing one of several products is said out loud", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "draw7-"));
+  write(dir, "MultifamilyForm.tsx", `export function MultifamilyForm() { return <div className="mf">New Multifamily Deal</div> }`);
+  write(dir, "RentAnalysisForm.tsx", `export function RentAnalysisForm() { return <div className="ra">Rent Analysis</div> }`);
+  write(dir, "BenchmarkForm.tsx", `export function BenchmarkForm() { return <div className="bm">Benchmark</div> }`);
+  write(dir, "ProcessingWizard.tsx", `export function ProcessingWizard() { return <div className="pw">Create Deal from Term Sheet — a long wizard with many steps</div> }`);
+  const route = write(
+    dir,
+    "page.tsx",
+    `import { MultifamilyForm } from './MultifamilyForm'
+     import { RentAnalysisForm } from './RentAnalysisForm'
+     import { BenchmarkForm } from './BenchmarkForm'
+     import { ProcessingWizard } from './ProcessingWizard'
+     export default function P() {
+       if (type) {
+         switch (type) {
+           case 'multifamily':   return <MultifamilyForm />
+           case 'rent_analysis': return <RentAnalysisForm />
+           case 'benchmark':     return <BenchmarkForm />
+         }
+       }
+       return <ProcessingWizard />
+     }`
+  );
+  const r = drawFromRoute(route, { componentsDir: dir });
+
+  /**
+   * ⛔ IT STILL PICKS — refusing to draw anything would leave the screen with no picture, which
+   * `check` refuses for good reason. What changes is that the pick is no longer silent.
+   */
+  assert.equal(r.forks.length, 1, `expected exactly one fork, got ${JSON.stringify(r.forks)}`);
+  const [f] = r.forks;
+  assert.equal(f.on, "type", "the fork must name what it turns on");
+  assert.ok(
+    f.others.includes("MultifamilyForm") && f.others.includes("RentAnalysisForm"),
+    `the other screens must be named so somebody can pick: ${JSON.stringify(f.others)}`
+  );
+  assert.ok(f.others.length >= 3, "a fork that names one alternative is not telling anybody enough");
+
+  /**
+   * ⛔ AND THE ARMS ARE DRAWN, not merely named. A switch arm is a guard, so each becomes a state
+   * with the product's own word on its tab — which is how somebody looking at the picture can see
+   * that the screen they meant is one of the ones this did not open on.
+   */
+  const labels = r.drawnStates.map((st) => st.label);
+  assert.ok(labels.includes("Multifamily"), `the arms must be drawn as states: ${JSON.stringify(labels)}`);
+  assert.ok(
+    r.drawnStates.find((st) => st.label === "Multifamily")?.html.includes("New Multifamily Deal"),
+    "a state tab and the picture it shows disagree"
+  );
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+/** ⛔ And a screen that forks nowhere reports no fork — a warning on every drawing is a warning on none. */
+test("a route that renders one screen reports no fork", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "draw8-"));
+  const route = write(
+    dir,
+    "page.tsx",
+    `export default function P() {
+       if (isLoading) return <div className="sk">Loading</div>
+       return <div className="real"><h1>The screen</h1></div>
+     }`
+  );
+  const r = drawFromRoute(route);
+  assert.deepEqual(r.forks, [], "a loading guard is a state, not a fork between products");
+  assert.match(r.html, /class="real"/, "the guard was drawn as the screen");
+  fs.rmSync(dir, { recursive: true, force: true });
+});

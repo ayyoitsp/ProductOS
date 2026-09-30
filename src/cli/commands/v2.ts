@@ -1616,6 +1616,28 @@ export function v2Command(): Command {
        * constant, so a screen whose five wizard steps were all drawn still reported one — the run
        * that fixed the generator looked, from its own output, like the run that had not.
        */
+      /**
+       * ⛔ THE LOUDEST THING THIS COMMAND SAYS, because it is the only failure that produces a
+       * drawing nobody can tell is wrong.
+       *
+       * Peter: *"creating a CRE/multifamily deal does NOT go through a term sheet. it is a manual
+       * form only"*. The route switches on project type across five unrelated screens; this drew
+       * the default — a five-step term-sheet wizard belonging to a different product — in full, and
+       * reported success. Every other failure mode here makes a drawing that looks thin. This one
+       * makes a drawing that looks like the product.
+       */
+      for (const f of drawn.forks) {
+        console.log(
+          pc.yellow("⚠"),
+          `${f.where} renders ${f.others.length + 1} different screens depending on ${pc.bold(f.on)}`
+        );
+        console.log(pc.yellow(`    drew ${f.chose} — which may not be this one`));
+        console.log(pc.dim(`    it could also be: ${f.others.join(", ")}`));
+        console.log(
+          pc.dim(`    which one this screen IS is a fact about the product, not about the code — if it is not this`)
+        );
+        console.log(pc.dim(`    one, name the component: productos v2 draw "<scope>#<view>" --route <file> --into <corpus>`));
+      }
       if (drawn.states.length || drawn.drawnStates.length) {
         const made = drawn.drawnStates.length + 1;
         const left = drawn.states.length;

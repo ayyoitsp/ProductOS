@@ -32,6 +32,12 @@ export interface DrawResult {
   unresolved: string[];
   /** Branches not drawn: the screen's other states, named so they are not lost silently. */
   states: string[];
+  /**
+   * ⛔ WHERE THIS DREW ONE OF SEVERAL UNRELATED SCREENS AND CANNOT KNOW WHICH IS RIGHT.
+   * Never empty quietly: a caller that does not report these ships a confident drawing of another
+   * product's screen.
+   */
+  forks: Array<{ on: string; chose: string; others: string[]; where: string }>;
   /** Each of those states, DRAWN — the same walk, taking the arm it normally declines. */
   drawnStates: DrawnState[];
   /** Parts the corpus declares that the drawing does not show. */
@@ -120,6 +126,20 @@ interface Ctx {
   /** The raw conditions behind those states, so each one can be drawn on a second pass. */
   conditions: string[];
   /**
+   * ⛔ WHERE THE ROUTE RENDERS A DIFFERENT PRODUCT DEPENDING ON SOMETHING THIS CANNOT READ.
+   *
+   * Peter: *"creating a CRE/multifamily deal does NOT go through a term sheet. it is a manual form
+   * only"* — and the corpus said otherwise for months. The create route switches on project type
+   * and returns one of five unrelated screens, then falls through to a default. This drew the
+   * default: a five-step term-sheet wizard, in full, belonging to a different product.
+   *
+   * It is not a guess this can make correctly. Which of five products a screen IS, is a fact about
+   * the product and lives in the truth, never in the code. What it must never do is pick one and
+   * say nothing, because a confident drawing of the wrong screen is indistinguishable from a right
+   * one — which is strictly worse than the thin drawing everything else in this file fights.
+   */
+  forks: Array<{ on: string; chose: string; others: string[]; where: string }>;
+  /**
    * Inside a repeated row, where an unreadable value is the POINT rather than a defect — the shape
    * of the data is what a reader judges, and a hatch per cell would bury it.
    */
@@ -194,11 +214,42 @@ function returnedJsx(file: string, name?: string): ts.Node | undefined {
    * ⛔ AND THE GUARDS ARE KEPT, not discarded: they are the screen's states, and they are what the
    * tabs above it offer.
    */
+  /**
+   * ⛔ A SWITCH ARM IS A CONDITION TOO, AND TREATING IT AS UNGUARDED DREW A DIFFERENT PRODUCT.
+   *
+   * Peter, on the CRE create-a-deal screen: *"creating a CRE/multifamily deal does NOT go through
+   * a term sheet. it is a manual form only, asking for property and borrower name."* He is right,
+   * and the corpus said otherwise because of this function.
+   *
+   * The route switches on the project type and returns a different component per arm —
+   * multifamily, rent analysis, offering memorandum, benchmark, processing — then falls through to
+   * `return <ConsolidatedProjectWizard/>` as a default. Only `if` was recognised here, so all five
+   * arms read as UNGUARDED and the pick became largest-by-span. It drew the processing wizard: a
+   * five-step term-sheet flow belonging to a different product, rendered in full, legible, and
+   * about something else entirely. The generator reported success.
+   *
+   * That is the worst failure this file has. A thin drawing looks thin; a confident drawing of the
+   * wrong screen looks like the product, and a reviewer has no way to tell.
+   *
+   * ⛔ AND IT LOSES NOTHING, because a guard is not discarded — it becomes a drawn state. A route
+   * that renders five products now offers five pictures with the product's own word on each tab,
+   * instead of silently being one of them.
+   */
   const guardedBy = (n: ts.Node): string | undefined => {
     let at: ts.Node | undefined = n.parent;
     while (at) {
       if (ts.isIfStatement(at) && at.thenStatement && at.thenStatement.pos <= n.pos && n.end <= at.thenStatement.end)
         return at.expression.getText().replace(/\s+/g, " ");
+      /**
+       * ⛔ NAMED WITH ITS SUBJECT, so the condition reads the way the same state would read as a
+       * ternary and `prefer` can match it on a redraw without a second vocabulary. A bare
+       * `case 'multifamily':` names a value with nothing to compare it against.
+       */
+      if (ts.isCaseClause(at)) {
+        const sw = at.parent.parent;
+        const subject = ts.isSwitchStatement(sw) ? sw.expression.getText() : "";
+        return `${subject} === ${at.expression.getText()}`.replace(/\s+/g, " ").trim();
+      }
       if (ts.isFunctionDeclaration(at) || ts.isArrowFunction(at) || ts.isFunctionExpression(at)) return undefined;
       at = at.parent;
     }
@@ -560,7 +611,23 @@ function emit(node: ts.Node, ctx: Ctx): string {
     if (file && ctx.depth < 4) {
       ctx.from.add(path.basename(file));
       const inner = returnedJsx(file, tag) ?? returnedJsx(file);
+      /**
+       * ⛔ READ IMMEDIATELY. `guardsOfLastRead` is replaced by every later parse, and everything
+       * below this line parses something.
+       */
+      const innerGuards = guardsOfLastRead();
       if (inner) {
+        /**
+         * ⛔ A FORK IS SIBLING ARMS RETURNING DIFFERENT COMPONENTS — not a loading guard.
+         *
+         * `if (isPending) return <Skeleton/>` is one screen in two states and is handled as a state
+         * everywhere else in this file. What this looks for is the other thing: three or more arms
+         * each returning a bare component of its own, which is a router choosing between unrelated
+         * screens. Two is deliberately not enough — a screen and its empty state are often written
+         * exactly that way.
+         */
+        const fork = forkOf(innerGuards, inner, path.basename(file));
+        if (fork) ctx.forks.push(fork);
         /** Bind what the call site passes, so the primitive renders the application's own words. */
         const bound = new Map<string, string>();
         for (const a of open.attributes.properties) {
@@ -1051,6 +1118,49 @@ function localRegion(file: string, name: string): Region | undefined {
   return found;
 }
 
+
+/**
+ * ⛔ A FORK: SIBLING ARMS EACH RETURNING A DIFFERENT SCREEN.
+ *
+ * Not a loading guard — `if (isPending) return <Skeleton/>` is one screen in two states, handled
+ * as a state everywhere else here. This is the other thing: three or more arms each returning a
+ * bare component of its own, which is a router choosing between unrelated products. Two is
+ * deliberately not enough, because a screen and its empty state are written exactly that way.
+ *
+ * ⛔ ONE DETECTOR BECAUSE IT HAPPENS IN TWO PLACES AND ONLY ONE WAS COVERED. The CRE create route
+ * forks inside a component the drawing INLINES, which is where this was first written; a route
+ * that forks in its own body — the more obvious shape — went unreported, and a test written
+ * against the obvious shape is what found it.
+ */
+function forkOf(
+  guards: Array<{ when: string; node: ts.Node }>,
+  chosen: ts.Node,
+  where: string
+): { on: string; chose: string; others: string[]; where: string } | undefined {
+  const nameOf = (n: ts.Node): string | undefined => {
+    if (ts.isJsxElement(n)) return n.openingElement.tagName.getText();
+    if (ts.isJsxSelfClosingElement(n)) return n.tagName.getText();
+    return undefined;
+  };
+  const bare = guards.map((g) => ({ when: g.when, name: nameOf(g.node) })).filter((b) => b.name && /^[A-Z]/.test(b.name));
+  const distinct = [...new Set(bare.map((b) => b.name!))];
+  if (distinct.length < 3) return undefined;
+  const chose = nameOf(chosen);
+  /**
+   * ⛔ ONLY WHERE THE CHOSEN ARM IS ITSELF ANOTHER SCREEN. A wizard's step switch trips every test
+   * above — five arms, five distinct components — but its chrome is a `div` and its steps are
+   * already drawn as state tabs above the picture. Reporting that as a fork tells a reviewer
+   * something is missing that is on the screen in front of them.
+   */
+  if (!chose || !/^[A-Z]/.test(chose)) return undefined;
+  return {
+    on: bare[0]?.when.split("===")[0]?.trim() ?? "something this cannot read",
+    chose,
+    others: distinct.filter((d) => d !== chose),
+    where,
+  };
+}
+
 export function drawFromRoute(routeFile: string, opts: DrawOptions = {}): DrawResult {
   const root = opts.componentsDir;
   const index = new Map<string, string>();
@@ -1179,6 +1289,7 @@ export function drawFromRoute(routeFile: string, opts: DrawOptions = {}): DrawRe
     unresolved: [],
     states: [],
     conditions: [],
+    forks: [],
     props: new Map(),
     sample: (hint) => {
       const s = opts.sample ?? {};
@@ -1194,7 +1305,16 @@ export function drawFromRoute(routeFile: string, opts: DrawOptions = {}): DrawRe
    * the screen's own states are gone.
    */
   const routeGuards = guardsOfLastRead();
-  if (!jsx) return { html: "", from: [...ctx.from], unresolved: ["the route exports no component this can read"], undrawn: [], states: [], drawnStates: [], text: "" };
+  /**
+   * ⛔ THE ROUTE'S OWN BODY FORKS TOO, and this was written only for the inlined case. The CRE
+   * create route hides its switch one component down, so that is the shape it was built against —
+   * and a route that switches in its own body, which is the more ordinary way to write it, went
+   * unreported. Found by a test written against the obvious shape rather than the one in front of
+   * me, which is the whole reason to write the obvious one.
+   */
+  const routeFork = jsx ? forkOf(routeGuards, jsx, path.basename(routeFile)) : undefined;
+  if (routeFork) ctx.forks.push(routeFork);
+  if (!jsx) return { html: "", from: [...ctx.from], unresolved: ["the route exports no component this can read"], undrawn: [], states: [], forks: [], drawnStates: [], text: "" };
   const plain = emit(jsx, ctx);
 
   /**
@@ -1270,6 +1390,8 @@ export function drawFromRoute(routeFile: string, opts: DrawOptions = {}): DrawRe
     states: [...new Set(ctx.states)].filter(
       (st) => !drawnStates.some((d) => st.startsWith(`when ${d.when.slice(0, 50)}:`))
     ),
+    /** ⛔ Deduped: emit re-walks the route once per state, and a fork reported five times reads as five. */
+    forks: [...new Map(ctx.forks.map((f) => [`${f.where}:${f.on}:${f.chose}`, f])).values()],
     drawnStates,
     text: asText(wired.html),
   };
