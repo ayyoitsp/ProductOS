@@ -1444,6 +1444,45 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
     for (const { scope } of corpus.scopes) {
       for (const v of scope.views) {
         if (v.exists === "withdrawn") continue;
+        /**
+         * ⛔ A SCREEN WITH FIVE APPEARANCES AND ONE SENTENCE IS A SCREEN NOBODY HAS DESCRIBED.
+         *
+         * Peter, on the create-a-deal screen the moment it finally drew: *"and there's a single
+         * behavior..."*. The drawing shows a five-step wizard — upload, details, borrower
+         * documents, folder setup, confirm — and the truth says one thing about the whole of it.
+         *
+         * ⛔ AND IT SAYS SO WITHOUT INVENTING ANY OF THEM. What each step promises is a product
+         * decision and nothing here may make it. All this counts is pictures against sentences,
+         * which is a fact, and puts it in front of the one person who can close it.
+         *
+         * A NOTE, because a thin screen is not a malformed one and refusing would block a corpus
+         * over an author's judgement about how much a step needs saying. The number is the
+         * argument; it does not need a gate behind it.
+         */
+        const states = v.states ?? [];
+        if (states.length >= 2) {
+          const spoken = scope.exchanges
+            .filter((e) => e.at?.view === v.id)
+            .reduce(
+              (n, e) =>
+                n +
+                Object.values(e.slots ?? {}).reduce((m, b) => {
+                  const says = (b as { says?: unknown } | undefined)?.says;
+                  return m + (typeof says === "string" ? 1 : Array.isArray(says) ? says.length : 0);
+                }, 0),
+              0
+            );
+          if (spoken <= 1)
+            add({
+              severity: "note",
+              kind: "the-states-of-this-screen-are-unspoken",
+              where: `${scope.id}#${v.id}`,
+              what: `this screen has ${states.length + 1} appearances drawn — ${["as it is", ...states.map((st) => st.label)].join(", ")} — and ${
+                spoken ? "one sentence covering all of them" : "nothing stated about any of them"
+              }. A reviewer can see five screens and read about one`,
+              fix: `say what each one promises. Where they are steps somebody moves through rather than states a screen falls into, they are screens of their own — give each its own view, and the drawing follows`,
+            });
+        }
         if (!v.sketch && !v.sketch_html) continue; // no drawing at all is a different finding
         const landing = scope.exchanges.filter((e) => e.at?.view === v.id);
         if (!landing.length) continue;

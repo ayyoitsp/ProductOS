@@ -606,6 +606,24 @@ replaces the whole block — so a screen whose component loses its empty state s
 Only the route's own branches count: a text field's internal `hint && !error` is a state of that
 field, not of the screen.
 
+⛔ **A STEP IS NOT A STATE, AND EACH ONE NEEDS SOMETHING SAID ABOUT IT.** `draw` reads a local render
+helper — `{renderStep()}`, `{renderTab()}` — as the body of the screen, so a wizard comes back with
+one drawing per step: *As it is · Project details · Borrower documents · Folder setup · Confirm*.
+The pictures are generated. **What each one promises is not**, and nothing may invent it.
+
+`check` reports the gap as `the-states-of-this-screen-are-unspoken`, because a screen showing five
+appearances under a single sentence is a screen a reviewer can see and cannot read. Close it one of
+two ways, and the distinction is the reviewer's:
+
+- **States** a screen falls into — loading, empty, error, something-is-open — belong to the one view.
+  Say what each promises in a slot on an exchange `at` that view.
+- **Steps somebody moves through** are screens of their own. Give each its own `views:` entry with
+  its own parts and its own exchanges. The drawing follows: name the route once and each step draws
+  itself.
+
+A five-step wizard filed as one view with one sentence is the thin corpus in its most common form —
+it looks complete, because the thing that is missing was never given a place to be missing from.
+
 ⛔ **Never offer `exists: intended` as a way out of a gap.** Whether something ships is not a fact
 about the target, and asking an author to declare a screen unbuilt so a check will pass is the code
 made authoritative over the truth. If a screen has no picture, generate one.

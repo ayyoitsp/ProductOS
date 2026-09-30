@@ -11,7 +11,7 @@ import { test } from "node:test";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { drawFromRoute, driftedFrom } from "../dist/v2/draw.js";
+import { drawFromRoute, driftedFrom, sampleValue } from "../dist/v2/draw.js";
 
 const write = (dir, rel, body) => {
   const f = path.join(dir, rel);
@@ -49,7 +49,18 @@ test("a parenthesised branch is drawn, not dropped", () => {
    * Skipped and reported, like loading and empty.
    */
   assert.doesNotMatch(r.html, /class="boom"/, "the error state was drawn as part of the screen");
-  assert.ok(r.states.some((st) => st.includes("could not load")), "and it must be reported as a state");
+  /**
+   * ⛔ NOT LOST — which is satisfied by DRAWING it, and drawing it is strictly better than naming
+   * it. `states` used to hold every skipped branch including the ones that were then drawn as
+   * their own pictures, so a screen whose states all came out as pictures still listed them under
+   * "not drawn". Splitting the two made this assertion look at the wrong list; the contract it
+   * exists to hold is that the branch survives somewhere a reviewer can reach it.
+   */
+  assert.ok(
+    r.states.some((st) => st.includes("could not load")) ||
+      r.drawnStates.some((st) => st.html.includes("could not load")),
+    "and it must survive as a state — drawn, or at least named"
+  );
   /**
    * ⛔ THIS TEST USED TO DEMAND BOTH ARMS, reasoning that *"taking one silently draws one state and
    * calls it the screen."* The operative word was SILENTLY, and drawing both is worse: the deals
@@ -59,12 +70,20 @@ test("a parenthesised branch is drawn, not dropped", () => {
    *
    * So one arm is drawn — the larger, which is the screen rather than the guard — and the other is
    * REPORTED as a state this drawing does not hold. Not silent, which was the real objection.
+   *
+   * ⛔ AND "NOT SILENT" IS NOW USUALLY "DRAWN". `states` holds the arms that could only be named;
+   * anything that could be drawn moved to `drawnStates` and became a tab. Both satisfy the
+   * objection, so both are accepted here — asserting on the naming list alone would fail the day
+   * the generator got good enough to draw the thing.
    */
   assert.match(r.html, /class="rows"/, "the screen arm was dropped");
   assert.doesNotMatch(r.html, /class="none"/, "both arms were drawn, which is a picture of no state");
   assert.ok(
-    r.states.some((st) => st.includes("nothing here")),
-    `the arm it did not draw must be reported as a state; got ${JSON.stringify(r.states)}`
+    r.states.some((st) => st.includes("nothing here")) ||
+      r.drawnStates.some((st) => st.html.includes("nothing here")),
+    `the arm it did not draw must survive as a state; got ${JSON.stringify(r.states)} and ${JSON.stringify(
+      r.drawnStates.map((st) => st.label)
+    )}`
   );
   fs.rmSync(dir, { recursive: true, force: true });
 });
@@ -197,4 +216,75 @@ test("drift is content, not timestamps", () => {
   assert.equal(driftedFrom(route, `  ${same}\n`).drifted, false, "reindenting read as drift");
   assert.equal(driftedFrom(route, same.replace("hi", "typed over")).drifted, true, "a hand edit read as current");
   fs.rmSync(dir, { recursive: true, force: true });
+});
+
+/**
+ * ⛔ THE BODY OF THE SCREEN LIVED IN A LOCAL RENDER HELPER, AND THE DRAWING DISCARDED IT.
+ *
+ * Peter, on create-a-deal the moment it first appeared at the top of its feature: *"yay, it's
+ * finally fucking there. boo, there's literally NOTHING on it."* The screen drew its title, its
+ * three progress dots and six hundred pixels of white, because everything below the chrome is
+ * `{renderStep()}` and a call the walker could not follow became one marked ellipsis.
+ *
+ * Every wizard, tabbed panel and stepped form in any React codebase is written this way. A
+ * generator that declines to follow it draws frames and throws away pictures.
+ */
+test("a local render helper is the body of the screen, and each of its arms is a state", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "draw6-"));
+  const route = write(
+    dir,
+    "page.tsx",
+    `export default function P() {
+       const renderStep = () => {
+         switch (state.currentStep) {
+           case 'upload_term_sheet':
+             return (<div className="one">Upload a term sheet</div>)
+           case 'project_details':
+             return (<div className="two">Name the deal</div>)
+           case 'confirm':
+             return (<div className="three">Create the deal</div>)
+         }
+       }
+       return (
+         <div className="wrap">
+           <h1 className="title">Create Deal from Term Sheet</h1>
+           <div className="body">{renderStep()}</div>
+         </div>
+       )
+     }`
+  );
+  const r = drawFromRoute(route);
+  assert.match(r.html, /Upload a term sheet/, "the helper's body was dropped — the screen is a frame around nothing");
+  /**
+   * ⛔ THE FIRST ARM, NOT THE BIGGEST. A switch is written in the order a person moves through it,
+   * so case one is step one. Opening a wizard on its confirmation screen makes the end the subject.
+   */
+  assert.doesNotMatch(r.html, /Create the deal/, "the screen opened on a later step than the first");
+  /**
+   * ⛔ AND THE OTHER ARMS ARE DRAWN, which is what the tabs above the picture offer. A five-step
+   * wizard holds five screens; four of them are exactly what a reviewer needs to walk.
+   */
+  const labels = r.drawnStates.map((st) => st.label);
+  assert.ok(labels.includes("Project details"), `the other steps were not drawn: ${JSON.stringify(labels)}`);
+  assert.ok(labels.includes("Confirm"), `the other steps were not drawn: ${JSON.stringify(labels)}`);
+  /** ⛔ Named from the product's own word for the step, not from the code around it. */
+  assert.ok(
+    r.drawnStates.find((st) => st.label === "Project details")?.html.includes("Name the deal"),
+    "a state tab and the picture it shows disagree"
+  );
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+/**
+ * ⛔ WHAT A FIELD HOLDS IS NAMED BY ITS LAST SEGMENT. `step.number` matched the stage rule on the
+ * word "step" and put "Underwriting" inside an eight-pixel circle — three progress dots reading
+ * "erwr", "reen" and "ern hee". Legible and wrong is worse than blank.
+ */
+test("a counter samples as a number, whatever it hangs off", () => {
+  assert.equal(sampleValue("step.number", 0), "1");
+  assert.equal(sampleValue("step.number", 1), "2");
+  assert.equal(sampleValue("row.index", 2), "3");
+  /** And the thing it belongs to still reads as itself. */
+  assert.equal(sampleValue("step.label", 0), "Underwriting");
+  assert.equal(sampleValue("deal.stage", 1), "Screening");
 });

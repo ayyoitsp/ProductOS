@@ -440,6 +440,30 @@ function emit(node: ts.Node, ctx: Ctx): string {
         }
       }
     }
+    /**
+     * ⛔ A CALL TO A LOCAL RENDER HELPER IS CONTENT. See `localRegion` for why this is the whole
+     * screen and not a detail: `{renderStep()}` held the entire body of the create-a-deal wizard.
+     */
+    if (ts.isCallExpression(e) && ts.isIdentifier(e.expression) && ctx.sameFile) {
+      const region = localRegion(ctx.sameFile, e.expression.text);
+      if (region) {
+        const wanted = ctx.prefer ? region.arms.find((a) => a.when === ctx.prefer) : undefined;
+        const take = wanted ? wanted.node : region.main;
+        for (const arm of region.arms) {
+          if (arm.node === take || !arm.when) continue;
+          ctx.states.push(`when ${arm.when.slice(0, 50)}: ${arm.node.getText().replace(/\s+/g, " ").slice(0, 60)}`);
+          /**
+           * ⛔ AT ANY DEPTH, UNLIKE AN INLINED COMPONENT'S OWN BRANCHES. The depth rule exists
+           * because a TextField's `hint && !error` is a state of a text field, not of the page.
+           * A render helper is the other thing entirely: it is the region the page swaps, and the
+           * page's chrome is frequently one component down — the wizard's steps are states of the
+           * screen even though the switch lives inside `ConsolidatedProjectWizard`.
+           */
+          ctx.conditions.push(arm.when);
+        }
+        return emit(take, ctx);
+      }
+    }
     if (ts.isJsxElement(e) || ts.isJsxSelfClosingElement(e) || ts.isJsxFragment(e)) return emit(e, ctx);
     if (ts.isStringLiteral(e)) return text(e.text);
     /**
@@ -801,6 +825,16 @@ export function sampleValue(hint: string, row: number): string | undefined {
     if (!m) return undefined;
     hint = m[1]!;
   }
+  /**
+   * ⛔ WHAT A FIELD HOLDS IS NAMED BY ITS LAST SEGMENT; THE PREFIX NAMES WHAT IT BELONGS TO.
+   *
+   * `step.number` matched the stage rule on the word "step" and drew "Underwriting" inside an
+   * eight-pixel circle — a wizard whose three progress dots read "erwr", "reen" and "ern hee".
+   * Reading the prefix is how a counter came to hold a stage name, and it is wrong for every
+   * `x.count`, `x.index`, `x.position` in the product, not just this one.
+   */
+  const tail = hint.split(/[.?[\]'"()]+/).filter(Boolean).pop() ?? hint;
+  if (/^(number|num|index|idx|order|position|pos|rank|seq|sequence)$/i.test(tail)) return String((row % 3) + 1);
   for (const [re, values] of SAMPLES) if (re.test(hint)) return values[row % values.length];
   return undefined;
 }
@@ -844,6 +878,17 @@ function labelFor(cond: string): string {
     return m ? `${m[1].replace(/([a-z])([A-Z])/g, "$1 $2")} open` : "Open";
   }
   if (/\b(hasActiveFilters|filtered|search)\b/i.test(read)) return "Filtered";
+  /**
+   * ⛔ A STEP NAMES ITSELF. `state.currentStep === 'borrower_documents'` labelled a tab "when
+   * state.currentStep === 'bor" — the reviewer is shown the code they are not reading instead of
+   * the step they are being asked to walk. The literal being compared against IS the name; it is
+   * the product's own word for that state, not one invented here.
+   */
+  const named = /===\s*['"`]([a-z0-9_-]{2,40})['"`]\s*$/i.exec(read.trim());
+  if (named) {
+    const w = named[1].replace(/[_-]+/g, " ").trim();
+    return w.charAt(0).toUpperCase() + w.slice(1);
+  }
   return `when ${read.slice(0, 32)}`;
 }
 
@@ -880,6 +925,130 @@ function localJsx(file: string, name: string): ts.Node | undefined {
     localCache.set(file, found);
   }
   return found.get(name);
+}
+
+/**
+ * A local render helper, read as a REGION OF THE SCREEN.
+ *
+ * ⛔ `{renderStep()}` IS THE BODY OF THE SCREEN, NOT AN UNKNOWN — and drawing it as one is why the
+ * create-a-deal screen came out as a title, three progress dots and six hundred pixels of nothing.
+ * Peter: *"boo, there's literally NOTHING on it"*.
+ *
+ * A wizard, a tabbed panel and a stepped form are all written the same way: the chrome is inline
+ * and the part that changes is a local function switching on the current step. That function is
+ * where the screen actually is. Refusing to follow it draws the frame and discards the picture —
+ * a drawing that looks generated but shows nothing a reviewer can judge.
+ *
+ * ⛔ AND EACH ARM IS A STATE, which is what the tabs above the drawing are for. A five-step wizard
+ * has five screens in it; one of them is the happy path and the other four are exactly what a
+ * reviewer needs to walk. `localJsx` already does this for a bare `{someJsxConst}`; a call is the
+ * same thing with parentheses, and it is the far more common shape.
+ */
+interface Region {
+  /** The arm drawn by default: the screen as somebody first meets it. */
+  main: ts.Node;
+  /** Every arm, in source order, with the condition that reaches it. */
+  arms: Array<{ when: string; node: ts.Node }>;
+}
+
+const regionCache = new Map<string, Map<string, Region | null>>();
+
+function localRegion(file: string, name: string): Region | undefined {
+  let byName = regionCache.get(file);
+  if (!byName) {
+    byName = new Map<string, Region | null>();
+    regionCache.set(file, byName);
+  }
+  if (byName.has(name)) return byName.get(name) ?? undefined;
+  byName.set(name, null);
+
+  let src: ts.SourceFile;
+  try {
+    src = ts.createSourceFile(file, fs.readFileSync(file, "utf-8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  } catch {
+    return undefined;
+  }
+
+  let fn: ts.Node | undefined;
+  const find = (n: ts.Node): void => {
+    if (fn) return;
+    if (
+      ts.isVariableDeclaration(n) &&
+      ts.isIdentifier(n.name) &&
+      n.name.text === name &&
+      n.initializer &&
+      (ts.isArrowFunction(n.initializer) || ts.isFunctionExpression(n.initializer))
+    )
+      fn = n.initializer;
+    else if (ts.isFunctionDeclaration(n) && n.name?.text === name && n.body) fn = n;
+    else ts.forEachChild(n, find);
+  };
+  find(src);
+  if (!fn) return undefined;
+
+  const body = (fn as ts.ArrowFunction | ts.FunctionDeclaration).body;
+  if (!body) return undefined;
+  const isJsx = (e: ts.Node): boolean => ts.isJsxElement(e) || ts.isJsxSelfClosingElement(e) || ts.isJsxFragment(e);
+
+  /** A concise arrow — `const Row = () => <tr>…</tr>` — has no branches and no returns to find. */
+  if (!ts.isBlock(body)) {
+    const e = ts.isParenthesizedExpression(body) ? body.expression : body;
+    if (!isJsx(e)) return undefined;
+    const only: Region = { main: e, arms: [{ when: "", node: e }] };
+    byName.set(name, only);
+    return only;
+  }
+
+  /**
+   * ⛔ WHAT REACHES THIS ARM, READ FROM THE SWITCH ITSELF. A `case 'project_details':` is only
+   * half a condition — on its own it names a value with nothing to compare it to, and two helpers
+   * switching on different things would produce arms that look identical. The subject comes from
+   * the `switch`, so the condition reads the way the same state would read as a ternary, and the
+   * redraw pass can match it against `prefer` without a second vocabulary.
+   */
+  const reaching = (n: ts.Node): string | undefined => {
+    let at: ts.Node | undefined = n.parent;
+    while (at && at !== body) {
+      if (ts.isCaseClause(at)) {
+        const sw = at.parent.parent;
+        const subject = ts.isSwitchStatement(sw) ? sw.expression.getText() : "";
+        return `${subject} === ${at.expression.getText()}`.replace(/\s+/g, " ").trim();
+      }
+      if (ts.isIfStatement(at) && at.thenStatement.pos <= n.pos && n.end <= at.thenStatement.end)
+        return at.expression.getText().replace(/\s+/g, " ");
+      at = at.parent;
+    }
+    return undefined;
+  };
+
+  const arms: Array<{ when: string; node: ts.Node }> = [];
+  let open: ts.Node | undefined;
+  const seek = (n: ts.Node): void => {
+    /** A callback inside this helper returns for ITSELF, not for the screen. */
+    if (n !== body && (ts.isArrowFunction(n) || ts.isFunctionExpression(n) || ts.isFunctionDeclaration(n))) return;
+    if (ts.isReturnStatement(n) && n.expression) {
+      const e = ts.isParenthesizedExpression(n.expression) ? n.expression.expression : n.expression;
+      if (isJsx(e)) {
+        const when = reaching(n);
+        if (when) arms.push({ when, node: e });
+        else if (!open || e.getEnd() - e.getStart() > open.getEnd() - open.getStart()) open = e;
+      }
+    }
+    ts.forEachChild(n, seek);
+  };
+  seek(body);
+
+  /**
+   * ⛔ THE FIRST ARM IS THE HAPPY PATH, and taking the biggest would open the screen on whichever
+   * step happens to have the most markup. A `switch` is written in the order a person moves through
+   * it: the first case of a wizard's step switch is step one. That is a stronger signal than span,
+   * and it is the opposite of the rule for early-return guards, where source order means nothing.
+   */
+  const main = open ?? arms[0]?.node;
+  if (!main) return undefined;
+  const found: Region = { main, arms };
+  byName.set(name, found);
+  return found;
 }
 
 export function drawFromRoute(routeFile: string, opts: DrawOptions = {}): DrawResult {
@@ -1092,7 +1261,15 @@ export function drawFromRoute(routeFile: string, opts: DrawOptions = {}): DrawRe
     from: [...ctx.from],
     unresolved: [...new Set(ctx.unresolved)],
     undrawn,
-    states: [...new Set(ctx.states)],
+    /**
+     * ⛔ NAMED-BUT-NOT-DRAWN MEANS NOT DRAWN. `states` is the list of appearances this drawing
+     * could not show, and it was reporting the ones it had just drawn alongside them — a wizard
+     * whose five steps all came out as pictures still printed four of them under "not drawn", so
+     * the output of a working generator was indistinguishable from the output of a broken one.
+     */
+    states: [...new Set(ctx.states)].filter(
+      (st) => !drawnStates.some((d) => st.startsWith(`when ${d.when.slice(0, 50)}:`))
+    ),
     drawnStates,
     text: asText(wired.html),
   };

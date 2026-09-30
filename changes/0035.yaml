@@ -1,0 +1,10 @@
+id: "0035"
+said: |-
+  yay, it's finally fucking there.  boo, there's literally NOTHING on it.
+  and there's a single behavior...
+at: 2026-09-30
+kind: generator
+reaches:
+  generate: localRegion
+  pin: a local render helper is the body of the screen
+waived: {}

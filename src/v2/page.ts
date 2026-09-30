@@ -780,6 +780,27 @@ function renderScreens(scope: Scope, ctx: Ctx, scopeId: string, opts: PageOption
                 : ""
             }
             ${!v.walked ? `<p class="owes">Nobody has walked this screen, so what it holds is unconfirmed.</p>` : ""}
+            ${
+              /**
+               * ⛔ A SCREEN SHOWING FIVE APPEARANCES UNDER ONE SENTENCE, SAYING SO WHERE IT SHOWS.
+               *
+               * Peter, the moment create-a-deal finally drew its wizard: *"and there's a single
+               * behavior..."*. `check` reports this as `the-states-of-this-screen-are-unspoken`,
+               * and a finding only the CLI prints is a finding the person reviewing never meets —
+               * the page is where somebody looks at a screen and decides whether it is right.
+               *
+               * ⛔ COUNTED, NEVER ANSWERED. What each step promises is a product decision; this
+               * says only how many pictures there are and how many sentences, which is a fact.
+               */
+              (v.states?.length ?? 0) >= 2 &&
+              statedAt(scope, v.id, undefined).reduce((n, x) => n + x.said.length, 0) <= 1
+                ? `<p class="owes">This screen has ${(v.states?.length ?? 0) + 1} appearances and ${
+                    statedAt(scope, v.id, undefined).some((x) => x.said.length)
+                      ? "one sentence covering all of them"
+                      : "nothing said about any of them"
+                  } — you can see more here than you can read. Steps somebody moves through are screens of their own.</p>`
+                : ""
+            }
             ${body}
             <div class="pt-detail" data-for="${esc(v.id)}" hidden></div>
             ${

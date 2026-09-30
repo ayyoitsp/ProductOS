@@ -1554,8 +1554,21 @@ export function v2Command(): Command {
        * one; saying which were skipped is the difference between a picture of the loaded state and
        * a picture claiming to be the whole screen.
        */
-      if (drawn.states.length) {
-        console.log(pc.dim(`  drew one state; ${drawn.states.length} other${drawn.states.length === 1 ? "" : "s"} not drawn:`));
+      /**
+       * ⛔ AND HOW MANY IT DID DRAW, COUNTED RATHER THAN ASSUMED. This said "drew one state" as a
+       * constant, so a screen whose five wizard steps were all drawn still reported one — the run
+       * that fixed the generator looked, from its own output, like the run that had not.
+       */
+      if (drawn.states.length || drawn.drawnStates.length) {
+        const made = drawn.drawnStates.length + 1;
+        const left = drawn.states.length;
+        console.log(
+          pc.dim(
+            `  drew ${made} state${made === 1 ? "" : "s"}` +
+              (left ? `; ${left} other${left === 1 ? "" : "s"} named but not drawn:` : "")
+          )
+        );
+        for (const st of drawn.drawnStates) console.log(pc.dim(`    ✓ ${st.label} — ${st.when}`));
         for (const st of drawn.states.slice(0, 6)) console.log(pc.dim(`    ${st}`));
       }
       if (parts.length)
