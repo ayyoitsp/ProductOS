@@ -2385,11 +2385,36 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
          * exists, the truth and the design system where one does not.
          */
         if (!v.sketch_html && !v.sketch) {
+          /**
+           * ⛔ SAY WHICH KIND OF NOTHING IT IS. "No picture" sent somebody to the generator four
+           * times for four screens the generator could never have drawn: two have no parts AND no
+           * statements — a name with nothing behind it — and one declares a form whose own sentence
+           * says the product asks nothing. Those are gaps in the truth, and pointing them at a
+           * regeneration command wastes the one person who could close them.
+           */
+          const saidHere = scope.exchanges
+            .filter((e) => e.at?.view === v.id)
+            .reduce((n, e) => n + Object.values(e.slots ?? {}).reduce((m, b) => {
+              const says = (b as { says?: unknown } | undefined)?.says;
+              return m + (typeof says === "string" ? 1 : Array.isArray(says) ? says.length : 0);
+            }, 0), 0);
+          if (!v.parts.length && !saidHere) {
+            add({
+              severity: "refuse",
+              kind: "nothing-is-known-about-this-screen",
+              where: `${scope.id}#${v.id}`,
+              what: "this screen has no controls, nothing stated about it, and no picture — it is a name with nothing behind it, and no generator can draw what nobody has said",
+              fix: `say what is on it and what it does, or remove it. Nothing here can be generated.`,
+            });
+            continue;
+          }
           add({
             severity: "refuse",
             kind: "no-picture-of-this-screen",
             where: `${scope.id}#${v.id}`,
-            what: "this screen has nothing anybody can look at — a title and a parts list is not something a person can tell is wrong",
+            what: v.parts.length
+              ? "this screen has nothing anybody can look at — a title and a parts list is not something a person can tell is wrong"
+              : "this screen states what it does but declares no controls, so there is nothing to place on it and nothing to find it by",
             /**
              * ⛔ ONE COMMAND IN THE FIX, NOT THREE. A finding that asks somebody to assemble a
              * sequence is a finding they defer — and drawing, proposing and connecting were three

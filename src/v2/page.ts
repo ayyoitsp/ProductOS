@@ -3313,6 +3313,14 @@ const DRIVE = `<script>
        * read as a grey smear. This is scoped to mock shadow roots, so it cannot touch the review
        * page around them, and it only fills in what the reconstruction dropped.
        */
+      /**
+       * ⛔ A MODAL IN A DRAWING MUST NOT TAKE OVER THE PAGE. A screen that composes a Modal inlines
+       * its fixed-position overlay, and a fixed element positions against the VIEWPORT even from
+       * inside a shadow root — so opening the deal workspace covered the whole review surface with a
+       * folder picker. Containment makes the mock its own containing block, so anything fixed inside
+       * it is fixed to the mock. No rewriting of their CSS, which is the thing that fails quietly.
+       */
+      ".productos-mock{contain:layout paint;position:relative}" +
       "td,th{padding:.3rem .5rem;line-height:1.35;vertical-align:middle}" +
       "table{border-collapse:collapse;width:100%}" +
       /* A value we supplied, not one the product produced — legible, and never mistakable. */
@@ -3994,6 +4002,15 @@ const STYLE = `<style>
    * (No backticks in this comment: it lives inside a template literal, and a backtick here ends
    * the string. That has now cost four builds.)
    */
+  /**
+   * ⛔ A DRAWN MODAL IS CONTAINED TO ITS MOCK. A screen that composes a modal inlines its overlay,
+   * and a fixed element positions against the VIEWPORT even from inside a shadow root — so opening
+   * the deal workspace covered the whole review surface with a folder picker, twice. A transform on
+   * the host makes it the containing block for everything fixed inside it; containment alone did
+   * not, because the host is in the light DOM and the rule was being adopted into the shadow root.
+   */
+  .proto.html { transform: translateZ(0); contain: layout paint; position: relative; overflow: auto; }
+
   /* Walking a screen through its states. */
   .state-tabs { display: flex; flex-wrap: wrap; gap: .3rem; margin: 0 0 .45rem; }
   .state-tab { font: inherit; font-size: .78rem; cursor: pointer; border: 1px solid var(--rule);

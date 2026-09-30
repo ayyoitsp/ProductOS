@@ -175,15 +175,52 @@ function returnedJsx(file: string, name?: string): ts.Node | undefined {
    * guard is a line, a screen is a page. Where it is wrong the drawing is visibly a guard, which a
    * reviewer can see — unlike the silent version, where it looked like the screen.
    */
-  const fromBody = (body: ts.Node): ts.Node | undefined => {
+  /**
+   * ⛔ A RETURN BEHIND A GUARD IS A STATE, NOT THE SCREEN — and taking the biggest one regardless is
+   * how the deal workspace came out reading "Back to CRE Deals / Deal not found".
+   *
+   * Real components are written as early returns:
+   *
+   *     if (isLoading)               return <Skeleton/>
+   *     if (error || !state.project) return <NotFound/>
+   *     return <the actual screen/>
+   *
+   * The screen's own return is frequently the SMALLEST of the three — it composes a few components
+   * while the not-found block spells out its markup inline. Largest-by-span was a good heuristic
+   * when the alternative was drawing a loading guard by accident; it is the wrong question once the
+   * guards can be recognised. Peter: *"the top piece should generally just have happy path… I see
+   * 'deal not found'"*.
+   *
+   * ⛔ AND THE GUARDS ARE KEPT, not discarded: they are the screen's states, and they are what the
+   * tabs above it offer.
+   */
+  const guardedBy = (n: ts.Node): string | undefined => {
+    let at: ts.Node | undefined = n.parent;
+    while (at) {
+      if (ts.isIfStatement(at) && at.thenStatement && at.thenStatement.pos <= n.pos && n.end <= at.thenStatement.end)
+        return at.expression.getText().replace(/\s+/g, " ");
+      if (ts.isFunctionDeclaration(at) || ts.isArrowFunction(at) || ts.isFunctionExpression(at)) return undefined;
+      at = at.parent;
+    }
+    return undefined;
+  };
+
+  const fromBody = (body: ts.Node): { main?: ts.Node; guards: Array<{ when: string; node: ts.Node }> } => {
     let best: ts.Node | undefined;
     let widest = 0;
+    let fallback: ts.Node | undefined;
+    let fallbackWidth = 0;
+    const guards: Array<{ when: string; node: ts.Node }> = [];
     const seek = (n: ts.Node): void => {
       if (ts.isReturnStatement(n) && n.expression) {
         const e = ts.isParenthesizedExpression(n.expression) ? n.expression.expression : n.expression;
         if (ts.isJsxElement(e) || ts.isJsxSelfClosingElement(e) || ts.isJsxFragment(e)) {
           const span = e.getEnd() - e.getStart();
-          if (span > widest) {
+          const guard = guardedBy(n);
+          if (guard) {
+            guards.push({ when: guard, node: e });
+            if (span > fallbackWidth) { fallbackWidth = span; fallback = e; }
+          } else if (span > widest) {
             widest = span;
             best = e;
           }
@@ -192,7 +229,8 @@ function returnedJsx(file: string, name?: string): ts.Node | undefined {
       ts.forEachChild(n, seek);
     };
     seek(body);
-    return best;
+    /** Everything this component returns is behind a guard: draw the biggest, and say nothing false. */
+    return { main: best ?? fallback, guards };
   };
   /**
    * ⛔ A NAMED EXPORT IS AS ORDINARY AS A DEFAULT ONE. Looking only for `export default` refused
@@ -205,6 +243,8 @@ function returnedJsx(file: string, name?: string): ts.Node | undefined {
    * exported component in the file.
    */
   const byName = new Map<string, ts.Node>();
+  /** ⛔ The guarded returns of whichever component is chosen — the screen's states, kept not dropped. */
+  const guardsByName = new Map<string, Array<{ when: string; node: ts.Node }>>();
   let dflt: ts.Node | undefined;
   const exported = new Set<string>();
   const visit = (n: ts.Node): void => {
@@ -212,20 +252,22 @@ function returnedJsx(file: string, name?: string): ts.Node | undefined {
       const mods = n.modifiers ?? [];
       const isExport = mods.some((m) => m.kind === ts.SyntaxKind.ExportKeyword);
       const isDefault = mods.some((m) => m.kind === ts.SyntaxKind.DefaultKeyword);
-      const jsx = fromBody(n.body);
+      const { main: jsx, guards } = fromBody(n.body);
       if (jsx) {
         byName.set(n.name.text, jsx);
+        guardsByName.set(n.name.text, guards);
         if (isExport) exported.add(n.name.text);
-        if (isDefault) dflt = jsx;
+        if (isDefault) { dflt = jsx; guardsByName.set("\u0000default", guards); }
       }
     }
     if (ts.isVariableStatement(n)) {
       const isExport = (n.modifiers ?? []).some((m) => m.kind === ts.SyntaxKind.ExportKeyword);
       for (const d of n.declarationList.declarations)
         if (ts.isIdentifier(d.name) && d.initializer) {
-          const jsx = fromBody(d.initializer);
+          const { main: jsx, guards } = fromBody(d.initializer);
           if (!jsx) continue;
           byName.set(d.name.text, jsx);
+          guardsByName.set(d.name.text, guards);
           if (isExport) exported.add(d.name.text);
         }
     }
@@ -233,11 +275,23 @@ function returnedJsx(file: string, name?: string): ts.Node | undefined {
   };
   visit(src);
 
-  if (name && byName.has(name)) return byName.get(name);
-  if (!name && dflt) return dflt;
-  const base = path.basename(file).replace(/\.tsx?$/, "");
-  if (byName.has(base) && (!name || name === base)) return byName.get(base);
-  if (!name && exported.size === 1) return byName.get([...exported][0]!);
+  const pickName = (): string | undefined => {
+    if (name && byName.has(name)) return name;
+    const base = path.basename(file).replace(/\.tsx?$/, "");
+    if (byName.has(base) && (!name || name === base)) return base;
+    if (!name && exported.size === 1) return [...exported][0];
+    return undefined;
+  };
+  const chosen = pickName();
+  if (chosen) {
+    lastGuards = guardsByName.get(chosen) ?? [];
+    return byName.get(chosen);
+  }
+  if (!name && dflt) {
+    lastGuards = guardsByName.get("\u0000default") ?? [];
+    return dflt;
+  }
+  lastGuards = [];
   return found ?? (name ? undefined : dflt);
 }
 
@@ -298,6 +352,13 @@ function emit(node: ts.Node, ctx: Ctx): string {
      */
     /** ⛔ An ERROR state is a state too — it drew as an empty pink bar across every screen that has
      *  one, which reads as a defect in the product rather than as a branch nobody is in. */
+    /**
+     * ⛔ "SOMETHING IS OPEN" IS A STATE TOO. A screen that composes a modal renders it behind a
+     * visibility flag, and drawing it unconditionally put an open folder picker and its dimming
+     * backdrop over the entire deal workspace — the happy path buried under a dialog nobody opened.
+     * Peter: *"the top piece should generally just have happy path"*.
+     */
+    const OPEN = /\b(show[A-Z]\w*|is[A-Z]\w*Open|isOpen|\w*ModalOpen|\w*DialogOpen|picking|editing|confirming)\b/;
     const GUARD = /\b(isLoading|loading|isPending|pending|isFetching|busy|skeleton|isError|error)\b/i;
     const EMPTY = /(===\s*0|!\s*\w+(?:\.\w+)*\.length\b|\blength\s*===\s*0\b|\bisEmpty\b|\bnoResults\b)/i;
     const pick = (cond: ts.Node, a: ts.Node, b: ts.Node): string => {
@@ -306,7 +367,7 @@ function emit(node: ts.Node, ctx: Ctx): string {
       let chosen: ts.Node;
       let skipped: ts.Node;
       if (ctx.prefer && c.replace(/\s+/g, " ") === ctx.prefer) { chosen = a; skipped = b; }
-      else if (GUARD.test(c) || EMPTY.test(c)) { chosen = b; skipped = a; }
+      else if (GUARD.test(c) || EMPTY.test(c) || OPEN.test(c)) { chosen = b; skipped = a; }
       else if (span(a) >= span(b)) { chosen = a; skipped = b; }
       else { chosen = b; skipped = a; }
       const other = skipped.getText().replace(/\s+/g, " ").slice(0, 60);
@@ -334,7 +395,7 @@ function emit(node: ts.Node, ctx: Ctx): string {
        */
       if (ctx.depth > 0 && ts.isIdentifier(e.left) && ctx.props.size && !ctx.props.has(e.left.text)) return "";
       /** `{!deals.length && <Empty/>}` — a state, not the screen. Recorded and not drawn. */
-      if (GUARD.test(c) || EMPTY.test(c)) {
+      if (GUARD.test(c) || EMPTY.test(c) || OPEN.test(c)) {
         /** Preferred: this IS the state being drawn, so show what it shows. */
         if (ctx.prefer && c.replace(/\s+/g, " ") === ctx.prefer) return emit(e.right, ctx);
         ctx.states.push(`when ${c.replace(/\s+/g, " ").slice(0, 50)}: ${e.right.getText().replace(/\s+/g, " ").slice(0, 60)}`);
@@ -547,6 +608,32 @@ function emit(node: ts.Node, ctx: Ctx): string {
       }
     }
     /**
+     * ⛔ A DIALOG IS CLOSED UNLESS SOMETHING SAYS IT IS OPEN.
+     *
+     * A modal is written as `<Modal open={somethingIsOpen}>` — always present in the tree, with its
+     * visibility as a PROP rather than a branch. Inlined unconditionally it renders its overlay and
+     * its dimming backdrop, so the deal workspace drew a folder picker over the whole screen with
+     * everything behind it greyed out. Peter: *"the top piece should generally just have happy
+     * path"*. A screen's happy path does not have a dialog open on it.
+     *
+     * Only when the flag is an expression we cannot read. `open` hard-coded true is somebody saying
+     * it really is always open, and that is drawn.
+     */
+    const DIALOG = /(modal|dialog|drawer|sheet|popover|overlay|lightbox)$/i;
+    if (DIALOG.test(tag)) {
+      const openAttr = open.attributes.properties.find(
+        (a): a is ts.JsxAttribute => ts.isJsxAttribute(a) && /^(open|isOpen|visible|shown)$/.test(a.name.getText())
+      );
+      const literallyOpen =
+        openAttr?.initializer &&
+        ts.isJsxExpression(openAttr.initializer) &&
+        openAttr.initializer.expression?.kind === ts.SyntaxKind.TrueKeyword;
+      if (openAttr && !literallyOpen) {
+        ctx.states.push(`when ${openAttr.initializer ? openAttr.initializer.getText().replace(/[{}]/g, "").slice(0, 40) : tag}: <${tag}> is open`);
+        return "";
+      }
+    }
+    /**
      * ⛔ AN UNRESOLVED COMPONENT IS NAMED, NOT DROPPED. Silently omitting it produces a screen
      * missing a control the application has — which is the thin drawing again, arrived at
      * mechanically.
@@ -747,10 +834,29 @@ function labelFor(cond: string): string {
     .join(" && ");
   const read = asserted || cond;
   if (/(===\s*0|\blength\s*===\s*0\b|\bisEmpty\b|\bnoResults\b)/i.test(read)) return "Empty";
+  /** ⛔ A missing THING reads differently from a failure: "Deal not found" is not "Error". */
+  if (/!\s*\w+(\.\w+)*\b|\bnotfound\b|===\s*null|==\s*null/i.test(cond) && !/\blength\b/i.test(cond)) return "Not found";
   if (/\b(isError|error)\b/i.test(read)) return "Error";
   if (/\b(isLoading|loading|isPending|pending|isFetching|skeleton)\b/i.test(read)) return "Loading";
+  if (/\b(show[A-Z]\w*|is[A-Z]\w*Open|isOpen|\w*ModalOpen|picking|editing|confirming)\b/.test(cond)) {
+    /** Named after what opens, so three dialogs on one screen do not all read "Open". */
+    const m = /\b(?:show|is)([A-Z]\w*?)(?:Open|Modal|Dialog)?\b/.exec(cond);
+    return m ? `${m[1].replace(/([a-z])([A-Z])/g, "$1 $2")} open` : "Open";
+  }
   if (/\b(hasActiveFilters|filtered|search)\b/i.test(read)) return "Filtered";
   return `when ${read.slice(0, 32)}`;
+}
+
+/**
+ * The guarded returns of the component `returnedJsx` last chose.
+ *
+ * ⛔ A side channel rather than a changed signature, because `returnedJsx` is called from several
+ * places that want only the screen — and every one of them would otherwise have to learn about
+ * states to keep compiling. Read immediately after the call that produced it.
+ */
+let lastGuards: Array<{ when: string; node: ts.Node }> = [];
+export function guardsOfLastRead(): Array<{ when: string; node: ts.Node }> {
+  return lastGuards;
 }
 
 const localCache = new Map<string, Map<string, ts.Node>>();
@@ -855,6 +961,13 @@ export function drawFromRoute(routeFile: string, opts: DrawOptions = {}): DrawRe
     },
   };
   const jsx = returnedJsx(routeFile);
+  /**
+   * ⛔ READ IMMEDIATELY, BEFORE ANYTHING ELSE IS PARSED. `emit` calls `returnedJsx` again for every
+   * component it inlines — thirty-eight of them on the deals workspace — and each call replaces
+   * this. Read after emit, it holds the guards of whichever primitive happened to be read last, and
+   * the screen's own states are gone.
+   */
+  const routeGuards = guardsOfLastRead();
   if (!jsx) return { html: "", from: [...ctx.from], unresolved: ["the route exports no component this can read"], undrawn: [], states: [], drawnStates: [], text: "" };
   const plain = emit(jsx, ctx);
 
@@ -870,6 +983,22 @@ export function drawFromRoute(routeFile: string, opts: DrawOptions = {}): DrawRe
    * make the exception the subject.
    */
   const drawnStates: DrawnState[] = [];
+  /**
+   * ⛔ EARLY-RETURN GUARDS ARE STATES TOO, and they are where real components keep them. The deals
+   * workspace has no state ternary at all — it has three returns, two of them behind `if (isLoading)`
+   * and `if (error || !state.project)`. Drawn from the same nodes, so a tab and the screen it shows
+   * can never disagree.
+   */
+  for (const g of routeGuards.slice(0, 6)) {
+    let html = "";
+    try {
+      html = emit(g.node, { ...ctx, states: [], conditions: [], unresolved: [] });
+    } catch {
+      continue;
+    }
+    if (!html.trim() || html === plain) continue;
+    drawnStates.push({ when: g.when, label: labelFor(g.when), html: opts.parts?.length ? wireParts(html, opts.parts).html : html });
+  }
   for (const cond of [...new Set(ctx.conditions)].slice(0, 6)) {
     const sub: Ctx = { ...ctx, prefer: cond, states: [], conditions: [], unresolved: [] };
     let html = "";
