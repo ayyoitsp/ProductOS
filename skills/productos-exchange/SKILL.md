@@ -544,6 +544,36 @@ migration that assigned `commits` to anything with a claim attached turned every
 filter into an ask of its own — say which role a control has by what it does, not by what somebody
 happened to record about it.
 
+### ⛔ A control that goes BACK says `returns: true`, and it is a `navigates`
+
+`navigates` normally needs a `leads_to` naming another screen. **Back, Cancel, Close and "choose a
+different one" do not go to another screen — they put somebody back on the one they are standing on,
+as it was.** That is a `navigates` part with `returns: true` and no `leads_to`:
+
+```yaml
+- id: back-to-details
+  role: navigates
+  label: Back
+  returns: true          # ⛔ back to THIS screen as it was. Never together with leads_to.
+```
+
+⛔ **Do not file it as `commits`.** It commits nothing, and that was the workaround before this
+field existed — a wrong role, and a prototype that dead-ends because a commit's destination is read
+from its `answer` and an answer cannot name a state. Peter walked into exactly that: *"it dead ends.
+no way to complete setup, can't go back?"*
+
+⛔ **`returns` is a boolean, not a state reference, and that is deliberate.** A screen's states are
+GENERATED from a component, so their labels change whenever the code does — truth pointing at one
+would rot on somebody else's edit. "The screen as it was" is the only destination that stays true
+whatever the drawing does.
+
+⛔ **It does not cover "back to step two of four".** Nothing can say that yet; it is an open
+framework gap. If you need it, record one — do not stretch `returns` to mean it.
+
+The prototype drives on this: pressing a `returns` control puts the picture back on the screen as it
+first appeared, and `check` counts it as a way out of a state, which is what stops
+`this-state-is-a-dead-end` firing.
+
 ### The sketch is a working prototype, so write it like one
 
 The page turns the sketch into the control surface: every part is a button a reviewer can click to

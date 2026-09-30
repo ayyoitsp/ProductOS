@@ -434,6 +434,36 @@ function emit(node: ts.Node, ctx: Ctx): string {
      * backdrop over the entire deal workspace — the happy path buried under a dialog nobody opened.
      * Peter: *"the top piece should generally just have happy path"*.
      */
+    /**
+     * ⛔ WHAT A CONDITION ASSERTS, NOT WHICH WORDS IT CONTAINS — and this file knew that in one
+     * place and not the other, which cost a whole screen.
+     *
+     * Peter, on the folder step: *"it dead ends. no way to complete setup"*. The choices are
+     * written `{!folderSetup.isMatching && !folderSetup.error && (<the choices/>)}` — a condition
+     * that says explicitly this is NOT the loading state and NOT the error state, which is to say
+     * it is the content. GUARD matched the word "error" inside it, so the body of the step was
+     * treated as an error guard, skipped, and the drawing showed "Searching for matching
+     * folders..." with nothing to press.
+     *
+     * `labelFor` has stripped negated terms since the day it was written, for exactly this reason
+     * — `!isPending && !isError && total === 0` is the EMPTY state, not the loading one. The
+     * picker never learned it. One helper now, used by both.
+     */
+    /**
+     * ⛔ AND IT RETURNS NOTHING WHEN EVERY TERM IS NEGATED, WHICH IS THE WHOLE CASE.
+     *
+     * `!isMatching && !error` asserts nothing positive — it says only what this branch is NOT, and
+     * a branch that is not the loading one and not the error one is the content. Falling back to
+     * the raw condition here (which `labelFor` does, because a label needs SOMETHING to say) puts
+     * the word "error" straight back in front of the test and changes nothing at all. The first
+     * version of this fix did exactly that and the folder step stayed a dead end.
+     */
+    const asserted = (cond: string): string =>
+      cond
+        .split("&&")
+        .map((t) => t.trim())
+        .filter((t) => t && !t.startsWith("!"))
+        .join(" && ");
     const OPEN = /\b(show[A-Z]\w*|is[A-Z]\w*Open|isOpen|\w*ModalOpen|\w*DialogOpen|picking|editing|confirming)\b/;
     /**
      * ⛔ BUSY IS A STATE, AND THE WORD FOR IT IS NOT ALWAYS "LOADING". This listed the words a
@@ -443,14 +473,27 @@ function emit(node: ts.Node, ctx: Ctx): string {
      */
     const GUARD =
       /\b(isLoading|loading|isPending|pending|isFetching|busy|skeleton|isError|error|isCreating|creating|isSaving|saving|isSubmitting|submitting|isUploading|uploading|isDeleting|deleting|isMutating)\b/i;
+    /**
+     * ⛔ `isSomethingIng` IS A BUSY FLAG, WHICHEVER VERB IT IS — and the list above can never be
+     * finished by adding words to it. `folderSetup.isMatching` is not in it, so the folder step
+     * drew "Searching for matching folders…" ON TOP OF the folder choices: both branches at once,
+     * which is a picture of neither. Peter had already said this about the deals list — *"a
+     * superposition of three states is not a picture of any of them"*.
+     *
+     * The naming convention is the rule. A flag called `isXxxing` is a thing in progress, and a
+     * screen in progress is a state rather than the screen.
+     */
+    const DOING = /\bis[A-Z]\w*ing\b/;
     const EMPTY = /(===\s*0|!\s*\w+(?:\.\w+)*\.length\b|\blength\s*===\s*0\b|\bisEmpty\b|\bnoResults\b)/i;
     const pick = (cond: ts.Node, a: ts.Node, b: ts.Node): string => {
       const c = cond.getText();
+      /** ⛔ Read what it asserts — see `asserted` above for the screen this cost. */
+      const said = asserted(c);
       const span = (n: ts.Node): number => n.getEnd() - n.getStart();
       let chosen: ts.Node;
       let skipped: ts.Node;
       if (ctx.prefer && c.replace(/\s+/g, " ") === ctx.prefer) { chosen = a; skipped = b; }
-      else if (GUARD.test(c) || EMPTY.test(c) || OPEN.test(c)) { chosen = b; skipped = a; }
+      else if (GUARD.test(said) || DOING.test(said) || EMPTY.test(said) || OPEN.test(said)) { chosen = b; skipped = a; }
       else if (span(a) >= span(b)) { chosen = a; skipped = b; }
       else { chosen = b; skipped = a; }
       const other = skipped.getText().replace(/\s+/g, " ").slice(0, 60);
@@ -499,8 +542,18 @@ function emit(node: ts.Node, ctx: Ctx): string {
        * and it did not pass `required`. Only applied while inlining, where that list is real.
        */
       if (ctx.depth > 0 && ts.isIdentifier(e.left) && ctx.props.size && !ctx.props.has(e.left.text)) return "";
-      /** `{!deals.length && <Empty/>}` — a state, not the screen. Recorded and not drawn. */
-      if (GUARD.test(c) || EMPTY.test(c) || OPEN.test(c)) {
+      /**
+       * `{!deals.length && <Empty/>}` — a state, not the screen. Recorded and not drawn.
+       *
+       * ⛔ BUT `{!isMatching && !error && <Content/>}` IS THE SCREEN, and reading the raw text
+       * treated it as a guard because the word "error" appears in it. A negated term says what the
+       * branch is NOT.
+       *
+       * ⛔ EMPTY still reads the RAW condition. `!deals.length` is an emptiness test written as a
+       * negation — stripping it would make every empty state look like content, which is the
+       * opposite mistake and the one this file fixed first.
+       */
+      if (GUARD.test(asserted(c)) || DOING.test(asserted(c)) || EMPTY.test(c) || OPEN.test(asserted(c))) {
         /** Preferred: this IS the state being drawn, so show what it shows. */
         if (ctx.prefer && c.replace(/\s+/g, " ") === ctx.prefer) return emit(e.right, ctx);
         ctx.states.push(`when ${c.replace(/\s+/g, " ").slice(0, 50)}: ${e.right.getText().replace(/\s+/g, " ").slice(0, 60)}`);

@@ -1477,7 +1477,49 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
          * refusing a corpus over one would be this check deciding a product question.
          */
         if (states.length) {
-          const drives = new Set(landingsFor(scope, v).map((l) => l.part));
+          const landings = landingsFor(scope, v);
+          /**
+           * ⛔ A STATE THE PROTOTYPE CAN REACH AND CANNOT LEAVE IS A DEAD END, AND A REVIEWER FINDS
+           * IT BY WALKING INTO IT.
+           *
+           * Peter, one press into create-a-deal: *"it dead ends. no way to complete setup, can't
+           * go back?"*. He was right, and nothing said so — the screen had a way in and no way on,
+           * and the only way to know was to try it.
+           *
+           * ⛔ REACHABLE IS THE POINT. A state nothing drives to is a state a reviewer meets by
+           * pressing its tab, and they can press the tab back. A state a CONTROL puts them in is a
+           * place the product sent them, and the product owes them a way out.
+           *
+           * ⛔ AND THE WAY OUT MAY NOT BE EXPRESSIBLE YET — see the framework gap: truth has no way
+           * to name a state, so "this returns you to the screen as it was" cannot be written. That
+           * is ours to fix, not the author's, which is why this says what it sees rather than
+           * telling anybody what to type.
+           */
+          const reached = new Map<number, string>();
+          for (const l of landings) reached.set(l.index, l.part);
+          for (const [index, from] of reached) {
+            const st = states[index - 1];
+            if (!st) continue;
+            const out = landings.filter((l) => l.index !== index);
+            /**
+             * A control drawn in this state that leads somewhere else is a way out. The drawing is
+             * the only record of which controls a state holds, so it is what gets asked.
+             */
+            const holds = (id: string): boolean => st.sketch_html.includes(`data-part="${id}"`);
+            const ways = out.filter((l) => holds(l.part)).length
+              + v.parts.filter((pt) => pt.leads_to && holds(pt.id)).length;
+            if (ways) continue;
+            add({
+              severity: "note",
+              kind: "this-state-is-a-dead-end",
+              where: `${scope.id}#${v.id}`,
+              what: `pressing ${
+                v.parts.find((pt) => pt.id === from)?.label ?? from
+              } puts somebody on "${st.label}", and nothing on that state leads anywhere — no control there commits to another state and none navigates away`,
+              fix: `say where a control on "${st.label}" leaves somebody, in the \`answer\` of an exchange at that control. Where the way out is "back to the screen as it was", the model cannot express it yet — that is a framework gap, not yours`,
+            });
+          }
+          const drives = new Set(landings.map((l) => l.part));
           const dead = v.parts.filter(
             (pt) =>
               pt.role === "commits" &&

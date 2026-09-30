@@ -1,0 +1,14 @@
+id: "0040"
+said: |-
+  ok, it works to the second page, but it dead ends.  no way to complete setup, can't go back?
+at: 2026-09-30
+kind: concept
+reaches:
+  model: returns
+  derive: this control returns to the screen as it was
+  generate: asserted
+  surface: data-lands
+  check: this-state-is-a-dead-end
+  instruct: "returns: true"
+  pin: a control that returns puts somebody back on the screen as it was
+waived: {}

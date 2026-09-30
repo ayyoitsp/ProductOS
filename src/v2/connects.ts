@@ -273,6 +273,14 @@ export function landingsFor(scope: Scope, view: View): Landing[] {
   const out: Landing[] = [];
 
   for (const pt of view.parts) {
+    /**
+     * ⛔ A RETURNING CONTROL NEEDS NO SENTENCE READ, because it already says where it goes. State 0
+     * is the screen as it was — the one destination that stays true however the drawing changes.
+     */
+    if (pt.returns) {
+      out.push({ part: pt.id, index: 0, label: view.title ?? view.id, because: "this control returns to the screen as it was" });
+      continue;
+    }
     if (pt.role !== "commits") continue;
     /**
      * ⛔ THE EXCHANGE AT THE CONTROL FIRST, THEN THE SCREEN'S OWN. A commit control is how a

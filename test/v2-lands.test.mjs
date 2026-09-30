@@ -80,3 +80,39 @@ test("a screen with no states offers no landings", () => {
   );
   assert.deepEqual(lands, []);
 });
+
+
+/**
+ * ⛔ THE DEAD END, AND THE FIELD THAT EXISTS BECAUSE OF IT.
+ *
+ * Peter, one press into the create-a-deal folder step: *"it dead ends. no way to complete setup,
+ * can't go back?"*. Back is a real control with a real destination and the model could not hold it:
+ * `navigates` demands a `leads_to` naming another SCREEN, `commits` says the destination is the
+ * answer slot, and an answer cannot name a state either. It was filed as `commits`, which is false
+ * — it commits nothing — and drove nowhere.
+ */
+test("a control that returns puts somebody back on the screen as it was", () => {
+  const back = { id: "back", role: "navigates", label: "Back", returns: true };
+  const lands = landingsFor(screen({ after: { says: "Nothing here names any state at all." } }), {
+    ...view,
+    parts: [...view.parts, back],
+  });
+  const got = lands.find((l) => l.part === "back");
+  assert.ok(got, `a returning control was given no landing: ${JSON.stringify(lands)}`);
+  /** ⛔ State 0 is the screen as it first appeared — the one destination that survives a redraw. */
+  assert.equal(got.index, 0, "it landed somewhere other than the screen as it was");
+  assert.match(got.because, /as it was/i, "it must say what it read, like every other landing");
+});
+
+/**
+ * ⛔ AND IT NEEDS NO SENTENCE, which is the point of it being a field rather than a derivation.
+ * A word-match against a state label is a heuristic over a hole; this is the author saying so.
+ */
+test("a returning control needs nothing said about it", () => {
+  const lands = landingsFor(
+    { ...screen({}), exchanges: [] },
+    { ...view, parts: [{ id: "cancel", role: "navigates", label: "Cancel", returns: true }] }
+  );
+  assert.equal(lands.length, 1, "a returning control needed an exchange it should not need");
+  assert.equal(lands[0].index, 0);
+});

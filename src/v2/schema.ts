@@ -1182,14 +1182,49 @@ export const Part = z
     role: PartRole,
     label: z.string().optional(),
     leads_to: z.string().optional(),
+    /**
+     * ⛔ GOES BACK TO THIS SCREEN AS IT WAS — the destination that had nowhere to live.
+     *
+     * Peter, one press into the create-a-deal folder step: *"it dead ends. no way to complete
+     * setup, can't go back?"*. Back is a real control with a real destination, and the model could
+     * not hold it: `navigates` demands a `leads_to` naming another SCREEN, and `commits` says the
+     * destination is the answer slot — which cannot name a state either. So Back was filed as
+     * `commits`, which is false (it commits nothing) and drove nowhere.
+     *
+     * ⛔ A BOOLEAN, NOT A STATE REFERENCE, AND THAT IS THE POINT. A screen's states are GENERATED
+     * from a component; their labels change when the code changes, so truth pointing at one would
+     * be truth that rots on somebody else's edit. "The screen as it was" is the one destination
+     * that is stable whatever the drawing does, and it is the overwhelmingly common case — Back,
+     * Cancel, Close, Choose a different one.
+     *
+     * ⛔ THE REST OF THE GAP STAYS OPEN, and is recorded as one: this still cannot say "returns you
+     * to the second of four steps". Closing the common case is not closing the hole, and the next
+     * person to need the other half should find the gap rather than this field and a shrug.
+     */
+    returns: z.boolean().optional(),
     decorative: z.boolean().optional(),
   }).strict()
   .superRefine((p, ctx) => {
-    if (p.role === "navigates" && !p.leads_to && !p.decorative) {
+    if (p.role === "navigates" && !p.leads_to && !p.returns && !p.decorative) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["leads_to"],
-        message: `"${p.label ?? p.id}" navigates and says nowhere — a reader cannot follow it and an engineer will guess`,
+        message: `"${p.label ?? p.id}" navigates and says nowhere — a reader cannot follow it and an engineer will guess. Where it goes back to this screen as it was, say \`returns: true\``,
+      });
+    }
+    /** ⛔ Both is two answers to one question, and a reader cannot tell which the product does. */
+    if (p.returns && p.leads_to) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["returns"],
+        message: `"${p.label ?? p.id}" both returns to this screen and leads somewhere else — it does one or the other`,
+      });
+    }
+    if (p.returns && p.role !== "navigates") {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["returns"],
+        message: `"${p.label ?? p.id}" returns somebody to this screen without changing anything, which is what \`navigates\` is`,
       });
     }
     if (p.role === "commits" && p.leads_to) {
