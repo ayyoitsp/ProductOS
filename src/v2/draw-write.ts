@@ -68,13 +68,34 @@ export function writeSketchHtml(
     const start = lines.findIndex((l) => l.trim() === `- id: ${viewId}`);
     if (start < 0) continue;
 
-    // The end of this view block: the next sibling entry, or the next top-level key.
+    /**
+     * The end of this view block: the next SIBLING entry, or the next top-level key.
+     *
+     * ⛔ A SIBLING IS FOUND BY INDENT, NEVER BY `- id:` ALONE — and getting that wrong wrote a
+     * second drawing into a file that already had one, leaving a corpus that would not parse.
+     *
+     * A view's `parts:` are children, and every one of them starts `- id:`. So this stopped at the
+     * first PART and declared the view over there. Any generated block sitting after `parts:` —
+     * which is exactly where this writer puts it when `parts` is inline `[]` — then fell outside
+     * the window, survived the deletion pass, and got a full second copy spliced in beside it.
+     *
+     * Two `drawn_from`, two `sketch_html`, two `states`: "duplicated mapping key at line 107". It
+     * needs no unusual corpus to hit, only a screen whose parts were written after its drawing,
+     * which is the ordinary way round — the drawing comes from the code, the parts come from a
+     * person, and people write them second.
+     */
+    const depth = (l: string): number => (/^(\s*)/.exec(l)![1] ?? "").length;
+    const mine = depth(lines[start]!);
     let end = lines.length;
     for (let i = start + 1; i < lines.length; i++) {
-      if (/^\s*- id: /.test(lines[i]!) || (lines[i] && !/^\s/.test(lines[i]!))) {
-        end = i;
-        break;
-      }
+      const l = lines[i]!;
+      if (!l.trim()) continue;
+      /** A top-level key ends every nested block under it. */
+      if (!/^\s/.test(l)) { end = i; break; }
+      /** A sibling list entry: same indent as this view's own dash, and a dash of its own. */
+      if (depth(l) <= mine && /^\s*- /.test(l)) { end = i; break; }
+      /** A key at or above this view's indent is the end of the list this view is in. */
+      if (depth(l) < mine) { end = i; break; }
     }
 
     // Drop an existing drawing, whatever its indent.

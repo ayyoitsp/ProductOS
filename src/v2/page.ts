@@ -860,11 +860,29 @@ function partFacts(corpus: Corpus, ids: string[]): string {
     if (!ids.includes(scope.id)) continue;
     for (const v of scope.views) {
       for (const pt of v.parts) {
+        /**
+         * ⛔ A COMMIT CONTROL IS HOW THE SCREEN'S OWN PROMISE IS ASKED FOR, and telling somebody
+         * nothing is stated at it while the screen states exactly what happens is a lie the page
+         * tells about its own corpus.
+         *
+         * Peter, pressing the only submit button on create-a-deal: *"i can't tell if clicking on
+         * next is actually navigating"*. It answered "Nothing states what happens here. An
+         * engineer building this screen would decide it" — two inches below an `answer` saying the
+         * deal is created and an `after` saying the analyst is then asked where its folder is.
+         *
+         * ⛔ NARROW, AND MARKED AS THE SCREEN'S RATHER THAN THE CONTROL'S. Only a `commits` part,
+         * only when nothing is said at the part itself, and only from exchanges anchored at the
+         * screen with no part of their own — those are the ones a commit control asks. It is not
+         * promoted to being about the control: the panel says whose promise it is, because a
+         * reviewer agreeing to a sentence needs to know what it was written about.
+         */
+        const own = statedAt(scope, v.id, pt.id);
         facts[`${v.id}/${pt.id}`] = {
           label: pt.label || pt.id,
           role: pt.role,
           goes: pt.leads_to ?? null,
-          at: statedAt(scope, v.id, pt.id),
+          at: own,
+          ofScreen: pt.role === "commits" && !own.length ? statedAt(scope, v.id, undefined) : [],
           slots: SLOT_ASKS_SHORT,
         };
       }
@@ -3032,6 +3050,25 @@ const PROTOTYPE = `<script>
      */
     const head = '<p class="pt-head"><strong>' + esc(f.label) + '</strong> <span class="role">' + esc(f.role) + '</span>' +
       (f.goes ? ' <button type="button" class="pt-go" data-walk="' + esc(f.goes) + '">follow it →</button>' : "") + '</p>';
+    /**
+     * ⛔ THE SCREEN'S PROMISE, SAID TO BE THE SCREEN'S. See partFacts for why this exists: a
+     * commit control with nothing of its own is how the screen's own exchange gets asked, and
+     * answering "nothing is stated" there contradicts the page above it.
+     */
+    if ((!f.at || !f.at.length) && f.ofScreen && f.ofScreen.length) {
+      const rows = f.ofScreen
+        .map(
+          (x) =>
+            '<p class="pt-of"><em>Stated about this screen, not about this control</em> — ' +
+            esc(x.title) +
+            "</p>" +
+            x.said
+              .map((sd) => '<p class="pt-said"><span class="slot">' + esc(f.slots[sd.slot] || sd.slot) + "</span> " + esc(sd.text) + "</p>")
+              .join("")
+        )
+        .join("");
+      return head + rows;
+    }
     if (!f.at || !f.at.length) {
       /**
        * ⛔ THE BLANK IS THE FINDING. A control the corpus draws and states nothing about is the

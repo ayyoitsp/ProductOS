@@ -375,8 +375,18 @@ function emit(node: ts.Node, ctx: Ctx): string {
     ts.isCallExpression(n) ||
     (ts.isBinaryExpression(n) && n.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken);
   if (asExpression) {
-    const e = ts.isJsxExpression(n) ? n.expression : n;
-    if (!e) return "";
+    const wrapped = ts.isJsxExpression(n) ? n.expression : n;
+    if (!wrapped) return "";
+    /**
+     * ⛔ PARENTHESES ARE NOT CONTENT, AND SIXTY-THREE CONTROLS WERE BLANK BECAUSE OF THEM.
+     *
+     * `{ok && (<ChevronRight/>)}` hands this a ParenthesizedExpression. Every JSX test below asks
+     * `isJsxElement` and gets false, so it fell through to the unreadable-value path and drew an
+     * empty span — inside a button, which then had nothing on it at all. Real JSX is written with
+     * these parentheses far more often than without, and two handlers further down already unwrap
+     * them locally; doing it once here is what stops the next branch forgetting.
+     */
+    const e = ts.isParenthesizedExpression(wrapped) ? wrapped.expression : wrapped;
     // `{cond && <X/>}` — draw the element: a mock exists to show the states, not to hide them.
     /**
      * ⛔ A SCREEN IS ONE STATE AT A TIME, AND THIS USED TO DRAW ALL OF THEM AT ONCE.
@@ -410,7 +420,14 @@ function emit(node: ts.Node, ctx: Ctx): string {
      * Peter: *"the top piece should generally just have happy path"*.
      */
     const OPEN = /\b(show[A-Z]\w*|is[A-Z]\w*Open|isOpen|\w*ModalOpen|\w*DialogOpen|picking|editing|confirming)\b/;
-    const GUARD = /\b(isLoading|loading|isPending|pending|isFetching|busy|skeleton|isError|error)\b/i;
+    /**
+     * ⛔ BUSY IS A STATE, AND THE WORD FOR IT IS NOT ALWAYS "LOADING". This listed the words a
+     * component uses while FETCHING and none of the words it uses while SUBMITTING — so
+     * `isCreating ? 'Creating…' : 'Continue'` was picked by span, and the button on the happy path
+     * read "Creating…", which is the screen mid-submit rather than the screen you meet.
+     */
+    const GUARD =
+      /\b(isLoading|loading|isPending|pending|isFetching|busy|skeleton|isError|error|isCreating|creating|isSaving|saving|isSubmitting|submitting|isUploading|uploading|isDeleting|deleting|isMutating)\b/i;
     const EMPTY = /(===\s*0|!\s*\w+(?:\.\w+)*\.length\b|\blength\s*===\s*0\b|\bisEmpty\b|\bnoResults\b)/i;
     const pick = (cond: ts.Node, a: ts.Node, b: ts.Node): string => {
       const c = cond.getText();
@@ -432,7 +449,29 @@ function emit(node: ts.Node, ctx: Ctx): string {
          */
         if (ctx.depth === 0) ctx.conditions.push(c.replace(/\s+/g, " "));
       }
-      return emit(chosen, ctx);
+      /**
+       * ⛔ THE CHOSEN ARM IS OFTEN NOT JSX, AND EVERY ONE OF THOSE RENDERED AS NOTHING.
+       *
+       * Peter: *"i can't tell if clicking on next is actually navigating"* — because the button had
+       * no words on it. `{state.isCreating ? 'Creating…' : 'Continue'}` is a ternary between two
+       * string literals; `pick` chose one and handed the bare node to `emit`, which recognises JSX
+       * and a `JsxExpression` wrapper and nothing else. It fell through to the final guard and
+       * returned "".
+       *
+       * So every submit button in the product that swaps its label while busy — which is all of
+       * them — drew as a blank coloured rectangle. The screen looked finished and the one control
+       * a reviewer needs to identify was unlabelled.
+       *
+       * Wrapping restores the expression path, which already knows about string literals, samples,
+       * props and locals. The `||` handling below has always done exactly this; the two branches
+       * simply never agreed.
+       */
+      return emit(
+        ts.isJsxElement(chosen) || ts.isJsxSelfClosingElement(chosen) || ts.isJsxFragment(chosen)
+          ? chosen
+          : ts.factory.createJsxExpression(undefined, chosen as ts.Expression),
+        ctx
+      );
     };
     if (ts.isBinaryExpression(e) && e.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken) {
       const c = e.left.getText();
@@ -453,7 +492,13 @@ function emit(node: ts.Node, ctx: Ctx): string {
         if (ctx.depth === 0) ctx.conditions.push(c.replace(/\s+/g, " "));
         return "";
       }
-      return emit(e.right, ctx);
+      /** ⛔ Same as the ternary: `{ok && 'Saved'}` is a string, and a bare string reaches nothing. */
+      return emit(
+        ts.isJsxElement(e.right) || ts.isJsxSelfClosingElement(e.right) || ts.isJsxFragment(e.right)
+          ? e.right
+          : ts.factory.createJsxExpression(undefined, e.right),
+        ctx
+      );
     }
     if (ts.isConditionalExpression(e)) return pick(e.condition, e.whenTrue, e.whenFalse);
     /**
@@ -820,6 +865,31 @@ function emit(node: ts.Node, ctx: Ctx): string {
   }
   const attr = attrs.length ? ` ${attrs.join(" ")}` : "";
   if (VOID.has(tag)) return `<${tag}${attr} />`;
+  /**
+   * ⛔ A CONTROL WITH NO WORDS ON IT IS UNREVIEWABLE, WHATEVER MADE IT EMPTY.
+   *
+   * Peter: *"i can't tell if clicking on next is actually navigating"*. The immediate cause there
+   * was a ternary between two string literals, fixed above — but that fix left 118 of 555 controls
+   * on this corpus still blank, from three unrelated causes: an icon with no text beside it, a
+   * label the walk could not read, and a button whose children resolved to nothing at all.
+   *
+   * They are different bugs and they are the same defect. A reviewer looking at a blank coloured
+   * rectangle cannot say whether the product is right, and cannot say what they would be pressing.
+   *
+   * ⛔ SO THE NAME COMES FROM WHAT IS ALREADY KNOWN, AND IS NEVER INVENTED. An application labels
+   * its icon-only buttons for screen readers, which is the same problem solved by the same
+   * information: `aria-label`, then `title`, then the icon's own name — each of them something the
+   * source says. Marked as ours, so nobody reads it as the product's own word.
+   */
+  if (/^(button|a)$/.test(tag) && !/>[^<]*[A-Za-z0-9][^<]*</.test(`>${children}<`)) {
+    const said = /aria-label="([^"]+)"/.exec(attr)?.[1] ?? /title="([^"]+)"/.exec(attr)?.[1];
+    const icon = /class="productos-icon"[^>]*aria-label="([^"]+)"/.exec(children)?.[1];
+    const named = said ?? icon;
+    if (named)
+      return `<${tag}${attr}>${children}<span class="productos-sample" title="${
+        said ? "labelled for a screen reader" : "named after its icon"
+      }">${named}</span></${tag}>`;
+  }
   return `<${tag}${attr}>${children}</${tag}>`;
 }
 
@@ -939,6 +1009,13 @@ function labelFor(cond: string): string {
   if (/!\s*\w+(\.\w+)*\b|\bnotfound\b|===\s*null|==\s*null/i.test(cond) && !/\blength\b/i.test(cond)) return "Not found";
   if (/\b(isError|error)\b/i.test(read)) return "Error";
   if (/\b(isLoading|loading|isPending|pending|isFetching|skeleton)\b/i.test(read)) return "Loading";
+  /**
+   * ⛔ BUSY IS NOT LOADING, AND IT IS NOT THE CODE EITHER. A tab reading "when state.isCreating"
+   * shows a reviewer the expression they are not reading instead of the moment they are being
+   * asked to look at. The verb in the flag is the product's own word for what is happening.
+   */
+  const doing = /\b(?:is)?(creating|saving|submitting|uploading|deleting|mutating)\b/i.exec(read);
+  if (doing) return doing[1]!.charAt(0).toUpperCase() + doing[1]!.slice(1).toLowerCase();
   if (/\b(show[A-Z]\w*|is[A-Z]\w*Open|isOpen|\w*ModalOpen|picking|editing|confirming)\b/.test(cond)) {
     /** Named after what opens, so three dialogs on one screen do not all read "Open". */
     const m = /\b(?:show|is)([A-Z]\w*?)(?:Open|Modal|Dialog)?\b/.exec(cond);
@@ -955,6 +1032,15 @@ function labelFor(cond: string): string {
   if (named) {
     const w = named[1].replace(/[_-]+/g, " ").trim();
     return w.charAt(0).toUpperCase() + w.slice(1);
+  }
+  /**
+   * ⛔ A BARE FLAG NAMES ITSELF. `folderFailure` is one word the product already uses, and
+   * "when folderFailure" is that word with an apology in front of it.
+   */
+  const bare = /^!?\s*([A-Za-z_$][\w$]*)\s*$/.exec(read.trim());
+  if (bare) {
+    const w = bare[1]!.replace(/^(is|has|should)(?=[A-Z])/, "").replace(/([a-z0-9])([A-Z])/g, "$1 $2").trim();
+    return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
   }
   return `when ${read.slice(0, 32)}`;
 }

@@ -373,3 +373,76 @@ test("a route that renders one screen reports no fork", () => {
   assert.match(r.html, /class="real"/, "the guard was drawn as the screen");
   fs.rmSync(dir, { recursive: true, force: true });
 });
+
+
+/**
+ * ⛔ A CONTROL WITH NO WORDS ON IT IS UNREVIEWABLE, AND THREE UNRELATED BUGS MADE 118 OF THEM.
+ *
+ * Peter: *"i can't tell if clicking on next is actually navigating"*. The button had nothing on it.
+ * One corpus, 555 controls, 118 blank — from three separate causes that all end as a blank
+ * coloured rectangle a reviewer cannot judge and cannot identify:
+ *
+ *   1. a ternary between two string literals — `pick` handed a bare node to `emit`, which knows
+ *      JSX and a JsxExpression wrapper and nothing else, so it returned ""
+ *   2. parenthesised JSX — `{ok && (<Icon/>)}` failed every isJsxElement test and fell through to
+ *      the unreadable-value path
+ *   3. an icon-only button — nothing wrong with the drawing, and still nothing a reviewer can read
+ */
+test("a control always carries words, whatever made it empty", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "draw9-"));
+  const route = write(
+    dir,
+    "page.tsx",
+    `import { Trash2 } from 'lucide-react'
+     export default function P() {
+       return (
+         <div className="wrap">
+           <button className="submit">{isCreating ? 'Creating…' : 'Continue'}</button>
+           <button className="chev">{canPage && (<Trash2 className="h-4" />)}</button>
+           <button className="icon" aria-label="Remove this row"><Trash2 /></button>
+         </div>
+       )
+     }`
+  );
+  const r = drawFromRoute(route);
+
+  /**
+   * ⛔ AND IT IS THE IDLE LABEL, NOT THE BUSY ONE. `isCreating ? 'Creating…' : 'Continue'` picked
+   * by span put the screen mid-submit on the happy path. Busy is a guard; the word for it is not
+   * always "loading".
+   */
+  assert.match(r.html, /Continue/, "a ternary between two string literals rendered as nothing");
+  assert.doesNotMatch(r.html, /Creating…/, "the happy path opened on the busy label");
+
+  /** ⛔ Parentheses are not content — two handlers unwrapped them locally and the top never did. */
+  assert.match(r.html, /productos-icon/, "parenthesised JSX fell through to the unreadable path");
+
+  /** ⛔ An icon-only control takes its name from what the source already says, never from a guess. */
+  assert.match(r.html, /Remove this row/, "an aria-labelled control was left with no words on it");
+
+  /** ⛔ The real assertion: nothing that can be pressed is blank. */
+  const blanks = [...r.html.matchAll(/<(button|a)\b[^>]*>([\s\S]*?)<\/\1>/g)].filter(
+    (m) => !/[A-Za-z0-9]/.test(m[2].replace(/<[^>]*>/g, ""))
+  );
+  assert.equal(blanks.length, 0, `${blanks.length} control(s) drew with no words on them`);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+/** ⛔ A state tab names the moment, not the expression: "Creating", not "when state.isCreating". */
+test("a state is named in the product's words, never in the code's", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "draw10-"));
+  const route = write(
+    dir,
+    "page.tsx",
+    `export default function P() {
+       if (folderFailure) return <div className="ff">The folder could not be set up</div>
+       if (state.isCreating) return <div className="cr">Creating your deal</div>
+       return <div className="main"><h1>New Multifamily Deal</h1><p>Start with the property.</p></div>
+     }`
+  );
+  const labels = drawFromRoute(route).drawnStates.map((st) => st.label);
+  assert.ok(labels.includes("Creating"), `a busy flag must name the moment: ${JSON.stringify(labels)}`);
+  assert.ok(labels.includes("Folder failure"), `a bare flag names itself: ${JSON.stringify(labels)}`);
+  for (const l of labels) assert.doesNotMatch(l, /^when /, `"${l}" shows the reviewer code they are not reading`);
+  fs.rmSync(dir, { recursive: true, force: true });
+});

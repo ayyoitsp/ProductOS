@@ -17,6 +17,7 @@ import os from "node:os";
 import path from "node:path";
 
 const { resolveRoute, isResolved, fingerprintOf } = await import(path.resolve("dist/v2/routes.js"));
+const { writeSketchHtml } = await import(path.resolve("dist/v2/draw-write.js"));
 
 /** A tiny repo: two components, one of which really renders the screen. */
 function fixture() {
@@ -162,4 +163,98 @@ test("one command regenerates everything generable, and every layer points at it
     /productos v2 generate/,
     "the skill must name it, or the next session assembles the sequence by hand again"
   );
+});
+
+
+/**
+ * ⛔ REDRAWING A SCREEN THAT HAS PARTS WROTE A SECOND DRAWING AND BROKE THE CORPUS.
+ *
+ * Peter, looking at a create-deal prototype: *"i can't tell if clicking on next is actually
+ * navigating"*. Wiring the controls meant giving the screen its parts; giving it parts and
+ * redrawing produced "duplicated mapping key at line 107" and a corpus that would not load.
+ *
+ * `writeSketchHtml` found the end of a view by scanning for the next `- id:` line. A view's PARTS
+ * each start `- id:`, so it stopped at the first part and declared the view over there — and any
+ * generated block sitting after `parts:`, which is exactly where it puts one when `parts` is
+ * inline `[]`, fell outside the deletion window, survived, and got a full second copy beside it.
+ *
+ * ⛔ It needs no unusual corpus. The drawing comes from the code and the parts come from a person,
+ * and people write them second — so the ordinary order of work is the one that triggers it.
+ */
+test("redrawing a screen that has parts replaces the drawing rather than adding one", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "productos-redraw-"));
+  fs.mkdirSync(path.join(root, "truth"), { recursive: true });
+  const file = path.join(root, "truth", "thing.md");
+
+  /** ⛔ `parts` BEFORE the drawing, which is where a person writing them second puts them. */
+  fs.writeFileSync(
+    file,
+    [
+      "---",
+      "id: thing",
+      "title: A thing",
+      "views:",
+      "  - id: the-screen",
+      "    title: The screen",
+      "    exists: kept",
+      "    parts:",
+      "      - id: save",
+      "        role: commits",
+      "        label: Save",
+      "      - id: name",
+      "        role: entry",
+      "        label: Name",
+      '    drawn_from: "src/Old.tsx"',
+      '    drawn_at: "0000000"',
+      "    sketch_html: |",
+      '      <div class="old">the previous drawing</div>',
+      "    states:",
+      '      - when: "isLoading"',
+      '        label: "Loading"',
+      "        sketch_html: |",
+      '          <div class="old-loading">old</div>',
+      "exchanges: []",
+      "---",
+      "",
+      "Prose that must survive.",
+      "",
+    ].join("\n")
+  );
+
+  const count = (body, re) => (body.match(re) ?? []).length;
+
+  writeSketchHtml(
+    root,
+    "thing",
+    "the-screen",
+    '<div class="new">the new drawing</div>',
+    { from: "src/New.tsx", at: "1111111" },
+    "New\n  text",
+    [{ when: "isEmpty", label: "Empty", html: '<div class="new-empty">new</div>' }]
+  );
+
+  const once = fs.readFileSync(file, "utf-8");
+  assert.equal(count(once, /^ *drawn_from:/gm), 1, "a second drawing was written beside the first");
+  assert.equal(count(once, /^ *sketch_html: \|/gm), 2, "expected exactly the view's drawing and its one state");
+  assert.ok(!once.includes("the previous drawing"), "the old drawing survived the redraw");
+  assert.ok(!once.includes("old-loading"), "the old states survived the redraw");
+  assert.ok(once.includes("the new drawing"), "the new drawing was not written");
+  /** ⛔ AND THE AUTHORED PARTS ARE UNTOUCHED — they are nobody's to regenerate. */
+  assert.ok(once.includes("- id: save") && once.includes("- id: name"), "regenerating ate the parts");
+  assert.ok(once.includes("Prose that must survive."), "regenerating ate the prose");
+
+  /** ⛔ And again, because the failure only showed itself on the SECOND write. */
+  writeSketchHtml(
+    root,
+    "thing",
+    "the-screen",
+    '<div class="new">the new drawing</div>',
+    { from: "src/New.tsx", at: "1111111" },
+    "New\n  text",
+    [{ when: "isEmpty", label: "Empty", html: '<div class="new-empty">new</div>' }]
+  );
+  const twice = fs.readFileSync(file, "utf-8");
+  assert.equal(twice, once, "drawing twice with the same input changed the file — it is not idempotent");
+
+  fs.rmSync(root, { recursive: true, force: true });
 });
