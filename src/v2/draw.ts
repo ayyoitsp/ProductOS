@@ -944,6 +944,63 @@ export function drawFromRoute(routeFile: string, opts: DrawOptions = {}): DrawRe
   learnIcons(routeFile);
   for (const f of index.values()) learnIcons(f);
 
+  /**
+   * ⛔ COMPONENTS CO-LOCATED WITH A ROUTE ARE INVISIBLE TO A SINGLE components_dir, AND THAT IS HOW
+   * A WHOLE SCREEN DREW AS AN EMPTY BOX.
+   *
+   * `create-deal` drew 190 bytes: a wrapper around `<ConsolidatedProjectWizard/>`, which lives in
+   * `app/(app)/projects/create/components/` — beside its route, which is how the app-directory
+   * convention works, and nowhere near the configured `frontend/app/components`. Peter: *"why is
+   * there no screen rendering at the top of this feature?"* Because the only thing on it could not
+   * be found.
+   *
+   * So the route's own neighbourhood is indexed too — up to its section root and back down —
+   * without widening the configured directory, which stays what it is for everything else. A
+   * namesake in components_dir still wins: these are only added where nothing is registered.
+   */
+  const near = path.dirname(path.resolve(routeFile));
+  for (let up = 0, dir = near; up < 4; up++, dir = path.dirname(dir)) {
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      break;
+    }
+    for (const e of entries) {
+      if (!e.isDirectory() || e.name === "node_modules" || e.name.startsWith(".")) continue;
+      const stack = [path.join(dir, e.name)];
+      let seen = 0;
+      while (stack.length && seen < 200) {
+        const at = stack.pop()!;
+        let kids: fs.Dirent[];
+        try {
+          kids = fs.readdirSync(at, { withFileTypes: true });
+        } catch {
+          continue;
+        }
+        for (const k of kids) {
+          const full = path.join(at, k.name);
+          if (k.isDirectory()) {
+            if (k.name === "node_modules" || k.name === "__tests__" || k.name.startsWith(".")) continue;
+            stack.push(full);
+          } else if (/\.tsx$/.test(k.name) && !/\.(test|spec|stories)\./.test(k.name)) {
+            seen++;
+            const base = k.name.replace(/\.tsx$/, "");
+            if (!index.has(base)) index.set(base, full);
+            let body = "";
+            try {
+              body = fs.readFileSync(full, "utf-8");
+            } catch {
+              body = "";
+            }
+            for (const m of body.matchAll(/export\s+(?:default\s+)?(?:function|const)\s+([A-Z][A-Za-z0-9_]*)/g))
+              if (!index.has(m[1]!)) index.set(m[1]!, full);
+          }
+        }
+      }
+    }
+  }
+
   const ctx: Ctx = {
     icons,
     resolve: (name) => index.get(name),

@@ -502,15 +502,16 @@ const PT_STYLE = `<style>
    * in the DOM, correct, and invisible — a list that still looked empty, which is the complaint this
    * whole change exists to answer. Varied widths so a column reads as data rather than as a ruler.
    */
-  .productos-value { display: inline-block; min-width: 3.2em; height: .66em; border-radius: 3px;
-    background: currentColor; opacity: .3; vertical-align: -.05em; }
+  /** ⛔ Neutral, never the text colour — see the note in the adopted sheet. */
+  .productos-value { display: inline-block; min-width: 3.2em; height: .6em; border-radius: 3px;
+    background: rgba(130,128,124,.20); vertical-align: -.05em; }
   td .productos-value, th .productos-value { min-width: 4.5em; }
   tr:nth-child(2n) .productos-value { min-width: 5.5em; }
   tr:nth-child(3n) .productos-value { min-width: 3.6em; }
   /** ⛔ A sample announces itself. That is what lets the drawing be legible without lying. */
   .productos-sample { text-decoration: underline dotted rgba(120,113,108,.55); text-underline-offset: 2px; }
   .productos-icon { display: inline-block; width: 1em; height: 1em; vertical-align: -.12em;
-    border-radius: 2px; background: currentColor; opacity: .3; }
+    border-radius: 2px; background: rgba(130,128,124,.28); }
   /**
    * ⛔ THE FOCUS MARK CANNOT BE THE ACCENT COLOUR. On a card's copy it landed on the primary
    * button — blue ring, blue button, invisible. The one job of the copy is to say WHICH control the
@@ -3337,7 +3338,20 @@ const DRIVE = `<script>
   try {
     marks = new CSSStyleSheet();
     marks.replaceSync(
-      ".productos-value{display:inline-block;min-width:3.2em;height:.66em;border-radius:3px;background:currentColor;opacity:.3;vertical-align:-.05em}" +
+      /**
+       * ⛔ A NEUTRAL GREY, NOT THE TEXT COLOUR — and this is the black overlay nobody could explain.
+       *
+       * A bar painted in the text colour at 30% is near-black on a screen whose text is near-black.
+       * The deals list has about thirty of them and looks like a list; the deal workspace has ONE
+       * HUNDRED AND SIXTY-SIX, packed tight, and at tile scale they merge into a solid black field.
+       * It read as an overlay covering the screen, and I spent three rounds looking for an overlay:
+       * checking backgrounds, filters, blend modes, scrims, dark-theme media queries. There was no
+       * overlay. It was the placeholders.
+       *
+       * A fixed light grey is the same on every screen no matter what colour its text is, and stays
+       * legible as structure when there are hundreds of them.
+       */
+      ".productos-value{display:inline-block;min-width:3.2em;height:.6em;border-radius:3px;background:rgba(130,128,124,.20);vertical-align:-.05em}" +
       "td .productos-value,th .productos-value{min-width:4.5em}" +
       "tr:nth-child(2n) .productos-value{min-width:5.5em}" +
       "tr:nth-child(3n) .productos-value{min-width:3.6em}" +
@@ -3366,7 +3380,7 @@ const DRIVE = `<script>
       "table{border-collapse:collapse;width:100%}" +
       /* A value we supplied, not one the product produced — legible, and never mistakable. */
       ".productos-sample{text-decoration:underline dotted rgba(120,113,108,.55);text-underline-offset:2px}" +
-      ".productos-icon{display:inline-block;width:1em;height:1em;vertical-align:-.12em;border-radius:2px;background:currentColor;opacity:.3}" +
+      ".productos-icon{display:inline-block;width:1em;height:1em;vertical-align:-.12em;border-radius:2px;background:rgba(130,128,124,.28)}" +
       /* ⛔ Only an EMPTY placeholder is painted. A wrapper that could not be read still contains the
          real screen, and hatching it drew orange stripes across the whole deals table. */
       /* ⛔ No colour on a wrapper either: the value bars draw in currentColor, so an unresolved
@@ -3557,7 +3571,7 @@ const VIEW_SWITCH = `<script>
     frame.classList.toggle("open", open);
   };
 
-  const show = (name, collapse) => {
+  const show = (name, collapse, fromHistory) => {
     let found = false;
     for (const v of views) {
       const mine = v.dataset.view === name;
@@ -3600,7 +3614,22 @@ const VIEW_SWITCH = `<script>
     if (sm) sm.hidden = section !== "overview";
     if (cr) cr.hidden = section === "overview";
     if (collapse || section === "overview") setOpen(false);
-    try { history.replaceState(null, "", "#" + (name === "overview" ? "view-overview" : "at-" + name)); } catch {}
+    /**
+     * ⛔ EACH VIEW IS A PLACE THE BACK BUTTON CAN RETURN TO.
+     *
+     * This called replaceState, so every move OVERWROTE the current entry instead of adding one —
+     * walk from the deals list into Creating a deal, press Back, and the browser returns to whatever
+     * preceded the page, which reads as being dumped at the root. Peter: *"navigation is fucked… i'm
+     * back at the root page"*.
+     *
+     * ⛔ And replaceState when arriving BY history, or going back would push a new entry for the
+     * place it just returned to and trap somebody between two views.
+     */
+    const at = "#" + (name === "overview" ? "view-overview" : "at-" + name);
+    try {
+      if (fromHistory) history.replaceState(null, "", at);
+      else if (location.hash !== at) history.pushState(null, "", at);
+    } catch {}
   };
 
   const chev = frame && frame.querySelector(".chev");
@@ -3680,6 +3709,20 @@ const VIEW_SWITCH = `<script>
    * ⛔ The same one-at-a-time rule, one level down. Everything is visible without this, so a saved
    * file still reads as one long document rather than as a blank panel.
    */
+  /**
+   * ⛔ AND THE BACK BUTTON HAS TO BE HEARD. Pushing entries is half of it; without this the address
+   * changes when you go back and the page goes on showing what it showed. Both directions, so
+   * forward works too — a reviewer who overshoots can return.
+   */
+  const fromAddress = () => {
+    const h = location.hash.replace(/^#/, "");
+    const name = h === "view-overview" || !h ? "overview" : h.replace(/^at-/, "");
+    const target = document.querySelector('section.view[data-view="' + (window.CSS && CSS.escape ? CSS.escape(name) : name) + '"]');
+    if (target) show(name, true, true);
+  };
+  window.addEventListener("popstate", fromAddress);
+  window.addEventListener("hashchange", fromAddress);
+
   const subs = [...document.querySelectorAll(".subtab")];
   const subViews = [...document.querySelectorAll(".sub-view")];
   const showSub = (name) => {
