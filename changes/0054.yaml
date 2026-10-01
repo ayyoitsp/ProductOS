@@ -1,0 +1,11 @@
+id: "0054"
+said: |-
+  pos: let's make the outline for the prototype very explicit. and make sure 'Done' has a tab item
+  when it's selected. right now when you get to done, the tab disappears. and the outline goes away,
+  so it looks like it's no longer the prototype.
+at: 2026-10-01
+kind: surface
+reaches:
+  surface: is-done-tab
+  pin: the page never paints with a token it does not define
+waived: {}

@@ -4801,8 +4801,21 @@ const STYLE = `<style>
    * the one state that shrank. Sizing the FRAME makes "same height" a property of the viewer
    * instead of something every kind of content has to remember to opt into.
    */
-  .states .state-frame { height: 30rem; }
+  /**
+   * ⛔ THE OUTLINE IS THE VIEWER, SO IT IS EXPLICIT AND IT NEVER MOVES. Peter: *"let's make the
+   * outline for the prototype very explicit… the outline goes away, so it looks like it's no longer
+   * the prototype."*
+   *
+   * The frame had no border of its own — what read as an outline was the drawing's own white page
+   * against the review surface. So any state that was not a white page looked like the prototype had
+   * ended, which is exactly what he described. A viewer that is only visible when its contents
+   * happen to be pale is not a viewer.
+   */
+  .states .state-frame { height: 30rem; border: 1px solid var(--line); border-radius: 8px;
+    background: var(--card); overflow: hidden; }
   .states .state-frame > * { height: 100%; }
+  /** The card inside already has the frame's edge around it; a second one reads as a box in a box. */
+  .states .state-frame > .done-card { border: 0; border-radius: 0; }
   .proto.html { transform: translateZ(0); contain: layout paint; position: relative;
     overflow: auto; }
   /** ⛔ The app's own full-height rules are about ITS viewport, not about this card. */
@@ -4825,15 +4838,29 @@ const STYLE = `<style>
    * ⛔ THE FINAL STATE, AND IT LOOKS LIKE AN ENDING. A frame styled like every other state would
    * read as one more screen to get past; this one is where the walk stops.
    */
-  .state-tab.is-done-tab { color: var(--green); }
-  .state-tab.is-done-tab.on { background: var(--green); color: var(--bg); }
+  /**
+   * ⛔ TOKENS THIS PAGE ACTUALLY HAS. Peter: *"make sure 'Done' has a tab item when it's selected.
+   * right now when you get to done, the tab disappears."*
+   *
+   * It did not disappear — it was white on nothing. I wrote green and surface tokens that belong
+   * to a different palette; this page has ok, card, line and ink. An undefined custom
+   * property resolves to nothing, so the background silently vanished while the text colour, which
+   * IS a real token, kept painting near-white. The same four tokens took the card's border away,
+   * which is the other half of what he saw: *"the outline goes away, so it looks like it's no longer
+   * the prototype."*
+   *
+   * ⛔ A MISSING VARIABLE FAILS SILENTLY AND LOOKS LIKE A MISSING ELEMENT, which is why he reported
+   * it as the tab being gone.
+   */
+  .state-tab.is-done-tab { color: var(--ok); border-color: var(--ok); }
+  .state-tab.is-done-tab.on { background: var(--ok); border-color: var(--ok); color: var(--bg); }
   /** ⛔ Fills the frame and centres in it, because the frame is now what decides the size. */
   .done-card {
     padding: 2.5rem 2rem; display: grid; gap: .75rem; justify-items: center; align-content: center;
     text-align: center; overflow: auto;
-    border: 1px solid var(--surface-3); border-radius: 8px; background: var(--surface);
+    border: 1px solid var(--line); border-radius: 8px; background: var(--card);
   }
-  .done-mark { margin: 0; font-weight: 600; color: var(--green); font-size: 1.05rem; }
+  .done-mark { margin: 0; font-weight: 600; color: var(--ok); font-size: 1.05rem; }
   .done-ends { margin: 0; font-size: 1.05rem; line-height: 1.5; max-width: 34rem; }
   .done-next { margin: 0; color: var(--dim); font-size: .9rem; }
   .done-note { margin: .5rem 0 0; color: var(--dim); font-size: .8rem; max-width: 34rem; }
@@ -4849,6 +4876,15 @@ const STYLE = `<style>
   .arm-tip[data-side="above"]::after { top: 100%; border-top-color: var(--ink); }
   .arm-tip[data-side="below"]::after { bottom: 100%; border-bottom-color: var(--ink); }
 
+  /**
+   * ⛔ TWO TOKENS WERE NAMED HERE FOR MONTHS AND NEVER DEFINED, so eleven borders and two
+   * panel backgrounds painted as nothing — the state tabs had no outline, the prototype tiles had no
+   * edge, and the leaving-a-feature callout had no fill. Nobody saw it because an undefined custom
+   * property is silent: it does not warn, it does not inherit, it simply does not paint.
+   *
+   * Found the day a test was written for exactly one instance of it. This page's hairline token is
+   * the line one, and its tinted panel is the code one.
+   */
   /* Walking a screen through its states. */
   /**
    * ⛔ WHERE THE WALK HAS BEEN — not where the thing sits. The page's own breadcrumb answers the
@@ -4863,21 +4899,21 @@ const STYLE = `<style>
   .wt-here { color: var(--dim); }
   .wt-sep { color: var(--dim); opacity: .6; }
   .state-tabs { display: flex; flex-wrap: wrap; gap: .3rem; margin: 0 0 .45rem; }
-  .state-tab { font: inherit; font-size: .78rem; cursor: pointer; border: 1px solid var(--rule);
+  .state-tab { font: inherit; font-size: .78rem; cursor: pointer; border: 1px solid var(--line);
     background: var(--bg); color: var(--dim); border-radius: 999px; padding: .12rem .6rem; }
   .state-tab:hover { color: var(--ink); }
   .state-tab.on { background: var(--accent); border-color: var(--accent); color: var(--bg); }
   /* Leaving one feature for another — said before it happens, not after. */
   .pt-detail .leaving { margin: 0 0 .4rem; padding: .35rem .55rem; border-radius: 6px;
-    background: var(--soft); border: 1px solid var(--accent); font-size: .85rem; }
+    background: var(--code); border: 1px solid var(--accent); font-size: .85rem; }
   [data-armed="1"] { outline: 2px solid var(--accent); outline-offset: 1px; }
 
   /* A node on the screen map carries the screen itself. */
-  .ux-shot { height: 11rem; overflow: hidden; border: 1px solid var(--rule); border-radius: 6px;
+  .ux-shot { height: 11rem; overflow: hidden; border: 1px solid var(--line); border-radius: 6px;
     background: #fff; margin-bottom: .45rem; }
   .ux-shot-scale { width: 250%; transform: scale(.4); transform-origin: top left; pointer-events: none; }
   .ux-shot.none { display: flex; align-items: center; justify-content: center; font-size: .78rem;
-    color: var(--dim); background: var(--soft); }
+    color: var(--dim); background: var(--code); }
 
   /* ── The prototype: the product as a board of real screens. ──────────────────────────── */
   /* ⛔ The width goes to the SCREENS. A surface whose job is being visual cannot spend it on nav. */
@@ -4890,7 +4926,7 @@ const STYLE = `<style>
    */
   /** ⛔ Tall enough to reach the CONTENT. At 15rem the deals list clipped one row below its column
    *  headers, so a table that renders correctly still read as an empty list. */
-  .ptile-glass { height: 15rem; overflow: hidden; border: 1px solid var(--rule); border-radius: 8px;
+  .ptile-glass { height: 15rem; overflow: hidden; border: 1px solid var(--line); border-radius: 8px;
     background: #fff; position: relative; }
   .ptile-scale { width: 200%; transform: scale(.5); transform-origin: top left; pointer-events: none; }
   .ptile:hover .ptile-glass { border-color: var(--accent); }
@@ -4898,25 +4934,25 @@ const STYLE = `<style>
   .pp-t { display: block; font-weight: 600; font-size: .9rem; }
   .pp-m { display: block; font-size: .76rem; color: var(--dim); }
 
-  .pnone { margin-top: 1.6rem; border-top: 1px solid var(--rule); padding-top: .7rem; }
+  .pnone { margin-top: 1.6rem; border-top: 1px solid var(--line); padding-top: .7rem; }
   .pnone h3 { margin: 0 0 .2rem; font-size: .95rem; }
   .pnone ul { list-style: none; margin: .4rem 0 0; padding: 0; }
-  .pnone li { padding: .3rem 0; border-bottom: 1px solid var(--rule); }
+  .pnone li { padding: .3rem 0; border-bottom: 1px solid var(--line); }
 
   /* Opened big: the screen at full width, the truth beside it. */
   .pbig { position: fixed; inset: 0; z-index: 60; background: var(--bg); display: flex; flex-direction: column; }
   .pbig-bar { display: flex; align-items: center; justify-content: space-between; gap: 1rem;
-    padding: .6rem .9rem; border-bottom: 1px solid var(--rule); }
+    padding: .6rem .9rem; border-bottom: 1px solid var(--line); }
   .pbig-esc { font-size: .76rem; color: var(--dim); margin-left: auto; margin-right: .6rem; }
-  .pbig-x { font: inherit; font-size: .85rem; cursor: pointer; background: none; border: 1px solid var(--rule);
+  .pbig-x { font: inherit; font-size: .85rem; cursor: pointer; background: none; border: 1px solid var(--line);
     border-radius: 6px; padding: .2rem .7rem; color: inherit; }
   .pbig-body { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) 22rem; overflow: hidden; }
   .pbig-stage { overflow: auto; padding: 1rem; background: #fff; }
-  .pbig-truth { overflow: auto; padding: 1rem; border-left: 1px solid var(--rule); font-size: .88rem; }
+  .pbig-truth { overflow: auto; padding: 1rem; border-left: 1px solid var(--line); font-size: .88rem; }
   .pbig-truth h4 { margin: 0 0 .3rem; font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; color: var(--dim); }
   .pbig-truth li { margin-bottom: .7rem; }
   .pbig-truth .slot { font-size: .72rem; color: var(--dim); text-transform: uppercase; letter-spacing: .04em; }
-  @media (max-width: 900px) { .pbig-body { grid-template-columns: 1fr; } .pbig-truth { border-left: 0; border-top: 1px solid var(--rule); } }
+  @media (max-width: 900px) { .pbig-body { grid-template-columns: 1fr; } .pbig-truth { border-left: 0; border-top: 1px solid var(--line); } }
 
   /* The truth moved under you — said, not done to you. */
   /* ⛔ The frame and the page both move down by exactly the bar's height while it is up, because a

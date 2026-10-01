@@ -1237,3 +1237,45 @@ test("every state of a screen is the same size, whatever kind of thing is in it"
   assert.ok(proto, "the drawing's own rule moved — re-read this before trusting it");
   assert.doesNotMatch(proto[0], /height:\s*\d/, "the drawing carries a height again, so a state that is not a drawing will shrink");
 });
+
+/**
+ * ⛔ EVERY COLOUR THIS PAGE NAMES HAS TO EXIST, BECAUSE A MISSING ONE FAILS SILENTLY.
+ *
+ * Peter: *"make sure 'Done' has a tab item when it's selected. right now when you get to done, the
+ * tab disappears. and the outline goes away, so it looks like it's no longer the prototype."*
+ *
+ * The tab had not disappeared — it was white on nothing. Four rules named tokens from a different
+ * palette (`--green`, `--surface`, `--surface-3`, `--text`); this page has `--ok`, `--card`,
+ * `--line`, `--ink`. An undefined custom property resolves to nothing, so the background vanished
+ * while the text colour — a real token — kept painting near-white. The same mistake took the
+ * completion card's border away, which is the other half of what he saw.
+ *
+ * ⛔ A missing variable looks exactly like a missing element, which is why it was reported as one.
+ */
+test("the page never paints with a token it does not define", () => {
+  const src = fs.readFileSync("src/v2/page.ts", "utf-8");
+  /**
+   * ⛔ THE WHOLE FILE, BOTH WAYS. The first cut sliced from one style constant to another and got
+   * nothing, because `PT_STYLE` is declared BEFORE `STYLE` — a backwards slice that reported zero
+   * tokens rather than failing honestly. Every definition and every use is in this one file, so
+   * scanning it whole is both simpler and correct.
+   */
+  const defined = new Set([...src.matchAll(/--([\w-]+)\s*:/g)].map((m) => m[1]));
+  assert.ok(defined.size > 8, `only ${defined.size} tokens found — the palette moved`);
+
+  /** Every `var(--x)` anywhere in the renderer, against what the palette actually declares. */
+  const used = [...src.matchAll(/var\(--([\w-]+)/g)].map((m) => m[1]);
+  const missing = [...new Set(used)].filter((n) => !defined.has(n));
+  assert.deepEqual(
+    missing,
+    [],
+    `these are painted with and never defined, so they resolve to nothing: ${missing.join(", ")}`
+  );
+});
+
+/** ⛔ And the one he reported: the selected Done tab has to be visible against the page. */
+test("the Done tab is painted, and the viewer's outline never belongs to its contents", () => {
+  const src = fs.readFileSync("src/v2/page.ts", "utf-8");
+  assert.match(src, /\.state-tab\.is-done-tab\.on \{ background: var\(--ok\)/, "the selected Done tab has no background");
+  assert.match(src, /\.states \.state-frame \{[^}]*border: 1px solid/, "the frame has no outline of its own");
+});
