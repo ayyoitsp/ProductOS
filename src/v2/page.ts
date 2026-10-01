@@ -1368,17 +1368,20 @@ function renderNotePanel(_corpus: Corpus, _ids: string[], opts: PageOptions): st
    * they type.
    */
   /**
-   * ⛔ AND IT ANSWERS BACK. Peter: *"i'm going to drive things mostly through product OS now, but
-   * let's add a 2-way window so you can send messages back as well"*.
+   * ⛔ THE COMPOSER ONLY. THE HISTORY ABOVE IT IS GONE, AND IT WAS MINE TO REMOVE.
    *
-   * The dock could file a request and nothing could reply where he was standing, so the surface he
-   * reviews in was write-only and "did anybody read this" had to be asked somewhere else. The
-   * thread for whatever he is looking at sits above the box — his words and the answers to them, in
-   * order, scoped to this screen rather than a log of everything ever said.
+   * I built a thread here an hour earlier, reading *"let's add a 2-way window so you can send
+   * messages back as well"* as "put the conversation on the screen". Peter, looking at it: *"pos:
+   * the history of messages on a screen is unnecessary, the one right above the send button."*
+   *
+   * He is right, and the mistake is worth naming: a reply reaching him is the requirement; a log of
+   * everything ever said about this screen, permanently occupying the space above the box he types
+   * in, is a different thing that happens to contain it. The channel still exists — `notes say`
+   * still records a reply and the inbox still carries it — what is gone is the surface that pushed
+   * the screen he came to review further up the page every time somebody spoke.
    */
   return `
     <form id="note-bar" class="note-bar" autocomplete="off">
-      <div class="note-thread" id="note-thread" hidden></div>
       <div class="note-at"><span class="note-at-what" id="note-about-label"></span></div>
       <div class="note-row">
         <textarea id="note-text" rows="1" placeholder="Change something here…"
@@ -2941,58 +2944,11 @@ if (noteBar) {
    * emits for a model object carries data-ref and data-label, so this reads the page's own answer
    * rather than a second one computed here.
    */
-  const thread = document.getElementById("note-thread");
-
   /**
-   * ⛔ THE CONVERSATION ABOUT THIS SCREEN, AND ONLY THIS SCREEN.
-   *
-   * A thread of everything ever said about the whole corpus is a log — useful, and not what somebody
-   * standing on a screen is asking. "What did I say about THIS, and did anybody answer" is the
-   * question, so the window shows the notes filed against the ref the composer would capture.
-   *
-   * ⛔ IT SHOWS THE TAG BACK. A note filed with pos: is a framework issue, and the badge is how he
-   * can see that the tag registered — a convention that silently did nothing would be worse than no
-   * convention, because he would go on using it.
+   * ⛔ THE THREAD IS GONE — see the composer markup for why. The reply channel is not: a reply is
+   * still recorded and still reaches the inbox. What was removed is the log of it sitting above
+   * the box, pushing the screen somebody came to review off the page.
    */
-  let threadFor = null;
-  /**
-   * ⛔ ITS OWN ESCAPE. esc lives in the DRIVE script's scope, not this one — the thread rendered
-   * nothing at all because the map threw a ReferenceError after the panel had already been
-   * un-hidden, which looks exactly like "there is no conversation here".
-   */
-  const safe = (x) =>
-    String(x == null ? "" : x).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-  const paint = (notes) => {
-    if (!thread) return;
-    if (!notes.length) { thread.hidden = true; thread.innerHTML = ""; return; }
-    thread.hidden = false;
-    thread.innerHTML = notes
-      .map((n) => {
-        const badge = n.kind === "framework" ? '<span class="n-kind">framework</span>' : "";
-        const head = '<p class="n-said"><span class="n-who">' + safe(n.by) + "</span>" + badge + " " + safe(n.says) + "</p>";
-        const said = (n.replies || [])
-          .map((r) => '<p class="n-reply"><span class="n-who">' + safe(r.by) + "</span> " + safe(r.says) + "</p>")
-          .join("");
-        /** ⛔ The closing account is a reply too — the last one — not a different kind of thing. */
-        const end = n.outcome ? '<p class="n-reply n-done"><span class="n-who">done</span> ' + safe(n.outcome) + "</p>" : "";
-        return '<div class="n-note' + (n.state === "done" ? " is-done" : "") + '">' + head + said + end + "</div>";
-      })
-      .join("");
-  };
-
-  const loadThread = async (about) => {
-    if (!thread || MODE !== "http" || !about) return;
-    threadFor = about;
-    try {
-      const res = await fetch("/api/v2/thread?about=" + encodeURIComponent(about));
-      const body = await res.json();
-      /** ⛔ Only if they are still looking at the same thing — a slow answer must not paint over a new place. */
-      if (threadFor === about) paint(body.notes || []);
-    } catch (e) {
-      /* a thread that will not load is not worth an error bar over the composer */
-    }
-  };
-
   const READING_LINE = 0.35; // a third down the viewport is where somebody is actually reading
 
   const visible = (el) => {
@@ -3056,14 +3012,6 @@ if (noteBar) {
     label.textContent = trail.map((t) => t.label).join(" / ");
     const leaf = trail[trail.length - 1];
     label.title = leaf.ref;
-    /**
-     * ⛔ THE THREAD FOLLOWS THE PLACE, because the composer does. A window showing the conversation
-     * about the screen somebody has scrolled away from is worse than no window — it reads as an
-     * answer to what they are looking at now.
-     */
-    /** ⛔ The whole trail — a note about the feature is about the screen you are standing in. */
-    const path = trail.map((t) => t.ref).filter(Boolean).join("|");
-    if (path !== threadFor) loadThread(path);
     return leaf.ref;
   };
   describe();
@@ -3148,7 +3096,6 @@ if (noteBar) {
         ? "noted as a framework issue — you will get an answer here"
         : "noted — nothing changes until somebody authors it";
       status.className = "status ok";
-      loadThread(threadFor || about);
       setTimeout(() => { if (status.className === "status ok") status.textContent = ""; }, 6000);
     } catch (err) {
       status.textContent = "Not sent: " + (err && err.message ? err.message : String(err));
@@ -3479,6 +3426,16 @@ const PROTOTYPE = `<script>
     for (const t of box.querySelectorAll(".state-tab")) t.classList.toggle("on", t === tab);
     for (const f of box.querySelectorAll(".state-frame")) f.hidden = f.dataset.state !== want;
     remember();
+    /**
+     * ⛔ PUT THE NEW SCREEN WHERE THE EYE IS. Peter: *"it's very jarring to click something like
+     * 'use this folder', and scroll position puts us down past the new screen"*.
+     *
+     * Pressing a control near the bottom of a tall drawing swaps in a different drawing underneath
+     * the same scroll position — so the reviewer is left looking at the middle of a screen they
+     * have not seen the top of, which reads as nothing having happened.
+     */
+    const top = box.getBoundingClientRect().top + window.scrollY - 90;
+    if (Math.abs(window.scrollY - top) > 40) window.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
     /** ⛔ Say what moved and why, or a picture that changed on its own is a picture nobody trusts. */
     const screen = box.closest("article.screen");
     const panel = screen && screen.querySelector(".pt-detail");
@@ -3970,7 +3927,9 @@ const DRIVE = `<script>
        * folder picker. Containment makes the mock its own containing block, so anything fixed inside
        * it is fixed to the mock. No rewriting of their CSS, which is the thing that fails quietly.
        */
-      ".productos-mock{contain:layout paint;position:relative}" +
+      ".productos-mock{contain:layout paint;position:relative;min-height:0}" +
+      /** ⛔ A screen built for a viewport must not claim one inside a card. */
+      ".productos-mock .min-h-screen,.productos-mock [class*=min-h-]{min-height:0!important}" +
       /**
        * ⛔ A BACKDROP IS NOT PART OF THE SCREEN. Every drawing composes something that renders a
        * full-bleed dimming layer — a modal's scrim, a drawer's overlay — and inlined unconditionally
@@ -4407,7 +4366,16 @@ const STYLE = `<style>
   [hidden] { display: none !important; }
   body { background: var(--bg); color: var(--ink); margin: 0;
     font: 16px/1.55 ui-sans-serif, -apple-system, "Segoe UI", system-ui, sans-serif; }
-  main { max-width: 52rem; margin: 0 auto; padding: 2.5rem 1.25rem 6rem; }
+  /**
+   * ⛔ THE WIDTH GOES TO THE PRODUCT. Peter: *"can we have the content take up the whole width of
+   * the screen?"*
+   *
+   * 52rem is a reading measure, and it is the right one for prose — which is what this page used to
+   * be. It is now mostly SCREENS: a drawing rendered at 52rem on a wide display is a mock of a
+   * narrow window, reflowed, which is not what the product looks like. The measure survives where
+   * it still earns its keep, on the prose blocks.
+   */
+  main { max-width: 100%; margin: 0 auto; padding: 2.5rem 2rem 6rem; }
   h1 { font-size: 1.9rem; line-height: 1.15; margin: 0 0 .5rem; letter-spacing: -.02em; }
   h2 { font-size: 1.05rem; text-transform: uppercase; letter-spacing: .08em; color: var(--dim);
     margin: 3rem 0 1rem; font-weight: 600; }
@@ -4535,14 +4503,14 @@ const STYLE = `<style>
   nav.scopes a.on::before { content: "▸ "; color: var(--accent); }
   .topframe { position: sticky; top: 0; z-index: 8; background: var(--bg);
     border-bottom: 1px solid var(--line); }
-  .topframe .tabs { display: flex; gap: .15rem; max-width: 52rem; margin: 0 auto;
+  .topframe .tabs { display: flex; gap: .15rem; max-width: 100%; margin: 0 auto;
     padding: .55rem 1.25rem 0; }
   .topframe .tab { font: inherit; font-size: .92rem; background: none; border: 0;
     border-bottom: 2px solid transparent; color: var(--dim); cursor: pointer;
     padding: .4rem .7rem; border-radius: 4px 4px 0 0; }
   .topframe .tab:hover { color: var(--ink); }
   .topframe .tab.on { color: var(--ink); font-weight: 600; border-bottom-color: var(--accent); }
-  .topframe .subtabs { display: flex; gap: .15rem; flex-wrap: wrap; max-width: 52rem;
+  .topframe .subtabs { display: flex; gap: .15rem; flex-wrap: wrap; max-width: 100%;
     margin: 0 auto; padding: .35rem 1.25rem .5rem; border-top: 1px solid var(--line); }
   .subtab { font: inherit; font-size: .88rem; background: none; border: 0; cursor: pointer;
     color: var(--dim); padding: .35rem .6rem; border-bottom: 2px solid transparent; }
@@ -4551,7 +4519,7 @@ const STYLE = `<style>
   .subtab .pill, .topframe .tab .pill { font-size: .72rem; background: var(--warn); color: var(--bg);
     border-radius: 99px; padding: .05rem .4rem; margin-left: .25rem; vertical-align: .05em; }
   .topframe .crumbs { display: flex; gap: .5rem; align-items: center; width: 100%;
-    max-width: 52rem; margin: 0 auto; padding: .45rem 1.25rem .6rem;
+    max-width: 100%; margin: 0 auto; padding: .45rem 2rem .6rem;
     border-top: 1px solid var(--line); background: none; border: 0;
     font: inherit; font-size: .9rem; color: var(--ink); cursor: pointer; text-align: left; }
   .topframe .trail { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -4728,7 +4696,21 @@ const STYLE = `<style>
    * the host makes it the containing block for everything fixed inside it; containment alone did
    * not, because the host is in the light DOM and the rule was being adopted into the shadow root.
    */
-  .proto.html { transform: translateZ(0); contain: layout paint; position: relative; overflow: auto; }
+  /**
+   * ⛔ A DRAWING IS NOT A PAGE, AND IT WAS BEING GIVEN A PAGE'S WORTH OF ROOM.
+   *
+   * Peter: *"lots of empty space. make the prototype more compact."* Real screens are built for a
+   * viewport — full-height utilities, vertical centring, generous padding — and rendered inline at full
+   * height that becomes a column of air with a form floating in it, so a reviewer scrolls past
+   * nothing to reach the next thing.
+   *
+   * Capped and scrolled inside itself: the drawing keeps its own layout exactly, and the REVIEW
+   * surface stops spending a screenful on one screen's margins.
+   */
+  .proto.html { transform: translateZ(0); contain: layout paint; position: relative;
+    overflow: auto; max-height: 30rem; }
+  /** ⛔ The app's own full-height rules are about ITS viewport, not about this card. */
+  .proto.html .productos-mock { min-height: 0; }
 
   /**
    * ⛔ THE CALLOUT IS FIXED, so it is not clipped by the mock it points into and not scaled by it.
@@ -4810,7 +4792,7 @@ const STYLE = `<style>
    */
   /** ⛔ Tall enough to reach the CONTENT. At 15rem the deals list clipped one row below its column
    *  headers, so a table that renders correctly still read as an empty list. */
-  .ptile-glass { height: 21rem; overflow: hidden; border: 1px solid var(--rule); border-radius: 8px;
+  .ptile-glass { height: 15rem; overflow: hidden; border: 1px solid var(--rule); border-radius: 8px;
     background: #fff; position: relative; }
   .ptile-scale { width: 200%; transform: scale(.5); transform-origin: top left; pointer-events: none; }
   .ptile:hover .ptile-glass { border-color: var(--accent); }
@@ -4887,25 +4869,6 @@ const STYLE = `<style>
    * outcome — the account of a whole afternoon's work — took over the screen somebody was trying to
    * review. Each line is clamped to two; the whole thing to a few. Hovering a line opens it.
    */
-  .note-thread { max-height: 7.5rem; overflow: auto; padding: .45rem .75rem 0; display: grid; gap: .4rem; }
-  .note-thread[hidden] { display: none; }
-  .n-note { border-left: 2px solid var(--surface-3); padding-left: .6rem; }
-  .n-note.is-done { opacity: .62; }
-  .n-said, .n-reply {
-    margin: 0; font-size: .84rem; line-height: 1.45;
-    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
-  }
-  .n-said:hover, .n-reply:hover { -webkit-line-clamp: unset; }
-  .n-reply { color: var(--dim); padding-left: .9rem; }
-  .n-who { font-weight: 600; color: var(--text); margin-right: .35rem; }
-  .n-reply .n-who { color: var(--dim); }
-  .n-done .n-who { color: var(--green); }
-  /** ⛔ The tag, shown back. A convention that silently did nothing would be worse than none. */
-  .n-kind {
-    font-size: .68rem; text-transform: uppercase; letter-spacing: .04em;
-    background: var(--accent); color: var(--bg); border-radius: 3px;
-    padding: .05rem .3rem; margin-right: .35rem; vertical-align: .08em;
-  }
   body.has-note-bar { padding-bottom: calc(4.5rem + var(--bottom-h)); }
 
   .gate-note { background: var(--warn-bg); border-left: 3px solid var(--warn); border-radius: 0 6px 6px 0;
@@ -4970,7 +4933,7 @@ const STYLE = `<style>
   .group-rules .none { font-size: .88rem; color: var(--dim); font-style: italic; margin: 0;
     border-left: 2px solid var(--line); padding-left: .7rem; }
   .group-rules .beh.asking { border-left: 3px solid var(--warn); }
-  .topframe nav.scopes { max-width: 52rem; margin: 0 auto; padding: 0 1.25rem 1rem;
+  .topframe nav.scopes { max-width: 100%; margin: 0 auto; padding: 0 1.25rem 1rem;
     max-height: 60vh; overflow-y: auto; }
   form.act-form { margin: .9rem 0 0; padding: .9rem; border: 1px solid var(--accent); border-radius: 8px;
     display: grid; gap: .35rem; }

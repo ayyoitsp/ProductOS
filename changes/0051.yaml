@@ -1,0 +1,17 @@
+id: "0051"
+said: |-
+  pos: the history of messages on a screen is unnecessary, the one right above the send button. and
+  can we have the content take up the whole width of the screen? lots of empty space. make the
+  prototype more compact, it's very jarring to click something like 'use this folder', and scroll
+  position puts us down past the new screen. 2 things - make it scroll the top of the prototype
+  screen into view, and make the prototypes more compact.
+
+  [and] "The monitor delivered that straight through — listening works now." - wdym? it's still
+  sitting there, no response, saying 1 request is waiting. and i had to poke you so something
+  actually happened?
+at: 2026-10-01
+kind: surface
+reaches:
+  surface: max-height: 30rem
+  pin: no field an author can write is read by nothing
+waived: {}

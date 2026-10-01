@@ -37,6 +37,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { loadCorpus } from "./load.js";
+/** ⛔ Aliased: `seen` is already the set of records announced, and shadowing it silently broke the build. */
+import { seen as imHere } from "./presence.js";
 
 export interface WatchOptions {
   /** Print what is already recorded before waiting. Off by default: a watcher that replays history on
@@ -46,12 +48,20 @@ export interface WatchOptions {
   quietMs?: number;
   /** Where each line goes. Injected so a test can capture it without a subprocess. */
   emit?: (line: string) => void;
+  /** ⛔ Who is listening, so the page can say somebody is. Defaults to this process. */
+  session?: string;
 }
 
 /** One line per record, in the tense of the thing that happened. */
 function lineFor(kind: "act" | "note", r: Record<string, unknown>): string {
   if (kind === "note")
-    return `NOTE  ${String(r.by)} asked for a change to ${String(r.about)} — ${String(r.says).replace(/\s+/g, " ").slice(0, 160)}`;
+    /**
+     * ⛔ NOT TRUNCATED. This cut at 160 characters, and a note asking for four things arrived as a
+     * note asking for two — I worked from the half that fitted and Peter had to ask again for the
+     * rest. A notification is the only form in which this is ever read; clipping it does not save
+     * anybody anything, it just loses the end of what somebody said.
+     */
+    return `NOTE  ${String(r.by)} asked for a change to ${String(r.about)} — ${String(r.says).replace(/\s+/g, " ")}`;
   const target = String(r.target ?? r.scope ?? "");
   const extra = r.because ? ` — ${String(r.because).replace(/\s+/g, " ").slice(0, 120)}` : "";
   return `ACT   ${String(r.by)} ${String(r.kind)} ${target} via ${String(r.via)}${extra}`;
@@ -63,6 +73,24 @@ function lineFor(kind: "act" | "note", r: Record<string, unknown>): string {
  */
 export function watchCorpus(dir: string, opts: WatchOptions = {}): { stopped: Promise<void>; stop: () => void } {
   const emit = opts.emit ?? ((l: string) => console.log(l));
+  /**
+   * ⛔ WATCHING IS WORKING, AND THE PAGE WAS TELLING HIM OTHERWISE.
+   *
+   * Peter, twice, at the banner: *"Nobody is working on this right now — 1 request is waiting"* →
+   * *"again??????"*. A session sitting on this watcher is the most attentive state there is — it
+   * reacts in under a second — and it reported nothing, because presence was recorded by the INBOX
+   * and watching does not read the inbox.
+   *
+   * So the one surface that means "somebody is listening right now" said nobody was, to the person
+   * who had just pressed send. He stopped trusting it, which is exactly what it exists to prevent.
+   *
+   * ⛔ A HEARTBEAT, NOT A FLAG. Presence lapses on its own — a watcher killed mid-session must stop
+   * claiming to be there, and nothing is going to run a shutdown hook for it.
+   */
+  const session = opts.session ?? `watch-${process.pid}`;
+  imHere(dir, session);
+  const beat = setInterval(() => imHere(dir, session), 20_000);
+  beat.unref?.();
   const quiet = opts.quietMs ?? 150;
   const seen = new Set<string>();
 
@@ -129,6 +157,7 @@ export function watchCorpus(dir: string, opts: WatchOptions = {}): { stopped: Pr
   let done: () => void;
   const stopped = new Promise<void>((r) => (done = r));
   const stop = () => {
+    clearInterval(beat);
     if (timer) clearTimeout(timer);
     clearInterval(floor);
     for (const w of watchers) w.close();

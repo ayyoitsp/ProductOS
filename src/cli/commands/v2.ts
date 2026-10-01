@@ -1853,8 +1853,19 @@ export function v2Command(): Command {
       console.log(pc.bold(`${notes.length} ${o.all ? "notes" : "open"}`));
       for (const n of notes) {
         console.log("");
-        console.log(`  ${pc.cyan(n.about)} ${pc.dim(`— ${n.by} on ${n.at}, ${n.via}`)}`);
+        console.log(
+          `  ${pc.cyan(n.about)} ${pc.dim(`— ${n.by} on ${n.at}, ${n.via}`)}` +
+            (n.kind === "framework" ? ` ${pc.yellow("framework")}` : "")
+        );
         for (const l of n.says.split("\n")) console.log(`    ${l}`);
+        /**
+         * ⛔ THE CONVERSATION READS HERE NOW. It used to render above the composer on the page, and
+         * Peter had it removed — *"the history of messages on a screen is unnecessary, the one right
+         * above the send button"*. He is right that a log does not belong there; the replies
+         * themselves still have to be readable somewhere, and a reply nothing ever shows is a reply
+         * that was never sent.
+         */
+        for (const r of n.replies ?? []) console.log(pc.dim(`    ${pc.bold(r.by)} ${r.says}`));
         if (n.state === "done") console.log(pc.dim(`    ✓ ${n.outcome}`));
       }
       console.log("");
