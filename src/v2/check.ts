@@ -2611,6 +2611,58 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
     });
   }
 
+  /**
+   * ⛔ PRODUCT TRUTH DESCRIBES THE PRODUCT. NOT HOW THE DESCRIPTION WAS PRODUCED.
+   *
+   * Peter, reading the deals list: *"'That was not somebody mis-reading the product. The create
+   * route chooses between six unrelated screens… the shape of the mistake is the point' ←--- what
+   * is this even for? we should never show this in a product description."*
+   *
+   * He is right and it was mine: I had written a paragraph about a GENERATOR BUG into a feature's
+   * prose — why a drawing came out wrong, what the route does, what the mistake taught us — and it
+   * rendered to a reader as though it were something about their product.
+   *
+   * ⛔ THE RULE ALREADY EXISTED AND NOTHING ENFORCED IT. `CLAUDE.md` says it plainly: nothing a
+   * reader sees should mention the storage, and anything file-shaped on a product-truth page is a
+   * leak. Prose with a ⛔ on it did not stop me doing it, in the same session as writing the rest of
+   * this file.
+   *
+   * ⛔ IT MATCHES OUR OWN VOCABULARY, NOT PLAUSIBLE ENGLISH. "drawing", "scope" and "state" are
+   * ordinary words that belong in a product description; `sketch_html`, `productos` and "the
+   * generator" are ours and belong nowhere near one.
+   */
+  {
+    const MACHINERY: Array<[RegExp, string]> = [
+      [/\bproductos\b/i, "the tool's own name"],
+      [/\bsketch_html\b|\bdrawn_from\b|\bhappy_path\b|\bleads_to\b|\bends_with\b/i, "a field name"],
+      [/\bthe (generator|corpus|renderer|migrator|drawer)\b/i, "a part of the tool"],
+      [/\bv2 (draw|generate|check|propose|connect)\b/i, "a command"],
+      [/\bexchange model\b|\bproduct truth\b/i, "the model's own vocabulary"],
+      [/\.md\b|\btruth\/|\bcorpus file\b/i, "where it is stored"],
+    ];
+    for (const { scope, body, file } of corpus.scopes) {
+      /**
+       * ⛔ THE PROSE ONLY. A `question:` may legitimately say "nothing in the corpus says where" —
+       * that is somebody describing what is UNDECIDED, addressed to us, and it is the one place our
+       * vocabulary belongs. What a reader meets as a description of their product is this body.
+       */
+      for (const [re, what] of MACHINERY) {
+        const hit = re.exec(body);
+        if (!hit) continue;
+        const line = body.slice(Math.max(0, hit.index - 60), hit.index + 90).replace(/\s+/g, " ").trim();
+        add({
+          severity: "refuse",
+          kind: "prose-about-the-machinery",
+          where: `${scope.id}`,
+          what: `this feature's description names ${what} — "${hit[0]}" — so a reader meets our tooling where they came to read about their product: …${line}…`,
+          fix: `say what the PRODUCT does, or delete the paragraph. If it is something the model could not express, that is a framework gap: productos todo add "<what>"`,
+        });
+        void file;
+        break;
+      }
+    }
+  }
+
   const project = projectRootOf(root);
   if (project) {
     for (const { scope } of corpus.scopes) {

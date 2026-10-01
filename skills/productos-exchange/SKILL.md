@@ -972,6 +972,28 @@ as a decision is how a habit nobody agreed to becomes a rule everybody is held t
 ⛔ **An opaque steer says where it was learned.** A pattern inferred from what somebody accepted is
 only worth trusting if the next person can go and look at what it was inferred from.
 
+## ⛔ A feature's prose describes the PRODUCT, never how the description was made
+
+Peter, reading a feature page: *"what is this even for? we should never show this in a product
+description."* What he was looking at was a paragraph about a generator bug — why a drawing came out
+wrong and what the mistake taught us — sitting in a feature's prose where a reader meets it as
+something about their product.
+
+⛔ **Never write about the tooling in a corpus.** Not the generator, not the corpus, not a command,
+not a field name, not a file path, not the model's own vocabulary. `check` REFUSES
+`prose-about-the-machinery` now, and it matches our words rather than plausible English — *"the
+analyst reviews the drawing"* is fine, *"the generator could not read this"* is not.
+
+Where the tooling genuinely could not express something, that is a **framework gap** and it has its
+own home:
+
+```bash
+productos todo add "<what the model cannot express>" --forced-into <where it had to go>
+```
+
+An account of why a thing is approximate belongs there, addressed to us. A reader of the product
+should never learn that the tool exists.
+
 ## ⛔ `pos:` means the framework, and the page answers back
 
 The review page is a **conversation**, not a request form. The composer files a note; the window
