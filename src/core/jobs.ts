@@ -654,6 +654,118 @@ export const AUTHORS: Author[] = [
 ];
 
 /**
+ * ⛔ THE COMMANDS, DECLARED — because `--help` is not a list, it is an inventory of whatever
+ * happens to be registered.
+ *
+ * Peter: *"is our overall architecture ok? we generally just have 'commands' and 'agents' to back
+ * the commands. have we maintained a list anywhere?"* The agents were maintained and generated with
+ * a test against drift; the commands were not maintained at all. Fifty-four of them, the only list
+ * being `--help`, nothing tying a command to the layer that owns it, and nothing failing when one
+ * shipped with no home or stopped being used.
+ *
+ * ⛔ AND IT IS NOT A SECOND COPY OF `--help`. A doc listing commands is exactly the thing that
+ * rots; what makes this maintained is `who` and `track`, which `--help` cannot know and which are
+ * the two questions actually worth asking about a command:
+ *
+ *   who   — a person, or the model. "Never hand a human a flag" is a rule this project keeps, and
+ *           it was keepable only by remembering it. A command marked `claude` that turns up in a
+ *           skill's instructions to a person is now a visible contradiction.
+ *   track — v1 or the Exchange model. Two parallel tracks have been running for months and nothing
+ *           said which commands belong to which, so the retired half stayed indistinguishable from
+ *           the live half at the only moment it matters: somebody reading the list.
+ */
+export interface Verb {
+  /** As it is typed. ⛔ Including the parent, because `v2 read` and `read` are different commands. */
+  name: string;
+  does: string;
+  /** Which layer this serves, so a command with no home is visible. */
+  owns: Layer;
+  /**
+   * ⛔ WHO RUNS IT. A person, the model on their behalf, or both.
+   *
+   * The skills say "never hand a human a flag" and the only thing enforcing it was somebody
+   * remembering. A command this marks `claude` appearing in instructions addressed to a person is
+   * a contradiction somebody can now see.
+   */
+  who: "person" | "claude" | "both";
+  /** Which of the two parallel models it belongs to. */
+  track: "v1" | "exchange" | "both";
+}
+
+export const COMMANDS: Verb[] = [
+  // ─── setting up, and the surfaces a person actually opens ───────────────────────────────────
+  { name: "init", does: "Install ProductOS into an AI runtime and scaffold a corpus", owns: "instruct", who: "claude", track: "both" },
+  { name: "serve", does: "Render product truth as a website, or run the MCP server", owns: "surface", who: "person", track: "both" },
+  { name: "configure", does: "Interactive configuration, section by section", owns: "instruct", who: "person", track: "both" },
+  { name: "doctor", does: "Check the install, the runtime, and the state of the truth", owns: "check", who: "person", track: "both" },
+  { name: "env", does: "Drive a dev environment", owns: "surface", who: "claude", track: "both" },
+  { name: "byok", does: "Toggle and report the state of bring-your-own-key verification", owns: "surface", who: "person", track: "both" },
+  { name: "todo", does: "Framework gaps — where the model could not express what the corpus needed", owns: "check", who: "both", track: "both" },
+
+  // ─── the Exchange model ─────────────────────────────────────────────────────────────────────
+  /** ⛔ The parent is a command too — `productos v2` with no verb lists the tree. */
+  { name: "v2", does: "The Exchange model — the tree every verb below it hangs from", owns: "surface", who: "both", track: "exchange" },
+  { name: "v2 check", does: "What this corpus refuses, and what it merely reports", owns: "check", who: "claude", track: "exchange" },
+  { name: "v2 grid", does: "The behaviours a scope states, and where each one stands", owns: "derive", who: "claude", track: "exchange" },
+  { name: "v2 acts", does: "How many acts of human judgement this corpus carries", owns: "derive", who: "claude", track: "exchange" },
+  { name: "v2 packet", does: "Compile the execution packet for one scope", owns: "generate", who: "claude", track: "exchange" },
+  { name: "v2 next", does: "What to ask somebody next about one feature", owns: "derive", who: "claude", track: "exchange" },
+  { name: "v2 page", does: "Render one scope as a page a person can review", owns: "surface", who: "claude", track: "exchange" },
+  { name: "v2 publishable", does: "Emit the interactive page for publishing, if the corpus allows it", owns: "surface", who: "claude", track: "exchange" },
+
+  // the five acts. ⛔ A person performs these; the CLI is how the model records what they chose.
+  { name: "v2 accept", does: "Record that somebody has read one exchange and agrees to it", owns: "derive", who: "claude", track: "exchange" },
+  { name: "v2 rule", does: "Settle an unsettled slot — the ruling, and why", owns: "derive", who: "claude", track: "exchange" },
+  { name: "v2 read", does: "Record that somebody read a scope end to end", owns: "derive", who: "claude", track: "exchange" },
+  { name: "v2 waive", does: "Declare that something is deliberately not answered", owns: "derive", who: "claude", track: "exchange" },
+  { name: "v2 defer", does: "Park a question somebody has read and is not answering yet", owns: "derive", who: "claude", track: "exchange" },
+  { name: "v2 decide", does: "Work one scope's open questions, with what guessing wrong would cost", owns: "surface", who: "claude", track: "exchange" },
+
+  // generating. ⛔ If it can be generated, generate it — these are why hand-authoring is a defect.
+  { name: "v2 generate", does: "Regenerate everything generable: screens, their states, and the graph", owns: "generate", who: "claude", track: "exchange" },
+  { name: "v2 draw", does: "Generate one screen from the codebase", owns: "generate", who: "claude", track: "exchange" },
+  { name: "v2 propose", does: "Generate a screen from a view's own parts, where no code renders it", owns: "generate", who: "claude", track: "exchange" },
+  { name: "v2 connect", does: "Work out what each control leads to, from what the corpus says", owns: "derive", who: "claude", track: "exchange" },
+  { name: "v2 migrate", does: "Convert a v1 corpus into the Exchange model", owns: "generate", who: "claude", track: "exchange" },
+  { name: "v2 moved", does: "Walk what the code has decided since each screen was drawn", owns: "check", who: "claude", track: "exchange" },
+
+  // the conversation, and keeping ourselves honest
+  { name: "v2 notes", does: "What people asked to be changed, what they were looking at, and the replies", owns: "surface", who: "claude", track: "exchange" },
+  { name: "v2 inbox", does: "What has happened since a given position", owns: "surface", who: "claude", track: "exchange" },
+  { name: "v2 watch", does: "Wait, and print a line whenever somebody records an act or asks for a change", owns: "surface", who: "claude", track: "exchange" },
+  { name: "v2 whoami", does: "What an instance thinks you are, and what it will let you do", owns: "surface", who: "claude", track: "exchange" },
+  { name: "v2 change", does: "Record a piece of feedback and drive it into every layer it must reach", owns: "instruct", who: "claude", track: "exchange" },
+  { name: "v2 agents", does: "The roles: what each asks, and which skill orchestrates which", owns: "instruct", who: "both", track: "exchange" },
+  { name: "v2 reset", does: "Restore a corpus from the pristine seed, so every run starts identical", owns: "generate", who: "claude", track: "exchange" },
+
+  // ─── v1, still here and no longer where the work is ─────────────────────────────────────────
+  { name: "check", does: "Check a v1 corpus against the model", owns: "check", who: "claude", track: "v1" },
+  { name: "product", does: "Inspect v1 product truth and update tracking", owns: "surface", who: "claude", track: "v1" },
+  { name: "area", does: "Show an area's features, flow, and audit roll-up", owns: "surface", who: "claude", track: "v1" },
+  { name: "review", does: "A conversational REPL to edit a v1 feature in plain English", owns: "surface", who: "person", track: "v1" },
+  { name: "scan", does: "LLM-driven scan of a codebase to create a v1 feature", owns: "generate", who: "person", track: "v1" },
+  { name: "move", does: "Re-file a v1 feature or area, repointing every reference", owns: "generate", who: "claude", track: "v1" },
+  { name: "history", does: "Recent snapshots of a v1 feature", owns: "surface", who: "claude", track: "v1" },
+  { name: "undo", does: "Restore a previous on-disk version of a v1 feature", owns: "generate", who: "claude", track: "v1" },
+  { name: "decide", does: "Answer an open question on a v1 behaviour", owns: "derive", who: "claude", track: "v1" },
+  { name: "ask", does: "Raise an ambiguity, a question, or a proposal as a reader", owns: "surface", who: "claude", track: "v1" },
+  { name: "read", does: "Record that somebody read a v1 container end to end", owns: "derive", who: "claude", track: "v1" },
+  { name: "next", does: "The v1 decisions waiting on somebody, ranked", owns: "derive", who: "claude", track: "v1" },
+  { name: "verify", does: "Mark a v1 behaviour as human-validated", owns: "derive", who: "claude", track: "v1" },
+  { name: "unverify", does: "Clear the human-validated stamp on a v1 behaviour", owns: "derive", who: "claude", track: "v1" },
+  { name: "gaps", does: "Gaps in v1 truth, tracking and open feedback", owns: "check", who: "claude", track: "v1" },
+  { name: "feedback", does: "Manage the v1 feedback queue", owns: "surface", who: "claude", track: "v1" },
+  { name: "queue", does: "Inspect and manage the v1 work queue", owns: "surface", who: "claude", track: "v1" },
+  { name: "test", does: "Test scaffolding and result ingestion", owns: "pin", who: "claude", track: "v1" },
+];
+
+/** ⛔ Said out loud: which commands belong to the track that is no longer where the work is. */
+export const retiring = (): Verb[] => COMMANDS.filter((c) => c.track === "v1");
+
+/** Everything a PERSON is expected to type. ⛔ The rest are the model's, and a skill must not offer them. */
+export const forPeople = (): Verb[] => COMMANDS.filter((c) => c.who !== "claude");
+
+/**
  * ⛔ THE PRESET — WHICH ROLES EACH SKILL ORCHESTRATES, AND WHAT IT MAY NOT HAND OFF.
  *
  * Peter: *"when the user sends a message we should ensure it flows through the agents as
@@ -687,6 +799,15 @@ export interface Shim {
    * lives here, and so does every question put to a person.
    */
   keeps: string[];
+  /**
+   * ⛔ WHICH MODEL IT AUTHORS FOR, because a skill can outlive the track it was written against.
+   *
+   * `productos-align` is declared in the live tree and its body is entirely v1 — `test_cases`,
+   * `coverage_ref`, `productos test align`. Nothing said so, so it read as current, and the guard
+   * that stops instructions pointing at retired commands fired on it as though it were a mistake.
+   * It is not a mistake; it is a v1 skill correctly naming v1 commands.
+   */
+  track?: "v1" | "exchange";
 }
 
 export const SHIMS: Shim[] = [
@@ -701,7 +822,7 @@ export const SHIMS: Shim[] = [
     ],
     keeps: [
       "running `productos v2 generate`, because a screen a component renders is DRAWN and never designed",
-      "running `productos check` before anybody is asked to look",
+      "running `productos v2 check` before anybody is asked to look — ⛔ the `v2` matters, the bare verb is v1",
       "putting the survey in front of a person before thirty scopers start against a partition that is wrong",
       "every act of judgement — nothing here is validated by having been written",
     ],
@@ -709,6 +830,7 @@ export const SHIMS: Shim[] = [
   {
     skill: "productos-scope",
     does: "Scope one in-flight feature",
+    track: "v1",
     steps: [
       { role: "scoper", why: "the feature written in a context holding nothing but that feature" },
       { role: "designer", fan: true, why: "screens the product should have and nothing renders yet" },
@@ -739,6 +861,7 @@ export const SHIMS: Shim[] = [
   {
     skill: "productos-align",
     does: "Map existing tests onto declared criteria",
+    track: "v1",
     steps: [{ role: "evidencer", why: "the whole of the search, by a role that cannot mistake a green test for agreement" }],
     keeps: [
       "the decision about what to do with a criterion nothing demonstrates",
@@ -776,6 +899,7 @@ export const SHIMS: Shim[] = [
   {
     skill: "productos-review",
     does: "Look at and edit a feature conversationally",
+    track: "v1",
     steps: [],
     keeps: ["the conversation, and every act of judgement in it"],
   },

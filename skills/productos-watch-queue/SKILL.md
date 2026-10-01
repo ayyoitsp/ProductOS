@@ -270,6 +270,6 @@ Workflow:
 
 ## Defer
 
-- **Inspecting a specific task without claiming** → `productos queue show <id>` (CLI) or read `productos/queue/<id>.md` directly.
-- **Releasing a stale claim** (your previous watch crashed mid-task) → `productos queue release <id>` (CLI).
+- **Inspecting a specific task without claiming** → `productos v2 inbox` for an Exchange corpus. (The v1 queue is `productos queue show <id>`.)
+- **Releasing a stale claim** (your previous watch crashed mid-task) → `productos v2 notes` — a claim lapses on its own. (The v1 queue releases with `productos queue release <id>`.)
 - **One-off edits with no queue task** → just use `productos-edit` or `productos-review` directly.

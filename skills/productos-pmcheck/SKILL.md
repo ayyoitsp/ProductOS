@@ -53,11 +53,11 @@ answer it.
 ## 1. Bring the site up
 
 ```bash
-productos check                     # fix structural problems FIRST — see below
+productos v2 check --at <corpus>    # fix what it REFUSES first — see below
 productos serve --port 7899 &       # a port nothing else is on
 ```
 
-⛔ **Run `productos check` first and fix what it reports.** A reviewer who hits a
+⛔ **Run `productos v2 check` first and fix what it reports.** A reviewer who hits a
 missing README or a broken link spends the whole run on that, and you learn nothing
 about whether the *content* communicates. Grouping suggestions are fine to leave —
 they are judgement calls, and a reviewer's opinion on the shape is worth having.
@@ -187,17 +187,17 @@ A reader can now record findings directly, and these are where their report shou
 
 | The reviewer said | Verb |
 |---|---|
-| "this is decided and two people would build it differently" | `productos ask ambiguous <container> <behavior> -r "..." -r "..." -c "<cost>"` |
-| "nobody has decided X" | `productos ask question <container> <id> -q "..." --of <who> -b <blocks...>` |
+| "this is decided and two people would build it differently" | record it as an open question on the slot — `standing: {kind: open, …}` with both readings as candidates and what guessing wrong costs |
+| "nobody has decided X" | an open `standing` on the slot, with `asked_of` and `blocks` — then `productos v2 decide` puts it to them |
 | "I propose X, somebody rule on it" | the same, plus `--propose "..." --because "..."` |
 | "I believe this page depends on that one" | add `suspected_depends_on` to the depending page |
-| "I read the whole thing and could not build from it" | `productos read <container> --blocked --blocked-by <ids> -n "..."` |
+| "I read the whole thing and could not build from it" | `productos v2 read <scope>` records it — ⛔ and only ever for the person who actually read it |
 
 ⛔ **Run these yourself, during routing — never put them in a reviewer's prompt.** A
 reviewer who knows the verbs starts writing artifacts instead of reporting confusion, and
 the confusion is the product of the run. Their ignorance is the instrument.
 
-⛔ **`productos read` — and you must be honest about who read it.**
+⛔ **`productos v2 read` — and you must be honest about who read it.**
 
 An architect reviewing the framework caught me doing this wrong: both read-throughs in a
 real corpus said `by: a fresh-eyes review`, stamped by this skill on behalf of an LLM

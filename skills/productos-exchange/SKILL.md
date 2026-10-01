@@ -992,7 +992,7 @@ screen itself is completely described. Nobody was looking at the path, and a fea
 are each correct and do not join up is a feature nobody can use — and it looks finished from every
 angle except the one that matters.
 
-Mechanically, `productos check` now reports `the-happy-path-stops-here` when a screen in `through:`
+Mechanically, `productos v2 check` now reports `the-happy-path-stops-here` when a screen in `through:`
 has nothing that says how to reach the next one. That catches the missing link. It cannot say
 whether the sequence adds up to what `accomplishes` claims, which is the reading the reviewer does.
 

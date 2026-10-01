@@ -1,0 +1,31 @@
+id: "0045"
+said: |-
+  is our overall architecture ok? we generally just have 'commands' and 'agents' to back the
+  commands. have we maintained a list anywhere?
+
+  let's maintain the general set of commands that we support
+
+  yes, let's clean up
+at: 2026-10-01
+kind: concept
+reaches:
+  model: COMMANDS
+  generate: "### Current —"
+  instruct: the `v2` matters, the bare verb is v1
+  pin: every command the CLI registers is declared, and every declaration is real
+waived:
+  derive: |-
+    `retiring()` and `forPeople()` are lookups over a static table in the model file, the same shape
+    as `shimFor` and waived for the same reason on change 0036. Nothing is inherited, gated or
+    stamped. Arguable: if which track a command belongs to ever becomes something COMPUTED — from
+    which corpus is loaded, say — that is a real derivation and this stops holding.
+  surface: |-
+    The list is a document, not a screen. `productos v2 agents --out AGENTS.md` writes it and the
+    CLI prints the roles; there is nothing for a reviewer to press, because a command list is not
+    product truth and never appears on the review page. Arguable: if the page ever has to show a
+    person which commands are theirs to type, that is a surface and this stops holding.
+  check: |-
+    `src/v2/check.ts` reports what is wrong in a CORPUS. A stale command reference lives in OUR
+    instructions, not in anybody's product truth, so the guard is in the registry tests — where it
+    found three real ones on its first run, including CLAUDE.md telling every session for months to
+    run a v1 verb that cannot read an Exchange corpus at all.

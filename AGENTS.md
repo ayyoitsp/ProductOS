@@ -91,7 +91,7 @@ Turn a whole codebase into a first corpus.
 
 **⛔ Keeps, because it may not be delegated:**
 - running `productos v2 generate`, because a screen a component renders is DRAWN and never designed
-- running `productos check` before anybody is asked to look
+- running `productos v2 check` before anybody is asked to look — ⛔ the `v2` matters, the bare verb is v1
 - putting the survey in front of a person before thirty scopers start against a partition that is wrong
 - every act of judgement — nothing here is validated by having been written
 
@@ -475,6 +475,76 @@ Held three ways rather than one: no author declares `ask-the-human`, so no host 
 - judge whether the destination is the RIGHT destination — that is a product decision, and this asks only whether somebody can get there
 
 **Needs:** read-files · search-files · run-commands  ·  **Prompt:** `agents/productos-completeness.md`
+
+## The commands
+
+⛔ **Generated from the registry, and a test walks the real CLI against it.** A declared list nothing compares against `--help` is a second copy of `--help` that rots, which is the failure mode of every document this project has deleted. The test fails both ways: a command that exists and is declared nowhere, and a declaration the CLI no longer has.
+
+What `--help` cannot tell you, and why this exists: **who** types it, and **which track** it belongs to. *Never hand a human a flag* is a rule the skills state and nothing enforced — a command marked `claude` appearing in instructions addressed to a person is now a visible contradiction. And two parallel models have been running for months with nothing saying which commands belong to which.
+
+### Current — 34 commands
+
+| command | does | layer | typed by |
+|---|---|---|---|
+| `productos init` | Install ProductOS into an AI runtime and scaffold a corpus | instruct | the model |
+| `productos serve` | Render product truth as a website, or run the MCP server | surface | **a person** |
+| `productos configure` | Interactive configuration, section by section | instruct | **a person** |
+| `productos doctor` | Check the install, the runtime, and the state of the truth | check | **a person** |
+| `productos env` | Drive a dev environment | surface | the model |
+| `productos byok` | Toggle and report the state of bring-your-own-key verification | surface | **a person** |
+| `productos todo` | Framework gaps — where the model could not express what the corpus needed | check | either |
+| `productos v2` | The Exchange model — the tree every verb below it hangs from | surface | either |
+| `productos v2 check` | What this corpus refuses, and what it merely reports | check | the model |
+| `productos v2 grid` | The behaviours a scope states, and where each one stands | derive | the model |
+| `productos v2 acts` | How many acts of human judgement this corpus carries | derive | the model |
+| `productos v2 packet` | Compile the execution packet for one scope | generate | the model |
+| `productos v2 next` | What to ask somebody next about one feature | derive | the model |
+| `productos v2 page` | Render one scope as a page a person can review | surface | the model |
+| `productos v2 publishable` | Emit the interactive page for publishing, if the corpus allows it | surface | the model |
+| `productos v2 accept` | Record that somebody has read one exchange and agrees to it | derive | the model |
+| `productos v2 rule` | Settle an unsettled slot — the ruling, and why | derive | the model |
+| `productos v2 read` | Record that somebody read a scope end to end | derive | the model |
+| `productos v2 waive` | Declare that something is deliberately not answered | derive | the model |
+| `productos v2 defer` | Park a question somebody has read and is not answering yet | derive | the model |
+| `productos v2 decide` | Work one scope's open questions, with what guessing wrong would cost | surface | the model |
+| `productos v2 generate` | Regenerate everything generable: screens, their states, and the graph | generate | the model |
+| `productos v2 draw` | Generate one screen from the codebase | generate | the model |
+| `productos v2 propose` | Generate a screen from a view's own parts, where no code renders it | generate | the model |
+| `productos v2 connect` | Work out what each control leads to, from what the corpus says | derive | the model |
+| `productos v2 migrate` | Convert a v1 corpus into the Exchange model | generate | the model |
+| `productos v2 moved` | Walk what the code has decided since each screen was drawn | check | the model |
+| `productos v2 notes` | What people asked to be changed, what they were looking at, and the replies | surface | the model |
+| `productos v2 inbox` | What has happened since a given position | surface | the model |
+| `productos v2 watch` | Wait, and print a line whenever somebody records an act or asks for a change | surface | the model |
+| `productos v2 whoami` | What an instance thinks you are, and what it will let you do | surface | the model |
+| `productos v2 change` | Record a piece of feedback and drive it into every layer it must reach | instruct | the model |
+| `productos v2 agents` | The roles: what each asks, and which skill orchestrates which | instruct | either |
+| `productos v2 reset` | Restore a corpus from the pristine seed, so every run starts identical | generate | the model |
+
+### v1 — 18 commands, on the track the work moved off
+
+⛔ Still registered and still working. They are listed apart because the only thing that used to distinguish them was knowing, and somebody reading the list is exactly who does not.
+
+| command | does | layer | typed by |
+|---|---|---|---|
+| `productos check` | Check a v1 corpus against the model | check | the model |
+| `productos product` | Inspect v1 product truth and update tracking | surface | the model |
+| `productos area` | Show an area's features, flow, and audit roll-up | surface | the model |
+| `productos review` | A conversational REPL to edit a v1 feature in plain English | surface | **a person** |
+| `productos scan` | LLM-driven scan of a codebase to create a v1 feature | generate | **a person** |
+| `productos move` | Re-file a v1 feature or area, repointing every reference | generate | the model |
+| `productos history` | Recent snapshots of a v1 feature | surface | the model |
+| `productos undo` | Restore a previous on-disk version of a v1 feature | generate | the model |
+| `productos decide` | Answer an open question on a v1 behaviour | derive | the model |
+| `productos ask` | Raise an ambiguity, a question, or a proposal as a reader | surface | the model |
+| `productos read` | Record that somebody read a v1 container end to end | derive | the model |
+| `productos next` | The v1 decisions waiting on somebody, ranked | derive | the model |
+| `productos verify` | Mark a v1 behaviour as human-validated | derive | the model |
+| `productos unverify` | Clear the human-validated stamp on a v1 behaviour | derive | the model |
+| `productos gaps` | Gaps in v1 truth, tracking and open feedback | check | the model |
+| `productos feedback` | Manage the v1 feedback queue | surface | the model |
+| `productos queue` | Inspect and manage the v1 work queue | surface | the model |
+| `productos test` | Test scaffolding and result ingestion | pin | the model |
 
 ## The map they read
 

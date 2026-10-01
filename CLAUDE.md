@@ -241,10 +241,12 @@ of the two is current.
 
 ---
 
-## ⛔ Run `productos check` before asking anyone to review a corpus
+## ⛔ Run `productos v2 check` before asking anyone to review a corpus
 
 ```bash
-productos check      # structure + every high audit finding + reference resolution
+productos v2 check --at <corpus>   # structure + every refusal + reference resolution
+# ⛔ The `v2` is load-bearing. Without it this is the v1 verb: no --at, and it cannot
+#    read an Exchange corpus at all. Every session was told to run that one for months.
 ```
 
 **A corpus was handed over for review that contradicted the documented model in four

@@ -24,7 +24,7 @@ You are the **orchestrator**, and you are the session — not a subagent. That i
 **⛔ You keep these yourself, because they may not be delegated:**
 
 - running `productos v2 generate`, because a screen a component renders is DRAWN and never designed
-- running `productos check` before anybody is asked to look
+- running `productos v2 check` before anybody is asked to look — ⛔ the `v2` matters, the bare verb is v1
 - putting the survey in front of a person before thirty scopers start against a partition that is wrong
 - every act of judgement — nothing here is validated by having been written
 
@@ -52,7 +52,7 @@ Your job is to consult, propose, update, and process these three things via MCP.
 ## Before handing the corpus back
 
 ```bash
-productos check
+productos v2 check --at <corpus>
 ```
 
 It refuses a product / area / capability system with no description, a container at the
@@ -103,8 +103,9 @@ them into one flat area produces a page nobody reads.
 
 Target **2–8 features per area** (configurable as `grouping:` in
 `productos/config.yaml`). Past that, nest. Below it, don't — an area holding one
-feature is a name, not a grouping, and `productos check` flags both directions and
-names the clusters it would split out. Re-file with `productos move <id> <dest>`,
+feature is a name, not a grouping, and `productos v2 check` flags both directions and
+names the clusters it would split out. Re-file by moving the scope and repointing what
+references it,
 never `mv`: the id **is** the path, so a hand move strands every edge pointing at it.
 
 **Undefined behaviors** — when you cannot tell what a claim should be, write
@@ -133,7 +134,8 @@ it. Those are different facts and a reader needs the second one. See `productos-
 `holds_for` and why it is usually the wrong fix for a claim full of one customer's
 numbers.
 
-**You never answer a question.** `productos decide` does, and only a person runs it.
+**You never answer a question.** ⛔ A person does, on the page, and `productos v2 decide`
+is how their choice is RECORDED — never how it is made.
 
 **⛔ Run the capability pass, and print the ratio.** A fullscan is where the machinery
 layer is lost, because features have routes to find them by and capabilities have none.
@@ -143,7 +145,7 @@ by nothing.
 
 The method is in `productos-scope` §3e: list every verb your feature claims attribute to
 the system, name the page that owns each one, and treat every unowned verb as a missing
-capability page. Then check the ratio — `productos check` prints it — and report it in
+capability page. Then check the ratio — `productos v2 check` prints it — and report it in
 your handoff. Under a third machinery, for a product that does real work underneath,
 means the pass is not finished.
 
@@ -276,7 +278,7 @@ Then check the feature-level invariants: authorization, precision/format rules, 
 
 If a UX view has 3+ interactive elements and you wrote 1 behavior for it, you missed the rules — go back. (See `productos-scope` §3b for the full checklist with a worked form example.)
 4. **Write product truth via MCP:**
-   - New feature → `productos_propose_feature` writes productos/products/<id>.md. Pass `id`, `title`, `description`, `ux`, and `behaviors`. Each behavior has `id`, `claim`, optional `notes`, optional anchor (`ux` / `element` / `interaction`), **and `test_cases`**. After the fullscan, tell the user to run `productos review` to walk the new features and edit interactively.
+   - New feature → `productos_propose_feature` writes productos/products/<id>.md. Pass `id`, `title`, `description`, `ux`, and `behaviors`. Each behavior has `id`, `claim`, optional `notes`, optional anchor (`ux` / `element` / `interaction`), **and `test_cases`**. After the fullscan, point the user at the review page — `productos serve` — to walk the new features and edit there.
    - Existing feature, new behavior → `productos_add_behavior(feature_id, behavior)`.
    - Reword a claim → `productos_update_behavior(feature_id, behavior_id, claim?)`.
 
@@ -304,7 +306,7 @@ If a UX view has 3+ interactive elements and you wrote 1 behavior for it, you mi
    - For a brand-new behavior: status='proposed' so the human knows to verify it.
    - For tracking the file paths that implement a feature: set `implements`.
    - For tying code lines to a behavior: set `behavior_id` + `code_refs`.
-   - Never set status='verified' — only humans verify (via the website's ✓ Verify button or `productos product verify`).
+   - Never set status='verified' — only a person validates, and in the Exchange model that is an ACT they perform on the page. ⛔ Never type it for them.
 
 ### Mode C: Process the feedback queue
 
@@ -441,4 +443,4 @@ Files to review:
   - Processed feedback:         productos/feedback/<id>.md (state: processed)
 ```
 
-The previous version of this skill ended with "verify via the ✓ Verify button or `productos product verify`" — that's incomplete. With v0.1, `productos-review` is the canonical inline vetting flow and the site is the canonical visual flow. Both must be surfaced.
+The previous version of this skill ended with "verify via the ✓ Verify button or a CLI flag" — that's incomplete, and the flag was a v1 command. With v0.1, `productos-review` is the canonical inline vetting flow and the site is the canonical visual flow. Both must be surfaced.

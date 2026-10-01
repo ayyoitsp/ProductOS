@@ -12,7 +12,18 @@
  * So this renders it, a test asserts the committed file still matches, and changing an agent
  * changes the doc or fails the build.
  */
-import { AGENTS, AREAS, AUTHORS, CASCADE, KINDS, LAYERS, SHIMS, type Agent, type Shim } from "./jobs.js";
+import {
+  AGENTS,
+  AREAS,
+  AUTHORS,
+  CASCADE,
+  COMMANDS,
+  KINDS,
+  LAYERS,
+  SHIMS,
+  type Agent,
+  type Shim,
+} from "./jobs.js";
 /**
  * ⛔ THE PRESET, WRITTEN INTO THE SKILL THAT RUNS IT — because `instruct` is the layer that gets
  * skipped, and a routing table nothing reads is a routing table nobody follows.
@@ -279,6 +290,44 @@ export function agentsDoc(): string {
     out.push("");
     out.push(`**Needs:** ${a.needs.join(" · ")}${a.prompt ? `  ·  **Prompt:** \`${a.prompt}\`` : ""}`);
   }
+
+  out.push("");
+  out.push("## The commands");
+  out.push("");
+  out.push(
+    "⛔ **Generated from the registry, and a test walks the real CLI against it.** A declared list " +
+      "nothing compares against `--help` is a second copy of `--help` that rots, which is the " +
+      "failure mode of every document this project has deleted. The test fails both ways: a command " +
+      "that exists and is declared nowhere, and a declaration the CLI no longer has."
+  );
+  out.push("");
+  out.push(
+    "What `--help` cannot tell you, and why this exists: **who** types it, and **which track** it " +
+      "belongs to. *Never hand a human a flag* is a rule the skills state and nothing enforced — a " +
+      "command marked `claude` appearing in instructions addressed to a person is now a visible " +
+      "contradiction. And two parallel models have been running for months with nothing saying " +
+      "which commands belong to which."
+  );
+  out.push("");
+  const live = COMMANDS.filter((c) => c.track !== "v1");
+  const old = COMMANDS.filter((c) => c.track === "v1");
+  const rows = (xs: typeof COMMANDS): string[] => [
+    "| command | does | layer | typed by |",
+    "|---|---|---|---|",
+    ...xs.map((c) => `| \`productos ${c.name}\` | ${c.does} | ${c.owns} | ${c.who === "claude" ? "the model" : c.who === "person" ? "**a person**" : "either"} |`),
+  ];
+  out.push(`### Current — ${live.length} commands`);
+  out.push("");
+  out.push(...rows(live));
+  out.push("");
+  out.push(`### v1 — ${old.length} commands, on the track the work moved off`);
+  out.push("");
+  out.push(
+    "⛔ Still registered and still working. They are listed apart because the only thing that used " +
+      "to distinguish them was knowing, and somebody reading the list is exactly who does not."
+  );
+  out.push("");
+  out.push(...rows(old));
 
   out.push("");
   out.push("## The map they read");
