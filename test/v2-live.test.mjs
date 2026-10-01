@@ -60,7 +60,8 @@ test("a change made anywhere reaches a page somebody has open", async () => {
 test("a served page listens; a standalone file does not pretend to", () => {
   const corpus = loadCorpus(dir);
   const served = renderScopePage(corpus, SCOPE, { interactive: true, records: "http" });
-  for (const needed of ["/api/v2/live", "EventSource", "live-bar"])
+  /** ⛔ No `live-bar` any more — the page updates instead of announcing that it should. */
+  for (const needed of ["/api/v2/live", "EventSource", "location.reload()"])
     assert.ok(served.includes(needed), `a served page must carry ${needed}`);
 
   /**
@@ -72,15 +73,27 @@ test("a served page listens; a standalone file does not pretend to", () => {
   assert.ok(!asFile.includes("new EventSource"), "a page with no server must not try to listen");
 });
 
-test("it says what changed and waits, instead of reloading under somebody mid-sentence", () => {
+/**
+ * ⛔ IT UPDATES, AND IT STILL NEVER LOSES WORDS — and this test used to assert the opposite.
+ *
+ * It pinned "say what changed and wait", which was right until Peter looked at it: *"6 changes to
+ * the truth under this page {show it} - unnecessary, just live update as we go..."* A bar whose only
+ * possible answer is "yes, show me the correct page" is a question not worth asking.
+ *
+ * ⛔ What the old test was really protecting is kept, and strengthened: losing what a person wrote
+ * is the one thing this surface must never do, and the guard now looks at every open form rather
+ * than only at what is focused. A reason typed and then clicked away from is still a reason.
+ */
+test("the page updates itself, without reloading over words somebody has typed", () => {
   const src = fs.readFileSync("src/v2/page.ts", "utf-8");
-  /**
-   * ⛔ Losing what a person wrote is the one thing this surface must never do. A reviewer typing a
-   * reason is the most expensive state on the page and the easiest to destroy with a reload.
-   */
-  assert.match(src, /typing\(\)/, "the live bar must check whether somebody is mid-sentence");
-  assert.match(src, /if \(!typing\(\)\) show\(\)/, "it must not announce over somebody's typing");
-  assert.match(src, /productos-at/, "'show it' must come back to where the reader was");
+  assert.match(src, /if \(!unsent\(\)\) apply\(\)/, "a change is applied without checking for unsent words");
+  assert.match(src, /form\.act-form input, form\.act-form textarea/,
+    "the guard reads only what is focused, so a half-written reason clicked away from would be destroyed");
+  assert.match(src, /if \(pending && !unsent\(\)\) apply\(\)/,
+    "a change held back while typing is never applied — the page can sit stale and silent, which is the failure this whole mechanism exists to remove");
+  assert.match(src, /productos-at/, "a reload must come back to where the reader was — more so now that nobody asked for it");
+  /** ⛔ And no bar, because two mechanisms for one job is how the dismissable one wins. */
+  assert.ok(!/class = "live-bar"|className = "live-bar"/.test(src), "the bar is back alongside the live update");
 });
 
 /**

@@ -2796,15 +2796,22 @@ const FOLLOWS_THE_TRUTH = `/**
  * the truth changed underneath, the page went on showing the old one until somebody reloaded by
  * hand. That reload is the seam a person feels as "I have to go and check".
  *
- * ⛔ IT SAYS WHAT CHANGED AND WAITS, rather than reloading under somebody mid-sentence. Swapping
- * the page out while a reviewer is typing a reason would lose the reason — and losing what a person
- * wrote is the one thing this surface must never do.
+ * ⛔ IT JUST UPDATES. Peter: *"6 changes to the truth under this page {show it} - unnecessary, just
+ * live update as we go..."*
+ *
+ * It used to count the changes and offer a button. That was one seam replaced by a smaller one: the
+ * page knew it was out of date, said so, and still showed the old truth until somebody pressed
+ * something. A bar whose only possible answer is "yes, show me the correct page" is a question not
+ * worth asking.
+ *
+ * ⛔ EXCEPT OVER WORDS SOMEBODY HAS TYPED, which is the one thing this surface must never lose.
+ * Reloading under a half-written reason would destroy it, so a change waits while anything holds
+ * unsent text and applies the moment it does not. ⛔ And "typed" is not "focused": a person can
+ * write a reason and then click away to re-read the sentence, which leaves their words in a form
+ * with nothing focused — the first version of this guard checked activeElement alone and would
+ * have thrown those away.
  */
 if (typeof EventSource !== "undefined") {
-  const bar = document.createElement("div");
-  bar.className = "live-bar";
-  bar.hidden = true;
-  document.body.appendChild(bar);
   /**
    * ⛔ THE BOTTOM BARS STACK; THEY DO NOT SIT ON EACH OTHER OR ON THE COMPOSER.
    *
@@ -2929,11 +2936,15 @@ if (typeof EventSource !== "undefined") {
   setInterval(askWho, 20000);
   let heard = Date.now();
   let pending = 0;
-  const typing = () => {
+  /**
+   * ⛔ ANYTHING UNSENT, NOT JUST WHAT IS FOCUSED. A reason typed and then clicked away from is still
+   * a reason somebody wrote, and it is sitting in a form with nothing focused.
+   */
+  const unsent = () => {
+    for (const el of document.querySelectorAll("form.act-form input, form.act-form textarea, #note-bar textarea"))
+      if ((el.value || "").trim().length) return true;
     const el = document.activeElement;
-    if (!el) return false;
-    if (el.tagName === "TEXTAREA" || el.tagName === "INPUT") return (el.value || "").trim().length > 0;
-    return false;
+    return !!el && (el.tagName === "TEXTAREA" || el.tagName === "INPUT") && (el.value || "").trim().length > 0;
   };
   /**
    * ⛔ IT MOVES THE PAGE DOWN; IT DOES NOT SIT ON TOP OF IT.
@@ -2948,8 +2959,6 @@ if (typeof EventSource !== "undefined") {
    * window, and then the bar covers the tabs again on exactly the screens with least room.
    */
   const fit = () => {
-    document.documentElement.style.setProperty("--live-h", (bar.hidden ? 0 : bar.offsetHeight) + "px");
-    document.documentElement.classList.toggle("live-showing", !bar.hidden);
     // ⛔ Measured, not assumed: these wrap to two lines on a narrow window, which is exactly where
     // there is least room and most to cover.
     document.documentElement.style.setProperty("--bottom-h", bottom.offsetHeight + "px");
@@ -2958,26 +2967,18 @@ if (typeof EventSource !== "undefined") {
   // that kills this whole block — and with it the stream, the change bar and the presence bar, on a
   // page that otherwise looks perfectly fine. That is exactly how it failed once.
   window.addEventListener("resize", fit);
-  const show = () => {
-    bar.innerHTML =
-      "<span>" + pending + (pending === 1 ? " change" : " changes") + " to the truth under this page</span>" +
-      '<button type="button" class="live-go">Show it</button>' +
-      '<button type="button" class="live-later">Later</button>';
-    bar.hidden = false;
-    fit();
-    bar.querySelector(".live-go").onclick = () => {
-      /** ⛔ Come back to the same view and the same place in it, or "show it" costs the reader their place. */
-      const view = [...document.querySelectorAll("section.view")].find((v) => !v.hidden);
-      try {
-        sessionStorage.setItem("productos-at", JSON.stringify({ view: view && view.dataset.view, y: window.scrollY }));
-      } catch (e) {}
-      location.reload();
-    };
-    bar.querySelector(".live-later").onclick = () => {
-      bar.hidden = true;
-      pending = 0;
-      fit();
-    };
+  /**
+   * ⛔ COME BACK TO THE SAME VIEW AND THE SAME PLACE IN IT. This mattered when a reload was asked
+   * for; it matters far more now that one happens on its own — a page that silently jumps to the
+   * top mid-review is worse than the bar it replaced.
+   */
+  const apply = () => {
+    pending = 0;
+    const view = [...document.querySelectorAll("section.view")].find((v) => !v.hidden);
+    try {
+      sessionStorage.setItem("productos-at", JSON.stringify({ view: view && view.dataset.view, y: window.scrollY }));
+    } catch (e) {}
+    location.reload();
   };
   const es = new EventSource("/api/v2/live");
   es.addEventListener("changed", () => {
@@ -2986,7 +2987,7 @@ if (typeof EventSource !== "undefined") {
     // ⛔ Straight away, not on the next tick: filing a request is exactly when they want to know.
     askWho();
     pending++;
-    if (!typing()) show();
+    if (!unsent()) apply();
   });
   /**
    * ⛔ A PAGE THAT HAS SILENTLY STOPPED FOLLOWING IS THE ONE FAILURE A READER CANNOT DETECT.
@@ -3001,6 +3002,14 @@ if (typeof EventSource !== "undefined") {
     stale.hidden = true;
     fit();
   });
+  /**
+   * ⛔ THE HELD CHANGE IS NOT DROPPED. Without this, a change that arrives while somebody is typing
+   * waits forever — and that is the old failure exactly: a page showing truth that moved, with
+   * nothing saying so, which is the one state a reader cannot detect.
+   */
+  setInterval(() => {
+    if (pending && !unsent()) apply();
+  }, 1500);
   setInterval(() => {
     const since = Math.round((Date.now() - heard) / 1000);
     // Two missed beats, not one — a single late beat is a slow network, not a dead stream.
@@ -4858,7 +4867,7 @@ const STYLE = `<style>
   @media (min-width: 62rem) {
     :root[data-nav="left"] body { padding-left: 19rem; }
     /* The column starts below the bar too: a top offset alone does not move a fixed element's inset. */
-    :root[data-nav="left"] .topframe { position: fixed; inset: var(--live-h) auto 0 0; width: 19rem;
+    :root[data-nav="left"] .topframe { position: fixed; inset: 0 auto 0 0; width: 19rem;
       overflow-y: auto; border-bottom: 0; border-right: 1px solid var(--line); padding-bottom: 2rem; }
     :root[data-nav="left"] .topframe .tabs { flex-direction: column; align-items: stretch;
       gap: .1rem; padding: .7rem .9rem .4rem; }
@@ -5184,15 +5193,12 @@ const STYLE = `<style>
   /* The truth moved under you — said, not done to you. */
   /* ⛔ The frame and the page both move down by exactly the bar's height while it is up, because a
      bar that covers the navigation takes every way off the page with it. See fit(), above. */
-  :root { --live-h: 0px; }
-  :root.live-showing body { padding-top: var(--live-h); }
-  :root.live-showing .topframe { top: var(--live-h); }
-  .live-bar { position: fixed; left: 0; right: 0; top: 0; z-index: 40; display: flex; gap: .6rem;
-    align-items: center; justify-content: center; padding: .5rem .8rem; font-size: .88rem;
-    background: var(--accent); color: var(--bg); }
-  .live-bar button { font: inherit; font-size: .85rem; border: 0; border-radius: 5px; padding: .2rem .7rem;
-    cursor: pointer; background: var(--bg); color: var(--ink); }
-  .live-bar button.live-later { background: transparent; color: var(--bg); text-decoration: underline; }
+  /**
+   * ⛔ THE BAR AT THE TOP IS GONE, AND SO IS EVERYTHING THAT MADE ROOM FOR IT. Peter: *"just live
+   * update as we go"*. Leaving the rules behind would leave a reader of this file believing there
+   * is still something up there, and leaving the --live-h variable behind would leave one whose
+   * only honest value is zero — which is how a token ends up being reasoned about for an hour.
+   */
   /* ⛔ The colour of a problem, not of an update. A page that has stopped following looked exactly
      like one that was up to date, which is the failure nobody can see for themselves. */
   :root { --bottom-h: 0px; }
