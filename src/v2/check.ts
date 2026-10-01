@@ -2700,6 +2700,79 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
        * ⛔ A NOTE, AND ONLY FOR A LEAF. A grouping has no happy path and no behaviours of its own,
        * so prose is the only thing it can say about itself and is still rendered there.
        */
+      /**
+       * ⛔ A PURPOSE THAT ENUMERATES THE FORM.
+       *
+       * Peter: *"this includes details that may change - 'arrives with'. I think this 'what this
+       * feature is for' card should be more generic. generally what comes with it."*
+       *
+       * `brings` said "a name for the deal, the borrower, and the property's address" — the entry
+       * form, listed. The fields are already the view's parts, so it is a second copy; adding a
+       * field makes it quietly wrong; and the purpose is what a reviewer agrees to FIRST, so every
+       * detail underneath was gated behind a sentence enumerating details nobody had settled.
+       *
+       * ⛔ TWO OR MORE, because one overlap is ordinary English — a feature about deals will say
+       * "deal", and a part called `deal-name` is not evidence of anything. Two is a list.
+       */
+      if (scope.happy_path?.brings) {
+        /**
+         * ⛔ WORDS NEAR EACH OTHER, NOT A SUBSTRING — AND THE FIRST VERSION FOUND NOTHING.
+         *
+         * Matching the label as a substring missed every real case, because nobody writes a field
+         * list in field-label form: `brings` said *"a name for the deal, the borrower, and the
+         * property's address"* against parts labelled "Deal Name", "Borrower" and "Property
+         * Address". One of three matched. The rule looked correct and reported a clean corpus.
+         *
+         * ⛔ AND PLAIN WORD-CONTAINMENT OVER-MATCHES, which is worse than missing: with "property"
+         * and "name" both somewhere in that sentence, a part called "Property Name" — which he
+         * never mentioned — would be named in the finding. Reporting words somebody did not write
+         * is how a note gets dismissed, and then so does the next one.
+         *
+         * So: every word of the label appears, and within a few words of each other. "property's
+         * address" is adjacent; "property … name" is eight apart and is not a mention.
+         */
+        /**
+         * ⛔ EVERY TOKEN KEPT FOR POSITION, ONLY MEANINGFUL ONES ELIGIBLE TO MATCH.
+         *
+         * Both halves of that sentence were learned by getting it wrong against the real corpus:
+         *
+         *   — dropping short tokens first compressed the distances, so in "a name for the deal, the
+         *     borrower, and the property's address" everything was near everything and a field
+         *     called "Property Name" matched on `property` and `name` eight words apart.
+         *   — keeping them all as MATCHABLE let the lone `s` from "property's" be a prefix of
+         *     "state", so the finding named a field called State he had never written — in the same
+         *     breath as telling him the sentence was too specific.
+         *
+         * So position comes from the whole sentence and matching ignores the noise.
+         */
+        const words = scope.happy_path.brings.toLowerCase().split(/[^a-z]+/).filter(Boolean);
+        const near = (label: string): boolean => {
+          const want = label.toLowerCase().split(/[^a-z]+/).filter((w) => w.length > 3);
+          if (!want.length) return false;
+          const at = want.map((w) =>
+            words.findIndex((x) => x.length > 3 && (x === w || x.startsWith(w) || w.startsWith(x)))
+          );
+          if (at.some((i) => i < 0)) return false;
+          /** ⛔ Within a few words of each other — a field is named as a phrase, not as two nouns in a paragraph. */
+          return Math.max(...at) - Math.min(...at) <= 4;
+        };
+        const named = scope.views
+          .filter((v) => (scope.happy_path!.through ?? []).includes(v.id))
+          .flatMap((v) => v.parts)
+          /** ⛔ `entry` only. A button or a region sharing a word with the purpose is not a field list. */
+          .filter((pt) => pt.role === "entry")
+          .map((pt) => (pt.label ?? pt.id).toLowerCase())
+          .filter(near);
+        if (named.length >= 2)
+          add({
+            severity: "note",
+            kind: "the-purpose-lists-the-form",
+            where: `${scope.id}#happy-path`,
+            what: `what this feature is for says a person arrives with ${named.length} of the form's own fields — ${named.join(", ")}. Those are already the controls on the screen, so this is a second copy of them, and adding a field makes this sentence wrong with nothing to detect it`,
+            fix: `say what somebody turns up HOLDING, not the shape of the control they type it into — "the deal they want to create and where its model should live" survives a new field, and is what somebody can agree to before any detail is settled`,
+          });
+      }
+
       const isLeaf = !corpus.scopes.some((x) => x.scope.in === scope.id);
       const prose = body.replace(/\s+/g, " ").trim();
       if (isLeaf && prose.length > 80)

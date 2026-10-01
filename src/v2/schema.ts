@@ -1321,7 +1321,23 @@ export const HappyPath = z
   .object({
     /** What the person gets done. The reason the feature exists, in one sentence. */
     accomplishes: z.string().min(20, "say what gets done here — a few words is a label, not a purpose"),
-    /** What they arrive with. */
+    /**
+     * What they arrive with — ⛔ IN GENERAL, NEVER THE FIELDS OF THE FORM.
+     *
+     * Peter, reading a purpose card: *"this includes details that may change - 'arrives with'. I
+     * think this 'what this feature is for' card should be more generic. generally what comes with
+     * it."*
+     *
+     * It said *"a name for the deal, the borrower, and the property's address"* — which is the
+     * entry form, listed. Three problems, all the same problem: the fields are already the view's
+     * parts, so this is a second copy; adding a field to the form silently makes it wrong; and the
+     * purpose is the thing a reviewer agrees to FIRST, so it was gated behind agreeing to a
+     * sentence that enumerates details not yet settled.
+     *
+     * *"the deal they want to create and where its model should live"* survives a new field. That
+     * is the altitude: what a person turns up holding, not the shape of the control they type it
+     * into. `productos v2 check` reports a `brings` that names the parts.
+     */
     brings: z.string().min(3, "say what the person arrives with, or `nothing` if they arrive empty-handed"),
     /** What they leave with. ⛔ The desired OUTPUT, which is what makes the path checkable. */
     ends_with: z.string().min(10, "say what they leave with — a path with no stated outcome cannot be judged right or wrong"),

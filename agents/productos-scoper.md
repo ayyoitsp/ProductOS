@@ -43,6 +43,23 @@ finding: say so.
 bring, what do they end up with, and which screens they pass through. A scope whose purpose is
 written last is a scope whose purpose was inferred from the behaviours, and it shows.
 
+⛔ **And `brings` says what they turn up HOLDING, never the fields of the form.** Peter, reading a
+purpose card: *"this includes details that may change - 'arrives with'. I think this 'what this
+feature is for' card should be more generic. generally what comes with it."*
+
+| | |
+|---|---|
+| ✗ | *a name for the deal, the borrower, and the property's address* |
+| ✓ | *the deal they want to create and where its model should live* |
+
+The first one is the entry form, listed. The fields are already the view's parts, so it is a second
+copy of them; adding a field to the form makes the sentence wrong with nothing to detect it; and
+⛔ **the purpose is the thing somebody agrees to FIRST** — so every detail underneath was gated
+behind a sentence enumerating details nobody had settled yet. The second survives a new field.
+
+Same altitude for `ends_with` and `not`: the outcome and the deliberate exclusion, not the controls.
+`productos v2 check` reports a `brings` that names two or more of the form's own fields.
+
 Then the screens, their parts, and the exchanges at each.
 
 ⛔ **And no prose preface on a feature.** Do not write an introductory paragraph under the
