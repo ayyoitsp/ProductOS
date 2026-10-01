@@ -1,0 +1,14 @@
+id: "0050"
+said: |-
+  pos: need to be able to go 'back' from the deal creation screen.  perhaps we need breadcrumbs for
+  the prototypes
+
+  [and, on the queue] Nobody is working on this right now — 1 request is waiting.
+
+  but why aren't you listening???? you should always be listening to that interfce
+at: 2026-10-01
+kind: surface
+reaches:
+  surface: walk-trail
+  pin: a walk remembers where it has been, and every screen has somewhere to show it
+waived: {}

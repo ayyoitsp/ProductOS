@@ -1177,3 +1177,38 @@ test("arming is held by reference, because the document cannot be asked across a
   const watcher = src.slice(src.indexOf("if (!armedBtn) return;"));
   assert.match(watcher.slice(0, 220), /btn !== armedBtn/, "anything other than the same control must cancel it");
 });
+
+/**
+ * ⛔ A WALK THAT CANNOT GO BACK IS A WALK NOBODY EXPLORES.
+ *
+ * Peter: *"need to be able to go 'back' from the deal creation screen. perhaps we need breadcrumbs
+ * for the prototypes"*.
+ *
+ * The prototype walked forward well — a press moves a state, a second press leaves a feature — and
+ * had no memory at all. Somebody who followed New Deal into creating a deal was simply there, with
+ * the browser's back button the only way out, which leaves the page rather than the walk.
+ *
+ * ⛔ THE WALK, NOT THE SITE. The page already has a breadcrumb saying where a thing SITS, which
+ * never changes. This says where somebody has BEEN.
+ */
+test("a walk remembers where it has been, and every screen has somewhere to show it", () => {
+  const src = fs.readFileSync("src/v2/page.ts", "utf-8");
+  assert.match(src, /nav class="walk-trail"/, "no screen has anywhere to show where a walk has been");
+  assert.match(src, /let trail = \[\]/, "the walk keeps no memory");
+
+  /** ⛔ Both kinds of step: moving a state, and leaving a feature. */
+  const lands = src.slice(src.indexOf('inPath(ev, "[data-lands]")'));
+  assert.match(lands.slice(0, 900), /remember\(\)/, "moving between states is not recorded as a step");
+  const walker = src.slice(src.indexOf("function walk(dest, from)"));
+  assert.match(walker.slice(0, 2000), /remember\(\)/, "leaving a feature is not recorded as a step");
+
+  /**
+   * ⛔ STEPPING BACK TRUNCATES. A → B → C, back to A, and the walk is A — not A with C still ahead
+   * of it, which would offer a forward step nobody took.
+   */
+  const back = src.slice(src.indexOf('closest("button.wt-back")'));
+  assert.match(back.slice(0, 900), /trail\.slice\(0, i \+ 1\)/, "stepping back leaves the steps ahead of it in place");
+
+  /** ⛔ And it hides while there is nowhere to go back to — one step is not a trail. */
+  assert.match(src, /trail\.length < 2/, "a trail with one entry still renders, which reads as a path");
+});

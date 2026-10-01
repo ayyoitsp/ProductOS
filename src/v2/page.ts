@@ -900,6 +900,8 @@ function renderScreens(scope: Scope, ctx: Ctx, scopeId: string, opts: PageOption
           const body = v.sketch_html
             ? states.length
               ? `<div class="states" data-states="${esc(v.id)}">
+                   <!-- ⛔ Where a walk has been. Empty until somebody walks; see the live script. -->
+                   <nav class="walk-trail" hidden aria-label="where this walk has been"></nav>
                    <div class="state-tabs">
                      <button type="button" class="state-tab on" data-state="0">As it is</button>
                      ${states
@@ -3472,8 +3474,11 @@ const PROTOTYPE = `<script>
     const tab = box.querySelector('.state-tab[data-state="' + want + '"]');
     const frame = box.querySelector('.state-frame[data-state="' + want + '"]');
     if (!tab || !frame) return;
+    /** ⛔ Where the walk was, before it moves — see the trail, above. */
+    startTrail();
     for (const t of box.querySelectorAll(".state-tab")) t.classList.toggle("on", t === tab);
     for (const f of box.querySelectorAll(".state-frame")) f.hidden = f.dataset.state !== want;
+    remember();
     /** ⛔ Say what moved and why, or a picture that changed on its own is a picture nobody trusts. */
     const screen = box.closest("article.screen");
     const panel = screen && screen.querySelector(".pt-detail");
@@ -3602,7 +3607,94 @@ const PROTOTYPE = `<script>
     if (btn !== armedBtn) disarm();
   }, true);
 
+  /**
+   * ⛔ A WALK THAT CANNOT GO BACK IS A WALK NOBODY EXPLORES.
+   *
+   * Peter: *"need to be able to go 'back' from the deal creation screen. perhaps we need
+   * breadcrumbs for the prototypes"*.
+   *
+   * The prototype walks forward well — a press moves a state, a second press leaves a feature — and
+   * had no memory at all. Somebody who followed New Deal into creating a deal was simply there,
+   * with the browser's back button the only way out, which leaves the page rather than the walk.
+   *
+   * ⛔ THE WALK, NOT THE SITE. The page already has a breadcrumb — Product › CRE › Deal management
+   * — and that is where a thing SITS, which never changes. This is where somebody has BEEN, which
+   * is a different question and the one that was unanswerable.
+   *
+   * ⛔ AND IT IS NOT HISTORY. Stepping back truncates: having gone A → B → C, going back to A means
+   * the walk is now just A. A trail that kept C after you left it would offer a forward step
+   * nobody took.
+   */
+  let trail = [];
+
+  const trailBars = () => document.querySelectorAll("nav.walk-trail");
+
+  const paintTrail = () => {
+    for (const bar of trailBars()) {
+      if (trail.length < 2) { bar.hidden = true; bar.innerHTML = ""; continue; }
+      bar.hidden = false;
+      bar.innerHTML = trail
+        .map((step, i) =>
+          i === trail.length - 1
+            ? '<span class="wt-here">' + esc(step.label) + "</span>"
+            : '<button type="button" class="wt-back" data-step="' + i + '">' + esc(step.label) + "</button>"
+        )
+        .join('<span class="wt-sep">›</span>');
+    }
+  };
+
+  /** Where the walk is right now, so stepping back can put it there again. */
+  const here = () => {
+    const screen = document.querySelector("article.screen:not([hidden])");
+    const view = document.querySelector("section.view:not([hidden])");
+    const box = screen && screen.querySelector(".states");
+    const on = box && box.querySelector(".state-tab.on");
+    return {
+      view: view ? view.dataset.view : null,
+      state: on ? on.dataset.state : null,
+      label: on && on.dataset.state !== "0"
+        ? on.textContent.trim()
+        : (view && view.querySelector("h2") ? view.querySelector("h2").textContent.trim() : "here"),
+    };
+  };
+
+  const remember = () => {
+    const at = here();
+    const last = trail[trail.length - 1];
+    /** ⛔ Never twice in a row. Pressing a control that lands where you already are is not a step. */
+    if (last && last.view === at.view && last.state === at.state) return;
+    trail.push(at);
+    paintTrail();
+  };
+
+  /** ⛔ Start the trail where somebody begins, or the first step has nothing to go back to. */
+  const startTrail = () => { if (!trail.length) trail.push(here()); };
+
+  document.addEventListener("click", (ev) => {
+    const back = ev.target.closest && ev.target.closest("button.wt-back");
+    if (!back) return;
+    ev.preventDefault();
+    const i = Number(back.dataset.step);
+    const step = trail[i];
+    if (!step) return;
+    /** ⛔ Truncate. Going back to A after A → B → C makes the walk A, not A with C still ahead. */
+    trail = trail.slice(0, i + 1);
+    if (step.view) {
+      const go = document.querySelector('nav.scopes a[data-goto="' + CSS.escape(step.view) + '"]');
+      if (go) go.click();
+    }
+    if (step.state != null) {
+      const box = document.querySelector("article.screen:not([hidden]) .states");
+      const tab = box && box.querySelector('.state-tab[data-state="' + step.state + '"]');
+      if (tab) tab.click();
+    }
+    /** ⛔ After the tab click, which would otherwise push the place we just came back to. */
+    trail = trail.slice(0, i + 1);
+    paintTrail();
+  });
+
   function walk(dest, from) {
+    startTrail();
     const bare = String(dest).split("#")[0];
     const target =
       document.querySelector('article.screen[data-screen="' + CSS.escape(bare) + '"]') ||
@@ -3623,6 +3715,8 @@ const PROTOTYPE = `<script>
       if (go) go.click();
     }
     target.scrollIntoView({ block: "center" });
+    /** ⛔ Leaving a feature is the step somebody most needs to come back from. */
+    remember();
     target.classList.add("arrived");
     setTimeout(() => target.classList.remove("arrived"), 1400);
   }
@@ -4676,6 +4770,18 @@ const STYLE = `<style>
   .arm-tip[data-side="below"]::after { bottom: 100%; border-bottom-color: var(--ink); }
 
   /* Walking a screen through its states. */
+  /**
+   * ⛔ WHERE THE WALK HAS BEEN — not where the thing sits. The page's own breadcrumb answers the
+   * second question and reads almost the same, so this one is quieter and sits with the states it
+   * is made of.
+   */
+  .walk-trail { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem;
+    margin: 0 0 .4rem; font-size: .76rem; }
+  .walk-trail[hidden] { display: none; }
+  .wt-back { font: inherit; font-size: .76rem; cursor: pointer; background: none; border: 0;
+    padding: 0 .1rem; color: var(--accent); text-decoration: underline; }
+  .wt-here { color: var(--dim); }
+  .wt-sep { color: var(--dim); opacity: .6; }
   .state-tabs { display: flex; flex-wrap: wrap; gap: .3rem; margin: 0 0 .45rem; }
   .state-tab { font: inherit; font-size: .78rem; cursor: pointer; border: 1px solid var(--rule);
     background: var(--bg); color: var(--dim); border-radius: 999px; padding: .12rem .6rem; }
