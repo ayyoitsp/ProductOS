@@ -27,6 +27,40 @@
  * than shipping one that fails halfway through.
  */
 
+/**
+ * ⛔ WHO WOULD HAVE DONE THIS, IN A TEAM THAT HAD PEOPLE.
+ *
+ * Peter: *"i'm not convinced we have the right roles. I'd rather build around 'traditional' roles
+ * first — product manager, engineer, designer, QA — and then break the roles down within those.
+ * doesn't need to be formalized, but we should be able to describe the roles based on who would
+ * have done each task."*
+ *
+ * Thirteen roles, and no way to see whether that was a team or a list. Laying them out by the seat
+ * a person would have sat in is what made the holes visible — nobody asked whether a screen was any
+ * GOOD, whether a feature could be BUILT as written, or whether a criterion would DEMONSTRATE its
+ * claim rather than merely pass. None of those three was findable by reading the roles one at a time.
+ *
+ * ⛔ A DESCRIPTION, NOT A PERMISSION SYSTEM. Nothing is gated on it, and it is not a hierarchy.
+ * What it buys is being able to look at the registry and see a team with holes in it.
+ *
+ * ⛔ "THE FRAMEWORK ITSELF" IS A SEAT, AND THE DISTINCTION IS NOT WHAT IT FIRST LOOKS LIKE.
+ * Two reviewers here do not review anybody's product; they review ProductOS. Peter, on the first
+ * attempt to sort them: *"consistency shouldn't be product OS only — we need to make sure the
+ * product truth is consistent itself, why is that product OS itself? same as sufficiency."*
+ *
+ * He is right about the QUESTIONS and the answer is not a reclassification:
+ *
+ *   — Asking whether a CORPUS contradicts itself was a job nobody held. `consistency` reads only
+ *     `src/` paths; it cannot see a corpus at all. So `coherence` was added rather than the other
+ *     one relabelled, because moving it would have left the layer-skipping failure unwatched to
+ *     cover a gap, and traded one blind spot for another.
+ *   — Asking whether a corpus is sufficient to build from is `newcomer`, and always was. What was
+ *     wrong was the NAME: "sufficiency" claimed that ground while asking about the model. Two roles
+ *     whose names claim the same question is how one of them stops being run.
+ */
+export const DISCIPLINES = ["product", "design", "engineering", "quality", "the framework itself"] as const;
+export type Discipline = (typeof DISCIPLINES)[number];
+
 /** What a job needs of its host, in terms no host owns. */
 export const CAPABILITIES = [
   "read-files",
@@ -284,6 +318,8 @@ export const AREAS: Area[] = [
  */
 export interface Agent {
   name: string;
+  /** ⛔ Whose seat this is. See `DISCIPLINES` — it describes a team, it does not gate anything. */
+  discipline: Discipline;
   /** The question it answers. ⛔ One question. An agent with two is two agents. */
   asks: string;
   /** Why this question needs asking — the failure it exists to catch. */
@@ -303,6 +339,7 @@ export interface Agent {
 export const AGENTS: Agent[] = [
   {
     name: "consistency",
+    discipline: "the framework itself",
     asks: "Is every concept present in every layer it needs to be, or does it exist in one and nowhere else?",
     because:
       "Four times in one session a concept was added to the schema and shown in the renderer while the " +
@@ -332,6 +369,7 @@ export const AGENTS: Agent[] = [
   },
   {
     name: "coverage",
+    discipline: "quality",
     asks: "Is each defect and each behaviour pinned by something that fails on its own?",
     because:
       "Every bug in this repo was found by a person and prevented by a test written afterwards — and " +
@@ -356,7 +394,17 @@ export const AGENTS: Agent[] = [
     prompt: "agents/productos-coverage.md",
   },
   {
-    name: "generated",
+    /**
+     * ⛔ WAS CALLED `generated`, WHICH NAMED NOTHING. Peter: *"not sure what generated even is?"* —
+     * about the reviewer that catches somebody TYPING a screen a command should have produced,
+     * which is the single most-repeated mistake in this project's history. A reviewer whose name
+     * does not say what it asks is a reviewer nobody thinks to run.
+     *
+     * ⛔ And it reviews a CORPUS, not us: its sources are the corpus and that corpus's git log.
+     * It was briefly filed under the framework, which would have aimed it at the wrong repository.
+     */
+    name: "hand-authored",
+    discipline: "quality",
     asks: "Is anything in a corpus hand-authored that a generator should have produced?",
     because:
       "The single most-repeated mistake here, and the one Peter has objected to four times in capitals. " +
@@ -377,10 +425,11 @@ export const AGENTS: Agent[] = [
     never: ["regenerate anything itself", "treat legitimate authoring — a claim, a question, a purpose — as a generated artefact"],
     needs: ["read-files", "search-files", "run-commands"],
     judges: true,
-    prompt: "agents/productos-generated.md",
+    prompt: "agents/productos-hand-authored.md",
   },
   {
     name: "truthfulness",
+    discipline: "engineering",
     /**
      * ⛔ THIS ASKED "does the corpus say what the code actually does?" AND THAT MADE THE CODE THE
      * STANDARD.
@@ -422,6 +471,7 @@ export const AGENTS: Agent[] = [
   },
   {
     name: "newcomer",
+    discipline: "product",
     asks: "Could a PM handed this and told to build from it actually do it?",
     because:
       "By the time you have written a corpus you know what it meant to say, so your reading of it is " +
@@ -439,6 +489,7 @@ export const AGENTS: Agent[] = [
   },
   {
     name: "architecture",
+    discipline: "engineering",
     asks: "Are these the right subsystems, with the right boundaries, and would it work?",
     because: "The system half of a corpus has no natural reviewer — PRDs stop below it and design docs start above it.",
     reads: ["the capability half of the corpus", "what each capability promises and who depends on it"],
@@ -449,7 +500,13 @@ export const AGENTS: Agent[] = [
     prompt: "agents/productos-architect.md",
   },
   {
-    name: "sufficiency",
+    /**
+     * ⛔ WAS CALLED `sufficiency`, WHICH READ AS A QUESTION ABOUT A CORPUS. It is a question about
+     * the MODEL — whether this thing can express a real product at all. "Is this corpus sufficient
+     * to build from" is what `newcomer` asks, from a seat that has never read our source.
+     */
+    name: "can-the-model-say-it",
+    discipline: "the framework itself",
     asks: "Can this model express a real product, and can a person actually review what it produces?",
     because:
       "This is the agent that should have said 'there is nowhere to state what a feature is for' and " +
@@ -464,10 +521,11 @@ export const AGENTS: Agent[] = [
     never: ["write anything", "judge whether one particular product is ready"],
     needs: ["read-files", "search-files", "run-commands"],
     judges: true,
-    prompt: "agents/productos-framework.md",
+    prompt: "agents/productos-can-the-model-say-it.md",
   },
   {
     name: "completeness",
+    discipline: "product",
     asks: "Can somebody get from the start of this feature to the end of it, or does the path stop somewhere?",
     because:
       "Peter found two dead ends by hand, one after the other, on a corpus all seven other reviewers " +
@@ -501,6 +559,7 @@ export const AGENTS: Agent[] = [
   },
   {
     name: "rendered",
+    discipline: "design",
     asks: "Does the drawing match the product a person actually sees?",
     because:
       "Every reviewer here reads SOURCE. `truthfulness` compares the corpus against the code, which " +
@@ -532,6 +591,145 @@ export const AGENTS: Agent[] = [
     needs: ["read-files", "search-files", "run-commands", "see-a-page"],
     judges: true,
     prompt: "agents/productos-rendered.md",
+  },
+  /**
+   * ⛔ THE FOUR BELOW WERE FOUND BY LAYING THE OTHERS OUT BY SEAT, AND NOT BEFORE.
+   * Each one is a question somebody on a real team asks every week and nothing here asked once.
+   */
+  {
+    name: "coherence",
+    discipline: "product",
+    asks: "Does this corpus contradict itself?",
+    because:
+      "Peter: *\"we need to make sure the product truth is consistent itself\"* — and nothing did. " +
+      "`consistency` asks the same question about ProductOS and reads only our source; it cannot " +
+      "open a corpus. So a corpus could promise a thing on a feature page and refuse it on the " +
+      "screen that holds it, use one word for two concepts, or carry a rule contradicting a " +
+      "statement, and every check would pass: each file is individually well-formed, and " +
+      "contradiction is a property of the pair. ⛔ The author is the worst possible person to " +
+      "notice, because they know which of the two they meant.",
+    reads: [
+      "every scope in the corpus — a contradiction is never visible from one",
+      "the vocabulary across all of them — the same word, and whether it means the same thing twice",
+      "each statement against the rules and criteria said to govern it",
+      "what each screen promises against what the feature holding it claims",
+    ],
+    finds: [
+      "two scopes promising different things about the same screen or the same entity",
+      "one term carrying two meanings, or two terms carrying one — the first is worse",
+      "a rule that forbids what a statement elsewhere asserts",
+      "a criterion that would pass while the claim above it is false",
+      "an exchange whose refusal contradicts another exchange's happy path",
+    ],
+    never: [
+      "write anything",
+      "⛔ decide which side of a contradiction is correct — report both and who must choose",
+      "report a difference between target state and built code — that is drift, and truthfulness holds it",
+    ],
+    needs: ["read-files", "search-files", "run-commands"],
+    judges: true,
+    prompt: "agents/productos-coherence.md",
+  },
+  {
+    name: "design-critique",
+    discipline: "design",
+    asks: "Is this the right screen for what it has to do?",
+    because:
+      "Nothing here has ever asked whether a screen is any GOOD. `rendered` looks at pictures and " +
+      "explicitly refuses this — it asks only whether the drawing matches the built product, so a " +
+      "faithful drawing of a bad screen passes it cleanly. `completeness` asks whether a path ends, " +
+      "which a terrible flow can also satisfy. A corpus is supposed to be sufficient to build from; " +
+      "building the wrong screen from a clear description is still the wrong screen.",
+    reads: [
+      "the screens of one feature, in the order somebody meets them",
+      "what each one is for, and what it asks a person to do or decide",
+      "the design system, so a critique names the part that exists rather than inventing one",
+      "the other screens of this product that do a comparable job",
+    ],
+    finds: [
+      "a screen asking for something it already knows, or could decide itself",
+      "a decision put to somebody who has not been shown what it costs",
+      "two screens where the work would fit on one, or one carrying what needs two",
+      "a control whose outcome a person cannot predict before pressing it",
+      "a pattern invented here that this product already solves elsewhere, differently",
+      "⛔ an empty, error or loading state the screen must have and does not",
+    ],
+    never: [
+      "write anything",
+      "⛔ restyle — this is about whether the screen is right, never about taste in colour or spacing",
+      "⛔ object that no component renders it: a screen the product SHOULD have is the target state",
+    ],
+    needs: ["read-files", "search-files", "run-commands", "see-a-page"],
+    judges: true,
+    prompt: "agents/productos-design-critique.md",
+  },
+  {
+    name: "buildability",
+    discipline: "engineering",
+    asks: "Could somebody start on this on Monday, and what would surprise them?",
+    because:
+      "⛔ The second tenet is that product truth must be sufficient to build from without " +
+      "interpretation, and nobody checked it from a builder's seat. `newcomer` comes closest and " +
+      "is a product manager — it catches what a corpus fails to EXPLAIN, not what it fails to " +
+      "DECIDE. The gap between those is every question that only appears once somebody tries: " +
+      "where the data comes from, what happens to work in progress, which of two screens owns a " +
+      "piece of state. Each is cheap to answer now and expensive to discover mid-implementation, " +
+      "where it gets answered by whoever is typing.",
+    reads: [
+      "one feature, as somebody who has to implement it and may not ask the author",
+      "every screen's controls, and what each is said to commit",
+      "what the feature says it depends on, and whether that thing says the same",
+      "the criteria, as the definition of done they would be held to",
+    ],
+    finds: [
+      "a decision the corpus leaves to whoever implements it, without saying it is theirs to make",
+      "a state change with no stated source of truth, or two screens both claiming it",
+      "a failure that would certainly happen and is not described — ⛔ offline, concurrent edit, half-finished work",
+      "a criterion that cannot be demonstrated without inventing a fact the corpus does not supply",
+      "an ordering or permission assumption that is load-bearing and unwritten",
+    ],
+    never: [
+      "write anything",
+      "⛔ estimate, or argue the scope is too large — the question is whether it is BUILDABLE, not whether it is cheap",
+      "⛔ treat 'no code exists yet' as a finding: a corpus may never require code to exist",
+      "⛔ ask for implementation detail — how it gets built is the builder's, and demanding it is the opposite of this job",
+    ],
+    needs: ["read-files", "search-files", "run-commands"],
+    judges: true,
+    prompt: "agents/productos-buildability.md",
+  },
+  {
+    name: "test-design",
+    discipline: "quality",
+    asks: "Would this criterion actually show the claim holding — or would it just pass?",
+    because:
+      "⛔ `coverage` asks whether a claim HAS something attached and `evidencer` finds what to " +
+      "attach; neither reads the criterion to see whether it would demonstrate anything. A test " +
+      "named createsDeal that asserts a mock was called satisfies both of them and proves nothing " +
+      "about the product. This is the one way the two tenets can both be met on paper by a corpus " +
+      "that is worthless: a human validated it, it is clear enough to build from, and every claim " +
+      "is pinned by something that cannot fail.",
+    reads: [
+      "each claim, and the criteria said to show it",
+      "what the criterion actually asserts, and against what",
+      "the claim's own wording, to see whether the assertion is about the same thing",
+      "what the feature refuses or fails at — the cases a happy-path criterion will never reach",
+    ],
+    finds: [
+      "a criterion that asserts a call happened rather than an outcome being true",
+      "a criterion that cannot fail — true whatever the product does",
+      "a criterion narrower than the claim above it, so the claim is only partly shown",
+      "⛔ a claim about refusing or failing, shown only by a criterion that succeeds",
+      "a criterion whose setup assumes the thing it is meant to establish",
+    ],
+    never: [
+      "write anything, including a better criterion — ⛔ naming the defect is the output",
+      "run the tests — this is about what a criterion would SHOW, not whether it currently passes",
+      "⛔ report a missing criterion: that is coverage's question, and reporting it here hides this one",
+    ],
+    needs: ["read-files", "search-files", "run-commands"],
+    judges: true,
+    prompt: "agents/productos-test-design.md",
   },
 ];
 
@@ -584,6 +782,8 @@ export const AGENTS: Agent[] = [
  */
 export interface Author {
   name: string;
+  /** ⛔ Whose seat this is. See `DISCIPLINES` — it describes a team, it does not gate anything. */
+  discipline: Discipline;
   /** The question it answers. ⛔ One question, same rule as a judge. */
   asks: string;
   /** Why this is a role and not a step in a script — the failure that made it one. */
@@ -610,6 +810,7 @@ export interface Author {
 export const AUTHORS: Author[] = [
   {
     name: "surveyor",
+    discipline: "product",
     asks: "What does this product consist of — which areas, and which features in each?",
     because:
       "The first thing anybody does with a codebase is the thing least suited to being done feature " +
@@ -634,6 +835,7 @@ export const AUTHORS: Author[] = [
   },
   {
     name: "scoper",
+    discipline: "product",
     asks: "What does this one feature promise, and where does somebody meet it?",
     because:
       "This is the role the whole idea is for: the only part of authoring that genuinely parallelises, " +
@@ -664,6 +866,7 @@ export const AUTHORS: Author[] = [
   },
   {
     name: "designer",
+    discipline: "design",
     asks: "What should this screen look like, where no code renders it?",
     because:
       "Peter: *\"why can't generate be an agent? like a designer type agent?\"* — and the objection " +
@@ -692,6 +895,7 @@ export const AUTHORS: Author[] = [
   },
   {
     name: "evidencer",
+    discipline: "quality",
     asks: "What already demonstrates each of these claims?",
     because:
       "A corpus written from code arrives with every criterion unproven, and the proof usually " +
@@ -866,7 +1070,23 @@ export interface Shim {
   does: string;
   /** What somebody types or says to mean this route. */
   when: string;
-  /** The roles it spawns, in order. `fan` = one per unit of its role's axis; otherwise one. */
+  /**
+   * The roles it spawns, in order. `fan` = one per unit of its role's axis; otherwise one.
+   *
+   * ⛔ REVIEWERS BELONG HERE TOO, AND FOUR ROUTES USED TO HAVE NONE.
+   *
+   * This list only ever named authors, so every route that reviewed something said *"running the
+   * reviewers"* in `keeps` — prose, where a field belonged. The consequence: the question "which
+   * roles does this route orchestrate?" had no answer for any reviewer, in a registry whose entire
+   * job is answering it. Four routes read as orchestrating nothing at all.
+   *
+   * ⛔ A ROLE IN NO ROUTE IS A ROLE NOBODY RUNS, and that is now a test rather than a hope. It is
+   * how two reviewers turned out to be reachable only by somebody remembering they existed.
+   *
+   * Order is meaningful and mixed on purpose: authors write, then reviewers judge what was
+   * written. Which of the two a role is never stated here — it is derived from the registries, so
+   * a judge cannot be listed as if it wrote something.
+   */
   steps: Array<{ role: string; fan?: boolean; why: string }>;
   /**
    * ⛔ What this route performs ITSELF, because it may not be delegated. Every act of judgement
@@ -883,6 +1103,15 @@ export const SHIMS: Shim[] = [
     steps: [
       { role: "scoper", why: "the feature written in a context holding nothing but that feature" },
       { role: "designer", fan: true, why: "screens the product should have and nothing renders yet" },
+      /**
+       * ⛔ A DESIGN, ENGINEERING AND QA READ OF WHAT WAS JUST WRITTEN — which is what a team does
+       * and this route did not. It spawned two authors and stopped, so the first person to ask
+       * whether the feature was any good, buildable, or provable was Peter, in a browser.
+       */
+      { role: "completeness", why: "whether somebody can get from the start of this feature to the end of it" },
+      { role: "design-critique", fan: true, why: "whether these are the right screens for the job, not just complete ones" },
+      { role: "buildability", why: "whether somebody could start on Monday — the second tenet, from a builder's seat" },
+      { role: "test-design", why: "whether each criterion would show its claim, rather than merely pass" },
     ],
     keeps: [
       "the conversation about what this feature is for — a purpose inferred from code is a purpose nobody chose",
@@ -899,6 +1128,9 @@ export const SHIMS: Shim[] = [
       { role: "scoper", fan: true, why: "every feature written in its own context, reading only its own code" },
       { role: "designer", fan: true, why: "a picture for every screen no component renders — a screen with none cannot be reviewed" },
       { role: "evidencer", why: "what the repository already demonstrates, found by somebody who did not write the claims" },
+      { role: "completeness", fan: true, why: "every feature walked end to end, because a first corpus is where paths fail to join" },
+      { role: "coherence", why: "⛔ the whole corpus at once — thirty scopers writing in isolation is exactly how one word comes to mean two things" },
+      { role: "hand-authored", why: "whether anything was typed that a generator should have produced — on a run this large, nobody would notice" },
     ],
     keeps: [
       "running `productos v2 generate`, because a screen a component renders is DRAWN and never designed",
@@ -911,7 +1143,11 @@ export const SHIMS: Shim[] = [
     route: "map evidence",
     does: "Find what already demonstrates the claims a corpus makes",
     when: "map my tests · what covers this · align evidence",
-    steps: [{ role: "evidencer", why: "the whole of the search, by a role that cannot mistake a green test for agreement" }],
+    steps: [
+      { role: "evidencer", why: "the whole of the search, by a role that cannot mistake a green test for agreement" },
+      { role: "coverage", why: "whether each claim is pinned by something that fails on its own" },
+      { role: "test-design", why: "⛔ and whether those pins would show anything — coverage is satisfied by a test that cannot fail" },
+    ],
     keeps: [
       "the decision about what to do with a criterion nothing demonstrates",
       "never letting coverage be reported as validation",
@@ -921,7 +1157,11 @@ export const SHIMS: Shim[] = [
     route: "check it communicates",
     does: "Find out whether a corpus can be built from by somebody who has not read it",
     when: "run a PM review · fresh eyes · would somebody understand this",
-    steps: [],
+    steps: [
+      { role: "newcomer", fan: true, why: "a product manager handed a URL, who has never seen ProductOS and may not read its source" },
+      { role: "buildability", why: "what the corpus fails to DECIDE, which is a different question from what it fails to explain" },
+      { role: "can-the-model-say-it", why: "whether a confusion is the corpus's fault or ours — the routing this whole route exists to get right" },
+    ],
     /**
      * ⛔ NO AUTHORS AT ALL, AND THAT IS THE POINT. An author anywhere in this would be ANSWERING
      * the confusions the reviewers came back with, which is the single most valuable output there
@@ -938,7 +1178,11 @@ export const SHIMS: Shim[] = [
     route: "look at the product",
     does: "Compare the drawings against the product a person actually sees",
     when: "does this match · check the prototype against the app",
-    steps: [],
+    steps: [
+      { role: "rendered", fan: true, why: "whether the drawing matches the product a person actually sees" },
+      { role: "design-critique", fan: true, why: "⛔ and whether it is any good — `rendered` refuses this, so a faithful drawing of a bad screen passes it" },
+      { role: "truthfulness", why: "where the built product disagrees with the target, reported as drift and never as the corpus being wrong" },
+    ],
     keeps: [
       "bringing the environment up, and saying so when it will not come up",
       "running the reviewer that looks, which judges and never writes",
@@ -954,6 +1198,34 @@ export const SHIMS: Shim[] = [
       "deciding which route each request belongs to, and running it",
       "replying where they asked — ⛔ a `pos:` is answered concisely, and the framework is what changes",
       "every act of judgement",
+    ],
+  },
+  /**
+   * ⛔ THIS ROUTE DID NOT EXIST, AND TWO REVIEWERS WERE REACHABLE ONLY BY MEMORY.
+   *
+   * Every route here reviews somebody's product. Nothing routed to the roles that review PRODUCTOS
+   * — `consistency` and `architecture` were in the registry, written, installed, and named by no
+   * route at all, so they ran when a session happened to remember them. Both exist because of
+   * failures in this repo that no file-scoped review could see, which is exactly the kind of check
+   * that stops happening when nothing asks for it.
+   *
+   * Giving the framework its own seat is what made that visible: once the roles were grouped by who
+   * would have done the work, two of them had no work coming to them.
+   */
+  {
+    route: "review ProductOS itself",
+    does: "Review the framework, not anybody's product",
+    when: "review the framework · did we skip a layer · is this the right architecture · can the model say this",
+    steps: [
+      { role: "consistency", why: "whether a concept reached every layer, or stopped at the one that was convenient" },
+      { role: "architecture", why: "whether these are the right subsystems with the right boundaries, and whether it would work" },
+      { role: "coverage", why: "whether each defect we fixed is pinned by something that fails on its own" },
+      { role: "can-the-model-say-it", why: "whether the model can express a real product, and whether a person can review what it produces" },
+    ],
+    keeps: [
+      "⛔ deciding what to change — these four judge the framework and may not touch it",
+      "running it after a change to `src/` or `skills/`, which is when a layer gets skipped",
+      "recording what came back with `productos v2 change`, in the words it came back in",
     ],
   },
   {
@@ -981,7 +1253,32 @@ export const shimFor = (route: string): Shim | undefined => SHIMS.find((s) => s.
  * when it is written. Checked by a test, because the registry is the kind of thing edited by hand.
  */
 export const danglingSteps = (): Array<{ route: string; role: string }> =>
-  SHIMS.flatMap((s) => s.steps.filter((st) => !AUTHORS.some((a) => a.name === st.role)).map((st) => ({ route: s.route, role: st.role })));
+  SHIMS.flatMap((s) =>
+    s.steps
+      /** ⛔ EITHER REGISTRY. A step used to resolve only against authors, which is why no route could name a reviewer. */
+      .filter((st) => !AUTHORS.some((a) => a.name === st.role) && !AGENTS.some((a) => a.name === st.role))
+      .map((st) => ({ route: s.route, role: st.role }))
+  );
+
+/**
+ * ⛔ A ROLE NO ROUTE NAMES IS A ROLE NOBODY RUNS.
+ *
+ * `consistency` and `architecture` were written, installed, and named by no route — so they ran
+ * only when a session remembered they existed, which for the two roles that review ProductOS
+ * itself means they ran least often exactly when the framework was changing fastest. Nothing could
+ * detect that, because every individual part of it was present and correct.
+ */
+export const unrouted = (): string[] => {
+  const named = new Set(SHIMS.flatMap((s) => s.steps.map((st) => st.role)));
+  return [...AGENTS, ...AUTHORS].map((r) => r.name).filter((n) => !named.has(n));
+};
+
+/** Which seat each role sits in, for reading the registry as a team rather than a list. */
+export const byDiscipline = (): Array<{ discipline: Discipline; roles: Array<Agent | Author> }> =>
+  DISCIPLINES.map((d) => ({
+    discipline: d,
+    roles: [...AUTHORS, ...AGENTS].filter((r) => r.discipline === d),
+  })).filter((g) => g.roles.length);
 
 /** ⛔ Said out loud rather than implied: which agents exist as a prompt and which are named only here. */
 export const unwritten = (): Agent[] => AGENTS.filter((a) => !a.prompt);

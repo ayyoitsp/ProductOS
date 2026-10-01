@@ -20,8 +20,12 @@ You are the **orchestrator**, and you are the session — not a subagent. That i
 
 **Spawn, in order:**
 
-- `scoper` — the feature written in a context holding nothing but that feature
-- `designer` — **one per unit, in parallel** — screens the product should have and nothing renders yet
+- `scoper` *(product · writes)* — the feature written in a context holding nothing but that feature
+- `designer` *(design · writes)* — **one per unit, in parallel** — screens the product should have and nothing renders yet
+- `completeness` *(product · judges, writes nothing)* — whether somebody can get from the start of this feature to the end of it
+- `design-critique` *(design · judges, writes nothing)* — **one per unit, in parallel** — whether these are the right screens for the job, not just complete ones
+- `buildability` *(engineering · judges, writes nothing)* — whether somebody could start on Monday — the second tenet, from a builder's seat
+- `test-design` *(quality · judges, writes nothing)* — whether each criterion would show its claim, rather than merely pass
 
 **⛔ You keep these yourself:**
 
@@ -35,10 +39,13 @@ You are the **orchestrator**, and you are the session — not a subagent. That i
 
 **Spawn, in order:**
 
-- `surveyor` — decide what the product consists of once, before anything describes a feature
-- `scoper` — **one per unit, in parallel** — every feature written in its own context, reading only its own code
-- `designer` — **one per unit, in parallel** — a picture for every screen no component renders — a screen with none cannot be reviewed
-- `evidencer` — what the repository already demonstrates, found by somebody who did not write the claims
+- `surveyor` *(product · writes)* — decide what the product consists of once, before anything describes a feature
+- `scoper` *(product · writes)* — **one per unit, in parallel** — every feature written in its own context, reading only its own code
+- `designer` *(design · writes)* — **one per unit, in parallel** — a picture for every screen no component renders — a screen with none cannot be reviewed
+- `evidencer` *(quality · writes)* — what the repository already demonstrates, found by somebody who did not write the claims
+- `completeness` *(product · judges, writes nothing)* — **one per unit, in parallel** — every feature walked end to end, because a first corpus is where paths fail to join
+- `coherence` *(product · judges, writes nothing)* — ⛔ the whole corpus at once — thirty scopers writing in isolation is exactly how one word comes to mean two things
+- `hand-authored` *(quality · judges, writes nothing)* — whether anything was typed that a generator should have produced — on a run this large, nobody would notice
 
 **⛔ You keep these yourself:**
 
@@ -53,7 +60,9 @@ You are the **orchestrator**, and you are the session — not a subagent. That i
 
 **Spawn, in order:**
 
-- `evidencer` — the whole of the search, by a role that cannot mistake a green test for agreement
+- `evidencer` *(quality · writes)* — the whole of the search, by a role that cannot mistake a green test for agreement
+- `coverage` *(quality · judges, writes nothing)* — whether each claim is pinned by something that fails on its own
+- `test-design` *(quality · judges, writes nothing)* — ⛔ and whether those pins would show anything — coverage is satisfied by a test that cannot fail
 
 **⛔ You keep these yourself:**
 
@@ -64,7 +73,11 @@ You are the **orchestrator**, and you are the session — not a subagent. That i
 
 *They say:* run a PM review · fresh eyes · would somebody understand this
 
-**Spawn nothing.** Every part of this is something you may not hand off.
+**Spawn, in order:**
+
+- `newcomer` *(product · judges, writes nothing)* — **one per unit, in parallel** — a product manager handed a URL, who has never seen ProductOS and may not read its source
+- `buildability` *(engineering · judges, writes nothing)* — what the corpus fails to DECIDE, which is a different question from what it fails to explain
+- `can-the-model-say-it` *(the framework itself · judges, writes nothing)* — whether a confusion is the corpus's fault or ours — the routing this whole route exists to get right
 
 **⛔ You keep these yourself:**
 
@@ -76,7 +89,11 @@ You are the **orchestrator**, and you are the session — not a subagent. That i
 
 *They say:* does this match · check the prototype against the app
 
-**Spawn nothing.** Every part of this is something you may not hand off.
+**Spawn, in order:**
+
+- `rendered` *(design · judges, writes nothing)* — **one per unit, in parallel** — whether the drawing matches the product a person actually sees
+- `design-critique` *(design · judges, writes nothing)* — **one per unit, in parallel** — ⛔ and whether it is any good — `rendered` refuses this, so a faithful drawing of a bad screen passes it
+- `truthfulness` *(engineering · judges, writes nothing)* — where the built product disagrees with the target, reported as drift and never as the corpus being wrong
 
 **⛔ You keep these yourself:**
 
@@ -95,6 +112,23 @@ You are the **orchestrator**, and you are the session — not a subagent. That i
 - deciding which route each request belongs to, and running it
 - replying where they asked — ⛔ a `pos:` is answered concisely, and the framework is what changes
 - every act of judgement
+
+### Review the framework, not anybody's product
+
+*They say:* review the framework · did we skip a layer · is this the right architecture · can the model say this
+
+**Spawn, in order:**
+
+- `consistency` *(the framework itself · judges, writes nothing)* — whether a concept reached every layer, or stopped at the one that was convenient
+- `architecture` *(engineering · judges, writes nothing)* — whether these are the right subsystems with the right boundaries, and whether it would work
+- `coverage` *(quality · judges, writes nothing)* — whether each defect we fixed is pinned by something that fails on its own
+- `can-the-model-say-it` *(the framework itself · judges, writes nothing)* — whether the model can express a real product, and whether a person can review what it produces
+
+**⛔ You keep these yourself:**
+
+- ⛔ deciding what to change — these four judge the framework and may not touch it
+- running it after a change to `src/` or `skills/`, which is when a layer gets skipped
+- recording what came back with `productos v2 change`, in the words it came back in
 
 ### A surgical change to truth somebody already agreed to
 

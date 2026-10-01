@@ -23,7 +23,7 @@ import { idiomOf, proposeScreen } from "../../v2/propose.js";
 import { indexDesignSystem } from "../../v2/design.js";
 import { inferConnections, type Connection } from "../../v2/connects.js";
 import { writeLeadsTo } from "../../v2/draw-write.js";
-import { AGENTS, AUTHORS, CASCADE, KINDS, SHIMS, SKILL } from "../../core/jobs.js";
+import { AGENTS, AUTHORS, CASCADE, KINDS, SHIMS, SKILL, byDiscipline } from "../../core/jobs.js";
 
 /** ⛔ Plain text for a terminal and for JSON — never HTML-escaped, which is the page's business. */
 const plain = (x: unknown): string => String(x ?? "").replace(/\s+/g, " ").trim();
@@ -1355,7 +1355,38 @@ export function v2Command(): Command {
     .option("--at <dir>", "corpus directory, for the model assignments", "v2")
     .option("--out <file>", "write the whole tree as a document instead of printing a summary")
     .option("--presets", "write each skill's preset into its SKILL.md, from the registry")
-    .action((o: { at?: string; out?: string; presets?: boolean }) => {
+    .option("--tree", "print the routes and which roles each one orchestrates, in order")
+    .action((o: { at?: string; out?: string; presets?: boolean; tree?: boolean }) => {
+      /**
+       * ⛔ WHICH ROLES A ROUTE ORCHESTRATES, ON THE SURFACE SOMEBODY ASKS IT FROM.
+       *
+       * Peter: *"let's map out all the commands/skills and what agents they'd orchestrate and
+       * how."* It was answerable from `jobs.ts` and from the generated doc, and not from the
+       * command whose entire job is telling you about the roles — so answering it meant reading
+       * source, which is the state every generated document here exists to end.
+       */
+      if (o.tree) {
+        for (const sh of SHIMS) {
+          console.log("");
+          console.log(pc.bold(sh.route) + pc.dim(`  — ${sh.does}`));
+          console.log(pc.dim(`  they say: ${sh.when}`));
+          if (!sh.steps.length) console.log(pc.dim("  spawns nothing — every part of this is kept"));
+          for (const st of sh.steps) {
+            const author = AUTHORS.find((a) => a.name === st.role);
+            const agent = AGENTS.find((a) => a.name === st.role);
+            const seat = author?.discipline ?? agent?.discipline ?? pc.red("in no registry");
+            const kind = author ? pc.cyan("writes") : pc.magenta("judges");
+            console.log(`  → ${pc.bold(st.role)}${st.fan ? pc.dim(" ×N") : ""}  ${kind} ${pc.dim(`· ${seat}`)}`);
+            console.log(pc.dim(`      ${st.why}`));
+          }
+          /** ⛔ The kept acts print with the spawns, because a route read without them is a fan-out. */
+          for (const k of sh.keeps) console.log(pc.yellow("  ⛔ keeps: ") + pc.dim(k));
+        }
+        console.log("");
+        const named = new Set(SHIMS.flatMap((x) => x.steps.map((st) => st.role)));
+        console.log(pc.dim(`  ${named.size} of ${AUTHORS.length + AGENTS.length} roles are named by a route — a role no route names runs only when somebody remembers it`));
+        return;
+      }
       /**
        * ⛔ THE PRESET REACHES THE SKILL, OR IT REACHES NOBODY. `instruct` is the layer this project
        * skips, and a routing table that lives only in `jobs.ts` is a table a future session never
@@ -1415,6 +1446,16 @@ export function v2Command(): Command {
        * This printed reviewers alone for as long as reviewers were all there were — an accurate
        * picture of a system where authoring had no role behind it.
        */
+      /**
+       * ⛔ GROUPED BY THE SEAT A PERSON WOULD HAVE SAT IN, because that is the view that shows a
+       * team with holes in it. Peter: *"we should be able to describe the roles based on who would
+       * have done each task."* Flat, thirteen roles read as complete; by seat, four questions had
+       * nobody asking them.
+       */
+      console.log(pc.bold("THE TEAM") + pc.dim("  — by who would have done the work"));
+      for (const g of byDiscipline())
+        console.log(`  ${pc.bold(g.discipline.padEnd(22))} ${g.roles.map((r) => r.name).join(pc.dim(" · "))}`);
+      console.log("");
       console.log(pc.bold("AUTHORS") + pc.dim("  — every one writes, none may settle"));
       for (const a of AUTHORS) {
         const who = models[a.name] ?? dflt;
@@ -1422,7 +1463,7 @@ export function v2Command(): Command {
         console.log(
           `${pc.bold(a.name)}  ${pc.dim(who ? `model: ${who}` : "model: whatever the host uses")}${
             off[a.name] ? pc.yellow("  off") : ""
-          }${a.prompt ? "" : pc.yellow("  no prompt yet")}${pc.dim(a.each ? `  · one per ${a.each}` : "  · runs once")}`
+          }${a.prompt ? "" : pc.yellow("  no prompt yet")}${pc.dim(`  · ${a.discipline}`)}${pc.dim(a.each ? `  · one per ${a.each}` : "  · runs once")}`
         );
         console.log(`  ${a.asks}`);
         if (off[a.name]) console.log(pc.dim(`  turned off here: ${off[a.name]}`));
@@ -1436,7 +1477,7 @@ export function v2Command(): Command {
         console.log(
           `${pc.bold(a.name)}  ${pc.dim(who ? `model: ${who}` : "model: whatever the host uses")}${
             off[a.name] ? pc.yellow("  off") : ""
-          }${a.prompt ? "" : pc.yellow("  no prompt yet")}`
+          }${a.prompt ? "" : pc.yellow("  no prompt yet")}${pc.dim(`  · ${a.discipline}`)}`
         );
         console.log(`  ${a.asks}`);
         if (off[a.name]) console.log(pc.dim(`  turned off here: ${off[a.name]}`));

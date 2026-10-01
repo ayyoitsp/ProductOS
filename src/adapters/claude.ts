@@ -268,6 +268,29 @@ function isDevInstall(skillsRoot: string): boolean {
   return fs.existsSync(path.join(repoRoot, "src"));
 }
 
+/**
+ * Roles that are installed and no longer in the registry, removed.
+ *
+ * ⛔ A NAMED FUNCTION BECAUSE A LAYER HAS TO BE FINDABLE. `productos v2 change check` verifies a
+ * layer by looking for a named thing in the file that would hold it, and this logic first went in
+ * as four anonymous lines inside the installer — reached, and unverifiable, which is the same
+ * position as not having been done.
+ */
+function pruneRenamedRoles(installed: string[], cfgRoot?: string): string[] {
+  if (!installed.length) return [];
+  const theirs = new Set(installed.map((a) => `${a}.md`));
+  const dir = agentsDirFor(cfgRoot);
+  if (!fs.existsSync(dir)) return [];
+  const gone: string[] = [];
+  for (const f of fs.readdirSync(dir)) {
+    /** ⛔ Only our own files. The directory is shared with agents we did not write. */
+    if (!f.startsWith("productos-") || !f.endsWith(".md") || theirs.has(f)) continue;
+    fs.rmSync(path.join(dir, f), { force: true });
+    gone.push(`− ${f.replace(/\.md$/, "")}`);
+  }
+  return gone;
+}
+
 export function installClaudeSkills(opts: { update?: boolean; config?: ProductosConfig; configRoot?: string } = {}): ClaudeInstallResult {
   if (!fs.existsSync(CLAUDE_DIR)) {
     throw new Error(
@@ -381,6 +404,20 @@ export function installClaudeSkills(opts: { update?: boolean; config?: Productos
     ...installClaudeAgents(dev, opts.update, opts.config, opts.configRoot),
     ...installClaudeAuthors(opts.update, opts.config, opts.configRoot),
   ];
+
+  /**
+   * ⛔ AND THE SAME FOR ROLES, WHICH WAS MISSING WHILE THE SKILL VERSION SAT TWENTY LINES ABOVE.
+   *
+   * Skills that no longer exist are removed; roles that no longer exist were not, so every rename
+   * this registry has ever made is still installed on every machine that ran init. Two roles were
+   * renamed the moment this was noticed — `generated` and `sufficiency`, both for saying nothing
+   * about what they ask — and without this a session could still be handed the old pair.
+   *
+   * ⛔ Only our own files, and only after a successful install. Removing on a failed run would
+   * uninstall somebody's working set because a build was broken, and the directory is shared with
+   * agents we did not write.
+   */
+  agents.push(...pruneRenamedRoles(agents, opts.configRoot));
   return { installed, agents, agentsDir: agentsDirFor(opts.configRoot), mcpRegisteredAt: wrote.join(", ") || "nowhere — no config file was found to register in", symlinked: dev };
 }
 

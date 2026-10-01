@@ -1,5 +1,5 @@
 ---
-name: productos-generated
+name: productos-hand-authored
 description: Is anything in a corpus hand-authored that a generator should have produced? Reviews only — never writes, edits or fixes anything.
 tools: Read, Grep, Glob, Bash
 ---

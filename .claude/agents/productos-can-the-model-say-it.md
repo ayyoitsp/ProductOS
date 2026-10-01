@@ -1,5 +1,5 @@
 ---
-name: productos-framework
+name: productos-can-the-model-say-it
 description: Can this model express a real product, and can a person actually review what it produces? Reviews only — never writes, edits or fixes anything.
 tools: Read, Grep, Glob, Bash
 ---

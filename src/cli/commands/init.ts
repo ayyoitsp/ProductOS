@@ -88,7 +88,18 @@ export function initCommand(): Command {
          * prompt body — so there is nothing to symlink, and saying otherwise sends somebody to
          * edit a file they think is the source.
          */
-        console.log(pc.green("✓"), `Wrote agent: ${path.join(install.agentsDir, `${a}.md`)}`);
+        /**
+         * ⛔ A REMOVAL READS AS A REMOVAL. The prune marks a gone role with a leading `−`, and this
+         * printed every entry as "Wrote agent", so a deletion came out as
+         * `✓ Wrote agent: …/− productos-framework.md` — a file path that does not exist, reported
+         * as a success, for the one operation anybody would want to see clearly.
+         */
+        if (a.startsWith("− ")) {
+          const name = a.slice(2);
+          console.log(pc.yellow("−"), `Removed agent, no longer in the registry: ${path.join(install.agentsDir, `${name}.md`)}`);
+        } else {
+          console.log(pc.green("✓"), `Wrote agent: ${path.join(install.agentsDir, `${a}.md`)}`);
+        }
       }
       console.log(pc.green("✓"), `MCP server registered in ${install.mcpRegisteredAt}`);
 

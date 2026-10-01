@@ -27,6 +27,9 @@ import {
   unwrittenAuthors,
   shimFor,
   danglingSteps,
+  unrouted,
+  byDiscipline,
+  DISCIPLINES,
   SKILL,
 } from "../dist/core/jobs.js";
 import { agentsDoc, withPreset } from "../dist/core/agents-doc.js";
@@ -298,7 +301,17 @@ test("every route names real roles, and none delegates the settling", () => {
     "there is more than one skill again — the routes belong under one entry point");
   assert.ok(fs.existsSync(`skills/${SKILL}/SKILL.md`), `the one skill is not at skills/${SKILL}`);
 
-  assert.deepEqual(danglingSteps(), [], "a route names a role that is not in the author registry");
+  assert.deepEqual(danglingSteps(), [], "a route names a role that is in neither registry");
+
+  /**
+   * ⛔ AND EVERY ROLE IS REACHABLE FROM A ROUTE.
+   *
+   * Four routes used to review things while naming no reviewer — `keeps` said "running the
+   * reviewers" and no field said which — so `consistency` and `architecture` sat in the registry
+   * reachable only by a session remembering them. Both exist because of failures here that no
+   * file-scoped review could see, and both were the least likely to be run.
+   */
+  assert.deepEqual(unrouted(), [], "a role exists that no route names — it runs only when somebody remembers it");
 
   /**
    * ⛔ `keeps` IS WHAT MAKES THIS A MODEL RATHER THAN A FAN-OUT. Spawning four agents and forgetting
@@ -334,4 +347,40 @@ test("the skill carries every route, generated, and has not drifted", () => {
   for (const sh of SHIMS) assert.ok(body.includes(sh.does), `the route "${sh.route}" is not in the skill`);
   /** ⛔ The part outside the markers is hand-authored and must survive regeneration. */
   assert.ok(body.split("<!-- /productos:preset -->")[1].trim().length > 200, `${f} lost its authored body`);
+});
+
+/**
+ * ⛔ THE REGISTRY HAS TO READ AS A TEAM, NOT A LIST.
+ *
+ * Peter: *"I'd rather build around 'traditional' roles first — product manager, engineer, designer,
+ * QA — and then break the roles down within those. doesn't need to be formalized, but we should be
+ * able to describe the roles based on who would have done each task."*
+ *
+ * Laying thirteen roles out by seat is what surfaced four missing jobs and two names that said
+ * nothing. That only works if every role declares its seat and every seat has somebody in it — a
+ * discipline with nobody in it is a question this project has stopped asking.
+ */
+test("every role sits in a discipline, and every discipline has somebody in it", () => {
+  for (const r of [...AGENTS, ...AUTHORS]) {
+    assert.ok(DISCIPLINES.includes(r.discipline), `"${r.name}" has no seat: ${r.discipline}`);
+  }
+  const seats = byDiscipline();
+  assert.equal(seats.length, DISCIPLINES.length, `a discipline has nobody in it: ${DISCIPLINES.filter((d) => !seats.some((g) => g.discipline === d)).join(", ")}`);
+
+  /**
+   * ⛔ THE FRAMEWORK SEAT REVIEWS US AND NEVER A CORPUS, which is the distinction that was wrong
+   * the first time it was sorted. Peter: *"consistency shouldn't be product OS only — we need to
+   * make sure the product truth is consistent itself."* He was right that the question applies to
+   * a corpus, and the answer was a new role rather than moving this one — so if anything in this
+   * seat stops reading our own source, the split has quietly collapsed back.
+   */
+  for (const r of AGENTS.filter((a) => a.discipline === "the framework itself")) {
+    assert.ok(
+      r.reads.some((x) => /src\/|skills\/|test\/|the model/.test(x)),
+      `"${r.name}" sits in the framework seat and reads no part of the framework`
+    );
+  }
+  /** ⛔ And somebody asks the corpus version of the same question. */
+  assert.ok(AGENTS.some((a) => a.name === "coherence" && a.discipline === "product"),
+    "nothing asks whether a corpus contradicts itself — that was the whole point of splitting the seats");
 });

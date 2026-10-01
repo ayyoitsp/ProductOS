@@ -1,0 +1,16 @@
+id: "0057"
+said: i'm not convinced we have the right roles.  I'd rather build around 'traditional' roles first - product manager, engineer, designer, QA and then break the roles down within those.  doesn't need to be formalized, but we should be able to describe the roles based on who would have done each task
+at: 2026-10-01
+kind: concept
+reaches:
+  model: DISCIPLINES
+  derive: byDiscipline() and unrouted() in src/core/jobs.ts; kindOf() in src/core/agents-doc.ts derives writes-vs-judges
+  generate: byDiscipline
+  surface: THE TEAM
+  check: unrouted() refuses a role no route names; danglingSteps() now resolves against both registries
+  instruct: judges, writes nothing
+  pin: every role sits in a discipline
+waived:
+  derive: the derivation is byDiscipline() and it lives in src/core/jobs.ts beside the registry it reads — which the architecture map files under model. Moving a registry derivation into the derive area would separate it from the only data it touches, so the layer is reached and cannot be verified where the map looks.
+  check: the check layer is corpus checks, and a role registry is not in a corpus — unrouted() refuses a role no route names, and it is held by a test rather than by src/v2/check.ts because nothing about it can be wrong in somebody else product truth.
+closed: 2026-10-01

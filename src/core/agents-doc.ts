@@ -16,6 +16,7 @@ import {
   AGENTS,
   AREAS,
   AUTHORS,
+  byDiscipline,
   CASCADE,
   COMMANDS,
   KINDS,
@@ -35,6 +36,26 @@ import {
  */
 export const PRESET_OPEN = "<!-- productos:preset -->";
 export const PRESET_CLOSE = "<!-- /productos:preset -->";
+
+/**
+ * ⛔ WHETHER A STEP WRITES OR ONLY JUDGES, DERIVED RATHER THAN DECLARED.
+ *
+ * A route's steps name roles from either registry, and an orchestrator that cannot tell them apart
+ * will wait for a reviewer to produce a corpus or treat an author's output as a verdict. Both kinds
+ * come back with text; only one of them changed anything.
+ *
+ * Derived, never written next to the step — a step that declared its own kind could declare the
+ * wrong one, and a judge listed as if it wrote something is precisely the boundary this project
+ * enforces at install.
+ */
+function kindOf(role: string): { label: string; discipline: string } {
+  const author = AUTHORS.find((a) => a.name === role);
+  if (author) return { label: "writes", discipline: author.discipline };
+  const agent = AGENTS.find((a) => a.name === role);
+  if (agent) return { label: "judges, writes nothing", discipline: agent.discipline };
+  /** ⛔ Unreachable while `danglingSteps()` is empty, and said out loud rather than rendered blank. */
+  return { label: "⛔ in no registry", discipline: "unknown" };
+}
 
 export function presetBlock(shims: Shim[]): string {
   const out: string[] = [PRESET_OPEN];
@@ -57,8 +78,12 @@ export function presetBlock(shims: Shim[]): string {
     if (sh.steps.length) {
       out.push("**Spawn, in order:**");
       out.push("");
-      for (const st of sh.steps)
-        out.push(`- \`${st.role}\`${st.fan ? " — **one per unit, in parallel**" : ""} — ${st.why}`);
+      for (const st of sh.steps) {
+        const k = kindOf(st.role);
+        out.push(
+          `- \`${st.role}\` *(${k.discipline} · ${k.label})*${st.fan ? " — **one per unit, in parallel**" : ""} — ${st.why}`
+        );
+      }
     } else {
       out.push("**Spawn nothing.** Every part of this is something you may not hand off.");
     }
@@ -173,6 +198,43 @@ export function agentsDoc(): string {
   out.push(diagram());
   out.push("");
 
+  /**
+   * ⛔ THE SAME ROLES, BY THE SEAT A PERSON WOULD HAVE SAT IN — and this is the view that found
+   * the holes. Peter: *"I'd rather build around 'traditional' roles first — product manager,
+   * engineer, designer, QA — and then break the roles down within those."*
+   *
+   * Thirteen roles read as a complete set until they were grouped this way, at which point four
+   * questions had nobody asking them and two reviewers turned out to be reviewing ProductOS from
+   * inside a list of roles that review products.
+   */
+  out.push("## The team");
+  out.push("");
+  out.push(
+    "⛔ **Described by who would have done the work, not by what they are allowed to touch.** " +
+      "Nothing is gated on a discipline and it is not a hierarchy. What it buys is being able to " +
+      "look at this list and see a team with holes in it — which is how four of the roles below " +
+      "were found. Reading the roles one at a time, each was clearly necessary and nothing said " +
+      "what was absent."
+  );
+  out.push("");
+  out.push(
+    "⛔ **\"The framework itself\" is a real seat.** Those roles review ProductOS, not anybody's " +
+      "product. The distinction is not cosmetic: `consistency` asks whether a concept reached " +
+      "every layer of *the framework* and reads only our source, while `coherence` asks whether a " +
+      "*corpus* contradicts itself. Both questions are worth asking and neither reviewer can " +
+      "answer the other's — which is why the second one was added rather than the first relabelled."
+  );
+  out.push("");
+  out.push("| seat | roles |");
+  out.push("|---|---|");
+  for (const g of byDiscipline())
+    out.push(
+      `| **${g.discipline}** | ${g.roles
+        .map((r) => `\`${r.name}\`${"judges" in r ? "" : " ·writes·"}`)
+        .join(" · ")} |`
+    );
+  out.push("");
+
   out.push("");
   out.push("## The tree — which roles each skill orchestrates");
   out.push("");
@@ -208,7 +270,14 @@ export function agentsDoc(): string {
     out.push("");
     if (sh.steps.length) {
       out.push("**Spawns, in order:**");
-      out.push(bullet(sh.steps.map((st) => `\`${st.role}\`${st.fan ? " — one per unit, in parallel" : ""} — ${st.why}`)));
+      out.push(
+        bullet(
+          sh.steps.map((st) => {
+            const k = kindOf(st.role);
+            return `\`${st.role}\` *(${k.discipline} · ${k.label})*${st.fan ? " — one per unit, in parallel" : ""} — ${st.why}`;
+          })
+        )
+      );
     } else {
       out.push("**Spawns nothing.** Every part of this is something the session may not hand off.");
     }

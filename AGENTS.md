@@ -22,13 +22,17 @@ flowchart LR
     direction TB
   consistency["consistency<br/><i>Is every concept present in every layer it needs to be, or does it exist in one and nowhere else?</i>"]
   coverage["coverage<br/><i>Is each defect and each behaviour pinned by something that fails on its own?</i>"]
-  generated["generated<br/><i>Is anything in a corpus hand-authored that a generator should have produced?</i>"]
+  hand_authored["hand-authored<br/><i>Is anything in a corpus hand-authored that a generator should have produced?</i>"]
   truthfulness["truthfulness<br/><i>Where does what was built disagree with the target the corpus describes?</i>"]
   newcomer["newcomer<br/><i>Could a PM handed this and told to build from it actually do it?</i>"]
   architecture["architecture<br/><i>Are these the right subsystems, with the right boundaries, and would it work?</i>"]
-  sufficiency["sufficiency<br/><i>Can this model express a real product, and can a person actually review what it produces?</i>"]
+  can_the_model_say_it["can-the-model-say-it<br/><i>Can this model express a real product, and can a person actually review what it produces?</i>"]
   completeness["completeness<br/><i>Can somebody get from the start of this feature to the end of it, or does the path stop somewhere?</i>"]
   rendered["rendered<br/><i>Does the drawing match the product a person actually sees?</i>"]
+  coherence["coherence<br/><i>Does this corpus contradict itself?</i>"]
+  design_critique["design-critique<br/><i>Is this the right screen for what it has to do?</i>"]
+  buildability["buildability<br/><i>Could somebody start on this on Monday, and what would surprise them?</i>"]
+  test_design["test-design<br/><i>Would this criterion actually show the claim holding — or would it just pass?</i>"]
   end
   subgraph MAP["the map — territory every role reads"]
     direction TB
@@ -44,6 +48,20 @@ flowchart LR
   REVIEWERS --> MAP
 ```
 
+## The team
+
+⛔ **Described by who would have done the work, not by what they are allowed to touch.** Nothing is gated on a discipline and it is not a hierarchy. What it buys is being able to look at this list and see a team with holes in it — which is how four of the roles below were found. Reading the roles one at a time, each was clearly necessary and nothing said what was absent.
+
+⛔ **"The framework itself" is a real seat.** Those roles review ProductOS, not anybody's product. The distinction is not cosmetic: `consistency` asks whether a concept reached every layer of *the framework* and reads only our source, while `coherence` asks whether a *corpus* contradicts itself. Both questions are worth asking and neither reviewer can answer the other's — which is why the second one was added rather than the first relabelled.
+
+| seat | roles |
+|---|---|
+| **product** | `surveyor` ·writes· · `scoper` ·writes· · `newcomer` · `completeness` · `coherence` |
+| **design** | `designer` ·writes· · `rendered` · `design-critique` |
+| **engineering** | `truthfulness` · `architecture` · `buildability` |
+| **quality** | `evidencer` ·writes· · `coverage` · `hand-authored` · `test-design` |
+| **the framework itself** | `consistency` · `can-the-model-say-it` |
+
 
 ## The tree — which roles each skill orchestrates
 
@@ -56,22 +74,43 @@ flowchart TD
   scope_a_feature(["scope a feature<br/><i>Turn one in-flight feature into product truth</i>"])
   scope_a_feature --> scope_a_feature_scoper["scoper"]
   scope_a_feature --> scope_a_feature_designer["designer ×N"]
+  scope_a_feature --> scope_a_feature_completeness["completeness"]
+  scope_a_feature --> scope_a_feature_design-critique["design-critique ×N"]
+  scope_a_feature --> scope_a_feature_buildability["buildability"]
+  scope_a_feature --> scope_a_feature_test-design["test-design"]
   scope_a_feature -.->|keeps| scope_a_feature_self(["the session — 3 things it may not hand off"])
   scan_a_codebase(["scan a codebase<br/><i>Turn a whole codebase into a first corpus</i>"])
   scan_a_codebase --> scan_a_codebase_surveyor["surveyor"]
   scan_a_codebase --> scan_a_codebase_scoper["scoper ×N"]
   scan_a_codebase --> scan_a_codebase_designer["designer ×N"]
   scan_a_codebase --> scan_a_codebase_evidencer["evidencer"]
+  scan_a_codebase --> scan_a_codebase_completeness["completeness ×N"]
+  scan_a_codebase --> scan_a_codebase_coherence["coherence"]
+  scan_a_codebase --> scan_a_codebase_hand-authored["hand-authored"]
   scan_a_codebase -.->|keeps| scan_a_codebase_self(["the session — 4 things it may not hand off"])
   map_evidence(["map evidence<br/><i>Find what already demonstrates the claims a corpus makes</i>"])
   map_evidence --> map_evidence_evidencer["evidencer"]
+  map_evidence --> map_evidence_coverage["coverage"]
+  map_evidence --> map_evidence_test-design["test-design"]
   map_evidence -.->|keeps| map_evidence_self(["the session — 2 things it may not hand off"])
   check_it_communicates(["check it communicates<br/><i>Find out whether a corpus can be built from by somebody who has not read it</i>"])
+  check_it_communicates --> check_it_communicates_newcomer["newcomer ×N"]
+  check_it_communicates --> check_it_communicates_buildability["buildability"]
+  check_it_communicates --> check_it_communicates_can-the-model-say-it["can-the-model-say-it"]
   check_it_communicates -.->|keeps| check_it_communicates_self(["the session — 3 things it may not hand off"])
   look_at_the_product(["look at the product<br/><i>Compare the drawings against the product a person actually sees</i>"])
+  look_at_the_product --> look_at_the_product_rendered["rendered ×N"]
+  look_at_the_product --> look_at_the_product_design-critique["design-critique ×N"]
+  look_at_the_product --> look_at_the_product_truthfulness["truthfulness"]
   look_at_the_product -.->|keeps| look_at_the_product_self(["the session — 3 things it may not hand off"])
   drain_the_queue(["drain the queue<br/><i>Work what people have asked for, and answer them where they asked</i>"])
   drain_the_queue -.->|keeps| drain_the_queue_self(["the session — 3 things it may not hand off"])
+  review_ProductOS_itself(["review ProductOS itself<br/><i>Review the framework, not anybody's product</i>"])
+  review_ProductOS_itself --> review_ProductOS_itself_consistency["consistency"]
+  review_ProductOS_itself --> review_ProductOS_itself_architecture["architecture"]
+  review_ProductOS_itself --> review_ProductOS_itself_coverage["coverage"]
+  review_ProductOS_itself --> review_ProductOS_itself_can-the-model-say-it["can-the-model-say-it"]
+  review_ProductOS_itself -.->|keeps| review_ProductOS_itself_self(["the session — 3 things it may not hand off"])
   edit_one_thing(["edit one thing<br/><i>A surgical change to truth somebody already agreed to</i>"])
   edit_one_thing -.->|keeps| edit_one_thing_self(["the session — 1 thing it may not hand off"])
 ```
@@ -82,8 +121,12 @@ flowchart TD
 Turn one in-flight feature into product truth.
 
 **Spawns, in order:**
-- `scoper` — the feature written in a context holding nothing but that feature
-- `designer` — one per unit, in parallel — screens the product should have and nothing renders yet
+- `scoper` *(product · writes)* — the feature written in a context holding nothing but that feature
+- `designer` *(design · writes)* — one per unit, in parallel — screens the product should have and nothing renders yet
+- `completeness` *(product · judges, writes nothing)* — whether somebody can get from the start of this feature to the end of it
+- `design-critique` *(design · judges, writes nothing)* — one per unit, in parallel — whether these are the right screens for the job, not just complete ones
+- `buildability` *(engineering · judges, writes nothing)* — whether somebody could start on Monday — the second tenet, from a builder's seat
+- `test-design` *(quality · judges, writes nothing)* — whether each criterion would show its claim, rather than merely pass
 
 **⛔ Keeps, because it may not be delegated:**
 - the conversation about what this feature is for — a purpose inferred from code is a purpose nobody chose
@@ -95,10 +138,13 @@ Turn one in-flight feature into product truth.
 Turn a whole codebase into a first corpus.
 
 **Spawns, in order:**
-- `surveyor` — decide what the product consists of once, before anything describes a feature
-- `scoper` — one per unit, in parallel — every feature written in its own context, reading only its own code
-- `designer` — one per unit, in parallel — a picture for every screen no component renders — a screen with none cannot be reviewed
-- `evidencer` — what the repository already demonstrates, found by somebody who did not write the claims
+- `surveyor` *(product · writes)* — decide what the product consists of once, before anything describes a feature
+- `scoper` *(product · writes)* — one per unit, in parallel — every feature written in its own context, reading only its own code
+- `designer` *(design · writes)* — one per unit, in parallel — a picture for every screen no component renders — a screen with none cannot be reviewed
+- `evidencer` *(quality · writes)* — what the repository already demonstrates, found by somebody who did not write the claims
+- `completeness` *(product · judges, writes nothing)* — one per unit, in parallel — every feature walked end to end, because a first corpus is where paths fail to join
+- `coherence` *(product · judges, writes nothing)* — ⛔ the whole corpus at once — thirty scopers writing in isolation is exactly how one word comes to mean two things
+- `hand-authored` *(quality · judges, writes nothing)* — whether anything was typed that a generator should have produced — on a run this large, nobody would notice
 
 **⛔ Keeps, because it may not be delegated:**
 - running `productos v2 generate`, because a screen a component renders is DRAWN and never designed
@@ -111,7 +157,9 @@ Turn a whole codebase into a first corpus.
 Find what already demonstrates the claims a corpus makes.
 
 **Spawns, in order:**
-- `evidencer` — the whole of the search, by a role that cannot mistake a green test for agreement
+- `evidencer` *(quality · writes)* — the whole of the search, by a role that cannot mistake a green test for agreement
+- `coverage` *(quality · judges, writes nothing)* — whether each claim is pinned by something that fails on its own
+- `test-design` *(quality · judges, writes nothing)* — ⛔ and whether those pins would show anything — coverage is satisfied by a test that cannot fail
 
 **⛔ Keeps, because it may not be delegated:**
 - the decision about what to do with a criterion nothing demonstrates
@@ -121,7 +169,10 @@ Find what already demonstrates the claims a corpus makes.
 
 Find out whether a corpus can be built from by somebody who has not read it.
 
-**Spawns nothing.** Every part of this is something the session may not hand off.
+**Spawns, in order:**
+- `newcomer` *(product · judges, writes nothing)* — one per unit, in parallel — a product manager handed a URL, who has never seen ProductOS and may not read its source
+- `buildability` *(engineering · judges, writes nothing)* — what the corpus fails to DECIDE, which is a different question from what it fails to explain
+- `can-the-model-say-it` *(the framework itself · judges, writes nothing)* — whether a confusion is the corpus's fault or ours — the routing this whole route exists to get right
 
 **⛔ Keeps, because it may not be delegated:**
 - running the reviewers, which judge and never write
@@ -132,7 +183,10 @@ Find out whether a corpus can be built from by somebody who has not read it.
 
 Compare the drawings against the product a person actually sees.
 
-**Spawns nothing.** Every part of this is something the session may not hand off.
+**Spawns, in order:**
+- `rendered` *(design · judges, writes nothing)* — one per unit, in parallel — whether the drawing matches the product a person actually sees
+- `design-critique` *(design · judges, writes nothing)* — one per unit, in parallel — ⛔ and whether it is any good — `rendered` refuses this, so a faithful drawing of a bad screen passes it
+- `truthfulness` *(engineering · judges, writes nothing)* — where the built product disagrees with the target, reported as drift and never as the corpus being wrong
 
 **⛔ Keeps, because it may not be delegated:**
 - bringing the environment up, and saying so when it will not come up
@@ -149,6 +203,21 @@ Work what people have asked for, and answer them where they asked.
 - deciding which route each request belongs to, and running it
 - replying where they asked — ⛔ a `pos:` is answered concisely, and the framework is what changes
 - every act of judgement
+
+### review ProductOS itself
+
+Review the framework, not anybody's product.
+
+**Spawns, in order:**
+- `consistency` *(the framework itself · judges, writes nothing)* — whether a concept reached every layer, or stopped at the one that was convenient
+- `architecture` *(engineering · judges, writes nothing)* — whether these are the right subsystems with the right boundaries, and whether it would work
+- `coverage` *(quality · judges, writes nothing)* — whether each defect we fixed is pinned by something that fails on its own
+- `can-the-model-say-it` *(the framework itself · judges, writes nothing)* — whether the model can express a real product, and whether a person can review what it produces
+
+**⛔ Keeps, because it may not be delegated:**
+- ⛔ deciding what to change — these four judge the framework and may not touch it
+- running it after a change to `src/` or `skills/`, which is when a layer gets skipped
+- recording what came back with `productos v2 change`, in the words it came back in
 
 ### edit one thing
 
@@ -329,7 +398,7 @@ Held three ways rather than one: no author declares `ask-the-human`, so no host 
 
 **Needs:** read-files · search-files · run-commands  ·  **Prompt:** `agents/productos-coverage.md`
 
-### `generated`
+### `hand-authored`
 
 **Asks:** Is anything in a corpus hand-authored that a generator should have produced?
 
@@ -350,7 +419,7 @@ Held three ways rather than one: no author declares `ask-the-human`, so no host 
 - regenerate anything itself
 - treat legitimate authoring — a claim, a question, a purpose — as a generated artefact
 
-**Needs:** read-files · search-files · run-commands  ·  **Prompt:** `agents/productos-generated.md`
+**Needs:** read-files · search-files · run-commands  ·  **Prompt:** `agents/productos-hand-authored.md`
 
 ### `truthfulness`
 
@@ -418,7 +487,7 @@ Held three ways rather than one: no author declares `ask-the-human`, so no host 
 
 **Needs:** read-files · search-files · run-commands · fetch-url  ·  **Prompt:** `agents/productos-architect.md`
 
-### `sufficiency`
+### `can-the-model-say-it`
 
 **Asks:** Can this model express a real product, and can a person actually review what it produces?
 
@@ -438,7 +507,7 @@ Held three ways rather than one: no author declares `ask-the-human`, so no host 
 - write anything
 - judge whether one particular product is ready
 
-**Needs:** read-files · search-files · run-commands  ·  **Prompt:** `agents/productos-framework.md`
+**Needs:** read-files · search-files · run-commands  ·  **Prompt:** `agents/productos-can-the-model-say-it.md`
 
 ### `completeness`
 
@@ -494,6 +563,112 @@ Held three ways rather than one: no author declares `ask-the-human`, so no host 
 - report a difference it could not see — if the environment would not come up, say that instead
 
 **Needs:** read-files · search-files · run-commands · see-a-page  ·  **Prompt:** `agents/productos-rendered.md`
+
+### `coherence`
+
+**Asks:** Does this corpus contradict itself?
+
+**Exists because:** Peter: *"we need to make sure the product truth is consistent itself"* — and nothing did. `consistency` asks the same question about ProductOS and reads only our source; it cannot open a corpus. So a corpus could promise a thing on a feature page and refuse it on the screen that holds it, use one word for two concepts, or carry a rule contradicting a statement, and every check would pass: each file is individually well-formed, and contradiction is a property of the pair. ⛔ The author is the worst possible person to notice, because they know which of the two they meant.
+
+**Reads, in this order:**
+- every scope in the corpus — a contradiction is never visible from one
+- the vocabulary across all of them — the same word, and whether it means the same thing twice
+- each statement against the rules and criteria said to govern it
+- what each screen promises against what the feature holding it claims
+
+**A finding is:**
+- two scopes promising different things about the same screen or the same entity
+- one term carrying two meanings, or two terms carrying one — the first is worse
+- a rule that forbids what a statement elsewhere asserts
+- a criterion that would pass while the claim above it is false
+- an exchange whose refusal contradicts another exchange's happy path
+
+**⛔ Never:**
+- write anything
+- ⛔ decide which side of a contradiction is correct — report both and who must choose
+- report a difference between target state and built code — that is drift, and truthfulness holds it
+
+**Needs:** read-files · search-files · run-commands  ·  **Prompt:** `agents/productos-coherence.md`
+
+### `design-critique`
+
+**Asks:** Is this the right screen for what it has to do?
+
+**Exists because:** Nothing here has ever asked whether a screen is any GOOD. `rendered` looks at pictures and explicitly refuses this — it asks only whether the drawing matches the built product, so a faithful drawing of a bad screen passes it cleanly. `completeness` asks whether a path ends, which a terrible flow can also satisfy. A corpus is supposed to be sufficient to build from; building the wrong screen from a clear description is still the wrong screen.
+
+**Reads, in this order:**
+- the screens of one feature, in the order somebody meets them
+- what each one is for, and what it asks a person to do or decide
+- the design system, so a critique names the part that exists rather than inventing one
+- the other screens of this product that do a comparable job
+
+**A finding is:**
+- a screen asking for something it already knows, or could decide itself
+- a decision put to somebody who has not been shown what it costs
+- two screens where the work would fit on one, or one carrying what needs two
+- a control whose outcome a person cannot predict before pressing it
+- a pattern invented here that this product already solves elsewhere, differently
+- ⛔ an empty, error or loading state the screen must have and does not
+
+**⛔ Never:**
+- write anything
+- ⛔ restyle — this is about whether the screen is right, never about taste in colour or spacing
+- ⛔ object that no component renders it: a screen the product SHOULD have is the target state
+
+**Needs:** read-files · search-files · run-commands · see-a-page  ·  **Prompt:** `agents/productos-design-critique.md`
+
+### `buildability`
+
+**Asks:** Could somebody start on this on Monday, and what would surprise them?
+
+**Exists because:** ⛔ The second tenet is that product truth must be sufficient to build from without interpretation, and nobody checked it from a builder's seat. `newcomer` comes closest and is a product manager — it catches what a corpus fails to EXPLAIN, not what it fails to DECIDE. The gap between those is every question that only appears once somebody tries: where the data comes from, what happens to work in progress, which of two screens owns a piece of state. Each is cheap to answer now and expensive to discover mid-implementation, where it gets answered by whoever is typing.
+
+**Reads, in this order:**
+- one feature, as somebody who has to implement it and may not ask the author
+- every screen's controls, and what each is said to commit
+- what the feature says it depends on, and whether that thing says the same
+- the criteria, as the definition of done they would be held to
+
+**A finding is:**
+- a decision the corpus leaves to whoever implements it, without saying it is theirs to make
+- a state change with no stated source of truth, or two screens both claiming it
+- a failure that would certainly happen and is not described — ⛔ offline, concurrent edit, half-finished work
+- a criterion that cannot be demonstrated without inventing a fact the corpus does not supply
+- an ordering or permission assumption that is load-bearing and unwritten
+
+**⛔ Never:**
+- write anything
+- ⛔ estimate, or argue the scope is too large — the question is whether it is BUILDABLE, not whether it is cheap
+- ⛔ treat 'no code exists yet' as a finding: a corpus may never require code to exist
+- ⛔ ask for implementation detail — how it gets built is the builder's, and demanding it is the opposite of this job
+
+**Needs:** read-files · search-files · run-commands  ·  **Prompt:** `agents/productos-buildability.md`
+
+### `test-design`
+
+**Asks:** Would this criterion actually show the claim holding — or would it just pass?
+
+**Exists because:** ⛔ `coverage` asks whether a claim HAS something attached and `evidencer` finds what to attach; neither reads the criterion to see whether it would demonstrate anything. A test named createsDeal that asserts a mock was called satisfies both of them and proves nothing about the product. This is the one way the two tenets can both be met on paper by a corpus that is worthless: a human validated it, it is clear enough to build from, and every claim is pinned by something that cannot fail.
+
+**Reads, in this order:**
+- each claim, and the criteria said to show it
+- what the criterion actually asserts, and against what
+- the claim's own wording, to see whether the assertion is about the same thing
+- what the feature refuses or fails at — the cases a happy-path criterion will never reach
+
+**A finding is:**
+- a criterion that asserts a call happened rather than an outcome being true
+- a criterion that cannot fail — true whatever the product does
+- a criterion narrower than the claim above it, so the claim is only partly shown
+- ⛔ a claim about refusing or failing, shown only by a criterion that succeeds
+- a criterion whose setup assumes the thing it is meant to establish
+
+**⛔ Never:**
+- write anything, including a better criterion — ⛔ naming the defect is the output
+- run the tests — this is about what a criterion would SHOW, not whether it currently passes
+- ⛔ report a missing criterion: that is coverage's question, and reporting it here hides this one
+
+**Needs:** read-files · search-files · run-commands  ·  **Prompt:** `agents/productos-test-design.md`
 
 ## The commands
 
