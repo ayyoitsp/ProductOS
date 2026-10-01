@@ -857,10 +857,27 @@ function renderScreens(scope: Scope, ctx: Ctx, scopeId: string, opts: PageOption
                * ⛔ COUNTED, NEVER ANSWERED. What each step promises is a product decision; this
                * says only how many pictures there are and how many sentences, which is a fact.
                */
+              /**
+               * ⛔ COUNTED AT THE SCREEN AND AT ITS CONTROLS. Anchoring each exchange at the control
+               * that asks it — which the model wants, and which `arrives-nowhere` refuses a corpus
+               * for not doing — emptied the screen-level count, so a feature with thirty-seven
+               * statements on it reported "nothing said about any of them". The banner was reading
+               * one shelf and calling the room empty.
+               */
               (v.states?.length ?? 0) >= 2 &&
-              statedAt(scope, v.id, undefined).reduce((n, x) => n + x.said.length, 0) <= 1
+              scope.exchanges
+                .filter((e) => e.at?.view === v.id)
+                .reduce(
+                  (n, e) =>
+                    n +
+                    Object.values(e.slots ?? {}).reduce((m, b) => {
+                      const says = (b as { says?: unknown } | undefined)?.says;
+                      return m + (typeof says === "string" ? 1 : Array.isArray(says) ? says.length : 0);
+                    }, 0),
+                  0
+                ) <= 1
                 ? `<p class="owes">This screen has ${(v.states?.length ?? 0) + 1} appearances and ${
-                    statedAt(scope, v.id, undefined).some((x) => x.said.length)
+                    scope.exchanges.some((e) => e.at?.view === v.id && Object.keys(e.slots ?? {}).length)
                       ? "one sentence covering all of them"
                       : "nothing said about any of them"
                   } — you can see more here than you can read. Steps somebody moves through are screens of their own.</p>`
@@ -1251,12 +1268,22 @@ function renderNotePanel(_corpus: Corpus, _ids: string[], opts: PageOptions): st
    * the thing they are most likely to want to correct by scrolling, so it has to be legible while
    * they type.
    */
+  /**
+   * ⛔ AND IT ANSWERS BACK. Peter: *"i'm going to drive things mostly through product OS now, but
+   * let's add a 2-way window so you can send messages back as well"*.
+   *
+   * The dock could file a request and nothing could reply where he was standing, so the surface he
+   * reviews in was write-only and "did anybody read this" had to be asked somewhere else. The
+   * thread for whatever he is looking at sits above the box — his words and the answers to them, in
+   * order, scoped to this screen rather than a log of everything ever said.
+   */
   return `
     <form id="note-bar" class="note-bar" autocomplete="off">
+      <div class="note-thread" id="note-thread" hidden></div>
       <div class="note-at"><span class="note-at-what" id="note-about-label"></span></div>
       <div class="note-row">
         <textarea id="note-text" rows="1" placeholder="Change something here…"
-          aria-label="Ask for a change to what you are looking at. Enter sends, Shift+Enter starts a new line"></textarea>
+          aria-label="Ask for a change to what you are looking at. Enter sends, Shift+Enter starts a new line. Start with pos: for a framework issue"></textarea>
         <button type="submit" id="note-send">Send</button>
         <span class="status" id="note-status"></span>
       </div>
@@ -2785,6 +2812,58 @@ if (noteBar) {
    * emits for a model object carries data-ref and data-label, so this reads the page's own answer
    * rather than a second one computed here.
    */
+  const thread = document.getElementById("note-thread");
+
+  /**
+   * ⛔ THE CONVERSATION ABOUT THIS SCREEN, AND ONLY THIS SCREEN.
+   *
+   * A thread of everything ever said about the whole corpus is a log — useful, and not what somebody
+   * standing on a screen is asking. "What did I say about THIS, and did anybody answer" is the
+   * question, so the window shows the notes filed against the ref the composer would capture.
+   *
+   * ⛔ IT SHOWS THE TAG BACK. A note filed with pos: is a framework issue, and the badge is how he
+   * can see that the tag registered — a convention that silently did nothing would be worse than no
+   * convention, because he would go on using it.
+   */
+  let threadFor = null;
+  /**
+   * ⛔ ITS OWN ESCAPE. esc lives in the DRIVE script's scope, not this one — the thread rendered
+   * nothing at all because the map threw a ReferenceError after the panel had already been
+   * un-hidden, which looks exactly like "there is no conversation here".
+   */
+  const safe = (x) =>
+    String(x == null ? "" : x).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  const paint = (notes) => {
+    if (!thread) return;
+    if (!notes.length) { thread.hidden = true; thread.innerHTML = ""; return; }
+    thread.hidden = false;
+    thread.innerHTML = notes
+      .map((n) => {
+        const badge = n.kind === "framework" ? '<span class="n-kind">framework</span>' : "";
+        const head = '<p class="n-said"><span class="n-who">' + safe(n.by) + "</span>" + badge + " " + safe(n.says) + "</p>";
+        const said = (n.replies || [])
+          .map((r) => '<p class="n-reply"><span class="n-who">' + safe(r.by) + "</span> " + safe(r.says) + "</p>")
+          .join("");
+        /** ⛔ The closing account is a reply too — the last one — not a different kind of thing. */
+        const end = n.outcome ? '<p class="n-reply n-done"><span class="n-who">done</span> ' + safe(n.outcome) + "</p>" : "";
+        return '<div class="n-note' + (n.state === "done" ? " is-done" : "") + '">' + head + said + end + "</div>";
+      })
+      .join("");
+  };
+
+  const loadThread = async (about) => {
+    if (!thread || MODE !== "http" || !about) return;
+    threadFor = about;
+    try {
+      const res = await fetch("/api/v2/thread?about=" + encodeURIComponent(about));
+      const body = await res.json();
+      /** ⛔ Only if they are still looking at the same thing — a slow answer must not paint over a new place. */
+      if (threadFor === about) paint(body.notes || []);
+    } catch (e) {
+      /* a thread that will not load is not worth an error bar over the composer */
+    }
+  };
+
   const READING_LINE = 0.35; // a third down the viewport is where somebody is actually reading
 
   const visible = (el) => {
@@ -2848,6 +2927,14 @@ if (noteBar) {
     label.textContent = trail.map((t) => t.label).join(" / ");
     const leaf = trail[trail.length - 1];
     label.title = leaf.ref;
+    /**
+     * ⛔ THE THREAD FOLLOWS THE PLACE, because the composer does. A window showing the conversation
+     * about the screen somebody has scrolled away from is worse than no window — it reads as an
+     * answer to what they are looking at now.
+     */
+    /** ⛔ The whole trail — a note about the feature is about the screen you are standing in. */
+    const path = trail.map((t) => t.ref).filter(Boolean).join("|");
+    if (path !== threadFor) loadThread(path);
     return leaf.ref;
   };
   describe();
@@ -2927,8 +3014,12 @@ if (noteBar) {
       }
       text.value = ""; grow();
       // ⛔ Says what it did and did NOT do. A green tick alone would read as "changed".
-      status.textContent = "noted — nothing changes until somebody authors it";
+      /** ⛔ Says what it did and did NOT do, and shows the request landing in the thread. */
+      status.textContent = /^\s*pos\s*:/i.test(says)
+        ? "noted as a framework issue — you will get an answer here"
+        : "noted — nothing changes until somebody authors it";
       status.className = "status ok";
+      loadThread(threadFor || about);
       setTimeout(() => { if (status.className === "status ok") status.textContent = ""; }, 6000);
     } catch (err) {
       status.textContent = "Not sent: " + (err && err.message ? err.message : String(err));
@@ -4501,6 +4592,34 @@ const STYLE = `<style>
   .note-bar .status { font-size: .8rem; white-space: nowrap; padding-bottom: .45rem; }
   .note-bar .status.ok { color: var(--ok); } .note-bar .status.bad { color: var(--bad); }
   /* Clearance for the composer, so it never covers the last thing on the page. */
+  /**
+   * ⛔ THE CONVERSATION ABOVE THE BOX, AND CAPPED. A thread that grows without limit eventually
+   * owns the screen somebody is trying to review, which is the opposite of what a dock is for.
+   */
+  /**
+   * ⛔ A WINDOW, NOT A DOCUMENT. The first version showed every reply in full and a single long
+   * outcome — the account of a whole afternoon's work — took over the screen somebody was trying to
+   * review. Each line is clamped to two; the whole thing to a few. Hovering a line opens it.
+   */
+  .note-thread { max-height: 7.5rem; overflow: auto; padding: .45rem .75rem 0; display: grid; gap: .4rem; }
+  .note-thread[hidden] { display: none; }
+  .n-note { border-left: 2px solid var(--surface-3); padding-left: .6rem; }
+  .n-note.is-done { opacity: .62; }
+  .n-said, .n-reply {
+    margin: 0; font-size: .84rem; line-height: 1.45;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .n-said:hover, .n-reply:hover { -webkit-line-clamp: unset; }
+  .n-reply { color: var(--dim); padding-left: .9rem; }
+  .n-who { font-weight: 600; color: var(--text); margin-right: .35rem; }
+  .n-reply .n-who { color: var(--dim); }
+  .n-done .n-who { color: var(--green); }
+  /** ⛔ The tag, shown back. A convention that silently did nothing would be worse than none. */
+  .n-kind {
+    font-size: .68rem; text-transform: uppercase; letter-spacing: .04em;
+    background: var(--accent); color: var(--bg); border-radius: 3px;
+    padding: .05rem .3rem; margin-right: .35rem; vertical-align: .08em;
+  }
   body.has-note-bar { padding-bottom: calc(4.5rem + var(--bottom-h)); }
 
   .gate-note { background: var(--warn-bg); border-left: 3px solid var(--warn); border-radius: 0 6px 6px 0;

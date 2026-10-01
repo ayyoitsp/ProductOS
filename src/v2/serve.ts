@@ -97,6 +97,12 @@ export async function v2Route(req: http.IncomingMessage, res: http.ServerRespons
     "/api/v2/corpus",
     "/api/v2/whoami",
     "/api/v2/presence",
+    /**
+     * ⛔ ON THE LIST, OR IT DOES NOT EXIST. The handler below was written, built and shipped, and
+     * every request to it 404ed — because this allowlist is what decides whether `v2Route` claims a
+     * path at all, and a route added to the body alone is a route nothing routes to.
+     */
+    "/api/v2/thread",
   ];
   if (p !== "/v2" && !p.startsWith("/v2/") && !OURS.includes(p)) return false;
 
@@ -177,6 +183,51 @@ export async function v2Route(req: http.IncomingMessage, res: http.ServerRespons
    */
   if (req.method === "GET" && p === "/api/v2/whoami") {
     return json(res, { kind: who.kind, actor: who.actor, session: who.session, scopes: who.scopes, mints_human_consent: false }), true;
+  }
+
+  /**
+   * ⛔ THE OTHER HALF OF THE CONVERSATION, WHICH THE PAGE COULD NOT SHOW.
+   *
+   * Peter: *"i'm going to drive things mostly through product OS now, but let's add a 2-way window
+   * so you can send messages back as well"*.
+   *
+   * The composer could file a request and nothing could answer it where he was standing. Every
+   * reply had to happen in a chat window he is deliberately moving away from — so the surface he
+   * reviews in was write-only, and the answer to "did anybody read this" was to go somewhere else
+   * and ask.
+   *
+   * ⛔ SCOPED TO WHAT HE IS LOOKING AT, same as the composer above it. A thread of everything ever
+   * said about the whole corpus is a log; the thread about THIS screen is a conversation.
+   */
+  if (req.method === "GET" && p === "/api/v2/thread") {
+    /** ⛔ `p` arrives with the query already stripped, so the ref is read from the raw url. */
+    /**
+     * ⛔ THE TRAIL, NOT THE LEAF. Standing on a screen, the composer captures "Creating a deal /
+     * screen: Create a deal" — so a note filed earlier against the FEATURE was invisible from the
+     * screen inside it, and the window came up empty on the one page with a conversation on it.
+     *
+     * What somebody is looking at is every ref on the way down to where they are standing.
+     */
+    const q = new URL(req.url ?? "/", "http://localhost").searchParams;
+    const refs = q.getAll("about").flatMap((x) => x.split("|")).map((x) => x.trim()).filter(Boolean);
+    const all = loadCorpus(dir).notes;
+    const mine = refs.length ? all.filter((n) => refs.includes(n.about)) : all;
+    return (
+      json(res, {
+        notes: mine.map((n) => ({
+          id: n.id,
+          about: n.about,
+          says: n.says,
+          by: n.by,
+          at: n.at,
+          kind: n.kind ?? "corpus",
+          state: n.state,
+          outcome: n.outcome ?? null,
+          replies: n.replies ?? [],
+        })),
+      }),
+      true
+    );
   }
 
   /**

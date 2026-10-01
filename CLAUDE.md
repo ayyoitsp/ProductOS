@@ -48,6 +48,41 @@ same way: feedback arrives about a rendered corpus, the corpus gets edited, the 
 away, and nothing about ProductOS changed. Prose with a ⛔ on it did not stop that. A failing
 build does.
 
+## ⛔ He drives through ProductOS now, and `pos:` means the framework
+
+Peter: *"i'm going to drive things mostly through product OS now, but let's add a 2-way window so
+you can send messages back as well. if i tag pos: {blah blah} in the message, that indicates a
+framework issue and to fix the framework issue (agent setup), and you respond concisely that it has
+been updated or fixed"*.
+
+**The page is the conversation, not a one-way request form.** The composer files a note; the window
+above it shows the thread for whatever he is looking at — his words and the answers to them. Reply
+where he is standing:
+
+```bash
+productos v2 notes say <id> --says "…"          # reply, leave it open
+productos v2 notes done <id> --outcome "…"      # the last reply, and close
+```
+
+| He typed | It is | What you do |
+| --- | --- | --- |
+| `pos: …` | a **framework** issue — ProductOS itself, the agents, the generators, the checks | fix the framework, then reply **concisely**: what was updated or fixed |
+| anything else | a **corpus** request — what the product truth says | fix the truth, reply with what changed |
+
+⛔ **The tag sets `Note.kind`; nothing infers it.** A classifier reading the sentence would be a
+guess wearing a decision's clothes, and this is the distinction the top of this file opens on —
+backwards in either direction is expensive.
+
+⛔ **Concise means concise on a `pos:` note.** He is reviewing a product, not reading a changelog.
+One or two sentences saying what now happens differently. The full account belongs in the commit
+and in `productos v2 change`, which is where it already goes.
+
+⛔ **Still every layer.** A `pos:` note is feedback like any other: record it with `v2 change new`,
+quote him verbatim, and reach every layer its kind demands. Replying "fixed" without the cascade is
+the same defect this file has been fighting since the first line of it.
+
+---
+
 ### ⛔ Record what he said, then drive it — `productos v2 change`
 
 ```bash

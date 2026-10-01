@@ -10,7 +10,7 @@ import { compilePacket } from "../../v2/packet.js";
 
 import { questionsFor, descendants } from "../../v2/settle.js";
 import { perform, preview, payloadFrom, optionText, VIA, type Act, type Via, type Outcome, type Refused } from "../../v2/acts.js";
-import { fileNote, closeNote } from "../../v2/notes.js";
+import { fileNote, closeNote, replyToNote } from "../../v2/notes.js";
 import { appStyleFor } from "../../v2/appcss.js";
 import { watchCorpus } from "../../v2/watch.js";
 import { inbox } from "../../v2/inbox.js";
@@ -1913,6 +1913,31 @@ export function v2Command(): Command {
       }
       console.log(pc.green("✓"), `${r.said} — ${pc.dim(r.note.id)}`);
       console.log(pc.dim("  this changes nothing on its own. author the change, then close it saying what you did."));
+    });
+
+  noteCmd
+    /**
+     * ⛔ THE REPLY THAT DOES NOT CLOSE ANYTHING.
+     *
+     * Peter: *"let's add a 2-way window so you can send messages back as well"*. `done` was the
+     * only thing that could be said in reply, and it ends the request — so a question, a progress
+     * line, or "this is a framework gap and here is why" had to be said somewhere he is no longer
+     * looking.
+     */
+    .command("say")
+    .description("Reply on a request, without deciding it is finished")
+    .argument("<id>")
+    .requiredOption("--says <what>", "what to tell them")
+    .option("--by <who>", "who is replying", "claude")
+    .action((id: string, o: { says: string; by?: string }, self: Command) => {
+      const r = replyToNote(at(self.optsWithGlobals()), id, o.by ?? "claude", o.says);
+      if (!r.ok) {
+        console.error(pc.red("✗"), r.why);
+        for (const d of r.detail ?? []) console.error(pc.dim(`  ${d}`));
+        process.exit(1);
+      }
+      console.log(pc.green("✓"), r.said);
+      console.log(pc.dim("  it is still open — close it with: productos v2 notes done " + id + ' --outcome "…"'));
     });
 
   noteCmd

@@ -39,7 +39,19 @@ const asYaml = (n: NoteT): string =>
     `    at: ${n.at}`,
     `    via: ${n.via}`,
     `    state: ${n.state}`,
+    ...(n.kind && n.kind !== "corpus" ? [`    kind: ${n.kind}`] : []),
     ...(n.outcome ? [`    outcome: ${JSON.stringify(n.outcome)}`] : []),
+    /** ⛔ Every reply kept, in order. A thread with the middle removed is a thread that lies. */
+    ...(n.replies?.length
+      ? [
+          `    replies:`,
+          ...n.replies.flatMap((r) => [
+            `      - by: ${JSON.stringify(r.by)}`,
+            `        at: ${JSON.stringify(r.at)}`,
+            `        says: ${JSON.stringify(r.says)}`,
+          ]),
+        ]
+      : []),
     /**
      * ⛔ WRITTEN BACK, or a claim would survive exactly until the next thing rewrote this file —
      * which is a lease that silently stops existing at the moment a second session appears.
@@ -63,6 +75,13 @@ export interface Filing {
  * Append a request. Append-only, like the verdict log: a note is a record that somebody asked,
  * not a field that gets overwritten once somebody decides what to do about it.
  */
+/**
+ * ⛔ THE TAG THAT MAKES A NOTE A FRAMEWORK ISSUE. Anchored at the start, because a note that
+ * MENTIONS ProductOS in passing is not a note about it — "the pos: prefix is confusing" is a
+ * corpus request about a label, and matching it anywhere would file it against ourselves.
+ */
+export const POS = /^\s*pos\s*:/i;
+
 export function fileNote(dir: string, f: Filing): Filed | NotFiled {
   const says = f.says.trim();
   if (!says) return { ok: false, why: "an empty note is a click nobody can act on" };
@@ -71,6 +90,18 @@ export function fileNote(dir: string, f: Filing): Filed | NotFiled {
     id,
     about: f.about.trim() || "the whole corpus",
     says,
+    /**
+     * ⛔ READ FROM THE TAG HE TYPED, NEVER FROM THE SENTENCE.
+     *
+     * Peter: *"if i tag pos: {blah blah} in the message, that indicates a framework issue"*. A
+     * classifier reading the prose would be a guess wearing a decision's clothes, and this is the
+     * distinction `CLAUDE.md` opens on — getting it backwards sends somebody to rearrange a corpus
+     * that has no correct arrangement, or buries a real framework fix in an author's backlog.
+     *
+     * ⛔ AND THE TAG STAYS IN HIS WORDS. Stripping it would make the record of what he asked for
+     * differ from what he typed, and the one rule this project keeps about feedback is to quote him.
+     */
+    kind: POS.test(says) ? ("framework" as const) : ("corpus" as const),
     by: f.by.trim(),
     at: f.at,
     via: f.via,
@@ -107,6 +138,45 @@ export function fileNote(dir: string, f: Filing): Filed | NotFiled {
     work: parsed.data.id,
   });
   return { ok: true, note: parsed.data, said: `noted against ${parsed.data.about}` };
+}
+
+/**
+ * Say something back, without deciding the matter is finished.
+ *
+ * ⛔ THE HALF OF THE CONVERSATION THAT DID NOT EXIST. Peter: *"let's add a 2-way window so you can
+ * send messages back as well"*. The only thing that could be said in reply was `outcome`, which
+ * closes the note — so every answer doubled as a decision that the matter was over, and a question,
+ * a progress line, or "this is a framework gap and here is why" had nowhere to go but a chat window
+ * he is deliberately moving away from.
+ *
+ * ⛔ APPEND-ONLY, like everything else here. A reply is a record that somebody said a thing, and a
+ * thread with the middle rewritten is a thread that lies about how a decision was reached.
+ */
+export function replyToNote(dir: string, id: string, by: string, says: string): Filed | NotFiled {
+  const said = says.trim();
+  if (!said) return { ok: false, why: "an empty reply is worse than none — it reads as an answer" };
+  const notes = read(dir);
+  const n = notes.find((x) => x.id === id);
+  if (!n)
+    return { ok: false, why: `no note "${id}"`, detail: notes.filter((x) => x.state === "open").map((x) => `${x.id} — ${x.about}`) };
+
+  const at = new Date().toISOString();
+  const next: NoteT = { ...n, replies: [...(n.replies ?? []), { by, at, says: said }] };
+  fs.writeFileSync(fileOf(dir), "notes:\n" + notes.map((x) => (x.id === id ? next : x)).map(asYaml).join(""));
+  /**
+   * ⛔ NO `work` ON THIS EVENT. The note still owes what it owed; a reply is somebody speaking, not
+   * somebody finishing. Carrying work here would let the inbox cursor advance past an open request
+   * because a progress line was posted against it.
+   */
+  append(dir, {
+    kind: "note",
+    at,
+    by,
+    via: "chat",
+    ref: n.about,
+    says: `${by} replied on ${n.id} — ${said}`,
+  });
+  return { ok: true, note: next, said: `replied on ${n.id}` };
 }
 
 /**

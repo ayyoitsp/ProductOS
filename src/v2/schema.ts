@@ -2145,6 +2145,42 @@ export const Note = z
     state: z.enum(["open", "done"]).default("open"),
     outcome: z.string().optional(),
     /**
+     * ⛔ WHAT KIND OF THING IS BEING ASKED FOR — the corpus, or the framework that produced it.
+     *
+     * Peter: *"if i tag pos: {blah blah} in the message, that indicates a framework issue and to
+     * fix the framework issue (agent setup), and you respond concisely that it has been updated or
+     * fixed"*.
+     *
+     * The distinction already governs everything here — `CLAUDE.md` opens on it, the newcomer skill
+     * routes on it, and getting it backwards is called out as costly in both directions. It had no
+     * field: every note arrived looking like a corpus request, and which one it was got decided by
+     * whoever read it, from the prose, differently each time.
+     *
+     * ⛔ SET FROM WHAT HE TYPED, NEVER INFERRED. A tag is a decision somebody made; a classifier
+     * reading the sentence is a guess that looks like one.
+     */
+    kind: z.enum(["corpus", "framework"]).default("corpus"),
+    /**
+     * ⛔ A NOTE IS A CONVERSATION, NOT A REQUEST WITH A RECEIPT.
+     *
+     * Peter: *"let's add a 2-way window so you can send messages back as well"*. Before this the
+     * only thing that could be said in reply was `outcome`, which closes the note — so every answer
+     * was also a decision that the matter was finished, and anything short of that (a question, a
+     * progress line, "this is a framework gap and here is why") had nowhere to go but a chat
+     * window he is deliberately moving away from.
+     */
+    replies: z
+      .array(
+        z
+          .object({
+            by: z.string().min(1),
+            at: z.string(),
+            says: z.string().min(1, "an empty reply is worse than none — it reads as an answer"),
+          })
+          .strict()
+      )
+      .default([]),
+    /**
      * ⛔ WHO IS WORKING ON IT, AND UNTIL WHEN — because a note is the only thing in this model that
      * two sessions can both pick up.
      *

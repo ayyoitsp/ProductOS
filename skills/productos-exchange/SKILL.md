@@ -934,6 +934,30 @@ attrition.
 — nobody has agreed it", not "agreed". A command whose output contradicts what it did is worse than
 one that refuses: somebody reads the tick and stops looking.
 
+## ⛔ `pos:` means the framework, and the page answers back
+
+The review page is a **conversation**, not a request form. The composer files a note; the window
+above it shows the thread for whatever the person is looking at — their words and the answers to
+them. Reply where they are standing:
+
+```bash
+productos v2 notes say <id> --says "…"          # reply, and leave it open
+productos v2 notes done <id> --outcome "…"      # the last reply, and close
+```
+
+| They typed | It is | What you do |
+| --- | --- | --- |
+| `pos: …` | a **framework** issue — ProductOS itself, its agents, generators and checks | fix the framework, then reply **concisely**: what was updated or fixed |
+| anything else | a **corpus** request — what the product truth says | fix the truth, reply with what changed |
+
+⛔ **The tag sets `Note.kind`; nothing infers it.** A classifier reading the sentence would be a
+guess wearing a decision's clothes — and this is the audit-finding-versus-framework-gap distinction
+that `GLOSSARY.md` warns is costly in both directions.
+
+⛔ **A reply is not a closure.** `outcome` ends the request, so answering with it used to double as
+deciding the matter was finished — a question, a progress line, or "this is a gap and here is why"
+had nowhere to go. `say` leaves it open.
+
 ## The reviewers, and what each one asks
 
 ```bash
