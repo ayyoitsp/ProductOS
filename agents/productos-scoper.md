@@ -729,6 +729,37 @@ at:
   part: deal-row          # ⛔ the card can now say "show me the deal row" and take them to it
 ```
 
+⛔ **Who may is a thing the product HAS — name it, do not describe it.** Where the product has roles
+or permissions, the `may` slot names them in `held_by` beside its sentence:
+
+```yaml
+      may:
+        says: >
+          An underwriter on this deal's own team. Somebody who can read the deals list but not
+          add to it never reaches this screen.
+        held_by: [underwriter]      # ⛔ roles/permissions the product enumerates, not free text
+```
+
+Peter, reading *"Anybody in the organization whose role lets them create deals here"*: *"we should
+probably solidify 'roles/permissions' as a cross-product concept, and enumerate which permissions
+can access it."* That sentence names a role without naming it — it cannot be listed, cannot be
+checked, and gets retyped differently on every exchange that means the same thing, so *"what can an
+underwriter reach"* was answerable only by reading the whole corpus.
+
+⛔ **The sentence stays and is still required.** A list of ids is not something a person can judge;
+*"nobody outside the deal's own team, even an admin"* is the part somebody agrees to, and the ids are
+what make it answerable from the other end.
+
+The product's roles and permissions live in one file at the top of the corpus, each with what
+holding it lets somebody do. A role may `hold` permissions; a permission holds nothing. ⛔ **And not
+every product has them** — `access:` in the corpus config says `roles`, `permissions`, `both` or
+`neither`, and where it is `neither` naming one is the finding rather than omitting one.
+`productos v2 check` reports a `may` that is only prose, a name no access item defines, and a role
+or permission nothing anywhere uses.
+
+⛔ **`held_by` belongs to `may` and is refused on every other slot** — the same reasoning as
+`outcomes` on `refuses`.
+
 ⛔ **The control that ENDS the feature says so: `finishes: true` on its exchange.** And where a
 press moves the picture to a particular appearance of the screen, name it: `lands_on:` carrying that
 state's `when`, the same spelling `at.state` uses.

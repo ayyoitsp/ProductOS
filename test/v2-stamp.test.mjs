@@ -33,6 +33,14 @@ const SAMPLE = {
   instead_of: [{ rule: "nothing-half-happens", because: "a reason nobody agreed to at all" }],
   defers_to: [{ rule: "nothing-half-happens", because: "the org rule still holds, narrowed here" }],
   candidates: [{ says: "a drafted answer", consequence: "and what it would force" }],
+  /**
+   * ⛔ WHO MAY IS PART OF WHAT SOMEBODY AGREED TO. Widening it from one role to anybody is a change
+   * to the claim, not a detail beside it — so a stamp taken before that change must stop reading as
+   * current. This test is the only thing that would have caught `held_by` being invisible to the
+   * hash, which is a tenet-one hole: somebody agreed that an underwriter may, and the acceptance
+   * would have survived the sentence becoming "anybody may".
+   */
+  held_by: ["somebody-else-entirely"],
 };
 
 test("every key of SlotFill changes the canonical form the hash is taken over", () => {

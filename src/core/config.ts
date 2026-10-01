@@ -87,6 +87,21 @@ export const ExchangeConfig = z
       .enum(["never", "allow"])
       .default("never")
       .describe("whether this corpus may be published to claude.ai as an interactive page"),
+    /**
+     * ⛔ WHICH ACCESS MODEL THIS PRODUCT HAS — and `neither` is a real answer.
+     *
+     * Peter: *"at the top level we can configure whether we use roles, permissions, or nothing like
+     * that."*
+     *
+     * A single-user tool has no roles, and a `may` slot naming one there would be an invention. The
+     * reverse is worse: with no setting, every check either assumes roles exist (and nags a product
+     * that has none) or assumes they do not (and never notices that "whoever may create deals" is
+     * four spellings of one idea). So the product answers once, and the checks follow the answer.
+     */
+    access: z
+      .enum(["roles", "permissions", "both", "neither"])
+      .default("neither")
+      .describe("whether this product has roles, permissions, both, or no such concept"),
   })
   .strict();
 export type ExchangeConfig = z.infer<typeof ExchangeConfig>;

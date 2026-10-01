@@ -715,6 +715,19 @@ export const SlotFill = z
      *  latitude reaches a builder by declaration rather than by absence. */
     none: z.boolean().optional(),
     cannot_fail: z.string().optional(),
+    /**
+     * ⛔ WHO MAY, BY NAME — only on `may`, and refused on every other slot.
+     *
+     * Peter: *"enumerate which permissions can access it."* The slot already asks who may; what it
+     * could not do was answer in terms the product shares with its other features, so the answer
+     * was prose and the question "what can an underwriter reach" was unanswerable.
+     *
+     * ⛔ `says` STAYS AND IS STILL REQUIRED. A list of ids is not a sentence a reviewer can judge —
+     * "nobody outside the deal's own team, even an admin" is the part a person agrees to, and the
+     * ids are what makes it checkable and listable. Replacing the sentence with the list would
+     * trade the thing a human validates for the thing a machine reads.
+     */
+    held_by: z.array(z.string()).default([]),
     /* ⛔ `notes` REMOVED. It answered no slot question, so it had no honest content — and it
      * carried unsettled product truth straight through every guard: *"How far back the history
      * goes is not decided… Whether a kid sees the same history as a parent is also unsettled"*
@@ -1054,6 +1067,20 @@ export const Exchange = z
     criteria: z.array(Criterion).default([]),
   }).strict()
   .superRefine((e, ctx) => {
+    /**
+     * ⛔ `held_by` ANSWERS "WHO MAY", SO IT BELONGS TO THAT SLOT AND NOWHERE ELSE.
+     *
+     * The same reasoning as `outcomes` on `refuses` and `cannot_fail` on `fails`: a field that is
+     * meaningful on one slot and accepted on all eight is a field that will be written on the
+     * wrong one, read by nothing, and look correct in the file.
+     */
+    for (const [slot, fill] of Object.entries(e.slots ?? {}))
+      if (slot !== "may" && (fill as { held_by?: string[] })?.held_by?.length)
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["slots", slot, "held_by"],
+          message: `held_by says who may perform this, so it belongs on the \`may\` slot — not on \`${slot}\``,
+        });
     // ⛔ A person's ask arrives somewhere. Without this an exchange can claim a human
     // trigger and name no screen, which is how v1 accumulated screen-shaped behaviours
     // nobody could find.
@@ -2399,6 +2426,60 @@ export const Steer = z
 export type Steer = z.infer<typeof Steer>;
 
 export const SteersFile = z.object({ steers: z.array(Steer).default([]) }).strict();
+
+/**
+ * ⛔ WHO MAY — AS A THING THE PRODUCT HAS, NOT A SENTENCE EACH FEATURE WRITES AGAIN.
+ *
+ * Peter, reading a `may` slot that said *"Anybody in the organization whose role lets them create
+ * deals here"*: *"we should probably solidify 'roles/permissions' as a cross-product concept, and
+ * enumerate which permissions can access it. and at the top level we can configure whether we use
+ * roles, permissions, or nothing like that."*
+ *
+ * That sentence is the tell. It is prose standing where a concept should be: it names a role
+ * without naming it, cannot be checked, cannot be listed, and is retyped slightly differently on
+ * every exchange in the product — so "which features can an underwriter reach" was a question
+ * nobody could answer except by reading everything and trusting four spellings of the same idea.
+ * `CLAUDE.md` names this exact shape: when something true has nowhere to live, add the field.
+ *
+ * ⛔ AND NOT EVERY PRODUCT HAS THEM. A single-user tool has no roles and a `may` naming one would be
+ * an invention; forcing the concept everywhere is how a framework starts making products describe
+ * themselves in its vocabulary rather than their own. So the product says which model it uses —
+ * `access:` in the corpus's config — and the checks follow that answer rather than assuming one.
+ */
+export const AccessKind = z.enum(["role", "permission"]);
+export type AccessKind = z.infer<typeof AccessKind>;
+
+export const Access = z
+  .object({
+    id: z.string().regex(new RegExp(`^${SEGMENT}$`), "an access id is one segment, kebab-case"),
+    kind: AccessKind,
+    /** What somebody holding it is thereby able to do, in product language. */
+    means: z.string().min(10, "say what holding this lets somebody do — a name alone is not a definition"),
+    /**
+     * ⛔ A ROLE IS A BAG OF PERMISSIONS, AND SAYS SO. Without this, a product using both has roles
+     * whose contents live in whichever exchanges happen to name them — so removing a permission
+     * from a role is a search-and-replace, and nobody can tell what a role grants without reading
+     * the whole corpus. Empty on a permission, and refused there.
+     */
+    holds: z.array(z.string()).default([]),
+    /**
+     * ⛔ WHO DECIDES WHO HOLDS IT, where that is not this product. An access name the product
+     * cannot grant is one somebody will look for a screen to manage and not find.
+     */
+    granted_by: z.string().optional(),
+  })
+  .strict()
+  .superRefine((x, ctx) => {
+    if (x.kind === "permission" && x.holds.length)
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["holds"],
+        message: "a permission holds nothing — only a role is a bag of permissions. Make this a role, or drop `holds`",
+      });
+  });
+export type Access = z.infer<typeof Access>;
+
+export const AccessFile = z.object({ access: z.array(Access).default([]) }).strict();
 
 export const ScopeFile = Scope;
 export const RulesFile = z.object({ rules: z.array(Rule).default([]) }).strict();

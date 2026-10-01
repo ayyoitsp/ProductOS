@@ -10,7 +10,7 @@
  *   note     worth a person's attention; never blocks
  *   shape    an observation about proportions, which no single page can show
  */
-import { SLOTS, SLOT_ASKS, statements, type SlotName, type Says } from "./schema.js";
+import { SLOTS, SLOT_ASKS, statements, saysText, type SlotName, type Says } from "./schema.js";
 import {
   DOWNSTREAM_OF_ANSWER,
   answerIsUnknown,
@@ -28,7 +28,7 @@ import {
 import { stampFor, staleReason, coveredBy } from "./stamp.js";
 import { resolveRef } from "./ref.js";
 import { descendants } from "./settle.js";
-import { ruleHomes } from "./grid.js";
+import { ruleHomes, reachOf } from "./grid.js";
 import { appStyleFor } from "./appcss.js";
 import { readLog } from "./log.js";
 import { landingsFor, finishesFor } from "./connects.js";
@@ -141,11 +141,18 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
    * is a defect or simply the truth about a product nobody has built yet.
    */
   let hasCode = false;
+  /**
+   * ⛔ WHICH ACCESS MODEL THE PRODUCT SAYS IT HAS, read once. `neither` on no config at all, which
+   * is the right default: a corpus that has never been configured has not claimed to have roles.
+   */
+  let accessModel: "roles" | "permissions" | "both" | "neither" = "neither";
   try {
     const paths = resolvePathsOrThrow(root);
     const cfgRoot = path.dirname(path.dirname(paths.configFile));
-    const dir = readConfig(paths).web.components_dir;
+    const conf = readConfig(paths);
+    const dir = conf.web.components_dir;
     hasCode = Boolean(dir) && fs.existsSync(path.resolve(cfgRoot, dir!));
+    accessModel = conf.exchange.access;
   } catch {
     hasCode = false;
   }
@@ -1863,6 +1870,79 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
       });
     if (screenOnly.length > nowhere.length + silentParts.length)
       void 0; // nothing to say: naming the screen without a control is normal for whole-screen rules
+  }
+
+  /**
+   * ---- who may, where the product has roles or permissions ----
+   *
+   * ⛔ Peter, reading *"Anybody in the organization whose role lets them create deals here"*: *"we
+   * should probably solidify 'roles/permissions' as a cross-product concept, and enumerate which
+   * permissions can access it."*
+   *
+   * ⛔ EVERY ONE OF THESE IS GATED ON THE PRODUCT SAYING IT HAS THE CONCEPT. A tool with one user
+   * has no roles, and nagging it about them would be the framework making a product describe itself
+   * in a vocabulary it does not use. `access:` in the config is the answer, and `neither` is a real
+   * one — so the only finding in that case is an exchange naming a role the product says it has not
+   * got.
+   */
+  {
+    const model = accessModel;
+    const byId = new Map(corpus.access.map((a) => [a.id, a]));
+    const wants = (k: "role" | "permission") =>
+      model === "both" || (model === "roles" && k === "role") || (model === "permissions" && k === "permission");
+
+    for (const { scope } of corpus.scopes)
+      for (const ex of scope.exchanges) {
+        const held = ex.slots?.may?.held_by ?? [];
+        /** ⛔ A ref that resolves to nothing, which is a refusal everywhere else in this model. */
+        for (const id of held)
+          if (!byId.has(id))
+            add({
+              severity: "refuse",
+              kind: "may-names-nothing",
+              where: `${scope.id}#${ex.id}#may`,
+              what: `this says only "${id}" may perform it, and the product has no role or permission by that name`,
+              fix: `add it where the product's roles and permissions are listed, or correct the name. ⛔ A name that resolves to nothing reads as a constraint and enforces none`,
+            });
+          else if (!wants(byId.get(id)!.kind))
+            add({
+              severity: "note",
+              kind: "an-access-model-this-product-does-not-use",
+              where: `${scope.id}#${ex.id}#may`,
+              what: `this names the ${byId.get(id)!.kind} "${id}", and this product is configured as access: ${model}`,
+              fix: `either change \`access:\` in the corpus config to the model the product actually has, or say who may in terms of the one it does`,
+            });
+
+        /**
+         * ⛔ AND PROSE WHERE A NAME BELONGS — the finding this whole concept exists for. Only on a
+         * product that HAS the concept, and only a note: the sentence is still the thing a person
+         * agrees to, and an author may legitimately not know the role yet.
+         */
+        if (model !== "neither" && !held.length && saysText(ex.slots?.may?.says).trim())
+          add({
+            severity: "note",
+            kind: "who-may-is-only-prose",
+            where: `${scope.id}#${ex.id}#may`,
+            what: `who may perform this is a sentence and names no ${model === "permissions" ? "permission" : "role"} — so it cannot be listed, cannot be checked, and is spelled differently on every exchange that means the same thing`,
+            fix: `name ${model === "permissions" ? "the permissions" : "the roles"} in \`held_by\`, beside the sentence. ⛔ The sentence stays: it is what somebody agrees to, and the names are what make it answerable from the other end — "what can an underwriter reach"`,
+          });
+      }
+
+    /**
+     * ⛔ A ROLE OR PERMISSION NOTHING USES. Dead access is worse than a missing one: it reads as
+     * something the product enforces, and somebody will build a screen to grant it.
+     */
+    if (corpus.access.length) {
+      const reach = reachOf(corpus);
+      for (const r of reach.filter((x) => !x.reaches.length))
+        add({
+          severity: "note",
+          kind: "nothing-uses-this-access",
+          where: r.id,
+          what: `the ${r.kind} "${r.id}" is defined and no exchange anywhere says it may do anything — so it reads as something the product enforces and reaches nothing`,
+          fix: `name it in the \`may\` of what it is for, or delete it. ⛔ Do not leave it: somebody will build a screen to grant a ${r.kind} that controls nothing`,
+        });
+    }
   }
 
   /**

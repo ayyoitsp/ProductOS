@@ -19,7 +19,7 @@ import { resolveRules, type Corpus } from "./load.js";
 import { promisesOf, screensOf, type ProtoPromise, type ProtoScreen } from "./prototype.js";
 import { inferConnections, landingsFor, finishesFor, stateShowing } from "./connects.js";
 import { SLOTS, SLOT_ASKS_SHORT, statements, saysText, type SlotName, type Scope, type View, type Part, type Says } from "./schema.js";
-import { gridFor, gateFor, actsFor, ruleHomes, stageOf, type Grid, type Cell } from "./grid.js";
+import { gridFor, gateFor, actsFor, ruleHomes, stageOf, reachOf, type Grid, type Cell } from "./grid.js";
 import { stampFor, decidedFor } from "./stamp.js";
 import { wireParts } from "./wire.js";
 import { questionsFor, descendants, type Question } from "./settle.js";
@@ -1403,6 +1403,24 @@ function renderBehaviours(
                 })()
               : ""
           }
+          ${
+            /**
+             * ⛔ WHO MAY, BY NAME, BESIDE THE SENTENCE. Peter: *"enumerate which permissions can
+             * access it."* The sentence stays — it is what somebody agrees to — and the names are
+             * what make it answerable from the other end and the same on every feature that means
+             * the same thing.
+             */
+            slot === "may" && (ex.slots?.[slot]?.held_by ?? []).length
+              ? `<p class="held-by">${(ex.slots![slot]!.held_by ?? [])
+                  .map((id: string) => {
+                    const a = corpus.access.find((x) => x.id === id);
+                    return `<span class="who ${a ? a.kind : "unknown"}" title="${esc(a ? a.means : "nothing in this product is called that")}">${esc(
+                      id
+                    )}</span>`;
+                  })
+                  .join("")}</p>`
+              : ""
+          }
           ${renderState(corpus, sref)}
           ${
             settled
@@ -2608,6 +2626,54 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
                    .map(
                      (x) =>
                        `<li id="${anchorOf(`steer#${x.id}`)}" data-ref="${esc(`steer#${x.id}`)}" data-label="${esc(plain(x.says).slice(0, 60))}">${line(x.says)}</li>`
+                   )
+                   .join("")}</ul>
+               </div>`;
+             })()
+           }
+           ${
+             /**
+              * ⛔ WHAT EACH ROLE OR PERMISSION REACHES — the question prose could not answer.
+              *
+              * Peter: *"enumerate which permissions can access it."* From an exchange's side that is
+              * `held_by`; this is the same fact from the end somebody actually asks from — *what can
+              * an underwriter do in this product.* With the answer in prose that was only reachable
+              * by reading every feature and trusting four spellings of one idea.
+              *
+              * ⛔ Derived, never stored. A second list of who-reaches-what would disagree with the
+              * exchanges within a week, and the stored one would win because it is the one printed.
+              */
+             (() => {
+               if (!corpus.access.length) return "";
+               const reach = reachOf(corpus);
+               const title = (ref: string) => {
+                 const [sid, eid] = ref.split("#");
+                 const sc = corpus.scopes.find((x) => x.scope.id === sid)?.scope;
+                 const ex = sc?.exchanges.find((x) => x.id === eid);
+                 return `${plain(ex?.title ?? eid ?? ref)} — ${plain(sc?.title ?? sid ?? "")}`;
+               };
+               return `<div class="sub-view" data-sub-view="access" data-ref="access" data-label="Who may">
+                 <h2>Who may</h2>
+                 <p class="lede">The roles and permissions this product has, and what each one reaches.
+                 ⛔ Read from what the features say, not kept as a second list.</p>
+                 <ul class="access-list">${reach
+                   .map(
+                     (r) => `<li id="${anchorOf(`access#${r.id}`)}" data-ref="${esc(`access#${r.id}`)}" data-label="${esc(r.id)}">
+                       <p class="access-head"><span class="who ${esc(r.kind)}">${esc(r.id)}</span> ${line(r.means)}</p>
+                       ${
+                         /** ⛔ Who grants it, where that is not this product — or somebody looks for the screen and does not find it. */
+                         (() => {
+                           const a = corpus.access.find((x) => x.id === r.id);
+                           return a?.granted_by ? `<p class="access-by">granted by ${line(a.granted_by)}</p>` : "";
+                         })()
+                       }
+                       ${
+                         r.reaches.length
+                           ? `<ul class="reaches">${r.reaches.map((x) => `<li>${esc(title(x))}</li>`).join("")}</ul>`
+                           : `<p class="owes">Nothing in this product says this may do anything.</p>`
+                       }
+                       ${r.idle.length ? `<p class="owes">Holds ${r.idle.map((x) => `<code>${esc(x)}</code>`).join(", ")}, which nothing uses.</p>` : ""}
+                     </li>`
                    )
                    .join("")}</ul>
                </div>`;
@@ -4755,6 +4821,17 @@ const STYLE = `<style>
   .counts .warn { color: var(--warn); } .counts .bad { color: var(--bad); font-weight: 600; }
   /** ⛔ Confirmed-or-not beside a sentence. Palette tokens only — an invented colour paints nothing. */
   /** ⛔ Where a press goes, said on the card. A derived destination says so — it is a reading, not a claim. */
+  /** ⛔ A named role or permission, so it reads as a thing the product has rather than a word in a sentence. */
+  .access-list { list-style: none; padding: 0; display: grid; gap: .9rem; }
+  .access-list > li { border: 1px solid var(--line); border-radius: .4rem; padding: .6rem .8rem; background: var(--card); }
+  .access-head { margin: 0 0 .3rem; }
+  .access-by { margin: .2rem 0; font-size: .85rem; color: var(--dim); }
+  .reaches { margin: .3rem 0 0 1rem; font-size: .9rem; color: var(--dim); }
+  .held-by { display: flex; flex-wrap: wrap; gap: .3rem; margin: .4rem 0 0; }
+  .held-by .who { font-size: .74rem; letter-spacing: .02em; padding: .1rem .4rem; border-radius: 3px;
+    border: 1px solid var(--line); color: var(--dim); background: var(--card); }
+  .held-by .who.role { border-color: var(--accent); color: var(--accent); }
+  .held-by .who.unknown { border-color: var(--bad); color: var(--bad); }
   .beh-where .goes { color: var(--accent); }
   .beh-where .goes.done { color: var(--ok); }
   .beh-where .goes i { color: var(--dim); font-style: italic; }

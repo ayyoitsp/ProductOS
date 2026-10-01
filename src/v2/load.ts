@@ -15,7 +15,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { parseFrontmatter } from "../core/frontmatter.js";
 import YAML from "yaml";
-import { Scope, Rule, Reading, Verdict, Charter, type SlotName , saysText, type Says, Note, Steer} from "./schema.js";
+import { Scope, Rule, Reading, Verdict, Charter, type SlotName , saysText, type Says, Note, Steer, Access} from "./schema.js";
 
 export interface V2Paths {
   root: string;
@@ -58,6 +58,11 @@ export interface Corpus {
    * by design — see `Steer`. Nothing here is ever a verdict.
    */
   steers: Steer[];
+  /**
+   * ⛔ The roles or permissions this product has. Empty where it has no such concept — see
+   * `access:` in the corpus config, which is what says whether that emptiness is a hole.
+   */
+  access: Access[];
   rules: Array<{ rule: Rule; body: string; file: string }>;
   readings: Reading[];
   verdicts: Verdict[];
@@ -231,6 +236,22 @@ export function loadCorpus(root: string, store: Store = diskStore): Corpus {
       broken.push({ file, why: why(e) });
     }
   }
+  /**
+   * ⛔ THE ROLES AND PERMISSIONS THE PRODUCT HAS, read once and shared by every feature.
+   *
+   * One file rather than one per item, unlike rules: a role cannot be judged on its own — what
+   * matters is whether the set of them carves the product sensibly, and that is only visible with
+   * all of them in front of you.
+   */
+  const access: Access[] = [];
+  for (const file of readDir(paths.root, [".yaml", ".yml"]).filter((f) => /access\.ya?ml$/.test(f))) {
+    try {
+      const raw = YAML.parse(readFile(file)) ?? {};
+      for (const x of raw.access ?? []) access.push(Access.parse(x));
+    } catch (e) {
+      broken.push({ file, why: why(e) });
+    }
+  }
   const verdicts: Verdict[] = [];
   for (const file of readDir(paths.verdicts, [".yaml", ".yml"])) {
     try {
@@ -240,7 +261,7 @@ export function loadCorpus(root: string, store: Store = diskStore): Corpus {
       broken.push({ file, why: why(e) });
     }
   }
-  return { paths, scopes, rules, charter, notes, readings, verdicts, steers, broken };
+  return { paths, scopes, rules, charter, notes, readings, verdicts, steers, access, broken };
 }
 
 // ---------------------------------------------------------------------------
