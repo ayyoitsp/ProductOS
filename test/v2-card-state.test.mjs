@@ -71,3 +71,81 @@ test("an author naming a state is what the model can now carry", async () => {
   });
   assert.ok(!bad.success, "an anchor accepted an unknown key, so a misspelled state would be silently ignored");
 });
+
+/**
+ * ⛔ A DRAWING OLDER THAN THE PARTS IS ONE FINDING, NOT ONE PER BEHAVIOUR.
+ *
+ * `v2 draw` marks a control only if the view already DECLARES it, so a screen drawn while
+ * `parts: []` comes out with no markers at all — and then everything pointing into the picture
+ * fails at once: every anchored behaviour reports that the picture lacks its control, and the
+ * dead-end check fires with landings that are nonsense because nothing can be located.
+ *
+ * A scoper hit this on a real feature and reported it as a defect in `draw`, which from inside is
+ * exactly what it looks like. It is an ORDERING problem: redrawing after the parts landed wrote
+ * seventeen markers and cleared every false finding. ⛔ Checked by running it — the agent's report
+ * said regenerating reproduces them, and that was wrong.
+ *
+ * N confident false findings cost more than one missing one, because they get acted on.
+ */
+import { checkCorpus } from "../dist/v2/check.js";
+import fs from "node:fs";
+import path from "node:path";
+import os2 from "node:os";
+
+function drawnBeforeParts(withMarkers) {
+  const dir = fs.mkdtempSync(path.join(os2.tmpdir(), "v2stale-"));
+  fs.mkdirSync(path.join(dir, "truth"), { recursive: true });
+  /**
+   * ⛔ A BLOCK SCALAR BELOW, so the marker's own double quotes need no escaping. Escaping them
+   * inside a quoted YAML scalar is what made the first version of this fixture unparseable — and
+   * the assertion that the fixture parsed is the only reason that was caught rather than passing
+   * as "no findings".
+   */
+  const send = withMarkers ? '<button data-part="send">Send it</button>' : "<button>Send it</button>";
+  fs.writeFileSync(path.join(dir, "truth", "pay.md"), `---
+id: pay
+title: Pay somebody
+exists: kept
+happy_path:
+  accomplishes: somebody sends money to a person they have paid before
+  brings: who they are paying and how much
+  ends_with: the money has moved and both of them can see it
+  through: [pay-form]
+views:
+  - id: pay-form
+    title: Pay somebody
+    sketch_html: |
+      <form>${send}</form>
+    parts:
+      - { id: send, label: Send it, role: commits }
+exchanges:
+  - id: send-it
+    title: Somebody sends the money
+    asked_by: person
+    at: { view: pay-form, part: send }
+    slots:
+      answer:
+        says: the money has moved, and it shows on the list of payments with today's date
+`);
+  const { corpus, findings } = checkCorpus(dir);
+  assert.deepEqual(corpus.broken, [], "the fixture did not parse");
+  return findings;
+}
+
+test("a drawing that marks none of its declared controls is reported once, as output being stale", () => {
+  const found = drawnBeforeParts(false);
+  const stale = found.filter((f) => f.kind === "the-drawing-is-older-than-the-controls");
+  assert.equal(stale.length, 1, "a drawing with no markers at all was not reported as out of date");
+  assert.equal(stale[0].severity, "note", "it is not an authoring mistake — the drawing is output");
+  assert.match(stale[0].fix, /generate|draw/, "the fix does not say to redraw it");
+
+  /** ⛔ And the cascade is suppressed while it holds. */
+  assert.deepEqual(found.filter((f) => f.kind === "the-picture-does-not-contain-the-control"), [],
+    "it reported the stale drawing AND one finding per behaviour — the second set is false and gets acted on");
+});
+
+test("once the drawing marks its controls, the staleness finding goes and the real check applies", () => {
+  const found = drawnBeforeParts(true);
+  assert.deepEqual(found.filter((f) => f.kind === "the-drawing-is-older-than-the-controls"), [],
+    "a correctly marked drawing is still being called out of date, so redrawing can never clear it");
+});

@@ -1547,6 +1547,42 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
          * is the fix, never "delete the sentence".
          */
         {
+          /**
+           * ⛔ A DRAWING OLDER THAN THE PARTS, REPORTED ONCE — NOT AS ONE FINDING PER BEHAVIOUR.
+           *
+           * `v2 draw` writes a `data-part` marker only for a control the view already DECLARES, so
+           * a screen drawn before its parts were written comes out with none at all. Everything
+           * that points into a picture then fails at once: every anchored behaviour reports
+           * `the-picture-does-not-contain-the-control`, and `this-state-is-a-dead-end` fires with
+           * landings that are nonsense because no control can be located.
+           *
+           * A scoper hit exactly this and reported the cascade as a defect in `draw` — reasonably,
+           * since from inside it looks like one. It is an ORDERING problem: the drawing was made
+           * when the view had `parts: []`, and redrawing after the parts landed wrote seventeen
+           * markers and cleared every one of the false findings. ⛔ Verified by running it, not
+           * assumed — the fix text said "regenerate" and the agent's report said regenerating
+           * reproduces them, which turned out to be wrong.
+           *
+           * So this says the one true thing, and the per-behaviour checks below are skipped while
+           * it holds. N confident false findings cost more than a missing one: they are acted on.
+           */
+          const anyMarker = [v.sketch_html, ...(v.states ?? []).map((st) => st.sketch_html)].some(
+            (html) => !!html && html.includes("data-part=")
+          );
+          const drawn = !!v.sketch_html || (v.states ?? []).some((st) => st.sketch_html);
+          if (drawn && !anyMarker && v.parts.some((pt) => !pt.decorative)) {
+            add({
+              severity: "note",
+              kind: "the-drawing-is-older-than-the-controls",
+              where: `${scope.id}#${v.id}`,
+              what: `this screen is drawn and declares ${v.parts.length} control${
+                v.parts.length === 1 ? "" : "s"
+              }, and the drawing marks none of them — so it was made before they were written. Nothing can point at a control on it: no behaviour card can focus one, no press can be followed, and no state can be resolved from one`,
+              fix: `redraw it — \`productos v2 generate --into <corpus>\`, or name the route by hand with \`productos v2 draw "${scope.id}#${v.id}" --route <file>\`. ⛔ Nothing here is an authoring mistake; the drawing is output and is simply out of date`,
+            });
+            continue;
+          }
+
           const drawnAnywhere = (part: string) =>
             [v.sketch_html, ...(v.states ?? []).map((st) => st.sketch_html)].some(
               (html) => !!html && html.includes(`data-part="${part}"`)

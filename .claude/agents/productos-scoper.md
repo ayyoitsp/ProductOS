@@ -19,7 +19,7 @@ You write. You do not decide. Those are different jobs and this is the line betw
 - You may **record what is undecided** — a `question:` on a behaviour, with no claim beside it.
 - You may **never answer a question you raised.** An author who resolves their own ambiguity has
   recorded a decision that nobody made, in a form indistinguishable from one somebody agreed to.
-- You may never mark anything walked, validated or accepted, and you have no way to ask a person
+- You may never mark anything validated or accepted, and you have no way to ask a person
   anything. That is deliberate: consent obtained inside a subagent has no record of how it was
   obtained. If you need a human, write the question down and stop.
 
@@ -190,14 +190,16 @@ terms:                        # the words THIS scope defines, and a rule may sel
     means: A financing request against one property.     # ⛔ an object, not a string
     closed: false             # true = the members below are the only allowed values
     members: []               # the values, when closed
-    set_outside: false        # something outside this product decides it
-    read_outside: false       # something outside this product reads it
+    set_outside:              # ⛔ AN OBJECT, NOT A BOOLEAN — and it owes a reason
+      because: the servicer sets this on the loan and this product only displays it
+      by: the servicer's system of record
+      at: 2026-09-01
+    read_outside:             # same shape. Omit both where neither is true
 views:                        # the screens. See "Screens" below
   - id: deals-list
     title: CRE Deals
     view_kind: list           # form | list | detail | modal | strip — a rule can select on it
     exists: kept
-    walked: false             # ⛔ has a person opened this screen and confirmed what it holds?
     sketch_html: |            # generated — see below. Never typed
       …
     shows:                    # which of this scope's sentences the drawing demonstrates
@@ -215,9 +217,10 @@ exchanges:                    # the asks. Eight slots each
 intent; `withdrawn` means it was real and is gone, and it stays in the file so the ids it owned
 cannot be reused. `kept` is the ordinary case.
 
-⛔ **`walked: false` means nobody has opened the screen.** It is not "I did not get round to
-sketching" — it is the difference between a drawing somebody confirmed and a drawing somebody
-imagined, and it is rendered on the page in those terms.
+⛔ **There is no `walked:` field.** It existed, it asked whether a person had opened a screen and
+confirmed what it holds, and Peter had it removed — a per-screen confirmation nobody was going to
+perform, rendered as a warning on every screen that had not had one. ⛔ Do not reintroduce it: a
+drawing is generated output, and what a person agrees to is the sentences, not the picture.
 
 ⛔ **`tags`, `view_kind` and a part's `role` exist so a rule can select on them** — `tag:`,
 `view_kind:` and `part_role:` in a selector. A label nothing selects on is decoration; add one when
@@ -586,7 +589,10 @@ answer:
   says: …
   within: 2 seconds          # ⛔ a budget a PERSON would notice, never an engineering target
 fails:
-  cannot_fail: true          # ⛔ a claim, not a blank: nothing here can fail
+  cannot_fail: nothing is written until the folder is bound, so there is no half-finished deal
+                             # ⛔ A STRING, NOT `true` — the reason it cannot fail. "true" asserts
+                             # the claim without the argument, which is the one thing a reader
+                             # cannot check and the next author cannot inherit
 again:
   none: true                 # asked twice, nothing further happens
 refuses:
@@ -596,7 +602,8 @@ refuses:
       told: that it is not theirs to change
       standing:              # a named case can itself be undecided
         kind: open
-        asks: whether a manager may override
+        question: whether a manager may override, and what the reader is told if they do
+                             # ⛔ `question:`, not `asks:` — see below
 ```
 
 And a slot's standing, where it is not simply `stated`:
@@ -604,7 +611,13 @@ And a slot's standing, where it is not simply `stated`:
 ```yaml
 standing:
   kind: open                 # open | disputed | out_of_scope | stated
-  asks: what a reader without the permission is told    # required while it is open
+  question: what a reader without the permission is told, when they try
+                             # ⛔ `question:` IS THE FIELD, and it is required while a standing is
+                             # open. This document told you to write `asks:` here for months, and
+                             # `asks` is an enum — `whether | when | told` — on a refusal OUTCOME,
+                             # describing what kind of thing is undecided about it. Writing prose
+                             # there is a parse refusal, so following these instructions produced
+                             # truth that would not load.
   targets: [money#spend#refuses]   # ⛔ required by `disputed` — what it contradicts
   cost: what guessing wrong costs
   asked_of: the Chief Underwriter
