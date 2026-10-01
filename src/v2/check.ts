@@ -1716,8 +1716,54 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
            */
           if (pt.decorative || pt.role === "display" || pt.role === "region") continue;
           if (pt.role === "entry" || pt.role === "navigates") continue;
-          if (!scope.exchanges.some((e) => e.at?.view === v.id && e.at?.part === pt.id))
-            silentParts.push(`${scope.id}#${v.id}#${pt.id}`);
+          const says = scope.exchanges.find((e) => e.at?.view === v.id && e.at?.part === pt.id);
+          /**
+           * ⛔ A CONTROL THAT COMMITS AND PROMISES NOTHING IS NOT ORDINARY INCOMPLETENESS.
+           *
+           * Peter, after clicking through a prototype: *"it dead ends. no way to complete setup"*,
+           * and later *"what isn't back is the linking between features and any behaviors"*.
+           *
+           * ⛔ THE DETECTION WAS NEVER MISSING, WHICH IS THE WHOLE LESSON. Both shapes of this were
+           * already reported — one as `slot-blank`, in the same words it uses for a blank slot on a
+           * label, among 322 of them; the other inside an aggregated note reading "9 controls the
+           * screens draw, that no behaviour says anything about", with one `where` and the
+           * committing ones mixed in with the decorative. Every dead end he walked into was in the
+           * output the whole time, indistinguishable from a sentence nobody had got round to.
+           *
+           * So the serious case gets its own name, its own severity, and ⛔ ONE PER EXIT rather
+           * than a count — because the question a reader has is *which* door, and a number cannot
+           * answer it.
+           *
+           * Two ways it happens, one hole, one kind: nothing is anchored at the control at all, or
+           * something is and its `answer` does not say where somebody arrives. ⛔ Both here rather
+           * than one here and one in the slot loop — the same predicate in two places is the
+           * gateFor/check divergence this codebase paid for once already.
+           */
+          if (pt.role === "commits") {
+            const lands = says?.slots?.answer?.says;
+            const said = typeof lands === "string" ? lands.trim() : Array.isArray(lands) ? lands.length : 0;
+            if (!said)
+              add({
+                severity: "refuse",
+                kind: "pressing-this-promises-nothing",
+                where: `${scope.id}#${v.id}#${pt.id}`,
+                /**
+                 * ⛔ NOT "TAKES SOMEBODY AWAY", WHICH THE FIRST VERSION OF THIS SAID.
+                 *
+                 * It ran against the real corpus and reported *"Add row commits, so pressing it
+                 * takes somebody away"* about a button that adds a row to the table it is standing
+                 * in. A `commits` control CHANGES something; only some of them also move somebody.
+                 * A finding whose first clause is false about the thing it names is a finding the
+                 * reader stops believing, and they are right to.
+                 */
+                what: `${pt.label ?? pt.id} commits — pressing it changes something — and nothing says what happens${
+                  says ? "" : ". No behaviour is anchored at it at all"
+                }. Whoever builds it decides, and a reviewer clicking the prototype arrives at a control that does nothing`,
+                fix: `state it in the \`answer\` of an exchange at this control: what is true afterwards, and where somebody is left if they are left anywhere. ⛔ Where it moves them into another feature, say that — a destination the reader has to infer is the same hole with a sentence over it`,
+              });
+            continue;
+          }
+          if (!says) silentParts.push(`${scope.id}#${v.id}#${pt.id}`);
         }
       }
     }

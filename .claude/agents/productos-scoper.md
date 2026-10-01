@@ -721,6 +721,21 @@ at:
   part: deal-row          # ⛔ the card can now say "show me the deal row" and take them to it
 ```
 
+⛔ **And a control that `commits` owes an `answer`.** A commit changes something; state what is
+true afterwards, and where somebody is left if they are left anywhere. `productos v2 check`
+**refuses** `pressing-this-promises-nothing` for every committing control that has no exchange at
+all, or has one whose `answer` is blank.
+
+Peter found these by clicking: *"it dead ends. no way to complete setup"*. ⛔ They were being
+reported the whole time — as `slot-blank`, in the same words used for a blank slot on a label, among
+three hundred of them, and inside a note that counted them without naming them. A control a person
+can press that the product makes no promise about is **whoever-builds-it's decision**, and it is the
+one hole a reviewer discovers by walking into it rather than by reading.
+
+⛔ **`leads_to` is refused on a `commits` part** — a commit's destination is its `answer`, not a
+link. Where a press moves somebody into another feature, the `answer` has to say so; a destination
+the reader infers is the same hole with a sentence over it.
+
 Without the part, a card reads *"Deal row on CRE Deals — refuses"* with nothing to look at, which
 is unjudgeable — and was the exact complaint that made this exist. In a real 47-exchange corpus 21
 named a screen and **7** named a control; `productos v2 check` reports the controls no behaviour
