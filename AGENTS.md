@@ -765,7 +765,7 @@ Territory, not ownership. Nobody is assigned an area — an agent reads this to 
 | **derive** | derive | `src/v2/grid.ts` `src/v2/stamp.ts` `src/v2/settle.ts` `src/v2/acts.ts` `src/v2/record.ts` `src/v2/spoken.ts` `src/v2/connects.ts` `src/adapters/claude.ts` |
 | **generate** | generate | `src/v2/migrate.ts` `src/v2/draw.ts` `src/v2/draw-write.ts` `src/v2/routes.ts` `src/v2/propose.ts` `src/v2/appcss.ts` `src/core/agents-doc.ts` `src/v2/design.ts` |
 | **surface** | surface | `src/v2/page.ts` `src/v2/prototype.ts` `src/v2/serve.ts` `src/ui/server.ts` `src/v2/packet.ts` `src/v2/notes.ts` `src/v2/watch.ts` `src/v2/log.ts` `src/v2/inbox.ts` `src/v2/presence.ts` `src/v2/identity.ts` `src/v2/client.ts` `src/v2/write.ts` `src/v2/wire.ts` `src/v2/moved.ts` `src/cli/commands/v2.ts` `src/mcp/v2-tools.ts` |
-| **instruct** | instruct | `skills` |
+| **instruct** | instruct | `skills` `agents` |
 | **pin** | pin | `test` |
 | **check** | check | `src/v2/check.ts` |
 

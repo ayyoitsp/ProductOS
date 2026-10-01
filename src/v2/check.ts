@@ -1531,6 +1531,45 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
               fix: `say where it ends in the \`after\` slot of the exchange it performs — "the analyst is then asked where its folder is" is what lets a press move the picture. Where it genuinely stays put, nothing here needs changing`,
             });
         }
+        /**
+         * ⛔ A SENTENCE POINTING AT A CONTROL THAT IS IN NO PICTURE OF THE SCREEN.
+         *
+         * Peter: *"most of the prototypes per behavior card are wrong. on at-create-deal, they all
+         * show the entry form, even if talking about folder matching..."*
+         *
+         * The immediate cause was that nothing could name a state, and `stateShowing` now derives
+         * it. But it can only find a control that is drawn SOMEWHERE — and a control drawn nowhere
+         * is the same symptom with no derivation available: a sentence shown beside a picture that
+         * does not contain the thing it is about. Silent, and it looks like a rendering bug.
+         *
+         * ⛔ A NOTE, NOT A REFUSAL, AND THE DIRECTION MATTERS. The truth is the target state, so a
+         * control the drawing lacks may well mean the DRAWING is behind — "regenerate, or draw it"
+         * is the fix, never "delete the sentence".
+         */
+        {
+          const drawnAnywhere = (part: string) =>
+            [v.sketch_html, ...(v.states ?? []).map((st) => st.sketch_html)].some(
+              (html) => !!html && html.includes(`data-part="${part}"`)
+            );
+          const nowhere = scope.exchanges.filter(
+            (e) => e.at?.view === v.id && e.at.part && v.parts.some((pt) => pt.id === e.at!.part) && !drawnAnywhere(e.at.part)
+          );
+          /** ⛔ Only when there IS a drawing. With no picture at all, the missing picture is the finding. */
+          if (nowhere.length && (v.sketch_html || (v.states ?? []).some((st) => st.sketch_html)))
+            add({
+              severity: "note",
+              kind: "the-picture-does-not-contain-the-control",
+              where: `${scope.id}#${v.id}`,
+              what: `${nowhere.length} behaviour${nowhere.length === 1 ? " is" : "s are"} about ${
+                nowhere.length === 1 ? "a control" : "controls"
+              } this screen's drawings do not contain — ${nowhere
+                .map((e) => e.at!.part)
+                .join(", ")}. Each is shown beside a picture without the thing it is about, which reads as the drawing being wrong rather than missing`,
+              fix: `regenerate this screen, or draw the appearance that holds ${
+                nowhere.length === 1 ? "that control" : "those controls"
+              }. ⛔ Never the other way round — the truth is the target state, so a control the drawing lacks is evidence the drawing is behind`,
+            });
+        }
         if (states.length >= 2) {
           const spoken = scope.exchanges
             .filter((e) => e.at?.view === v.id)

@@ -286,7 +286,22 @@ export const AREAS: Area[] = [
       "describe a field without showing the key an author actually types",
     ],
     owns: ["instruct"],
-    files: ["skills"],
+    /**
+     * ⛔ BOTH PLACES A FUTURE SESSION IS TOLD WHAT TO WRITE, AND `agents` WAS MISSING.
+     *
+     * This was `["skills"]` alone, from when there were eight skills each carrying its own
+     * authoring rules. When they became one, those rules moved to the scoper — the only role that
+     * writes a scope — and this list did not follow. So for every change since, `change check`
+     * looked for the authoring instruction in the one place it is no longer kept, and the only way
+     * past was to waive a layer that had actually been reached.
+     *
+     * ⛔ That is the worse failure of the two: a waiver is supposed to be a decision somebody could
+     * argue with, and a waiver for work that was done empties it of meaning everywhere else.
+     *
+     * Found by the check refusing an instruction I had written into the scoper, which is the
+     * cascade catching a hole in its own map.
+     */
+    files: ["skills", "agents"],
     needs: ["read-files", "search-files"],
   },
   {

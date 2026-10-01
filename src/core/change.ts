@@ -141,12 +141,26 @@ export function verify(root: string, rec: ChangeRecord): LayerVerdict[] {
     };
 
     switch (layer) {
-      case "instruct":
+      case "instruct": {
         /**
          * ⛔ THE LAYER THAT GETS SKIPPED. A concept perfect in the schema that no future session
          * writes only ever appears where somebody typed it by hand. Four times.
+         *
+         * ⛔ AND THE DIRECTORIES COME FROM THE MAP, which the comment above already insisted on and
+         * this case went on ignoring: it was hardcoded to `skills/`. When eight skills became one,
+         * the authoring rules moved to the scoper in `agents/` — so from then on this looked for
+         * the authoring instruction in the one place it is no longer kept, and the only way past
+         * was to waive a layer that had actually been reached. A waiver is meant to be a decision
+         * somebody could argue with; granting one for work that was done empties it everywhere.
          */
-        return { layer, by, ok: anyUnder("skills", by), how: `"${by}" in skills/` };
+        const dirs = areaOf(layer)?.files ?? ["skills"];
+        return {
+          layer,
+          by,
+          ok: dirs.some((d) => anyUnder(d, by)),
+          how: `"${by}" in ${dirs.map((d) => `${d}/`).join(" or ")}`,
+        };
+      }
       case "pin":
         return { layer, by, ok: anyUnder("test", by), how: `"${by}" in test/` };
       default: {

@@ -976,7 +976,31 @@ export const Exchange = z
      * `one-press-two-answers` — where it WEAKENED the refusal: two exchanges on the same
      * button escaped the collision by spelling it `press` and `tap`. The refusal means "one
      * control, one answer", so its key is the control. */
-    at: z.object({ view: z.string(), part: z.string().optional() }).strict().optional(),
+    /**
+     * Where a person meets this exchange: the screen, the control on it, and ⛔ WHICH STATE OF IT.
+     *
+     * Peter, reviewing create-deal: *"most of the prototypes per behavior card are wrong. on
+     * at-create-deal, they all show the entry form, even if talking about folder matching..."*
+     *
+     * He was looking at four behaviours anchored to four different controls of one view — and every
+     * card showed the same picture, because `at` could name a view and a part and had no way to
+     * name a state. That view has four states; `folder-question`, `use-existing-folder` and
+     * `create-new-folder` exist in exactly ONE of them and are absent from the default picture
+     * entirely. So every sentence about folders was shown beside a screen with no folders on it.
+     *
+     * ⛔ A SCREEN IS NOT ONE PICTURE — the model already said that, for views. This is the half that
+     * was missing: a sentence pointing INTO one. `View.states` landed, and every reference to a
+     * view went on resolving to its default frame, which made the states visible to somebody
+     * clicking tabs and invisible to everything that cites a screen.
+     *
+     * Optional, and derived when absent: `stateShowing` finds the one state whose picture contains
+     * the part. Writing it only matters when the derivation cannot tell — a part drawn in several
+     * states, where which one the sentence means is a fact only the author has.
+     */
+    at: z
+      .object({ view: z.string(), part: z.string().optional(), state: z.string().optional() })
+      .strict()
+      .optional(),
     exists: z.enum(["intended", "kept", "withdrawn"]).optional(),
     reads: z.array(z.string()).default([]),
     changes: z.array(z.string()).default([]),

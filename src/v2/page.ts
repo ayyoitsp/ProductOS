@@ -17,7 +17,7 @@
  */
 import { resolveRules, type Corpus } from "./load.js";
 import { promisesOf, screensOf, type ProtoPromise, type ProtoScreen } from "./prototype.js";
-import { inferConnections, landingsFor, finishesFor } from "./connects.js";
+import { inferConnections, landingsFor, finishesFor, stateShowing } from "./connects.js";
 import { SLOTS, SLOT_ASKS_SHORT, statements, saysText, type SlotName, type Scope, type View, type Part, type Says } from "./schema.js";
 import { gridFor, gateFor, actsFor, ruleHomes, stageOf, type Grid, type Cell } from "./grid.js";
 import { stampFor, decidedFor } from "./stamp.js";
@@ -1345,13 +1345,37 @@ function renderBehaviours(
              * sentence is about.
              */
             ex.at?.view
-              ? `<figure class="card-screen" data-of="${esc(ex.at.view)}"${
-                  ex.at.part ? ` data-focus="${esc(ex.at.part)}"` : ""
-                }><figcaption>${
-                  ex.at.part
-                    ? `${esc(partLabel(corpus, scopeId, ex.at.view, ex.at.part))} on ${esc(viewTitle(corpus, scopeId, ex.at.view))}`
-                    : esc(viewTitle(corpus, scopeId, ex.at.view))
-                }</figcaption></figure>`
+              ? (() => {
+                  /**
+                   * ⛔ THE PICTURE THE SENTENCE IS ACTUALLY ABOUT.
+                   *
+                   * Peter: *"most of the prototypes per behavior card are wrong. on at-create-deal,
+                   * they all show the entry form, even if talking about folder matching..."*
+                   *
+                   * Four behaviours on four different controls of one view, every card showing the
+                   * same frame — because a reference to a view resolved to its default picture and
+                   * nothing else. Three of those controls are not in the default picture at all, so
+                   * each folder sentence was shown beside a screen with no folders on it.
+                   *
+                   * Written by the author when they say so, derived from the drawings when they do
+                   * not, and ⛔ left on the default when neither can tell — a frame picked by
+                   * guessing is the same defect with a different picture.
+                   */
+                  const v = corpus.scopes.find((x) => x.scope.id === scopeId)?.scope.views.find((x) => x.id === ex.at!.view);
+                  const named = ex.at!.state && v ? v.states?.findIndex((st) => st.when === ex.at!.state) : -1;
+                  const frame = named !== undefined && named >= 0 ? named + 1 : v && ex.at!.part ? stateShowing(v, ex.at!.part) : null;
+                  const stateLabel = frame && v?.states?.[frame - 1] ? v.states[frame - 1]!.label || v.states[frame - 1]!.when : "";
+                  return `<figure class="card-screen" data-of="${esc(ex.at!.view)}"${
+                    ex.at!.part ? ` data-focus="${esc(ex.at!.part)}"` : ""
+                  }${frame ? ` data-frame="${frame}"` : ""}><figcaption>${
+                    ex.at!.part
+                      ? `${esc(partLabel(corpus, scopeId, ex.at!.view, ex.at!.part))} on ${esc(viewTitle(corpus, scopeId, ex.at!.view))}`
+                      : esc(viewTitle(corpus, scopeId, ex.at!.view))
+                  }${
+                    /** ⛔ Name the state, or a reader cannot tell this is one picture of several. */
+                    stateLabel ? ` · <span class="of-state">${esc(stateLabel)}</span>` : ""
+                  }</figcaption></figure>`;
+                })()
               : ""
           }
           ${renderState(corpus, sref)}
@@ -3912,7 +3936,16 @@ const PROTOTYPE = `<script>
     }
     fig.dataset.filled = "1";
 
-    const proto = src.querySelector(".proto");
+    /**
+     * ⛔ THE FRAME THIS CARD ASKED FOR, not whatever picture comes first.
+     *
+     * A view renders its default frame plus one per state, and every citation of a screen used to
+     * clone the default — so the states were visible to somebody clicking tabs and invisible to
+     * everything that pointed at a screen.
+     */
+    const want = fig.dataset.frame;
+    const box = want && src.querySelector('.state-frame[data-state="' + want + '"]');
+    const proto = (box || src).querySelector(".proto") || src.querySelector(".proto");
     if (!proto) {
       fig.insertAdjacentHTML("beforeend", '<p class="none">Nobody has drawn this screen.</p>');
       return;
@@ -4871,6 +4904,8 @@ const STYLE = `<style>
   figure.card-screen figcaption { font-size: .74rem; color: var(--dim); padding: .35rem .6rem;
     border-bottom: 1px solid var(--line); background: var(--bg); }
   figure.card-screen .none { font-size: .82rem; color: var(--dim); font-style: italic; margin: 0; padding: .6rem; }
+  /** ⛔ Which picture of the screen this is — without it a state reads as the screen itself. */
+  figure.card-screen .of-state { color: var(--accent); }
   /**
    * ⛔ SCALED, NOT SHRUNK. zoom reflows the copy at a smaller size, so a wide table stays legible
    * instead of being squeezed into unreadable columns; transform: scale would leave the layout at

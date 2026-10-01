@@ -685,6 +685,29 @@ is unjudgeable — and was the exact complaint that made this exist. In a real 4
 named a screen and **7** named a control; `productos v2 check` reports the controls no behaviour
 says anything about, which is where the holes are.
 
+**⛔ And when the control only exists in one appearance of the screen, name it.** A screen is not
+one picture — it has a default and one per state — so a reference to a view resolves to a picture,
+and the wrong one is worse than none:
+
+```yaml
+at:
+  view: create-deal-form
+  part: folder-question
+  state: "phase === 'folder'"   # ⛔ which appearance — matches a `when:` in that view's states
+```
+
+Peter, reading four behaviours of one feature: *"most of the prototypes per behavior card are wrong.
+on at-create-deal, they all show the entry form, even if talking about folder matching..."* Three of
+those controls appear in exactly one state and in the default picture **not at all**, so every
+sentence about folders was shown beside a screen with no folders on it.
+
+⛔ **Usually you do not have to write it.** It is derived from the drawings: a part found in exactly
+one state's picture resolves to that state. Write it only when the derivation cannot tell — a
+control drawn in several states, where which one the sentence means is a fact only you have. If
+`productos v2 check` reports `the-picture-does-not-contain-the-control`, the part is drawn nowhere
+and the answer is to regenerate or draw the screen, **never** to delete the sentence: the truth is
+the target state, so a control the drawing lacks is evidence the drawing is behind.
+
 ### ⛔ Every screen gets a picture. The corpus is the target state, so being unbuilt is no excuse
 
 **A corpus may never require code to exist.** A screen in the corpus is the screen the product

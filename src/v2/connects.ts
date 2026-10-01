@@ -478,3 +478,36 @@ export function finishesFor(scope: Scope, view: View): string[] {
     })
     .map((pt) => pt.id);
 }
+
+
+/**
+ * ⛔ WHICH PICTURE OF A SCREEN A SENTENCE IS ABOUT, DERIVED FROM THE PICTURES.
+ *
+ * Peter: *"most of the prototypes per behavior card are wrong. on at-create-deal, they all show the
+ * entry form, even if talking about folder matching..."*
+ *
+ * A view holds a default picture and a picture per state, and a part may exist in only some of
+ * them. Three of create-deal's controls appear in exactly one state and in no other picture at all
+ * — so the state is not a judgement, it is a lookup, and asking an author to write it would be
+ * asking them to retype what the drawing already says.
+ *
+ * Returns the index into the rendered frames: 0 is the default picture, n+1 is `states[n]` — the
+ * same numbering the page's state tabs use, because two numberings for one list is how a tab comes
+ * to show a different frame than the thing that linked to it.
+ *
+ * ⛔ NULL WHEN IT CANNOT TELL, AND THAT IS THREE DIFFERENT SITUATIONS, ALL OF WHICH MUST NOT GUESS:
+ * the part is in the default picture (so the default is right); the part is in several states (only
+ * the author knows which the sentence means); the part is in none (the drawing and the truth
+ * disagree, which is a finding, not something to paper over by picking a frame).
+ */
+export function stateShowing(
+  view: { sketch_html?: string; states?: Array<{ sketch_html?: string }> },
+  part: string
+): number | null {
+  if (!part) return null;
+  /** ⛔ The attribute, not a bare substring: "folder" would match "folder-question" and six others. */
+  const marks = (html?: string) => !!html && html.includes(`data-part="${part}"`);
+  if (marks(view.sketch_html)) return null;
+  const hits = (view.states ?? []).flatMap((st, i) => (marks(st.sketch_html) ? [i + 1] : []));
+  return hits.length === 1 ? hits[0]! : null;
+}
