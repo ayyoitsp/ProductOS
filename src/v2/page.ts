@@ -2542,7 +2542,21 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
            </div>
            <div class="sub-view" data-sub-view="about" data-ref="${esc(scopeId)}" data-label="Product Truth">
              <h2>${line(entry.scope.title || scopeId)}</h2>
-             ${renderProse(entry.body)}
+             ${
+               /**
+                * ⛔ THE SAME RULE AS THE FEATURE VIEW, AND IT WAS THE SECOND DOOR.
+                *
+                * Removing the preface from a feature's own view left it rendering here whenever a
+                * feature is the root of the page — and the real corpus hid that, because its root
+                * is the product, so the paragraph genuinely disappeared from the page Peter was
+                * looking at while still rendering for anybody who opened one feature on its own.
+                * A test on a single feature is what found it.
+                *
+                * A grouping keeps its prose: it has no happy path and no behaviours of its own, so
+                * this is the only thing it can say about itself.
+                */
+               corpus.scopes.some((x) => x.scope.in === scopeId) ? renderProse(entry.body) : ""
+             }
            </div>
            ${
              /**
@@ -2637,7 +2651,31 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
                */
               renderScreens(corpus.scopes.find((x) => x.scope.id === g.scope)!.scope, ctx, g.scope, opts, corpus)
             }
-            ${renderProse(corpus.scopes.find((x) => x.scope.id === g.scope)?.body ?? "")}
+            ${
+              /**
+               * ⛔ NO STANDALONE PREFACE ON A FEATURE. Peter, reading create-deal: *"the 'what this
+               * feature is for' is the overview, the preface seems to be unnecessary — should be
+               * constructed from the confirmed truths, not a standalone section that may need to be
+               * regenerated. Let's just remove the preface for now."*
+               *
+               * Four paragraphs of prose sat above "What this feature is for", saying the same
+               * things: what it is, where it is reached from, what the form holds, what it does
+               * not do. Each of those is a sentence somebody can AGREE to further down the page —
+               * the purpose, the screens, the behaviours — and up here it was agreed to by nobody,
+               * so the first thing a reviewer met was the one part of the page they could not act
+               * on and could not trust.
+               *
+               * ⛔ AND IT IS THE "ONE HOME" RULE, which is the part worth keeping in mind if
+               * somebody is tempted to put it back. A paragraph restating the behaviours is a
+               * second copy with no forcing function: when a behaviour is reworded the paragraph
+               * is not, nothing detects it, and a reader cannot tell which of the two is current.
+               *
+               * ⛔ CONTAINERS KEEP THEIRS, and that is not an inconsistency. A group has no
+               * happy path and no behaviours of its own — prose is the only thing it can say about
+               * itself, so there it is the single home rather than a duplicate of one.
+               */
+              ""
+            }
             ${renderHappyPath(corpus, g.scope, ctx, decisionsOn(corpus, `${g.scope}#happy-path`))}
             ${
               /* ⛔ A leaf shows this only when it owns something. "Nothing holds everywhere in here"

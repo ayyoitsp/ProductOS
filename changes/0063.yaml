@@ -1,0 +1,9 @@
+id: "0063"
+said: the 'what this feature is for' is the overview, the preface seems to be unnecessary - shoudl be constructed from the confirmed truths, not a standalone section that may need to be regenerated.  Let's just remove the preface for now
+at: 2026-10-01
+kind: surface
+reaches:
+  surface: NO STANDALONE PREFACE ON A FEATURE
+  pin: a feature's preface is not rendered, and its purpose still is
+waived: {}
+closed: 2026-10-01

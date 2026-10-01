@@ -45,6 +45,25 @@ written last is a scope whose purpose was inferred from the behaviours, and it s
 
 Then the screens, their parts, and the exchanges at each.
 
+⛔ **And no prose preface on a feature.** Do not write an introductory paragraph under the
+frontmatter describing what the feature is, where it is reached from, or what it does not do. Every
+one of those belongs to something a person can AGREE to — the purpose is `happy_path`, the route in
+is a `leads_to`, a deliberate non-behaviour is a slot with `∅` and a reason.
+
+Peter, reading four such paragraphs above *"What this feature is for"*: *"the 'what this feature is
+for' is the overview, the preface seems to be unnecessary — should be constructed from the confirmed
+truths, not a standalone section that may need to be regenerated."*
+
+A paragraph restating the behaviours is a **second copy with no forcing function**: reword the
+behaviour and the paragraph stays as it was, nothing detects it, and a reader cannot tell which of
+the two is current. It is also the one part of a feature page nobody can act on — unagreeable, and
+first on the page. The renderer no longer shows it on a feature, and `productos v2 check` reports a
+feature that carries one.
+
+**A container is the exception**, and for the reason that proves the rule: a grouping has no happy
+path and no behaviours of its own, so prose is the only thing it can say about itself. There it is
+the single home, not a duplicate.
+
 ## ⛔ The code is where truth comes FROM, never what it is tied TO
 
 Product truth is the target state. A feature that should behave differently from how it is built is

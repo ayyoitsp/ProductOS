@@ -2685,6 +2685,32 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
        * that is somebody describing what is UNDECIDED, addressed to us, and it is the one place our
        * vocabulary belongs. What a reader meets as a description of their product is this body.
        */
+      /**
+       * ⛔ A FEATURE CARRYING A PREFACE NOTHING SHOWS.
+       *
+       * Peter: *"the 'what this feature is for' is the overview, the preface seems to be
+       * unnecessary — should be constructed from the confirmed truths, not a standalone section
+       * that may need to be regenerated. Let's just remove the preface for now."*
+       *
+       * The renderer stopped showing it, and ⛔ that alone would have been the worse half of a fix:
+       * the paragraphs stay in the corpus, invisible, and every future scoper goes on writing them.
+       * Unrendered prose is the quietest kind of rot — it reads as content when somebody opens the
+       * file and reaches no reader at all.
+       *
+       * ⛔ A NOTE, AND ONLY FOR A LEAF. A grouping has no happy path and no behaviours of its own,
+       * so prose is the only thing it can say about itself and is still rendered there.
+       */
+      const isLeaf = !corpus.scopes.some((x) => x.scope.in === scope.id);
+      const prose = body.replace(/\s+/g, " ").trim();
+      if (isLeaf && prose.length > 80)
+        add({
+          severity: "note",
+          kind: "a-preface-nobody-reads",
+          where: `${scope.id}`,
+          what: `this feature carries ${prose.length} characters of description that nothing renders — a feature says what it is for in its purpose, and each of its promises in a sentence somebody can agree to. Up here it is agreed to by nobody and shown to nobody: …${prose.slice(0, 90)}…`,
+          fix: `move anything true in it to where it can be agreed to — the purpose into \`happy_path\`, a route in as a \`leads_to\`, a deliberate non-behaviour as a slot with a reason — then delete the paragraph. ⛔ Do not keep it "for context": a paragraph restating the behaviours is a second copy that nothing re-checks when one of them is reworded`,
+        });
+
       for (const [re, what] of MACHINERY) {
         const hit = re.exec(body);
         if (!hit) continue;
