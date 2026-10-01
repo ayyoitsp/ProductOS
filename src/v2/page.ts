@@ -298,7 +298,20 @@ function renderQuestion(q: Question, i: number, past: Decision[], ctx: Ctx): str
           ? `<p class="owes">This case asks <em>whether</em> it refuses at all — the answer decides whether the case survives.</p>`
           : ""
       }
-      ${renderRecord(past)}
+      ${
+        /**
+         * ⛔ THIS ONE STAYS, AND IT IS NOT THE THING PETER OBJECTED TO.
+         *
+         * On a behaviour card the log answered a question nobody asked. On a QUESTION, the record
+         * is the answer: what was decided, why, which option was chosen and — the reason
+         * `also_considered` exists at all — what was rejected. Stripping it here would delete the
+         * only thing standing between a settled question and somebody relitigating it from scratch.
+         *
+         * It is also empty while a question is open, so it never appears as clutter beside
+         * something undecided.
+         */
+        renderRecord(past)
+      }
     </article>`;
 }
 
@@ -310,6 +323,39 @@ function renderQuestion(q: Question, i: number, past: Decision[], ctx: Ctx): str
  * and then invisible to the one person about to relitigate it. Same for `chose`, `option_said`
  * and `via`.
  */
+/**
+ * ⛔ CONFIRMED, OR NOT, BESIDE THE SENTENCE — AND NOT A LOG OF ACTS.
+ *
+ * Peter: *"if it's confirmed, the state should be obvious, there shouldn't be a list of human
+ * judgement record. we should show confirmed or not next to a behavior."*
+ *
+ * Every behaviour card carried a collapsed "3 acts of human judgement recorded here", which answers
+ * a question nobody was asking. What a reviewer needs from a sentence they are about to judge is
+ * whether it has been judged — one word, visible without opening anything. The provenance still
+ * exists in the verdict log, which is where an audit belongs; a card is a decision surface.
+ *
+ * ⛔ IT READS THE SAME `stampFor` EVERY GATE READS, so "confirmed" on this page cannot disagree
+ * with `check` — three surfaces each built their own accepted-set once, and the packet printed
+ * "accepted separately" for rules with no verdict at all.
+ *
+ * ⛔ AND IT SHOWS A STALE STAMP AS NOT CONFIRMED. If the sentence changed after somebody agreed,
+ * `stampFor` says so, and a badge reading "confirmed" over a sentence they never read is the exact
+ * failure the stale states exist to catch.
+ */
+function renderState(corpus: Corpus, ref: string): string {
+  const st = stampFor(corpus, ref);
+  if (st.state === "accepted")
+    return `<p class="beh-state ok"><b>confirmed</b><span>by ${esc(st.by)} on ${esc(st.at)}</span></p>`;
+  if (st.state === "never") return `<p class="beh-state"><b>not confirmed</b><span>nobody has agreed to this yet</span></p>`;
+  const what =
+    st.state === "claim-changed"
+      ? "the sentence changed after it was agreed to"
+      : st.state === "criteria-changed"
+        ? "what would show it changed after it was agreed to"
+        : "the sentence and what would show it both changed after it was agreed to";
+  return `<p class="beh-state warn"><b>not confirmed</b><span>${esc(st.by)} agreed on ${esc(st.at)}, but ${what}</span></p>`;
+}
+
 function renderRecord(ds: Decision[]): string {
   if (!ds.length) return "";
   return `
@@ -1308,10 +1354,20 @@ function renderBehaviours(
                 }</figcaption></figure>`
               : ""
           }
-          ${renderRecord(past)}
+          ${renderState(corpus, sref)}
           ${
             settled
-              ? `<footer class="beh-acts">
+              ? /**
+                 * ⛔ CONFIRMED MEANS THE "THAT IS RIGHT" BUTTON GOES. Offering it again under a
+                 * badge saying confirmed asks somebody to agree twice and makes the badge look
+                 * advisory. ⛔ Rewording stays, always: product truth is the target state and has to
+                 * remain changeable, so the one act that is still honest here is changing it.
+                 */
+                stampFor(corpus, sref).state === "accepted"
+                ? `<footer class="beh-acts quiet">
+                     <button class="act ghost" data-act="say" data-ref="${esc(sref)}">This needs to change</button>
+                   </footer>`
+                : `<footer class="beh-acts">
                    <button class="act" data-act="accept" data-ref="${esc(sref)}">That is right</button>
                    <button class="act ghost" data-act="say" data-ref="${esc(sref)}">Not quite — reword it</button>
                    <button class="act ghost" data-act="waive" data-ref="${esc(sref)}">Not ours to say</button>
@@ -1462,7 +1518,14 @@ function renderHappyPath(corpus: Corpus, scopeId: string, ctx: Ctx, past: Decisi
               .join("")}</ol>`
           : `<p class="owes">No screens are named, so the flow cannot be walked.</p>`
       }
-      ${renderRecord(past)}
+      ${
+        /**
+         * ⛔ NO LIST HERE EITHER, AND THIS ONE WAS ALSO A SECOND COPY. Four lines below, this card
+         * already says "Agreed by X on Y" or that nobody has looked — so the log of acts was both
+         * the clutter Peter objected to and a restatement of the sentence underneath it.
+         */
+        ""
+      }
       ${
         landed
           ? `<p class="decided-for-you">Nobody has looked at this. It was written for you by
@@ -1885,7 +1948,15 @@ function renderExchanges(corpus: Corpus, scopeIds: string[], cellOf: Map<string,
             ${e.asked_by ? `<span class="asked">asked by ${esc(e.asked_by)}</span>` : ""}
           </header>
           <div class="slots">${slots}</div>
-          ${renderRecord(decisionsUnder(corpus, ref))}
+          ${
+            /**
+             * ⛔ THE SAME BADGE AN EXCHANGE'S BEHAVIOURS GET. Peter asked for confirmed-or-not next
+             * to a behaviour; this card is the whole exchange, and leaving the log here would have
+             * put two shapes in circulation on one page — which is how the next session picks the
+             * wrong one.
+             */
+            renderState(corpus, ref)
+          }
           ${criteria ? `<details class="crit"><summary>${e.criteria.length} thing${e.criteria.length === 1 ? "" : "s"} that would show this working</summary><ul>${criteria}</ul></details>` : ""}
           <footer>
             ${
@@ -3233,6 +3304,39 @@ document.addEventListener("click", (ev) => {
   const host = b.closest(".opt-body") || b.closest("footer") || b.parentElement;
   if (host.querySelector("form.act-form")) { host.querySelector("form.act-form").remove(); return; }
 
+  /**
+   * ⛔ ONE PRESS WHEN THE ACT OWES NOTHING.
+   *
+   * Peter: *"clicking twice to confirm a behavior is annoying - just a single click."*
+   *
+   * He is right and it was never a confirmation step. Every other act owes words — a ruling owes
+   * why, a waiver owes whose it is instead — and the form is where those get typed. An accept owes
+   * nothing, so the form it opened had no inputs at all: a sentence restating what the button
+   * already said, and a second button. Two presses to record one thing, with nothing gathered in
+   * between.
+   *
+   * ⛔ WHAT A CONFIRMATION WOULD HAVE BEEN FOR, SAID PLAINLY: a misclick records a verdict in
+   * somebody's name, and there is no act that withdraws one. Rewording is the only correction, and
+   * it leaves the first agreement in the log. The ceremony did not actually protect against that —
+   * a reflexive second press is not a decision — so this trades a step that felt like a safeguard
+   * for one that was never one, and the real answer is an act that retracts. Recorded as such.
+   */
+  if (!fields.length) {
+    const payload = { act, ref, by: BY, via: "page" };
+    if (b.dataset.pick) payload.pick = Number(b.dataset.pick);
+    if (b.dataset.buildable) payload.buildable = b.dataset.buildable === "yes";
+    /** A status line beside the control, since there is no form to carry one. */
+    let where = host.querySelector("p.status.inline");
+    if (!where) {
+      where = document.createElement("p");
+      where.className = "status inline";
+      host.appendChild(where);
+    }
+    /** ⛔ record() disables the form controls on success; there is no form, so nothing to disable. */
+    record(payload, { querySelector: (q) => (q === ".status" ? where : null), querySelectorAll: () => [] }, b);
+    return;
+  }
+
   const form = document.createElement("form");
   form.className = "act-form";
   form.innerHTML =
@@ -4544,6 +4648,14 @@ const STYLE = `<style>
 
   .counts { display: flex; gap: .9rem; flex-wrap: wrap; font-size: .85rem; color: var(--dim); }
   .counts .warn { color: var(--warn); } .counts .bad { color: var(--bad); font-weight: 600; }
+  /** ⛔ Confirmed-or-not beside a sentence. Palette tokens only — an invented colour paints nothing. */
+  .beh-state { display: flex; align-items: baseline; gap: .5rem; margin: .6rem 0 .2rem; font-size: .85rem; }
+  .beh-state b { text-transform: uppercase; letter-spacing: .04em; color: var(--dim); }
+  .beh-state span { color: var(--dim); }
+  .beh-state.ok b { color: var(--ok); }
+  .beh-state.warn b { color: var(--warn); }
+  .beh-acts.quiet { opacity: .75; }
+  .status.inline { margin: .4rem 0 0; font-size: .85rem; }
   /**
    * ⛔ THE STAGE, AND ITS REASON, AS ONE THING. Tokens only from the palette above — a colour
    * invented here paints nothing and fails silently, which has happened twice.

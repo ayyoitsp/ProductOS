@@ -1,0 +1,9 @@
+id: "0061"
+said: "POS: clicking twice to confirm  a behavior is annoying - just a single click.  and if it's confirmed, the state should be obvious, there shouldn't be a list of human judgement record.  we should show confirmed or not next to a behavior."
+at: 2026-10-01
+kind: surface
+reaches:
+  surface: function renderState
+  pin: agreeing to it changes what the card says, and retires the agree button
+waived: {}
+closed: 2026-10-01
