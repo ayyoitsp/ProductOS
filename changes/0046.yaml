@@ -1,0 +1,19 @@
+id: "0046"
+said: |-
+  can we make it accessible from other machines in the network too? i'm on a remote control
+  session, would like to be able to see the productos page
+
+  [hitting the refusal it first shipped with] Not sent: say who you are. This press came from
+  another machine, and the account this server runs under is not evidence of who pressed it — a
+  verdict names the person who agreed
+
+  don't even ask right now
+
+  pos: i thought we had agreed that the completeness here was a separate page, but 'create folder'
+  still links to a different feature
+at: 2026-10-01
+kind: surface
+reaches:
+  surface: on this network
+  pin: the server says which interfaces it is answering on
+waived: {}

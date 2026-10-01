@@ -771,11 +771,32 @@ function renderScreens(scope: Scope, ctx: Ctx, scopeId: string, opts: PageOption
            * nowhere a reviewer could press it. A flow whose last step is on a state is the ordinary
            * case, not an exotic one: that is what a state IS.
            */
+          /**
+           * ⛔ A CONTROL THAT FINISHES THE FEATURE DOES NOT ALSO OFFER TO LEAVE IT.
+           *
+           * Peter: *"i thought we had agreed that the completeness here was a separate page, but
+           * 'create folder' still links to a different feature"*. He is right, and the two were
+           * competing on one button: the same press both ENDED the happy path and carried a
+           * derived jump into the deal workspace, so finishing and leaving were indistinguishable.
+           *
+           * Where the product goes next is still true and still said — the completion names it.
+           * What it stops doing is offering it as a press, because the walk is over.
+           */
+          const finishing = new Set(finishesFor(scope, v));
           const withGoes = (html: string): string =>
             derivedGoes
               ? html.replace(/data-part="([^"]+)"/g, (whole, id: string) => {
                   const to = derivedGoes.get(`${scopeId}#${v.id}#${id}`);
-                  return to ? `${whole} data-goes="${esc(to)}"` : whole;
+                  if (!to) return whole;
+                  /**
+                   * ⛔ NAMED, NOT OFFERED. Where the product goes after a feature is finished is
+                   * true and worth saying; making it a press is what put a door out of the feature
+                   * on the button that ends it. `data-next` is read for the completion line and
+                   * nothing walks it.
+                   */
+                  return finishing.has(id)
+                    ? `${whole} data-next="${esc(to)}"`
+                    : `${whole} data-goes="${esc(to)}"`;
                 })
               : html;
           /**
@@ -789,7 +810,7 @@ function renderScreens(scope: Scope, ctx: Ctx, scopeId: string, opts: PageOption
            * rendered at the end of a walk. Stamped onto the controls that end the path so the
            * prototype can show it where the press happens.
            */
-          const finishes = new Set(finishesFor(scope, v));
+          const finishes = finishing;
           const ends = scope.happy_path?.ends_with ?? "";
           const withFinish = (html: string): string =>
             finishes.size && ends
@@ -822,7 +843,7 @@ function renderScreens(scope: Scope, ctx: Ctx, scopeId: string, opts: PageOption
                        )
                        .join("")}
                    </div>
-                   <div class="state-frame" data-state="0">${asMock(withFinish(withLands(wireHtml(v, matched, derivedGoes, scopeId), 0)))}</div>
+                   <div class="state-frame" data-state="0">${asMock(withFinish(withLands(withGoes(wireHtml(v, matched)), 0)))}</div>
                    ${states
                      .map(
                        (st, i) =>
@@ -3284,6 +3305,22 @@ const PROTOTYPE = `<script>
      * they did not ask to be. So a control that goes somewhere in THIS feature simply goes, and one
      * that leaves says where it would take them and waits to be asked twice.
      */
+    /**
+     * ⛔ FINISHING IS ITS OWN PRESS NOW, and removing the link removed the message with it.
+     *
+     * A control that ends the happy path no longer carries a destination — Peter: *"'create folder'
+     * still links to a different feature"* — and the completion callout was reached only through
+     * that destination, so taking the link away made the walk end in silence. Worse than before:
+     * the press did the right thing and said nothing at all.
+     *
+     * ⛔ ONE PRESS, NOT TWO. The second press existed to confirm LEAVING. There is nowhere to go.
+     */
+    const ends = btn.dataset && btn.dataset.finishes;
+    if (ends && !(btn.dataset && btn.dataset.goes)) {
+      select(btn);
+      arm(btn, (btn.dataset && btn.dataset.next) || null);
+      return;
+    }
     const dest = btn.dataset && btn.dataset.goes;
     if (dest) {
       const screen = screenOf(btn);
@@ -3379,8 +3416,9 @@ const PROTOTYPE = `<script>
    */
   function arm(btn, dest) {
     disarm();
-    const to = String(dest).split("#")[0];
-    const target = document.getElementById("at-" + to.replace(/[^a-z0-9]+/gi, "-"));
+    /** ⛔ A finish has no destination — it is the end, and nothing comes after it to name. */
+    const to = dest == null ? "" : String(dest).split("#")[0];
+    const target = to ? document.getElementById("at-" + to.replace(/[^a-z0-9]+/gi, "-")) : null;
     const name =
       (target && target.querySelector("h2") && target.querySelector("h2").textContent.trim()) || to;
     const tip = document.createElement("div");
@@ -3394,9 +3432,8 @@ const PROTOTYPE = `<script>
     tip.innerHTML = done
       ? '<strong class="arm-done">✓ That completes this feature</strong><span class="arm-ends">' +
         esc(done) +
-        "</span><span>" +
-        esc(name) +
-        " is where it goes next — press again to follow it</span>"
+        "</span>" +
+        (name ? "<span>" + esc(name) + " is where the product goes next</span>" : "")
       : "<strong>" + esc(name) + "</strong><span>Press again to go there</span>";
     if (done) tip.classList.add("is-done");
     document.body.appendChild(tip);

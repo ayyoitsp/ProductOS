@@ -185,6 +185,13 @@ export const AREAS: Area[] = [
       "src/v2/page.ts",
       "src/v2/prototype.ts",
       "src/v2/serve.ts",
+      /**
+       * ⛔ THE PROCESS THAT HOSTS EVERY SURFACE, AND IT WAS ON NO AREA. `v2Route` is mounted here,
+       * the port is bound here, and the one line that told anybody where the page was reachable is
+       * here — which is how a corpus naming a real client came to answer the whole network while
+       * printing "localhost". A file missing from the map is a place no reviewer will look.
+       */
+      "src/ui/server.ts",
       "src/v2/packet.ts",
       "src/v2/notes.ts",
       "src/v2/watch.ts",

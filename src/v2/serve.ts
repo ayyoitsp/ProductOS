@@ -74,7 +74,28 @@ function sessionOf(req: http.IncomingMessage, res: http.ServerResponse): string 
 }
 
 /** The name a press is recorded under when nothing better is known. See `identity.ts`. */
-const whoIsPressing = (): string => localAccount();
+/**
+ * ⛔ WHOSE NAME GOES ON A PRESS, AND WHY IT IS STILL THE LOCAL ACCOUNT.
+ *
+ * The server binds every interface, so a press can arrive from another machine — and `by` is the
+ * OS account of the process, which is evidence about where the server runs and not about who
+ * pressed. A verdict says a human agreed; that one can name the wrong human.
+ *
+ * ⛔ AND ASKING WAS WORSE. The first cut refused an unattributable press and told the person to say
+ * who they were. Peter hit it immediately, reviewing over a remote session — the exact case he had
+ * just asked for — and got "Not sent" for his trouble, then: *"don't even ask right now"*. He is
+ * right. A guarantee that blocks the work it protects is a guarantee somebody turns off, and this
+ * is a single-operator machine on a private network where the local account IS the answer.
+ *
+ * So it stays as it was, deliberately, and `isLocal` exists so the question is answerable the day
+ * this serves more than one person. Recorded as fg-0002 rather than left as a silent compromise.
+ */
+const LOOPBACK = /^(::1|(::ffff:)?127(\.\d{1,3}){3})$/;
+
+/** Whether a request came from this machine. ⛔ Anchored at both ends, so a hostname cannot pass. */
+export const isLocal = (req: http.IncomingMessage): boolean => LOOPBACK.test(req.socket.remoteAddress ?? "");
+
+const whoIsPressing = (_req: http.IncomingMessage): string => localAccount();
 
 /**
  * Handle a `/v2` request. Returns `false` when the path is not ours, so the v1 server can carry
@@ -320,10 +341,11 @@ export async function v2Route(req: http.IncomingMessage, res: http.ServerRespons
      * which is the `gateFor`/`check` shape again — two writers for one file, diverging by whichever
      * field one of them forgot.
      */
+    const asker = typeof body.by === "string" && body.by.trim() ? body.by.trim() : whoIsPressing(req);
     const r = fileNote(dir, {
       about: String(body.about ?? ""),
       says: String(body.says ?? ""),
-      by: typeof body.by === "string" && body.by.trim() ? body.by.trim() : whoIsPressing(),
+      by: asker,
       via: "page",
       at: new Date().toISOString().slice(0, 10),
     });
@@ -375,7 +397,7 @@ export async function v2Route(req: http.IncomingMessage, res: http.ServerRespons
       appCss: app.css || undefined,
       mockClass: app.mockClass,
       linkBase: "/v2",
-      by: whoIsPressing(),
+      by: whoIsPressing(req),
       recordsTo: `written into ${dir}`,
     });
     if (!page) {

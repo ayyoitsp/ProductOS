@@ -80,6 +80,12 @@ export interface StartUiServerOptions {
    * route: `v2Route` returns false for every path that is not its own.
    */
   v2Dir?: string;
+  /**
+   * Which interface to bind. ⛔ Absent means EVERY interface, which is what Node does with no host
+   * and what this has always quietly done — the default is unchanged, it is merely visible now.
+   * Pass `127.0.0.1` to serve only this machine.
+   */
+  host?: string;
 }
 
 export async function startUiServer(opts: StartUiServerOptions = {}): Promise<void> {
@@ -90,6 +96,7 @@ export async function startUiServer(opts: StartUiServerOptions = {}): Promise<vo
     ?? (Number.isInteger(envPort) && envPort > 0 && envPort < 65536 ? envPort : undefined)
     ?? config.ui_port;
 
+  const host = opts.host;
   const v2Dir = opts.v2Dir ?? path.join(path.dirname(paths.productsDir), "..", "v2");
   const server = http.createServer(async (req, res) => {
     try {
@@ -676,8 +683,41 @@ export async function startUiServer(opts: StartUiServerOptions = {}): Promise<vo
     console.error(pc.red("✗"), `Server error: ${err.message}`);
     process.exit(1);
   });
-  server.listen(port, () => {
+  /**
+   * ⛔ IT WAS ALREADY ANSWERING THE WHOLE NETWORK AND SAID "localhost".
+   *
+   * Peter: *"can we make it accessible from other machines in the network too? i'm on a remote
+   * control session, would like to be able to see the productos page"*. It already was —
+   * `listen(port)` with no host binds every interface, so a corpus that names a real client had
+   * been reachable from any machine on the LAN for as long as this has existed, while the one line
+   * it printed said localhost.
+   *
+   * That is the wrong way round twice over: somebody who WANTS the LAN cannot find the address,
+   * and somebody who does not want it is never told they have it.
+   *
+   * ⛔ SO IT SAYS WHERE IT IS, AND HOW TO SHUT IT. The default stays open because that is what was
+   * asked for; what changes is that it is now a thing you can see and a thing you can refuse.
+   */
+  const addresses = (): string[] => {
+    const out: string[] = [];
+    for (const [, infos] of Object.entries(os.networkInterfaces()))
+      for (const i of infos ?? [])
+        if (i.family === "IPv4" && !i.internal) out.push(i.address);
+    return out;
+  };
+
+  server.listen(port, host, () => {
     console.log(pc.green("✓"), `Product truth: ${pc.cyan(`http://localhost:${port}`)}`);
+    const lan = host === "127.0.0.1" || host === "::1" || host === "localhost" ? [] : addresses();
+    if (lan.length) {
+      for (const a of lan) console.log(pc.dim(`  on this network: `) + pc.cyan(`http://${a}:${port}`));
+      /**
+       * ⛔ WHAT THAT MEANS, not merely that it is true. Anybody who can reach it can READ the whole
+       * corpus; nobody can press anything in somebody else's name, because an act from another
+       * machine has to say who performed it rather than inheriting this account.
+       */
+      console.log(pc.dim("  anyone on this network can read this corpus — ") + pc.dim(`close it with --host 127.0.0.1`));
+    }
     console.log(pc.dim(`  product:  ${path.relative(process.cwd(), paths.productsDir)}/`));
     console.log(pc.dim(`  tracking: ${path.relative(process.cwd(), paths.trackingDir)}/`));
     console.log(pc.dim(`  feedback: ${path.relative(process.cwd(), paths.feedbackDir)}/`));
