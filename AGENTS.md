@@ -86,10 +86,10 @@ flowchart TD
   scan_a_codebase --> scan_a_codebase_coherence["coherence"]
   scan_a_codebase --> scan_a_codebase_hand-authored["hand-authored"]
   scan_a_codebase -.->|keeps| scan_a_codebase_self(["the session — 4 things it may not hand off"])
-  ready_it_for_build(["ready it for build<br/><i>Hand truth somebody has agreed to over to engineering and QA</i>"])
-  ready_it_for_build --> ready_it_for_build_buildability["buildability"]
-  ready_it_for_build --> ready_it_for_build_test-design["test-design"]
-  ready_it_for_build -.->|keeps| ready_it_for_build_self(["the session — 3 things it may not hand off"])
+  hand_it_to_the_builders(["hand it to the builders<br/><i>The engineering and QA read, once product and design have signed off</i>"])
+  hand_it_to_the_builders --> hand_it_to_the_builders_buildability["buildability"]
+  hand_it_to_the_builders --> hand_it_to_the_builders_test-design["test-design"]
+  hand_it_to_the_builders -.->|keeps| hand_it_to_the_builders_self(["the session — 3 things it may not hand off"])
   map_evidence(["map evidence<br/><i>Find what already demonstrates the claims a corpus makes</i>"])
   map_evidence --> map_evidence_evidencer["evidencer"]
   map_evidence --> map_evidence_coverage["coverage"]
@@ -119,6 +119,8 @@ flowchart TD
 ### scope a feature
 
 Turn one in-flight feature into product truth.
+
+⛔ **Runs at stage: specification** — derived by stageOf, never stored.
 
 **Spawns, in order:**
 - `scoper` *(product · writes)* — the feature written in a context holding nothing but that feature
@@ -151,11 +153,11 @@ Turn a whole codebase into a first corpus.
 - putting the survey in front of a person before thirty scopers start against a partition that is wrong
 - every act of judgement — nothing here is validated by having been written
 
-### ready it for build
+### hand it to the builders
 
-Hand truth somebody has agreed to over to engineering and QA.
+The engineering and QA read, once product and design have signed off.
 
-⛔ **Precondition: a human has agreed to this truth.**
+⛔ **Runs at stage: ready for review** — derived by stageOf, never stored.
 
 **Spawns, in order:**
 - `buildability` *(engineering · judges, writes nothing)* — whether somebody could start on Monday — the second tenet, read from a builder's seat

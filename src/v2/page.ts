@@ -19,7 +19,7 @@ import { resolveRules, type Corpus } from "./load.js";
 import { promisesOf, screensOf, type ProtoPromise, type ProtoScreen } from "./prototype.js";
 import { inferConnections, landingsFor, finishesFor } from "./connects.js";
 import { SLOTS, SLOT_ASKS_SHORT, statements, saysText, type SlotName, type Scope, type View, type Part, type Says } from "./schema.js";
-import { gridFor, gateFor, actsFor, ruleHomes, type Grid, type Cell } from "./grid.js";
+import { gridFor, gateFor, actsFor, ruleHomes, stageOf, type Grid, type Cell } from "./grid.js";
 import { stampFor, decidedFor } from "./stamp.js";
 import { wireParts } from "./wire.js";
 import { questionsFor, descendants, type Question } from "./settle.js";
@@ -2503,6 +2503,34 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
             <h2>${line(g.title)}</h2>
             ${
               /**
+               * ⛔ WHICH STAGE THIS FEATURE IS AT, AND WHY — on the surface where somebody decides.
+               *
+               * Peter: *"what are our main stages? we should have 'specification', 'ready for
+               * review', 'ready for build' - ready for review is when the builders get involved"*.
+               *
+               * It renders the REASON beside the stage, always. A bare badge reading "ready for
+               * review" is the kind of thing a person trusts and cannot check, and this one is
+               * derived — so if the derivation is wrong, the sentence next to it is what makes that
+               * visible instead of plausible.
+               *
+               * ⛔ Nothing stores it and nothing on this page sets it. There is no control here,
+               * deliberately: the way a feature advances is that somebody agrees to its sentences
+               * and a builder reads it through, both of which are acts that already exist. A button
+               * marking it ready would be a way to claim consent nobody gave.
+               */
+              (() => {
+                const st = stageOf(corpus, g.scope);
+                /** ⛔ A grouping has no stage, and showing one would invent a fact. */
+                if (!st) return "";
+                const tone = st.stage === "ready for build" ? "good" : st.stage === "ready for review" ? "ready" : "spec";
+                const blockers = st.blocked_by.length
+                  ? `<span class="blockers">in the way: ${st.blocked_by.map((b) => line(b)).join(", ")}</span>`
+                  : "";
+                return `<p class="stage ${tone}"><b>${esc(st.stage)}</b><span>${line(st.because)}</span>${blockers}</p>`;
+              })()
+            }
+            ${
+              /**
                * ⛔ THE SCREEN COMES FIRST. Peter: *"when we are at a feature like 'create deal', we
                * need prototypes as well. why is there no screen rendering at the top of this
                * feature?"* — it was fifth of six blocks, below the prose, the purpose and every
@@ -4516,6 +4544,20 @@ const STYLE = `<style>
 
   .counts { display: flex; gap: .9rem; flex-wrap: wrap; font-size: .85rem; color: var(--dim); }
   .counts .warn { color: var(--warn); } .counts .bad { color: var(--bad); font-weight: 600; }
+  /**
+   * ⛔ THE STAGE, AND ITS REASON, AS ONE THING. Tokens only from the palette above — a colour
+   * invented here paints nothing and fails silently, which has happened twice.
+   */
+  .stage { display: flex; flex-wrap: wrap; align-items: baseline; gap: .5rem .75rem; margin: 0 0 1rem;
+    padding: .5rem .7rem; border: 1px solid var(--line); border-radius: .4rem; background: var(--card); }
+  .stage b { font-size: .8rem; letter-spacing: .04em; text-transform: uppercase; }
+  .stage span { color: var(--dim); font-size: .9rem; }
+  .stage.spec b { color: var(--dim); }
+  .stage.ready { border-color: var(--warn); background: var(--warn-bg); }
+  .stage.ready b { color: var(--warn); }
+  .stage.good { border-color: var(--ok); }
+  .stage.good b { color: var(--ok); }
+  .stage .blockers { color: var(--bad); }
   .scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--card); }
   table.grid { border-collapse: collapse; width: 100%; font-size: .85rem; }
   table.grid th, table.grid td { border-bottom: 1px solid var(--line); padding: .55rem .6rem; text-align: left; }

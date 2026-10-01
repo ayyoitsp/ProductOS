@@ -30,7 +30,6 @@ import {
   unrouted,
   byDiscipline,
   DISCIPLINES,
-  PRECONDITIONS,
   SKILL,
 } from "../dist/core/jobs.js";
 import { agentsDoc, withPreset } from "../dist/core/agents-doc.js";
@@ -403,8 +402,13 @@ test("every role sits in a discipline, and every discipline has somebody in it",
  * behind it. Nothing downstream can tell that apart from a decision somebody made.
  */
 test("engineering and QA do not read truth nobody has agreed to", () => {
-  const GATED = "a human has agreed to this truth";
-  assert.ok(PRECONDITIONS.includes(GATED), "the precondition this ordering depends on is gone");
+  /**
+   * ⛔ THE STAGE, NOT A SENTENCE OF MINE. The first version of this gated on the string "a human
+   * has agreed to this truth" — a condition nothing in the model computed, so the gate could only
+   * ever be a reminder. Peter named the stages, and `stageOf` derives them, so the precondition is
+   * now a thing that can be ANSWERED about a feature.
+   */
+  const GATED = "ready for review";
 
   /** The seats that must wait. ⛔ Derived from the registry, so adding a role cannot dodge it. */
   const waits = new Set(
@@ -412,7 +416,7 @@ test("engineering and QA do not read truth nobody has agreed to", () => {
   );
 
   for (const sh of SHIMS) {
-    if (sh.after === GATED) continue;
+    if (sh.at === GATED) continue;
     /**
      * ⛔ THE LINE IS WHAT THE ROLE JUDGES, NOT WHICH SEAT IT SITS IN.
      *
@@ -457,7 +461,7 @@ test("engineering and QA do not read truth nobody has agreed to", () => {
     "`scope a feature` no longer says it stops — the split is what makes human truth come first, and nothing else records it"
   );
   assert.ok(
-    SHIMS.some((sh) => sh.after === GATED && sh.steps.length),
+    SHIMS.some((sh) => sh.at === GATED && sh.steps.length),
     "nothing picks the feature up after somebody agrees — the engineering and QA reads have been dropped rather than deferred"
   );
 });

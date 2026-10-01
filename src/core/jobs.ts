@@ -26,6 +26,13 @@
  * whatever the host offers, refusing to install an agent whose needs the host cannot meet rather
  * than shipping one that fails halfway through.
  */
+/**
+ * ⛔ A TYPE FROM THE MODEL, because the stages a route runs at are the stages a feature HAS. Two
+ * enumerations of them — one for the routing table and one for the truth — is how a route comes to
+ * gate on a stage no feature can ever be at.
+ */
+import type { Stage } from "../v2/schema.js";
+
 
 /**
  * ⛔ WHO WOULD HAVE DONE THIS, IN A TEAM THAT HAD PEOPLE.
@@ -1054,24 +1061,23 @@ export const forPeople = (): Verb[] => COMMANDS.filter((c) => c.who !== "claude"
  * everything, which for anything touching truth is a skill that has delegated the consent.
  */
 /**
- * ⛔ WHAT MUST BE TRUE BEFORE A ROUTE MAY RUN.
+ * ⛔ THE STAGE A ROUTE RUNS AT.
  *
- * Peter: *"i think scope a feature gets broken down a bit - we need to a rough scope, nail down
- * human truth before we need to involve engineers/qa"*.
+ * Peter: *"wait, what are our main stages? we should have 'specification', 'ready for review',
+ * 'ready for build' - ready for review is when the builders get involved.. design and product have
+ * signed off, more or less"*.
  *
- * He is describing tenet one, and the route was breaking it. `scope a feature` had grown to spawn
- * a scoper, a designer, and then an engineering and a QA read in one pass — so somebody was being
- * asked whether a feature could be built, and whether its criteria would demonstrate anything,
- * about truth no human had agreed to yet. That is work spent on a draft, and worse: it arrives as
- * authority. An engineer saying "this is buildable" reads as a decision having been made, which is
- * exactly the shape of a corpus that is fully reviewed and validated by nobody.
+ * The first attempt at this gated the engineering and QA reads behind a sentence of my own —
+ * "a human has agreed to this truth" — which was the right instinct aimed at nothing. It named a
+ * condition no part of the model computed, so the gate could only ever be a reminder, and I said so
+ * at the time: the grain was a guess.
  *
- * So the precondition is a field rather than a sentence in `keeps`. A precondition in prose is
- * advice, and the one thing this project has learned repeatedly is that advice at the top of a file
- * does not survive the session that is in a hurry.
+ * The stages are the grain. `Stage` in the schema names them and `stageOf` derives each one from
+ * the stamps, so a route's precondition is now a thing that can be ANSWERED about a feature rather
+ * than remembered about a workflow. ⛔ And it is where the builders enter: `ready for review` is the
+ * stage, not a politeness — product and design have signed off, and that is what makes an
+ * engineer's reading worth having instead of a cost estimate on a draft.
  */
-export const PRECONDITIONS = ["nothing", "a human has agreed to this truth"] as const;
-export type Precondition = (typeof PRECONDITIONS)[number];
 
 export interface Shim {
   /**
@@ -1114,12 +1120,12 @@ export interface Shim {
    */
   keeps: string[];
   /**
-   * ⛔ What must already be true. Absent means nothing — most routes are entered cold.
+   * ⛔ The stage a feature must be at for this route to run. Absent means any — a route that reads
+   * a whole corpus or reviews the framework is not about one feature's stage at all.
    *
-   * The only value that exists is "a human has agreed to this truth", and it exists because the
-   * engineering and QA reads must not happen before that. See `PRECONDITIONS`.
+   * Derived by `stageOf`, never stored, so this is checkable rather than advisory. See `Stage`.
    */
-  after?: Precondition;
+  at?: Stage;
 }
 
 export const SHIMS: Shim[] = [
@@ -1127,6 +1133,8 @@ export const SHIMS: Shim[] = [
     route: "scope a feature",
     does: "Turn one in-flight feature into product truth",
     when: "scope the deals list · spec this feature · what should this screen promise",
+    /** ⛔ The first stage, and the only one where truth is still being written. */
+    at: "specification",
     steps: [
       { role: "scoper", why: "the feature written in a context holding nothing but that feature" },
       { role: "designer", fan: true, why: "screens the product should have and nothing renders yet" },
@@ -1183,10 +1191,10 @@ export const SHIMS: Shim[] = [
    * a shape nobody validated — with a reviewer's authority behind it. The order is the protection.
    */
   {
-    route: "ready it for build",
-    does: "Hand truth somebody has agreed to over to engineering and QA",
-    when: "ready for build · is this buildable · can we start on this · engineering review · would these tests prove anything",
-    after: "a human has agreed to this truth",
+    route: "hand it to the builders",
+    does: "The engineering and QA read, once product and design have signed off",
+    when: "ready for review · is this buildable · can we start on this · engineering review · would these tests prove anything",
+    at: "ready for review",
     steps: [
       { role: "buildability", why: "whether somebody could start on Monday — the second tenet, read from a builder's seat" },
       { role: "test-design", why: "whether each criterion would show its claim holding, rather than merely pass" },

@@ -207,6 +207,37 @@ export const SLOT_ASKS_SHORT: Record<SlotName, string> = {
 export const StandingKind = z.enum(["stated", "open", "disputed", "out_of_scope"]);
 export type StandingKind = z.infer<typeof StandingKind>;
 
+/**
+ * ⛔ THE STAGES A FEATURE PASSES THROUGH — AND THEY ARE DERIVED, NEVER STORED.
+ *
+ * Peter: *"what are our main stages? we should have 'specification', 'ready for review', 'ready for
+ * build' - ready for review is when the builders get involved.. design and product have signed off,
+ * more or less"*.
+ *
+ * ⛔ NO FIELD HOLDS THIS, DELIBERATELY. Every one of these stages is already a fact about the
+ * stamps: whether anything is still unanswered, whether anybody agreed, whether a builder read it
+ * through and said it was buildable. A `stage:` field beside those would be a second record of one
+ * fact — and the stored one wins, because it is the one a page prints, until it is wrong and
+ * nothing detects it. `GLOSSARY.md` has the general form of this; it is sharpest here, because a
+ * stage is exactly the kind of thing somebody sets by hand to make a board look right.
+ *
+ * ⛔ AND IT CANNOT BE SET AHEAD OF THE WORK. A stored stage lets a feature be marked ready for
+ * build while questions are open — which is the failure the two tenets exist to prevent, wearing a
+ * status field. Derived, "ready for build" is unreachable until a human actually agreed and a
+ * builder actually read it. The stage is a REPORT on consent, not a substitute for it.
+ *
+ *   specification      product and design are still writing it — something is unanswered, or
+ *                      nothing has been agreed to yet
+ *   ready for review   they have signed off, and ⛔ THIS is where builders get involved
+ *   ready for build    a builder read it through and said it is buildable
+ *
+ * A read-through that says it is NOT buildable sends the feature back to `specification` with the
+ * blockers named. That is not a fourth stage: it is the first one, re-entered for a reason somebody
+ * can read — which is what the stage is for.
+ */
+export const STAGES = ["specification", "ready for review", "ready for build"] as const;
+export type Stage = (typeof STAGES)[number];
+
 const dateish = z.union([z.string(), z.date()]).transform((v) =>
   v instanceof Date ? v.toISOString().slice(0, 10) : v
 );

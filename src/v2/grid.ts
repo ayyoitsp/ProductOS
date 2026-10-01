@@ -7,7 +7,7 @@
  * you can see from across a room, which is the only reason "every button has a loading
  * state" can be written once and still be legible on forty pages.
  */
-import { SLOTS, type SlotName, type Rule , statements} from "./schema.js";
+import { SLOTS, type SlotName, type Rule , statements, type Stage} from "./schema.js";
 import { resolveRules, disputeIndex, DOWNSTREAM_OF_ANSWER, answerIsUnknown, lineageOf, type Corpus } from "./load.js";
 import { stampFor, decidedFor } from "./stamp.js";
 import { existsOf } from "./load.js";
@@ -770,5 +770,117 @@ export function ownCount(corpus: Corpus, scopeId: string, acts: ActCount, homes:
     open: openRules.size ? rulesHere.filter((id) => openRules.has(id)).length : 0,
     toRead: acts.behaviours.filter(mine).length + rulesHere.filter((id) => !openRules.has(id)).length,
     ready: acts.acceptable.filter(mine).length,
+  };
+}
+
+
+/**
+ * ⛔ WHICH STAGE A FEATURE IS AT — DERIVED FROM THE STAMPS, BECAUSE NOTHING STORES IT.
+ *
+ * Peter: *"we should have 'specification', 'ready for review', 'ready for build' - ready for review
+ * is when the builders get involved.. design and product have signed off, more or less"*.
+ *
+ * ⛔ IT LIVES BESIDE `ownCount`, NOT IN A FILE OF ITS OWN. "Is this scope ready" already had an
+ * implementation here, and the most expensive bug this codebase has had was `gateFor` diverging
+ * from `check` by one clause — two answers to one question, both plausible, neither wrong enough to
+ * notice. A stage computed somewhere else would have become the third.
+ *
+ * The "more or less" in what he said is doing real work, and this is where it lands: sign-off is
+ * read off the acts that already exist rather than from a new approval step. Nothing is answered
+ * that nobody answered, and nothing is agreed that nobody agreed to.
+ */
+export interface StageState {
+  stage: Stage;
+  /** ⛔ Why it is at this stage, in the terms somebody could check — never a bare label. */
+  because: string;
+  /** What a builder said was in the way, when one has read it and said it is not buildable. */
+  blocked_by: string[];
+}
+
+/**
+ * ⛔ NULL FOR A GROUPING, because a group is not a feature and has no stage of its own.
+ *
+ * The first run of this over a real corpus reported *"specification — this feature states nothing
+ * yet"* against `cre`, `deals`, `pricing` and `product`: four containers, correctly stating nothing
+ * in their own right, each described as an unfinished feature. A grouping's content is its children,
+ * so its stage would have to be a rollup — and a rollup of three stages is a number every ancestor
+ * repeats and no ancestor is responsible for, which is the mistake `ownCount` exists because of.
+ *
+ * So it answers nothing rather than answering wrongly, and a caller has to decide what to show.
+ */
+export function stageOf(corpus: Corpus, scopeId: string): StageState | null {
+  const entry = corpus.scopes.find((x) => x.scope.id === scopeId);
+  if (!entry) return null;
+  if (corpus.scopes.some((x) => x.scope.in === scopeId)) return null;
+
+  /**
+   * ⛔ `gridFor`, NOT `actsFor` — AND THE FIRST VERSION OF THIS GOT IT WRONG IN A WAY THAT RENDERED.
+   *
+   * `actsFor` reports what is OFFERABLE: a feature's behaviours are deliberately withheld until its
+   * purpose has been accepted, so on a corpus where nobody has agreed to anything yet it returns
+   * empty for every feature. Deriving the stage from it said *"this feature states nothing yet"*
+   * about a feature with four exchanges and thirty-two slots, which is the worst available failure
+   * — a confident sentence, on the page, about a feature that is plainly not empty.
+   *
+   * ⛔ `ownCount` has the same bug and no caller, which is presumably why nobody found it. It is
+   * left alone here rather than quietly repaired: it is a separate claim about a separate surface,
+   * and fixing it in passing would put a change nobody reviewed behind a change somebody asked for.
+   *
+   * What the stage needs is what the feature SAYS and what somebody has AGREED to — the grid for
+   * the first, the stamps for the second.
+   */
+  const g = gridFor(corpus, scopeId);
+  if (!g || !g.rows.length)
+    return { stage: "specification", because: "this feature states nothing yet", blocked_by: [] };
+
+  /**
+   * ⛔ A READ-THROUGH IS THE BUILDER'S ACT, AND IT ALREADY EXISTED. `Verdict.kind === "read"`
+   * carries `scope` and `buildable` and has since the acts were written — what was missing was
+   * anything naming the stage it puts a feature into. The newest wins: a builder may read a feature
+   * twice, and the second reading is the current one.
+   */
+  const reads = corpus.verdicts.filter((v) => v.kind === "read" && v.scope === scopeId);
+  const read = reads.length ? reads[reads.length - 1] : undefined;
+
+  if (read && read.buildable === false)
+    return {
+      stage: "specification",
+      /** ⛔ Back to the first stage with a reason — not a fourth stage, and never a silent hold. */
+      because: `a builder read it through and said it is not buildable${read.note ? `: ${read.note}` : ""}`,
+      blocked_by: read.blocked_by ?? [],
+    };
+
+  /** Anything unanswered or unsaid, and product and design are still writing. */
+  const { unsettled, blank } = g.counts;
+  if (unsettled || blank) {
+    const parts = [
+      unsettled ? `${unsettled} unsettled` : "",
+      blank ? `${blank} blank` : "",
+    ].filter(Boolean);
+    return { stage: "specification", because: `${parts.join(" and ")} — nobody has said what these are`, blocked_by: [] };
+  }
+
+  /**
+   * ⛔ SIGN-OFF IS READ OFF THE STAMPS, AND THERE IS NO NEW APPROVAL STEP. Peter: *"design and
+   * product have signed off, more or less"* — the "more or less" is what this is. An `accept` on
+   * every exchange the feature states IS product and design having signed off; inventing a separate
+   * "signed off" act would create a second record of consent, and the weaker one always wins
+   * because it is one press instead of several.
+   */
+  const unagreed = g.rows.filter((r) => stampFor(corpus, `${scopeId}#${r.exchange}`).state !== "accepted");
+  if (unagreed.length)
+    return {
+      stage: "specification",
+      because: `${unagreed.length} of ${g.rows.length} behaviour${g.rows.length === 1 ? "" : "s"} nobody has agreed to — product and design have not signed off`,
+      blocked_by: [],
+    };
+
+  if (read && read.buildable === true)
+    return { stage: "ready for build", because: `${read.by} read it through and said it is buildable`, blocked_by: [] };
+
+  return {
+    stage: "ready for review",
+    because: "every behaviour is agreed to and nothing is unsettled — this is where builders get involved",
+    blocked_by: [],
   };
 }

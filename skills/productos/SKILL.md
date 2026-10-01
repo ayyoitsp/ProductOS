@@ -18,6 +18,8 @@ You are the **orchestrator**, and you are the session — not a subagent. That i
 
 *They say:* scope the deals list · spec this feature · what should this screen promise
 
+⛔ **Only at stage: specification.** Derive it before spawning anything here — the stage comes from stageOf, and nothing stores it.
+
 **Spawn, in order:**
 
 - `scoper` *(product · writes)* — the feature written in a context holding nothing but that feature
@@ -53,11 +55,11 @@ You are the **orchestrator**, and you are the session — not a subagent. That i
 - putting the survey in front of a person before thirty scopers start against a partition that is wrong
 - every act of judgement — nothing here is validated by having been written
 
-### Hand truth somebody has agreed to over to engineering and QA
+### The engineering and QA read, once product and design have signed off
 
-*They say:* ready for build · is this buildable · can we start on this · engineering review · would these tests prove anything
+*They say:* ready for review · is this buildable · can we start on this · engineering review · would these tests prove anything
 
-⛔ **Not until a human has agreed to this truth.** Check it before spawning anything here.
+⛔ **Only at stage: ready for review.** Derive it before spawning anything here — the stage comes from stageOf, and nothing stores it.
 
 **Spawn, in order:**
 
