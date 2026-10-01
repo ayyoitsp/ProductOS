@@ -1296,7 +1296,32 @@ function renderBehaviours(
                     ex.at.part ? `show me ${esc(partLabel(corpus, scopeId, ex.at.view, ex.at.part))}` : "show me the screen"
                   }</button>`
                 : ` · <span class="n owes-inline">nothing says where this happens</span>`
-            }${cell && cell.rule ? ` · from <code>${esc(cell.rule)}</code>` : ""}
+            }${cell && cell.rule ? ` · from <code>${esc(cell.rule)}</code>` : ""}${
+              /**
+               * ⛔ WHERE PRESSING IT GOES, ON THE CARD — not only in the walk.
+               *
+               * Peter, early on: *"i can't tell if clicking on next is actually navigating"*. The
+               * prototype moved, eventually, and the card describing the control still said nothing
+               * about where it leads. So a reviewer reading the sentence had to press the button to
+               * find out, and pressing it is the thing they were trying to judge.
+               *
+               * ⛔ `finishes` first, because it is the stronger claim: a press that ends the feature
+               * is not "goes to the completion screen", it is the end of the thing being reviewed.
+               */
+              (() => {
+                if (!ex.at?.part) return "";
+                const sc2 = corpus.scopes.find((x) => x.scope.id === scopeId)?.scope;
+                const vw = sc2?.views.find((x) => x.id === ex.at!.view);
+                if (!sc2 || !vw) return "";
+                if (finishesFor(sc2, vw).includes(ex.at.part))
+                  return ` · <span class="goes done">pressing it finishes this feature</span>`;
+                const land = landingsFor(sc2, vw).find((l) => l.part === ex.at!.part);
+                if (!land) return "";
+                return ` · <span class="goes">pressing it goes to <b>${esc(land.label)}</b>${
+                  ex.lands_on ? "" : " <i>(read from what it says, not stated)</i>"
+                }</span>`;
+              })()
+            }
           </p>
           ${
             /**
@@ -4729,6 +4754,10 @@ const STYLE = `<style>
   .counts { display: flex; gap: .9rem; flex-wrap: wrap; font-size: .85rem; color: var(--dim); }
   .counts .warn { color: var(--warn); } .counts .bad { color: var(--bad); font-weight: 600; }
   /** ⛔ Confirmed-or-not beside a sentence. Palette tokens only — an invented colour paints nothing. */
+  /** ⛔ Where a press goes, said on the card. A derived destination says so — it is a reading, not a claim. */
+  .beh-where .goes { color: var(--accent); }
+  .beh-where .goes.done { color: var(--ok); }
+  .beh-where .goes i { color: var(--dim); font-style: italic; }
   .beh-state { display: flex; align-items: baseline; gap: .5rem; margin: .6rem 0 .2rem; font-size: .85rem; }
   .beh-state b { text-transform: uppercase; letter-spacing: .04em; color: var(--dim); }
   .beh-state span { color: var(--dim); }

@@ -1509,11 +1509,53 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
               fix: `say where a control on "${st.label}" leaves somebody, in the \`answer\` of an exchange at that control. Where the way out is "back to the screen as it was", the model cannot express it yet — that is a framework gap, not yours`,
             });
           }
+          /**
+           * ⛔ A CONTROL THAT FINISHES THE FEATURE MOVES SOMEBODY — to the completion appearance.
+           *
+           * `landingsFor` stopped returning finishing controls, because a press that ends a feature
+           * must not also land inside it. This counted them as dead the moment that changed, and
+           * told an author that the three controls which complete create-deal lead nowhere. One
+           * question — does pressing this move the picture — and `finishesFor` is the other half of
+           * the answer, so it has to be asked here too.
+           */
+          const finishes = new Set(finishesFor(scope, v));
           const drives = new Set(landings.map((l) => l.part));
+
+          /**
+           * ⛔ A DRAWN APPEARANCE NOTHING CAN PUT SOMEBODY IN.
+           *
+           * Peter, driving the prototype: *"'creating' is not a valid screen, since it creates
+           * after folder selection is done"*.
+           *
+           * He is right, and the drawing is not lying — `state.isCreating` is a real branch in the
+           * component. It is a branch of a region the person is not looking at by then, so the
+           * product can never be in that appearance at that point. `draw` extracts branches and
+           * cannot know which are reachable, which is the correct division of labour; what was
+           * missing is anybody saying so afterwards.
+           *
+           * ⛔ A NOTE AGAINST THE DRAWING, NOT THE AUTHOR. An appearance no control reaches is
+           * either output that should not have been produced, or a state whose way in nobody has
+           * written — and the author cannot tell which from here, so neither does this.
+           */
+          /** ⛔ The same `reached` map computed above — one reading of which appearances a press can put somebody in. */
+          const unreachable = states.flatMap((st, i) => (reached.has(i + 1) ? [] : [st.label || st.when]));
+          if (unreachable.length && landings.length)
+            add({
+              severity: "note",
+              kind: "nothing-reaches-this-appearance",
+              where: `${scope.id}#${v.id}`,
+              what: `${unreachable.length} of this screen's ${states.length} drawn appearances — ${unreachable.join(
+                ", "
+              )} — ${unreachable.length === 1 ? "is one" : "are ones"} no control puts somebody in, so a reviewer can only reach ${
+                unreachable.length === 1 ? "it" : "them"
+              } by pressing a tab that the product does not have`,
+              fix: `either say what leads there, in the \`after\` of a control that commits — or, where the product genuinely cannot be in that appearance here, the drawing is output that should not have been produced: ⛔ do not delete it by hand, redraw the screen and report it if it comes back`,
+            });
           const dead = v.parts.filter(
             (pt) =>
               pt.role === "commits" &&
               !drives.has(pt.id) &&
+              !finishes.has(pt.id) &&
               scope.exchanges.some((e) => e.at?.view === v.id && (e.at?.part === pt.id || !e.at?.part))
           );
           if (dead.length)

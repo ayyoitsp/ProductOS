@@ -1002,6 +1002,48 @@ export const Exchange = z
       .strict()
       .optional(),
     exists: z.enum(["intended", "kept", "withdrawn"]).optional(),
+    /**
+     * ⛔ THIS IS THE ACT THAT ENDS THE FEATURE — SAID, NOT GUESSED.
+     *
+     * Peter, driving the prototype: *"the screen linking is wrong - clicking continue from the first
+     * page shoudl take you to folder selection"* — and before that, *"it dead ends. no way to
+     * complete setup"*.
+     *
+     * Finishing used to be derived by scoring a control's sentence against `happy_path.ends_with`
+     * and taking anything sharing three words. ⛔ So **Continue** was declared to complete
+     * create-deal, on a sentence whose own words are *"Nothing has been created yet"* — it shared
+     * "deal" and "folder" with the outcome, and that was enough. A claim as strong as "this is
+     * where the feature ends" cannot rest on shared nouns: every sentence in a feature is about the
+     * same nouns.
+     *
+     * So an author says it. One boolean, on the exchange whose press ends the thing. Nothing infers
+     * it, and where nothing says it, `nothing-finishes-this-feature` asks for it rather than
+     * inventing an answer — which is the difference between a corpus that is incomplete and one
+     * that is confidently wrong about its own flow.
+     */
+    finishes: z.boolean().optional(),
+    /**
+     * ⛔ WHICH APPEARANCE OF THE SCREEN THIS PRESS PUTS SOMEBODY IN — said, where prose cannot tell.
+     *
+     * Peter: *"the screen linking is wrong - clicking continue from the first page shoudl take you
+     * to folder selection."*
+     *
+     * The destination was scored out of the `after` sentence against each state's name. That works
+     * when the sentence happens to name the state and fails in a way nobody can see when it does
+     * not: Continue's sentence says *"They are being asked where this deal's folder is… Nothing has
+     * been created yet"* — which names **Folder** and **Creating** equally well, so the tie rule
+     * refused both and the prototype moved nowhere. Before that, with no `after` at all, it read
+     * the `answer` and landed on Creating.
+     *
+     * ⛔ Every one of those outcomes is a sentence being asked a question it was not written to
+     * answer. `after` says what is different afterwards; it is not a pointer. So where the picture
+     * has to move somewhere specific, name it — the value is a state's `when`, the same vocabulary
+     * `at.state` uses, because two spellings of "which appearance" is how the two come to disagree.
+     *
+     * Still derived when absent: a sentence that unambiguously names one appearance is a lookup, and
+     * making an author restate it would be the hand-authoring this project keeps failing at.
+     */
+    lands_on: z.string().optional(),
     reads: z.array(z.string()).default([]),
     changes: z.array(z.string()).default([]),
     /** Rules this exchange is exempt from, each with a required reason. */

@@ -348,8 +348,22 @@ export function landingsFor(scope: Scope, view: View): Landing[] {
   const states = view.states ?? [];
   if (!states.length) return [];
   const out: Landing[] = [];
+  /**
+   * ⛔ A CONTROL THAT ENDS THE FEATURE DOES NOT ALSO LAND INSIDE IT.
+   *
+   * The three controls that finish create-deal each also scored a landing on the folder appearance
+   * — the one they are already standing in — because their `after` says what the folder choice
+   * produced and therefore mentions folders. Two destinations for one press, and the walk has to
+   * pick: land and the completion never shows, finish and the landing was noise. Either way the
+   * prototype behaves differently from what either list says.
+   *
+   * ⛔ Finishing wins, because it is the stronger claim and it is checked against `ends_with` rather
+   * than scored. See `finishesFor`.
+   */
+  const ends = new Set(finishesFor(scope, view));
 
   for (const pt of view.parts) {
+    if (ends.has(pt.id)) continue;
     /**
      * ⛔ A RETURNING CONTROL NEEDS NO SENTENCE READ, because it already says where it goes. State 0
      * is the screen as it was — the one destination that stays true however the drawing changes.
@@ -373,7 +387,41 @@ export function landingsFor(scope: Scope, view: View): Landing[] {
      * is usually the thing itself. Both of "the deal is created on the CRE deals list" and "the
      * analyst is then asked where its folder is" are true, and only the second says where you are.
      */
-    const because = saysText(at.slots?.after?.says) || saysText(at.slots?.answer?.says);
+    /**
+     * ⛔ `after` ONLY. THE FALLBACK TO `answer` CONTRADICTED THE COMMENT ABOVE IT AND LIED ABOUT A FLOW.
+     *
+     * Peter, driving the prototype: *"the screen linking is wrong - clicking continue from the first
+     * page shoudl take you to folder selection. 'creating' is not a valid screen, since it creates
+     * after folder selection is done"*.
+     *
+     * Continue landed on the "Creating" appearance. Not a scoring bug — the scoring was right about
+     * the sentence it was given. `after` was blank, so it read `answer`, whose four statements say
+     * "creates no deal", "the deal comes into being" and never once say *folder*. So the one state
+     * the sentence named was Creating, and the prototype taught a flow the corpus does not claim.
+     *
+     * The comment directly above already said why this cannot work: `answer` is what a press GIVES
+     * you, not where you are. Reading it for a destination is asking a field the wrong question,
+     * and a sentence that does not mention where you end up will still match something.
+     *
+     * ⛔ So: no destination without a sentence about destinations. A commit whose `after` is blank
+     * lands nowhere and `pressing-this-moves-nothing` says so — which is a true statement an author
+     * can act on, where a confident wrong arrow is one they cannot even see is wrong.
+     */
+    /**
+     * ⛔ WHAT THE AUTHOR SAID, BEFORE ANYTHING IS SCORED. See `Exchange.lands_on`.
+     *
+     * A sentence is scored only when nobody named the appearance, because scoring asks `after` a
+     * question it was not written to answer and fails invisibly when the sentence is ambiguous.
+     */
+    if (at.lands_on) {
+      const i = states.findIndex((st) => st.when === at.lands_on);
+      if (i >= 0) {
+        out.push({ part: pt.id, index: i + 1, label: states[i]!.label, because: `this control is said to land on "${states[i]!.label}"` });
+        continue;
+      }
+      /** ⛔ Named an appearance this screen does not have — reported by `check`, not guessed past. */
+    }
+    const because = saysText(at.slots?.after?.says);
     if (!because) continue;
     const mine = words(because);
     if (!mine.size) continue;
@@ -437,46 +485,40 @@ export function landingsFor(scope: Scope, view: View): Landing[] {
  * dropped: the reviewer had finished and nothing said so, so leaving read as losing their place.
  */
 export function finishesFor(scope: Scope, view: View): string[] {
+  /**
+   * ⛔ AUTHORED, NOT SCORED. See `Exchange.finishes` for why.
+   *
+   * This read a control's sentence against `happy_path.ends_with` and took anything sharing three
+   * words. On create-deal it declared **Continue** to be where the feature ends, from a sentence
+   * reading *"Nothing has been created yet"* — "deal" and "folder" were enough. Peter found it by
+   * pressing the button, twice, weeks apart.
+   *
+   * ⛔ Every sentence in a feature is about the same nouns, so overlap cannot separate "the deal is
+   * now on the list" from "no deal has been created". Nothing here guesses any more.
+   */
   const through = scope.happy_path?.through ?? [];
   if (!through.length) return [];
-  /** Only the last screen of the path can finish it. */
+  /** ⛔ Still only the last screen of the path: a control mid-flow lands, it does not finish. */
   if (through[through.length - 1] !== view.id) return [];
-  const ends = scope.happy_path?.ends_with;
-  if (!ends) return [];
+  if (!scope.happy_path?.ends_with) return [];
 
-  /**
-   * ⛔ AND ONLY A CONTROL THAT DOES WHAT FINISHING MEANS.
-   *
-   * Every commit on the last screen used to count, which is far too blunt: it marked "New Deal" as
-   * finishing the deals list. That is a control which LEAVES the feature, and treating it as the
-   * end suppressed its link — breaking the one cross-feature connection in the corpus, the one
-   * anybody would draw by hand.
-   *
-   * The feature already says what finishing is. A control finishes it when what the control leaves
-   * behind is what the feature says it ends with: *"the deal exists on the CRE deals list, and its
-   * sizing model has been written into the folder"* against *"the deal is bound to that folder…
-   * taken on to the deal workspace"*. "New Deal" against *"they are in that deal's workspace"*
-   * shares almost nothing, which is the right answer — starting a deal is not finishing a list.
-   */
-  const want = words(ends);
-  if (!want.size) return [];
-  return view.parts
-    .filter((pt) => pt.role === "commits" && !pt.returns)
-    .filter((pt) => {
-      const at =
-        scope.exchanges.find((e) => e.at?.view === view.id && e.at?.part === pt.id) ??
-        scope.exchanges.find((e) => e.at?.view === view.id && !e.at?.part);
-      if (!at) return false;
-      const did = words(`${saysText(at.slots?.after?.says)} ${saysText(at.slots?.answer?.says)}`);
-      if (!did.size) return false;
-      const shared = [...did].filter((w) => want.has(w)).length;
-      /**
-       * ⛔ A MARGIN, NOT A SINGLE WORD. Two sentences about the same product share "deal" without
-       * being about the same thing, and one match would make every commit a finish again.
-       */
-      return shared >= 3;
-    })
-    .map((pt) => pt.id);
+  const out: string[] = [];
+  for (const pt of view.parts) {
+    if (pt.role !== "commits" || pt.returns) continue;
+    /**
+     * ⛔ THE SAME READING `landingsFor` USES — the exchange at the control, else the screen's own.
+     *
+     * Rewriting this to require a part-anchored exchange dropped that fallback, and the difference
+     * showed up as a test failure rather than as a wrong answer, which is luck. Two readings of
+     * "which exchange does this control perform" is the gateFor/check divergence in miniature.
+     */
+    const at =
+      scope.exchanges.find((e) => e.at?.view === view.id && e.at?.part === pt.id) ??
+      scope.exchanges.find((e) => e.at?.view === view.id && !e.at?.part);
+    if (at?.finishes) out.push(pt.id);
+  }
+  return out;
+
 }
 
 

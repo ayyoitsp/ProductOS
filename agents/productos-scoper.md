@@ -729,6 +729,36 @@ at:
   part: deal-row          # ⛔ the card can now say "show me the deal row" and take them to it
 ```
 
+⛔ **The control that ENDS the feature says so: `finishes: true` on its exchange.** And where a
+press moves the picture to a particular appearance of the screen, name it: `lands_on:` carrying that
+state's `when`, the same spelling `at.state` uses.
+
+```yaml
+  - id: use-a-folder-that-exists
+    at: { view: create-deal-form, part: use-existing-folder, state: "phase === 'folder'" }
+    finishes: true                    # ⛔ pressing this is where the feature ends
+
+  - id: create-deal-form
+    at: { view: create-deal-form, part: continue-to-folder }
+    lands_on: "phase === 'folder'"    # ⛔ and this is where the press puts them
+```
+
+Peter found the absence of both by pressing buttons: *"it dead ends. no way to complete setup"*,
+then *"the screen linking is wrong - clicking continue from the first page shoudl take you to folder
+selection. 'creating' is not a valid screen"*.
+
+Both used to be **guessed from your prose**, by scoring a sentence against the state names and
+against `ends_with`. ⛔ That cannot work, and the reason is worth keeping: every sentence in a
+feature is about the same nouns. So *Continue* — whose own sentence reads *"Nothing has been created
+yet"* — was declared to complete the feature, because it shared "deal" and "folder" with the
+outcome; and its destination resolved to the **Creating** appearance, because the sentence said
+"created".
+
+⛔ **`finishes` is never inferred.** Where nothing claims it, `nothing-finishes-this-feature` asks
+you — which is a corpus that is incomplete rather than one confidently wrong about its own flow.
+`lands_on` is still derived when a sentence unambiguously names one appearance, so write it only
+where it does not.
+
 ⛔ **And a control that `commits` owes an `answer`.** A commit changes something; state what is
 true afterwards, and where somebody is left if they are left anywhere. `productos v2 check`
 **refuses** `pressing-this-promises-nothing` for every committing control that has no exchange at
