@@ -361,9 +361,6 @@ export function migrate(v1Root: string, outDir: string, at: string): Migration {
         id: seg(v.id),
         title: v.title,
         exists: v1.status === "planned" ? "intended" : "kept",
-        // ⛔ `walked` is a human's observation. Nothing in v1 recorded one, so it is false here —
-        // claiming otherwise would manufacture the only evidence that a screen exists.
-        walked: false,
         ...(v.sketch ? { sketch: v.sketch } : {}),
         /**
          * ⛔ CARRIED, AND IT WAS NOT. `sketch_html` is the same screen in the application's own

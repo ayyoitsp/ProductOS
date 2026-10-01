@@ -1308,9 +1308,8 @@ export const View = z.object({
    * claim eight of eleven things and says so out loud.
    *
    * ⛔ IT IS A CLAIM, NOT A PROOF. Listing a ref here says the author drew that state; nobody can
-   * verify from the markup that the dash is really in it. That is what `walked` is for — a person
-   * confirming the screen holds what it says. This closes the gap between "there is a picture" and
-   * "the picture shows the thing", which is where thin drawings lived.
+   * verify from the markup that the dash is really in it. What closes that gap is the `rendered`
+   * reviewer, which looks at the product beside the drawing — not a boolean somebody ticks.
    */
   shows: z.array(z.string()).default([]),
   /**
@@ -1330,8 +1329,6 @@ export const View = z.object({
    */
   drawn_from: z.string().optional(),
   drawn_at: z.string().optional(),
-  /** ⛔ Not "I didn't feel like sketching" — it means nobody walked the screen, and it
-   *  blocks readiness. */
   /**
    * ⛔ A SCREEN IS NOT ONE PICTURE. Peter: *"a clickable screenshot at the top of this deals list
    * screen that walks through the various states"* and *"the framework should be able to generate
@@ -1355,7 +1352,21 @@ export const View = z.object({
         .strict()
     )
     .default([]),
-  walked: z.boolean().default(false),
+  /**
+   * ⛔ `walked` WAS HERE AND IS GONE. Peter: *"how do we 'walk a screen' so that this never shows?
+   * i'm confused — should users be confirming every screen?"* — and, asked which way to take it,
+   * chose to drop it.
+   *
+   * It meant "a person confirmed this picture shows what the screen claims", and it was a human
+   * validation with nothing of the machinery every other one here has: no actor, no time, no `via`,
+   * nothing stopping a script setting it. A stamp that asserts somebody agreed, which anybody can
+   * write, is worse than no stamp — it reads as a guarantee and is not one.
+   *
+   * What it was reaching for is already covered: a drawing is generated from the component or from
+   * the truth, `a-drawing-does-not-show-what-the-screen-states` reports where the picture does not
+   * claim what the screen says, and `rendered` now LOOKS at the product beside it. A chore on top
+   * of those added no guarantee.
+   */
   parts: z.array(Part).default([]),
 }).strict();
 export type View = z.infer<typeof View>;

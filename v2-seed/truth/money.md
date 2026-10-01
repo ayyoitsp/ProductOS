@@ -15,7 +15,6 @@ views:
   - id: balance
     title: A kid's money
     view_kind: detail
-    walked: true
     sketch: |
       ┌──────────────────────────────┐
       │  Ada                         │
@@ -45,7 +44,6 @@ views:
   - id: earn-form
     title: Record something earned
     view_kind: form
-    walked: true
     sketch: |
       ┌──────────────────────────────┐
       │  Ada earned                  │
@@ -71,7 +69,6 @@ views:
   - id: spend-form
     title: Record something spent
     view_kind: form
-    walked: true
     sketch: |
       ┌──────────────────────────────┐
       │  Ada spent                   │

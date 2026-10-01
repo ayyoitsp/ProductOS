@@ -17,7 +17,6 @@ views:
   - id: a-screen
     title: A screen
     view_kind: form
-    walked: true
     parts:
       - id: go
         role: commits

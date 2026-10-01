@@ -20,6 +20,7 @@ import { drawFromRoute } from "../../v2/draw.js";
 import { everyView, isResolved, resolveRoute } from "../../v2/routes.js";
 import { spokenFor } from "../../v2/spoken.js";
 import { idiomOf, proposeScreen } from "../../v2/propose.js";
+import { indexDesignSystem } from "../../v2/design.js";
 import { inferConnections, type Connection } from "../../v2/connects.js";
 import { writeLeadsTo } from "../../v2/draw-write.js";
 import { AGENTS, AUTHORS, CASCADE, KINDS, SHIMS } from "../../core/jobs.js";
@@ -1562,6 +1563,7 @@ export function v2Command(): Command {
       }
       const into = path.resolve(o.into ?? ".");
       let componentsDir: string | undefined;
+      let designDir: string | undefined;
       try {
         const paths = resolvePathsOrThrow(into);
         const root = path.dirname(path.dirname(paths.configFile));
@@ -2133,16 +2135,28 @@ function proposeScreens(into: string, ref?: string): void {
       
       let repoRoot = into;
       let componentsDir: string | undefined;
+      let designDir: string | undefined;
       try {
         const paths = resolvePathsOrThrow(into);
         repoRoot = path.dirname(path.dirname(paths.configFile));
-        const dir = readConfig(paths).web.components_dir;
-        componentsDir = dir ? path.resolve(repoRoot, dir) : undefined;
+        const web = readConfig(paths).web;
+        componentsDir = web.components_dir ? path.resolve(repoRoot, web.components_dir) : undefined;
+        /** ⛔ The product's own vocabulary, where it has one — see `idiomOf`. */
+        designDir = web.design_system ? path.resolve(repoRoot, web.design_system) : undefined;
       } catch {
         componentsDir = undefined;
+        designDir = undefined;
       }
       const corpus = loadCorpus(into);
-      const idiom = idiomOf(componentsDir);
+      const idiom = idiomOf(componentsDir, designDir);
+      if (designDir) {
+        const ds = indexDesignSystem(designDir);
+        if (ds?.pieces.length)
+          console.log(
+            pc.dim(`  built from ${path.basename(designDir)} — ${ds.pieces.length} parts of the product's own vocabulary`)
+          );
+        else console.log(pc.yellow("!"), `nothing readable in ${designDir} — falling back to what the app's components imply`);
+      }
       const targets = everyView(corpus).filter((x) =>
         !ref ? !x.view.sketch_html && !x.view.sketch : ref === `${x.scope}#${x.view.id}`
       );

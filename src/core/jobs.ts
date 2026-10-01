@@ -183,6 +183,8 @@ export const AREAS: Area[] = [
       "src/v2/propose.ts",
       "src/v2/appcss.ts",
       "src/core/agents-doc.ts",
+      /** ⛔ The design system index: a generator source like `draw`, reading a product's own vocabulary. */
+      "src/v2/design.ts",
     ],
     needs: ["read-files", "run-commands", "search-files", "write-corpus"],
   },

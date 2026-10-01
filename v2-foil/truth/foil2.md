@@ -9,7 +9,6 @@ views:
   - id: a-screen
     title: The same screen name, declared twice
     view_kind: form
-    walked: true
     parts:
       - id: go
         role: commits

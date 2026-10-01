@@ -19,6 +19,7 @@
  * wrote in front of a reviewer who is there to judge sentences.
  */
 import fs from "node:fs";
+import { indexDesignSystem, drawWith } from "./design.js";
 import path from "node:path";
 import type { Part, View } from "./schema.js";
 
@@ -80,7 +81,32 @@ function sources(dir: string, limit = 400): string[] {
  * ⛔ THE COMMONEST, NOT THE FIRST. One component's flourish is not the house style, and a screen
  * generated in a one-off idiom reads as a different product than the one beside it.
  */
-export function idiomOf(componentsDir: string | undefined): Idiom {
+export function idiomOf(componentsDir: string | undefined, designSystemDir?: string): Idiom {
+  /**
+   * ⛔ A DESIGN SYSTEM REMOVES THE GUESS, it does not improve it.
+   *
+   * Peter: *"can we index the actual design system bilrost has with the prototypes now?"* Learning
+   * an idiom by FREQUENCY is a reasonable guess about what a button looks like and never more than
+   * one: it cannot tell a button from a thing shaped like one, it averages over every variant, and
+   * it drifts the moment somebody writes a one-off. Where the product says authoritatively what its
+   * parts ARE, that is what a drawing is built from.
+   *
+   * ⛔ AND IT FALLS BACK PER KIND. A system with a Button and no Card should give its real button
+   * and let the card be learned, rather than being all-or-nothing about it.
+   */
+  if (designSystemDir) {
+    const ds = indexDesignSystem(designSystemDir);
+    if (ds?.pieces.length) {
+      const learned = componentsDir && fs.existsSync(componentsDir) ? idiomOf(componentsDir) : FALLBACK;
+      return {
+        ...learned,
+        button: drawWith(ds, "commits") ?? learned.button,
+        field: drawWith(ds, "entry") ?? learned.field,
+        card: drawWith(ds, "region") ?? learned.card,
+        from: [`${path.basename(designSystemDir)} — ${ds.pieces.length} parts`, ...learned.from].slice(0, 8),
+      };
+    }
+  }
   if (!componentsDir || !fs.existsSync(componentsDir)) return FALLBACK;
   const files = sources(componentsDir);
   const bag = { card: [] as string[], field: [] as string[], button: [] as string[], heading: [] as string[], label: [] as string[], muted: [] as string[] };

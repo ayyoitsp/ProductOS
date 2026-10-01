@@ -29,7 +29,6 @@ export interface ProtoScreen {
   html?: string;
   /** How the picture came to exist, which is a fact about the BUILD, never about the truth. */
   from: "the code" | "the truth" | "nobody";
-  walked: boolean;
   parts: Array<{ id: string; role: string; label?: string; goes?: string }>;
   /** Statements that arrive at this screen, with the exchange they belong to. */
   says: Array<{ ref: string; slot: string; text: string; exchange: string; part?: string }>;
@@ -107,7 +106,6 @@ export function screensOf(corpus: Corpus): ProtoScreen[] {
          * about where the picture came from rather than about the screen's standing.
          */
         from: v.sketch_html ? (v.drawn_from ? "the code" : "the truth") : "nobody",
-        walked: Boolean(v.walked),
         parts: (v.parts ?? []).map((p) => ({ id: p.id, role: p.role, label: p.label, goes: p.leads_to })),
         says: saysFor(corpus, s.scope.id, v.id),
         areas: lineage(corpus, s.scope.id).map((a) => titleOf(corpus, a)),

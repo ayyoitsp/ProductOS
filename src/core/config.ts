@@ -221,6 +221,15 @@ export const WebConfig = z.object({
    *  elements) to produce static HTML mocks that look like the real app —
    *  WITHOUT running the user's code. Example: "src/components". */
   components_dir: z.string().optional(),
+  /**
+   * ⛔ WHERE THE PRODUCT'S OWN VOCABULARY LIVES. Peter: *"can we index the actual design system
+   * bilrost has with the prototypes now?"*
+   *
+   * With this set, a drawn screen is built from parts the product actually ships — the component's
+   * declared base classes and its declared variants — instead of from the class strings that happen
+   * to appear most often across the app, which cannot tell a button from a thing shaped like one.
+   */
+  design_system: z.string().optional(),
 });
 export type WebConfig = z.infer<typeof WebConfig>;
 

@@ -1,0 +1,31 @@
+id: "0052"
+said: |-
+  pos: can we index the actual design system bilrost has with the prototypes now?
+
+  pos: let's keep the frame the same fixed height instead of going smaller for smaller screens.
+
+  pos: remove placeholder text like this: The screens these arrive on / Click anything on a screen
+  to see what the product promises there — and what it does not say
+
+  pos: there should be a way for you to acknowldege POS things are taken care of, make an expandable
+  bar, and send a message indicating a particular piece is taken care of
+
+  "Nobody has walked this screen, so what it holds is unconfirmed." - how do we 'walk a screen' so
+  that this never shows? i'm confused - should users be confirming every screen?
+
+  [asked which way to take it] Drop it
+at: 2026-10-01
+kind: concept
+reaches:
+  model: WAS HERE AND IS GONE
+  generate: indexDesignSystem
+  surface: ack-bar
+  check: a-steer-nobody-can-check
+  instruct: What steers a project, and which half of it anybody sees
+  pin: no field an author can write is read by nothing
+waived:
+  derive: |-
+    Nothing new is computed, inherited or gated. Indexing a design system is a READ of somebody
+    else's source — the same layer `draw` sits in — and `drawWith` is a lookup over what that read
+    produced. Arguable: if which part a role maps to ever becomes configurable per project rather
+    than a convention in one function, that mapping is a derivation and this stops holding.

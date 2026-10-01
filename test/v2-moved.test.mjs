@@ -38,7 +38,7 @@ function scene() {
   const write = (at) =>
     fs.writeFileSync(
       path.join(corpus, "truth", "thing.md"),
-      `---\nid: thing\ntitle: A thing\nexists: kept\nviews:\n  - id: pane\n    title: Pane\n    walked: true\n    drawn_from: app/Pane.tsx\n${
+      `---\nid: thing\ntitle: A thing\nexists: kept\nviews:\n  - id: pane\n    title: Pane\n    drawn_from: app/Pane.tsx\n${
         at ? `    drawn_at: ${at}\n` : ""
       }    sketch_html: |\n      <div></div>\n    parts: []\n---\n\nA scope.\n`
     );

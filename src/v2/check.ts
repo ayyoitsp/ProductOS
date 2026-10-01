@@ -1032,20 +1032,10 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
 
     for (const v of scope.views) {
       /**
-       * ⛔ NOT ESCAPABLE BY DECLARING IT UNBUILT. This used to end *"or set exists: intended so a
-       * reader knows it does not exist yet"* — offering a statement about the BUILD as the way out
-       * of a gap in the TRUTH. Whether a screen ships has no bearing on whether anybody has
-       * confirmed its picture shows what it claims, and a screen generated from the truth can be
-       * walked exactly as a drawn one can.
+       * ⛔ `view-never-walked` WAS HERE AND IS GONE WITH THE FIELD IT READ. It fired on every
+       * screen in every corpus, asking for a boolean that asserted a human had confirmed something
+       * and that anybody could write. See the note where `walked` used to be declared.
        */
-      if (!v.walked)
-        add({
-          severity: "note",
-          kind: "view-never-walked",
-          where: `${scope.id}#${v.id}`,
-          what: "nobody has confirmed that the picture of this screen shows what the screen claims",
-          fix: "walk it — read the picture against the behaviours that arrive at it, and set walked: true",
-        });
       for (const p of v.parts) {
         // ⛔ `commits` only. An `entry` part is described by the `with` slot of whatever
         // commits it, and a `navigates` part is fully described by `leads_to` — asking a

@@ -224,7 +224,7 @@ export function coveredBy(corpus: Corpus, target: string): Covered | null {
             .sort(([a], [b]) => a.localeCompare(b));
         })()
       ),
-      view: view ? { sketch: view.sketch, parts: view.parts, exists: view.exists, walked: view.walked } : undefined,
+      view: view ? { sketch: view.sketch, parts: view.parts, exists: view.exists } : undefined,
     }),
     canon({
       title: ex.title,

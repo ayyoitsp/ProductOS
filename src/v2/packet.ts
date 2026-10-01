@@ -259,7 +259,6 @@ function compileOne(corpus: Corpus, scopeId: string): string | null {
        * against, which is a fact about the build and worth saying to whoever is about to build it.
        */
       if (v.exists === "intended") out.push("", "> ⛔ Nothing renders this screen yet. You are building it, not changing it.");
-      if (!v.walked) out.push("", "> ⛔ Nobody has walked this screen. Treat what follows as incomplete.");
       if (v.sketch) {
         out.push("");
         out.push("```");

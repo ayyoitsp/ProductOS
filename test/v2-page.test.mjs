@@ -424,7 +424,7 @@ test("a queue with no questions says how much is unwritten", () => {
   // One behaviour, one slot said, the rest blank — a migration's output in miniature.
   fs.writeFileSync(
     path.join(dir, "truth", "thing.md"),
-    `---\nid: thing\ntitle: A thing\nexists: kept\nhappy_path:\n  accomplishes: Somebody records that a thing happened, and can see afterwards that it did.\n  brings: the thing that happened\n  ends_with: the thing is recorded and they were told so\n  through: [a-screen]\nviews:\n  - id: a-screen\n    title: A screen\n    walked: true\n    parts:\n      - id: go\n        role: commits\n        label: Go\nexchanges:\n  - id: press-go\n    title: Somebody presses Go\n    asked_by: person\n    at: { view: a-screen, part: go }\n    slots:\n      answer:\n        says: Something is recorded, and the person is told it was.\n    criteria: []\n---\n\nA scope with one sentence and seven blanks.\n`
+    `---\nid: thing\ntitle: A thing\nexists: kept\nhappy_path:\n  accomplishes: Somebody records that a thing happened, and can see afterwards that it did.\n  brings: the thing that happened\n  ends_with: the thing is recorded and they were told so\n  through: [a-screen]\nviews:\n  - id: a-screen\n    title: A screen\n    parts:\n      - id: go\n        role: commits\n        label: Go\nexchanges:\n  - id: press-go\n    title: Somebody presses Go\n    asked_by: person\n    at: { view: a-screen, part: go }\n    slots:\n      answer:\n        says: Something is recorded, and the person is told it was.\n    criteria: []\n---\n\nA scope with one sentence and seven blanks.\n`
   );
   const bare = loadCorpus(dir);
   assert.equal(bare.broken.length, 0, JSON.stringify(bare.broken));

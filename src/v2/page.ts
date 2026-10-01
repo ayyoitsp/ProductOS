@@ -450,7 +450,7 @@ function renderScreenIndex(corpus: Corpus, ids: string[], ctx: Ctx): string {
             (r) => `<tr>
               <td><button type="button" class="show-part" data-show-part="${esc(`${r.view.id}/`)}">${line(r.view.title)}</button>${
               r.view.exists === "intended" ? ` <span class="n">not built yet</span>` : ""
-            }${!r.view.walked ? ` <span class="n">not walked</span>` : ""}</td>
+            }</td>
               <td>${refLink(r.scope.id, ctx, line(r.scope.title || r.scope.id))}</td>
               <td class="num">${r.controls}</td>
               <td class="num${r.silent ? " warn" : ""}">${r.silent || "—"}</td>
@@ -696,9 +696,13 @@ function renderScreens(scope: Scope, ctx: Ctx, scopeId: string, opts: PageOption
   if (!shown.length) return "";
   return `
     <section class="screens">
-      <h3 class="sub">The screens these arrive on</h3>
-      <p class="what-next">Click anything on a screen to see what the product promises there — and
-      what it does not say yet. Controls that go somewhere take you there.</p>
+      <!--
+        ⛔ NO HEADING AND NO INSTRUCTIONS HERE. Peter: *"remove placeholder text like this: The
+        screens these arrive on / Click anything on a screen to see what the product promises
+        there…"*. A screen a reviewer can see needs no label saying it is a screen, and a surface
+        that explains how to click it is a surface that does not look clickable. The controls
+        advertise themselves; that was the whole point of marking only the things a person touches.
+      -->
       ${shown
         .map((v) => {
           const matched = new Map<string, boolean>();
@@ -943,7 +947,6 @@ function renderScreens(scope: Scope, ctx: Ctx, scopeId: string, opts: PageOption
                 ? `<p class="owes">This screen does not exist yet — everything here is intent, not observation.</p>`
                 : ""
             }
-            ${!v.walked ? `<p class="owes">Nobody has walked this screen, so what it holds is unconfirmed.</p>` : ""}
             ${
               /**
                * ⛔ A SCREEN SHOWING FIVE APPEARANCES UNDER ONE SENTENCE, SAYING SO WHERE IT SHOWS.
@@ -1508,7 +1511,6 @@ function renderGroupUx(corpus: Corpus, scopeId: string, ctx: Ctx): string {
     view: string;
     title: string;
     intended: boolean;
-    walked: boolean;
     drawn: boolean;
     controls: number;
     silent: number;
@@ -1530,7 +1532,6 @@ function renderGroupUx(corpus: Corpus, scopeId: string, ctx: Ctx): string {
         view: v.id,
         title: plain(v.title || v.id),
         intended: v.exists === "intended",
-        walked: v.walked,
         drawn: Boolean(v.sketch || v.sketch_html),
         controls: live.length,
         silent: live.filter((p) => !sc.exchanges.some((e) => e.at?.view === v.id && e.at?.part === p.id)).length,
@@ -1604,7 +1605,6 @@ function renderGroupUx(corpus: Corpus, scopeId: string, ctx: Ctx): string {
       } · ${n.said} behaviour${n.said === 1 ? "" : "s"}</span>
       ${!n.drawn ? `<span class="ux-flag">not drawn</span>` : ""}
       ${n.intended ? `<span class="ux-flag">not built</span>` : ""}
-      ${!n.walked ? `<span class="ux-flag">not walked</span>` : ""}
       ${
         n.goes.length
           ? `<span class="ux-goes">${n.goes
@@ -2672,6 +2672,85 @@ if (typeof EventSource !== "undefined") {
   who.className = "who-bar";
   who.hidden = true;
   bottom.appendChild(who);
+  /**
+   * ⛔ A WAY TO SAY A FRAMEWORK ASK IS DEALT WITH, WHERE HE ASKED IT.
+   *
+   * Peter: *"there should be a way for you to acknowledge POS things are taken care of, make an
+   * expandable bar, and send a message indicating a particular piece is taken care of"*.
+   *
+   * He had the opposite of this an hour earlier — a full thread above the composer — and had it
+   * removed: *"the history of messages on a screen is unnecessary"*. The difference is the shape,
+   * not the content. A log occupies the page whether or not anything happened; a bar that says
+   * "3 dealt with" and opens when pressed costs one line until somebody wants the detail.
+   *
+   * ⛔ ONLY FRAMEWORK ASKS, AND ONLY CLOSED ONES. This is an acknowledgement surface, not a second
+   * inbox: a corpus request is answered by the truth changing, which the page already shows by
+   * being different. What has no other evidence is a framework ask — the code changed somewhere he
+   * cannot see, and "it is done" is the whole of what he needs back.
+   */
+  /**
+   * ⛔ THIS SCRIPT'S OWN ESCAPE, AND IT IS HERE BECAUSE I MADE THE MISTAKE TWICE.
+   *
+   * The shared escape belongs to the DRIVE script's scope. The thread panel used it from here an
+   * hour earlier,
+   * threw a ReferenceError mid-render, and showed nothing at all — which looks exactly like having
+   * no data. Then the acknowledgement bar did the same thing: a count that rendered and a list that
+   * silently did not. A helper with a name of its own is harder to reach for by habit.
+   */
+  const safely = (x) =>
+    String(x == null ? "" : x).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+  const acks = document.createElement("div");
+  acks.className = "ack-bar";
+  acks.hidden = true;
+  bottom.appendChild(acks);
+  let acksOpen = false;
+
+  const paintAcks = (done) => {
+    if (!done.length) { acks.hidden = true; acks.innerHTML = ""; fit(); return; }
+    const n = done.length;
+    acks.innerHTML =
+      '<button type="button" class="ack-head">' +
+      '<span class="ack-n">' + n + '</span> framework ' + (n === 1 ? "ask" : "asks") + " dealt with" +
+      '<span class="ack-caret">' + (acksOpen ? "▾" : "▸") + "</span></button>" +
+      (acksOpen
+        ? '<ul class="ack-list">' +
+          done
+            .map(
+              (d) =>
+                "<li><strong>" + safely(d.says.replace(/^\s*pos\s*:\s*/i, "")) + "</strong>" +
+                (d.outcome ? '<span class="ack-what">' + safely(d.outcome) + "</span>" : "") +
+                "</li>"
+            )
+            .join("") +
+          "</ul>"
+        : "");
+    acks.hidden = false;
+    fit();
+  };
+
+  let lastAcks = [];
+  const askAcks = () =>
+    fetch("/api/v2/thread")
+      .then((r) => r.json())
+      .then((b) => {
+        /** ⛔ Newest first, and capped — this is an acknowledgement, not an archive. */
+        lastAcks = (b.notes || [])
+          .filter((x) => x.kind === "framework" && x.state === "done")
+          .slice(-8)
+          .reverse();
+        paintAcks(lastAcks);
+      })
+      .catch(() => {});
+  askAcks();
+  setInterval(askAcks, 30000);
+
+  document.addEventListener("click", (ev) => {
+    if (!ev.target.closest || !ev.target.closest("button.ack-head")) return;
+    acksOpen = !acksOpen;
+    paintAcks(lastAcks);
+  });
+
   const askWho = () =>
     fetch("/api/v2/presence")
       .then((r) => r.json())
@@ -4707,8 +4786,16 @@ const STYLE = `<style>
    * Capped and scrolled inside itself: the drawing keeps its own layout exactly, and the REVIEW
    * surface stops spending a screenful on one screen's margins.
    */
+  /**
+   * ⛔ FIXED, NOT CAPPED. Peter: *"let's keep the frame the same fixed height instead of going
+   * smaller for smaller screens."*
+   *
+   * A capped height let a short drawing shrink its frame, so walking a feature made the page jump —
+   * every state a different size, the tabs moving under the cursor between presses. A drawing is a
+   * window onto a product, and a window does not change shape because of what is behind it.
+   */
   .proto.html { transform: translateZ(0); contain: layout paint; position: relative;
-    overflow: auto; max-height: 30rem; }
+    overflow: auto; height: 30rem; }
   /** ⛔ The app's own full-height rules are about ITS viewport, not about this card. */
   .proto.html .productos-mock { min-height: 0; }
 
@@ -4840,6 +4927,21 @@ const STYLE = `<style>
     background: var(--bad); color: var(--bg); }
   /* ⛔ Quiet, not alarming. Nobody being at the keyboard is ordinary; what is not ordinary is a
      page that hides it. The red is reserved for the page having stopped following. */
+  /**
+   * ⛔ ONE LINE UNTIL ASKED. The thread this replaces took the top third of the dock whether or not
+   * anything had happened; this is a count that opens.
+   */
+  .ack-bar { background: var(--card); border-top: 1px solid var(--line); }
+  .ack-head { font: inherit; font-size: .82rem; width: 100%; text-align: left; cursor: pointer;
+    background: none; border: 0; padding: .4rem .8rem; color: var(--ok);
+    display: flex; align-items: center; gap: .4rem; }
+  .ack-n { font-weight: 600; }
+  .ack-caret { margin-left: auto; color: var(--dim); }
+  .ack-list { list-style: none; margin: 0; padding: 0 .8rem .5rem; display: grid; gap: .45rem;
+    max-height: 11rem; overflow: auto; }
+  .ack-list li { font-size: .82rem; line-height: 1.4; display: grid; gap: .1rem; }
+  .ack-list strong { font-weight: 600; }
+  .ack-what { color: var(--dim); }
   .who-bar { padding: .45rem .8rem;
     font-size: .84rem; text-align: center; background: var(--warn-bg); color: var(--warn);
     border-top: 1px solid var(--line); }

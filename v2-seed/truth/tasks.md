@@ -16,7 +16,6 @@ views:
     title: Offer a task
     view_kind: form
     exists: intended
-    walked: false
     sketch_html: |
       <div class="pp">
             <h2 class="text-lg font-semibold">Offer a task</h2>
@@ -39,7 +38,6 @@ views:
   - id: task-list
     title: Tasks
     view_kind: list
-    walked: true
     sketch: |
       ┌──────────────────────────────┐
       │  Tasks                       │
