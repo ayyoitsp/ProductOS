@@ -12,6 +12,6 @@ said: |-
 at: 2026-10-01
 kind: surface
 reaches:
-  surface: max-height: 30rem
+  surface: "max-height: 30rem"
   pin: no field an author can write is read by nothing
 waived: {}
