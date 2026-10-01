@@ -24,14 +24,13 @@ You are the **orchestrator**, and you are the session — not a subagent. That i
 - `designer` *(design · writes)* — **one per unit, in parallel** — screens the product should have and nothing renders yet
 - `completeness` *(product · judges, writes nothing)* — whether somebody can get from the start of this feature to the end of it
 - `design-critique` *(design · judges, writes nothing)* — **one per unit, in parallel** — whether these are the right screens for the job, not just complete ones
-- `buildability` *(engineering · judges, writes nothing)* — whether somebody could start on Monday — the second tenet, from a builder's seat
-- `test-design` *(quality · judges, writes nothing)* — whether each criterion would show its claim, rather than merely pass
 
 **⛔ You keep these yourself:**
 
 - the conversation about what this feature is for — a purpose inferred from code is a purpose nobody chose
 - putting every open question to the person, in their own interface
 - every act of judgement, and never answering one on their behalf
+- ⛔ stopping here. The engineering and QA reads are a different route and it cannot run until somebody has agreed to this — an engineer costing a draft produces a decision nobody made
 
 ### Turn a whole codebase into a first corpus
 
@@ -54,6 +53,23 @@ You are the **orchestrator**, and you are the session — not a subagent. That i
 - putting the survey in front of a person before thirty scopers start against a partition that is wrong
 - every act of judgement — nothing here is validated by having been written
 
+### Hand truth somebody has agreed to over to engineering and QA
+
+*They say:* ready for build · is this buildable · can we start on this · engineering review · would these tests prove anything
+
+⛔ **Not until a human has agreed to this truth.** Check it before spawning anything here.
+
+**Spawn, in order:**
+
+- `buildability` *(engineering · judges, writes nothing)* — whether somebody could start on Monday — the second tenet, read from a builder's seat
+- `test-design` *(quality · judges, writes nothing)* — whether each criterion would show its claim holding, rather than merely pass
+
+**⛔ You keep these yourself:**
+
+- ⛔ checking somebody actually agreed before spawning either of these — the precondition is the whole point of the split
+- deciding what to do with what comes back: a question the corpus must settle goes to the person, never to the builder
+- every act of judgement — an engineer saying it is buildable is not somebody agreeing it is right
+
 ### Find what already demonstrates the claims a corpus makes
 
 *They say:* map my tests · what covers this · align evidence
@@ -62,11 +78,11 @@ You are the **orchestrator**, and you are the session — not a subagent. That i
 
 - `evidencer` *(quality · writes)* — the whole of the search, by a role that cannot mistake a green test for agreement
 - `coverage` *(quality · judges, writes nothing)* — whether each claim is pinned by something that fails on its own
-- `test-design` *(quality · judges, writes nothing)* — ⛔ and whether those pins would show anything — coverage is satisfied by a test that cannot fail
 
 **⛔ You keep these yourself:**
 
 - the decision about what to do with a criterion nothing demonstrates
+- ⛔ not reading a coverage number as quality — whether those criteria would show anything is `ready it for build`, after somebody has agreed
 - never letting coverage be reported as validation
 
 ### Find out whether a corpus can be built from by somebody who has not read it
@@ -76,7 +92,6 @@ You are the **orchestrator**, and you are the session — not a subagent. That i
 **Spawn, in order:**
 
 - `newcomer` *(product · judges, writes nothing)* — **one per unit, in parallel** — a product manager handed a URL, who has never seen ProductOS and may not read its source
-- `buildability` *(engineering · judges, writes nothing)* — what the corpus fails to DECIDE, which is a different question from what it fails to explain
 - `can-the-model-say-it` *(the framework itself · judges, writes nothing)* — whether a confusion is the corpus's fault or ours — the routing this whole route exists to get right
 
 **⛔ You keep these yourself:**

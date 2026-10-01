@@ -75,6 +75,14 @@ export function presetBlock(shims: Shim[]): string {
     out.push("");
     out.push(`*They say:* ${sh.when}`);
     out.push("");
+    /**
+     * ⛔ THE PRECONDITION PRINTS BEFORE THE SPAWNS, because a gate rendered after the list of
+     * agents is a gate read after they have been spawned.
+     */
+    if (sh.after && sh.after !== "nothing") {
+      out.push(`⛔ **Not until ${sh.after}.** Check it before spawning anything here.`);
+      out.push("");
+    }
     if (sh.steps.length) {
       out.push("**Spawn, in order:**");
       out.push("");
@@ -268,6 +276,10 @@ export function agentsDoc(): string {
     out.push("");
     out.push(sh.does + ".");
     out.push("");
+    if (sh.after && sh.after !== "nothing") {
+      out.push(`⛔ **Precondition: ${sh.after}.**`);
+      out.push("");
+    }
     if (sh.steps.length) {
       out.push("**Spawns, in order:**");
       out.push(

@@ -76,9 +76,7 @@ flowchart TD
   scope_a_feature --> scope_a_feature_designer["designer ×N"]
   scope_a_feature --> scope_a_feature_completeness["completeness"]
   scope_a_feature --> scope_a_feature_design-critique["design-critique ×N"]
-  scope_a_feature --> scope_a_feature_buildability["buildability"]
-  scope_a_feature --> scope_a_feature_test-design["test-design"]
-  scope_a_feature -.->|keeps| scope_a_feature_self(["the session — 3 things it may not hand off"])
+  scope_a_feature -.->|keeps| scope_a_feature_self(["the session — 4 things it may not hand off"])
   scan_a_codebase(["scan a codebase<br/><i>Turn a whole codebase into a first corpus</i>"])
   scan_a_codebase --> scan_a_codebase_surveyor["surveyor"]
   scan_a_codebase --> scan_a_codebase_scoper["scoper ×N"]
@@ -88,14 +86,16 @@ flowchart TD
   scan_a_codebase --> scan_a_codebase_coherence["coherence"]
   scan_a_codebase --> scan_a_codebase_hand-authored["hand-authored"]
   scan_a_codebase -.->|keeps| scan_a_codebase_self(["the session — 4 things it may not hand off"])
+  ready_it_for_build(["ready it for build<br/><i>Hand truth somebody has agreed to over to engineering and QA</i>"])
+  ready_it_for_build --> ready_it_for_build_buildability["buildability"]
+  ready_it_for_build --> ready_it_for_build_test-design["test-design"]
+  ready_it_for_build -.->|keeps| ready_it_for_build_self(["the session — 3 things it may not hand off"])
   map_evidence(["map evidence<br/><i>Find what already demonstrates the claims a corpus makes</i>"])
   map_evidence --> map_evidence_evidencer["evidencer"]
   map_evidence --> map_evidence_coverage["coverage"]
-  map_evidence --> map_evidence_test-design["test-design"]
-  map_evidence -.->|keeps| map_evidence_self(["the session — 2 things it may not hand off"])
+  map_evidence -.->|keeps| map_evidence_self(["the session — 3 things it may not hand off"])
   check_it_communicates(["check it communicates<br/><i>Find out whether a corpus can be built from by somebody who has not read it</i>"])
   check_it_communicates --> check_it_communicates_newcomer["newcomer ×N"]
-  check_it_communicates --> check_it_communicates_buildability["buildability"]
   check_it_communicates --> check_it_communicates_can-the-model-say-it["can-the-model-say-it"]
   check_it_communicates -.->|keeps| check_it_communicates_self(["the session — 3 things it may not hand off"])
   look_at_the_product(["look at the product<br/><i>Compare the drawings against the product a person actually sees</i>"])
@@ -125,13 +125,12 @@ Turn one in-flight feature into product truth.
 - `designer` *(design · writes)* — one per unit, in parallel — screens the product should have and nothing renders yet
 - `completeness` *(product · judges, writes nothing)* — whether somebody can get from the start of this feature to the end of it
 - `design-critique` *(design · judges, writes nothing)* — one per unit, in parallel — whether these are the right screens for the job, not just complete ones
-- `buildability` *(engineering · judges, writes nothing)* — whether somebody could start on Monday — the second tenet, from a builder's seat
-- `test-design` *(quality · judges, writes nothing)* — whether each criterion would show its claim, rather than merely pass
 
 **⛔ Keeps, because it may not be delegated:**
 - the conversation about what this feature is for — a purpose inferred from code is a purpose nobody chose
 - putting every open question to the person, in their own interface
 - every act of judgement, and never answering one on their behalf
+- ⛔ stopping here. The engineering and QA reads are a different route and it cannot run until somebody has agreed to this — an engineer costing a draft produces a decision nobody made
 
 ### scan a codebase
 
@@ -152,6 +151,21 @@ Turn a whole codebase into a first corpus.
 - putting the survey in front of a person before thirty scopers start against a partition that is wrong
 - every act of judgement — nothing here is validated by having been written
 
+### ready it for build
+
+Hand truth somebody has agreed to over to engineering and QA.
+
+⛔ **Precondition: a human has agreed to this truth.**
+
+**Spawns, in order:**
+- `buildability` *(engineering · judges, writes nothing)* — whether somebody could start on Monday — the second tenet, read from a builder's seat
+- `test-design` *(quality · judges, writes nothing)* — whether each criterion would show its claim holding, rather than merely pass
+
+**⛔ Keeps, because it may not be delegated:**
+- ⛔ checking somebody actually agreed before spawning either of these — the precondition is the whole point of the split
+- deciding what to do with what comes back: a question the corpus must settle goes to the person, never to the builder
+- every act of judgement — an engineer saying it is buildable is not somebody agreeing it is right
+
 ### map evidence
 
 Find what already demonstrates the claims a corpus makes.
@@ -159,10 +173,10 @@ Find what already demonstrates the claims a corpus makes.
 **Spawns, in order:**
 - `evidencer` *(quality · writes)* — the whole of the search, by a role that cannot mistake a green test for agreement
 - `coverage` *(quality · judges, writes nothing)* — whether each claim is pinned by something that fails on its own
-- `test-design` *(quality · judges, writes nothing)* — ⛔ and whether those pins would show anything — coverage is satisfied by a test that cannot fail
 
 **⛔ Keeps, because it may not be delegated:**
 - the decision about what to do with a criterion nothing demonstrates
+- ⛔ not reading a coverage number as quality — whether those criteria would show anything is `ready it for build`, after somebody has agreed
 - never letting coverage be reported as validation
 
 ### check it communicates
@@ -171,7 +185,6 @@ Find out whether a corpus can be built from by somebody who has not read it.
 
 **Spawns, in order:**
 - `newcomer` *(product · judges, writes nothing)* — one per unit, in parallel — a product manager handed a URL, who has never seen ProductOS and may not read its source
-- `buildability` *(engineering · judges, writes nothing)* — what the corpus fails to DECIDE, which is a different question from what it fails to explain
 - `can-the-model-say-it` *(the framework itself · judges, writes nothing)* — whether a confusion is the corpus's fault or ours — the routing this whole route exists to get right
 
 **⛔ Keeps, because it may not be delegated:**

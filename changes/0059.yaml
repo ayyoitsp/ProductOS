@@ -1,0 +1,16 @@
+id: "0059"
+said: i think scope a feature gets broken down a bit - we need to a rough scope, nail down human truth before we need to involve engineers/qa
+at: 2026-10-01
+kind: concept
+reaches:
+  model: PRECONDITIONS
+  derive: ""
+  generate: "Not until "
+  surface: "not until "
+  check: ""
+  instruct: ready it for build
+  pin: engineering and QA do not read truth nobody has agreed to
+waived:
+  derive: there is nothing to derive — the precondition is declared per route and read as declared. A derivation would be inventing a way to infer that somebody agreed, which is the one thing that may never be inferred.
+  check: the ordering is a property of our route table, not of anybody corpus, so src/v2/check.ts is the wrong place to hold it — it is pinned by a test that walks every route and fails on the first engineering or QA step that is not behind the gate.
+closed: 2026-10-01

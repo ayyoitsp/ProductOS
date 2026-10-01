@@ -1053,6 +1053,26 @@ export const forPeople = (): Verb[] => COMMANDS.filter((c) => c.who !== "claude"
  * ⛔ `keeps` IS THE LOAD-BEARING FIELD. A preset with an empty `keeps` is a skill that delegated
  * everything, which for anything touching truth is a skill that has delegated the consent.
  */
+/**
+ * ⛔ WHAT MUST BE TRUE BEFORE A ROUTE MAY RUN.
+ *
+ * Peter: *"i think scope a feature gets broken down a bit - we need to a rough scope, nail down
+ * human truth before we need to involve engineers/qa"*.
+ *
+ * He is describing tenet one, and the route was breaking it. `scope a feature` had grown to spawn
+ * a scoper, a designer, and then an engineering and a QA read in one pass — so somebody was being
+ * asked whether a feature could be built, and whether its criteria would demonstrate anything,
+ * about truth no human had agreed to yet. That is work spent on a draft, and worse: it arrives as
+ * authority. An engineer saying "this is buildable" reads as a decision having been made, which is
+ * exactly the shape of a corpus that is fully reviewed and validated by nobody.
+ *
+ * So the precondition is a field rather than a sentence in `keeps`. A precondition in prose is
+ * advice, and the one thing this project has learned repeatedly is that advice at the top of a file
+ * does not survive the session that is in a hurry.
+ */
+export const PRECONDITIONS = ["nothing", "a human has agreed to this truth"] as const;
+export type Precondition = (typeof PRECONDITIONS)[number];
+
 export interface Shim {
   /**
    * What somebody is asking for. ⛔ A ROUTE, NOT A SKILL — there is one skill now.
@@ -1093,6 +1113,13 @@ export interface Shim {
    * lives here, and so does every question put to a person.
    */
   keeps: string[];
+  /**
+   * ⛔ What must already be true. Absent means nothing — most routes are entered cold.
+   *
+   * The only value that exists is "a human has agreed to this truth", and it exists because the
+   * engineering and QA reads must not happen before that. See `PRECONDITIONS`.
+   */
+  after?: Precondition;
 }
 
 export const SHIMS: Shim[] = [
@@ -1104,19 +1131,26 @@ export const SHIMS: Shim[] = [
       { role: "scoper", why: "the feature written in a context holding nothing but that feature" },
       { role: "designer", fan: true, why: "screens the product should have and nothing renders yet" },
       /**
-       * ⛔ A DESIGN, ENGINEERING AND QA READ OF WHAT WAS JUST WRITTEN — which is what a team does
-       * and this route did not. It spawned two authors and stopped, so the first person to ask
-       * whether the feature was any good, buildable, or provable was Peter, in a browser.
+       * ⛔ PRODUCT AND DESIGN ONLY, AND IT STOPS. Peter: *"we need to a rough scope, nail down human
+       * truth before we need to involve engineers/qa"*.
+       *
+       * This briefly spawned an engineering and a QA read in the same pass, which asked two people
+       * to judge whether a draft could be built and whether its criteria proved anything — before
+       * anybody had agreed the draft was the product. Those two roles moved to `ready it for build`,
+       * which cannot run until somebody has.
+       *
+       * What stays is what a person needs in order TO agree: does the thing join up, and are these
+       * the right screens. Both are questions about the truth itself, which is the thing being
+       * validated.
        */
       { role: "completeness", why: "whether somebody can get from the start of this feature to the end of it" },
       { role: "design-critique", fan: true, why: "whether these are the right screens for the job, not just complete ones" },
-      { role: "buildability", why: "whether somebody could start on Monday — the second tenet, from a builder's seat" },
-      { role: "test-design", why: "whether each criterion would show its claim, rather than merely pass" },
     ],
     keeps: [
       "the conversation about what this feature is for — a purpose inferred from code is a purpose nobody chose",
       "putting every open question to the person, in their own interface",
       "every act of judgement, and never answering one on their behalf",
+      "⛔ stopping here. The engineering and QA reads are a different route and it cannot run until somebody has agreed to this — an engineer costing a draft produces a decision nobody made",
     ],
   },
   {
@@ -1139,17 +1173,49 @@ export const SHIMS: Shim[] = [
       "every act of judgement — nothing here is validated by having been written",
     ],
   },
+  /**
+   * ⛔ THE HALF THAT WAITS. Peter: *"nail down human truth before we need to involve
+   * engineers/qa"* — so this is where they get involved, and `after` is what makes that more than
+   * an intention.
+   *
+   * Running it early is not merely wasteful. An engineering read of a draft comes back phrased as
+   * fact ("this needs a source of truth for X"), and a session acting on it is now building toward
+   * a shape nobody validated — with a reviewer's authority behind it. The order is the protection.
+   */
+  {
+    route: "ready it for build",
+    does: "Hand truth somebody has agreed to over to engineering and QA",
+    when: "ready for build · is this buildable · can we start on this · engineering review · would these tests prove anything",
+    after: "a human has agreed to this truth",
+    steps: [
+      { role: "buildability", why: "whether somebody could start on Monday — the second tenet, read from a builder's seat" },
+      { role: "test-design", why: "whether each criterion would show its claim holding, rather than merely pass" },
+    ],
+    keeps: [
+      "⛔ checking somebody actually agreed before spawning either of these — the precondition is the whole point of the split",
+      "deciding what to do with what comes back: a question the corpus must settle goes to the person, never to the builder",
+      "every act of judgement — an engineer saying it is buildable is not somebody agreeing it is right",
+    ],
+  },
   {
     route: "map evidence",
     does: "Find what already demonstrates the claims a corpus makes",
     when: "map my tests · what covers this · align evidence",
     steps: [
       { role: "evidencer", why: "the whole of the search, by a role that cannot mistake a green test for agreement" },
+      /**
+       * ⛔ COVERAGE AND NOT `test-design`, WHICH IS THE SPLIT PETER ASKED FOR APPLIED HERE TOO.
+       *
+       * Whether a claim HAS evidence is bookkeeping and safe to ask about a draft. Whether a
+       * criterion would PROVE anything is a QA judgement about the truth itself, and this route can
+       * be entered cold — so asking it here is asking QA to rule on something nobody has agreed to.
+       * It lives in `ready it for build`, behind the precondition.
+       */
       { role: "coverage", why: "whether each claim is pinned by something that fails on its own" },
-      { role: "test-design", why: "⛔ and whether those pins would show anything — coverage is satisfied by a test that cannot fail" },
     ],
     keeps: [
       "the decision about what to do with a criterion nothing demonstrates",
+      "⛔ not reading a coverage number as quality — whether those criteria would show anything is `ready it for build`, after somebody has agreed",
       "never letting coverage be reported as validation",
     ],
   },
@@ -1159,7 +1225,13 @@ export const SHIMS: Shim[] = [
     when: "run a PM review · fresh eyes · would somebody understand this",
     steps: [
       { role: "newcomer", fan: true, why: "a product manager handed a URL, who has never seen ProductOS and may not read its source" },
-      { role: "buildability", why: "what the corpus fails to DECIDE, which is a different question from what it fails to explain" },
+      /**
+       * ⛔ NO ENGINEERING READ HERE, THOUGH IT FIT WELL. This route runs BEFORE anybody is asked to
+       * review, so `buildability` would have been an engineer costing a draft — the exact thing the
+       * `scope a feature` split exists to prevent, arriving by a second door. What a corpus fails
+       * to DECIDE is still worth knowing; it is asked in `ready it for build`, once there is
+       * something agreed to decide about.
+       */
       { role: "can-the-model-say-it", why: "whether a confusion is the corpus's fault or ours — the routing this whole route exists to get right" },
     ],
     /**

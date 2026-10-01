@@ -30,6 +30,7 @@ import {
   unrouted,
   byDiscipline,
   DISCIPLINES,
+  PRECONDITIONS,
   SKILL,
 } from "../dist/core/jobs.js";
 import { agentsDoc, withPreset } from "../dist/core/agents-doc.js";
@@ -383,4 +384,80 @@ test("every role sits in a discipline, and every discipline has somebody in it",
   /** ⛔ And somebody asks the corpus version of the same question. */
   assert.ok(AGENTS.some((a) => a.name === "coherence" && a.discipline === "product"),
     "nothing asks whether a corpus contradicts itself — that was the whole point of splitting the seats");
+});
+
+/**
+ * ⛔ HUMAN TRUTH IS NAILED DOWN BEFORE ENGINEERING AND QA ARE INVOLVED.
+ *
+ * Peter: *"i think scope a feature gets broken down a bit - we need to a rough scope, nail down
+ * human truth before we need to involve engineers/qa"*.
+ *
+ * This is tenet one as an ordering, and `scope a feature` had broken it within an hour of the roles
+ * being added: it spawned an engineering and a QA read in the same pass as the scoper, so somebody
+ * was asked whether a draft could be built before anybody had agreed the draft was the product.
+ * Two other routes acquired the same leak by a different door.
+ *
+ * ⛔ WHY IT IS A TEST AND NOT A SENTENCE: the failure is silent and it reads as thoroughness. More
+ * reviewers on a feature looks like more care, and the output comes back phrased as fact — so a
+ * session acts on an engineer's reading of truth nobody validated, with a reviewer's authority
+ * behind it. Nothing downstream can tell that apart from a decision somebody made.
+ */
+test("engineering and QA do not read truth nobody has agreed to", () => {
+  const GATED = "a human has agreed to this truth";
+  assert.ok(PRECONDITIONS.includes(GATED), "the precondition this ordering depends on is gone");
+
+  /** The seats that must wait. ⛔ Derived from the registry, so adding a role cannot dodge it. */
+  const waits = new Set(
+    AGENTS.filter((a) => a.discipline === "engineering" || a.discipline === "quality").map((a) => a.name)
+  );
+
+  for (const sh of SHIMS) {
+    if (sh.after === GATED) continue;
+    /**
+     * ⛔ THE LINE IS WHAT THE ROLE JUDGES, NOT WHICH SEAT IT SITS IN.
+     *
+     * A role that rules on the CONTENT of the truth has to wait — is this buildable, would this
+     * criterion prove anything. A role that reports a mechanical property of the artefact does not:
+     * it is true or false about a draft, and most useful while the draft is still a draft.
+     *
+     *   coverage        does this claim have evidence attached — bookkeeping
+     *   hand-authored   was this typed when a generator should have made it — ⛔ and it is worth
+     *                   MOST before anybody reviews, because a hand-typed screen should not be
+     *                   reviewed at all; it should be regenerated
+     *   truthfulness    reads the built product against the target, not somebody's unagreed draft
+     *   the framework   reviews ProductOS, which is not anybody's product truth
+     *
+     * This list was written with the first and third only, and the test immediately caught
+     * `hand-authored` — which is the distinction being enforced rather than the heuristic that
+     * approximated it.
+     */
+    const allowed = new Set([
+      "coverage",
+      "hand-authored",
+      "truthfulness",
+      "architecture",
+      "consistency",
+      "can-the-model-say-it",
+    ]);
+    for (const st of sh.steps) {
+      if (!waits.has(st.role) || allowed.has(st.role)) continue;
+      assert.fail(
+        `the route "${sh.route}" spawns \`${st.role}\` and declares no precondition — ` +
+          `that asks ${AGENTS.find((a) => a.name === st.role).discipline} to rule on truth nobody has agreed to. ` +
+          `Either gate the route with after: "${GATED}", or move the step to a route that is gated.`
+      );
+    }
+  }
+
+  /** ⛔ And the route that was split must still stop, in its own words, where a person takes over. */
+  const rough = shimFor("scope a feature");
+  assert.ok(rough, "the route that produces rough truth is gone");
+  assert.ok(
+    rough.keeps.some((k) => /stopping here|hand/i.test(k)),
+    "`scope a feature` no longer says it stops — the split is what makes human truth come first, and nothing else records it"
+  );
+  assert.ok(
+    SHIMS.some((sh) => sh.after === GATED && sh.steps.length),
+    "nothing picks the feature up after somebody agrees — the engineering and QA reads have been dropped rather than deferred"
+  );
 });

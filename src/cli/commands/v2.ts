@@ -1370,6 +1370,8 @@ export function v2Command(): Command {
           console.log("");
           console.log(pc.bold(sh.route) + pc.dim(`  — ${sh.does}`));
           console.log(pc.dim(`  they say: ${sh.when}`));
+          /** ⛔ Before the spawns, for the same reason the document prints it there. */
+          if (sh.after && sh.after !== "nothing") console.log(pc.yellow(`  ⛔ not until ${sh.after}`));
           if (!sh.steps.length) console.log(pc.dim("  spawns nothing — every part of this is kept"));
           for (const st of sh.steps) {
             const author = AUTHORS.find((a) => a.name === st.role);
