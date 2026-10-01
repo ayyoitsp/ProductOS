@@ -4793,9 +4793,18 @@ const STYLE = `<style>
    * A capped height let a short drawing shrink its frame, so walking a feature made the page jump —
    * every state a different size, the tabs moving under the cursor between presses. A drawing is a
    * window onto a product, and a window does not change shape because of what is behind it.
+   *
+   * ⛔ AND THE HEIGHT IS ON THE FRAME, NOT ON THE DRAWING. Peter again: *"the prototype viewer is
+   * still collapsing in size on the final page. is the final page being treated differently? should
+   * follow same code path"* — and it was. The completion state is a card rather than a mock, so it
+   * never passed through the thing carrying the size, and the one state that is not a drawing was
+   * the one state that shrank. Sizing the FRAME makes "same height" a property of the viewer
+   * instead of something every kind of content has to remember to opt into.
    */
+  .states .state-frame { height: 30rem; }
+  .states .state-frame > * { height: 100%; }
   .proto.html { transform: translateZ(0); contain: layout paint; position: relative;
-    overflow: auto; height: 30rem; }
+    overflow: auto; }
   /** ⛔ The app's own full-height rules are about ITS viewport, not about this card. */
   .proto.html .productos-mock { min-height: 0; }
 
@@ -4818,8 +4827,10 @@ const STYLE = `<style>
    */
   .state-tab.is-done-tab { color: var(--green); }
   .state-tab.is-done-tab.on { background: var(--green); color: var(--bg); }
+  /** ⛔ Fills the frame and centres in it, because the frame is now what decides the size. */
   .done-card {
-    padding: 2.5rem 2rem; display: grid; gap: .75rem; justify-items: center; text-align: center;
+    padding: 2.5rem 2rem; display: grid; gap: .75rem; justify-items: center; align-content: center;
+    text-align: center; overflow: auto;
     border: 1px solid var(--surface-3); border-radius: 8px; background: var(--surface);
   }
   .done-mark { margin: 0; font-weight: 600; color: var(--green); font-size: 1.05rem; }

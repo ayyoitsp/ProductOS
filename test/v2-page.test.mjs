@@ -1212,3 +1212,28 @@ test("a walk remembers where it has been, and every screen has somewhere to show
   /** ⛔ And it hides while there is nowhere to go back to — one step is not a trail. */
   assert.match(src, /trail\.length < 2/, "a trail with one entry still renders, which reads as a path");
 });
+
+/**
+ * ⛔ THE VIEWER IS ONE SIZE, AND THE SIZE BELONGS TO THE VIEWER.
+ *
+ * Peter: *"the prototype viewer is still collapsing in size on the final page. is the final page
+ * being treated differently? should follow same code path"*.
+ *
+ * It was. The height sat on the drawing, and the completion state is a card rather than a drawing —
+ * so the one state that is not a mock was the one state that shrank. Sizing the FRAME makes "same
+ * height" a property of the viewer instead of something every kind of content has to remember to
+ * opt into, which is the whole of what he was pointing at.
+ */
+test("every state of a screen is the same size, whatever kind of thing is in it", () => {
+  const src = fs.readFileSync("src/v2/page.ts", "utf-8");
+  /** ⛔ On the frame, so a card, a mock and anything added later are all the same size. */
+  assert.match(src, /\.states \.state-frame \{ height:/, "the height is not on the frame, so each kind of content sets its own");
+  assert.match(src, /\.states \.state-frame > \* \{ height: 100%/, "content does not fill the frame, so a short card leaves a gap");
+  /**
+   * ⛔ AND NOT ON THE DRAWING. Leaving it there is what made the completion state different, and it
+   * would make the next non-drawing state different in exactly the same way.
+   */
+  const proto = /\.proto\.html \{[^}]*\}/.exec(src);
+  assert.ok(proto, "the drawing's own rule moved — re-read this before trusting it");
+  assert.doesNotMatch(proto[0], /height:\s*\d/, "the drawing carries a height again, so a state that is not a drawing will shrink");
+});
