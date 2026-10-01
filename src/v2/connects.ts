@@ -443,5 +443,38 @@ export function finishesFor(scope: Scope, view: View): string[] {
   if (through[through.length - 1] !== view.id) return [];
   const ends = scope.happy_path?.ends_with;
   if (!ends) return [];
-  return view.parts.filter((pt) => pt.role === "commits" && !pt.returns).map((pt) => pt.id);
+
+  /**
+   * ⛔ AND ONLY A CONTROL THAT DOES WHAT FINISHING MEANS.
+   *
+   * Every commit on the last screen used to count, which is far too blunt: it marked "New Deal" as
+   * finishing the deals list. That is a control which LEAVES the feature, and treating it as the
+   * end suppressed its link — breaking the one cross-feature connection in the corpus, the one
+   * anybody would draw by hand.
+   *
+   * The feature already says what finishing is. A control finishes it when what the control leaves
+   * behind is what the feature says it ends with: *"the deal exists on the CRE deals list, and its
+   * sizing model has been written into the folder"* against *"the deal is bound to that folder…
+   * taken on to the deal workspace"*. "New Deal" against *"they are in that deal's workspace"*
+   * shares almost nothing, which is the right answer — starting a deal is not finishing a list.
+   */
+  const want = words(ends);
+  if (!want.size) return [];
+  return view.parts
+    .filter((pt) => pt.role === "commits" && !pt.returns)
+    .filter((pt) => {
+      const at =
+        scope.exchanges.find((e) => e.at?.view === view.id && e.at?.part === pt.id) ??
+        scope.exchanges.find((e) => e.at?.view === view.id && !e.at?.part);
+      if (!at) return false;
+      const did = words(`${saysText(at.slots?.after?.says)} ${saysText(at.slots?.answer?.says)}`);
+      if (!did.size) return false;
+      const shared = [...did].filter((w) => want.has(w)).length;
+      /**
+       * ⛔ A MARGIN, NOT A SINGLE WORD. Two sentences about the same product share "deal" without
+       * being about the same thing, and one match would make every commit a finish again.
+       */
+      return shared >= 3;
+    })
+    .map((pt) => pt.id);
 }

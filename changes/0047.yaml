@@ -1,0 +1,11 @@
+id: "0047"
+said: |-
+  the 'tap twice' thing should reset once the user taps anywhere else.  if i tap something that
+  links to another product, then tap another button, then tap that original button, it auto links
+  me out
+at: 2026-10-01
+kind: surface
+reaches:
+  surface: armedBtn
+  pin: arming is held by reference, because the document cannot be asked across a shadow root
+waived: {}

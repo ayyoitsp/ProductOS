@@ -3330,8 +3330,9 @@ const PROTOTYPE = `<script>
       if (sameFeature) { walk(dest, btn); return; }
       /** Armed by the first press; the second one goes. */
       if (btn.dataset.armed === "1") { disarm(); walk(dest, btn); return; }
-      for (const other of document.querySelectorAll("[data-armed]")) other.removeAttribute("data-armed");
+      disarm();
       btn.dataset.armed = "1";
+      armedBtn = btn;
       select(btn, dest);
       /**
        * ⛔ AND THE CALLOUT GOES WHERE THE EYE IS, NOT WHERE THE PANEL IS.
@@ -3415,7 +3416,13 @@ const PROTOTYPE = `<script>
    * appended somewhere that would inherit the mock's transform and land in the wrong place.
    */
   function arm(btn, dest) {
-    disarm();
+    /**
+     * ⛔ CLEARS THE OLD TIP, NEVER THE ARMING — disarming here deleted the attribute the
+     * CALLER had just set, two lines earlier, so a control armed itself and immediately forgot.
+     * The tip appeared, which is why it looked right; the second press then read as a first one and
+     * nothing ever walked.
+     */
+    dropTip();
     /** ⛔ A finish has no destination — it is the end, and nothing comes after it to name. */
     const to = dest == null ? "" : String(dest).split("#")[0];
     const target = to ? document.getElementById("at-" + to.replace(/[^a-z0-9]+/gi, "-")) : null;
@@ -3455,7 +3462,22 @@ const PROTOTYPE = `<script>
   }
 
   let armState = null;
-  function disarm() {
+  /**
+   * ⛔ THE ARMED CONTROL IS HELD BY REFERENCE, BECAUSE THE DOM CANNOT BE ASKED FOR IT.
+   *
+   * Peter: *"if i tap something that links to another product, then tap another button, then tap
+   * that original button, it auto links me out"*.
+   *
+   * Disarming used to ask the document for every element carrying the armed attribute — and that
+   * query DOES NOT CROSS A SHADOW BOUNDARY. Every control on a prototype lives inside one, so it
+   * matched nothing,
+   * every time. The attribute stayed set on a button nobody could see it on: tap A, tap anything
+   * else, tap A again, and the second press read as the confirmation of the first and walked
+   * straight out of the feature. The two-press rule was one press with extra steps.
+   */
+  let armedBtn = null;
+  /** The floating tip alone — arming is a separate fact, and arming must not clear it. */
+  function dropTip() {
     if (!armState) return;
     window.removeEventListener("scroll", armState.place, true);
     window.removeEventListener("resize", armState.place);
@@ -3463,14 +3485,27 @@ const PROTOTYPE = `<script>
     armState = null;
   }
 
-  /** ⛔ A second press anywhere else cancels it — an armed control nobody went back to is noise. */
-  document.addEventListener("click", (ev) => {
-    if (!armState) return;
-    const btn = inPath(ev, "[data-goes]");
-    if (!btn || btn.dataset.armed !== "1") {
-      for (const other of document.querySelectorAll("[data-armed]")) other.removeAttribute("data-armed");
-      disarm();
+  function disarm() {
+    if (armedBtn) {
+      /** ⛔ By reference. Asking the document for it is what failed. */
+      delete armedBtn.dataset.armed;
+      armedBtn = null;
     }
+    dropTip();
+  }
+
+  /**
+   * ⛔ ANY PRESS THAT IS NOT THE SAME CONTROL CANCELS IT — and the guard that used to sit here,
+   * returning early when no tip was showing, was the second half of the bug: a tip removed any
+   * other way left the attribute armed forever with nothing watching to clear it.
+   *
+   * ⛔ CAPTURE PHASE, AND COMPOSED. A click inside a shadow root reports the HOST as its target
+   * unless the path is read, so inPath is what sees the real control.
+   */
+  document.addEventListener("click", (ev) => {
+    if (!armedBtn) return;
+    const btn = inPath(ev, "[data-goes]");
+    if (btn !== armedBtn) disarm();
   }, true);
 
   function walk(dest, from) {

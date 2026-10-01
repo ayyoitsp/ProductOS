@@ -1135,3 +1135,45 @@ test("a mock adopts the application's stylesheet rather than printing it", () =>
   );
 });
 
+
+/**
+ * ⛔ THE TWO-PRESS RULE WAS ONE PRESS WITH EXTRA STEPS.
+ *
+ * Peter: *"the 'tap twice' thing should reset once the user taps anywhere else. if i tap something
+ * that links to another product, then tap another button, then tap that original button, it auto
+ * links me out"*.
+ *
+ * Disarming asked the DOCUMENT for every element carrying the armed attribute — and that query does
+ * not cross a shadow boundary. Every control on a prototype lives inside one, so it matched nothing
+ * every time: the attribute stayed set on a button nobody could see it on, and the next press of it
+ * read as the confirmation of a press made minutes earlier.
+ *
+ * ⛔ THE SECOND HALF OF THE FIX IS ARMING ITSELF. `arm()` opened by disarming, which deleted the
+ * attribute its caller had set two lines earlier — so the tip appeared (which is why it looked
+ * right) and nothing was ever actually armed. Dropping the tip and disarming are now separate acts.
+ */
+test("arming is held by reference, because the document cannot be asked across a shadow root", () => {
+  const src = fs.readFileSync("src/v2/page.ts", "utf-8");
+  assert.doesNotMatch(
+    src,
+    /querySelectorAll\("\[data-armed\]"\)/,
+    "disarming asks the document again — that query cannot see inside a shadow root, which was the bug"
+  );
+  assert.match(src, /let armedBtn = null/, "the armed control is not held by reference");
+  assert.match(src, /delete armedBtn\.dataset\.armed/, "nothing clears the arming on the element itself");
+
+  /** ⛔ Arming must not clear itself: `arm` drops the tip, `disarm` drops both. */
+  /**
+   * ⛔ THE PROLOGUE ONLY. `arm` legitimately disarms deeper in, from the repositioner, when the
+   * control it is pointing at has left the DOM — asserting on the whole body called that the bug.
+   * What must not happen is opening with it, which is what deleted the caller's attribute.
+   */
+  const armAt = src.indexOf("function arm(btn, dest)");
+  const prologue = src.slice(armAt, src.indexOf("const to =", armAt));
+  assert.doesNotMatch(prologue, /\bdisarm\(\)/, "arm() opens by disarming, which deletes the attribute its caller just set");
+  assert.match(prologue, /dropTip\(\)/, "arm() leaves the previous tip on screen");
+
+  /** ⛔ And the watcher cannot be gated on the tip existing — that left the attribute set forever. */
+  const watcher = src.slice(src.indexOf("if (!armedBtn) return;"));
+  assert.match(watcher.slice(0, 220), /btn !== armedBtn/, "anything other than the same control must cancel it");
+});

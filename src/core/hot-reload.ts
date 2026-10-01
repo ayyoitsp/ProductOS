@@ -106,7 +106,20 @@ export function maybeEnableHotReload(): void {
        * old server KEEPS SERVING the previous build and says what is wrong. A stale page somebody
        * can read beats a dead port every time, and the error arrives where the person is looking.
        */
-      const changed = filename ? path.join(distDir, filename) : undefined;
+      /**
+       * ⛔ PROBE WHAT THE REPLACEMENT WILL NEED, NOT WHAT HAPPENED TO CHANGE.
+       *
+       * The first cut imported the changed file. A build writes many files, and the watcher fires
+       * on whichever lands first — so it validated `core/jobs.js`, which was fine, restarted, and
+       * the replacement died on `v2/page.js`, which was not. Seventh time the review surface went
+       * down mid-session.
+       *
+       * The server's own entry transitively imports every renderer and route it needs, so one
+       * import answers the only question that matters: will the process that is about to replace
+       * this one come up?
+       */
+      const entry = path.join(distDir, "ui", "server.js");
+      const changed = fs.existsSync(entry) ? entry : filename ? path.join(distDir, filename) : undefined;
       if (changed && /\.m?js$/.test(changed) && fs.existsSync(changed)) {
         const probe = loads(changed);
         if (!probe.ok) {
