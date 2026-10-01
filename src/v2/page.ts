@@ -782,7 +782,40 @@ function renderScreens(scope: Scope, ctx: Ctx, scopeId: string, opts: PageOption
            * Where the product goes next is still true and still said — the completion names it.
            * What it stops doing is offering it as a press, because the walk is over.
            */
-          const finishing = new Set(finishesFor(scope, v));
+          /**
+           * ⛔ A CONTROL THAT MOVES THIS SCREEN ON IS A STEP, NOT AN ENDING — and word overlap
+           * cannot tell them apart here.
+           *
+           * "Continue" leaves behind *"the deal exists on the CRE deals list… the analyst is then
+           * asked where its folder is"*; the feature ends with *"the deal exists on the CRE deals
+           * list, and its sizing model has been written into the folder"*. Four words in common,
+           * and they are not the same event. It was marked as finishing, so it carried a landing on
+           * the Done state ON TOP OF its landing on the folder step — two `data-lands` on one
+           * button — and the first press jumped the reviewer straight past the step to the end.
+           *
+           * The screen already knows: a control with a within-screen landing has somewhere to go
+           * that is not the end. That is a fact, not a reading of two sentences.
+           */
+          /**
+           * ⛔ A LANDING ON THE STATE YOU ARE ALREADY STANDING ON IS NOT A STEP.
+           *
+           * The folder controls each read as landing on "Folder" — which is where they are drawn.
+           * Counted as stepping, they were excluded from finishing, fell through to the link path,
+           * and armed a callout that then had nothing to clear it. Peter: *"now the modal never
+           * goes away."*
+           *
+           * Which state a control is drawn in is in the drawing, so it is asked rather than guessed.
+           */
+          const drawnIn = (id: string): number[] => {
+            const at: number[] = [];
+            if (v.sketch_html?.includes(`data-part="${id}"`)) at.push(0);
+            states.forEach((st, i) => {
+              if (st.sketch_html.includes(`data-part="${id}"`)) at.push(i + 1);
+            });
+            return at;
+          };
+          const stepsOn = new Set(lands.filter((l) => !drawnIn(l.part).every((i) => i === l.index)).map((l) => l.part));
+          const finishing = new Set([...finishesFor(scope, v)].filter((id) => !stepsOn.has(id)));
           const withGoes = (html: string): string =>
             derivedGoes
               ? html.replace(/data-part="([^"]+)"/g, (whole, id: string) => {
@@ -812,10 +845,45 @@ function renderScreens(scope: Scope, ctx: Ctx, scopeId: string, opts: PageOption
            */
           const finishes = finishing;
           const ends = scope.happy_path?.ends_with ?? "";
+          /**
+           * ⛔ THE FINAL STATE IS A SCREEN, NOT A TOOLTIP. Peter, five times: *"why on the create
+           * deal screen is there no final state after create deal. i've asked like 5 times."*
+           *
+           * Every answer before this put the completion in a floating callout — which is a label on
+           * a button, not somewhere a reviewer arrives. It also never went away, because it was
+           * armed through a path that never recorded what was armed.
+           *
+           * So finishing is a STATE, the same as every other appearance this screen has: it gets a
+           * tab, it gets a frame, and the control that ends the path LANDS on it by exactly the
+           * machinery that walks a wizard to its next step. One mechanism, not two.
+           */
+          const doneAt = states.length + 1;
+          const hasDone = finishes.size > 0 && !!ends;
+          const nextName = (ref: string | undefined): string => {
+            if (!ref) return "";
+            const id = ref.split("#")[0]!;
+            const sc = corpus.scopes.find((x) => x.scope.id === id);
+            return sc ? plain(sc.scope.title ?? id) : id;
+          };
+          const goesOnTo = [...finishes]
+            .map((id) => derivedGoes?.get(`${scopeId}#${v.id}#${id}`))
+            .find(Boolean);
+          const doneFrame = (): string => `
+            <div class="done-card">
+              <p class="done-mark">✓ That completes ${line(scope.title ?? scopeId)}</p>
+              <p class="done-ends">${line(ends)}</p>
+              ${
+                goesOnTo
+                  ? `<p class="done-next">From here the product goes on to <strong>${esc(nextName(goesOnTo))}</strong>.</p>`
+                  : ""
+              }
+              <p class="done-note">Nothing on this screen happens after this.</p>
+            </div>`;
+          /** ⛔ The finishing controls LAND here. Same attribute the wizard steps use. */
           const withFinish = (html: string): string =>
-            finishes.size && ends
+            hasDone
               ? html.replace(/data-part="([^"]+)"/g, (whole, id: string) =>
-                  finishes.has(id) ? `${whole} data-finishes="${esc(ends)}"` : whole
+                  finishes.has(id) ? `${whole} data-lands="${doneAt}" data-lands-why="${esc(ends)}"` : whole
                 )
               : html;
           const withLands = (html: string, here: number): string =>
@@ -842,6 +910,13 @@ function renderScreens(scope: Scope, ctx: Ctx, scopeId: string, opts: PageOption
                            )}">${line(st.label)}</button>`
                        )
                        .join("")}
+                     ${
+                       hasDone
+                         ? `<button type="button" class="state-tab is-done-tab" data-state="${doneAt}" title="${esc(
+                             "what the feature says it ends with"
+                           )}">✓ Done</button>`
+                         : ""
+                     }
                    </div>
                    <div class="state-frame" data-state="0">${asMock(withFinish(withLands(withGoes(wireHtml(v, matched)), 0)))}</div>
                    ${states
@@ -850,6 +925,7 @@ function renderScreens(scope: Scope, ctx: Ctx, scopeId: string, opts: PageOption
                          `<div class="state-frame" data-state="${i + 1}" hidden>${asMock(withFinish(withLands(withGoes(st.sketch_html), i + 1)))}</div>`
                      )
                      .join("")}
+                   ${hasDone ? `<div class="state-frame" data-state="${doneAt}" hidden>${doneFrame()}</div>` : ""}
                  </div>`
               : asMock(wireHtml(v, matched))
             : v.sketch
@@ -3315,12 +3391,6 @@ const PROTOTYPE = `<script>
      *
      * ⛔ ONE PRESS, NOT TWO. The second press existed to confirm LEAVING. There is nowhere to go.
      */
-    const ends = btn.dataset && btn.dataset.finishes;
-    if (ends && !(btn.dataset && btn.dataset.goes)) {
-      select(btn);
-      arm(btn, (btn.dataset && btn.dataset.next) || null);
-      return;
-    }
     const dest = btn.dataset && btn.dataset.goes;
     if (dest) {
       const screen = screenOf(btn);
@@ -3435,14 +3505,8 @@ const PROTOTYPE = `<script>
      * door to somewhere else — it is the end of the thing being reviewed, and saying "press again
      * to go there" as the whole message is what made completion read as being dropped.
      */
-    const done = btn.dataset && btn.dataset.finishes;
-    tip.innerHTML = done
-      ? '<strong class="arm-done">✓ That completes this feature</strong><span class="arm-ends">' +
-        esc(done) +
-        "</span>" +
-        (name ? "<span>" + esc(name) + " is where the product goes next</span>" : "")
-      : "<strong>" + esc(name) + "</strong><span>Press again to go there</span>";
-    if (done) tip.classList.add("is-done");
+    /** ⛔ One message. Finishing is a STATE now and never reaches this — see the done frame. */
+    tip.innerHTML = "<strong>" + esc(name) + "</strong><span>Press again to go there</span>";
     document.body.appendChild(tip);
     const place = () => {
       const r = btn.getBoundingClientRect();
@@ -4555,6 +4619,20 @@ const STYLE = `<style>
     display: flex; flex-direction: column; gap: .1rem;
   }
   .arm-tip strong { font-weight: 600; }
+  /**
+   * ⛔ THE FINAL STATE, AND IT LOOKS LIKE AN ENDING. A frame styled like every other state would
+   * read as one more screen to get past; this one is where the walk stops.
+   */
+  .state-tab.is-done-tab { color: var(--green); }
+  .state-tab.is-done-tab.on { background: var(--green); color: var(--bg); }
+  .done-card {
+    padding: 2.5rem 2rem; display: grid; gap: .75rem; justify-items: center; text-align: center;
+    border: 1px solid var(--surface-3); border-radius: 8px; background: var(--surface);
+  }
+  .done-mark { margin: 0; font-weight: 600; color: var(--green); font-size: 1.05rem; }
+  .done-ends { margin: 0; font-size: 1.05rem; line-height: 1.5; max-width: 34rem; }
+  .done-next { margin: 0; color: var(--dim); font-size: .9rem; }
+  .done-note { margin: .5rem 0 0; color: var(--dim); font-size: .8rem; max-width: 34rem; }
   /** ⛔ Wider and calmer when it is reporting completion — it is a sentence, not a label. */
   .arm-tip.is-done { max-width: 26rem; gap: .3rem; }
   .arm-tip .arm-done { color: #7fd48a; }

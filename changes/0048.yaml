@@ -1,0 +1,10 @@
+id: "0048"
+said: |-
+  now the modal never goes away.  i'm still confused.  hwy on the create deal screen is there no
+  final state after create deal. i've asked like 5 times. whats' going on?
+at: 2026-10-01
+kind: surface
+reaches:
+  surface: done-card
+  pin: a commit whose outcome is nothing like finishing does not finish
+waived: {}

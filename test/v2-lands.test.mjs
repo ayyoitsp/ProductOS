@@ -130,8 +130,15 @@ test("a returning control needs nothing said about it", () => {
  */
 const { finishesFor } = await import(path.resolve("dist/v2/connects.js"));
 
-const withPath = (through, ends) => ({
-  ...screen({}),
+/**
+ * ⛔ THE EXCHANGE HAS TO SAY WHAT THE CONTROL LEAVES BEHIND, because finishing is no longer "any
+ * commit on the last screen". That was too blunt — it marked "New Deal" as finishing the deals
+ * list, a control which LEAVES the feature, and suppressing its link broke the one cross-feature
+ * connection in the corpus. A control finishes when what it leaves behind is what the feature says
+ * it ends with.
+ */
+const withPath = (through, ends, after) => ({
+  ...screen({ after: { says: after ?? ends } }),
   happy_path: { accomplishes: "An analyst starts a deal", brings: "a name", ends_with: ends, through },
 });
 
@@ -158,4 +165,20 @@ test("a returning control does not finish the feature", () => {
 /** ⛔ Nothing to show means nothing is claimed — a path with no stated end finishes nowhere. */
 test("a feature that never says what finishing is finishes nowhere", () => {
   assert.deepEqual(finishesFor({ ...screen({}), happy_path: { through: ["the-form"] } }, view), []);
+});
+
+/**
+ * ⛔ A COMMIT THAT LEAVES THE FEATURE IS NOT THE END OF IT.
+ *
+ * "New Deal" sits on the last screen of the deals list and commits — and it starts a different
+ * feature. Counted as finishing, its destination was suppressed, which broke the only cross-feature
+ * link anybody would have drawn by hand.
+ */
+test("a commit whose outcome is nothing like finishing does not finish", () => {
+  const done = finishesFor(
+    withPath(["the-form"], "they have seen every deal and can get back to the list they came from",
+      "a new deal is begun, and nothing on this list changes"),
+    view
+  );
+  assert.deepEqual(done, [], "a control that starts something else was treated as the end of this");
 });
