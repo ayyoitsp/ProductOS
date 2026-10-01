@@ -22,12 +22,21 @@ import fs from "node:fs";
 import path from "node:path";
 import * as schema from "../dist/v2/schema.js";
 
-/** The skills are the authoring instructions. If a concept is not in here, nobody writes it. */
-const SKILL_TEXT = fs
-  .readdirSync("skills/productos-exchange")
-  .filter((f) => f.endsWith(".md"))
-  .map((f) => fs.readFileSync(path.join("skills/productos-exchange", f), "utf-8"))
-  .join("\n");
+/**
+ * The authoring instructions. If a concept is not in here, nobody writes it.
+ *
+ * ⛔ THAT IS NO LONGER ONE SKILL DIRECTORY. There were eight skills; there is one, and the rules
+ * for writing a scope moved into the role that writes one — the scoper — because a rule delivered
+ * to everybody and used by one is a rule that drifts. The instruct layer is wherever a future
+ * session is TOLD what to write, which is now the skill plus the author prompts.
+ */
+const SKILL_TEXT = [
+  ...fs.readdirSync("skills").flatMap((d) => {
+    const f = path.join("skills", d, "SKILL.md");
+    return fs.existsSync(f) ? [fs.readFileSync(f, "utf-8")] : [];
+  }),
+  ...fs.readdirSync("agents").filter((f) => f.endsWith(".md")).map((f) => fs.readFileSync(path.join("agents", f), "utf-8")),
+].join("\n");
 
 /**
  * Fields an author never writes, with the reason. ⛔ Adding a name here is a claim that no author
@@ -120,7 +129,7 @@ test("no field in the model is invisible to the skill that authors it", () => {
     [],
     `the schema supports these and no skill mentions them, so only a hand-typed corpus will ever have them:\n  ${missing.join(
       "\n  "
-    )}\n\nAdd them to skills/productos-exchange/ — that is the third layer CLAUDE.md says is the most-missed, and this test exists because it was missed four times.`
+    )}\n\nName them where a future session is told what to write — the skill, or the prompt of the role that writes it. That is the third layer CLAUDE.md says is the most-missed, and this test exists because it was missed four times.`
   );
 });
 

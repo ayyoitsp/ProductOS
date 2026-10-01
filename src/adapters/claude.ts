@@ -279,6 +279,20 @@ export function installClaudeSkills(opts: { update?: boolean; config?: Productos
   const skills = fs.readdirSync(root).filter((d) => d.startsWith("productos"));
   const dev = isDevInstall(root);
   const installed: string[] = [];
+  /**
+   * ⛔ A SKILL THAT NO LONGER EXISTS IS REMOVED, NOT LEFT BEHIND.
+   *
+   * Eight skills became one, and all eight were still sitting in the host's directory afterwards —
+   * so a session could still be handed `productos-scope`, which names v1 commands and a model the
+   * work has left. Installing has always ADDED; nothing has ever taken away, so every rename and
+   * every deletion this project has made is still installed on every machine that ran it.
+   */
+  const ours = new Set(skills);
+  for (const d of fs.readdirSync(SKILLS_DIR)) {
+    if (!d.startsWith("productos") || ours.has(d)) continue;
+    fs.rmSync(path.join(SKILLS_DIR, d), { recursive: true, force: true });
+    installed.push(`− ${d}`);
+  }
   for (const skill of skills) {
     const src = path.join(root, skill);
     const dst = path.join(SKILLS_DIR, skill);

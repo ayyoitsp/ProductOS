@@ -142,7 +142,7 @@ no such reader left in the session.
 So the check is a subagent: `productos-newcomer` (installed to `~/.claude/agents/`) is
 a product manager handed a URL and told to build from it, with **no knowledge of
 ProductOS and an explicit prohibition on reading OVERVIEW, GLOSSARY, EXAMPLE, the
-skills or the source.** The `productos-pmcheck` skill runs a few of them in parallel
+skills or the source.** The `check it communicates` route runs a few of them in parallel
 and routes what comes back.
 
 **Never explain ProductOS to one, in the prompt or in follow-up.** A reviewer who has

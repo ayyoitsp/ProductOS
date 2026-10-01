@@ -23,7 +23,7 @@ import { idiomOf, proposeScreen } from "../../v2/propose.js";
 import { indexDesignSystem } from "../../v2/design.js";
 import { inferConnections, type Connection } from "../../v2/connects.js";
 import { writeLeadsTo } from "../../v2/draw-write.js";
-import { AGENTS, AUTHORS, CASCADE, KINDS, SHIMS } from "../../core/jobs.js";
+import { AGENTS, AUTHORS, CASCADE, KINDS, SHIMS, SKILL } from "../../core/jobs.js";
 
 /** ⛔ Plain text for a terminal and for JSON — never HTML-escaped, which is the page's business. */
 const plain = (x: unknown): string => String(x ?? "").replace(/\s+/g, " ").trim();
@@ -1363,28 +1363,26 @@ export function v2Command(): Command {
        * survives, and pinned by a test so a preset and its tree cannot disagree.
        */
       if (o.presets) {
-        const root = path.resolve("skills");
+        /** ⛔ ONE SKILL. Its routes are the preset; see SHIMS for why there is no longer one each. */
+        const f = path.join(path.resolve("skills"), SKILL, "SKILL.md");
         let wrote = 0;
-        for (const shim of SHIMS) {
-          const f = path.join(root, shim.skill, "SKILL.md");
-          if (!fs.existsSync(f)) {
-            console.log(pc.yellow("!"), `${shim.skill} has a preset and no skill — one of the two is wrong`);
-            continue;
-          }
+        if (!fs.existsSync(f)) {
+          console.log(pc.yellow("!"), `there is no skill at ${f} — the routes have nowhere to be written`);
+        } else {
           const was = fs.readFileSync(f, "utf-8");
-          const now = withPreset(was, shim);
-          if (now === was) {
-            console.log(pc.dim(`  ${shim.skill} — current`));
-            continue;
+          const now = withPreset(was, SHIMS);
+          if (now === was) console.log(pc.dim(`  ${SKILL} — current`));
+          else {
+            fs.writeFileSync(f, now);
+            wrote++;
+            for (const sh of SHIMS)
+              console.log(
+                pc.green("✓"),
+                `${sh.route}  ${pc.dim(
+                  sh.steps.length ? sh.steps.map((st) => st.role + (st.fan ? "×N" : "")).join(" → ") : "spawns nothing"
+                )}`
+              );
           }
-          fs.writeFileSync(f, now);
-          wrote++;
-          console.log(
-            pc.green("✓"),
-            `${shim.skill}  ${pc.dim(
-              shim.steps.length ? shim.steps.map((st) => st.role + (st.fan ? "×N" : "")).join(" → ") : "spawns nothing"
-            )}`
-          );
         }
         console.log("");
         console.log(pc.dim(`  ${wrote} rewritten from src/core/jobs.ts — a test fails if one drifts`));

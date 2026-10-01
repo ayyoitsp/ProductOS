@@ -850,31 +850,50 @@ export const forPeople = (): Verb[] => COMMANDS.filter((c) => c.who !== "claude"
  * everything, which for anything touching truth is a skill that has delegated the consent.
  */
 export interface Shim {
-  /** The skill a person invokes. ⛔ The preset is keyed on what he types, not on a kind we inferred. */
-  skill: string;
+  /**
+   * What somebody is asking for. ⛔ A ROUTE, NOT A SKILL — there is one skill now.
+   *
+   * Peter: *"hmm, these don't seem right, why do we need skills and commands?"* He was right to
+   * push. A skill was carrying three different things: which roles to spawn (already declared
+   * here), the authoring rules (one document, delivered eight times), and a v1 workflow (1,903
+   * lines for a track the work had left). Only the first is a skill's job.
+   *
+   * So the eight became routes under one entry point. A command is what the system can DO; a role
+   * is WHO does a piece of it; a skill is only how a host lets somebody ask by name — and that
+   * needs one of them, not eight bodies of prose.
+   */
+  route: string;
   does: string;
+  /** What somebody types or says to mean this route. */
+  when: string;
   /** The roles it spawns, in order. `fan` = one per unit of its role's axis; otherwise one. */
   steps: Array<{ role: string; fan?: boolean; why: string }>;
   /**
-   * ⛔ What this skill performs ITSELF, because it may not be delegated. Every act of judgement
+   * ⛔ What this route performs ITSELF, because it may not be delegated. Every act of judgement
    * lives here, and so does every question put to a person.
    */
   keeps: string[];
-  /**
-   * ⛔ WHICH MODEL IT AUTHORS FOR, because a skill can outlive the track it was written against.
-   *
-   * `productos-align` is declared in the live tree and its body is entirely v1 — `test_cases`,
-   * `coverage_ref`, `productos test align`. Nothing said so, so it read as current, and the guard
-   * that stops instructions pointing at retired commands fired on it as though it were a mistake.
-   * It is not a mistake; it is a v1 skill correctly naming v1 commands.
-   */
-  track?: "v1" | "exchange";
 }
 
 export const SHIMS: Shim[] = [
   {
-    skill: "productos-fullscan",
+    route: "scope a feature",
+    does: "Turn one in-flight feature into product truth",
+    when: "scope the deals list · spec this feature · what should this screen promise",
+    steps: [
+      { role: "scoper", why: "the feature written in a context holding nothing but that feature" },
+      { role: "designer", fan: true, why: "screens the product should have and nothing renders yet" },
+    ],
+    keeps: [
+      "the conversation about what this feature is for — a purpose inferred from code is a purpose nobody chose",
+      "putting every open question to the person, in their own interface",
+      "every act of judgement, and never answering one on their behalf",
+    ],
+  },
+  {
+    route: "scan a codebase",
     does: "Turn a whole codebase into a first corpus",
+    when: "full scan · index this repo · propose truth for everything",
     steps: [
       { role: "surveyor", why: "decide what the product consists of once, before anything describes a feature" },
       { role: "scoper", fan: true, why: "every feature written in its own context, reading only its own code" },
@@ -883,46 +902,15 @@ export const SHIMS: Shim[] = [
     ],
     keeps: [
       "running `productos v2 generate`, because a screen a component renders is DRAWN and never designed",
-      "running `productos v2 check` before anybody is asked to look — ⛔ the `v2` matters, the bare verb is v1",
+      "running `productos v2 check` before anybody is asked to look",
       "putting the survey in front of a person before thirty scopers start against a partition that is wrong",
       "every act of judgement — nothing here is validated by having been written",
     ],
   },
   {
-    skill: "productos-scope",
-    does: "Scope one in-flight feature",
-    track: "v1",
-    steps: [
-      { role: "scoper", why: "the feature written in a context holding nothing but that feature" },
-      { role: "designer", fan: true, why: "screens the product should have and nothing renders yet" },
-    ],
-    keeps: [
-      "the conversation about what this feature is for — a purpose inferred from code is a purpose nobody chose",
-      "handing it over for review before any application code is touched",
-      "every act of judgement",
-    ],
-  },
-  {
-    skill: "productos-exchange",
-    does: "Write and settle product truth",
-    steps: [{ role: "scoper", fan: true, why: "the writing half, where there is more than one scope of it" }],
-    /**
-     * ⛔ THE CLEAREST CASE IN THE TABLE. This skill's whole second half is settling, and settling is
-     * the thing no author may do. A version of this that spawned an agent to "resolve the open
-     * questions" would have produced a corpus where every question is answered and none of the
-     * answers is anybody's.
-     */
-    keeps: [
-      "putting every open question to the person, in their own interface",
-      "recording each verdict with how consent was obtained — `via`, never defaulted",
-      "accepting, ruling, reading, waiving and deferring: all five acts",
-      "never answering a question on the person's behalf, however obvious the answer looks",
-    ],
-  },
-  {
-    skill: "productos-align",
-    does: "Map existing tests onto declared criteria",
-    track: "v1",
+    route: "map evidence",
+    does: "Find what already demonstrates the claims a corpus makes",
+    when: "map my tests · what covers this · align evidence",
     steps: [{ role: "evidencer", why: "the whole of the search, by a role that cannot mistake a green test for agreement" }],
     keeps: [
       "the decision about what to do with a criterion nothing demonstrates",
@@ -930,15 +918,15 @@ export const SHIMS: Shim[] = [
     ],
   },
   {
-    skill: "productos-pmcheck",
-    does: "Find out whether a corpus communicates",
+    route: "check it communicates",
+    does: "Find out whether a corpus can be built from by somebody who has not read it",
+    when: "run a PM review · fresh eyes · would somebody understand this",
     steps: [],
     /**
-     * ⛔ NO AUTHORS AT ALL, AND THAT IS THE POINT. This skill runs the newcomer reviewers. An author
-     * anywhere in it would be answering the confusions the reviewers came back with, which is the
-     * single most valuable output there is — *"a newcomer coming back confused about something you
-     * could clear up in one sentence is the highest-value result available — write it down, do not
-     * answer it."*
+     * ⛔ NO AUTHORS AT ALL, AND THAT IS THE POINT. An author anywhere in this would be ANSWERING
+     * the confusions the reviewers came back with, which is the single most valuable output there
+     * is: a newcomer confused about something you could clear up in one sentence is a finding, and
+     * clearing it up destroys it.
      */
     keeps: [
       "running the reviewers, which judge and never write",
@@ -947,44 +935,53 @@ export const SHIMS: Shim[] = [
     ],
   },
   {
-    skill: "productos-edit",
-    does: "Surgical edits to existing truth",
+    route: "look at the product",
+    does: "Compare the drawings against the product a person actually sees",
+    when: "does this match · check the prototype against the app",
+    steps: [],
+    keeps: [
+      "bringing the environment up, and saying so when it will not come up",
+      "running the reviewer that looks, which judges and never writes",
+      "never treating a difference as the corpus being wrong — the corpus is the target state",
+    ],
+  },
+  {
+    route: "drain the queue",
+    does: "Work what people have asked for, and answer them where they asked",
+    when: "drain the queue · anything waiting · did anyone press anything",
+    steps: [],
+    keeps: [
+      "deciding which route each request belongs to, and running it",
+      "replying where they asked — ⛔ a `pos:` is answered concisely, and the framework is what changes",
+      "every act of judgement",
+    ],
+  },
+  {
+    route: "edit one thing",
+    does: "A surgical change to truth somebody already agreed to",
+    when: "rename this · set leads_to · change this one field",
     steps: [],
     /**
-     * ⛔ TOO SMALL TO DELEGATE, AND SAYING SO IS WORTH A ROW. A preset that spawned a scoper for a
-     * one-field change would cost a whole context to rename an id — and the reason to record it
-     * here is that a table with a hole in it reads as an oversight, which somebody later fills in.
+     * ⛔ TOO SMALL TO DELEGATE, AND SAYING SO IS WORTH A ROW. Spawning a scoper for a one-field
+     * change costs a whole context to rename an id — and a table with a hole in it reads as an
+     * oversight somebody later fills in.
      */
     keeps: ["the edit itself — one field is not worth a context, and a scoper would rewrite around it"],
   },
-  {
-    skill: "productos-review",
-    does: "Look at and edit a feature conversationally",
-    track: "v1",
-    steps: [],
-    keeps: ["the conversation, and every act of judgement in it"],
-  },
-  {
-    skill: "productos-watch-queue",
-    does: "Drain pending work in the queue",
-    steps: [],
-    /**
-     * ⛔ IT ROUTES TO OTHER PRESETS RATHER THAN HOLDING ONE. What a queued item needs depends on
-     * what the item is, so this reads the table rather than repeating a slice of it.
-     */
-    keeps: ["deciding which preset each queued item belongs to, and running it"],
-  },
 ];
 
-/** The preset for a skill, or nothing — a skill with no preset orchestrates nothing and says so. */
-export const shimFor = (skill: string): Shim | undefined => SHIMS.find((s) => s.skill === skill);
+/** ⛔ There is one skill. Its routes are above; this is the directory it lives in. */
+export const SKILL = "productos";
+
+/** One route by name, or nothing. */
+export const shimFor = (route: string): Shim | undefined => SHIMS.find((s) => s.route === route);
 
 /**
  * ⛔ A step naming a role that does not exist is a preset that fails when it is run rather than
  * when it is written. Checked by a test, because the registry is the kind of thing edited by hand.
  */
-export const danglingSteps = (): Array<{ skill: string; role: string }> =>
-  SHIMS.flatMap((s) => s.steps.filter((st) => !AUTHORS.some((a) => a.name === st.role)).map((st) => ({ skill: s.skill, role: st.role })));
+export const danglingSteps = (): Array<{ route: string; role: string }> =>
+  SHIMS.flatMap((s) => s.steps.filter((st) => !AUTHORS.some((a) => a.name === st.role)).map((st) => ({ route: s.route, role: st.role })));
 
 /** ⛔ Said out loud rather than implied: which agents exist as a prompt and which are named only here. */
 export const unwritten = (): Agent[] => AGENTS.filter((a) => !a.prompt);

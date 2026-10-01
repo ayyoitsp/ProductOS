@@ -64,6 +64,15 @@ export function initCommand(): Command {
       const install = installClaudeSkills({ update: opts.update, config: projectConfig, configRoot: projectRoot });
       const verb = install.symlinked ? "Linked" : "Installed";
       for (const s of install.installed) {
+        /**
+         * ⛔ A REMOVAL IS NOT A LINK. Skills that no longer exist are taken away now, and reporting
+         * that as "Linked skill: ~/.claude/skills/− productos-scope/" is the install claiming to
+         * have added the thing it just deleted.
+         */
+        if (s.startsWith("− ")) {
+          console.log(pc.yellow("−"), `Removed skill, no longer in this version: ${s.slice(2)}`);
+          continue;
+        }
         console.log(pc.green("✓"), `${verb} skill: ~/.claude/skills/${s}/`);
       }
       if (install.installed.length === 0) {
@@ -179,14 +188,21 @@ export function initCommand(): Command {
       console.log(`  1. ${pc.dim("(optional)")} ${pc.bold("productos configure")} — pick handlers; defaults work for most v0.1 users.`);
       console.log(`  2. ${pc.dim("(optional)")} Fill in productos/context/*.md (goals, principles, etc.) ${pc.dim("— skippable in v0.1")}.`);
       console.log("  3. In another terminal: `productos serve` — opens your product-truth site at http://localhost:" + readConfig(paths).ui_port);
+      /**
+       * ⛔ NAMES THE ROUTES, NOT SKILLS THAT NO LONGER EXIST. This told everybody to use
+       * `productos-scope`, `productos-review`, `productos-edit` and `productos-align` — four skills
+       * that were deleted when the eight became one, so the first thing a new install said was the
+       * name of something not installed.
+       */
       console.log(`  4. Open Claude Code in this repo. Pick ${pc.bold("one in-flight feature")} and say:`);
-      console.log(`        ${pc.cyan("\"Scope ProductOS on the <feature> flow\"")}`);
-      console.log("     The productos-scope skill walks that feature's code paths and proposes comprehensive");
-      console.log("     coverage: surfaces, elements, and behaviors with claims + test cases in product language.");
-      console.log(`  5. Review either inline in Claude Code (${pc.cyan('"Use productos-review on <feature>"')}) or in the site.`);
-      console.log(`     For surgical edits later (add a leads_to, rename, etc.): ${pc.cyan('"Use productos-edit ..."')}.`);
-      console.log(`  6. Map existing tests with ${pc.cyan('"Align my tests to <feature>"')} (productos-align skill).`);
-      console.log("  7. Implement + push. CI posts results back via `productos test record`.");
+      console.log(`        ${pc.cyan("\"Scope the <feature> flow\"")}`);
+      console.log("     A scoper reads that feature's code and writes what the product should promise:");
+      console.log("     its purpose first, then its screens, their controls, and what each one answers.");
+      console.log(`  5. Review it on the site, and press what you agree with. ⛔ Nothing is validated`);
+      console.log(`     by having been written — a person agreeing to it is the whole point.`);
+      console.log(`  6. Ask for anything else by saying it: ${pc.cyan('"what covers this"')}, ${pc.cyan('"does this match the app"')},`);
+      console.log(`     ${pc.cyan('"drain the queue"')}. One skill routes them to the roles that do the work.`);
+      console.log("  7. Implement + push.");
       console.log();
       console.log(pc.dim("The v0.1 wedge is scoped to one feature, not the whole codebase — grow the corpus feature-by-feature."));
     });

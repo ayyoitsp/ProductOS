@@ -53,34 +53,44 @@ Same reason `CASCADE` is a table: a routing decided from memory is decided diffe
 
 ```mermaid
 flowchart TD
-  productos_fullscan(["productos-fullscan<br/><i>Turn a whole codebase into a first corpus</i>"])
-  productos_fullscan --> productos_fullscan_surveyor["surveyor"]
-  productos_fullscan --> productos_fullscan_scoper["scoper ×N"]
-  productos_fullscan --> productos_fullscan_designer["designer ×N"]
-  productos_fullscan --> productos_fullscan_evidencer["evidencer"]
-  productos_fullscan -.->|keeps| productos_fullscan_self(["the session — 4 things it may not hand off"])
-  productos_scope(["productos-scope<br/><i>Scope one in-flight feature</i>"])
-  productos_scope --> productos_scope_scoper["scoper"]
-  productos_scope --> productos_scope_designer["designer ×N"]
-  productos_scope -.->|keeps| productos_scope_self(["the session — 3 things it may not hand off"])
-  productos_exchange(["productos-exchange<br/><i>Write and settle product truth</i>"])
-  productos_exchange --> productos_exchange_scoper["scoper ×N"]
-  productos_exchange -.->|keeps| productos_exchange_self(["the session — 4 things it may not hand off"])
-  productos_align(["productos-align<br/><i>Map existing tests onto declared criteria</i>"])
-  productos_align --> productos_align_evidencer["evidencer"]
-  productos_align -.->|keeps| productos_align_self(["the session — 2 things it may not hand off"])
-  productos_pmcheck(["productos-pmcheck<br/><i>Find out whether a corpus communicates</i>"])
-  productos_pmcheck -.->|keeps| productos_pmcheck_self(["the session — 3 things it may not hand off"])
-  productos_edit(["productos-edit<br/><i>Surgical edits to existing truth</i>"])
-  productos_edit -.->|keeps| productos_edit_self(["the session — 1 thing it may not hand off"])
-  productos_review(["productos-review<br/><i>Look at and edit a feature conversationally</i>"])
-  productos_review -.->|keeps| productos_review_self(["the session — 1 thing it may not hand off"])
-  productos_watch_queue(["productos-watch-queue<br/><i>Drain pending work in the queue</i>"])
-  productos_watch_queue -.->|keeps| productos_watch_queue_self(["the session — 1 thing it may not hand off"])
+  scope_a_feature(["scope a feature<br/><i>Turn one in-flight feature into product truth</i>"])
+  scope_a_feature --> scope_a_feature_scoper["scoper"]
+  scope_a_feature --> scope_a_feature_designer["designer ×N"]
+  scope_a_feature -.->|keeps| scope_a_feature_self(["the session — 3 things it may not hand off"])
+  scan_a_codebase(["scan a codebase<br/><i>Turn a whole codebase into a first corpus</i>"])
+  scan_a_codebase --> scan_a_codebase_surveyor["surveyor"]
+  scan_a_codebase --> scan_a_codebase_scoper["scoper ×N"]
+  scan_a_codebase --> scan_a_codebase_designer["designer ×N"]
+  scan_a_codebase --> scan_a_codebase_evidencer["evidencer"]
+  scan_a_codebase -.->|keeps| scan_a_codebase_self(["the session — 4 things it may not hand off"])
+  map_evidence(["map evidence<br/><i>Find what already demonstrates the claims a corpus makes</i>"])
+  map_evidence --> map_evidence_evidencer["evidencer"]
+  map_evidence -.->|keeps| map_evidence_self(["the session — 2 things it may not hand off"])
+  check_it_communicates(["check it communicates<br/><i>Find out whether a corpus can be built from by somebody who has not read it</i>"])
+  check_it_communicates -.->|keeps| check_it_communicates_self(["the session — 3 things it may not hand off"])
+  look_at_the_product(["look at the product<br/><i>Compare the drawings against the product a person actually sees</i>"])
+  look_at_the_product -.->|keeps| look_at_the_product_self(["the session — 3 things it may not hand off"])
+  drain_the_queue(["drain the queue<br/><i>Work what people have asked for, and answer them where they asked</i>"])
+  drain_the_queue -.->|keeps| drain_the_queue_self(["the session — 3 things it may not hand off"])
+  edit_one_thing(["edit one thing<br/><i>A surgical change to truth somebody already agreed to</i>"])
+  edit_one_thing -.->|keeps| edit_one_thing_self(["the session — 1 thing it may not hand off"])
 ```
 
 
-### `productos-fullscan`
+### scope a feature
+
+Turn one in-flight feature into product truth.
+
+**Spawns, in order:**
+- `scoper` — the feature written in a context holding nothing but that feature
+- `designer` — one per unit, in parallel — screens the product should have and nothing renders yet
+
+**⛔ Keeps, because it may not be delegated:**
+- the conversation about what this feature is for — a purpose inferred from code is a purpose nobody chose
+- putting every open question to the person, in their own interface
+- every act of judgement, and never answering one on their behalf
+
+### scan a codebase
 
 Turn a whole codebase into a first corpus.
 
@@ -92,39 +102,13 @@ Turn a whole codebase into a first corpus.
 
 **⛔ Keeps, because it may not be delegated:**
 - running `productos v2 generate`, because a screen a component renders is DRAWN and never designed
-- running `productos v2 check` before anybody is asked to look — ⛔ the `v2` matters, the bare verb is v1
+- running `productos v2 check` before anybody is asked to look
 - putting the survey in front of a person before thirty scopers start against a partition that is wrong
 - every act of judgement — nothing here is validated by having been written
 
-### `productos-scope`
+### map evidence
 
-Scope one in-flight feature.
-
-**Spawns, in order:**
-- `scoper` — the feature written in a context holding nothing but that feature
-- `designer` — one per unit, in parallel — screens the product should have and nothing renders yet
-
-**⛔ Keeps, because it may not be delegated:**
-- the conversation about what this feature is for — a purpose inferred from code is a purpose nobody chose
-- handing it over for review before any application code is touched
-- every act of judgement
-
-### `productos-exchange`
-
-Write and settle product truth.
-
-**Spawns, in order:**
-- `scoper` — one per unit, in parallel — the writing half, where there is more than one scope of it
-
-**⛔ Keeps, because it may not be delegated:**
-- putting every open question to the person, in their own interface
-- recording each verdict with how consent was obtained — `via`, never defaulted
-- accepting, ruling, reading, waiving and deferring: all five acts
-- never answering a question on the person's behalf, however obvious the answer looks
-
-### `productos-align`
-
-Map existing tests onto declared criteria.
+Find what already demonstrates the claims a corpus makes.
 
 **Spawns, in order:**
 - `evidencer` — the whole of the search, by a role that cannot mistake a green test for agreement
@@ -133,9 +117,9 @@ Map existing tests onto declared criteria.
 - the decision about what to do with a criterion nothing demonstrates
 - never letting coverage be reported as validation
 
-### `productos-pmcheck`
+### check it communicates
 
-Find out whether a corpus communicates.
+Find out whether a corpus can be built from by somebody who has not read it.
 
 **Spawns nothing.** Every part of this is something the session may not hand off.
 
@@ -144,32 +128,36 @@ Find out whether a corpus communicates.
 - routing what comes back: a framework gap to us, a corpus finding to the author
 - never answering a newcomer's confusion — writing it down is the output
 
-### `productos-edit`
+### look at the product
 
-Surgical edits to existing truth.
+Compare the drawings against the product a person actually sees.
+
+**Spawns nothing.** Every part of this is something the session may not hand off.
+
+**⛔ Keeps, because it may not be delegated:**
+- bringing the environment up, and saying so when it will not come up
+- running the reviewer that looks, which judges and never writes
+- never treating a difference as the corpus being wrong — the corpus is the target state
+
+### drain the queue
+
+Work what people have asked for, and answer them where they asked.
+
+**Spawns nothing.** Every part of this is something the session may not hand off.
+
+**⛔ Keeps, because it may not be delegated:**
+- deciding which route each request belongs to, and running it
+- replying where they asked — ⛔ a `pos:` is answered concisely, and the framework is what changes
+- every act of judgement
+
+### edit one thing
+
+A surgical change to truth somebody already agreed to.
 
 **Spawns nothing.** Every part of this is something the session may not hand off.
 
 **⛔ Keeps, because it may not be delegated:**
 - the edit itself — one field is not worth a context, and a scoper would rewrite around it
-
-### `productos-review`
-
-Look at and edit a feature conversationally.
-
-**Spawns nothing.** Every part of this is something the session may not hand off.
-
-**⛔ Keeps, because it may not be delegated:**
-- the conversation, and every act of judgement in it
-
-### `productos-watch-queue`
-
-Drain pending work in the queue.
-
-**Spawns nothing.** Every part of this is something the session may not hand off.
-
-**⛔ Keeps, because it may not be delegated:**
-- deciding which preset each queued item belongs to, and running it
 
 ## The authors
 

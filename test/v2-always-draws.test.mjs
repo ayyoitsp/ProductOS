@@ -158,11 +158,19 @@ test("one command regenerates everything generable, and every layer points at it
   assert.match(cli, /function connectAll\(/, "connect must be a function both callers share");
 
   assert.match(fs.readFileSync("src/v2/check.ts", "utf-8"), /v2 generate/, "check must name it in its fix");
-  assert.match(
-    fs.readFileSync("skills/productos-exchange/SKILL.md", "utf-8"),
-    /productos v2 generate/,
-    "the skill must name it, or the next session assembles the sequence by hand again"
-  );
+  /**
+   * ⛔ THE INSTRUCTIONS MUST NAME IT, wherever they live. There were eight skills; there is one,
+   * and the authoring rules moved into the role that writes a scope — so this reads both, which is
+   * the whole of where a future session is told what to do.
+   */
+  const told = [
+    ...fs.readdirSync("skills").flatMap((d) => {
+      const f = path.join("skills", d, "SKILL.md");
+      return fs.existsSync(f) ? [fs.readFileSync(f, "utf-8")] : [];
+    }),
+    ...fs.readdirSync("agents").filter((f) => f.endsWith(".md")).map((f) => fs.readFileSync(path.join("agents", f), "utf-8")),
+  ].join("\n");
+  assert.match(told, /productos v2 generate/, "nothing tells the next session, so it assembles the sequence by hand again");
 });
 
 

@@ -27,6 +27,7 @@ import {
   unwrittenAuthors,
   shimFor,
   danglingSteps,
+  SKILL,
 } from "../dist/core/jobs.js";
 import { agentsDoc, withPreset } from "../dist/core/agents-doc.js";
 
@@ -287,32 +288,32 @@ test("every author writes, none may settle, and none can ask a person anything",
  * orchestrate nothing — `productos-edit` spawns nobody because one field is not worth a context,
  * and recording that is what stops somebody adding a scoper to it.
  */
-test("every skill has a preset, every preset names real roles, and none delegates the settling", () => {
-  const skills = fs.readdirSync("skills").filter((d) => fs.existsSync(`skills/${d}/SKILL.md`));
-  for (const skill of skills)
-    assert.ok(shimFor(skill), `the skill "${skill}" has no preset — nothing says which roles it orchestrates`);
-  for (const sh of SHIMS)
-    assert.ok(skills.includes(sh.skill), `the preset "${sh.skill}" names a skill that does not exist`);
+test("every route names real roles, and none delegates the settling", () => {
+  /**
+   * ⛔ ONE SKILL, SEVERAL ROUTES. Peter: *"why do we need skills and commands?"* — a skill was
+   * carrying which-roles-to-spawn, the authoring rules, and a v1 workflow. Only the first is a
+   * skill's job, so the eight became routes under one entry point.
+   */
+  assert.equal(fs.readdirSync("skills").filter((d) => fs.existsSync(`skills/${d}/SKILL.md`)).length, 1,
+    "there is more than one skill again — the routes belong under one entry point");
+  assert.ok(fs.existsSync(`skills/${SKILL}/SKILL.md`), `the one skill is not at skills/${SKILL}`);
 
-  assert.deepEqual(danglingSteps(), [], "a preset names a role that is not in the author registry");
+  assert.deepEqual(danglingSteps(), [], "a route names a role that is not in the author registry");
 
   /**
    * ⛔ `keeps` IS WHAT MAKES THIS A MODEL RATHER THAN A FAN-OUT. Spawning four agents and forgetting
    * somebody still has to AGREE is how a corpus ends up fully written, fully checked, and validated
-   * by nobody — so a preset that keeps nothing is refused.
+   * by nobody — so a route that keeps nothing is refused.
    */
-  for (const sh of SHIMS)
-    assert.ok(sh.keeps.length, `the preset "${sh.skill}" keeps nothing — it has delegated the consent`);
+  for (const sh of SHIMS) {
+    assert.ok(sh.keeps.length, `the route "${sh.route}" keeps nothing — it has delegated the consent`);
+    assert.ok(sh.when.length > 5, `the route "${sh.route}" says nothing about when somebody wants it`);
+  }
 
-  /**
-   * ⛔ AND EVERY SKILL THAT SETTLES KEEPS THE SETTLING BY NAME. The clearest case is
-   * `productos-exchange`, whose entire second half is the five acts; a version of it that spawned
-   * an agent to "resolve the open questions" would produce a corpus where every question is
-   * answered and none of the answers is anybody's.
-   */
-  const settles = ["productos-exchange", "productos-scope", "productos-fullscan", "productos-review"];
-  for (const name of settles) {
+  /** ⛔ And every route that touches truth keeps the settling by name. */
+  for (const name of ["scope a feature", "scan a codebase", "drain the queue"]) {
     const sh = shimFor(name);
+    assert.ok(sh, `the route "${name}" is gone`);
     assert.ok(
       sh.keeps.some((k) => /judgement|verdict|accept|consent|question|agree|validat/i.test(k)),
       `"${name}" touches truth and nothing in its keeps says the settling stays with the session`
@@ -321,23 +322,16 @@ test("every skill has a preset, every preset names real roles, and none delegate
 });
 
 /**
- * ⛔ THE PRESET HAS TO REACH THE SKILL, BECAUSE `instruct` IS THE LAYER THIS PROJECT SKIPS.
- *
- * A routing table living only in `jobs.ts` is a table a future session never meets: it reads the
- * skill. So the block is generated into each SKILL.md between markers, and this fails if one has
- * drifted from the registry — the same guarantee AGENTS.md already has.
+ * ⛔ THE ROUTES HAVE TO REACH THE SKILL, because `instruct` is the layer this project skips. A
+ * routing table living only in `jobs.ts` is a table a future session never meets: it reads the
+ * skill.
  */
-test("each skill carries its own preset, generated, and none has drifted", () => {
-  for (const sh of SHIMS) {
-    const f = `skills/${sh.skill}/SKILL.md`;
-    const body = fs.readFileSync(f, "utf-8");
-    assert.match(body, /<!-- productos:preset -->/, `${f} carries no preset block`);
-    assert.equal(
-      body,
-      withPreset(body, sh),
-      `${f} has drifted from the registry — regenerate with: productos v2 agents --presets`
-    );
-    /** ⛔ The part outside the markers is hand-authored and must survive regeneration. */
-    assert.ok(body.split("<!-- /productos:preset -->")[1].trim().length > 200, `${f} lost its authored body`);
-  }
+test("the skill carries every route, generated, and has not drifted", () => {
+  const f = `skills/${SKILL}/SKILL.md`;
+  const body = fs.readFileSync(f, "utf-8");
+  assert.match(body, /<!-- productos:preset -->/, `${f} carries no routes`);
+  assert.equal(body, withPreset(body, SHIMS), `${f} has drifted — regenerate: productos v2 agents --presets`);
+  for (const sh of SHIMS) assert.ok(body.includes(sh.does), `the route "${sh.route}" is not in the skill`);
+  /** ⛔ The part outside the markers is hand-authored and must survive regeneration. */
+  assert.ok(body.split("<!-- /productos:preset -->")[1].trim().length > 200, `${f} lost its authored body`);
 });

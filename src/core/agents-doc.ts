@@ -36,12 +36,12 @@ import {
 export const PRESET_OPEN = "<!-- productos:preset -->";
 export const PRESET_CLOSE = "<!-- /productos:preset -->";
 
-export function presetBlock(shim: Shim): string {
+export function presetBlock(shims: Shim[]): string {
   const out: string[] = [PRESET_OPEN];
-  out.push("## ⛔ The preset — which roles this skill orchestrates");
+  out.push("## ⛔ The routes — what to ask for, and which roles it spawns");
   out.push("");
   out.push("> **Generated from `src/core/jobs.ts` (`SHIMS`). Do not edit between the markers.**");
-  out.push("> `productos v2 agents --presets` rewrites every skill, and a test fails if one drifts.");
+  out.push("> `productos v2 agents --presets` rewrites this, and a test fails if it drifts.");
   out.push("");
   out.push(
     "You are the **orchestrator**, and you are the session — not a subagent. That is not an " +
@@ -49,23 +49,29 @@ export function presetBlock(shim: Shim): string {
       "person is the one job that may never be delegated."
   );
   out.push("");
-  if (shim.steps.length) {
-    out.push("**Spawn these, in order:**");
+  for (const sh of shims) {
+    out.push(`### ${sh.does}`);
     out.push("");
-    for (const st of shim.steps)
-      out.push(`- \`${st.role}\`${st.fan ? " — **one per unit, in parallel**" : ""} — ${st.why}`);
-  } else {
-    out.push("**Spawn nothing.** Every part of this is something you may not hand off.");
+    out.push(`*They say:* ${sh.when}`);
+    out.push("");
+    if (sh.steps.length) {
+      out.push("**Spawn, in order:**");
+      out.push("");
+      for (const st of sh.steps)
+        out.push(`- \`${st.role}\`${st.fan ? " — **one per unit, in parallel**" : ""} — ${st.why}`);
+    } else {
+      out.push("**Spawn nothing.** Every part of this is something you may not hand off.");
+    }
+    out.push("");
+    out.push("**⛔ You keep these yourself:**");
+    out.push("");
+    for (const k of sh.keeps) out.push(`- ${k}`);
+    out.push("");
   }
-  out.push("");
-  out.push("**⛔ You keep these yourself, because they may not be delegated:**");
-  out.push("");
-  for (const k of shim.keeps) out.push(`- ${k}`);
-  out.push("");
   out.push(
     "⛔ **Every author writes and none may settle.** An author may propose, populate, draw and " +
-      "regenerate; it may never produce a verdict, answer an open question, or mark anything walked " +
-      "or validated. None of them can put a question to a person — deliberately, because consent " +
+      "regenerate; it may never produce a verdict, answer an open question, or mark anything " +
+      "validated. None of them can put a question to a person — deliberately, because consent " +
       "obtained inside a subagent has no record of how it was obtained. What an author cannot " +
       "resolve comes back to you as a question, and you put it to the person yourself."
   );
@@ -81,12 +87,12 @@ export function presetBlock(shim: Shim): string {
  * that took the longest to get right. Where no markers exist yet the block goes directly under the
  * first heading, which is where somebody reading the skill meets it before anything else.
  */
-export function withPreset(body: string, shim: Shim): string {
-  const block = presetBlock(shim);
+export function withPreset(body: string, shims: Shim[]): string {
+  const block = presetBlock(shims);
   const open = body.indexOf(PRESET_OPEN);
   if (open !== -1) {
     const close = body.indexOf(PRESET_CLOSE, open);
-    if (close === -1) throw new Error(`${shim.skill}: a preset block was opened and never closed`);
+    if (close === -1) throw new Error("the skill's preset block was opened and never closed");
     return body.slice(0, open) + block + body.slice(close + PRESET_CLOSE.length);
   }
   const front = /^---\n[\s\S]*?\n---\n/.exec(body);
@@ -187,8 +193,8 @@ export function agentsDoc(): string {
   out.push("```mermaid");
   out.push("flowchart TD");
   for (const sh of SHIMS) {
-    const id = sh.skill.replace(/-/g, "_");
-    out.push(`  ${id}(["${sh.skill}<br/><i>${sh.does.replace(/"/g, "'")}</i>"])`);
+    const id = sh.route.replace(/[^a-z0-9]+/gi, "_");
+    out.push(`  ${id}(["${sh.route}<br/><i>${sh.does.replace(/"/g, "'")}</i>"])`);
     for (const st of sh.steps) out.push(`  ${id} --> ${id}_${st.role}["${st.role}${st.fan ? " ×N" : ""}"]`);
     out.push(`  ${id} -.->|keeps| ${id}_self(["the session — ${sh.keeps.length} thing${sh.keeps.length === 1 ? "" : "s"} it may not hand off"])`);
   }
@@ -196,7 +202,7 @@ export function agentsDoc(): string {
   out.push("");
   for (const sh of SHIMS) {
     out.push("");
-    out.push(`### \`${sh.skill}\``);
+    out.push(`### ${sh.route}`);
     out.push("");
     out.push(sh.does + ".");
     out.push("");
