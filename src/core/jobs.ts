@@ -40,6 +40,22 @@ export const CAPABILITIES = [
   "fetch-url",
   /** Show a person a rendered page. */
   "show-a-page",
+  /**
+   * ⛔ LOOK AT A RUNNING PRODUCT — drive a browser and see what comes back.
+   *
+   * Peter: *"we should have an agent that can view our actually rendered site and match up the UX"*
+   * and *"the designer agent should be able to look at existing sites and a design system to put
+   * together the screens"*.
+   *
+   * Every role here has read the product by reading its SOURCE. That is enough to know what a
+   * component does and not enough to know what it looks like — which is the whole question when the
+   * job is drawing a screen or saying whether a drawing matches the thing it describes. A corpus
+   * can be perfectly faithful to the code and describe a layout nobody would recognise.
+   *
+   * ⛔ Distinct from `fetch-url`, which brings back markup. This is rendering: a page as a person
+   * would meet it, with its own CSS applied and its own JavaScript run.
+   */
+  "see-a-page",
 ] as const;
 export type Capability = (typeof CAPABILITIES)[number];
 
@@ -481,6 +497,40 @@ export const AGENTS: Agent[] = [
     judges: true,
     prompt: "agents/productos-completeness.md",
   },
+  {
+    name: "rendered",
+    asks: "Does the drawing match the product a person actually sees?",
+    because:
+      "Every reviewer here reads SOURCE. `truthfulness` compares the corpus against the code, which " +
+      "catches a screen describing behaviour the code does not have — and passes a screen that is " +
+      "faithful to the code and looks nothing like the running product. A drawing is the one artefact " +
+      "in this model whose correctness is visual, and nothing had ever looked at it beside the thing " +
+      "it claims to depict. Peter: *\"we should have an agent that can view our actually rendered " +
+      "site and match up the UX\"*.",
+    reads: [
+      "productos/env.yaml, and whatever it says brings this product up",
+      "the running product, screen by screen, as a person meets it",
+      "the same screens on the ProductOS page, drawn",
+      "what the corpus says is on each — the parts, and what the exchanges promise",
+    ],
+    finds: [
+      "a drawing showing a state the product never opens on — a loading or empty branch drawn as the screen",
+      "a control the product has and the drawing does not, or the reverse",
+      "a label that differs between the two: the drawing says Continue and the product says Next",
+      "a layout the drawing invents — fields in an order the product does not use, a step that is one screen in the product and two in the drawing",
+      "a screen the corpus calls intended that the product already has",
+      "⛔ a drawing that matches the code and not the product — the gap no source-reading reviewer can see",
+    ],
+    never: [
+      "write anything, or correct a drawing it finds wrong",
+      "treat a difference as the CORPUS being wrong — product truth is the target state, and the product being different is drift, which is a finding about the build",
+      "judge whether the design is good. It asks whether the drawing depicts the product, never whether either is attractive",
+      "report a difference it could not see — if the environment would not come up, say that instead",
+    ],
+    needs: ["read-files", "search-files", "run-commands", "see-a-page"],
+    judges: true,
+    prompt: "agents/productos-rendered.md",
+  },
 ];
 
 /**
@@ -622,6 +672,8 @@ export const AUTHORS: Author[] = [
       "carries screens with no picture and why `check` refuses them — nobody can review a title.",
     reads: [
       "the screen's own truth — its parts, and what the exchanges at it promise",
+      "⛔ the running product, LOOKED AT rather than read — the real screens this one has to sit beside",
+      "the design system, where the product has one: its components, its spacing, its type scale",
       "the idiom this application already uses, learned from its own components",
       "sibling screens in the same area that DO have drawings, so it looks like the same product",
     ],
@@ -631,7 +683,7 @@ export const AUTHORS: Author[] = [
       "invent what a screen promises: it draws what the truth already says, and a screen with nothing said gets a question, not a guess",
       "write a drawing that does not say on its face that it was designed rather than observed — a reviewer who cannot tell which they are looking at may validate a screen the product does not have",
     ],
-    needs: ["read-files", "search-files", "run-commands", "write-corpus"],
+    needs: ["read-files", "search-files", "run-commands", "write-corpus", "see-a-page", "fetch-url"],
     each: "screen no component renders",
     authors: true,
     prompt: "agents/productos-designer.md",

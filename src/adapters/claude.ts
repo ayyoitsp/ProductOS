@@ -44,6 +44,17 @@ const TOOL_FOR: Record<Capability, string[]> = {
   "ask-the-human": ["AskUserQuestion"],
   "show-a-page": ["Read"],
   /**
+   * ⛔ DRIVING A BROWSER IS THIS HOST'S ANSWER TO "LOOK AT IT". The capability is portable — a host
+   * with a different way of rendering a page maps it differently, or refuses to install the roles
+   * that need it rather than installing ones that cannot do their job.
+   */
+  "see-a-page": [
+    "mcp__claude-in-chrome__navigate",
+    "mcp__claude-in-chrome__computer",
+    "mcp__claude-in-chrome__read_page",
+    "mcp__claude-in-chrome__tabs_context_mcp",
+  ],
+  /**
    * ⛔ THIS WAS DELIBERATELY EMPTY, AND THAT WAS THE RIGHT RULE FOR A REGISTRY OF JUDGES ONLY.
    *
    * The comment it replaces read: *"if it is ever reached, the registry has grown an author wearing

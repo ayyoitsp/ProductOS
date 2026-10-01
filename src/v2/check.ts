@@ -2570,6 +2570,57 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
     });
   }
 
+  /**
+   * ⛔ A STEER THAT CONSTRAINS THE PRODUCT HAS TO BE SOMEWHERE A PERSON CAN DISAGREE WITH IT.
+   *
+   * Peter: *"some stuff should be opaque and auto-training, while others are made obvious in
+   * product OS"*. The opaque half needs no check — it steers what gets proposed and nobody agrees
+   * to it. The surfaced half is the one with a failure mode: a constraint on the product that
+   * nobody can see is a constraint the next person breaks, and then it reads as their mistake.
+   */
+  for (const st of corpus.steers) {
+    /**
+     * ⛔ AN OPAQUE STEER SAYS WHERE IT CAME FROM, OR IT IS A RULE NOBODY CHOSE AND NOBODY CAN
+     * ARGUE WITH.
+     *
+     * These shape what the authors propose and no reviewer ever agrees to them — which is right,
+     * and is exactly why provenance is the only thing holding them honest. "He rejects screens with
+     * more than three required fields" is worth acting on if somebody can go and look at the four
+     * screens that came back; with nothing behind it, it is a preference that acquired authority by
+     * being written down.
+     */
+    if (st.steers === "generation" && !st.learned_from)
+      add({
+        severity: "note",
+        kind: "a-steer-nobody-can-check",
+        where: `steer:${st.id}`,
+        what: `"${st.says}" shapes what gets proposed and nothing says what it was inferred from — nobody agrees to these, so what it was learned from is the only thing anybody can argue with`,
+        fix: `say what it came from in \`learned_from\` — the screens, the reviews, the rejections. If somebody simply decided it, it is a claim about the product: file it as steering truth and put it in the charter`,
+      });
+    if (st.steers !== "truth") continue;
+    /**
+     * ⛔ AND IT IS NOT SATISFIED BY EXISTING. A constraint has to reach somebody — the charter is
+     * where this corpus puts what holds across the whole product, and a steer nothing there echoes
+     * is one that will govern nobody.
+     */
+    const said = Object.values(corpus.charter ?? {}).join(" ").toLowerCase();
+    /** ⛔ Long words only — "the", "and", "this" appear in every charter and prove nothing. */
+    const key = st.says
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter((w: string) => w.length > 4);
+    if (!key.length) continue;
+    const landed = key.filter((w: string) => said.includes(w)).length / key.length;
+    if (landed >= 0.5) continue;
+    add({
+      severity: "note",
+      kind: "a-constraint-nobody-can-see",
+      where: `steer:${st.id}`,
+      what: `"${st.says}" constrains the product and nothing in the charter says it — so a reviewer meets it only when somebody breaks it, and then it reads as their mistake rather than a rule nobody told them`,
+      fix: `put it in the charter, where what holds across the product lives. If it only steers how things get MADE — an idiom, a habit, what gets rejected — file it as steering generation instead, and it is right to be invisible`,
+    });
+  }
+
   const project = projectRootOf(root);
   if (project) {
     for (const { scope } of corpus.scopes) {

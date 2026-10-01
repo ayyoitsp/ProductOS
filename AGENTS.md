@@ -28,6 +28,7 @@ flowchart LR
   architecture["architecture<br/><i>Are these the right subsystems, with the right boundaries, and would it work?</i>"]
   sufficiency["sufficiency<br/><i>Can this model express a real product, and can a person actually review what it produces?</i>"]
   completeness["completeness<br/><i>Can somebody get from the start of this feature to the end of it, or does the path stop somewhere?</i>"]
+  rendered["rendered<br/><i>Does the drawing match the product a person actually sees?</i>"]
   end
   subgraph MAP["the map — territory every role reads"]
     direction TB
@@ -247,6 +248,8 @@ Held three ways rather than one: no author declares `ask-the-human`, so no host 
 
 **Reads, in this order:**
 - the screen's own truth — its parts, and what the exchanges at it promise
+- ⛔ the running product, LOOKED AT rather than read — the real screens this one has to sit beside
+- the design system, where the product has one: its components, its spacing, its type scale
 - the idiom this application already uses, learned from its own components
 - sibling screens in the same area that DO have drawings, so it looks like the same product
 
@@ -258,7 +261,7 @@ Held three ways rather than one: no author declares `ask-the-human`, so no host 
 - invent what a screen promises: it draws what the truth already says, and a screen with nothing said gets a question, not a guess
 - write a drawing that does not say on its face that it was designed rather than observed — a reviewer who cannot tell which they are looking at may validate a screen the product does not have
 
-**Needs:** read-files · search-files · run-commands · write-corpus  ·  **Prompt:** `agents/productos-designer.md`
+**Needs:** read-files · search-files · run-commands · write-corpus · see-a-page · fetch-url  ·  **Prompt:** `agents/productos-designer.md`
 
 ### `evidencer`
 
@@ -475,6 +478,34 @@ Held three ways rather than one: no author declares `ask-the-human`, so no host 
 - judge whether the destination is the RIGHT destination — that is a product decision, and this asks only whether somebody can get there
 
 **Needs:** read-files · search-files · run-commands  ·  **Prompt:** `agents/productos-completeness.md`
+
+### `rendered`
+
+**Asks:** Does the drawing match the product a person actually sees?
+
+**Exists because:** Every reviewer here reads SOURCE. `truthfulness` compares the corpus against the code, which catches a screen describing behaviour the code does not have — and passes a screen that is faithful to the code and looks nothing like the running product. A drawing is the one artefact in this model whose correctness is visual, and nothing had ever looked at it beside the thing it claims to depict. Peter: *"we should have an agent that can view our actually rendered site and match up the UX"*.
+
+**Reads, in this order:**
+- productos/env.yaml, and whatever it says brings this product up
+- the running product, screen by screen, as a person meets it
+- the same screens on the ProductOS page, drawn
+- what the corpus says is on each — the parts, and what the exchanges promise
+
+**A finding is:**
+- a drawing showing a state the product never opens on — a loading or empty branch drawn as the screen
+- a control the product has and the drawing does not, or the reverse
+- a label that differs between the two: the drawing says Continue and the product says Next
+- a layout the drawing invents — fields in an order the product does not use, a step that is one screen in the product and two in the drawing
+- a screen the corpus calls intended that the product already has
+- ⛔ a drawing that matches the code and not the product — the gap no source-reading reviewer can see
+
+**⛔ Never:**
+- write anything, or correct a drawing it finds wrong
+- treat a difference as the CORPUS being wrong — product truth is the target state, and the product being different is drift, which is a finding about the build
+- judge whether the design is good. It asks whether the drawing depicts the product, never whether either is attractive
+- report a difference it could not see — if the environment would not come up, say that instead
+
+**Needs:** read-files · search-files · run-commands · see-a-page  ·  **Prompt:** `agents/productos-rendered.md`
 
 ## The commands
 

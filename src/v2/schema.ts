@@ -2219,6 +2219,63 @@ export const Note = z
   });
 export type Note = z.infer<typeof Note>;
 
+/**
+ * ⛔ WHAT A PROJECT KNOWS THAT IS NOT A CLAIM ABOUT THE PRODUCT.
+ *
+ * Peter: *"we need a 'framework way' to track more context about a project, like design system
+ * concepts, feedback given, etc. some stuff should be opaque and auto-training, while others are
+ * made obvious in product OS"*.
+ *
+ * Every piece of context this project accumulated had one of two fates before this: it became a
+ * sentence in a corpus, where it had to be agreed to and could be wrong — or it lived in a session
+ * and died with it. Neither fits a design system, a naming habit, or "he rejects screens with more
+ * than three required fields". Those steer the work without being claims anybody validates.
+ *
+ * ⛔ THE SPLIT IS BY WHAT IT STEERS, which is Peter's own cut:
+ *
+ *   generation  — how a thing gets MADE. Idiom, layout habits, what gets rejected and why. Opaque:
+ *                 it shapes what the authors propose and no reviewer agrees to it, because there is
+ *                 nothing here a person could be wrong about. It is a record of taste, not truth.
+ *   truth       — a CLAIM about the product. Principles, constraints, decisions. Surfaced on the
+ *                 page, because somebody can disagree with it, and a constraint nobody can see is a
+ *                 constraint that gets broken by the next person.
+ *
+ * ⛔ AND IT IS NOT A VERDICT, EVER. A steer that steers generation has no standing, no acceptance
+ * and no `via` — it never counts as somebody having agreed to anything. The moment one of these
+ * starts carrying weight in a gate, it has become product truth and belongs in a scope.
+ */
+export const Steer = z
+  .object({
+    id: z.string().regex(new RegExp(`^${SEGMENT}$`), "a steer id is one segment, kebab-case"),
+    says: z.string().min(10, "a steer nobody can read steers nothing"),
+    steers: z.enum(["generation", "truth"]),
+    /**
+     * ⛔ WHERE IT CAME FROM, REQUIRED ON ANYTHING LEARNED. A pattern inferred from what somebody
+     * accepted is only trustworthy if the next person can go and look at what it was inferred from.
+     * An opaque steer with no provenance is a rule nobody can argue with and nobody chose.
+     */
+    learned_from: z.string().min(3).optional(),
+    at: dateish,
+  })
+  .strict()
+  .superRefine((x, ctx) => {
+    /**
+     * ⛔ A CLAIM ABOUT THE PRODUCT IS SOMEBODY'S, NOT SOMETHING THAT ACCUMULATED. Where it steers
+     * TRUTH, a person said it — so it may not also claim to have been learned, which would make a
+     * constraint on the product into a pattern nobody put their name to.
+     */
+    if (x.steers === "truth" && x.learned_from)
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["learned_from"],
+        message:
+          "a steer that constrains the product is somebody's decision, not a pattern noticed — say who decided it, or file it as steering generation",
+      });
+  });
+export type Steer = z.infer<typeof Steer>;
+
+export const SteersFile = z.object({ steers: z.array(Steer).default([]) }).strict();
+
 export const ScopeFile = Scope;
 export const RulesFile = z.object({ rules: z.array(Rule).default([]) }).strict();
 export const CharterFile = Charter;

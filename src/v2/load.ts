@@ -15,7 +15,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { parseFrontmatter } from "../core/frontmatter.js";
 import YAML from "yaml";
-import { Scope, Rule, Reading, Verdict, Charter, type SlotName , saysText, type Says, Note} from "./schema.js";
+import { Scope, Rule, Reading, Verdict, Charter, type SlotName , saysText, type Says, Note, Steer} from "./schema.js";
 
 export interface V2Paths {
   root: string;
@@ -53,6 +53,11 @@ export interface Corpus {
    * read as a decision.
    */
   notes: Note[];
+  /**
+   * ⛔ Context that steers the work without being a claim about the product. Half of it is opaque
+   * by design — see `Steer`. Nothing here is ever a verdict.
+   */
+  steers: Steer[];
   rules: Array<{ rule: Rule; body: string; file: string }>;
   readings: Reading[];
   verdicts: Verdict[];
@@ -213,6 +218,19 @@ export function loadCorpus(root: string, store: Store = diskStore): Corpus {
       broken.push({ file, why: why(e) });
     }
   }
+  /**
+   * ⛔ WHAT STEERS THIS PROJECT, which is not product truth and not a note either. See `Steer` in
+   * the schema for why those are three different things.
+   */
+  const steers: Steer[] = [];
+  for (const file of readDir(path.join(paths.root, "steers"), [".yaml", ".yml"])) {
+    try {
+      const raw = YAML.parse(readFile(file)) ?? {};
+      for (const x of raw.steers ?? []) steers.push(Steer.parse(x));
+    } catch (e) {
+      broken.push({ file, why: why(e) });
+    }
+  }
   const verdicts: Verdict[] = [];
   for (const file of readDir(paths.verdicts, [".yaml", ".yml"])) {
     try {
@@ -222,7 +240,7 @@ export function loadCorpus(root: string, store: Store = diskStore): Corpus {
       broken.push({ file, why: why(e) });
     }
   }
-  return { paths, scopes, rules, charter, notes, readings, verdicts, broken };
+  return { paths, scopes, rules, charter, notes, readings, verdicts, steers, broken };
 }
 
 // ---------------------------------------------------------------------------

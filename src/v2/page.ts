@@ -2444,6 +2444,36 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
              <h2>${line(entry.scope.title || scopeId)}</h2>
              ${renderProse(entry.body)}
            </div>
+           ${
+             /**
+              * ⛔ THE HALF OF A PROJECT'S CONTEXT THAT IS MEANT TO BE SEEN.
+              *
+              * Peter: *"some stuff should be opaque and auto-training, while others are made
+              * obvious in product OS"*. This is the obvious half — the steers that constrain the
+              * PRODUCT rather than how it gets made. A constraint nobody can see is one the next
+              * person breaks, and then it reads as their mistake rather than a rule nobody told
+              * them.
+              *
+              * ⛔ AND ONLY THAT HALF. A steer that shapes what gets proposed is deliberately not
+              * here: nobody agrees to it, so putting it on a page of product truth would make taste
+              * look like something that had been decided.
+              */
+             (() => {
+               const shown = corpus.steers.filter((x) => x.steers === "truth");
+               if (!shown.length) return "";
+               return `<div class="sub-view" data-sub-view="steers" data-ref="steers" data-label="what holds across this product">
+                 <h2>What holds across this product</h2>
+                 <p class="lede">Constraints somebody decided, which every feature is held to. ⛔ Not
+                 claims about one screen — those live on the feature they belong to.</p>
+                 <ul class="steer-list">${shown
+                   .map(
+                     (x) =>
+                       `<li id="${anchorOf(`steer#${x.id}`)}" data-ref="${esc(`steer#${x.id}`)}" data-label="${esc(plain(x.says).slice(0, 60))}">${line(x.says)}</li>`
+                   )
+                   .join("")}</ul>
+               </div>`;
+             })()
+           }
            ${corpus.charter
              .map(
                (c) => `<div class="sub-view" data-sub-view="${esc(c.charter.id)}" data-ref="${esc(c.charter.id)}" data-label="${esc(plain(c.charter.title))}">
@@ -4774,6 +4804,8 @@ const STYLE = `<style>
 
   .gate-note { background: var(--warn-bg); border-left: 3px solid var(--warn); border-radius: 0 6px 6px 0;
     padding: .7rem .9rem; margin: .9rem 0 1.4rem; font-size: .92rem; }
+  .steer-list { list-style: none; margin: 1rem 0 0; padding: 0; }
+  .steer-list li { padding: .6rem 0; border-bottom: 1px solid var(--line); font-size: 1rem; line-height: 1.5; }
   .charter-section { border-top: 1px solid var(--line); padding-top: 1rem; margin-top: 1.4rem; }
   .charter-section h3 { font-size: 1.1rem; margin: 0 0 .3rem; }
   ul.contents { list-style: none; margin: 1rem 0 0; padding: 0; }

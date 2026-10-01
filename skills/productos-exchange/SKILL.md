@@ -934,6 +934,44 @@ attrition.
 — nobody has agreed it", not "agreed". A command whose output contradicts what it did is worse than
 one that refuses: somebody reads the tick and stops looking.
 
+## ⛔ What steers a project, and which half of it anybody sees
+
+A project knows things that are not claims about its product: a design system, a naming habit, what
+keeps coming back in review. Before this they had two fates and neither fit — become a sentence in a
+corpus, where they must be agreed to and can be wrong, or live in a session and die with it.
+
+```yaml
+# <corpus>/steers/steers.yaml
+steers:
+  - id: verb-buttons
+    says: Buttons are named for the verb they perform, never Submit.
+    steers: generation                     # opaque — shapes what gets proposed
+    learned_from: every button renamed in review since August
+    at: 2026-10-01
+  - id: short-forms
+    says: Forms ask for as little as the product can proceed with.
+    steers: truth                          # surfaced — somebody can disagree
+    at: 2026-10-01
+```
+
+**The split is by what it steers**, and it is the whole of the concept:
+
+| `steers:` | what it is | who sees it |
+| --- | --- | --- |
+| `generation` | how a thing gets MADE — idiom, layout habits, what gets rejected | nobody. It shapes what the authors propose and is never agreed to, because there is nothing here a person could be *wrong* about |
+| `truth` | a CLAIM about the product — a principle, a constraint, a decision | everybody. It goes in the charter, because a constraint nobody can see is one the next person breaks |
+
+⛔ **A steer is never a verdict.** One that steers generation has no standing, no acceptance and no
+`via`. The moment one starts carrying weight in a gate it has become product truth and belongs in a
+scope — not here.
+
+⛔ **A claim about the product is somebody's, never something that accumulated.** A `truth` steer may
+not carry `learned_from`; the schema refuses it. A constraint inferred from behaviour and presented
+as a decision is how a habit nobody agreed to becomes a rule everybody is held to.
+
+⛔ **An opaque steer says where it was learned.** A pattern inferred from what somebody accepted is
+only worth trusting if the next person can go and look at what it was inferred from.
+
 ## ⛔ `pos:` means the framework, and the page answers back
 
 The review page is a **conversation**, not a request form. The composer files a note; the window
