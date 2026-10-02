@@ -18,7 +18,8 @@
 import { resolveRules, type Corpus } from "./load.js";
 import { promisesOf, screensOf, type ProtoPromise, type ProtoScreen } from "./prototype.js";
 import { inferConnections, landingsFor, finishesFor, stateShowing } from "./connects.js";
-import { SLOTS, SLOT_ASKS_SHORT, statements, saysText, type SlotName, type Scope, type View, type Part, type Says } from "./schema.js";
+import { inEffect, declined as declinedSteers } from "./steers.js";
+import { SLOTS, SLOT_ASKS_SHORT, statements, saysText, type SlotName, type Scope, type Steer, type View, type Part, type Says } from "./schema.js";
 import { gridFor, gateFor, actsFor, ruleHomes, stageOf, reachOf, type Grid, type Cell } from "./grid.js";
 import { stampFor, decidedFor } from "./stamp.js";
 import { wireParts } from "./wire.js";
@@ -2207,7 +2208,24 @@ function renderNav(
     }
   };
   walk(undefined, 0);
-  if (rows.length < 2) return "";
+  /**
+   * ⛔ THE TREE IS WHAT A ONE-SCOPE CORPUS DOES NOT NEED. THE FIXED TABS ARE NOT.
+   *
+   * This returned "" for the WHOLE frame, which took the tab row with it — so in a corpus with one
+   * scope, Overview, Prototype and the settings surface were all rendered, all `display:none`, and
+   * nothing on the page could switch between them. The prototype board has been unreachable in
+   * every single-scope corpus since it was built, including the seed this repo ships and serves;
+   * the comment at the top of this file says a nav row that does nothing is worse than prose, and
+   * the fix for that was applied one level too high.
+   *
+   * ⛔ Found by loading the page, not by reading it. The rendered HTML contained every section and
+   * read as correct — `data-label="What steers this"` is present either way, which is exactly how
+   * an assertion on the markup passes while the surface is unreachable.
+   *
+   * So the suppression moves to the tree it was about: no tree where there is nothing to navigate,
+   * and the destinations stay.
+   */
+  const tree = rows.length < 2 ? "" : `<nav class="scopes"><ul>${rows.join("")}</ul></nav>`;
   /**
    * ⛔ THE TRAIL IS BUILT WHERE THE TREE IS, from the same `in:` chain the rows are indented by.
    * Computing it again in the browser would be a second answer to "where am I", and the two would
@@ -2274,6 +2292,22 @@ function renderNav(
      */
     { id: "prototype", label: "Prototype", toRead: protoScreens.length },
     /**
+     * ⛔ ITS OWN PLACE, AND DELIBERATELY NOT THE CHARTER. Peter, asked where a learned habit gets
+     * reviewed: *"A settings surface on the page"*.
+     *
+     * The charter is product truth — things somebody agreed to. A generation steer is the one kind
+     * of context nobody agrees to, so a section of it among the constraints would make taste look
+     * like something that had been decided, and a reviewer would start validating habits. But
+     * ⛔ *"a learned steer nobody can see is a constraint nobody chose"* — so it is on the page,
+     * one tab away, under a heading that says what it is.
+     *
+     * ⛔ ABSENT WHERE THERE IS NOTHING, because an empty tab reads as "already checked that" — which
+     * is the complaint this file's own nav comment opens on.
+     */
+    ...(corpus.steers.some((x) => x.steers === "generation")
+      ? [{ id: "settings", label: "What steers this", toRead: inEffect(corpus.steers).length }]
+      : []),
+    /**
      * ⛔ WHAT A PERSON SEES, THEN THE MACHINERY UNDERNEATH. File order put the subsystems first,
      * which is backwards for every reader: the behaviours are the product, and the machinery is what
      * they rest on. Ordered by whether anything beneath the section has a screen, so it holds
@@ -2305,7 +2339,7 @@ function renderNav(
    * so the frame said one thing and the page showed another, with Overview's sub-menu still under
    * it. A fixed tab needs an entry exactly like a scope does.
    */
-  const sectionOf: Record<string, string> = { overview: "overview", prototype: "prototype" };
+  const sectionOf: Record<string, string> = { overview: "overview", prototype: "prototype", settings: "settings" };
   for (const { scope } of corpus.scopes) {
     const t = trails[scope.id]!;
     // ⛔ Index 0 now, because the root is no longer a crumb — see the trail comment above. Reading
@@ -2374,7 +2408,7 @@ function renderNav(
      */
     `<div class="crumbs"><span class="trail"></span>` +
     `<button type="button" class="chev" aria-expanded="false" aria-label="Show every feature">▾</button></div>` +
-    `<nav class="scopes"><ul>${rows.join("")}</ul></nav>` +
+    tree +
     `</div>`
   );
 }
@@ -2515,6 +2549,7 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
          * they belong to.
          */
         renderPrototype(protoScreens, protoPromises) +
+        renderSettings(corpus) +
         `<section class="view" id="view-overview" data-view="overview" data-ref="${esc(scopeId)}" data-label="Overview">
            <div class="sub-view" data-sub-view="queue" data-ref="queue" data-label="Queue">
              ${
@@ -5390,6 +5425,17 @@ const STYLE = `<style>
     padding: .7rem .9rem; margin: .9rem 0 1.4rem; font-size: .92rem; }
   .steer-list { list-style: none; margin: 1rem 0 0; padding: 0; }
   .steer-list li { padding: .6rem 0; border-bottom: 1px solid var(--line); font-size: 1rem; line-height: 1.5; }
+  /**
+   * ⛔ A HABIT READS AS A HABIT. On the settings surface each row carries where it was learned and,
+   * where it was turned off, why — stacked under the sentence rather than beside it, so a long
+   * provenance does not squeeze the thing it is provenance for.
+   */
+  .steer-list .steer-says { display: block; }
+  .steer-list .steer-from { display: block; margin-top: .2rem; font-size: .82rem; color: var(--dim); }
+  .steer-list .steer-nowhere { color: var(--warn); }
+  .steer-list .steer-why { display: block; margin-top: .2rem; font-size: .82rem; color: var(--dim); font-style: italic; }
+  /** ⛔ Legible, not hidden. A declined habit is evidence about this project, not clutter. */
+  .steer-list li.steer-off .steer-says { text-decoration: line-through; color: var(--dim); }
   .charter-section { border-top: 1px solid var(--line); padding-top: 1rem; margin-top: 1.4rem; }
   .charter-section h3 { font-size: 1.1rem; margin: 0 0 .3rem; }
   ul.contents { list-style: none; margin: 1rem 0 0; padding: 0; }
@@ -5489,6 +5535,70 @@ const STYLE = `<style>
  * pane when you press part of it — the inversion of every other view on this page, where a screen is
  * evidence inside a behaviour card.
  */
+/**
+ * ⛔ WHAT THIS PROJECT HAS LEARNED — SHOWN, AND NOT AS TRUTH.
+ *
+ * Peter: *"we need a 'framework way' to track more context about a project, like design system
+ * concepts, feedback given, etc. some stuff should be opaque and auto-training, while others are
+ * made obvious in product OS"* — and, asked where the opaque half gets reviewed: *"A settings
+ * surface on the page"*.
+ *
+ * The tension is real and the resolution is the heading. A generation steer must not be agreed to:
+ * nobody validates taste, and the moment one carries weight in a gate it has become product truth
+ * and belongs in a scope. But a habit that silently shapes every screen this product proposes, with
+ * no way to see or refuse it, is a constraint nobody chose — which is the defect `learned_from`
+ * exists to prevent, one level up. So: visible, provenance attached, declinable, and labelled as
+ * habits rather than promises.
+ */
+function renderSettings(corpus: Corpus): string {
+  const live = inEffect(corpus.steers);
+  const off = declinedSteers(corpus.steers);
+  if (!live.length && !off.length) return "";
+  const row = (x: Steer, dead: boolean): string =>
+    `<li id="${anchorOf(`steer#${x.id}`)}" data-ref="${esc(`steer#${x.id}`)}" data-label="${esc(plain(x.says).slice(0, 60))}"${
+      dead ? ' class="steer-off"' : ""
+    }>
+       <span class="steer-says">${line(x.says)}</span>
+       ${
+         /**
+          * ⛔ THE PROVENANCE IS THE WHOLE REASON THIS IS LOOKABLE-AT. A habit with its source shown
+          * is one somebody can check and refuse; without it, it is a preference that acquired
+          * authority by being written down. The loader reports a generation steer that has none.
+          */
+         x.learned_from
+           ? `<span class="steer-from">learned from ${line(x.learned_from)}</span>`
+           : `<span class="steer-from steer-nowhere">nothing says what this was inferred from — so there is nothing here anybody can argue with</span>`
+       }
+       ${dead ? `<span class="steer-why">declined — ${line(x.declined ?? "")}</span>` : ""}
+     </li>`;
+  return `<section class="view" id="view-settings" data-view="settings" data-ref="settings" data-label="What steers this">
+    <p class="lede">Habits this project works under. ⛔ <strong>Not promises</strong> — nothing here is
+    a claim about the product, and nobody agrees to any of it. They shape what gets proposed; what
+    the product commits to is on the features, and what holds across all of them is in the charter.</p>
+    ${
+      live.length
+        ? `<div class="sub-view" data-sub-view="in-force" data-ref="steers-live" data-label="In force">
+             <h2>In force</h2>
+             <p class="lede">Carried into every author that writes for this product. ⛔ And into no
+             reviewer — one told what this project likes can no longer notice the project is wrong.</p>
+             <ul class="steer-list">${live.map((x) => row(x, false)).join("")}</ul>
+           </div>`
+        : ""
+    }
+    ${
+      off.length
+        ? `<div class="sub-view" data-sub-view="declined" data-ref="steers-declined" data-label="Declined">
+             <h2>Declined</h2>
+             <p class="lede">Somebody looked at these and said they are not rules here. ⛔ Kept rather
+             than deleted: the pattern each was learned from is still in the record, so a steer that
+             was merely removed comes back the next time anything reads it.</p>
+             <ul class="steer-list">${off.map((x) => row(x, true)).join("")}</ul>
+           </div>`
+        : ""
+    }
+  </section>`;
+}
+
 function renderPrototype(screens: ProtoScreen[], promises: ProtoPromise[]): string {
   if (!screens.length && !promises.length) return "";
 

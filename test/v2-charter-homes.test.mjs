@@ -52,8 +52,22 @@ test("every section of a no-longer-document is reported, with its home named", (
   assert.equal(found.length, 3,
     "a section was not reported — an under-reporting finding is worse than none here, because the ones it stays quiet about read as fine");
   assert.ok(found.every((f) => /out_of_scope|refuses|happy_path\.not/.test(f.fix)), "it does not say where the sentence goes");
-  assert.ok(found.every((f) => f.severity === "note"),
-    "refusing would reject a real corpus on its first day over sections somebody wrote in good faith");
+  /**
+   * ⛔ A REFUSAL, AND THIS ASSERTION USED TO SAY THE OPPOSITE.
+   *
+   * It asserted `note`, on the reasoning that refusing would reject a corpus over sections somebody
+   * wrote in good faith. Peter, after being shown a long explanation of why one document's content
+   * was too valuable to move: *"don't care - just delete them. this is a framework thing. decisions
+   * at the top level don't exist. DELETE THEM."*
+   *
+   * He was right, and the giveaway was in how I used the note: not to schedule the move, but to
+   * keep the document and write three paragraphs about why its content mattered. A severity that
+   * lets a structural error be explained rather than fixed is the wrong severity. These documents
+   * do not exist in this model — the same kind of error as a container at the wrong depth, which
+   * this check already refuses.
+   */
+  assert.ok(found.every((f) => f.severity === "refuse"),
+    "a document that does not exist in this model is only a note, so a corpus carrying one can still be handed over");
 });
 
 test("a decision document is reported the same way, with a different home", () => {

@@ -1907,7 +1907,20 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
       if (!home) continue;
       for (const sec of doc.charter.sections)
         add({
-          severity: "note",
+          /**
+           * ⛔ A REFUSAL, NOT A NOTE. Peter, after being shown the reasoning for keeping one:
+           * *"don't care - just delete them. this is a framework thing. decisions at the top level
+           * don't exist. DELETE THEM."*
+           *
+           * It was a note because refusing would reject a corpus over sections somebody wrote in
+           * good faith. That reasoning was wrong, and the giveaway is that I used it to keep the
+           * document rather than to move it: a note let me explain at length why the content was
+           * valuable and leave it exactly where it should not be. These documents do not exist in
+           * this model — the same kind of structural error as a container at the wrong depth, which
+           * `check` already refuses — and a corpus carrying one cannot be handed over until the
+           * sentences are where a reader meets them.
+           */
+          severity: "refuse",
           kind: "this-belongs-to-a-feature",
           where: `${doc.charter.id}#${sec.id}`,
           what: `"${norm(sec.title ?? sec.id)}" sits at the top of the corpus, above every feature, while being about one of them — so nobody reading that feature meets it, and nothing here goes stale when the thing it is about changes`,
