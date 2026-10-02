@@ -50,7 +50,24 @@ export type Ref =
    * criteria pointing at one. A statement id that collides with a case name loses, and `check`
    * reports the collision rather than letting a ref silently mean the other thing.
    */
-  | { kind: "statement"; id: string; scope: string; exchange: string; slot: SlotName; name: string };
+  | { kind: "statement"; id: string; scope: string; exchange: string; slot: SlotName; name: string }
+  /**
+   * One section of a product-wide document — a goal, a principle, a persona, a non-goal, a decision.
+   *
+   * ⛔ NOTHING AT THE TOP OF A CORPUS COULD BE REFERRED TO, SO NOTHING THERE COULD BE AGREED TO.
+   *
+   * Peter: *"all the top level stuff should be able to be signed off on."* He is describing tenet
+   * one, and it stopped at the feature boundary: on a real corpus, six documents and twenty-six
+   * sections — the goals, the principles, every non-goal, every decision — and `resolveRef` answered
+   * *"not a rule or a scope here"* for all of them. Zero accepts existed against any of them, and
+   * none could have.
+   *
+   * ⛔ WHICH MAKES IT THE WORST PLACE FOR THE GAP TO BE. Every slot in every feature is judged
+   * against this material — a behaviour is right or wrong relative to a goal somebody chose — and it
+   * was the one part of the corpus nobody had ever put their name to. The whole gate at the slot
+   * level rests on a context that was never validated.
+   */
+  | { kind: "section"; id: string; charter: string; section: string };
 
 export interface Resolved {
   ref: Ref;
@@ -63,6 +80,37 @@ export interface Resolved {
 /** ⛔ Returns a reason, never throws and never guesses. Callers print the reason. */
 export function resolveRef(corpus: Corpus, raw: string): Resolved | { error: string } {
   const parts = raw.split("#");
+  /**
+   * ⛔ A SECTION OF A PRODUCT-WIDE DOCUMENT — `<document>#<section>`.
+   *
+   * ⛔ CHECKED FIRST, AND ONLY WHEN NOTHING ELSE OWNS THE NAME. A charter id is one bare segment
+   * (`goals`, `decisions`), which is exactly the shape of a scope id — so a product with an area
+   * called `decisions` would have two things answering to one ref. Rather than pick, this refuses
+   * and says so: a ref that silently means the other thing is the failure the case-versus-statement
+   * ordering above was written for, and it cost a shipped corpus its unruled cases.
+   */
+  if (parts.length === 2) {
+    const doc = corpus.charter.find((x) => x.charter.id === parts[0]);
+    if (doc) {
+      const clash =
+        corpus.scopes.some((x) => x.scope.id === parts[0]) || corpus.rules.some((x) => x.rule.id === parts[0]);
+      if (clash)
+        return {
+          error: `"${parts[0]}" is both a product-wide document and a ${
+            corpus.scopes.some((x) => x.scope.id === parts[0]) ? "feature" : "rule"
+          }, so this ref means two things. Rename one of them`,
+        };
+      const sec = doc.charter.sections.find((x) => x.id === parts[1]);
+      if (!sec)
+        return {
+          error: `"${doc.charter.title}" has no section "${parts[1]}" — it has ${doc.charter.sections
+            .map((x) => x.id)
+            .join(", ")}`,
+        };
+      /** ⛔ A section carries no standing: it is a statement somebody agrees to or does not. */
+      return { ref: { kind: "section", id: raw, charter: parts[0]!, section: parts[1]! }, unsettled: false };
+    }
+  }
   /**
    * ⛔ `<rule-id>#<case>` — a shared refusal case can hold a question, and nothing could
    * address it.

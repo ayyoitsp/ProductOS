@@ -312,11 +312,30 @@ function aimOf(corpus: Corpus, target: string): Refused | { kind: string } {
    * `GLOSSARY.md` calls one falsifiable claim "the atom". That is the thing a person reads and has
    * an opinion about, so that is the thing a stamp has to be able to cover.
    */
-  if (aim.ref.kind !== "exchange" && aim.ref.kind !== "rule" && aim.ref.kind !== "slot" && aim.ref.kind !== "statement")
-    return no(`${target} is a ${aim.ref.kind} — an acceptance covers one behaviour, one whole exchange, or one rule`, [
+  /**
+   * ⛔ AND A SECTION OF A PRODUCT-WIDE DOCUMENT, because nothing at the top of a corpus could be
+   * agreed to at all.
+   *
+   * Peter: *"all the top level stuff should be able to be signed off on."* He is describing tenet
+   * one, and it stopped at the feature boundary: on a real corpus six documents and twenty-six
+   * sections — every goal, every principle, every non-goal, every decision — could not be referred
+   * to, so no verdict could name one and none ever had.
+   *
+   * ⛔ WHICH MADE IT THE WORST PLACE FOR THE GAP TO BE: every slot in every feature is judged
+   * against this material, and the gate that withholds a feature's behaviours until its purpose is
+   * accepted rested on goals nobody had ever put their name to.
+   */
+  if (
+    aim.ref.kind !== "exchange" &&
+    aim.ref.kind !== "rule" &&
+    aim.ref.kind !== "slot" &&
+    aim.ref.kind !== "statement" &&
+    aim.ref.kind !== "section"
+  )
+    return no(`${target} is a ${aim.ref.kind} — an acceptance covers one behaviour, one whole exchange, one rule, or one section of a product-wide document`, [
       aim.ref.kind === "case"
         ? `you are probably after the slot: ${target.split("#").slice(0, 3).join("#")}`
-        : "name a behaviour as <scope>#<exchange>#<slot>, an exchange as <scope>#<exchange>, or a rule by its id",
+        : "name a behaviour as <scope>#<exchange>#<slot>, an exchange as <scope>#<exchange>, a rule by its id, or a section as <document>#<section>",
     ]);
   return { kind: aim.ref.kind };
 }

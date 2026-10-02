@@ -2689,6 +2689,33 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
                      (sec) => `<article class="charter-section" id="${anchorOf(`${c.charter.id}#${sec.id}`)}" data-ref="${esc(`${c.charter.id}#${sec.id}`)}" data-label="${esc(plain(sec.title))}">
                        <h3>${line(sec.title)}</h3>
                        ${renderProse(sec.says)}
+                       ${
+                         /**
+                          * ⛔ THE TOP OF A CORPUS IS SIGNED OFF ON LIKE EVERYTHING ELSE.
+                          *
+                          * Peter: *"all the top level stuff should be able to be signed off on."*
+                          * Nothing here was addressable, so no verdict could name a goal, a
+                          * principle, a non-goal or a decision — and none ever had. ⛔ Which made it
+                          * the worst place for the gap to be: every slot in every feature is judged
+                          * against this material, and the gate that withholds a feature's
+                          * behaviours until its purpose is accepted rested on goals nobody had put
+                          * their name to.
+                          *
+                          * Same badge and the same acts as a behaviour, deliberately: a second
+                          * shape of consent at the top level would be a second thing to trust.
+                          */
+                         renderState(corpus, `${c.charter.id}#${sec.id}`)
+                       }
+                       ${
+                         opts.interactive
+                           ? stampFor(corpus, `${c.charter.id}#${sec.id}`).state === "accepted"
+                             ? `<footer class="beh-acts quiet"><button class="act ghost" data-act="say" data-ref="${esc(`${c.charter.id}#${sec.id}`)}">This needs to change</button></footer>`
+                             : `<footer class="beh-acts">
+                                  <button class="act" data-act="accept" data-ref="${esc(`${c.charter.id}#${sec.id}`)}">That is right</button>
+                                  <button class="act ghost" data-act="say" data-ref="${esc(`${c.charter.id}#${sec.id}`)}">Not quite — reword it</button>
+                                </footer>`
+                           : ""
+                       }
                      </article>`
                    )
                    .join("")}
