@@ -691,7 +691,7 @@ Held three ways rather than one: no author declares `ask-the-human`, so no host 
 
 What `--help` cannot tell you, and why this exists: **who** types it, and **which track** it belongs to. *Never hand a human a flag* is a rule the skills state and nothing enforced — a command marked `claude` appearing in instructions addressed to a person is now a visible contradiction. And two parallel models have been running for months with nothing saying which commands belong to which.
 
-### Current — 35 commands
+### Current — 36 commands
 
 | command | does | layer | typed by |
 |---|---|---|---|
@@ -702,6 +702,7 @@ What `--help` cannot tell you, and why this exists: **who** types it, and **whic
 | `productos env` | Drive a dev environment | surface | the model |
 | `productos byok` | Toggle and report the state of bring-your-own-key verification | surface | **a person** |
 | `productos todo` | Framework gaps — where the model could not express what the corpus needed | check | either |
+| `productos learn` | What the record of feedback says about how this project works — computed, never written back | check | either |
 | `productos v2` | The Exchange model — the tree every verb below it hangs from | surface | either |
 | `productos v2 check` | What this corpus refuses, and what it merely reports | check | the model |
 | `productos v2 grid` | The behaviours a scope states, and where each one stands | derive | the model |
@@ -763,7 +764,7 @@ Territory, not ownership. Nobody is assigned an area — an agent reads this to 
 | area | layers | files |
 |---|---|---|
 | **model** | model | `src/v2/schema.ts` `src/v2/load.ts` `src/v2/ref.ts` `src/core/jobs.ts` `src/core/change.ts` |
-| **derive** | derive | `src/v2/grid.ts` `src/v2/stamp.ts` `src/v2/settle.ts` `src/v2/acts.ts` `src/v2/record.ts` `src/v2/spoken.ts` `src/v2/connects.ts` `src/v2/steers.ts` `src/adapters/claude.ts` |
+| **derive** | derive | `src/v2/grid.ts` `src/v2/stamp.ts` `src/v2/settle.ts` `src/v2/acts.ts` `src/v2/record.ts` `src/v2/spoken.ts` `src/v2/connects.ts` `src/v2/steers.ts` `src/core/learn.ts` `src/adapters/claude.ts` |
 | **generate** | generate | `src/v2/migrate.ts` `src/v2/draw.ts` `src/v2/draw-write.ts` `src/v2/routes.ts` `src/v2/propose.ts` `src/v2/appcss.ts` `src/core/agents-doc.ts` `src/v2/design.ts` |
 | **surface** | surface | `src/v2/page.ts` `src/v2/prototype.ts` `src/v2/serve.ts` `src/ui/server.ts` `src/v2/packet.ts` `src/v2/notes.ts` `src/v2/watch.ts` `src/v2/log.ts` `src/v2/inbox.ts` `src/v2/presence.ts` `src/v2/identity.ts` `src/v2/client.ts` `src/v2/write.ts` `src/v2/wire.ts` `src/v2/moved.ts` `src/cli/commands/v2.ts` `src/mcp/v2-tools.ts` |
 | **instruct** | instruct | `skills` `agents` |

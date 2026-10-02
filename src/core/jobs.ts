@@ -196,6 +196,8 @@ export const AREAS: Area[] = [
       "src/v2/spoken.ts",
       "src/v2/connects.ts",
       "src/v2/steers.ts",
+      /** ⛔ Reading the record of what was corrected is a derivation over it, and writes nothing. */
+      "src/core/learn.ts",
       "src/adapters/claude.ts",
     ],
     needs: ["read-files", "run-commands", "search-files"],
@@ -989,6 +991,13 @@ export const COMMANDS: Verb[] = [
   { name: "env", does: "Drive a dev environment", owns: "surface", who: "claude", track: "both" },
   { name: "byok", does: "Toggle and report the state of bring-your-own-key verification", owns: "surface", who: "person", track: "both" },
   { name: "todo", does: "Framework gaps — where the model could not express what the corpus needed", owns: "check", who: "both", track: "both" },
+  /**
+   * ⛔ `check`, BECAUSE IT DETECTS AND DOES NOT FIX — the same layer `todo` sits in, and for the
+   * same reason: both read a record and report what is wrong with the shape of it. Nothing it finds
+   * is applied by it, and the only routes onward are `v2 change` and `v2 steer`, both of which
+   * require a person.
+   */
+  { name: "learn", does: "What the record of feedback says about how this project works — computed, never written back", owns: "check", who: "both", track: "both" },
 
   // ─── the Exchange model ─────────────────────────────────────────────────────────────────────
   /** ⛔ The parent is a command too — `productos v2` with no verb lists the tree. */
