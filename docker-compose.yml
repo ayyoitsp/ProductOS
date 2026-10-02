@@ -11,6 +11,15 @@
 # PRODUCTOS_SINGLE_ACCOUNT for a hosted deployment, where signing in or holding a token is the only
 # way in.
 
+# ⛔ PINNED, OR THE DATABASE MOVES WHEN THE DIRECTORY DOES.
+#
+# Compose derives the project name from the containing folder, and the volume is
+# named `<project>_productos_data`. So the same stack run from a worktree
+# (`productos-2`) and from the main checkout (`productos`) uses two DIFFERENT
+# volumes — and the second one comes up empty, which reads exactly like the data
+# is gone. Naming it here makes the volume follow the stack rather than the path.
+name: productos
+
 services:
   postgres:
     image: postgres:16-alpine
