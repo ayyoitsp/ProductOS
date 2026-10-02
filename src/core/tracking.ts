@@ -42,6 +42,59 @@ export const HistoryEntry = z.object({
 });
 export type HistoryEntry = z.infer<typeof HistoryEntry>;
 
+/**
+ * How much to trust a claim an agent proposed — and, required alongside it, why.
+ *
+ * ⛔ THE POINT IS REVIEW ORDER. Review burden is the category's central unsolved
+ * problem: a reviewer facing forty undifferentiated claims rubber-stamps, and a
+ * rubber-stamped corpus is worse than none. Confidence is what lets a reviewer
+ * spend their attention where it changes an outcome — on the claims the agent
+ * effectively guessed at.
+ *
+ * ⛔ CONFIDENCE WITHOUT A BASIS IS WORTHLESS, and an agent will always claim
+ * `high` if allowed to. So anything above `low` must cite what it rests on, and
+ * the audit refuses it otherwise. The basis is also the answer to "where did
+ * this come from", which nothing else in the markdown path records.
+ */
+export const ClaimConfidence = z.enum([
+  /**
+   * A human said this, explicitly. A sentence in a document, a spoken
+   * requirement, an answer to a direct question. The only tier a reviewer can
+   * mostly skim, because a person already asserted it.
+   */
+  "stated",
+  /**
+   * Read directly off code the agent examined, and cited. Trustworthy about
+   * what the product *does*; says nothing about whether it is what anyone
+   * intended, which is exactly what the human is being asked.
+   */
+  "observed",
+  /**
+   * Inferred. Generalised from a pattern, assumed from convention, or filled in
+   * because a feature "should" have it. No direct evidence.
+   *
+   * ⛔ This is the tier that exists to be honest about slop. A `guessed` claim
+   * is not a defect — guessing is often the right move when scoping — but it
+   * must be labelled so review starts here rather than ending here.
+   */
+  "guessed",
+]);
+export type ClaimConfidence = z.infer<typeof ClaimConfidence>;
+
+/** What a claim rests on. Required for `stated` and `observed`. */
+export const ClaimBasis = z.object({
+  kind: z.enum(["human", "document", "code", "test", "conversation"]),
+  /**
+   * Where exactly. A file:line for code, a quoted sentence for a human, a
+   * document plus section. Specific enough that a reviewer can check it without
+   * asking the agent what it meant.
+   */
+  ref: z.string().min(3),
+  /** Optional verbatim excerpt — the sentence or line that carried the claim. */
+  quote: z.string().optional(),
+});
+export type ClaimBasis = z.infer<typeof ClaimBasis>;
+
 export const TestRunStatus = z.enum(["pass", "fail", "skip", "error"]);
 export type TestRunStatus = z.infer<typeof TestRunStatus>;
 
@@ -77,6 +130,18 @@ export type DriftEvent = z.infer<typeof DriftEvent>;
 export const BehaviorTracking = z.object({
   code_refs: z.array(z.string()).default([]),
   status: BehaviorStatus.default("proposed"),
+  /**
+   * How much to trust the claim, and why — set by whoever proposed it.
+   *
+   * Lives here rather than in the product truth file because it is a fact about
+   * the *proposal*, not about the product. The claim reads the same whoever
+   * wrote it; how much a reviewer should scrutinise it does not.
+   *
+   * Absent on a human-authored claim: a person writing their own product truth
+   * is not estimating their own confidence.
+   */
+  confidence: ClaimConfidence.optional(),
+  basis: z.array(ClaimBasis).default([]),
   last_verified: dateLike().optional(),
   verified_by: z.string().optional(),
   history: z.array(HistoryEntry).default([]),
@@ -108,11 +173,47 @@ export function trackingFilePath(paths: ProductosPaths, featureId: string): stri
 // ---------------------------------------------------------------------------
 // Read / Write
 
+/**
+ * ⛔ A malformed sidecar WARNS and returns null; it never throws.
+ *
+ * This threw, and the consequence was disproportionate: one stray unquoted colon
+ * in one tracking file took down every caller that touched the corpus — the
+ * renderer, the audit, gaps — with a raw YAML stack trace and no filename in the
+ * message. Meanwhile `doctor` reported the corpus healthy, because it validated
+ * product truth and never opened a sidecar.
+ *
+ * Product truth files already behave this way (`listFeatures` catches per file).
+ * Tracking is operational metadata: losing one file's stamps should degrade that
+ * feature, not the whole tool.
+ */
 export function readTracking(paths: ProductosPaths, featureId: string): FeatureTracking | null {
   const fp = trackingFilePath(paths, featureId);
   if (!fs.existsSync(fp)) return null;
-  const raw = YAML.parse(fs.readFileSync(fp, "utf-8")) ?? {};
-  return FeatureTracking.parse(raw);
+  try {
+    const raw = YAML.parse(fs.readFileSync(fp, "utf-8")) ?? {};
+    return FeatureTracking.parse(raw);
+  } catch (e) {
+    process.stderr.write(
+      `productos: ${path.relative(paths.repoRoot, fp)} failed to parse: ${(e as Error).message}\n`
+    );
+    return null;
+  }
+}
+
+/** Every tracking sidecar on disk, with the unreadable ones named. */
+export function listTrackingFiles(paths: ProductosPaths): string[] {
+  const root = paths.trackingDir;
+  if (!fs.existsSync(root)) return [];
+  const out: string[] = [];
+  const walk = (dir: string) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const fp = path.join(dir, entry.name);
+      if (entry.isDirectory()) walk(fp);
+      else if (entry.name.endsWith(".yaml") || entry.name.endsWith(".yml")) out.push(fp);
+    }
+  };
+  walk(root);
+  return out.sort();
 }
 
 export function writeTracking(paths: ProductosPaths, tracking: FeatureTracking): string {

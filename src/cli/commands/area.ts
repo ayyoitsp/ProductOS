@@ -1,7 +1,7 @@
 import { Command } from "commander";
 import pc from "picocolors";
 import { resolvePathsOrThrow } from "../../core/paths.js";
-import { listAreas } from "../../core/product.js";
+import { listAreas, listProducts, walkGroups, groupFeatures } from "../../core/product.js";
 import { buildAreaFlowGraph, renderAscii as renderFlowAscii } from "../../core/flowchart.js";
 import { auditArea, renderAreaAuditAscii } from "../../core/audit.js";
 
@@ -23,16 +23,33 @@ export function areaCommand(): Command {
           console.log(pc.dim("No areas yet."));
           return;
         }
+        // ⛔ Print the tree, not a flat list. Areas nest, so a flat list of slugs
+        // leaves `pricing` and `pricing/agency` looking like peers and gives no way
+        // to see that one is inside the other.
         console.log(pc.bold("Areas:"));
-        for (const a of areas) {
-          console.log(`  ${pc.cyan(a.slug.padEnd(20, " "))}  ${a.title}  ${pc.dim(`(${a.features.length} feature${a.features.length === 1 ? "" : "s"})`)}`);
+        for (const product of listProducts(paths)) {
+          console.log(`  ${pc.bold(pc.cyan(product.slug))}  ${pc.dim(product.title)}`);
+          walkGroups(product.groups, (g) => {
+            const n = groupFeatures(g).length;
+            const indent = "  ".repeat(g.depth);
+            const label = g.segments.slice(1).join("/");
+            console.log(
+              `  ${indent}${pc.cyan(label.padEnd(Math.max(4, 26 - indent.length), " "))}  ${
+                g.title
+              }  ${pc.dim(`(${n} feature${n === 1 ? "" : "s"}${g.groups.length ? `, ${g.groups.length} sub-area${g.groups.length === 1 ? "" : "s"}` : ""})`)}`
+            );
+          });
         }
         console.log("");
-        console.log(pc.dim("productos area <slug> for an overview."));
+        console.log(pc.dim("productos area <slug> for an overview — the slug is the path below the product, e.g. pricing/agency."));
         return;
       }
 
-      const area = areas.find((a) => a.slug === slug);
+      // Accept either the path below the product (`pricing/agency`) or the full id
+      // (`cre/pricing/agency`), because both are what a reader has in front of them.
+      const area =
+        areas.find((a) => a.slug === slug) ??
+        areas.find((a) => `${a.product}/${a.slug}` === slug);
       if (!area) {
         console.error(pc.red("✗"), `No area "${slug}". Known: ${areas.map((a) => a.slug).join(", ") || "(none)"}`);
         process.exit(1);

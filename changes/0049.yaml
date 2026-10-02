@@ -1,0 +1,31 @@
+id: "0049"
+said: |-
+  we should have an agent that can view our actually rendered site and match up the UX, etc.
+
+  also, we need a 'framework way' to track more context about a project, like design system
+  concepts, feedback given, etc.  some stuff should be opaque and auto-training, while others are
+  made obvious in product OS
+
+  the designer agent shoudl be able to look at existing sites and a design system to put together
+  the screens
+
+  [on which half is which] By what it steers — opaque steers the generators; surfaced are claims
+  about the product
+
+  [on what the visual reviewer looks at] The running app and the prototype
+at: 2026-10-01
+kind: concept
+reaches:
+  model: Steer
+  derive: see-a-page
+  surface: steer-list
+  check: a-steer-nobody-can-check
+  instruct: What steers a project, and which half of it anybody sees
+  pin: a steer says what it steers, and that is the whole split
+waived:
+  generate: |-
+    Nothing generates a steer. The surfaced half is somebody deciding something and the opaque half
+    is a pattern noticed in what they accepted — neither is produced from a source the way a screen
+    is produced from a component. Arguable: if the opaque half ever becomes something ProductOS
+    INFERS rather than something a session writes down, that inference is a generator and this
+    waiver stops holding. That is the likeliest next step here.

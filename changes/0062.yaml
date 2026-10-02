@@ -1,0 +1,15 @@
+id: "0062"
+said: "pos: most of the prototypes per behavior card are wrong.  on at-create-deal, they all show the entry form, even if talking about folder matching..."
+at: 2026-10-01
+kind: concept
+reaches:
+  model: "state: z.string().optional()"
+  derive: export function stateShowing
+  generate: ""
+  surface: data-frame=
+  check: the-picture-does-not-contain-the-control
+  instruct: which appearance
+  pin: a control drawn in one state only resolves to that state
+waived:
+  generate: "there is nothing for a generator to emit, deliberately. The state a card shows is DERIVED at render by stateShowing, because a part found in exactly one state picture is a lookup rather than a judgement — writing it into the corpus would be asking an author to retype what the drawing already says, and it would then be a stored fact that goes stale when the screen is redrawn. The generator is still the fix when the check fires: that finding means the part is drawn nowhere."
+closed: 2026-10-01

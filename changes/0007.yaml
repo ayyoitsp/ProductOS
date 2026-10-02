@@ -1,0 +1,13 @@
+id: "0007"
+said: a charter section cannot be addressed by any act and no packet carries one — a builder gets every behaviour and none of the principles
+at: 2026-09-24
+kind: concept
+reaches:
+  model: CharterSection
+  derive: ""
+  generate: ""
+  surface: ""
+  check: ""
+  instruct: charter
+  pin: ""
+waived: {}

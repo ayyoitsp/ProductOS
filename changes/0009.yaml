@@ -1,0 +1,8 @@
+id: "0009"
+said: Refused.instead is rendered by the CLI and dropped by the page — a refusal with no way forward is where reviewers stop reviewing
+at: 2026-09-24
+kind: surface
+reaches:
+  surface: ""
+  pin: ""
+waived: {}

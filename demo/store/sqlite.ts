@@ -205,22 +205,33 @@ export class SqliteStore implements Store {
     if (!cfg.enabled) return { applied: false, credited: 0 };
     const today = todayKey();
     if (cfg.last_applied === today) return { applied: false, credited: 0 };
-    const dow = new Date().getDay();
-    if (!cfg.days.includes(dow)) return { applied: false, credited: 0 };
 
-    const balances = await this.getAllBalances();
+    // Walk every calendar day from the day AFTER last_applied through today
+    // inclusive; collect the dates whose day-of-week is in the schedule.
+    // If last_applied is unset, only today is considered.
+    const start = cfg.last_applied ? nextDay(cfg.last_applied) : today;
+    const dueDates = scheduledDatesInRange(start, today, cfg.days);
+    if (dueDates.length === 0) return { applied: false, credited: 0 };
+
+    // For a multi-date batch (catch-up + today), stamp each credit with the
+    // date it represents so the parent can read off the ledger; for a
+    // single same-day apply, keep the simpler reason.
+    const datedReason = dueDates.length > 1 || dueDates[0] !== today;
     let credited = 0;
-    for (const [kidIdStr, balance] of Object.entries(balances)) {
-      if (balance <= 0) continue;
-      const interest = Math.round((balance * cfg.rate_pct) / 100);
-      if (interest <= 0) continue;
-      await this.addTransaction(
-        Number(kidIdStr),
-        interest,
-        `Interest (${cfg.rate_pct}%)`,
-        "interest"
-      );
-      credited++;
+    for (const date of dueDates) {
+      // Re-read balances per date so each missed day compounds on the
+      // post-previous-credit balance.
+      const balances = await this.getAllBalances();
+      for (const [kidIdStr, balance] of Object.entries(balances)) {
+        if (balance <= 0) continue;
+        const interest = Math.round((balance * cfg.rate_pct) / 100);
+        if (interest <= 0) continue;
+        const reason = datedReason
+          ? `Interest (${cfg.rate_pct}%) for ${date}`
+          : `Interest (${cfg.rate_pct}%)`;
+        await this.addTransaction(Number(kidIdStr), interest, reason, "interest");
+        credited++;
+      }
     }
     await this.setInterestConfig({ last_applied: today });
     return { applied: true, credited };
@@ -242,7 +253,46 @@ export class SqliteStore implements Store {
       );
       credited++;
     }
-    await this.setInterestConfig({ last_applied: todayKey() });
+    // Manual override: does NOT touch last_applied so the regular schedule
+    // continues uninterrupted.
     return { credited };
   }
+}
+
+// --- Date helpers (local-time, YYYY-MM-DD keys) -----------------------------
+
+function parseLocalDate(key: string): Date {
+  const [y, m, d] = key.split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
+
+function formatLocalDate(d: Date): string {
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function nextDay(key: string): string {
+  const d = parseLocalDate(key);
+  d.setDate(d.getDate() + 1);
+  return formatLocalDate(d);
+}
+
+function scheduledDatesInRange(
+  startKey: string,
+  endKey: string,
+  daysOfWeek: number[]
+): string[] {
+  if (startKey > endKey) return [];
+  const end = parseLocalDate(endKey);
+  const out: string[] = [];
+  for (
+    let d = parseLocalDate(startKey);
+    d.getTime() <= end.getTime();
+    d.setDate(d.getDate() + 1)
+  ) {
+    if (daysOfWeek.includes(d.getDay())) out.push(formatLocalDate(d));
+  }
+  return out;
 }

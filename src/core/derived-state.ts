@@ -1,4 +1,4 @@
-import { Behavior, TestCase } from "./product.js";
+import { Behavior, TestCase, isUndefinedBehavior } from "./product.js";
 import { BehaviorTracking } from "./tracking.js";
 
 /**
@@ -10,7 +10,12 @@ import { BehaviorTracking } from "./tracking.js";
  *
  * Five values, each pointing at a clear next action:
  *
- *   Unverified — no human has accepted; the analyzer's draft is awaiting vetting.
+ *   Undefined  — no claim has been decided at all; the behavior names an open
+ *                question instead. The rung BELOW unverified: there is nothing
+ *                for a human to accept yet, so it cannot be reviewed, and
+ *                nothing can be built against it.
+ *   Unverified — a claim exists but no human has accepted it; the analyzer's
+ *                draft is awaiting vetting.
  *   Verified   — human accepted; passing test result received for at least one
  *                active case; no open drift events.
  *   Contested  — open negative signal (failing test, code-inconsistent drift,
@@ -29,6 +34,7 @@ import { BehaviorTracking } from "./tracking.js";
  */
 
 export type DerivedVerification =
+  | "undefined"
   | "unverified"
   | "verified"
   | "contested"
@@ -64,6 +70,22 @@ export function derivedVerification(
 
   const openDrifts = (tracking?.drift_events ?? []).filter((d) => !d.resolved_at);
   const open_drift = openDrifts.length;
+
+  // ⛔ Asked before any evidence question, because there is nothing to have
+  // evidence ABOUT. A behavior with no decided claim cannot be verified,
+  // contested or orphaned — those all presuppose something to be right or
+  // wrong about. Reporting it as "unverified" would put it in the review
+  // queue, where a reviewer has nothing to accept.
+  if (!behavior.deprecated && isUndefinedBehavior(behavior)) {
+    return {
+      state: "undefined",
+      reason: "no claim decided yet — names an open question",
+      open_drift,
+      cases_with_runs,
+      cases_with_coverage_ref,
+      active_cases,
+    };
+  }
 
   // Not human-accepted yet → Unverified.
   // "proposed" = analyzer draft never accepted; "planned" = intent only.

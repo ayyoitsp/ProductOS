@@ -1,0 +1,25 @@
+id: "0041"
+said: |-
+  back/forward works.  the feature still isn't complete, you can't go past the folder selection
+  screen.  is that a framework issue or indexing issue?
+
+  one of our agents most assuredly should check that the happy path is 'complete'.  this most
+  certainly isn't
+at: 2026-09-30
+kind: concept
+reaches:
+  model: completeness
+  derive: anchored
+  surface: withGoes
+  check: the-happy-path-stops-here
+  instruct: productos-completeness
+  pin: somebody asks whether a feature can be walked from end to end
+waived:
+  generate: |-
+    Nothing is generated differently by this change. It is a reading — of which exchange a control
+    performs, and of whether a sentence says somebody is taken somewhere — plus a reviewer, a check
+    and a surface that stamps what the reading produced. `draw` produces the same bytes before and
+    after. Arguable: `withGoes` writes a derived destination INTO the drawing, which is generation
+    in the loose sense — but it happens at page render, from the corpus, and the generate area owns
+    what turns a source into stored output. Filing it here would make "generate" mean any string
+    substitution anywhere.

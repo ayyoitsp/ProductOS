@@ -1,0 +1,11 @@
+id: "0056"
+said: |-
+  hmm, these don't seem right, why do we need skills and commands?
+
+  [asked how far to take it] One skill, delete the v1 three
+at: 2026-10-01
+kind: instruction
+reaches:
+  instruct: There is one skill, and this is it
+  pin: every route names real roles, and none delegates the settling
+waived: {}

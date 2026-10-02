@@ -8,6 +8,7 @@ import {
   StyleSheet,
   TextInput,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect, useRouter } from "expo-router";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { Surface, Text, View } from "@/components/Themed";
@@ -26,6 +27,7 @@ export default function TasksScreen() {
   const cs = useColorScheme() ?? "light";
   const router = useRouter();
   const toast = useToast();
+  const insets = useSafeAreaInsets();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [kids, setKids] = useState<Kid[]>([]);
   const [confirming, setConfirming] = useState<Task | null>(null);
@@ -93,7 +95,7 @@ export default function TasksScreen() {
   }
 
   return (
-    <View style={styles.screen}>
+    <View style={[styles.screen, { paddingTop: insets.top }]}>
       <FlatList
         contentContainerStyle={styles.list}
         data={tasks}

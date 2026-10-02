@@ -1,0 +1,31 @@
+id: "0044"
+said: |-
+  let's update how we're doing things.  i'm going to drive things mostly through product OS now,
+  but let's add a 2-way window so you can send messages back as well.  if i tag pos: {blah blah} in
+  the meessage, that indicates a framework issue and to fix the framework issue (agent setup), and
+  you respond concisely that it has been updated or fixed
+at: 2026-10-01
+kind: concept
+reaches:
+  model: replies
+  surface: note-thread
+  instruct: "pos:"
+  pin: a reply says something back without deciding the matter is over
+waived:
+  derive: |-
+    `notes.ts` is owned by the SURFACE area, not derive — deliberately, and correctly: a note is
+    somebody asking for something, not product truth, and nothing is computed, inherited or gated
+    from it. `replyToNote` appends a record and `POS` reads a tag the person typed. Arguable: if a
+    note ever influences a verdict or a gate, it stops being a surface concern and this waiver
+    stops holding.
+  generate: |-
+    Nothing new is generated. The note file gains two fields and `asYaml` writes them, which is
+    serialisation in the same file the surface area already owns — not a generator turning a source
+    into output.
+  check: |-
+    `check` reports what is wrong in a CORPUS, and a note is not part of one — it is not loaded as
+    truth, no rule resolves through it, and no verdict depends on it. What can go wrong here is a
+    tag that does not register or a reply that closes something, and both are held by the registry
+    tests rather than by a corpus check. Arguable: an open note nobody has answered in a long time
+    might one day be worth reporting, which would be a real check and this waiver would stop
+    holding.

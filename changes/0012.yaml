@@ -1,0 +1,8 @@
+id: "0012"
+said: draw.ts and migrate() are imported by no test — both have named defects that can return silently
+at: 2026-09-24
+kind: instruction
+reaches:
+  instruct: ""
+  pin: ""
+waived: {}

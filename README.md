@@ -1,199 +1,131 @@
 # ProductOS
 
-**Product truth as a viewable, version-controlled artifact.**
+**Human-validated product truth that AI agents can build from.**
 
-ProductOS holds structured documentation of what your product does — version-controlled in your repo, diffable in PRs, rendered on demand as a navigable website. It's where you go *before* designing a feature to understand the system, and where you update *during* feature work so the diff captures both the code change and the behavior change in the same PR.
+ProductOS holds a structured, validated record of what your product does — what it guarantees, why it works that way, and what's currently in question. Product people define it. Agents build from it. Engineering finds out when a change breaks something the team committed to.
 
-> **Status:** v0.1.0 — early. Claude Code adapter; Codex / Cursor / Devin to follow.
+> **Status:** v0.1.0 — early, in active design. The architecture changed substantially in Aug 2026 (standalone hosted service, product-first). Docs reflect the new direction; code is catching up.
 
-## How it works
+## Why
 
-```
-   ┌─────────────┐                ┌──────────────┐               ┌───────────────────┐
-   │ Claude Code │ ─── MCP ──►   │  ProductOS   │ ─── HTTP ──►  │ Product Truth site│
-   │  + skill    │                │  MCP server  │                │ (localhost)       │
-   └──────┬──────┘                └──────────────┘                └───────────────────┘
-          │
-          │ consults, proposes, updates, attaches evidence
-          ▼
-   ┌────────────────────────────────────────────────────────────┐
-   │  productos/products/                                       │
-   │    <area>/<feature>.md  — frontmatter: behaviors, evidence │
-   │                          body: prose, UX, caveats         │
-   └────────────────────────────────────────────────────────────┘
-```
+> **AI agents autonomously deliver code based on human-validated product truths.**
 
-1. `productos init claude` — installs the ProductOS skill into Claude Code and scaffolds `productos/`.
-2. You edit `productos/env.yaml` to describe how Claude can bring up your dev stack.
-3. You ask Claude to "do a ProductOS pass on this codebase."
-4. Claude reads your code and writes markdown files under `productos/products/<area>/<feature>.md`. Each file declares **behaviors** (atomic claims about what the feature does) in its frontmatter, with **evidence** (code refs, captured API responses, screenshots, narratives) backing each claim.
-5. You open `http://localhost:7878` — the product-truth site, rendered dynamically from the markdown. You review the proposed behaviors, look at the evidence, and verify with `productos product verify <feature> <behavior>` or via the skill's prompts.
-6. The markdown gets committed alongside the code. PR diffs show both.
+Writing code is automating. Knowing *what* to build, and telling when you've broken it, is not. Agents read code and infer intent — and they can't infer what isn't there: the case you deliberately chose not to support leaves no trace in a repo.
 
-**The artifact is the markdown.** The website is dynamically rendered from it — no static HTML is checked in. Tests are *one possible kind of evidence* you can attach to a behavior, not the core of the system.
+ProductOS makes product truth an input to building, rather than a report on what was built.
 
-## Quickstart
+## The two tenets
 
-Prerequisites: Node 20+, Claude Code installed.
+Everything here is judged against these, and a feature that serves neither does not belong.
 
-```bash
-# 1. Install
-npm install -g productos    # (post-publish; until then: clone + npm run build + npm link)
+> **1. A human has validated the product truth.**
+>
+> **2. The product truth is sufficient to build from — no confusion, no room for interpretation.**
 
-# 2. In your project, install the ProductOS skill + scaffold productos/
-cd ~/my-app
-productos init claude
+The second carries a corollary: it has to help you see whether the truth is **complete**, not
+only whether it is clear. And the first carries a constraint on how it is served — **make
+validating easy, never overwhelm the reviewer, and record their decisions.** A queue nobody
+works is worth nothing, and a rubber-stamped corpus is worse than none, because every claim
+in it is labelled reviewed.
 
-# 3. Edit productos/env.yaml to match your stack
-$EDITOR productos/env.yaml
+These are the two things a repository structurally cannot hold and an agent cannot supply
+for itself. An agent can write a plausible claim; it cannot make a human have agreed to it.
+It can describe what code does; it cannot tell you the description omits the case nobody
+decided, or that one sentence has two builds.
 
-# 4. Sanity-check the env
-productos env up
-productos env check
+They divide the work cleanly, and the division is visible in the product:
 
-# 5. Start the product-truth site in another terminal
-productos serve            # → http://localhost:7878
+| | Tenet 1 — has a person agreed? | Tenet 2 — is it enough to build from? |
+|---|---|---|
+| **The act** | accepting a claim, settling a question | writing a claim that admits one reading |
+| **Who** | only a person; no tool exposes it to a model | whoever authors, human or agent |
+| **Surfaced by** | `productos next` · the ranked queue | `productos check` · readiness · the audit |
+| **Fails as** | *awaiting review* | *undecided* · *ambiguous* · *contradiction* |
 
-# 6. Open Claude Code in this repo and say:
-#    "do a ProductOS pass on this codebase"
-#
-# 7. Watch proposed features and behaviors appear in the site as Claude works.
-#    Review the evidence. Verify the good ones.
+⛔ **The order matters.** Never accept a claim that is contradicted or ambiguous: stamping
+*"this is what we intend"* onto a sentence with two meanings is worse than leaving it
+unstamped, because now it looks settled. Tenet 2 first, then tenet 1.
 
-# 8. Commit productos/products/ — it's part of your codebase now.
-```
+Start with [`OVERVIEW.md`](./OVERVIEW.md) — the model and why it is shaped this way — alongside [`EXAMPLE.md`](./EXAMPLE.md), which shows the same model as real files. [`GLOSSARY.md`](./GLOSSARY.md) defines every term and what it refuses; [`VISION.md`](./VISION.md) has the thesis.
 
-## The shape of a feature file
+## The model
 
-```yaml
----
-id: auth/signup
-title: User signup
-status: shipped              # planned | shipped | deprecated
-owners: [peter]
-implements:
-  - src/api/auth/signup.ts
-  - src/pages/signup.tsx
-related: [auth/login]
-behaviors:
-  - id: duplicate-email
-    claim: "POST /api/auth/signup with an existing email returns 409 with body.error.code = 'duplicate_email'"
-    status: verified         # planned | proposed | verified | stale | contested | deprecated
-    last_verified: 2026-05-28
-    verified_by: peter
-    evidence:
-      - kind: code
-        ref: "src/api/auth/signup.ts:23-67"
-      - kind: response
-        path: "productos/evidence/auth-signup-dup-email.json"
-        description: "Captured 2026-05-28 against local"
-    notes: |
-      Intentional separation from 400 so the client can show a
-      specific "this email is already registered" message.
-  - id: welcome-email
-    claim: "Successful signup enqueues a welcome email"
-    status: verified
-    evidence:
-      - kind: code
-        ref: "src/api/auth/signup.ts:80"
----
-
-# User signup
-
-Users create accounts by providing email + password.
-
-## UX
-
-The signup page lives at `/signup`...
-```
-
-Behaviors live in the frontmatter (structured, machine-readable, diff-friendly). The body is for prose that doesn't fit neatly into the structured fields.
-
-## CLI
+Three altitudes, one atom:
 
 ```
-productos init <runtime>             # 'claude' supported
-productos serve                      # render the product-truth site on localhost:7878
-productos env list|<name> up|check|reset|down
-productos product list               # list features
-productos product show <id>          # show a single feature with its behaviors
-productos product verify <feature_id> <behavior_id>
-productos product contest <feature_id> <behavior_id> --reason "..."
-productos gaps                       # behaviors awaiting verification, stale, contested, etc.
-productos doctor                     # check install, runtime, env, product-truth state
+Surface     how the user interacts — screens, elements, flow
+Feature     what the user gets                     grouped into feature areas
+Capability  one thing a subsystem promises         grouped into capability systems
 ```
 
-## MCP tools (consumed by Claude Code)
+Feature areas sit inside a **product** and **nest as deep as that product needs** —
+products vary enormously in complexity, so a fixed depth would force the real joints
+into names or into one unreadable bag. What bounds it is a target *size*, not a depth
+limit: `productos check` measures every area against it and names the specific edit,
+including which features it would split into a sub-area. A container's id **is** its
+path, so re-filing is `productos move`, which carries the file, the id, the tracking
+sidecar and every edge pointing at it.
 
-| Tool | Purpose |
-| --- | --- |
-| `productos_list_areas` / `productos_list_features` | Discover what already exists |
-| `productos_get_feature` | Read a feature's behaviors + body before updating |
-| `productos_propose_feature` | Create a NEW feature at productos/products/ — human runs `productos review <id>` to edit interactively |
-| `productos_update_feature` | Update metadata/body of an existing feature |
-| `productos_add_behavior` / `_update_behavior` / `_remove_behavior` | Modify individual behaviors on an existing feature |
-| `productos_add_or_replace_ux` / `_update_ux` / `_remove_ux` | Manage UX views (screens, modals) with ASCII sketches |
-| `productos_add_or_replace_element` / `_remove_element` | Manage interactive elements within a UX view (buttons, inputs, links, cards) |
-| `productos_attach_evidence` | Add evidence (code ref, response capture, screenshot, narrative, trace) to a behavior |
-| `productos_get_env` | Read dev-env config (services, healthcheck, etc.) |
-| `productos_get_gaps` | Find behaviors awaiting verification, stale, contested, etc. |
+A **Behavior** is a single falsifiable claim — the atom everything hangs off. Behaviors live on features and capabilities, and anchor to a surface when a user action triggers them.
 
-## Evidence kinds
+A **Capability** is one thing a subsystem promises — *"classification returns a confidence for every document"*, never *"there's a classification service behind a queue."* Capabilities group into **capability systems** (the subsystem), symmetric to features grouping into **feature areas**. That altitude is where product and engineering negotiate: product owns what is promised, engineering owns how it's kept.
 
-| Kind | When |
-| --- | --- |
-| `code` | File:lines reference into the codebase — minimum bar for any proposal |
-| `response` | Captured API request/response (JSON file in `productos/evidence/`) |
-| `screenshot` | PNG of UI state (`productos/evidence/<name>.png`) |
-| `trace` | Multi-step recording (Playwright trace, browser session, etc.) |
-| `narrative` | Free-form prose written by Claude or a human |
-| `test-result` | Pass/fail of a codified assertion (one option, not the core) |
-| `query` | DB query + result |
+Two rules govern authoring:
 
-You attach the cheapest sufficient evidence — usually `code` + `narrative` on first pass, with richer kinds (response captures, screenshots) when the claim needs them.
+- **Observability** decides what belongs — a detail is truth only if someone the product makes a promise to could distinguish two implementations differing in it. State the observation, never the mechanism.
+- **Trigger** decides where it belongs — user action → feature; input from elsewhere → capability.
 
-## The `productos/` directory
+## How it fits together
 
 ```
-productos/
-├── config.yaml              # checked in — project config
-├── env.yaml                 # checked in — how to bring up your dev stack
-├── products/                # checked in — the product truth tree
-│   ├── README.md            # top-level overview
-│   ├── auth/
-│   │   ├── README.md        # area overview
-│   │   ├── signup.md        # feature
-│   │   └── login.md
-│   ├── wishlist/
-│   └── ...
-├── evidence/                # checked in — captured API responses, screenshots, etc.
-└── .local/                  # gitignored — cache + runtime state
+┌─────────────────┐     ┌──────────────────┐     ┌────────────────────┐
+│   Product app   │────►│  ProductOS API   │◄────│   MCP server       │
+│  define, review │     │   + Postgres     │     │  (local bridge)    │
+└─────────────────┘     └────────┬─────────┘     └─────────┬──────────┘
+                                 │                          │
+                        markdown export              coding agent
+                        AGENTS.md                    CI / reconcile
 ```
 
-## What's *not* in v0.1.0
+- **The database is the authority.** Markdown is an export — the portability promise holds (*remove ProductOS and you keep your truth*) without making a repo the authoring surface. A product isn't a repo.
+- **Agents read truth over MCP**, and validated truth is emitted into [`AGENTS.md`](https://agents.md/) — read natively by most major coding agents, so behavior reaches them with no integration.
+- **The packet** is the handoff artifact: behaviors, test cases, applicable context and decisions, and the verified truth a change must not regress. Deliberately no implementation — stack and patterns come from the repo.
 
-- Browser-mode evidence (Playwright traces, screenshot capture wired into the skill) — fast-follow
-- The `productos-sync` skill (gaps → tickets via the user's Linear/Jira/GitHub MCPs) — fast-follow
-- The `productos-feedback` skill (Zendesk/Sentry MCPs → contested behaviors) — fast-follow
-- Codex / Cursor / Devin adapters — fast-follow
-- A `--byok` mode for headless/CI use without a runtime session — post-MVP
-- Drift detection (auto-flagging stale behaviors when code changes) — fast-follow
+## Validation
 
-## Build from source
+Agents propose. **Only humans validate** — no tool for a model to do it is exposed, which
+is a property of the tool surface and not a request in a prompt. An agent may *remove* a
+validation stamp (noticing that a claim no longer holds only ever reduces what the corpus
+asserts); it cannot add one.
 
-```bash
-git clone https://github.com/ayyoitsp/ProductOS.git
-cd ProductOS
-npm install
-npm run build
-npm link     # symlinks `productos` to your PATH
-```
+State stays deliberately small. Externally: *planned / built / retired*, and *needs review / validated / problem*. One "problem" signal, not a drift taxonomy. Richer structure exists internally and stays out of a reviewer's way.
+
+Invariants are enforced at the tool boundary rather than requested in prompts: an agent can
+ignore an instruction; it cannot ignore a rejected call. What is actually enforced, and
+what is only checked, are deliberately different lists.
+
+**Refused at the boundary** — no tool exists for a model to mark a claim validated; a
+behavior may not carry both a claim and a question; an answer must name who decided and
+why; a re-decision of a settled claim is rejected; a container may not be re-filed without
+carrying its id and every edge pointing at it.
+
+**Refused before handover** — `productos check` will not pass a corpus with a declared
+contradiction, a reference that resolves to nothing, a grouping with no description, or a
+high audit finding.
+
+**Checked and reported, not refused** — the claim linter, the flow rules, size and shape
+advice. These are judgement calls, and a gate that fails on judgement is a gate people
+route around.
+
+## Adoption
+
+**Incremental, from active work — never a day-one full scan.** A full pass produces a queue nobody reads carefully, and a rubber-stamped corpus is worse than none, because every claim in it is labelled reviewed.
+
+Start with the feature you're building now. Grow at the edges. Areas nobody touches stay uncovered, correctly.
 
 ## The `demo/` directory
 
-`demo/` contains **Family Wallet** — a tiny Expo + React Native mobile app we use as a testbed for dogfooding ProductOS. Parents manage allowances, track tasks → balances per kid, optionally apply interest on selected days of the week. Local SQLite storage. See [`demo/README.md`](./demo/README.md) for how to run it.
-
-The app is intentionally simple but has enough real product surface — multi-tenant ledger, editable task list, unbounded interest rules, modal flows — that proposing product truth + tracking for it is non-trivial.
+`demo/` contains **Family Wallet** — a small Expo + React Native app used as a dogfooding testbed. Parents manage allowances, track tasks → balances per kid, and can apply interest on selected days. Simple, but with enough real surface (multi-tenant ledger, editable task list, unbounded interest rules, modal flows) to make product truth non-trivial.
 
 ## License
 

@@ -1,0 +1,13 @@
+id: "0020"
+said: A human's own words are the one thing in a corpus that cannot be regenerated, and they live in one unversioned file with no protection — a single mistaken delete took out every note anybody had filed. Filing a note should be append-only and recoverable.
+at: 2026-09-25
+kind: concept
+reaches:
+  model: ""
+  derive: ""
+  generate: ""
+  surface: ""
+  check: ""
+  instruct: ""
+  pin: ""
+waived: {}

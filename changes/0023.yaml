@@ -1,0 +1,13 @@
+id: "0023"
+said: "A probe written by a session recorded itself as 'by: peter, asked for a change'. Nothing checks that the name a writer claims is the name of somebody who was there, so provenance is whatever the caller types — and a corpus whose 'who said this' cannot be trusted cannot satisfy tenet 1."
+at: 2026-09-28
+kind: concept
+reaches:
+  model: ""
+  derive: ""
+  generate: ""
+  surface: ""
+  check: ""
+  instruct: ""
+  pin: ""
+waived: {}

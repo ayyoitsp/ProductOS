@@ -1,0 +1,15 @@
+id: "0060"
+said: wait, what are our main stages? we should have 'specification', 'ready for review', 'ready for build' - ready for review is when the builders get involved.. design and product have signed off, more or less
+at: 2026-10-01
+kind: concept
+reaches:
+  model: export const STAGES
+  derive: export function stageOf
+  generate: Runs at stage
+  surface: st.blocked_by.length
+  check: ""
+  instruct: ready for review
+  pin: settling, agreeing and reading through is the whole way to the last stage
+waived:
+  check: there is nothing for a check to refuse. The stage is derived, so it cannot be wrong in a corpus — it can only be wrong in the derivation, which is a test. A check would have to invent a rule like 'no feature may sit in specification too long', and that is a project's business, not the model's.
+closed: 2026-10-01

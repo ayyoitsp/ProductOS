@@ -1,0 +1,8 @@
+id: "0017"
+said: 'the corpus describes deal-pricing as an editable grid with 23 behaviours and 11 controls. BIL-3101 (#4286, 2026-09-24 05:22) deleted that screen — Operator: "Computed work and editable cells all need to be ripped out" — so the corpus is accurate as of the branch it was scoped against and one deliberate decision behind'
+at: 2026-09-24
+kind: instruction
+reaches:
+  instruct: ""
+  pin: ""
+waived: {}

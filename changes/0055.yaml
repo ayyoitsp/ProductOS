@@ -1,0 +1,13 @@
+id: "0055"
+said: |-
+  pos: the deals list shows 'That was not somebody mis-reading the product. The create route chooses
+  between six unrelated screens depending on the project type, and the drawing was taken from the
+  default arm. It is recorded because the shape of the mistake is the point: a confident description
+  of the wrong screen reads exactly like a right one.' <---- what is this even for? we should never
+  show this in a product description.
+at: 2026-10-01
+kind: instruction
+reaches:
+  instruct: never how the description was made
+  pin: the paragraph he found is refused
+waived: {}

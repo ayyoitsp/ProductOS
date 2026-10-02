@@ -1,17 +1,23 @@
 import { useEffect, useState } from "react";
 import { Image, Pressable, ScrollView, StyleSheet, TextInput } from "react-native";
+import * as Clipboard from "expo-clipboard";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { Surface, Text, View } from "@/components/Themed";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { useToast } from "@/components/Toast";
 import Colors, { KID_COLORS } from "@/constants/Colors";
 import { AVATARS, AvatarId, avatarSource } from "@/constants/Avatars";
 import { useColorScheme } from "@/components/useColorScheme";
 import { createKid, deleteKid, getKid, updateKid } from "@/db/operations";
+import { nfcUrlForKid } from "@/lib/nfc";
 
 export default function AddKidScreen() {
   const cs = useColorScheme() ?? "light";
   const router = useRouter();
+  const toast = useToast();
+  const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id?: string }>();
   const editingId = id ? Number(id) : null;
   const isEdit = editingId !== null && Number.isFinite(editingId);
@@ -54,12 +60,18 @@ export default function AddKidScreen() {
     router.replace("/");
   }
 
+  async function copyNfcUrl() {
+    if (!isEdit) return;
+    await Clipboard.setStringAsync(nfcUrlForKid(editingId!));
+    toast.show("Copied!");
+  }
+
   if (!loaded) return null;
 
   const selectedSource = avatarSource(avatar);
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <ScrollView contentContainerStyle={[styles.container, { paddingBottom: insets.bottom + 24 }]}>
       <Stack.Screen
         options={{
           title: isEdit ? "Edit kid" : "Add a kid",
@@ -155,6 +167,27 @@ export default function AddKidScreen() {
         </Text>
       </Pressable>
 
+      {isEdit ? (
+        <Surface>
+          <Text style={styles.label}>NFC URL</Text>
+          <View style={styles.nfcRow}>
+            <Text style={styles.nfcUrl} numberOfLines={1}>
+              {nfcUrlForKid(editingId!)}
+            </Text>
+            <Pressable
+              onPress={copyNfcUrl}
+              hitSlop={8}
+              style={[styles.copyBtn, { backgroundColor: Colors[cs].tint }]}
+            >
+              <Text style={{ color: "#fff", fontWeight: "700", fontSize: 13 }}>Copy</Text>
+            </Pressable>
+          </View>
+          <Text style={[styles.help, { color: Colors[cs].muted }]}>
+            Write this URL to a blank NFC card with NFC Tools (or any NDEF writer) to make this kid&apos;s card.
+          </Text>
+        </Surface>
+      ) : null}
+
       <ConfirmDialog
         visible={confirmDelete}
         title="Delete kid?"
@@ -193,4 +226,8 @@ const styles = StyleSheet.create({
   },
   avatarImage: { width: 56, height: 56 },
   button: { padding: 14, borderRadius: 12, alignItems: "center" },
+  nfcRow: { flexDirection: "row", alignItems: "center", gap: 12, marginTop: 8 },
+  nfcUrl: { flex: 1, fontFamily: "Menlo", fontSize: 13 },
+  copyBtn: { paddingVertical: 8, paddingHorizontal: 16, borderRadius: 10 },
+  help: { fontSize: 12, marginTop: 8, lineHeight: 16 },
 });

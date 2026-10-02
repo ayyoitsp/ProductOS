@@ -1,0 +1,9 @@
+id: "0065"
+said: "POS: 6 changes to the truth under this page {show it} - unnecessary, just live update as we go..."
+at: 2026-10-01
+kind: surface
+reaches:
+  surface: IT JUST UPDATES
+  pin: the page updates itself, without reloading over words somebody has typed
+waived: {}
+closed: 2026-10-01

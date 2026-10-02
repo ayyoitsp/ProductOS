@@ -7,6 +7,7 @@ import {
   Switch,
   TextInput,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { Surface, Text, View } from "@/components/Themed";
@@ -25,6 +26,7 @@ import { getDb } from "@/db";
 export default function AddTaskScreen() {
   const cs = useColorScheme() ?? "light";
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id?: string }>();
   const editingId = id ? Number(id) : null;
   const isEdit = editingId !== null && Number.isFinite(editingId);
@@ -84,7 +86,7 @@ export default function AddTaskScreen() {
   const valid = name.trim().length > 0 && !!amount;
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <ScrollView contentContainerStyle={[styles.container, { paddingBottom: insets.bottom + 24 }]}>
       <Stack.Screen
         options={{
           title: isEdit ? "Edit task" : "New task",

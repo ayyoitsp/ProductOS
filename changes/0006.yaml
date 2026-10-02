@@ -1,0 +1,13 @@
+id: "0006"
+said: a dangling Criterion.of makes the evidence vanish from both cards and no check says so
+at: 2026-09-24
+kind: concept
+reaches:
+  model: of
+  derive: ""
+  generate: ""
+  surface: ""
+  check: ""
+  instruct: "of:"
+  pin: ""
+waived: {}

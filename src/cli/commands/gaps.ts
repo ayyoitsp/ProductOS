@@ -1,7 +1,7 @@
 import { Command } from "commander";
 import pc from "picocolors";
 import { resolvePathsOrThrow } from "../../core/paths.js";
-import { listFeatures } from "../../core/product.js";
+import { isUndefinedBehavior, listAllContainers } from "../../core/product.js";
 import { readTracking } from "../../core/tracking.js";
 import { listFeedback } from "../../core/feedback.js";
 
@@ -10,7 +10,7 @@ export function gapsCommand(): Command {
     .description("Print gaps in product truth + tracking + open feedback")
     .action(() => {
       const paths = resolvePathsOrThrow();
-      const features = listFeatures(paths);
+      const features = listAllContainers(paths);
       const groups: Record<string, Array<{ id: string; detail?: string }>> = {
         contested: [],
         stale: [],
@@ -18,6 +18,8 @@ export function gapsCommand(): Command {
         "no-behaviors": [],
         "planned-no-impl": [],
         "open-feedback": [],
+        undefined: [],
+        guessed: [],
       };
       for (const f of features) {
         const fm = f.frontmatter;
@@ -28,6 +30,23 @@ export function gapsCommand(): Command {
         for (const b of fm.behaviors) {
           const bt = t?.behaviors[b.id];
           const status = bt?.status ?? "proposed";
+          // Undefined outranks awaiting-verification: there is no claim for a
+          // human to accept, so it is not waiting on review — it is waiting on
+          // a decision.
+          if (isUndefinedBehavior(b)) {
+            groups.undefined!.push({ id: `${fm.id}#${b.id}`, detail: b.question ?? "" });
+            continue;
+          }
+          // ⛔ A guessed claim outranks a merely-unverified one. Both await a
+          // human, but one has evidence behind it and the other is the agent's
+          // inference — and review time spent on the second changes outcomes.
+          if (bt?.confidence === "guessed") {
+            groups.guessed!.push({
+              id: `${fm.id}#${b.id}`,
+              detail: b.claim.slice(0, 90),
+            });
+            continue;
+          }
           if (status === "proposed") groups["awaiting-verification"]!.push({ id: `${fm.id}#${b.id}` });
           if (status === "stale") groups.stale!.push({ id: `${fm.id}#${b.id}` });
           if (status === "contested") groups.contested!.push({ id: `${fm.id}#${b.id}` });
@@ -59,6 +78,8 @@ function labelFor(kind: string): string {
     "no-behaviors": "Features with no behaviors",
     "planned-no-impl": "Planned features with no implementation tracked",
     "open-feedback": "Open feedback",
+    undefined: "Undefined — no claim decided, nothing can be built from these",
+    guessed: "Guessed — an agent inferred these with no evidence. Review here first",
   } as Record<string, string>)[kind] ?? kind;
 }
 
@@ -70,5 +91,7 @@ function colorFor(kind: string): (s: string) => string {
     "no-behaviors": pc.dim,
     "planned-no-impl": pc.blue,
     "open-feedback": pc.cyan,
+    undefined: pc.red,
+    guessed: pc.yellow,
   } as Record<string, (s: string) => string>)[kind] ?? pc.dim;
 }

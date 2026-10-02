@@ -1,0 +1,15 @@
+id: "0058"
+said: consistency shouldn't be product OS only - we need to make sure the product truth is consistent itself, why is that product OS itself? same as sufficiency.  not sure what generated even is?
+at: 2026-10-01
+kind: concept
+reaches:
+  model: coherence
+  derive: pruneRenamedRoles
+  generate: coherence
+  surface: in no registry
+  check: the framework seat must read part of the framework, and coherence must exist in the product seat — both asserted
+  instruct: thirty scopers writing in isolation
+  pin: the framework seat
+waived:
+  check: the same as 0057 — whether our role registry holds together is not a finding about anybody corpus, so it is pinned by a test rather than by src/v2/check.ts.
+closed: 2026-10-01

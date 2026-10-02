@@ -1,0 +1,17 @@
+id: "0068"
+said: all the top level stuff should be able to be signed off on
+at: 2026-10-02
+kind: concept
+reaches:
+  model: "charter: string; section: string"
+  derive: A SECTION OF A PRODUCT-WIDE DOCUMENT, AND ITS HASH IS THE WHOLE POINT
+  generate: ""
+  surface: THE TOP OF A CORPUS IS SIGNED OFF ON LIKE EVERYTHING ELSE
+  check: ""
+  instruct: ""
+  pin: rewording the section breaks the agreement
+waived:
+  generate: nothing generates a charter — these are the sentences a person writes about their own product, and a generator proposing goals would be software authoring the thing every feature is judged against.
+  check: no new refusal. What was missing was the ABILITY to agree, not a rule about having agreed — and a check demanding every goal be signed off would refuse a corpus on its first day. The queue surfaces them; whether a product-wide document must be fully agreed before its features are is a real question and it is PT-0002's, not this change's.
+  instruct: "no author writes this field: `kind: section` is a ref grammar, not something typed into a corpus. The thing an author could get wrong — a document id colliding with a feature id — is refused by resolveRef with both names, which is where somebody meets it."
+closed: 2026-10-02

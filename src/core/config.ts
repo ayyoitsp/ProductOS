@@ -69,6 +69,43 @@ export type ByokConfig = z.infer<typeof ByokConfigInner>;
  * Resolved BYOK config — the shape the processor consumes. Always has
  * provider/api_key_env/model/max_steps filled in.
  */
+/**
+ * ⛔ PUBLISHING A CORPUS IS AN EXTERNAL SEND, AND IT DEFAULTS TO REFUSED.
+ *
+ * A published page is the only way a button inside Claude can actually record anything — a strict
+ * CSP blocks a rendered page from reaching localhost at all — so the affordance is genuinely
+ * valuable. It also copies the product truth to claude.ai, and product truth routinely names a
+ * real client. Whether that is acceptable is the corpus owner's call and nobody else's.
+ *
+ * So it is a per-corpus setting that starts at `never`, rather than a thing the tool remembers to
+ * ask about. A protection that depends on somebody deciding correctly under time pressure, every
+ * time, is not a protection.
+ */
+export const ExchangeConfig = z
+  .object({
+    publish: z
+      .enum(["never", "allow"])
+      .default("never")
+      .describe("whether this corpus may be published to claude.ai as an interactive page"),
+    /**
+     * ⛔ WHICH ACCESS MODEL THIS PRODUCT HAS — and `neither` is a real answer.
+     *
+     * Peter: *"at the top level we can configure whether we use roles, permissions, or nothing like
+     * that."*
+     *
+     * A single-user tool has no roles, and a `may` slot naming one there would be an invention. The
+     * reverse is worse: with no setting, every check either assumes roles exist (and nags a product
+     * that has none) or assumes they do not (and never notices that "whoever may create deals" is
+     * four spellings of one idea). So the product answers once, and the checks follow the answer.
+     */
+    access: z
+      .enum(["roles", "permissions", "both", "neither"])
+      .default("neither")
+      .describe("whether this product has roles, permissions, both, or no such concept"),
+  })
+  .strict();
+export type ExchangeConfig = z.infer<typeof ExchangeConfig>;
+
 export interface ResolvedByok {
   provider: ByokProvider;
   api_key_env: string;
@@ -143,11 +180,52 @@ export type StackConfig = z.infer<typeof StackConfig>;
  * sketches can render as real-looking mocks (when sketch_html is provided
  * on the UX view) instead of just ASCII art.
  */
+/**
+ * ⛔ WHICH MODEL RUNS EACH AGENT, AND IT IS THE CONSUMER'S CHOICE.
+ *
+ * Peter: "ideally in the future these job agents will be portable - model agnostic. we should let
+ * people assign whatever model they want to each task."
+ *
+ * So no agent definition names a model. The spec says what the agent is for, what it must never do,
+ * and which capabilities it needs; this says who runs it, per agent, per project. An adapter reads
+ * both at install time and emits whatever the host wants.
+ *
+ * ⛔ AN UNKNOWN NAME IS REFUSED AT INSTALL, NOT AT RUN. A typo here otherwise surfaces as an agent
+ * that fails halfway through a review somebody is waiting on.
+ */
+export const AgentsConfig = z.object({
+  /** Used for any agent with nothing of its own. Absent means "whatever the host would use anyway". */
+  default_model: z.string().optional(),
+  /**
+   * Per agent, by name — `consistency`, `coverage`, `generated`, `truthfulness`, `newcomer`,
+   * `architecture`, `sufficiency`.
+   */
+  model: z.record(z.string(), z.string()).default({}),
+  /** Per agent, how hard it should think, where the host understands such a thing. */
+  effort: z.record(z.string(), z.enum(["low", "medium", "high", "max"])).default({}),
+  /** ⛔ Agents a project has deliberately turned off, with the reason it is safe to. */
+  off: z.record(z.string(), z.string()).default({}),
+});
+export type AgentsConfig = z.infer<typeof AgentsConfig>;
+
 export const WebConfig = z.object({
   /** Path (relative to repo root) to a CSS file the user wants loaded into
    *  productos serve so UX mocks pick up their app's design system. The
    *  server exposes the file at /_user-style.css. */
   stylesheet: z.string().optional(),
+  /**
+   * Every stylesheet a mock needs, in cascade order.
+   *
+   * ⛔ A LIST, BECAUSE ONE FILE IS NOT HOW A REAL APP IS STYLED. The app this was built against
+   * has four design-system files (tokens, themes, typography, styles) plus a Tailwind build, and
+   * `stylesheet` could name one of them. Naming one produced a mock with the right class names and
+   * none of the values they resolve to, which looks like a broken app rather than the app.
+   *
+   * ⛔ INLINED, NEVER LINKED. A published page is served from claude.ai under a strict CSP: an
+   * external stylesheet is blocked, and there is no ProductOS server on the other side to ask. The
+   * bytes travel with the page or the mock renders unstyled.
+   */
+  stylesheets: z.array(z.string()).default([]),
   /** Optional CSS class to wrap every UX mock in. Use to scope your styles
    *  if your app's CSS expects a root container class (e.g. "app-root"). */
   mock_container_class: z.string().optional(),
@@ -158,8 +236,31 @@ export const WebConfig = z.object({
    *  elements) to produce static HTML mocks that look like the real app —
    *  WITHOUT running the user's code. Example: "src/components". */
   components_dir: z.string().optional(),
+  /**
+   * ⛔ WHERE THE PRODUCT'S OWN VOCABULARY LIVES. Peter: *"can we index the actual design system
+   * bilrost has with the prototypes now?"*
+   *
+   * With this set, a drawn screen is built from parts the product actually ships — the component's
+   * declared base classes and its declared variants — instead of from the class strings that happen
+   * to appear most often across the app, which cannot tell a button from a thing shaped like one.
+   */
+  design_system: z.string().optional(),
 });
 export type WebConfig = z.infer<typeof WebConfig>;
+
+/**
+ * What a readable tree looks like in THIS corpus.
+ *
+ * Exposed as config because the right number is a product judgement: a corpus of
+ * twelve features and one of four hundred do not want the same ceiling. The defaults
+ * are what `productos check` advises against when nobody has said otherwise.
+ */
+export const GroupingConfig = z.object({
+  group_min: z.number().default(2),
+  group_max: z.number().default(8),
+  behaviors_max: z.number().default(24),
+});
+export type GroupingConfig = z.infer<typeof GroupingConfig>;
 
 export const ProductosConfig = z.object({
   version: z.string().default("0.0.1"),
@@ -176,6 +277,9 @@ export const ProductosConfig = z.object({
   byok: ByokConfig.default({}),
   operations: OperationsConfig.default({}),
   web: WebConfig.default({}),
+  agents: AgentsConfig.default({}),
+  grouping: GroupingConfig.default({}),
+  exchange: ExchangeConfig.default({}),
 });
 export type ProductosConfig = z.infer<typeof ProductosConfig>;
 

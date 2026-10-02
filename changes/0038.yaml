@@ -1,0 +1,9 @@
+id: "0038"
+said: |-
+  after responding, the second page of the create deal page looks the exact same as the first, i can't tell if clicking on next is actually navigating
+at: 2026-09-30
+kind: surface
+reaches:
+  surface: ofScreen
+  pin: a control always carries words, whatever made it empty
+waived: {}

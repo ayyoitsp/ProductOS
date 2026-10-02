@@ -1,0 +1,35 @@
+# A stamp against nothing, and a stamp whose content has moved. Both must refuse.
+#
+# `via` records which surface obtained the consent. It is required and undefaulted, so that the
+# weakest provenance cannot silently wear the strongest name — these four deliberately spread
+# across the surfaces so a reader of this foil sees all of them.
+verdicts:
+  - kind: accept
+    target: foil#a-typo-in-the-target
+    by: nobody
+    at: 2026-09-01
+    via: cli
+    covers_slots: "sha256:0000000000000000"
+    covers_criteria: "sha256:0000000000000000"
+  - kind: accept
+    target: foil#nothing-here
+    by: someone
+    at: 2026-09-01
+    via: page
+    covers_slots: "sha256:deadbeefdeadbeef"
+    covers_criteria: "sha256:deadbeefdeadbeef"
+  - kind: rule
+    settles: foil#disputes-another#answer
+    by: someone
+    at: 2026-09-02
+    via: question
+    says: A ruling recorded here and never written into the slot it settles.
+    because: The gap between a person deciding and the corpus saying so, which nothing else compares.
+  - kind: read
+    scope: foil
+    by: someone
+    at: 2026-09-03
+    via: chat
+    buildable: false
+    blocked_by: [foil#nothing-here#may]
+    note: I read this end to end and could not build from it.

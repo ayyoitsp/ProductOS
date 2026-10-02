@@ -1,0 +1,8 @@
+id: "0015"
+said: draw cannot target a branch of a component, so a tab pane generates to the shell around it — overview-tab came out at 442 bytes and exception-log at 108
+at: 2026-09-24
+kind: generator
+reaches:
+  generate: ""
+  pin: ""
+waived: {}

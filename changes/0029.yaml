@@ -1,0 +1,13 @@
+id: "0029"
+said: "A slot holding two statements cannot mark one of them open. Standing is per-slot, so asking a question about one sentence forces the whole slot — including sentences that are settled — into being undecided, or forces the author to drop the question. Hit while scoping price-a-deal: 'both halves land together' is settled and 'what saved-back means' is a real question, and they share the after slot."
+at: 2026-09-28
+kind: concept
+reaches:
+  model: ""
+  derive: ""
+  generate: ""
+  surface: ""
+  check: ""
+  instruct: ""
+  pin: ""
+waived: {}

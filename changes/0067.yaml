@@ -1,0 +1,15 @@
+id: "0067"
+said: the screen linking is wrong - clicking continue from the first page shoudl take you to folder selection.  'creating' is not a valid screen, since it creates after folder selection is done
+at: 2026-10-01
+kind: concept
+reaches:
+  model: "lands_on: z.string().optional()"
+  derive: AUTHORED, NOT SCORED
+  generate: ""
+  surface: pressing it finishes this feature
+  check: nothing-reaches-this-appearance
+  instruct: "finishes: true"
+  pin: a sentence that merely shares words with the outcome finishes nothing
+waived:
+  generate: nothing about generation changed. ⛔ This row was briefly satisfied by naming `kindOf`, a symbol from a different change that happens to live in the generate area — which is the cascade being satisfied rather than reached, and the exact move the whole mechanism exists to stop. `draw` still extracts every branch it can see, including appearances the product cannot be in from here; that it cannot know which are reachable is correct division of labour, and `nothing-reaches-this-appearance` is how it gets said afterwards.
+closed: 2026-10-01

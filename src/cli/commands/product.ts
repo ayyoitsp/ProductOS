@@ -7,7 +7,7 @@ import {
   listAreas,
   listFeatures,
   readFeatureById,
-} from "../../core/product.js";
+  listAllContainers,} from "../../core/product.js";
 import {
   emptyTrackingFor,
   readTracking,
@@ -26,14 +26,16 @@ export function productCommand(): Command {
     .action((opts: { areas?: boolean; area?: string }) => {
       const paths = resolvePathsOrThrow();
       if (opts.areas) {
+        // Full ids, because a bare slug is ambiguous once two products both have a
+        // "pricing" area, and ambiguous is worse than long.
         const areas = listAreas(paths);
         for (const a of areas) {
-          console.log(`  ${pc.cyan(a.slug)}  ${pc.dim(`(${a.features.length} feature${a.features.length === 1 ? "" : "s"})`)}  ${a.title}`);
+          console.log(`  ${pc.cyan(`${a.product}/${a.slug}`)}  ${pc.dim(`(${a.features.length} feature${a.features.length === 1 ? "" : "s"})`)}  ${a.title}`);
         }
         if (!areas.length) console.log(pc.dim("(no areas)"));
         return;
       }
-      let features = listFeatures(paths);
+      let features = listAllContainers(paths);
       if (opts.area) features = features.filter((f) => f.frontmatter.id.startsWith(opts.area + "/"));
       for (const f of features) {
         const t = readTracking(paths, f.frontmatter.id);

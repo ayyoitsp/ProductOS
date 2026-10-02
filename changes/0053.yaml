@@ -1,0 +1,10 @@
+id: "0053"
+said: |-
+  pos: the prototype viewer is still collapsing in size on the final page. is the final page being
+  treated differently? should follow same code path
+at: 2026-10-01
+kind: surface
+reaches:
+  surface: ".states .state-frame"
+  pin: every state of a screen is the same size, whatever kind of thing is in it
+waived: {}

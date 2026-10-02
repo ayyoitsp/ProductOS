@@ -1,0 +1,65 @@
+feature_id: tasks/complete-task
+implements:
+  - app/(tabs)/tasks.tsx
+  - db/operations.ts
+  - store/sqlite.ts
+  - store/remote.ts
+behaviors:
+  tapping-a-task-starts-a-completion:
+    code_refs:
+      - app/(tabs)/tasks.tsx:50-61    # openConfirm — prefills name and amount from the task
+    status: proposed
+  a-task-cannot-be-completed-with-no-kids:
+    code_refs:
+      - app/(tabs)/tasks.tsx:51-54    # guards on kids.length === 0
+    status: proposed
+  a-single-kid-is-chosen-already:
+    code_refs:
+      - app/(tabs)/tasks.tsx:56       # preselects when exactly one kid
+    status: proposed
+  the-amount-is-confirmed-not-fixed:
+    code_refs:
+      - app/(tabs)/tasks.tsx:76-79    # parses the entered amount
+      - store/sqlite.ts:125           # opts.amount_cents wins over the task's
+    status: proposed
+  confirming-does-not-change-the-task:
+    code_refs:
+      - store/sqlite.ts:110-131       # only `active` is written back to tasks
+    status: proposed
+  a-comment-is-appended-to-the-task-name:
+    code_refs:
+      - store/sqlite.ts:122-124       # reason = name, or "name — comment"
+    status: proposed
+  someone-must-be-credited:
+    code_refs:
+      - app/(tabs)/tasks.tsx:67-70    # refuses with no kid chosen
+    status: proposed
+  a-completion-needs-a-name:
+    code_refs:
+      - app/(tabs)/tasks.tsx:71-75    # trims and refuses empty
+    status: proposed
+  a-completion-must-be-worth-something:
+    code_refs:
+      - app/(tabs)/tasks.tsx:76-79    # refuses null or <= 0
+    status: proposed
+  completing-credits-the-chosen-kid:
+    code_refs:
+      - store/sqlite.ts:127           # addTransaction against the chosen kid
+    status: proposed
+  a-one-time-task-leaves-the-list-once-done:
+    code_refs:
+      - store/sqlite.ts:129-131       # sets active = 0 when not recurring
+    status: proposed
+  a-recurring-task-stays-on-the-list:
+    code_refs:
+      - store/sqlite.ts:129           # recurring tasks skip the deactivation
+    status: proposed
+  a-completion-is-confirmed-back-to-the-parent:
+    code_refs:
+      - app/(tabs)/tasks.tsx:89-91    # toast naming task, amount and kid
+    status: proposed
+  backing-out-records-nothing:
+    code_refs:
+      - app/(tabs)/tasks.tsx:63-65    # closeConfirm
+      - app/(tabs)/tasks.tsx:147-149  # backdrop press closes
+    status: proposed

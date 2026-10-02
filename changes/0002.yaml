@@ -1,0 +1,11 @@
+id: "0002"
+said: our 'feature groups' shoudl also have UX describing a high level view
+at: 2026-09-24
+kind: concept
+reaches:
+  model: views
+  surface: renderGroupUx
+  check: drawn-as-a-diagram
+  instruct: high-level view
+  pin: group-ux
+waived: {}

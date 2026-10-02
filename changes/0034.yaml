@@ -1,0 +1,14 @@
+id: "0034"
+said: product truth is supposed to represent the 'target state' always, doesn't matter what's been built. the drift resolution is downstream. the existing codebase is useful for trying to populate product truth based on what was built, but no reason it needs to be tied to that.
+at: 2026-09-29
+kind: concept
+reaches:
+  model: Where does what was built disagree with the target
+  generate: proposeScreen
+  surface: Nothing renders this screen yet
+  check: no-picture-of-this-screen
+  instruct: Every screen gets a picture
+  pin: the earlier version of this test had it inverted
+waived:
+  derive: this change REMOVED a dependency rather than adding a derivation — nothing is derived from whether code exists any more, which is the point
+closed: 2026-09-29
