@@ -12,7 +12,7 @@ import { compilePacket } from "../../v2/packet.js";
 import { questionsFor, descendants } from "../../v2/settle.js";
 import { perform, preview, payloadFrom, optionText, VIA, type Act, type Via, type Outcome, type Refused } from "../../v2/acts.js";
 import { fileNote, closeNote, replyToNote } from "../../v2/notes.js";
-import { appStyleFor } from "../../v2/appcss.js";
+import { snapshotStyle, styleOf, styleDrift } from "../../v2/appcss.js";
 import { watchCorpus } from "../../v2/watch.js";
 import { inbox } from "../../v2/inbox.js";
 import { looksLikeInstance, instanceOf, mirror, act as remoteAct, note as remoteNote, inbox as remoteInbox, preview as remotePreview, whoami as remoteWhoami, presence as remotePresence } from "../../v2/client.js";
@@ -730,12 +730,7 @@ export function v2Command(): Command {
       const dir = await openAt(o);
       const corpus = loadCorpus(dir);
       warnIfBroken(corpus);
-      const app = appStyleFor(dir);
-      const page = renderScopePage(corpus, scope, {
-        appCss: app.css || undefined,
-        mockClass: app.mockClass,
-        theme: app.theme,
-      });
+      const page = renderScopePage(corpus, scope, styleOf(corpus));
       if (!page) {
         console.error(pc.red("✗"), `no scope "${scope}"`);
         process.exit(1);
@@ -810,13 +805,27 @@ export function v2Command(): Command {
        * own database and are turned into product truth by the same `perform` every other surface
        * uses; nothing about a press is truth until that happens.
        */
-      const app = appStyleFor(dir);
       /**
-       * ⛔ SAY WHAT WAS READ AND WHAT WAS NOT. A mistyped stylesheet path produces a page whose
-       * mocks render unstyled, which looks exactly like a page whose mocks were never written.
+       * ⛔ SAY WHAT THE PAGE IS WEARING, AND SAY WHEN IT IS WEARING NOTHING. A page whose mocks
+       * render unstyled looks exactly like a page whose mocks were never written — and this is the
+       * command that sends one to somebody else, so it is the last place anybody will notice.
+       *
+       * ⛔ AND IT COMES OUT OF THE CORPUS, which is what makes `--at <url>` publishable at all: a
+       * corpus on an instance has no stylesheets to read, only the snapshot it carries.
        */
-      if (app.from.length) console.log(pc.dim(`  styled with ${app.from.join(", ")}`));
-      for (const m of app.missing) console.error(pc.yellow("!"), `web.stylesheets names ${m}, which is not there — mocks will render unstyled`);
+      if (corpus.style?.css)
+        console.log(
+          pc.dim(
+            `  styled with ${corpus.style.sources.map((s) => s.path).join(", ")}${
+              corpus.style.theme ? `, wearing ${corpus.style.theme}` : ""
+            } — taken ${corpus.style.taken_at ?? "at some point"}`
+          )
+        );
+      else
+        console.error(
+          pc.yellow("!"),
+          "this corpus carries no style, so every drawing on the page will render unstyled — run `productos v2 style --into <corpus>` where the repository is"
+        );
       const page = renderScopePage(corpus, scope, {
         interactive: true,
         /**
@@ -827,9 +836,7 @@ export function v2Command(): Command {
         records: o.viaDb ? "db" : "mcp",
         by: o.by,
         recordsTo: o.viaDb ? "read back from this page and written into the product truth" : dir,
-        appCss: app.css || undefined,
-        mockClass: app.mockClass,
-        theme: app.theme,
+        ...styleOf(corpus),
       });
       if (!page) {
         console.error(pc.red("✗"), `no scope "${scope}"`);
@@ -1695,11 +1702,66 @@ export function v2Command(): Command {
      * one, then the graph from what the corpus says — in that order, because each feeds the next. A
      * screen has to exist before anything can connect to it.
      */
+    /**
+     * ⛔ THE DESIGN LIBRARIES, COPIED IN RATHER THAN REFERENCED.
+     *
+     * Peter: *"we should copy the appropriate css files in - were we referencing the repo before?
+     * we should have something that keeps the design libraries in sync."* We were, and that is
+     * precisely why a hosted instance rendered every drawing unstyled: it materializes a project
+     * into a temp directory and there is no repository above it to reference.
+     */
+    .command("style")
+    .description("Copy the application's design libraries into the corpus, so a drawing looks like the product anywhere")
+    .option("--into <dir>", "the corpus", ".")
+    .option("--check", "say whether the design system has moved since the snapshot, and change nothing")
+    .action((o: { into?: string; check?: boolean }) => {
+      const into = path.resolve(o.into ?? ".");
+      if (!o.check) return takeStyle(into);
+      const corpus = loadCorpus(into);
+      if (!corpus.style) {
+        console.log(pc.yellow("!"), "this corpus carries no style — every drawing in it renders unstyled");
+        console.log(pc.dim("  productos v2 style --into <corpus>"));
+        return;
+      }
+      const drift = styleDrift(into, corpus.style);
+      if (!drift.known) {
+        /**
+         * ⛔ "I CANNOT TELL" IS AN ANSWER, AND IT IS THE HOSTED ONE. Reporting in-sync here would be
+         * asserting something nothing checked, on the surface where nobody can go and look.
+         */
+        console.log(pc.dim("?"), `taken ${corpus.style.taken_at ?? "at some point"} from ${corpus.style.sources.length} file(s)`);
+        console.log(pc.dim("  no repository here to compare against, so whether it is current cannot be said from this corpus"));
+        return;
+      }
+      const moved = [...drift.moved, ...drift.gone, ...drift.added];
+      if (!moved.length) {
+        console.log(pc.green("✓"), `current — ${corpus.style.sources.length} file(s), unchanged since ${corpus.style.taken_at ?? "it was taken"}`);
+        return;
+      }
+      console.log(pc.yellow("!"), `the design system has moved since ${corpus.style.taken_at ?? "this was taken"}`);
+      for (const p of drift.moved) console.log(`    ${pc.yellow("~")} ${p} changed`);
+      for (const p of drift.gone) console.log(`    ${pc.yellow("-")} ${p} is no longer there`);
+      for (const p of drift.added) console.log(`    ${pc.yellow("+")} ${p} is new`);
+      console.log(pc.dim("\n  productos v2 style --into <corpus>   # take it again"));
+    });
+
+  cmd
     .command("generate")
     .description("Regenerate everything generable: screens, their states, and what connects to what")
     .option("--into <dir>", "the corpus", ".")
     .action((o: { into?: string }) => {
       const into = path.resolve(o.into ?? ".");
+      /**
+       * ⛔ THE STYLE FIRST, BECAUSE IT IS THE ONLY STEP THAT NEEDS THE REPOSITORY.
+       *
+       * Every other step reads the corpus; this one reads the application's stylesheets, which only
+       * exist where somebody has a checkout. Taking it here is what puts them INTO the corpus, so
+       * everything downstream — a hosted instance, a packet, a published page — has them without
+       * one.
+       */
+      console.log(pc.bold("What the product looks like"));
+      takeStyle(into);
+      console.log("");
       console.log(pc.bold("Screens, from the code"));
       drawEverything(into, false);
       console.log("");
@@ -2235,6 +2297,40 @@ export function v2Command(): Command {
  * state this whole change exists to end. So every screen lands in exactly one column, and the ones
  * it would not resolve say why, in words somebody can act on.
  */
+/**
+ * Take the style snapshot into the corpus.
+ *
+ * ⛔ IT WRITES A DOCUMENT, NOT A CACHE. `style.yaml` travels with the corpus into the store, into a
+ * packet and into an export, because the thing that has to look like the product is wherever the
+ * corpus is read — and hosted, that is a container with no repository in it.
+ */
+function takeStyle(into: string): void {
+  const style = snapshotStyle(into, new Date().toISOString().slice(0, 10));
+  const file = path.join(into, "style.yaml");
+  if (!style.css) {
+    /**
+     * ⛔ NOT WRITTEN EMPTY. An empty snapshot and no snapshot render identically, and `check` can
+     * only tell somebody which they have if the two are different on disk.
+     */
+    console.log(pc.yellow("  !"), "no stylesheets are configured, so there is nothing to carry — see web.stylesheets");
+    return;
+  }
+  fs.writeFileSync(file, YAML.stringify({ style }, { lineWidth: 0 }));
+  const kb = Math.round(style.css.length / 1024);
+  console.log(
+    pc.green("  ✓"),
+    `${style.sources.length} stylesheet${style.sources.length === 1 ? "" : "s"}, ${style.faces.length} face${
+      style.faces.length === 1 ? "" : "s"
+    }, ${kb} KB${style.theme ? ` — wearing ${pc.cyan(style.theme)}` : ""}`
+  );
+  if (!style.theme && style.offers.length)
+    console.log(pc.dim(`      offers ${style.offers.join(", ")} and nothing chose one — see web.theme`));
+  for (const u of style.unreachable.slice(0, 3))
+    console.log(pc.yellow("      !"), `${u} could not travel — the type there is not the product's`);
+  if (style.unreachable.length > 3)
+    console.log(pc.dim(`      …and ${style.unreachable.length - 3} more`));
+}
+
 function drawEverything(into: string, dryRun: boolean): void {
   /**
    * ⛔ BOTH TREES, OR THE ONE NOBODY SWEEPS QUIETLY ROTS. A repo can hold an Exchange corpus under

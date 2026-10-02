@@ -12,13 +12,25 @@
  */
 import fs from "node:fs";
 import path from "node:path";
+import { createHash } from "node:crypto";
 import { readConfig, type ProductosConfig } from "../core/config.js";
 import { resolvePathsOrThrow } from "../core/paths.js";
+import type { Style } from "./schema.js";
+import type { Corpus } from "./load.js";
 
 export interface AppStyle {
   css: string;
   /** What was read, so the CLI can say so rather than silently shipping nothing. */
   from: string[];
+  /**
+   * The same list with a digest of each file as it was read.
+   *
+   * ⛔ OF THE SOURCE BYTES, NOT OF THE RESULT. A digest taken after font inlining changes whenever
+   * a face does, which is correct for "has anything moved" and useless for saying WHICH stylesheet
+   * somebody edited — and the second is what a person needs in order to decide whether to re-take
+   * it.
+   */
+  sources: Array<{ path: string; sha: string; bytes: number }>;
   /** Named in config and not found — a typo here is byte-identical to an unstyled mock. */
   missing: string[];
   mockClass?: string;
@@ -75,11 +87,12 @@ export function appStyleFor(dir: string): AppStyle {
     cfg = readConfig(paths);
     root = path.dirname(path.dirname(paths.configFile));
   } catch {
-    return { css: "", from: [], missing: [], themes: [], inlined: [], unreachable: [] };
+    return { css: "", from: [], sources: [], missing: [], themes: [], inlined: [], unreachable: [] };
   }
   // `stylesheet` is v1's single path; `stylesheets` is the list. Both, in that order.
   const named = [...(cfg.web.stylesheet ? [cfg.web.stylesheet] : []), ...cfg.web.stylesheets];
   const from: string[] = [];
+  const sources: AppStyle["sources"] = [];
   const missing: string[] = [];
   // Shared across every stylesheet, because the budget is about the page rather than about a file.
   const budget: Budget = { spent: 0, inlined: [], unreachable: [], seen: new Map() };
@@ -107,7 +120,9 @@ export function appStyleFor(dir: string): AppStyle {
         continue;
       }
       from.push(hit);
-      css += `\n/* ${hit} */\n${inlineAssets(dropImports(fs.readFileSync(file, "utf-8")), path.dirname(file), budget)}`;
+      const raw = fs.readFileSync(file, "utf-8");
+      sources.push({ path: hit, sha: createHash("sha256").update(raw).digest("hex").slice(0, 16), bytes: raw.length });
+      css += `\n/* ${hit} */\n${inlineAssets(dropImports(raw), path.dirname(file), budget)}`;
     }
   }
   const trimmed = css.trim();
@@ -115,6 +130,7 @@ export function appStyleFor(dir: string): AppStyle {
   return {
     css: trimmed,
     from,
+    sources,
     missing,
     mockClass: cfg.web.mock_container_class,
     theme: scheme.theme,
@@ -402,4 +418,82 @@ function rewriteSelector(sel: string, mockClass: string): string {
    * was wrapped in. A rule reaching for one means the other here.
    */
   return scoped.replace(/(^|[\s>+~(,])body\b(?![-\w])/g, `$1.${mockClass}`);
+}
+
+/**
+ * ⛔ TAKE THE SNAPSHOT, SO THE CORPUS CARRIES WHAT THE PRODUCT LOOKS LIKE.
+ *
+ * Peter: *"we've now moved to a docker hosted/neon database backed copy. let's update the design
+ * there."*
+ *
+ * Everything above this line reads a filesystem, and a hosted instance has none worth reading: it
+ * materializes a project into a temp directory with no repository above it, so `appStyleFor` found
+ * no config, returned nothing, and every hosted drawing rendered in browser defaults — forty-four
+ * mocks in the application's class names and not one byte of its CSS. Measured on a real store
+ * before any of this was written, because "it probably does not work there" is not a finding.
+ *
+ * So this runs ONCE, where the repository is — and what it produces is a document like any other.
+ * `web.stylesheets` says where the bytes are TAKEN FROM; `style.yaml` is where they LIVE. The same
+ * relationship a drawing has to the component it was drawn from, and generated for the same reason:
+ * a corpus that needed a checkout beside it to be looked at could only ever be reviewed by somebody
+ * holding the repository.
+ */
+export function snapshotStyle(dir: string, today: string): Style {
+  const app = appStyleFor(dir);
+  return {
+    theme: app.theme,
+    mock_class: app.mockClass,
+    sources: app.sources,
+    taken_at: today,
+    faces: app.inlined,
+    unreachable: app.unreachable,
+    offers: app.themes,
+    css: app.css,
+  };
+}
+
+/**
+ * Has the design system moved since the snapshot was taken?
+ *
+ * ⛔ IT ANSWERS "I CANNOT TELL" AND THAT IS A THIRD ANSWER, NOT A NO. A hosted instance has no
+ * repository to compare against, and reporting "in sync" there would be this tool asserting
+ * something it did not check — on precisely the surface where nobody can go and look.
+ */
+export function styleDrift(
+  dir: string,
+  style: Style | undefined
+): { known: false } | { known: true; moved: string[]; gone: string[]; added: string[] } {
+  if (!style) return { known: false };
+  let root: string;
+  try {
+    const paths = resolvePathsOrThrow(dir);
+    root = path.dirname(path.dirname(paths.configFile));
+  } catch {
+    return { known: false };
+  }
+  const now = appStyleFor(dir);
+  if (!now.sources.length && !now.from.length) return { known: false };
+  const was = new Map(style.sources.map((s) => [s.path, s.sha]));
+  const is = new Map(now.sources.map((s) => [s.path, s.sha]));
+  void root;
+  return {
+    known: true,
+    moved: [...is].filter(([p, sha]) => was.has(p) && was.get(p) !== sha).map(([p]) => p),
+    gone: [...was.keys()].filter((p) => !is.has(p)),
+    added: [...is.keys()].filter((p) => !was.has(p)),
+  };
+}
+
+/**
+ * What a page needs, from the corpus rather than from a disk.
+ *
+ * ⛔ ONE SOURCE AT RENDER TIME, FOR BOTH CASES. A renderer that read the corpus where it could and
+ * a filesystem where it could not would be two products that look identical until somebody
+ * publishes one — and the local case is the one with a repository behind it, so it is the case that
+ * would always look fine while the hosted one was wrong.
+ */
+export function styleOf(corpus: Corpus): { appCss?: string; mockClass?: string; theme?: string } {
+  const s = corpus.style;
+  if (!s?.css) return {};
+  return { appCss: s.css, mockClass: s.mock_class, theme: s.theme };
 }

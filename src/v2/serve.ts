@@ -15,7 +15,7 @@ import { loadCorpus, corpusFiles } from "./load.js";
 import { renderScopePage, standalone } from "./page.js";
 import { perform, preview, payloadFrom, VIA, type Act, type Via } from "./acts.js";
 import { fileNote } from "./notes.js";
-import { appStyleFor } from "./appcss.js";
+import { styleOf } from "./appcss.js";
 import { watchLog, lineFor } from "./log.js";
 import { inbox, DEFAULT_LEASE_MS } from "./inbox.js";
 import { working } from "./presence.js";
@@ -417,14 +417,18 @@ export async function v2Route(req: http.IncomingMessage, res: http.ServerRespons
      */
     const target = scope ?? corpus.scopes.find((s) => !s.scope.in)?.scope.id;
     if (!target) return html(res, standalone("Nothing here", `<main><h1>No corpus at <code>${dir}</code></h1></main>`), 404), true;
-    // The app's own CSS, so a mock written in its class names looks like the application.
-    const app = appStyleFor(dir);
+    /**
+     * ⛔ THE APPLICATION'S OWN CSS, FROM THE CORPUS — NOT FROM A DISK BESIDE IT.
+     *
+     * This read `appStyleFor(dir)`, which resolves a repository above the corpus. An instance
+     * materializes a project into a temp directory and there is no repository above that, so every
+     * hosted drawing rendered unstyled while this exact line kept working locally. One source for
+     * both, or the case with a checkout behind it is the one that always looks fine.
+     */
     const page = renderScopePage(corpus, target, {
       interactive: true,
       records: "http",
-      appCss: app.css || undefined,
-      mockClass: app.mockClass,
-      theme: app.theme,
+      ...styleOf(corpus),
       linkBase: "/v2",
       by: whoIsPressing(req, opts.by),
       recordsTo: `written into ${dir}`,

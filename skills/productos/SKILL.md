@@ -50,10 +50,7 @@ You are the **orchestrator**, and you are the session — not a subagent. That i
 
 **⛔ You keep these yourself:**
 
-- running `productos v2 generate`, because a screen a component renders is DRAWN and never designed —
-  ⛔ it sweeps **both** corpus layouts from one aim, so a repo holding an Exchange corpus and a
-  products corpus gets both regenerated; a drawing that is stale is a drawing nobody swept, and the
-  way to find out is to run it and read what it says it could not resolve
+- running `productos v2 generate`, because a screen a component renders is DRAWN and never designed — it sweeps BOTH corpus layouts and copies the design libraries in first, so a drawing looks like the product wherever the corpus is read rather than only beside a checkout
 - running `productos v2 check` before anybody is asked to look
 - putting the survey in front of a person before thirty scopers start against a partition that is wrong
 - every act of judgement — nothing here is validated by having been written
@@ -323,6 +320,29 @@ A screen is drawn in the application's real class names, so it needs the applica
 it is a drawing of some other product. Four lines of `web:` in `productos/config.yaml` decide that,
 and every one of them fails by **looking fine** — the screen still renders, laid out and legible and
 reviewable, in whatever the fallbacks are.
+
+⛔ **The corpus CARRIES the stylesheets; it does not reference them.**
+
+```bash
+productos v2 style --into <corpus>     # copy the design libraries in — where the repository is
+productos v2 style --check --into <corpus>   # has the design system moved since?
+```
+
+`web.stylesheets` says where the bytes are **taken from**; `style.yaml` is where they **live**. Same
+relationship a drawing has to the component it was drawn from, and generated for the same reason: a
+corpus read anywhere but beside a checkout has no stylesheets to read. An instance materializes a
+project into a temp directory with no repository above it — that is not an edge case, it is the
+hosted product, and before this it rendered every drawing in browser defaults while the identical
+line of code kept working locally.
+
+So the snapshot is taken **where the repository is**, by `v2 style` or by `v2 generate`, which runs
+it first. Everything downstream — a hosted instance, a packet, a published page — reads the corpus.
+
+⛔ **A copy with nothing watching it is a copy that goes quietly wrong.** The snapshot carries a
+digest of every file it read, so `--check` and `v2 check` can say the design system has moved; take
+it again when they do. Where there is no repository to compare against they say **so**, rather than
+reporting it current — asserting something nothing checked, on the one surface nobody can go and
+look at, is the failure this whole section exists to stop.
 
 ```yaml
 web:

@@ -1079,6 +1079,12 @@ export const COMMANDS: Verb[] = [
 
   // generating. ⛔ If it can be generated, generate it — these are why hand-authoring is a defect.
   { name: "v2 generate", does: "Regenerate everything generable: screens, their states, and the graph", owns: "generate", who: "claude", track: "exchange" },
+  /**
+   * ⛔ THE ONE GENERATOR THAT NEEDS THE REPOSITORY, WHICH IS WHY IT IS ITS OWN VERB. Every other
+   * step reads the corpus; this reads the application's design libraries and copies them in, so a
+   * drawing looks like the product on an instance that has no checkout anywhere near it.
+   */
+  { name: "v2 style", does: "Copy the application's design libraries into the corpus, and say when they have moved since", owns: "generate", who: "claude", track: "exchange" },
   { name: "v2 draw", does: "Generate one screen from the codebase", owns: "generate", who: "claude", track: "exchange" },
   { name: "v2 propose", does: "Generate a screen from a view's own parts, where no code renders it", owns: "generate", who: "claude", track: "exchange" },
   { name: "v2 connect", does: "Work out what each control leads to, from what the corpus says", owns: "derive", who: "claude", track: "exchange" },
@@ -1278,7 +1284,7 @@ export const SHIMS: Shim[] = [
       { role: "hand-authored", why: "whether anything was typed that a generator should have produced — on a run this large, nobody would notice" },
     ],
     keeps: [
-      "running `productos v2 generate`, because a screen a component renders is DRAWN and never designed",
+      "running `productos v2 generate`, because a screen a component renders is DRAWN and never designed — it sweeps BOTH corpus layouts and copies the design libraries in first, so a drawing looks like the product wherever the corpus is read rather than only beside a checkout",
       "running `productos v2 check` before anybody is asked to look",
       "putting the survey in front of a person before thirty scopers start against a partition that is wrong",
       "every act of judgement — nothing here is validated by having been written",

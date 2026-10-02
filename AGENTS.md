@@ -148,7 +148,7 @@ Turn a whole codebase into a first corpus.
 - `hand-authored` *(quality · judges, writes nothing)* — whether anything was typed that a generator should have produced — on a run this large, nobody would notice
 
 **⛔ Keeps, because it may not be delegated:**
-- running `productos v2 generate`, because a screen a component renders is DRAWN and never designed
+- running `productos v2 generate`, because a screen a component renders is DRAWN and never designed — it sweeps BOTH corpus layouts and copies the design libraries in first, so a drawing looks like the product wherever the corpus is read rather than only beside a checkout
 - running `productos v2 check` before anybody is asked to look
 - putting the survey in front of a person before thirty scopers start against a partition that is wrong
 - every act of judgement — nothing here is validated by having been written
@@ -691,7 +691,7 @@ Held three ways rather than one: no author declares `ask-the-human`, so no host 
 
 What `--help` cannot tell you, and why this exists: **who** types it, and **which track** it belongs to. *Never hand a human a flag* is a rule the skills state and nothing enforced — a command marked `claude` appearing in instructions addressed to a person is now a visible contradiction. And two parallel models have been running for months with nothing saying which commands belong to which.
 
-### Current — 44 commands
+### Current — 45 commands
 
 | command | does | layer | typed by |
 |---|---|---|---|
@@ -726,6 +726,7 @@ What `--help` cannot tell you, and why this exists: **who** types it, and **whic
 | `productos v2 defer` | Park a question somebody has read and is not answering yet | derive | the model |
 | `productos v2 decide` | Work one scope's open questions, with what guessing wrong would cost | surface | the model |
 | `productos v2 generate` | Regenerate everything generable: screens, their states, and the graph | generate | the model |
+| `productos v2 style` | Copy the application's design libraries into the corpus, and say when they have moved since | generate | the model |
 | `productos v2 draw` | Generate one screen from the codebase | generate | the model |
 | `productos v2 propose` | Generate a screen from a view's own parts, where no code renders it | generate | the model |
 | `productos v2 connect` | Work out what each control leads to, from what the corpus says | derive | the model |

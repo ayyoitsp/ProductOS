@@ -29,7 +29,7 @@ import { stampFor, staleReason, coveredBy } from "./stamp.js";
 import { resolveRef } from "./ref.js";
 import { descendants } from "./settle.js";
 import { ruleHomes, reachOf } from "./grid.js";
-import { appStyleFor } from "./appcss.js";
+import { appStyleFor, styleDrift } from "./appcss.js";
 import { readLog } from "./log.js";
 import { landingsFor, finishesFor } from "./connects.js";
 import fs from "node:fs";
@@ -164,9 +164,94 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
    * caller to pass that in is how one of them forgets and the finding fires on a corpus with no app.
    */
   const app = appStyleFor(root);
-  const opts = { hasAppStyles: app.from.length > 0 };
+  const opts = { hasAppStyles: Boolean(corpus.style?.css) || app.from.length > 0 };
   const findings: Finding[] = [];
   const add = (f: Finding) => findings.push(f);
+
+  for (const b of corpus.broken) {
+    add({ severity: "refuse", kind: "will-not-parse", where: b.file, what: b.why });
+  }
+  /**
+   * ⛔ NOTHING DERIVED IS REPORTED WHILE A FILE WILL NOT PARSE, because the gate turns into a
+   * vandal.
+   *
+   * One stray `retention: two years` on a slot produced four refusals — and three of them
+   * were `rule-governs-nothing / this is a principle that carries no weight — widen the
+   * selector, **or delete it**`, aimed at *"Only a parent may change what a kid has"*. The
+   * rule governed nothing because the file declaring the exchanges it governs had not loaded.
+   *
+   * Fixing the one character took it to zero refusals. An author — or an LLM told to iterate
+   * until the gate is green — deletes the authorization rule from a children's money product
+   * and the gate thanks them.
+   */
+  if (corpus.broken.length) {
+    findings.push({
+      severity: "refuse",
+      kind: "cannot-judge-this-corpus",
+      where: corpus.broken.map((b) => b.file.split("/").pop()).join(", "),
+      what: `${corpus.broken.length} file${corpus.broken.length === 1 ? "" : "s"} would not load, so nothing else here can be judged — every rule, reference and shape finding would be computed against a corpus that is missing part of itself`,
+      fix: "fix the parse errors above first. Anything this would have reported may be an artefact of the missing file, and acting on it can delete truth that was never wrong",
+    });
+    return { corpus, findings };
+  }
+
+  /**
+   * ⛔ DOES THIS CORPUS CARRY WHAT THE PRODUCT LOOKS LIKE, AND IS IT STILL TRUE?
+   *
+   * Peter: *"we should copy the appropriate css files in — were we referencing the repo before? we
+   * should have something that keeps the design libraries in sync."* We were referencing it, so a
+   * corpus read anywhere but beside a checkout rendered every drawing unstyled. Copied in, the new
+   * failure is the opposite one — a copy that is no longer what the design system says — and a copy
+   * with nothing watching it looks identical the day it was taken and the year after.
+   */
+  /**
+   * ⛔ ONLY WHERE THERE IS SOMETHING TO STYLE. A corpus whose screens are ASCII, or which has no
+   * screens yet, needs no stylesheet and is not missing one — and a note that fires on every corpus
+   * in existence is a note people learn to scroll past, which is how the real one gets scrolled
+   * past with it. `sketch_html` is the exact condition: markup in an application's own class names,
+   * which is worth nothing without the values behind them.
+   */
+  const drawnInAppClasses = corpus.scopes.some((s) => s.scope.views.some((v) => v.sketch_html));
+  /**
+   * ⛔ AND ONLY WHERE SOMEBODY COULD ACT ON IT. "Every finding says what to do. A finding you cannot
+   * act on is a complaint." The snapshot can only be taken where the repository is, so telling a
+   * reader on an instance that their corpus carries no style is telling them about work they cannot
+   * do — while the one person who could has already seen it, locally, before importing.
+   */
+  const couldCarry = app.from.length > 0 || app.missing.length > 0;
+  if (!corpus.style?.css) {
+    if (drawnInAppClasses && couldCarry)
+      add({
+        severity: "note",
+        kind: "no-style",
+        where: "style.yaml",
+        what: "This corpus does not carry the application's stylesheets, and its screens are drawn in that application's class names — so every one of them renders in browser defaults.",
+        fix: "Run `productos v2 style --into <corpus>` where the repository is. Carried in, the drawings look like the product anywhere the corpus is read; referenced, they only look right beside a checkout.",
+      });
+  } else {
+    const drift = styleDrift(root, corpus.style);
+    const moved = drift.known ? [...drift.moved, ...drift.gone, ...drift.added] : [];
+    if (moved.length)
+      add({
+        severity: "note",
+        kind: "style-has-moved",
+        where: "style.yaml",
+        what: `The design system has changed since this was taken${
+          corpus.style.taken_at ? ` on ${corpus.style.taken_at}` : ""
+        } — ${moved.slice(0, 3).join(", ")}${moved.length > 3 ? `, and ${moved.length - 3} more` : ""}.`,
+        fix: "Take it again. Every drawing is currently of a product that has moved on, and nothing about the page says so.",
+      });
+    for (const u of corpus.style.unreachable.slice(0, 1))
+      add({
+        severity: "note",
+        kind: "mock-face-unreachable",
+        where: "style.yaml",
+        what: `${corpus.style.unreachable.length} thing${
+          corpus.style.unreachable.length === 1 ? "" : "s"
+        } the stylesheets load could not be carried — ${u}${corpus.style.unreachable.length > 1 ? ", …" : ""}.`,
+        fix: "A face that cannot travel falls back silently, so the type on every drawing is some other type. Name the built stylesheet rather than the source one where its URLs are relative to a build directory.",
+      });
+  }
 
   /**
    * ⛔ A MOCK THAT CANNOT WEAR THE PRODUCT'S STYLE FAILS BY LOOKING FINE.
@@ -196,19 +281,11 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
       fix: "Name a scheme the stylesheets actually define. A scheme that is not there applies nothing, and every drawing renders in the fallback colours.",
     });
   }
-  if (app.unreachable.length) {
-    add({
-      severity: "note",
-      kind: "mock-face-unreachable",
-      where: "productos/config.yaml",
-      what: `${app.unreachable.length} thing${
-        app.unreachable.length === 1 ? "" : "s"
-      } the stylesheets load cannot travel with a drawing — ${app.unreachable.slice(0, 3).join(", ")}${
-        app.unreachable.length > 3 ? ", …" : ""
-      }.`,
-      fix: "A face that cannot be carried falls back silently, so the type on every drawing is some other type. Name the built stylesheet rather than the source one where its URLs are relative to a build directory, and a root-relative URL has no document root here to resolve against.",
-    });
-  }
+  /**
+   * ⛔ THE FACES ARE REPORTED OFF THE SNAPSHOT, NOT OFF THE DISK — see `no-style` above. A corpus
+   * read on an instance has no disk to ask, and a finding that can only fire where somebody has a
+   * checkout is a finding that never fires on the surface it matters most on.
+   */
   if (app.themeFrom && !app.themeFrom.found) {
     add({
       severity: "note",
@@ -227,32 +304,6 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
     });
   }
 
-  for (const b of corpus.broken) {
-    add({ severity: "refuse", kind: "will-not-parse", where: b.file, what: b.why });
-  }
-  /**
-   * ⛔ NOTHING DERIVED IS REPORTED WHILE A FILE WILL NOT PARSE, because the gate turns into a
-   * vandal.
-   *
-   * One stray `retention: two years` on a slot produced four refusals — and three of them
-   * were `rule-governs-nothing / this is a principle that carries no weight — widen the
-   * selector, **or delete it**`, aimed at *"Only a parent may change what a kid has"*. The
-   * rule governed nothing because the file declaring the exchanges it governs had not loaded.
-   *
-   * Fixing the one character took it to zero refusals. An author — or an LLM told to iterate
-   * until the gate is green — deletes the authorization rule from a children's money product
-   * and the gate thanks them.
-   */
-  if (corpus.broken.length) {
-    findings.push({
-      severity: "refuse",
-      kind: "cannot-judge-this-corpus",
-      where: corpus.broken.map((b) => b.file.split("/").pop()).join(", "),
-      what: `${corpus.broken.length} file${corpus.broken.length === 1 ? "" : "s"} would not load, so nothing else here can be judged — every rule, reference and shape finding would be computed against a corpus that is missing part of itself`,
-      fix: "fix the parse errors above first. Anything this would have reported may be an artefact of the missing file, and acting on it can delete truth that was never wrong",
-    });
-    return { corpus, findings };
-  }
 
   const { inherited, constrained, contested, displaced, reach, awaiting } = resolveRules(corpus);
 

@@ -20,7 +20,8 @@
  */
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { scopeToShadow, themesIn, appStyleFor, resolveTheme } from "../dist/v2/appcss.js";
+import { scopeToShadow, themesIn, appStyleFor, resolveTheme, snapshotStyle, styleOf, styleDrift } from "../dist/v2/appcss.js";
+import YAML from "yaml";
 import { renderScopePage } from "../dist/v2/page.js";
 import { renderShell } from "../dist/ui/renderer.js";
 import { loadCorpus } from "../dist/v2/load.js";
@@ -274,6 +275,103 @@ test("a sweep finds the screens in both corpus layouts, and writes each into its
   assert.match(fs.readFileSync(v1, "utf-8"), /<b>one<\/b>/, "the products tree got the other tree's drawing");
   assert.match(fs.readFileSync(v2, "utf-8"), /<b>two<\/b>/, "the Exchange tree got the other tree's drawing");
   fs.rmSync(root, { recursive: true, force: true });
+});
+
+/** A repo with a corpus, a design system and a built stylesheet — enough to snapshot from. */
+function project() {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "productos-style-"));
+  const put = (rel, body) => {
+    fs.mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
+    fs.writeFileSync(path.join(root, rel), body);
+  };
+  put("build/media/face.woff2", Buffer.from([0x77, 0x4f, 0x46, 0x32]).toString("binary"));
+  fs.writeFileSync(path.join(root, "build/media/face.woff2"), Buffer.from([0x77, 0x4f, 0x46, 0x32]));
+  put("ds/tokens.css", ":root { --primary: blue }");
+  put(
+    "build/app.css",
+    ["html[data-theme='brand'] { --primary: camel }", "@font-face { font-family: B; src: url(media/face.woff2) }"].join("\n")
+  );
+  put(
+    "productos/config.yaml",
+    ["version: 0.0.1", "web:", "  theme: brand", "  stylesheets:", "    - ds/tokens.css", "    - build/app.css", ""].join("\n")
+  );
+  fs.mkdirSync(path.join(root, "v2", "truth"), { recursive: true });
+  put(
+    "v2/truth/thing.md",
+    ["---", "id: thing", "title: Thing", "views:", "  - id: screen", "    title: Screen", "---", ""].join("\n")
+  );
+  return { root, corpus: path.join(root, "v2"), put };
+}
+
+test("the corpus carries the design libraries, rather than referencing a repo", () => {
+  /**
+   * ⛔ Peter: *"we should copy the appropriate css files in - were we referencing the repo before?"*
+   * We were, at render time, which is why a hosted instance rendered forty-four drawings and not one
+   * byte of the application's CSS: it materializes a project into a temp directory and there is no
+   * repository above it. Measured on a real store before this was written.
+   */
+  const { root, corpus } = project();
+  const style = snapshotStyle(root, "2026-10-02");
+  assert.equal(style.theme, "brand");
+  assert.deepEqual(style.sources.map((s) => s.path), ["ds/tokens.css", "build/app.css"]);
+  assert.ok(style.sources.every((s) => s.sha.length === 16 && s.bytes > 0), "a source carries no digest to catch it going stale");
+  assert.match(style.css, /--primary: blue/);
+  // The face travels, because the file it names will not exist wherever this is read.
+  assert.match(style.css, /url\(data:font\/woff2;base64,/);
+  assert.deepEqual(style.faces, ["face.woff2"]);
+  // ⛔ NOT scoped here: scoping belongs to whichever surface renders it, and baking it in would make
+  //    the snapshot right for one renderer and silently wrong for the next.
+  assert.match(style.css, /html\[data-theme='brand'\]/);
+
+  // And a page built from the corpus alone — no repository consulted — wears it.
+  fs.writeFileSync(path.join(corpus, "style.yaml"), YAML.stringify({ style }));
+  const loaded = loadCorpus(corpus);
+  assert.deepEqual(loaded.broken, [], "style.yaml did not parse");
+  const html = renderScopePage(loaded, "thing", { linkBase: "/v2", ...styleOf(loaded) });
+  assert.match(html, /<template id="app-css" data-theme="brand">/, "the page does not carry the corpus's style");
+  assert.match(html, /:host\(\[data-theme='brand'\]\)/, "the theme was carried in a form that cannot match");
+  assert.match(html, /url\(data:font\/woff2/, "the faces did not reach the page");
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test("a snapshot can be caught having gone stale, and says so only where it can tell", () => {
+  /**
+   * ⛔ Peter: *"we should have something that keeps the design libraries in sync."* A copy with no
+   * fingerprint of its source cannot be kept in sync — it looks identical the day it is taken and
+   * the year after, and the only symptom of a stale one is that every drawing is of a product that
+   * has moved on, rendered just as confidently as a current one.
+   */
+  const { root, corpus, put } = project();
+  const style = snapshotStyle(root, "2026-10-02");
+  fs.writeFileSync(path.join(corpus, "style.yaml"), YAML.stringify({ style }));
+
+  let drift = styleDrift(corpus, style);
+  assert.equal(drift.known, true);
+  assert.deepEqual([drift.moved, drift.gone, drift.added], [[], [], []], "a fresh snapshot reported as stale");
+
+  put("ds/tokens.css", ":root { --primary: camel }");
+  drift = styleDrift(corpus, style);
+  assert.deepEqual(drift.moved, ["ds/tokens.css"], "an edited stylesheet was not noticed");
+
+  put("ds/extra.css", ".x { color: red }");
+  fs.writeFileSync(
+    path.join(root, "productos/config.yaml"),
+    ["version: 0.0.1", "web:", "  theme: brand", "  stylesheets:", "    - ds/tokens.css", "    - ds/extra.css", ""].join("\n")
+  );
+  drift = styleDrift(corpus, style);
+  assert.deepEqual(drift.added, ["ds/extra.css"], "a stylesheet somebody added was not noticed");
+  assert.deepEqual(drift.gone, ["build/app.css"], "a stylesheet somebody dropped was not noticed");
+
+  /**
+   * ⛔ "I CANNOT TELL" IS A THIRD ANSWER, AND IT IS THE HOSTED ONE. An instance has no repository to
+   * compare against; reporting in-sync there would assert something nothing checked, on exactly the
+   * surface where nobody can go and look.
+   */
+  const alone = fs.mkdtempSync(path.join(os.tmpdir(), "productos-nowhere-"));
+  assert.deepEqual(styleDrift(alone, style), { known: false }, "a corpus with no repository claimed to know");
+  assert.deepEqual(styleDrift(corpus, undefined), { known: false }, "a corpus with no snapshot claimed to know");
+  fs.rmSync(root, { recursive: true, force: true });
+  fs.rmSync(alone, { recursive: true, force: true });
 });
 
 test("the list of stylesheets is what gets read, not the single one", () => {

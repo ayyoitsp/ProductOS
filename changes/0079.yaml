@@ -1,0 +1,14 @@
+id: "0079"
+said: we should copy the appropriate css files in - were we referencing the repo before? we should have something that keeps the design libraries in sync
+at: 2026-10-02
+kind: concept
+reaches:
+  model: Style
+  generate: snapshotStyle
+  surface: styleOf
+  check: style-has-moved
+  instruct: The corpus CARRIES the stylesheets
+  pin: the corpus carries the design libraries, rather than referencing a repo
+waived:
+  derive: "`styleDrift` is a real derivation and it is the generator's own — the question \"is this output still true of its source\" is what every generator has to answer before deciding to run, and it lives beside `snapshotStyle` in appcss.ts, which the map files under generate. The derive layer is derivation over PRODUCT TRUTH: what a scope inherits, what a behaviour is gated by, what state a screen is in. Nothing here touches any of that — a corpus with a stale style says exactly what a corpus with a fresh one says, and only looks different. The argument against this waiver is that drift is the first derived fact in the model whose subject is the corpus rather than the product, and if a second one appears the derive layer should claim both rather than this reason being reused."
+closed: 2026-10-02

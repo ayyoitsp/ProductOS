@@ -15,7 +15,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { parseFrontmatter } from "../core/frontmatter.js";
 import YAML from "yaml";
-import { Scope, Rule, Reading, Verdict, Charter, type SlotName , saysText, type Says, Note, Steer, Access} from "./schema.js";
+import { Scope, Rule, Reading, Verdict, Charter, type SlotName , saysText, type Says, Note, Steer, Access, Style} from "./schema.js";
 
 export interface V2Paths {
   root: string;
@@ -63,6 +63,15 @@ export interface Corpus {
    * `access:` in the corpus config, which is what says whether that emptiness is a hole.
    */
   access: Access[];
+  /**
+   * What this product looks like — the application's own stylesheet, carried by the corpus.
+   *
+   * ⛔ ABSENT IS NOT EMPTY. A corpus with no snapshot renders its drawings unstyled, and `check`
+   * says so; a corpus whose snapshot is empty was taken against a product that names no
+   * stylesheets. Only one of those is a gap, and a `Style` with `css: ""` cannot be told from a
+   * missing one if this is widened to a default.
+   */
+  style?: Style;
   rules: Array<{ rule: Rule; body: string; file: string }>;
   readings: Reading[];
   verdicts: Verdict[];
@@ -293,6 +302,20 @@ export function loadCorpus(root: string, store: Store = diskStore): Corpus {
       broken.push({ file, why: why(e) });
     }
   }
+  /**
+   * ⛔ ROOT-LEVEL, LIKE `access.yaml`, AND FOR THE SAME REASON — it is one fact about the whole
+   * product rather than one per scope, and a root file is what `corpusFiles` enumerates, so it
+   * reaches the store, a packet and an export with nothing else to keep in step.
+   */
+  let style: Style | undefined;
+  for (const file of readDir(paths.root, [".yaml", ".yml"]).filter((f) => /style\.ya?ml$/.test(f))) {
+    try {
+      const raw = YAML.parse(readFile(file)) ?? {};
+      if (raw.style) style = Style.parse(raw.style);
+    } catch (e) {
+      broken.push({ file, why: why(e) });
+    }
+  }
   const verdicts: Verdict[] = [];
   for (const file of readDir(paths.verdicts, [".yaml", ".yml"])) {
     try {
@@ -302,7 +325,7 @@ export function loadCorpus(root: string, store: Store = diskStore): Corpus {
       broken.push({ file, why: why(e) });
     }
   }
-  return { paths, scopes, rules, charter, notes, readings, verdicts, steers, access, broken };
+  return { paths, scopes, rules, charter, notes, readings, verdicts, steers, access, style, broken };
 }
 
 // ---------------------------------------------------------------------------
