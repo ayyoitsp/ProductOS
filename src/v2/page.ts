@@ -5337,8 +5337,26 @@ const PROTO_FRAME = `<script>
      */
     const main = document.querySelector("main");
     const mp = main ? getComputedStyle(main) : null;
+    /**
+     * ⛔ ONLY WHAT IS ABOVE THE CONTENT, AND A LEFT-DOCKED NAV IS BESIDE IT.
+     *
+     * Peter, three rounds in and after everything else I had checked passed: *"uhm, still blank for
+     * me.... the bottom half."* He has the nav docked left — his choice, remembered in
+     * localStorage, which is why nothing I changed reached him.
+     *
+     * Docked left, the top frame becomes a full-height sidebar: 900px on a 900px window. This measured its
+     * HEIGHT and subtracted it, so the chrome came out at 954px, the framed view collapsed to its
+     * 320px minimum, and the bottom pane was exactly 0px tall. Blank, on every feature, no matter
+     * how short the prototype.
+     *
+     * ⛔ Measuring "everything in the way" by measuring every element's height assumed they are all
+     * stacked. One of them is not, and the one that is not is the one a reader can move — so the
+     * page was correct only in the placement I happened to be using, which is the same mistake as
+     * driving only the path I happened to take.
+     */
+    const stacked = top && document.documentElement.dataset.nav !== "left";
     const h =
-      (top ? top.offsetHeight : 0) +
+      (stacked ? top.offsetHeight : 0) +
       (note ? note.offsetHeight : 0) +
       (bars && !bars.hidden ? bars.offsetHeight : 0) +
       (mp ? parseFloat(mp.paddingTop) + parseFloat(mp.paddingBottom) : 0) +
@@ -5349,6 +5367,8 @@ const PROTO_FRAME = `<script>
   window.addEventListener("resize", chrome);
   /** ⛔ And after every view switch: the padding on main depends on which view is showing. */
   window.addEventListener("productos:view", chrome);
+  /** ⛔ The placement is a button, and moving the nav changes whether it is above the content at all. */
+  window.addEventListener("productos:nav", chrome);
   /** ⛔ The bars appear and disappear on their own; re-measure when the DOM under them changes. */
   new MutationObserver(chrome).observe(document.body, { childList: true, subtree: false });
   /** And after the composer has had a chance to grow, which it does on its first keystroke. */
