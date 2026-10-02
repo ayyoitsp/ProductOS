@@ -1571,7 +1571,7 @@ function behRow(
       ? `<span class="chip">not confirmed</span>`
       : `<span class="chip warn" title="${esc(st.by)} agreed on ${esc(st.at)}, and it changed after">changed since</span>`;
   return `<tr class="beh" id="beh-${slug(r.sref)}" data-beh="${esc(r.sref)}" data-ref="${esc(r.sref)}" data-label="${esc(r.label)}">
-      <td class="row-says">${r.says}${
+      <td class="row-says"><span class="says-text">${r.says}</span>${
         /**
          * ⛔ THE CHIPS RUN ON FROM THE SENTENCE. Peter: *"chips inline with the text at the end of
          * the sentence."*
@@ -3893,9 +3893,18 @@ document.addEventListener("click", (ev) => {
 });
 
 document.addEventListener("dblclick", (ev) => {
-  const says = ev.target.closest(".row-says");
+  /**
+   * ⛔ THE SENTENCE'S OWN ELEMENT, NOT THE CELL. The cell also holds the chips, so replacing its
+   * contents with a textarea took "confirmed" and the type with it.
+   *
+   * ⛔ AND IT LOOKS FOR A TABLE ROW. This handler was written when a behaviour was an article and
+   * survived two restructurings into a table unchanged — so double-click found the text, failed to
+   * find its row, and returned silently. It was the only thing in a 28-step drive of the page that
+   * did not work, and nothing had noticed because every test asserted the handler was PRESENT.
+   */
+  const says = ev.target.closest(".says-text");
   if (!says || says.querySelector("textarea")) return;
-  const row = says.closest("article.beh");
+  const row = says.closest("tr.beh, article.beh");
   if (!row || !row.dataset.ref) return;
   const was = says.textContent.trim();
   const box = document.createElement("textarea");
@@ -3904,14 +3913,34 @@ document.addEventListener("dblclick", (ev) => {
   box.value = was;
   says.textContent = "";
   says.appendChild(box);
+  /**
+   * ⛔ FOCUSED ON THE NEXT FRAME. Focusing immediately after appending left the focus on the body
+   * — measured, not guessed — so the box's own keydown never fired and Escape did nothing.
+   * The element has to be laid out before it can take focus.
+   */
   box.focus();
-  /** ⛔ Escape puts the sentence back. An edit box with no way out traps a reader in a field. */
+  requestAnimationFrame(() => box.focus());
+  /**
+   * ⛔ ESCAPE PUTS THE SENTENCE BACK, AND IT IS HANDLED ON THE DOCUMENT AS WELL AS THE BOX.
+   *
+   * An edit box with no way out traps a reader in a field. Relying on the box's own keydown relied
+   * on the box having focus, and it did not — so the only escape was reloading the page, which
+   * loses everything else. ⛔ Listening in both places costs one line and removes the dependency on
+   * where the browser decided to put the caret.
+   */
+  const cancel = () => {
+    says.textContent = was;
+    document.removeEventListener("keydown", onEsc, true);
+  };
+  const onEsc = (e) => { if (e.key === "Escape" && says.contains(box)) { e.preventDefault(); cancel(); } };
+  document.addEventListener("keydown", onEsc, true);
   box.onkeydown = (e) => {
-    if (e.key === "Escape") { says.textContent = was; return; }
+    if (e.key === "Escape") { e.preventDefault(); cancel(); return; }
     e.stopPropagation();
   };
   /** The act itself is the existing one — same floor, same record, same via. */
   box.onblur = () => {
+    document.removeEventListener("keydown", onEsc, true);
     const now = box.value.trim();
     if (!now || now === was) { says.textContent = was; return; }
     says.textContent = was;
@@ -5038,6 +5067,16 @@ const VIEW_SWITCH = `<script>
     const shown = views.find((v) => v.dataset.view === name);
     if (shown && shown.classList.contains("framed")) document.documentElement.dataset.framed = "1";
     else delete document.documentElement.dataset.framed;
+    /**
+     * ⛔ ANNOUNCED, BECAUSE THE MEASUREMENT HAPPENS IN ANOTHER SCRIPT AND HAPPENS FIRST.
+     *
+     * The frame's height is the viewport minus everything in the way, and the padding on main is one
+     * of those things — but the padding DEPENDS on whether a framed view is showing, which is
+     * decided here. Measured before this ran, it counted the unframed 136px, so the chrome came out
+     * at 281px and the bottom pane was left 152px tall. The same ordering trap as the resize
+     * listener registered above its own function in this file.
+     */
+    window.dispatchEvent(new Event("productos:view"));
     for (const a of menu) a.classList.toggle("on", a.dataset.goto === name);
     if (trail) {
       const parts = trails[name] || [{ id: name, label: name }];
@@ -5260,15 +5299,26 @@ const PROTO_FRAME = `<script>
     const top = document.querySelector(".topframe");
     const note = document.getElementById("note-bar");
     const bars = document.querySelector(".bottom-bars");
+    /**
+     * ⛔ THE PADDING ON MAIN COUNTS. Leaving it out made the frame taller than the space it had, so
+     * the bottom of the table sat below the viewport with nothing to scroll it into view — the
+     * exact failure a measured offset exists to avoid, reintroduced by measuring all but one of the
+     * things in the way.
+     */
+    const main = document.querySelector("main");
+    const mp = main ? getComputedStyle(main) : null;
     const h =
       (top ? top.offsetHeight : 0) +
       (note ? note.offsetHeight : 0) +
       (bars && !bars.hidden ? bars.offsetHeight : 0) +
-      16;
+      (mp ? parseFloat(mp.paddingTop) + parseFloat(mp.paddingBottom) : 0) +
+      8;
     root.style.setProperty("--chrome-h", h + "px");
   };
   chrome();
   window.addEventListener("resize", chrome);
+  /** ⛔ And after every view switch: the padding on main depends on which view is showing. */
+  window.addEventListener("productos:view", chrome);
   /** ⛔ The bars appear and disappear on their own; re-measure when the DOM under them changes. */
   new MutationObserver(chrome).observe(document.body, { childList: true, subtree: false });
   /** And after the composer has had a chance to grow, which it does on its first keystroke. */
@@ -5511,6 +5561,17 @@ const STYLE = `<style>
    * was for. ⛔ And the composer's clearance goes with it: the frame's own height already subtracts
    * the composer, so keeping the padding would push the bottom of the frame under it.
    */
+  /**
+   * ⛔ THE PAGE PADDING ON MAIN IS THE SPACE ABOVE THE TITLE. Peter: *"there's still space above the
+   * title"* — after I had reported it as zero, because I measured from the top of the VIEW and the
+   * 40px was on the element above it. A 2.5rem top padding is right for a document
+   * and wrong for a frame, where the top of the pane is the top of the content.
+   *
+   * ⛔ The 6rem at the bottom was worse than cosmetic: it is clearance for the fixed composer, which
+   * the frame's own height already subtracts — so the frame ran 96px past the viewport and the last
+   * row of the table was unreachable.
+   */
+  :root[data-framed] main { padding-top: .4rem; padding-bottom: 0; }
   :root[data-framed] body { overflow: hidden; }
   :root[data-framed] body.has-note-bar { padding-bottom: 0; }
   section.view.framed > .below { flex: 1 1 auto; min-height: 0; overflow: auto; }

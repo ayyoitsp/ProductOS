@@ -172,3 +172,39 @@ test("the frame does not waste space above the drawing", () => {
   assert.match(protoOf(many), /<h4>/, `${many} has ${screensIn(many)} screens and none is named`);
   if (one) assert.ok(!/<h4>/.test(protoOf(one)), `${one} has one screen and still repeats its name under the title`);
 });
+
+/**
+ * ⛔ TWO THINGS THAT WORKED IN NO TEST AND WERE FOUND BY DRIVING THE PAGE.
+ *
+ * Peter: *"drive the UX and make sure this works. stop being lazy."* Twenty-nine steps through the
+ * page the way a person uses it — land, read, resize, hide, scroll, switch tabs, press, edit, type,
+ * narrow the window, reload — surfaced two dead features that every existing test called present:
+ *
+ *   — double-click to edit did nothing. The handler looked for `article.beh`, and a behaviour had
+ *     been an article two restructurings ago. It found the text, failed to find its row, returned.
+ *   — Escape did not close the edit box, because focus was still on `body` after appending it, so
+ *     the box's own keydown never fired. The only way out was reloading the page.
+ *
+ * ⛔ Both were asserted by earlier tests as "the handler is in the script", which is true of a
+ * handler that returns on its first line. What is pinned here is the SELECTOR each one depends on,
+ * which is the part a string match can genuinely check.
+ */
+test("editing in place targets the element it is actually in", () => {
+  const html = page();
+  /** ⛔ Its own element, not the cell — the cell also holds the chips, which editing wiped. */
+  assert.match(html, /<span class="says-text">/, "the sentence has no element of its own inside the cell");
+  assert.match(html, /ev\.target\.closest\("\.says-text"\)/, "the edit handler does not target the sentence");
+  assert.match(html, /closest\("tr\.beh, article\.beh"\)/,
+    "the edit handler looks for an element the page no longer renders, so double-click silently does nothing");
+});
+
+test("the edit box can always be escaped, wherever focus went", () => {
+  const html = page();
+  /** ⛔ On the document as well as the box: relying on the box having focus relied on something false. */
+  assert.match(html, /document\.addEventListener\("keydown", onEsc, true\)/,
+    "Escape only works when the box has focus, and after appending it the focus was on body");
+  assert.match(html, /requestAnimationFrame\(\(\) => box\.focus\(\)\)/,
+    "the box is focused before it is laid out, which does nothing");
+  /** ⛔ And the listener is removed, or every edit leaves one behind for the rest of the session. */
+  assert.match(html, /removeEventListener\("keydown", onEsc, true\)/, "the escape listener is never removed");
+});
