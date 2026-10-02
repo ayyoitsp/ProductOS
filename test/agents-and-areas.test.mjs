@@ -56,12 +56,20 @@ test("every framework file the v2 track has is on the map", () => {
    * present everywhere it should be needs a list of everywhere; a file missing from it is a place
    * no agent will look.
    */
+  /**
+   * ⛔ AND `src/v2/store` IS PART OF THE V2 TRACK. It was not walked, so ten files — the whole
+   * hosted instance, its authorization, its migrations and the operator CLI — were on nobody's map
+   * and nothing said so. Found when a change record could not name the surface it had reached:
+   * Peter asked *"don't we need a schema change to support it?"* and the file that answers it,
+   * `store/schema.ts`, was somewhere no reviewer would be sent.
+   */
   const claimed = new Set(AREAS.flatMap((a) => a.files));
-  const missing = fs
-    .readdirSync("src/v2")
-    .filter((f) => f.endsWith(".ts"))
-    .map((f) => `src/v2/${f}`)
-    .filter((f) => !claimed.has(f));
+  const inDir = (dir) =>
+    fs
+      .readdirSync(dir)
+      .filter((f) => f.endsWith(".ts"))
+      .map((f) => `${dir}/${f}`);
+  const missing = [...inDir("src/v2"), ...inDir("src/v2/store")].filter((f) => !claimed.has(f));
   assert.deepEqual(missing, [], `these are part of the framework and on nobody's map:\n  ${missing.join("\n  ")}`);
 });
 

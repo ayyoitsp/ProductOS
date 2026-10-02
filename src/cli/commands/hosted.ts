@@ -28,6 +28,9 @@ import { exportToDisk, importFromDisk, loadFromStore } from "../../v2/store/corp
 import { migrateStore, openStore, rowsOf } from "../../v2/store/server.js";
 import { projects, tokens } from "../../v2/store/schema.js";
 import { eq, sql } from "drizzle-orm";
+import YAML from "yaml";
+import { Style } from "../../v2/schema.js";
+import { snapshotStyle } from "../../v2/appcss.js";
 
 interface Opened {
   db: Db;
@@ -176,9 +179,25 @@ ${pc.dim("⛔ Needs DATABASE_URL, not a token: creating the first credential can
             }
             for (const r of rows) {
               const store = await storeFor(d, { kind: "browser", account: r.owner, reach: [] }).project(r.id);
-              const docs = isRefusal(store) ? 0 : Object.keys(await store.documents()).length;
+              const files = isRefusal(store) ? {} : await store.documents();
+              const docs = Object.keys(files).length;
               console.log(`${pc.bold(r.id)}  ${r.slug}  ${pc.dim(r.name)}`);
               console.log(`  owner ${r.owner} · ${docs} documents`);
+              /**
+               * ⛔ WHETHER THIS PROJECT CAN LOOK LIKE THE PRODUCT, SAID HERE.
+               *
+               * A project with no style serves pages that render every drawing in browser defaults
+               * — and they still render, so the only way to find out was to open one and know what
+               * it was supposed to look like. Peter did exactly that: *"nothing is updated on
+               * localhost:4100?"*. An operator should be able to see which projects are behind
+               * without visiting each of them.
+               */
+              const styled = styleIn(files["style.yaml"]);
+              console.log(
+                styled
+                  ? pc.dim(`  style: ${styled.sources} file(s), taken ${styled.taken}${styled.theme ? `, wearing ${styled.theme}` : ""}`)
+                  : pc.yellow("  style: none — every drawing here renders unstyled (productos hosted style <id> --from <corpus>)"),
+              );
             }
           });
         } catch (e) {
@@ -340,6 +359,59 @@ ${pc.dim("⛔ Needs DATABASE_URL, not a token: creating the first credential can
 
   db(
     hosted
+      /**
+       * ⛔ THE ONE DOCUMENT AN INSTANCE CANNOT PRODUCE FOR ITSELF, PUSHED ON ITS OWN.
+       *
+       * Peter, looking at a running container: *"nothing is updated on localhost:4100?"* — and it
+       * was not, for two reasons. The image predated the change, and the corpus in the store was
+       * imported before `style.yaml` existed, so nothing in it carried the application's CSS.
+       *
+       * ⛔ NOT `corpus import`, WHICH WOULD CLOBBER. That verb `put`s every file in a directory, so
+       * pushing a style with it overwrites every document in the project with whatever the local
+       * copy says — including everything authored ON the instance since the import. A corpus is the
+       * authority once it is in the store; this writes exactly one document and touches nothing
+       * else.
+       *
+       * ⛔ AND IT IS TAKEN HERE, NOT THERE. The snapshot needs the application's stylesheets, which
+       * exist only where somebody has a checkout. An instance asked to refresh its own style would
+       * have nothing to read and no way to say so.
+       */
+      .command("style <projectId>")
+      .description("Push the application's design libraries into a project, without touching anything else")
+      .requiredOption("--from <dir>", "a corpus directory beside the repository, to take the snapshot from")
+      .option("-n, --dry-run", "say what would be pushed and change nothing")
+      .action(async (projectId: string, opts: { from: string; db?: string; dryRun?: boolean }) => {
+        try {
+          const style = snapshotStyle(path.resolve(opts.from), new Date().toISOString().slice(0, 10));
+          if (!style.css) {
+            throw new Error(
+              `nothing to take at ${path.resolve(opts.from)} — web.stylesheets names no file that is there, so a push would carry an empty style and the drawings would render exactly as they do now`,
+            );
+          }
+          const kb = Math.round(style.css.length / 1024);
+          const summary = `${style.sources.length} stylesheet(s), ${style.faces.length} face(s), ${kb} KB${
+            style.theme ? `, wearing ${style.theme}` : ", unthemed"
+          }`;
+          if (opts.dryRun) {
+            console.log(pc.dim("would push"), summary, pc.dim(`→ ${projectId}/style.yaml`));
+            return;
+          }
+          await withStore(opts, async (d) => {
+            const store = await reach(d, projectId);
+            const had = (await store.documents())["style.yaml"];
+            await store.put("style.yaml", YAML.stringify({ style }, { lineWidth: 0 }));
+            console.log(pc.green("✓"), `${had ? "replaced" : "added"} style.yaml in ${projectId} — ${summary}`);
+            for (const u of style.unreachable.slice(0, 3))
+              console.log(pc.yellow("  !"), `${u} could not travel — the type there is not the product's`);
+          });
+        } catch (e) {
+          die(e);
+        }
+      }),
+  );
+
+  db(
+    hosted
       .command("export <projectId>")
       .description("Write a project's corpus out as a directory. ⛔ Byte-identical to what went in")
       .requiredOption("--to <dir>", "where to write it")
@@ -394,4 +466,24 @@ async function reach(d: Db, projectId: string) {
   const store = await storeFor(d, { kind: "browser", account: row.owner, reach: [] }).project(projectId);
   if (isRefusal(store)) throw new Error(store.why);
   return store;
+}
+
+/**
+ * What a project's stored style says about itself, for a one-line report.
+ *
+ * ⛔ IT PARSES RATHER THAN TRUSTING. A document that will not load is not a style, and reporting one
+ * as present would tell an operator the project is fine when every drawing in it renders unstyled.
+ */
+function styleIn(source: string | undefined): { sources: number; taken: string; theme?: string } | null {
+  if (!source) return null;
+  try {
+    const parsed = Style.parse((YAML.parse(source) ?? {}).style);
+    return {
+      sources: parsed.sources.length,
+      taken: parsed.taken_at ?? "at some point",
+      theme: parsed.theme,
+    };
+  } catch {
+    return null;
+  }
 }

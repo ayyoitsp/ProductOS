@@ -374,6 +374,65 @@ test("a snapshot can be caught having gone stale, and says so only where it can 
   fs.rmSync(alone, { recursive: true, force: true });
 });
 
+test("a corpus already in a store takes the style as one document, and loses nothing", async () => {
+  /**
+   * ⛔ THE FEATURE NEEDS NO DDL, AND THAT IS WORTH PINNING RATHER THAN ASSERTING.
+   *
+   * Peter: *"i mean we're adding a feature, don't we need a schema change to support it?"* — the
+   * store holds a corpus as `(project_id, path, source)` and keeps `source` opaque on purpose, so a
+   * new corpus file is a ROW. The schema that moved is the CORPUS schema. `doc-migrations.ts` opens
+   * on exactly this split and says conflating the two would be a mistake.
+   *
+   * ⛔ AND THE REAL HAZARD IS THE OTHER VERB. `corpus import` puts every file in a directory, so
+   * using it to deliver a style overwrites every document in the project with whatever the local
+   * copy says — including everything authored ON the instance since it was imported. This asserts
+   * the push writes one document and leaves the rest byte-identical, because a clobber here is
+   * silent: the corpus still parses, still renders, and is somebody else's work gone.
+   */
+  const { PGlite } = await import("@electric-sql/pglite");
+  const { drizzle } = await import("drizzle-orm/pglite");
+  const { applyMigrations } = await import("../dist/v2/store/migrate.js");
+  const { accountFor } = await import("../dist/v2/store/identity.js");
+  const { storeFor, isRefusal } = await import("../dist/v2/store/access.js");
+  const { importFromDisk } = await import("../dist/v2/store/corpus.js");
+  const { createProject } = await import("../dist/v2/store/instance.js");
+
+  const client = new PGlite();
+  const db = drizzle(client);
+  await applyMigrations((sql) => client.exec(sql));
+  const account = await accountFor(db, "me@localhost");
+  await createProject(db, { id: "prj-style", owner: account, slug: "s", name: "S" });
+  const store = await storeFor(db, { kind: "browser", account, reach: [] }).project("prj-style");
+  assert.ok(!isRefusal(store));
+
+  const { root, corpus } = project();
+  await importFromDisk(store, corpus);
+  const before = await store.documents();
+  assert.ok(!before["style.yaml"], "the corpus carried a style before one was pushed");
+
+  // Something authored ON the instance, after the import — exactly what a clobber would take.
+  await store.put("truth/authored-here.md", "---\nid: authored\ntitle: Authored\n---\n");
+
+  const style = snapshotStyle(root, "2026-10-02");
+  await store.put("style.yaml", YAML.stringify({ style }));
+
+  const after = await store.documents();
+  assert.ok(after["style.yaml"], "the style did not reach the store");
+  assert.ok(after["truth/authored-here.md"], "work authored on the instance was lost");
+  for (const [p, src] of Object.entries(before))
+    assert.equal(after[p], src, `${p} was rewritten by a push that should only have added one document`);
+
+  // And the corpus the instance reads back carries it, with no filesystem involved.
+  const { loadFromStore } = await import("../dist/v2/store/corpus.js");
+  const read = await loadFromStore(store);
+  assert.deepEqual(read.broken, [], "the stored corpus stopped parsing once it carried a style");
+  assert.equal(read.style?.theme, "brand");
+  assert.ok(styleOf(read).appCss?.includes("--primary: blue"), "the style did not survive the round trip");
+
+  fs.rmSync(root, { recursive: true, force: true });
+  await client.close();
+});
+
 test("the list of stylesheets is what gets read, not the single one", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "productos-appcss-"));
   fs.mkdirSync(path.join(root, "productos"), { recursive: true });
