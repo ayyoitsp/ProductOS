@@ -21,7 +21,8 @@
 import fs from "node:fs";
 import { indexDesignSystem, drawWith } from "./design.js";
 import path from "node:path";
-import type { Part, View } from "./schema.js";
+import type { Part, Steer, View } from "./schema.js";
+import { inEffect } from "./steers.js";
 
 /** How this application writes each kind of thing, learned from its own components. */
 export interface Idiom {
@@ -180,7 +181,28 @@ const esc = (s: string): string =>
  * it understands and drops the rest produces a screen that looks complete and is missing controls
  * the truth declares — the thin drawing again, arrived at from a new direction.
  */
-export function proposeScreen(view: View, idiom: Idiom): { html: string; placed: number } {
+/**
+ * ⛔ AND THE RUNTIME HALF OF THE ADDENDUM — CARRIED AND DECLARED, NOT "APPLIED".
+ *
+ * Peter asked for a project addendum reaching *"Both"* install time and runtime. This is runtime,
+ * and being exact about what it can do matters more than making it sound bigger:
+ *
+ * A generation steer is PROSE — *"buttons are named for the verb they perform"*. This function is a
+ * deterministic transform from parts to markup; it cannot read that sentence and act on it, and
+ * pattern-matching keywords out of it to fake the effect would be a guess wearing a decision's
+ * clothes, which is the correction this repo has had to make three times in one day. The sentence
+ * is acted on by the AUTHORS, which is exactly why the addendum goes into their prompts at install.
+ *
+ * What this layer owes a reviewer is different and real: **which habits were in force when this was
+ * drawn.** A generated screen shaped by five project habits, shown with no sign of them, is a screen
+ * a reviewer cannot account for — they would be judging the habits without being shown them, and a
+ * constraint nobody can see is the defect the whole steer concept is organised against.
+ */
+export function proposeScreen(
+  view: View,
+  idiom: Idiom,
+  steers: readonly Steer[] = []
+): { html: string; placed: number } {
   const parts = view.parts ?? [];
   const one = (p: Part): string => {
     const label = esc(p.label ?? p.id);
@@ -205,9 +227,21 @@ export function proposeScreen(view: View, idiom: Idiom): { html: string; placed:
    * validate a screen the product does not have. The line is content, not styling, so it survives
    * whatever the application's stylesheet does to the rest.
    */
+  /**
+   * ⛔ NAMED, AND SAID TO BE HABITS RATHER THAN TRUTH. A reviewer who reads these as claims about
+   * the product would start agreeing to them, and a generation steer is the one kind of context
+   * nobody agrees to — the moment one carries weight in a gate it has become product truth.
+   */
+  const live = inEffect(steers);
+  const steered = live.length
+    ? `<p class="pp-steered">Shaped by ${live.length} ${live.length === 1 ? "habit" : "habits"} this project has learned, not by anything it promises: ${live
+        .map((st) => esc(st.says))
+        .join(" ")}</p>`
+    : "";
   const html = `<div class="pp">
       <h2 class="${idiom.heading}">${esc(view.title || view.id)}</h2>
       <p class="pp-from">Generated from this screen's own parts — nothing renders it yet.</p>
+      ${steered}
       ${body || '<p class="pp-from">This screen declares no parts, so there was nothing to place.</p>'}
     </div>`;
   return { html, placed: parts.length };

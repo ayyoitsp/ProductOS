@@ -1023,6 +1023,13 @@ export const COMMANDS: Verb[] = [
   { name: "v2 watch", does: "Wait, and print a line whenever somebody records an act or asks for a change", owns: "surface", who: "claude", track: "exchange" },
   { name: "v2 whoami", does: "What an instance thinks you are, and what it will let you do", owns: "surface", who: "claude", track: "exchange" },
   { name: "v2 change", does: "Record a piece of feedback and drive it into every layer it must reach", owns: "instruct", who: "claude", track: "exchange" },
+  /**
+   * ⛔ `instruct`, BECAUSE A GENERATION STEER LANDS IN AN AUTHOR'S INSTRUCTIONS. It is tempting to
+   * file this under `surface` — the verb is in the CLI and a person reads the list. But what the
+   * verb produces is appended to every author's prompt at install, which makes it the same layer
+   * `init` and `v2 change` serve: what a future session will be told.
+   */
+  { name: "v2 steer", does: "What this project has learned — habits that shape what gets made, never what it promises", owns: "instruct", who: "both", track: "exchange" },
   { name: "v2 agents", does: "The roles: what each asks, and which skill orchestrates which", owns: "instruct", who: "both", track: "exchange" },
   { name: "v2 reset", does: "Restore a corpus from the pristine seed, so every run starts identical", owns: "generate", who: "claude", track: "exchange" },
 

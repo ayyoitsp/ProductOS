@@ -760,6 +760,31 @@ or permission nothing anywhere uses.
 ⛔ **`held_by` belongs to `may` and is refused on every other slot** — the same reasoning as
 `outcomes` on `refuses`.
 
+```yaml
+# <corpus>/access.yaml
+access:
+  - id: underwriter
+    kind: role
+    means: Can price a deal and send it back to the broker with terms.
+    holds: [price-a-deal, return-with-terms]    # ⛔ a role is a bag of permissions, and says so
+  - id: price-a-deal
+    kind: permission
+    means: Can set the rate and fees on a deal that is still open.
+  - id: org-admin
+    kind: role
+    means: Can add and remove people from the organisation.
+    granted_by: the customer's own identity provider   # ⛔ not this product
+```
+
+⛔ **`holds:` is what a role actually grants, listed.** Without it a role's contents live in
+whichever exchanges happen to name it — so removing a permission from a role becomes a
+search-and-replace, and nobody can say what a role grants without reading the whole corpus. ⛔ **A
+permission holds nothing**, and the schema refuses `holds` on one.
+
+⛔ **`granted_by:` where this product does not decide who holds it.** An access name the product
+cannot grant is one somebody will go looking for a screen to manage and not find — and its absence
+is then read as a missing feature rather than as somebody else's system.
+
 ⛔ **The control that ENDS the feature says so: `finishes: true` on its exchange.** And where a
 press moves the picture to a particular appearance of the screen, name it: `lands_on:` carrying that
 state's `when`, the same spelling `at.state` uses.
@@ -1090,6 +1115,30 @@ as a decision is how a habit nobody agreed to becomes a rule everybody is held t
 ⛔ **An opaque steer says where it was learned.** A pattern inferred from what somebody accepted is
 only worth trusting if the next person can go and look at what it was inferred from.
 
+⛔ **Write one with the command, never by typing the YAML.** The shape above is what it produces, not
+an invitation to hand-author it — and for the life of this concept hand-authoring was the only way,
+which is why no corpus had one.
+
+```bash
+productos v2 steer new "<the habit>" --steers generation \
+    --learned-from "<the screens, the reviews, the rejections>"
+productos v2 steer list                                   # what is in force, and where each came from
+productos v2 steer decline <id> --because "<why it is not a rule here>"
+```
+
+**A generation steer reaches every author's instructions**, at install and again when a screen is
+proposed — so after writing one, `productos init claude --update`. ⛔ **And it reaches no judge,
+ever.** A reviewer told what this project likes can no longer notice that the project is wrong,
+which is the same reason the newcomer is never told what ProductOS is.
+
+⛔ **`declined:` turns a habit off and says why — it is not deleted.** A learned steer was noticed
+from a pattern sitting in the record, so deleting it ends nothing: the next scan reads the same
+pattern and learns the same habit again. Declining is how somebody says *"I saw this and it is not a
+rule here"* in a form the noticer can read, and the reason is the part a future person can argue
+with. ⛔ **Only a habit can be declined.** Turning off something that `steers: truth` is withdrawing
+a constraint on the product — that is a verdict, and it happens where it was agreed to, by taking it
+out of the charter.
+
 ## Before handing anything over
 
 ```bash
@@ -1142,3 +1191,48 @@ dropped.
 
 ⛔ **Never answer a note by editing the note.** If the request is wrong, or you cannot do it, say so
 in the outcome and leave the truth alone — the note is the record that somebody asked.
+
+### ⛔ A note is a conversation, so reply where he is standing
+
+Peter: *"let's add a 2-way window so you can send messages back as well"*. Before `replies:` the
+only thing that could be said back was `outcome`, which closes the note — so every answer was also a
+decision that the matter was finished, and a question, a progress line or *"this is a framework gap
+and here is why"* had nowhere to go but a chat window he is deliberately moving away from.
+
+```bash
+productos v2 notes say <id> --says "<the reply>"        # answer, leave it open
+productos v2 notes done <id> --outcome "<what you did>" # the last reply, and close
+```
+
+⛔ **`replies:` is a thread, and `outcome:` is the end of it.** Use `say` while anything is still
+owed — a question back, what you have done so far, why it is going to take another pass. Use `done`
+only when there is nothing left to do about it.
+
+⛔ **A `kind: framework` note gets a CONCISE reply.** He is reviewing a product, not reading a
+changelog: one or two sentences saying what now happens differently. The full account belongs in the
+commit and in `productos v2 change`. And `kind` is set from the `pos:` tag he typed — ⛔ **never
+inferred from the sentence**, because a classifier reading prose is a guess wearing a decision's
+clothes, and getting this backwards is expensive in both directions.
+
+### ⛔ Claiming a note, so two sessions do not both do it
+
+`claimed_by` and `claimed_until` are a lease: who is working on this, and when the claim lapses.
+Several sessions can be pointed at one corpus, and without a lease the second one to read the queue
+authors the same change again on top of the first.
+
+⛔ **You do not claim a note by name — reading the queue claims what it hands you.**
+
+```bash
+productos v2 inbox --claim <session>   # ⛔ every note this hands back is now leased to you
+```
+
+So the act of finding out what is owed is the act of taking it, and there is no window between the
+two in which a second session can pick up the same request. Handing one back is explicit:
+`productos_exchange_release_note` over MCP — ⛔ **use it rather than going quiet**, because a lease
+that has to expire on its own strands the request for as long as the lease lasts, and the person who
+asked is watching a queue that looks like somebody is on it.
+
+⛔ **A claim is a name AND an expiry — the schema refuses one without the other.** A claim with no
+expiry strands the note the first time the session holding it dies; an expiry with no claimant
+cannot say who to ask. ⛔ **An expired claim is not a done note.** It goes back in the queue, because
+the session that held it may have finished nothing.

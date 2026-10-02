@@ -75,6 +75,18 @@ const AUTHORED_SHAPES = [
   "RefusalOutcome",
   "Reading",
   "HappyPath",
+  /**
+   * ⛔ THESE THREE ESCAPED THE TEST THAT EXISTS TO CATCH EXACTLY THIS.
+   *
+   * The file's own header says a schema field no skill writes only ever appears where somebody
+   * typed it by hand. `Steer` was the proof: defined, loaded, checked, rendered — and authorable
+   * only by hand-writing YAML, which is the trap `CLAUDE.md` opens on. It was absent from this
+   * list, so the mechanism meant to notice could not see it. `Note` and `Access` were absent for
+   * the same reason: nobody added them when they landed.
+   */
+  "Steer",
+  "Note",
+  "Access",
 ];
 
 /**

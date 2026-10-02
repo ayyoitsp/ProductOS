@@ -691,7 +691,7 @@ Held three ways rather than one: no author declares `ask-the-human`, so no host 
 
 What `--help` cannot tell you, and why this exists: **who** types it, and **which track** it belongs to. *Never hand a human a flag* is a rule the skills state and nothing enforced — a command marked `claude` appearing in instructions addressed to a person is now a visible contradiction. And two parallel models have been running for months with nothing saying which commands belong to which.
 
-### Current — 34 commands
+### Current — 35 commands
 
 | command | does | layer | typed by |
 |---|---|---|---|
@@ -727,6 +727,7 @@ What `--help` cannot tell you, and why this exists: **who** types it, and **whic
 | `productos v2 watch` | Wait, and print a line whenever somebody records an act or asks for a change | surface | the model |
 | `productos v2 whoami` | What an instance thinks you are, and what it will let you do | surface | the model |
 | `productos v2 change` | Record a piece of feedback and drive it into every layer it must reach | instruct | the model |
+| `productos v2 steer` | What this project has learned — habits that shape what gets made, never what it promises | instruct | either |
 | `productos v2 agents` | The roles: what each asks, and which skill orchestrates which | instruct | either |
 | `productos v2 reset` | Restore a corpus from the pristine seed, so every run starts identical | generate | the model |
 

@@ -4,7 +4,8 @@ import { Command } from "commander";
 import pc from "picocolors";
 import { checkCorpus, summarise } from "../../v2/check.js";
 import { loadCorpus } from "../../v2/load.js";
-import { SLOTS, SLOT_ASKS_SHORT, type SlotName, statements } from "../../v2/schema.js";
+import { SLOTS, SLOT_ASKS_SHORT, Steer, type SlotName, statements } from "../../v2/schema.js";
+import YAML from "yaml";
 import { gridFor, renderGridText, actsFor, gateFor } from "../../v2/grid.js";
 import { compilePacket } from "../../v2/packet.js";
 
@@ -20,6 +21,7 @@ import { drawFromRoute } from "../../v2/draw.js";
 import { everyView, isResolved, resolveRoute } from "../../v2/routes.js";
 import { spokenFor } from "../../v2/spoken.js";
 import { idiomOf, proposeScreen } from "../../v2/propose.js";
+import { inEffect, readSteers, declined } from "../../v2/steers.js";
 import { indexDesignSystem } from "../../v2/design.js";
 import { inferConnections, type Connection } from "../../v2/connects.js";
 import { writeLeadsTo } from "../../v2/draw-write.js";
@@ -1101,6 +1103,176 @@ export function v2Command(): Command {
       if (blind) console.log(pc.dim(`  ${blind} could not be compared — see above`));
       /** ⛔ A non-zero exit, so this can gate something. A report nothing can fail on is a report. */
       if (gone) process.exitCode = 1;
+    });
+
+  /**
+   * ⛔ A STEER IS WRITTEN BY A COMMAND, BECAUSE HAND-AUTHORING IS THE TRAP.
+   *
+   * The shape was documented in the scoper and in no corpus — so the only way to get one was to
+   * type the YAML, which is the specific thing the top of `CLAUDE.md` is about: a typed artefact
+   * cannot be re-derived, so it is wrong the day after it is written, and when somebody says it is
+   * wrong, typing it again is always the shortest path.
+   */
+  const steer = cmd.command("steer").description("What this project has learned — habits that shape what gets made, never what it promises");
+
+  steer
+    .command("new")
+    .description("Record a habit this project works under")
+    .argument("<says>", "the habit, in one line somebody can act on")
+    .requiredOption("--steers <what>", "generation (a habit — opaque, shapes what gets proposed) | truth (a claim — surfaced on the charter)")
+    .option("--learned-from <provenance>", "⛔ required on anything learned — what it was inferred from, so the next person can go and look")
+    .option("--id <id>", "one segment, kebab-case — derived from the words if absent")
+    .option("--at <dir>", "corpus directory", "v2")
+    .action((says: string, o: { steers: string; learnedFrom?: string; id?: string; at?: string }) => {
+      const dir = path.resolve(o.at ?? "v2");
+      /**
+       * ⛔ THE WORDS THAT CARRY THE MEANING, not the first four. Slicing the opening words produced
+       * `buttons-are-named-for` — an id whose last two words are grammar, which somebody then has
+       * to type at `decline`. Dropping the filler leaves the part a person would actually recall.
+       */
+      const FILLER = new Set(
+        "a an and are as at be by for from has have in is it its must never no not of on or should that the their them then there they this to was were what when where which who with".split(" ")
+      );
+      const id =
+        o.id ??
+        says
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, " ")
+          .trim()
+          .split(/\s+/)
+          .filter((w) => w && !FILLER.has(w))
+          .slice(0, 4)
+          .join("-");
+      const rec = {
+        id,
+        says,
+        steers: o.steers,
+        ...(o.learnedFrom ? { learned_from: o.learnedFrom } : {}),
+        at: new Date().toISOString().slice(0, 10),
+      };
+      /**
+       * ⛔ PARSED BEFORE IT IS WRITTEN, so the schema's refusals are what the person meets — a
+       * learned steer with no provenance, or a truth steer claiming to have been learned. Writing
+       * first and checking later is how a corpus comes to hold a record no loader will take.
+       */
+      const parsed = Steer.safeParse(rec);
+      if (!parsed.success) {
+        console.error(pc.red("✗"), "that is not a steer:");
+        for (const i of parsed.error.issues) console.error(pc.dim(`  ${i.path.join(".") || "(record)"} — ${i.message}`));
+        process.exit(1);
+      }
+      const existing = readSteers(dir);
+      if (existing.some((x) => x.id === parsed.data.id)) {
+        console.error(pc.red("✗"), `"${parsed.data.id}" already steers this project`);
+        console.error(pc.dim("  productos v2 steer list"));
+        process.exit(1);
+      }
+      /**
+       * ⛔ WARNED, NOT REFUSED — BECAUSE `check` CALLS THIS A NOTE.
+       *
+       * A generation steer with no provenance is either under-documented or miscategorised, and
+       * there is no legitimate third case, so refusing it here was tempting. But `check` grades it
+       * `note`, and a writer stricter than the checker is two strictnesses for one rule — the
+       * "second implementation of a predicate" the derive area warns about, which already made two
+       * of five seed exchanges permanently unacceptable once. One rule, one severity, said twice.
+       */
+      if (parsed.data.steers === "generation" && !parsed.data.learned_from) {
+        console.log(pc.yellow("!"), "nothing says what this was inferred from");
+        console.log(
+          pc.dim("  nobody agrees to a habit, so what it was learned from is the only thing anybody can argue with")
+        );
+        console.log(pc.dim("  --learned-from \"<the screens, the reviews, the rejections>\""));
+        console.log(pc.dim("  or, if somebody simply decided it, it is a claim about the product — --steers truth, and into the charter"));
+        console.log("");
+      }
+      const file = path.join(dir, "steers", "steers.yaml");
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, YAML.stringify({ steers: [...existing, parsed.data] }, { lineWidth: 0 }));
+      console.log(pc.green("✓"), `${parsed.data.id} — ${path.relative(process.cwd(), file)}`);
+      console.log(pc.dim(`  "${parsed.data.says}"`));
+      console.log("");
+      if (parsed.data.steers === "generation") {
+        console.log(pc.dim("  it shapes what the authors propose, and nobody agrees to it"));
+        console.log(pc.dim("  productos init claude --update   — so every author installs with it"));
+      } else {
+        console.log(pc.dim("  it is a claim about the product, so it is on the charter where somebody can disagree"));
+      }
+    });
+
+  steer
+    .command("list")
+    .description("What steers this project, and where each was learned")
+    .option("--at <dir>", "corpus directory", "v2")
+    .action((o: { at?: string }) => {
+      const dir = path.resolve(o.at ?? "v2");
+      const all = readSteers(dir);
+      if (!all.length) {
+        console.log(pc.dim("nothing steers this project yet"));
+        console.log(pc.dim('  productos v2 steer new "<the habit>" --steers generation --learned-from "<what you noticed it in>"'));
+        return;
+      }
+      const live = inEffect(all);
+      const off = declined(all);
+      const truth = all.filter((x) => x.steers === "truth");
+      if (live.length) {
+        console.log("");
+        console.log(pc.bold("habits, in force") + pc.dim("  — into every author, and no judge"));
+        for (const st of live) {
+          console.log(`  ${pc.green("•")} ${pc.bold(st.id)} ${st.says}`);
+          /**
+           * ⛔ THE PROVENANCE IS THE POINT OF SHOWING IT. A habit with its source shown is one
+           * somebody can go and check and decline; without it, it is a rule nobody chose.
+           */
+          console.log(pc.dim(`    learned from ${st.learned_from ?? "— nothing said, which the loader refuses"}`));
+        }
+      }
+      if (truth.length) {
+        console.log("");
+        console.log(pc.bold("claims about the product") + pc.dim("  — on the charter, where somebody can disagree"));
+        for (const st of truth) console.log(`  ${pc.green("•")} ${pc.bold(st.id)} ${st.says}`);
+      }
+      if (off.length) {
+        console.log("");
+        console.log(pc.bold("declined") + pc.dim("  — kept, so the same pattern is not learned again"));
+        for (const st of off) {
+          console.log(`  ${pc.yellow("~")} ${pc.bold(st.id)} ${pc.dim(st.says)}`);
+          console.log(pc.dim(`    because ${st.declined}`));
+        }
+      }
+      console.log("");
+    });
+
+  steer
+    .command("decline")
+    .description("Turn a habit off, with the reason it is not a rule here")
+    .argument("<id>", "which steer")
+    .requiredOption("--because <reason>", "⛔ why it is not a rule here — a decline with no argument cannot be told from a steer nobody got round to")
+    .option("--at <dir>", "corpus directory", "v2")
+    .action((id: string, o: { because: string; at?: string }) => {
+      const dir = path.resolve(o.at ?? "v2");
+      const all = readSteers(dir);
+      const hit = all.find((x) => x.id === id);
+      if (!hit) {
+        console.error(pc.red("✗"), `no steer "${id}"`);
+        process.exit(1);
+      }
+      /**
+       * ⛔ DECLINING IS FOR A HABIT, NOT A CLAIM — the schema refuses the other case, and saying so
+       * here points at where it is actually withdrawn rather than just failing.
+       */
+      if (hit.steers === "truth") {
+        console.error(pc.red("✗"), `"${id}" is a claim about the product, not a habit`);
+        console.error(pc.dim("  a constraint is withdrawn where it was agreed to — take it out of the charter"));
+        process.exit(1);
+      }
+      const next = all.map((x) => (x.id === id ? { ...x, declined: o.because } : x));
+      const file = path.join(dir, "steers", "steers.yaml");
+      fs.writeFileSync(file, YAML.stringify({ steers: next }, { lineWidth: 0 }));
+      console.log(pc.green("✓"), `${id} no longer steers anything`);
+      console.log(pc.dim(`  because ${o.because}`));
+      console.log("");
+      console.log(pc.dim("  it is kept rather than deleted, so the pattern it came from is not learned again"));
+      console.log(pc.dim("  productos init claude --update   — so the authors stop carrying it"));
     });
 
   const change = cmd.command("change").description("Record a piece of feedback and drive it into every layer it affects");
@@ -2212,9 +2384,19 @@ function proposeScreens(into: string, ref?: string): void {
             : "  no components directory configured — using plain markup"
         )
       );
+      /**
+       * ⛔ SAID ONCE, FOR THE RUN. Every proposed screen carries the habits that shaped it, and
+       * repeating them per screen would bury the one line somebody needs: that this run was shaped
+       * by something other than the truth and the app's own idiom.
+       */
+      const steering = inEffect(corpus.steers);
+      if (steering.length)
+        console.log(
+          pc.dim(`  shaped by ${steering.length} ${steering.length === 1 ? "habit" : "habits"} this project has learned: ${steering.map((st) => st.id).join(", ")}`)
+        );
       let made = 0;
       for (const { scope, view } of targets) {
-        const { html, placed } = proposeScreen(view, idiom);
+        const { html, placed } = proposeScreen(view, idiom, corpus.steers);
         if (!placed) {
           console.log(pc.yellow("?"), `${scope}#${view.id} — declares no parts, so there is nothing to place. Give it its parts.`);
           continue;
