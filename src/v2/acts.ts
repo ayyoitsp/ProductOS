@@ -23,7 +23,7 @@ import { loadCorpus, type Corpus } from "./load.js";
 import { Verdict, type SlotName } from "./schema.js";
 import { gateFor } from "./grid.js";
 import { coveredBy, stampFor, staleReason } from "./stamp.js";
-import { questionsFor, settle, waive as applyWaiver, govern } from "./settle.js";
+import { questionsFor, settle, waive as applyWaiver, govern, withdraw as takeOut } from "./settle.js";
 import { resolveRef, nothingToDecide } from "./ref.js";
 import { append } from "./log.js";
 
@@ -65,7 +65,7 @@ export const VIA: readonly Via[] = ["page", "question", "chat", "cli", "agent"] 
  */
 export const isHuman = (via: Via): boolean => via !== "agent";
 
-export type Act = "accept" | "rule" | "read" | "waive" | "defer";
+export type Act = "accept" | "rule" | "read" | "waive" | "defer" | "withdraw";
 
 export interface Consent {
   /** ⛔ Recorded, never authenticated. See `requireName`. */
@@ -352,8 +352,22 @@ function aimOf(corpus: Corpus, target: string): Refused | { kind: string } {
  * would be the relay, which is the path nobody exercises by hand.
  */
 export function payloadFrom(act: Act, ref: string, body: Record<string, unknown>): Payload {
+  /**
+   * ⛔ A NEW ACT MUST NOT FALL THROUGH TO THE RULING SHAPE, WHICH IS WHAT HAPPENED.
+   *
+   * This is a chain of ternaries ending in the ruling payload, so `withdraw` — which takes a
+   * `target` like an acceptance — silently got `{ slot: ref }` instead. `doWithdraw` then read
+   * `o.target` as undefined and the endpoint answered "server error: Cannot read properties of
+   * undefined", from a trash icon that looked fine.
+   *
+   * ⛔ The shape of the bug is the same as `ACTS` in `serve.ts`: a hand-maintained list beside a
+   * union that is not, with the DEFAULT being the most complex member. Named here so the next act
+   * added gets a crash at the right place instead of a ruling.
+   */
   return act === "accept"
     ? { target: ref }
+    : act === "withdraw"
+      ? { target: ref, because: body.because === undefined ? undefined : String(body.because) }
     : act === "read"
       ? {
           scope: ref,
@@ -429,7 +443,84 @@ function run(dir: string, act: Act, payload: Payload, consent: Consent): Outcome
       return doWaive(dir, payload as WaivePayload, consent);
     case "defer":
       return doDefer(dir, payload as DeferPayload, consent);
+    case "withdraw":
+      return doWithdraw(dir, payload as AcceptPayload & { because?: string }, consent);
   }
+}
+
+/**
+ * ⛔ TAKE A BEHAVIOUR OUT. Peter, twice: *"we should probalby have a 'delete' button to just remove
+ * behaviors"*, then *"'trash' icon to delete"*.
+ *
+ * Nothing could be taken out. A sentence a scoper proposed and nobody wanted could only be removed
+ * by editing YAML — the one thing the page exists to stop — so a corpus accumulated every guess
+ * anybody's software had ever made about the product, and a reviewer's queue grew whether or not
+ * they agreed with any of it.
+ *
+ * ⛔ IT IS AN ACT, WITH A NAME AND A RECORD, not a file edit with a button on it. Removing truth is
+ * a judgement — more consequential than agreeing with it, because what is gone cannot be read and
+ * disagreed with. So it goes through the same door, carries the same `by` and `via`, and lands in
+ * the same log. `withdraw` reads the stamp and decides which of the two things it is doing.
+ */
+function doWithdraw(dir: string, o: AcceptPayload & { because?: string }, consent: Consent): Outcome {
+  const { corpus } = checkCorpus(dir);
+  const bad = gatesOf(consent, corpus, "taking a behaviour out");
+  if (bad) return bad;
+
+  /**
+   * ⛔ ANYTHING UNDER IT, NOT JUST THE REF ITSELF — AND THE FIRST VERSION ASKED ONLY ABOUT THE REF.
+   *
+   * `stampFor(exchange)` is false while a SLOT inside it is accepted, so taking out a whole
+   * behaviour reported "a draft nobody had agreed to" and deleted it — leaving the verdict somebody
+   * recorded against one of its slots pointing at nothing. Found by accepting a slot and then
+   * withdrawing its exchange, which is the obvious order and not the one I wrote the test for.
+   *
+   * So: if any verdict names this ref or anything beneath it, the id is kept. ⛔ Nothing that
+   * somebody's name is attached to gets deleted, at any grain.
+   */
+  const touched = (t: string | undefined): boolean => !!t && (t === o.target || t.startsWith(`${o.target}#`));
+  const agreed =
+    stampFor(corpus, o.target).state === "accepted" ||
+    corpus.verdicts.some((v) => v.kind === "accept" && touched(v.target));
+  const done = takeOut(dir, o.target, consent.by, today(), o.because, agreed);
+  /** ⛔ The refusal's `instead` is what makes it actionable — see every other act in this file. */
+  if (!done.ok) return no(done.why, done.instead);
+
+  /**
+   * ⛔ RECORDED EVEN WHERE IT WAS A DRAFT, AND WITH THE SENTENCE THAT WENT. A corpus that silently
+   * shrinks cannot be audited: "was there ever a claim about X" has to stay answerable, and after a
+   * delete the log is the only thing that can answer it.
+   *
+   * ⛔ Written as a `waive`, which is the model's existing "this is not ours to answer" verdict,
+   * with the sentence in its note. A sixth verdict kind for this would be a second record of the
+   * same shape of act, and `Verdict` deliberately has four plus the read-through.
+   */
+  writeVerdict(
+    dir,
+    "withdrawals.yaml",
+    [
+      `  - kind: waive`,
+      `    target: ${o.target}`,
+      `    by: ${consent.by}`,
+      `    at: ${today()}`,
+      `    via: ${consent.via}`,
+      `    because: ${JSON.stringify(
+        o.because?.trim() ||
+          `Taken out as a draft nobody had agreed to. It said: ${done.was.replace(/\s+/g, " ").slice(0, 200)}`
+      )}`,
+      `    note: ${JSON.stringify(`${done.mode}: ${done.was.replace(/\s+/g, " ").slice(0, 300)}`)}`,
+    ],
+    consent
+  );
+
+  return {
+    ok: true,
+    said:
+      done.mode === "deleted"
+        ? `took ${o.target} out — a draft nobody had agreed to, and the sentence it said is in the log`
+        : `withdrew ${o.target} — somebody had agreed to it, so its id is kept and marked withdrawn rather than freed for reuse`,
+    detail: [`it said: ${done.was.replace(/\s+/g, " ").slice(0, 160)}`],
+  };
 }
 
 function doAccept(dir: string, { target }: AcceptPayload, consent: Consent): Outcome {

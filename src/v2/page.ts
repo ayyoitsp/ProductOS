@@ -1223,7 +1223,9 @@ function renderBehaviours(
   corpus: Corpus,
   scopeId: string,
   cellOf: Map<string, Cell>,
-  ctx: Ctx
+  ctx: Ctx,
+  /** ⛔ Whether a press can record anything. An inert control is worse than none — see `page`. */
+  interactive: boolean
 ): string {
   const entry = corpus.scopes.find((s) => s.scope.id === scopeId);
   if (!entry) return "";
@@ -1281,7 +1283,71 @@ function renderBehaviours(
         const past = decisionsOn(corpus, sref);
         cards.push(`
         <article class="beh" id="beh-${slug(sref)}" data-beh="${esc(sref)}" data-ref="${esc(sref)}" data-label="${esc(`${SLOT_ASKS_SHORT[slot] ?? slot} · ${plain(ex.title)}`)}">
-          <div class="beh-says">${shown.length > 1 ? line(said.says) : says}</div>
+          ${
+            /**
+             * ⛔ A ROW, COLLAPSED, WITH THE THREE THINGS A READER DOES TO IT.
+             *
+             * Peter: *"let's make the behaviors more tabular now - collapse all the info, only on
+             * row tap does it expand. and have a 'checkmark' to approve, 'trash' icon to delete,
+             * 'edit' button to make changes. they should also be able to just edit the text
+             * directly."*
+             *
+             * A card carried the sentence, where it happens, its evidence, a screenshot of the
+             * control, its state and three buttons — about four hundred pixels each, and a feature
+             * has thirty. So reading a feature meant scrolling past everything about sentence one to
+             * reach sentence two, and the shape of the whole — which of thirty are confirmed —
+             * could not be seen at all.
+             *
+             * ⛔ WHAT STAYS IN THE ROW IS WHAT YOU CHOOSE BY: the sentence, whether it is confirmed,
+             * and the three acts. Everything that supports a judgement rather than being one —
+             * evidence, the drawing, where it lands — is behind the tap, because it is what you
+             * look at AFTER deciding the sentence is worth examining.
+             *
+             * ⛔ A details element, not a click handler. It opens with no JavaScript, keyboard and screen
+             * readers get it for free, and a reader who opens five rows and reloads keeps nothing —
+             * which is correct, because the row's state is not truth.
+             */
+            ""
+          }
+          <details class="beh-row">
+            <summary>
+              ${
+                /** ⛔ The state first, so a column of thirty reads as a column rather than prose. */
+                (() => {
+                  const st = stampFor(corpus, sref);
+                  const ok = st.state === "accepted";
+                  return `<span class="tick ${ok ? "on" : ""}" title="${ok ? `confirmed by ${esc(st.by)} on ${esc(st.at)}` : "nobody has agreed to this yet"}">${ok ? "✓" : "○"}</span>`;
+                })()
+              }
+              <span class="row-says">${shown.length > 1 ? line(said.says) : says}</span>
+              <span class="row-slot">${esc(SLOT_ASKS_SHORT[slot] ?? slot)}</span>
+              ${
+                /**
+                 * ⛔ THE ACTS ON THE ROW, so agreeing to twenty sentences is twenty presses and no
+                 * opening. ⛔ And they are in the summary, so a press must not also toggle the row:
+                 * the handler stops the event. Found by pressing one and watching the row open.
+                 */
+                settled && interactive
+                  ? `<span class="row-acts">${
+                      stampFor(corpus, sref).state === "accepted"
+                        ? ""
+                        : `<button class="act icon" data-act="accept" data-ref="${esc(sref)}" title="That is right — confirm it">✓</button>`
+                    }<button class="act icon" data-act="say" data-ref="${esc(sref)}" title="Reword it">✎</button>${
+                      /**
+                       * ⛔ NO TRASH ON A ROW SOMEBODY AGREED TO, because the act cannot succeed
+                       * there. A slot and a statement have no `exists` field, so withdrawing one
+                       * that carries a stamp is refused — agreed truth is reworded, which keeps the
+                       * id and breaks the stamp. Rendering the icon anyway would be a button whose
+                       * only possible outcome is a refusal, and this codebase has shipped that
+                       * three times.
+                       */
+                      stampFor(corpus, sref).state === "accepted"
+                        ? ""
+                        : `<button class="act icon danger" data-act="withdraw" data-ref="${esc(sref)}" title="Take it out — nobody has agreed to this yet">🗑</button>`
+                    }</span>`
+                  : ""
+              }
+            </summary>
           <p class="beh-where">
             ${esc(SLOT_ASKS_SHORT[slot] ?? slot)} · on ${refLink(ref, ctx, ex.title)}${
               /**
@@ -1422,6 +1488,7 @@ function renderBehaviours(
                   .join("")}</p>`
               : ""
           }
+          </details>
           ${renderState(corpus, sref)}
           ${
             settled
@@ -2842,7 +2909,7 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
                  being read. */
               [...homesOf.values()].includes(g.scope) ? renderGroupRules(corpus, g.scope, ctx, homesOf) : ""
             }
-            ${renderBehaviours(corpus, g.scope, cellOf, ctx)}
+            ${renderBehaviours(corpus, g.scope, cellOf, ctx, !!opts.interactive)}
             <details class="fold"><summary>Every slot, and where each came from — the authoring view</summary>
               ${renderGrid(g, ctx)}
               ${renderExchanges(corpus, [g.scope], cellOf, ctx, false)}
@@ -3512,9 +3579,54 @@ if (noteBar) {
   });
 }
 
+/**
+ * ⛔ EDIT THE SENTENCE WHERE IT IS. Peter: *"they should also be able to just edit the text
+ * directly."*
+ *
+ * Rewording went through a form with two fields, and the sentence being reworded was somewhere
+ * above it — so you retyped a sentence you could no longer see. Double-click the text and it
+ * becomes the text, with the reason asked for underneath, because ⛔ the reason is not optional:
+ * it is the floor that stops a sentence being quietly replaced by whoever was last in the file.
+ */
+document.addEventListener("dblclick", (ev) => {
+  const says = ev.target.closest(".row-says");
+  if (!says || says.querySelector("textarea")) return;
+  const row = says.closest("article.beh");
+  if (!row || !row.dataset.ref) return;
+  const was = says.textContent.trim();
+  const box = document.createElement("textarea");
+  box.className = "says-edit";
+  box.rows = 3;
+  box.value = was;
+  says.textContent = "";
+  says.appendChild(box);
+  box.focus();
+  /** ⛔ Escape puts the sentence back. An edit box with no way out traps a reader in a field. */
+  box.onkeydown = (e) => {
+    if (e.key === "Escape") { says.textContent = was; return; }
+    e.stopPropagation();
+  };
+  /** The act itself is the existing one — same floor, same record, same via. */
+  box.onblur = () => {
+    const now = box.value.trim();
+    if (!now || now === was) { says.textContent = was; return; }
+    says.textContent = was;
+    const btn = row.querySelector('button.act[data-act="say"]');
+    if (!btn) return;
+    btn.dataset.says = now;
+    btn.click();
+  };
+});
+
 document.addEventListener("click", (ev) => {
   const b = ev.target.closest("button.act");
   if (!b || b.disabled) return;
+  /**
+   * ⛔ A ROW'S ACT MUST NOT ALSO OPEN THE ROW. The buttons live in the summary element, so a press
+   * toggled the details as well — every confirmation opened the thing it had just confirmed, which
+   * reads as the press having done something else. Found by pressing one.
+   */
+  if (b.closest("summary")) { ev.preventDefault(); ev.stopPropagation(); }
   const act = b.dataset.act;
   const ref = b.dataset.ref;
   let fields = OWED[act] || [];
@@ -4903,6 +5015,32 @@ const STYLE = `<style>
   .beh-where .goes { color: var(--accent); }
   .beh-where .goes.done { color: var(--ok); }
   .beh-where .goes i { color: var(--dim); font-style: italic; }
+  /**
+   * ⛔ A TABLE OF ROWS. Peter: *"let's make the behaviors more tabular now - collapse all the info,
+   * only on row tap does it expand."* A grid rather than a flex row, so thirty sentences line up in
+   * columns a reader can scan down — the shape of the whole feature was the thing a stack of cards
+   * could not show.
+   */
+  .beh-row > summary { display: grid; grid-template-columns: 1.4rem 1fr auto auto; gap: .6rem;
+    align-items: center; cursor: pointer; padding: .45rem .2rem; border-bottom: 1px solid var(--line);
+    list-style: none; }
+  .beh-row > summary::-webkit-details-marker { display: none; }
+  .beh-row > summary:hover { background: var(--code); }
+  .beh-row[open] > summary { border-bottom-color: var(--accent); }
+  .row-says { font-size: .92rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .beh-row[open] .row-says { white-space: normal; }
+  .row-slot { font-size: .72rem; color: var(--dim); letter-spacing: .03em; text-transform: uppercase; }
+  .tick { text-align: center; color: var(--dim); }
+  .tick.on { color: var(--ok); font-weight: 700; }
+  /** ⛔ Visible without hovering: a control nobody can see is one nobody uses. */
+  .row-acts { display: flex; gap: .15rem; }
+  .row-acts .act.icon { font: inherit; font-size: .9rem; line-height: 1; padding: .2rem .35rem;
+    border: 1px solid var(--line); border-radius: 4px; background: var(--card); color: var(--dim); cursor: pointer; }
+  .row-acts .act.icon:hover { color: var(--ink); border-color: var(--accent); }
+  .row-acts .act.icon.danger:hover { color: var(--bad); border-color: var(--bad); }
+  /** ⛔ Edited in place, and it looks edited — a textarea that looks like text loses what was typed. */
+  .says-edit { width: 100%; font: inherit; font-size: .92rem; padding: .3rem; border: 1px solid var(--accent);
+    border-radius: 4px; background: var(--card); color: var(--ink); }
   .beh-state { display: flex; align-items: baseline; gap: .5rem; margin: .6rem 0 .2rem; font-size: .85rem; }
   .beh-state b { text-transform: uppercase; letter-spacing: .04em; color: var(--dim); }
   .beh-state span { color: var(--dim); }

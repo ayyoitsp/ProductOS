@@ -789,3 +789,133 @@ export function govern(
   );
   return { ok: true, file: entry.file };
 }
+
+/**
+ * ⛔ TAKE A BEHAVIOUR OUT — DELETED WHERE IT IS A DRAFT, WITHDRAWN WHERE SOMEBODY AGREED TO IT.
+ *
+ * Peter, twice: *"we should probalby have a 'delete' button to just remove behaviors"*, and then
+ * *"have a 'checkmark' to approve, 'trash' icon to delete, 'edit' button to make changes."*
+ *
+ * There was no way to take anything out. A sentence a scoper proposed and nobody wanted could only
+ * be removed by editing YAML, which is the one thing the page exists to stop — so a corpus
+ * accumulated every guess anybody's software ever made about it, and the queue a person worked
+ * through got longer whether or not they agreed with any of it.
+ *
+ * ⛔ THE TWO CASES ARE NOT THE SAME ACT, AND COLLAPSING THEM IS THE WHOLE RISK.
+ *
+ * Nothing has agreed to it → it is a draft, and it goes. No tombstone, because nothing depends on
+ * the id and a corpus full of markers for sentences nobody wanted is noise that outlives its
+ * subject.
+ *
+ * Somebody has agreed to it → the id is kept and marked `withdrawn`. Deleting it would free the id
+ * for reuse, so a later sentence could inherit a stamp somebody gave to a different claim; and it
+ * would erase the fact that this was once true, which is what anything pointing at it needs to
+ * still resolve. ⛔ That is append-only applying exactly where it was meant to: once shipped.
+ */
+export function withdraw(
+  root: string,
+  ref: string,
+  by: string,
+  at: string,
+  /** ⛔ Required only where somebody had agreed. A draft nobody wanted owes no essay. */
+  because: string | undefined,
+  /** Whether a human stamp covers this, which the caller reads from `stampFor`. */
+  agreed: boolean
+):
+  | { ok: true; file: string; mode: "deleted" | "withdrawn"; was: string }
+  | { ok: false; why: string; instead?: string[] } {
+  const corpus = loadCorpus(root);
+  const r = resolveRef(corpus, ref);
+  if ("error" in r) return { ok: false, why: r.error };
+  if (agreed && (because ?? "").trim().length < 40)
+    return {
+      ok: false,
+      why:
+        `${ref} has been agreed to, so taking it out needs a reason — somebody put their name to this sentence and ` +
+        `a corpus that drops it silently cannot tell them why`,
+    };
+
+  const aim = r.ref;
+  if (aim.kind !== "statement" && aim.kind !== "slot" && aim.kind !== "exchange")
+    return {
+      ok: false,
+      why: `${ref} is a ${aim.kind} — this takes out one statement, one slot, or one whole exchange`,
+    };
+  const kind = aim.kind;
+
+  const entry = corpus.scopes.find((x) => x.scope.id === aim.scope);
+  if (!entry) return { ok: false, why: `no feature "${aim.scope}"` };
+  const raw = parseFrontmatter(fs.readFileSync(entry.file, "utf-8"));
+  const data = raw.data as Record<string, unknown>;
+  const exchanges = (data.exchanges ?? []) as Array<Record<string, unknown>>;
+  const ex = exchanges.find((x) => x.id === aim.exchange);
+  if (!ex) return { ok: false, why: `no exchange "${aim.exchange}" in ${aim.scope}` };
+
+  let was = "";
+  /**
+   * ⛔ ONLY AN EXCHANGE CAN BE MARKED WITHDRAWN, AND THE FIRST VERSION OF THIS IGNORED THAT.
+   *
+   * `exists` lives on an exchange, a view and a scope. `Statement` is strict with two fields and
+   * `SlotFill` has no such field — so withdrawing one agreed slot had nowhere to record itself, and
+   * what it actually did was mark the whole EXCHANGE withdrawn, silently taking its other five
+   * slots down with it. Caught by running it against the seed and reading the file back, not by
+   * reading the code.
+   *
+   * ⛔ AND THE REFUSAL IS THE RIGHT ANSWER, NOT A GAP. Agreed truth is not deleted, it is reworded:
+   * the id stays, the stamp breaks, and the person who agreed is asked again. Deleting a sentence
+   * somebody put their name to would leave their verdict pointing at nothing, which is the one
+   * thing `withdrawn` exists to prevent at the exchange grain.
+   */
+  if (agreed && aim.kind !== "exchange")
+    return {
+      ok: false,
+      why:
+        `${ref} has been agreed to, and only a whole exchange can be marked withdrawn — ` +
+        `a slot and a statement have no such field, so there would be nowhere to record it`,
+      instead: [
+        `reword it: the id stays, the stamp breaks, and whoever agreed is asked again`,
+        `or take out the whole behaviour: withdraw ${aim.scope}#${aim.exchange}`,
+      ],
+    };
+
+  if (aim.kind === "exchange") {
+    was = String(ex.title ?? ex.id);
+    if (agreed) ex.exists = "withdrawn";
+    else exchanges.splice(exchanges.indexOf(ex), 1);
+  } else {
+    const slots = (ex.slots ?? {}) as Record<string, Record<string, unknown>>;
+    const fill = slots[aim.slot];
+    if (!fill) return { ok: false, why: `nothing is said at ${ref}` };
+    if (aim.kind === "slot") {
+      was = typeof fill.says === "string" ? fill.says : JSON.stringify(fill.says ?? "");
+      delete slots[aim.slot];
+    } else {
+      /**
+       * ⛔ ONE STATEMENT OUT OF SEVERAL, which is the grain the table rows are at. Taking the whole
+       * slot because one of its sentences was wrong is the shape of mistake `removals` exists to
+       * catch, and here it would be invisible: the slot would simply have less in it.
+       */
+      if (!Array.isArray(fill.says))
+        return { ok: false, why: `this slot says one thing, so there is no statement to take out of it — name the slot instead` };
+      const list = fill.says as Array<Record<string, unknown>>;
+      const one = list.find((x) => x.id === aim.name);
+      if (!one) return { ok: false, why: `no statement "${aim.name}" at ${ref}` };
+      was = String(one.says ?? "");
+      list.splice(list.indexOf(one), 1);
+      /** ⛔ A slot left with nothing is a blank slot, which `check` already refuses by name. */
+      if (!list.length) delete slots[aim.slot];
+    }
+  }
+
+  const parsed = Scope.safeParse(data);
+  if (!parsed.success)
+    return { ok: false, why: parsed.error.issues.map((i) => `${i.path.join(".")} — ${i.message}`).join("; ") };
+  fs.writeFileSync(
+    entry.file,
+    `---\n${YAML.stringify(data, { lineWidth: 96, blockQuote: "literal" })}---\n\n${raw.content.trim()}\n`,
+    "utf-8"
+  );
+  void by;
+  void at;
+  return { ok: true, file: entry.file, mode: agreed ? "withdrawn" : "deleted", was };
+}
