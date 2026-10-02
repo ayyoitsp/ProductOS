@@ -3,6 +3,8 @@ import path from "node:path";
 import os from "node:os";
 import { fileURLToPath } from "node:url";
 import { AGENTS, AUTHORS, type Capability } from "../core/jobs.js";
+import { addendum } from "../v2/steers.js";
+import type { Steer } from "../v2/schema.js";
 import type { ProductosConfig } from "../core/config.js";
 
 const HOME = os.homedir();
@@ -106,7 +108,12 @@ function agentsDirFor(cfgRoot?: string): string {
  * the reading and the writing in a context of its own. What a skill may never delegate is settling,
  * which is why no author gets a question tool.
  */
-function installClaudeAuthors(update?: boolean, cfg?: ProductosConfig, cfgRoot?: string): string[] {
+function installClaudeAuthors(
+  update?: boolean,
+  cfg?: ProductosConfig,
+  cfgRoot?: string,
+  steers?: readonly Steer[]
+): string[] {
   const root = bundledAgentsRoot();
   if (!fs.existsSync(root)) return [];
   const TARGET = agentsDirFor(cfgRoot);
@@ -154,7 +161,27 @@ function installClaudeAuthors(update?: boolean, cfg?: ProductosConfig, cfgRoot?:
       if (!update) continue;
       fs.rmSync(dst, { force: true });
     }
-    fs.writeFileSync(dst, front + fs.readFileSync(src, "utf-8"));
+    /**
+     * ⛔ WHAT THIS PROJECT HAS LEARNED, APPENDED — AUTHORS ONLY.
+     *
+     * Peter: *"either update the framework, or have 'org/project' addendum to the corpus that will
+     * run per org/project"*, and, asked how far it should reach: *"Both"* — here at install, and
+     * again at runtime when something is proposed.
+     *
+     * ⛔ AND NEVER ON A JUDGE, which is why this lives in `installClaudeAuthors` and has no
+     * counterpart in `installClaudeAgents`. A judge told what this project likes is a judge that
+     * can no longer notice the project is wrong — the same reason the newcomer is never told what
+     * ProductOS is. The split is structural: `AUTHORS` and `AGENTS` are two registries walked by
+     * two functions, and only one of them appends taste.
+     *
+     * It goes AFTER the prompt body, so the framework's own instructions are what an author reads
+     * first; a habit that contradicts them is the habit being wrong, and the addendum says so.
+     */
+    const learned = addendum(steers ?? []);
+    fs.writeFileSync(
+      dst,
+      front + fs.readFileSync(src, "utf-8") + (learned ? `\n\n---\n\n${learned}\n` : "")
+    );
     out.push(name);
   }
   return out;
@@ -291,7 +318,19 @@ function pruneRenamedRoles(installed: string[], cfgRoot?: string): string[] {
   return gone;
 }
 
-export function installClaudeSkills(opts: { update?: boolean; config?: ProductosConfig; configRoot?: string } = {}): ClaudeInstallResult {
+export function installClaudeSkills(
+  opts: {
+    update?: boolean;
+    config?: ProductosConfig;
+    configRoot?: string;
+    /**
+     * ⛔ HANDED IN, NOT DISCOVERED HERE. The adapter knows how to write an agent; it does not know
+     * where a project keeps its corpus, and inventing a path convention inside an installer is how
+     * one store quietly becomes two. The caller already resolved the corpus — it passes the steers.
+     */
+    steers?: readonly Steer[];
+  } = {}
+): ClaudeInstallResult {
   if (!fs.existsSync(CLAUDE_DIR)) {
     throw new Error(
       `Claude Code not detected at ${CLAUDE_DIR}. Install Claude Code first, then re-run.`
@@ -402,7 +441,7 @@ export function installClaudeSkills(opts: { update?: boolean; config?: Productos
 
   const agents = [
     ...installClaudeAgents(dev, opts.update, opts.config, opts.configRoot),
-    ...installClaudeAuthors(opts.update, opts.config, opts.configRoot),
+    ...installClaudeAuthors(opts.update, opts.config, opts.configRoot, opts.steers),
   ];
 
   /**

@@ -1,0 +1,18 @@
+id: "0070"
+said: |-
+  we should have product OS self improve from the get-go. all the feedback it receives we should record and figure out how to improve the agents. if it's make consistent errors or if it corrections indicate it should add an agent/adjust an agent, we should do that. and either update the framework, or have 'org/project' addendum to the corpus that will run per org/project - so a self learning loop
+
+  [asked how far a project addendum should reach] Both — install-time addendum into author prompts and runtime reads
+  [asked where a generation steer gets reviewed] A settings surface on the page
+  [asked about build order] Phase 0 + Phase 1 together
+at: 2026-10-02
+kind: concept
+reaches:
+  model: ""
+  derive: ""
+  generate: ""
+  surface: ""
+  check: ""
+  instruct: ""
+  pin: ""
+waived: {}

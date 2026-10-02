@@ -2452,6 +2452,19 @@ export const Steer = z
      */
     learned_from: z.string().min(3).optional(),
     at: dateish,
+    /**
+     * ⛔ TURNED OFF, AND WHY — BECAUSE OTHERWISE IT COMES STRAIGHT BACK.
+     *
+     * A learned steer is noticed from a pattern in what somebody corrected. So deleting one that
+     * turned out to be wrong does not end it: the pattern it was drawn from is still sitting in the
+     * record, and the next scan learns it again. Declining is how a person says "I saw this and it
+     * is not a rule here", in a form the noticer can read.
+     *
+     * ⛔ And it carries the reason, for the same argument `waived` on a change record carries one: a
+     * decline with no argument is indistinguishable from a steer nobody got round to, and the next
+     * person cannot tell which.
+     */
+    declined: z.string().min(3).optional(),
   })
   .strict()
   .superRefine((x, ctx) => {
@@ -2466,6 +2479,19 @@ export const Steer = z
         path: ["learned_from"],
         message:
           "a steer that constrains the product is somebody's decision, not a pattern noticed — say who decided it, or file it as steering generation",
+      });
+    /**
+     * ⛔ DECLINING IS FOR A PATTERN, NOT FOR A CLAIM. Turning off something that steers TRUTH is
+     * withdrawing a constraint on the product, which is a verdict — it belongs in a scope, where it
+     * can be argued with and where something records who withdrew it. Letting it happen here would
+     * make a line in a settings file into a quiet retraction of product truth.
+     */
+    if (x.steers === "truth" && x.declined)
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["declined"],
+        message:
+          "a constraint on the product is withdrawn where it was agreed to, not turned off in settings — take it out of the charter, or file it as steering generation",
       });
   });
 export type Steer = z.infer<typeof Steer>;

@@ -195,6 +195,7 @@ export const AREAS: Area[] = [
       "src/v2/record.ts",
       "src/v2/spoken.ts",
       "src/v2/connects.ts",
+      "src/v2/steers.ts",
       "src/adapters/claude.ts",
     ],
     needs: ["read-files", "run-commands", "search-files"],
