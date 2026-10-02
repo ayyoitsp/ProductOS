@@ -11,7 +11,10 @@
  * machine gets the identical loop, because the gate that protects a corpus naming a real client
  * must not become a punishment for using it.
  */
+import fs from "node:fs";
 import http from "node:http";
+import os from "node:os";
+import path from "node:path";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { sql } from "drizzle-orm";
@@ -96,9 +99,52 @@ export async function migrateStore(db: Db): Promise<{ applied: string[]; skipped
   );
 }
 
+/**
+ * Remove scratch directories a dead process left behind.
+ *
+ * ⛔ `finally` DOES NOT RUN ON SIGKILL, AND THAT IS THE ONLY WAY THESE LEAK. Every request
+ * materializes the corpus under `os.tmpdir()` and removes it on the way out, including on a throw —
+ * but an OOM kill or a `docker kill` skips that, and nothing swept. One abandoned copy of a corpus
+ * per hard kill is small; a container that has been restarting for a month is a disk somebody has
+ * to go and look at, and the symptom will not mention ProductOS.
+ *
+ * ⛔ AGE-GATED, BECAUSE A SECOND INSTANCE MAY BE MID-REQUEST. Inside a container the temp directory
+ * is the container's own, so a boot sweep would be safe — but `npm run dev:hosted` shares `/tmp`
+ * with whatever else is running, and deleting a live request's corpus would be a far worse bug than
+ * the one being fixed. An hour is longer than any request and shorter than anybody cares about.
+ */
+export function sweepScratch(
+  olderThanMs = 60 * 60 * 1000,
+  tmp: string = os.tmpdir(),
+  now: number = Date.now(),
+): string[] {
+  const removed: string[] = [];
+  let entries: string[] = [];
+  try {
+    entries = fs.readdirSync(tmp);
+  } catch {
+    return removed;
+  }
+  for (const name of entries) {
+    if (!name.startsWith("productos-project-")) continue;
+    const full = path.join(tmp, name);
+    try {
+      if (now - fs.statSync(full).mtimeMs < olderThanMs) continue;
+      fs.rmSync(full, { recursive: true, force: true });
+      removed.push(name);
+    } catch {
+      /** ⛔ Reported by omission, never thrown — a failed cleanup must not stop an instance booting. */
+    }
+  }
+  return removed;
+}
+
 export async function startHosted(
   config: HostedConfig = configFromEnv(),
 ): Promise<{ server: http.Server; url: string; close: () => Promise<void> }> {
+  const swept = sweepScratch();
+  if (swept.length) process.stderr.write(`[productos] swept ${swept.length} abandoned scratch directories\n`);
+
   const { db, close } = openStore(config.databaseUrl);
 
   const migrated = await migrateStore(db);

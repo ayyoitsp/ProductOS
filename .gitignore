@@ -62,3 +62,6 @@ docs/example/productos/.local/
 # review run, so committing it would only ever record whichever run finished last.
 # v2-seed/ IS committed — it is the pristine copy every run starts from.
 /v2/
+
+# Database dumps from `make backup` — a customer roadmap, in one file.
+/backups/
