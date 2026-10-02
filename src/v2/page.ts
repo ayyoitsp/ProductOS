@@ -2407,7 +2407,13 @@ function renderNav(
      * is for.
      */
     `<div class="crumbs"><span class="trail"></span>` +
-    `<button type="button" class="chev" aria-expanded="false" aria-label="Show every feature">▾</button></div>` +
+    /**
+     * ⛔ AND NO CHEVRON WHERE THERE IS NO TREE TO SHOW. A control that expands nothing is the thing
+     * `check` refuses by name elsewhere in this project — it reads as "there is more here" and then
+     * answers nothing, which is worse than the absence it is covering for.
+     */
+    (tree ? `<button type="button" class="chev" aria-expanded="false" aria-label="Show every feature">▾</button>` : "") +
+    `</div>` +
     tree +
     `</div>`
   );
@@ -5424,6 +5430,7 @@ const STYLE = `<style>
   .gate-note { background: var(--warn-bg); border-left: 3px solid var(--warn); border-radius: 0 6px 6px 0;
     padding: .7rem .9rem; margin: .9rem 0 1.4rem; font-size: .92rem; }
   .steer-list { list-style: none; margin: 1rem 0 0; padding: 0; }
+  .steer-block { margin-top: 1.6rem; }
   .steer-list li { padding: .6rem 0; border-bottom: 1px solid var(--line); font-size: 1rem; line-height: 1.5; }
   /**
    * ⛔ A HABIT READS AS A HABIT. On the settings surface each row carries where it was learned and,
@@ -5576,8 +5583,16 @@ function renderSettings(corpus: Corpus): string {
     a claim about the product, and nobody agrees to any of it. They shape what gets proposed; what
     the product commits to is on the features, and what holds across all of them is in the charter.</p>
     ${
+      /**
+       * ⛔ NOT `sub-view` WRAPPERS, AND THAT IS NOT A STYLE CHOICE. A `.sub-view` is hidden by the
+       * frame's script and revealed one at a time by a `subtabs` row — which Overview has and this
+       * surface does not. Wrapped that way, both lists rendered into the DOM and neither was ever
+       * shown: the tab worked, the section opened, and the page was blank below the lede.
+       *
+       * ⛔ Found in a browser. Every assertion on the markup passed — the lists ARE in the HTML.
+       */
       live.length
-        ? `<div class="sub-view" data-sub-view="in-force" data-ref="steers-live" data-label="In force">
+        ? `<div class="steer-block" data-ref="steers-live">
              <h2>In force</h2>
              <p class="lede">Carried into every author that writes for this product. ⛔ And into no
              reviewer — one told what this project likes can no longer notice the project is wrong.</p>
@@ -5587,7 +5602,7 @@ function renderSettings(corpus: Corpus): string {
     }
     ${
       off.length
-        ? `<div class="sub-view" data-sub-view="declined" data-ref="steers-declined" data-label="Declined">
+        ? `<div class="steer-block" data-ref="steers-declined">
              <h2>Declined</h2>
              <p class="lede">Somebody looked at these and said they are not rules here. ⛔ Kept rather
              than deleted: the pattern each was learned from is still in the record, so a steer that

@@ -119,3 +119,84 @@ test("a corpus with no steers directory is not an error", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pos-nosteers-"));
   assert.deepEqual(readSteers(dir), []);
 });
+
+// ─── the surface ──────────────────────────────────────────────────────────────────────────────
+
+import { renderScopePage } from "../dist/v2/page.js";
+
+/** The smallest corpus that renders: one scope, which is also the commonest shape in a seed. */
+const oneScope = (steers = []) => ({
+  paths: { root: "/tmp/x" },
+  scopes: [
+    {
+      scope: { id: "wallet", title: "Family Wallet", kind: "feature", views: [], exchanges: [] },
+      body: "",
+      file: "wallet.md",
+    },
+  ],
+  charter: [],
+  notes: [],
+  readings: [],
+  verdicts: [],
+  steers,
+  access: [],
+  rules: [],
+  broken: [],
+});
+
+test("⛔ the fixed tabs render in a one-scope corpus — the prototype board was unreachable without this", () => {
+  /**
+   * `renderNav` returned "" for the whole frame when the scope tree had fewer than two rows, which
+   * took the tab row with it. So Overview, Prototype and this settings surface were all rendered,
+   * all `display: none`, and nothing on the page could switch between them — in every single-scope
+   * corpus, including the seed this repo ships and serves.
+   *
+   * ⛔ ASSERTING ON THE MARKUP IS WHAT MISSED IT. Every section was present in the HTML and every
+   * `data-label` read correctly; the defect only existed once a browser applied the stylesheet.
+   * What makes this test worth anything is that it checks for the CONTROL, not the destination.
+   */
+  const html = renderScopePage(oneScope([steer()]), "wallet", {});
+  for (const tab of ["overview", "prototype", "settings"])
+    assert.match(html, new RegExp(`data-tab="${tab}"`), `no way to reach ${tab} — the section renders and nothing opens it`);
+});
+
+test("a dead chevron is not offered where there is no tree to expand", () => {
+  const html = renderScopePage(oneScope([steer()]), "wallet", {});
+  assert.doesNotMatch(html, /class="chev"/, "a control that expands nothing reads as 'there is more here' and answers nothing");
+});
+
+test("⛔ the settings surface is not a sub-view, or nothing on it is ever shown", () => {
+  /**
+   * A `.sub-view` is hidden by the frame's script and revealed one at a time by a `subtabs` row,
+   * which this surface does not have. Wrapped that way both lists rendered into the DOM and neither
+   * was ever visible: the tab worked, the section opened, and the page was blank below the lede.
+   */
+  const html = renderScopePage(oneScope([steer()]), "wallet", {});
+  const sec = html.slice(html.indexOf('id="view-settings"'));
+  const end = sec.indexOf("</section>");
+  assert.doesNotMatch(sec.slice(0, end), /class="sub-view"/, "the frame hides these, and nothing here reveals them");
+  assert.match(sec.slice(0, end), /Screens with more than three|steer-block/);
+});
+
+test("⛔ a habit stays off the charter, and a constraint stays off settings", () => {
+  const habit = steer({ id: "verb-buttons" });
+  const claim = steer({ id: "no-typing", says: "Nothing on a pricing screen can be typed into.", steers: "truth", learned_from: undefined });
+  const html = renderScopePage(oneScope([habit, claim]), "wallet", {});
+  const settings = html.slice(html.indexOf('id="view-settings"'));
+  const inSettings = settings.slice(0, settings.indexOf("</section>"));
+  assert.ok(
+    !inSettings.includes("pricing screen can be typed"),
+    "⛔ a constraint somebody agreed to belongs on the charter — on a settings surface it reads as taste nobody has to keep"
+  );
+  assert.ok(
+    inSettings.includes("Buttons are named for the verb"),
+    "the habit is here, where it can be seen and refused"
+  );
+});
+
+test("no settings tab at all where nothing has been learned", () => {
+  /** ⛔ An empty tab reads as *already checked that*, which is this page's oldest complaint. */
+  const html = renderScopePage(oneScope([]), "wallet", {});
+  assert.doesNotMatch(html, /data-tab="settings"/);
+  assert.doesNotMatch(html, /id="view-settings"/);
+});
