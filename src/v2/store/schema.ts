@@ -120,6 +120,21 @@ export const tokens = pgTable("tokens", {
 }, (t) => [uniqueIndex("token_hash_idx").on(t.hash)]);
 
 /**
+ * A one-time code proving somebody controls an address.
+ *
+ * ⛔ HASHED AND SINGLE-USE. `usedAt` is written rather than the row deleted, so a code that turns up
+ * again in a mail archive is visibly spent instead of merely absent. Delivery is the host's
+ * business — see `requestLogin`, which returns the code rather than pretending to send it.
+ */
+export const loginCodes = pgTable("login_codes", {
+  id: text("id").primaryKey(),
+  email: text("email").notNull(),
+  hash: text("hash").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  usedAt: timestamp("used_at", { withTimezone: true }),
+}, (t) => [index("login_code_email_idx").on(t.email)]);
+
+/**
  * ⛔ THIS TABLE IS WHAT MAKES `via: page` PROVABLE RATHER THAN CLAIMED.
  *
  * The instance issued this session and watched the press arrive on it, so it knows the press did
@@ -197,6 +212,7 @@ export const documents = pgTable("documents", {
 
 export const schema = {
   accounts,
+  loginCodes,
   projects,
   projectMembers,
   tokens,
