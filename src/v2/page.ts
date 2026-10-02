@@ -1597,7 +1597,7 @@ function behRow(
       ? `<span class="chip">not confirmed</span>`
       : `<span class="chip warn" title="${esc(st.by)} agreed on ${esc(st.at)}, and it changed after">changed since</span>`;
   return `<tr class="beh" id="beh-${slug(r.sref)}" data-beh="${esc(r.sref)}" data-ref="${esc(r.sref)}" data-label="${esc(r.label)}">
-      <td class="row-says">${r.says}${
+      <td class="row-says"><span class="says-text">${r.says}</span>${
         /**
          * ⛔ THE CHIPS RUN ON FROM THE SENTENCE. Peter: *"chips inline with the text at the end of
          * the sentence."*
@@ -3036,8 +3036,10 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
                    corpus
                  )}</div>
                  <div class="proto-grip" role="separator" aria-orientation="horizontal" tabindex="0"
-                      aria-label="Drag to resize the screen, or press to hide it">
-                   <button type="button" class="proto-hide" title="Hide the screen">▴</button>
+                      aria-label="Drag to resize the screen, or press the button to hide it">
+                   <button type="button" class="proto-hide">
+                     <span class="when-open">▴ hide the screen</span><span class="when-off">▾ show the screen</span>
+                   </button>
                  </div>
                </div>`
             }
@@ -3153,17 +3155,39 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
           .map((id) => {
             const sc = corpus.scopes.find((s) => s.scope.id === id)!.scope;
             const kids = corpus.scopes.filter((x) => x.scope.in === id);
-            return `<section class="view" id="${anchorOf(id)}" data-view="${esc(id)}" data-ref="${esc(id)}" data-label="${esc(plain(sc.title || id))}">
-              <h2>${line(sc.title || id)}</h2>
+            /**
+             * ⛔ A GROUP GETS THE SAME FRAME, AND NOT GIVING IT ONE IS WHY HE STILL COULD NOT SEE IT.
+             *
+             * Peter, after a 29-step drive of a FEATURE page reported everything working: *"still
+             * don't see anything on the bottom half, still not moveable pane for the preview."*
+             *
+             * He was not on a feature. `/v2` with no hash lands on the product overview, and a
+             * group — an area, the product itself — renders its own screens too. Neither had a
+             * frame, so on either one there is a prototype you cannot move and no second pane at
+             * all: exactly what he described, twice, while my drive passed on the one view that
+             * worked.
+             *
+             * ⛔ The lesson is about the drive, not the layout: I navigated by clicking a leaf in
+             * the nav, which is one of several ways in and the only one I tried. A surface verified
+             * on the path the author happens to take is verified nowhere.
+             */
+            const framed = sc.views.some((v) => v.exists !== "withdrawn");
+            return `<section class="view${framed ? " framed" : ""}" id="${anchorOf(id)}" data-view="${esc(id)}" data-ref="${esc(id)}" data-label="${esc(plain(sc.title || id))}">
+              <h3 class="feature-title">${line(sc.title || id)}</h3>
               ${
-                /**
-                 * ⛔ A GROUP'S OWN SCREEN RENDERS TOO. `views` is on every Scope and only leaf
-                 * features ever drew theirs, so a group that genuinely has a screen — an area
-                 * landing page, a shell the whole group lives in — could hold one in the file and
-                 * see nothing on the page.
-                 */
-                renderScreens(sc, ctx, id, opts, corpus)
+                framed
+                  ? `<div class="proto-frame">
+                       <div class="proto-scroll">${renderScreens(sc, ctx, id, opts, corpus)}</div>
+                       <div class="proto-grip" role="separator" aria-orientation="horizontal" tabindex="0"
+                            aria-label="Drag to resize the screen, or press the button to hide it">
+                         <button type="button" class="proto-hide">
+                           <span class="when-open">▴ hide the screen</span><span class="when-off">▾ show the screen</span>
+                         </button>
+                       </div>
+                     </div>`
+                  : ""
               }
+              <div class="below">
               ${renderProse(corpus.scopes.find((x) => x.scope.id === id)?.body ?? "")}
               ${renderGroupUx(corpus, id, ctx)}
               ${renderGroupRules(corpus, id, ctx, homesOf)}
@@ -3184,6 +3208,7 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
                 })
                 .join("")}</ul>
               ${kids.length ? "" : `<p class="lede">Nothing is filed under this yet.</p>`}
+              </div>
             </section>`;
           })
           .join("")
@@ -3919,9 +3944,18 @@ document.addEventListener("click", (ev) => {
 });
 
 document.addEventListener("dblclick", (ev) => {
-  const says = ev.target.closest(".row-says");
+  /**
+   * ⛔ THE SENTENCE'S OWN ELEMENT, NOT THE CELL. The cell also holds the chips, so replacing its
+   * contents with a textarea took "confirmed" and the type with it.
+   *
+   * ⛔ AND IT LOOKS FOR A TABLE ROW. This handler was written when a behaviour was an article and
+   * survived two restructurings into a table unchanged — so double-click found the text, failed to
+   * find its row, and returned silently. It was the only thing in a 28-step drive of the page that
+   * did not work, and nothing had noticed because every test asserted the handler was PRESENT.
+   */
+  const says = ev.target.closest(".says-text");
   if (!says || says.querySelector("textarea")) return;
-  const row = says.closest("article.beh");
+  const row = says.closest("tr.beh, article.beh");
   if (!row || !row.dataset.ref) return;
   const was = says.textContent.trim();
   const box = document.createElement("textarea");
@@ -3930,14 +3964,34 @@ document.addEventListener("dblclick", (ev) => {
   box.value = was;
   says.textContent = "";
   says.appendChild(box);
+  /**
+   * ⛔ FOCUSED ON THE NEXT FRAME. Focusing immediately after appending left the focus on the body
+   * — measured, not guessed — so the box's own keydown never fired and Escape did nothing.
+   * The element has to be laid out before it can take focus.
+   */
   box.focus();
-  /** ⛔ Escape puts the sentence back. An edit box with no way out traps a reader in a field. */
+  requestAnimationFrame(() => box.focus());
+  /**
+   * ⛔ ESCAPE PUTS THE SENTENCE BACK, AND IT IS HANDLED ON THE DOCUMENT AS WELL AS THE BOX.
+   *
+   * An edit box with no way out traps a reader in a field. Relying on the box's own keydown relied
+   * on the box having focus, and it did not — so the only escape was reloading the page, which
+   * loses everything else. ⛔ Listening in both places costs one line and removes the dependency on
+   * where the browser decided to put the caret.
+   */
+  const cancel = () => {
+    says.textContent = was;
+    document.removeEventListener("keydown", onEsc, true);
+  };
+  const onEsc = (e) => { if (e.key === "Escape" && says.contains(box)) { e.preventDefault(); cancel(); } };
+  document.addEventListener("keydown", onEsc, true);
   box.onkeydown = (e) => {
-    if (e.key === "Escape") { says.textContent = was; return; }
+    if (e.key === "Escape") { e.preventDefault(); cancel(); return; }
     e.stopPropagation();
   };
   /** The act itself is the existing one — same floor, same record, same via. */
   box.onblur = () => {
+    document.removeEventListener("keydown", onEsc, true);
     const now = box.value.trim();
     if (!now || now === was) { says.textContent = was; return; }
     says.textContent = was;
@@ -5074,6 +5128,16 @@ const VIEW_SWITCH = `<script>
     const shown = views.find((v) => v.dataset.view === name);
     if (shown && shown.classList.contains("framed")) document.documentElement.dataset.framed = "1";
     else delete document.documentElement.dataset.framed;
+    /**
+     * ⛔ ANNOUNCED, BECAUSE THE MEASUREMENT HAPPENS IN ANOTHER SCRIPT AND HAPPENS FIRST.
+     *
+     * The frame's height is the viewport minus everything in the way, and the padding on main is one
+     * of those things — but the padding DEPENDS on whether a framed view is showing, which is
+     * decided here. Measured before this ran, it counted the unframed 136px, so the chrome came out
+     * at 281px and the bottom pane was left 152px tall. The same ordering trap as the resize
+     * listener registered above its own function in this file.
+     */
+    window.dispatchEvent(new Event("productos:view"));
     for (const a of menu) a.classList.toggle("on", a.dataset.goto === name);
     if (trail) {
       const parts = trails[name] || [{ id: name, label: name }];
@@ -5281,7 +5345,12 @@ const PROTO_FRAME = `<script>
   try {
     const was = localStorage.getItem("productos:proto");
     if (was === "off") root.dataset.proto = "off";
-    else if (was && /^[0-9.]+$/.test(was)) root.style.setProperty("--proto-h", was + "px");
+    /**
+     * ⛔ A REMEMBERED SLIVER FROM AN OLDER BUILD IS FORGIVEN. The floor used to be 80px, so somebody
+     * who dragged it down then is stuck with an unusable frame for good — a persisted value is a
+     * decision that outlives the code that allowed it.
+     */
+    else if (was && /^[0-9.]+$/.test(was)) root.style.setProperty("--proto-h", Math.max(140, parseFloat(was)) + "px");
   } catch (e) {}
 
   const remember = (v) => { try { localStorage.setItem("productos:proto", v); } catch (e) {} };
@@ -5296,15 +5365,46 @@ const PROTO_FRAME = `<script>
     const top = document.querySelector(".topframe");
     const note = document.getElementById("note-bar");
     const bars = document.querySelector(".bottom-bars");
+    /**
+     * ⛔ THE PADDING ON MAIN COUNTS. Leaving it out made the frame taller than the space it had, so
+     * the bottom of the table sat below the viewport with nothing to scroll it into view — the
+     * exact failure a measured offset exists to avoid, reintroduced by measuring all but one of the
+     * things in the way.
+     */
+    const main = document.querySelector("main");
+    const mp = main ? getComputedStyle(main) : null;
+    /**
+     * ⛔ ONLY WHAT IS ABOVE THE CONTENT, AND A LEFT-DOCKED NAV IS BESIDE IT.
+     *
+     * Peter, three rounds in and after everything else I had checked passed: *"uhm, still blank for
+     * me.... the bottom half."* He has the nav docked left — his choice, remembered in
+     * localStorage, which is why nothing I changed reached him.
+     *
+     * Docked left, the top frame becomes a full-height sidebar: 900px on a 900px window. This measured its
+     * HEIGHT and subtracted it, so the chrome came out at 954px, the framed view collapsed to its
+     * 320px minimum, and the bottom pane was exactly 0px tall. Blank, on every feature, no matter
+     * how short the prototype.
+     *
+     * ⛔ Measuring "everything in the way" by measuring every element's height assumed they are all
+     * stacked. One of them is not, and the one that is not is the one a reader can move — so the
+     * page was correct only in the placement I happened to be using, which is the same mistake as
+     * driving only the path I happened to take.
+     */
+    const stacked = top && document.documentElement.dataset.nav !== "left";
     const h =
-      (top ? top.offsetHeight : 0) +
+      (stacked ? top.offsetHeight : 0) +
       (note ? note.offsetHeight : 0) +
       (bars && !bars.hidden ? bars.offsetHeight : 0) +
-      16;
+      (mp ? parseFloat(mp.paddingTop) + parseFloat(mp.paddingBottom) : 0) +
+      8;
     root.style.setProperty("--chrome-h", h + "px");
   };
   chrome();
   window.addEventListener("resize", chrome);
+  /** ⛔ And after every view switch: the padding on main depends on which view is showing. */
+  window.addEventListener("productos:view", chrome);
+  /** ⛔ The placement is a button, and moving the nav changes whether it is above the content at all. */
+  window.addEventListener("productos:nav", chrome);
   /** ⛔ The bars appear and disappear on their own; re-measure when the DOM under them changes. */
   new MutationObserver(chrome).observe(document.body, { childList: true, subtree: false });
   /** And after the composer has had a chance to grow, which it does on its first keystroke. */
@@ -5319,7 +5419,12 @@ const PROTO_FRAME = `<script>
     const off = root.dataset.proto === "off";
     if (off) { delete root.dataset.proto; remember(String(Math.round(px()))); }
     else { root.dataset.proto = "off"; remember("off"); }
-    hide.title = off ? "Hide the screen" : "Show the screen";
+    /**
+     * ⛔ THE LABEL IS CSS, NOT JAVASCRIPT. It was set here on click only, so a page that LOADED
+     * collapsed showed a 20x18 caret whose tooltip said "Hide the screen" — about a screen that was
+     * already hidden. The state is remembered, so that is the state a reader comes back to, and the
+     * one control that could undo it was both unlabelled and lying.
+     */
   });
 
   const px = () => {
@@ -5345,7 +5450,12 @@ const PROTO_FRAME = `<script>
      * which reads as broken rather than hidden — hiding is what the button is for. Dragged past the
      * viewport the tabs leave the screen entirely.
      */
-    const h = Math.max(80, Math.min(window.innerHeight - 160, from.h + (ev.clientY - from.y)));
+    /**
+     * ⛔ A FLOOR YOU CAN STILL USE. 80px left a sliver with a drawing cropped to nothing, which is
+     * indistinguishable from broken — and it is REMEMBERED, so it is what you come back to. Hiding
+     * is what the button is for, and hiding says so.
+     */
+    const h = Math.max(140, Math.min(window.innerHeight - 160, from.h + (ev.clientY - from.y)));
     delete root.dataset.proto;
     root.style.setProperty("--proto-h", h + "px");
   });
@@ -5366,7 +5476,7 @@ const PROTO_FRAME = `<script>
     if (!step) return;
     ev.preventDefault();
     delete root.dataset.proto;
-    root.style.setProperty("--proto-h", Math.max(80, Math.min(window.innerHeight - 160, px() + step)) + "px");
+    root.style.setProperty("--proto-h", Math.max(140, Math.min(window.innerHeight - 160, px() + step)) + "px");
     remember(String(Math.round(px())));
   });
 })();
@@ -5403,7 +5513,12 @@ export function standalone(title: string, page: string): string {
 <title>${esc(title)}</title></head><body>${page}</body></html>`;
 }
 
-const STYLE = `<style>
+/**
+ * ⛔ EXPORTED SO THERE IS ONE DESIGN SYSTEM, NOT TWO. The project selector at an instance's root is
+ * a page a person looks at, and giving it its own CSS would start a second set of tokens that drift
+ * — the thing this file is most careful about everywhere else.
+ */
+export const STYLE = `<style>
   :root {
     --bg: #fbfaf8; --card: #fff; --ink: #1a1a18; --dim: #6b6b64; --line: #e4e1da;
     --accent: #7c4a2d; --warn: #8a5a00; --warn-bg: #fdf5e3; --bad: #a8301c; --bad-bg: #fcefec;
@@ -5547,6 +5662,17 @@ const STYLE = `<style>
    * was for. ⛔ And the composer's clearance goes with it: the frame's own height already subtracts
    * the composer, so keeping the padding would push the bottom of the frame under it.
    */
+  /**
+   * ⛔ THE PAGE PADDING ON MAIN IS THE SPACE ABOVE THE TITLE. Peter: *"there's still space above the
+   * title"* — after I had reported it as zero, because I measured from the top of the VIEW and the
+   * 40px was on the element above it. A 2.5rem top padding is right for a document
+   * and wrong for a frame, where the top of the pane is the top of the content.
+   *
+   * ⛔ The 6rem at the bottom was worse than cosmetic: it is clearance for the fixed composer, which
+   * the frame's own height already subtracts — so the frame ran 96px past the viewport and the last
+   * row of the table was unreachable.
+   */
+  :root[data-framed] main { padding-top: .4rem; padding-bottom: 0; }
   :root[data-framed] body { overflow: hidden; }
   :root[data-framed] body.has-note-bar { padding-bottom: 0; }
   section.view.framed > .below { flex: 1 1 auto; min-height: 0; overflow: auto; }
@@ -5571,11 +5697,21 @@ const STYLE = `<style>
     cursor: ns-resize; touch-action: none; }
   .proto-grip::before { content: ""; width: 3rem; height: 3px; border-radius: 2px; background: var(--line); }
   .proto-grip:hover::before, .proto-grip:focus-visible::before { background: var(--accent); }
-  .proto-hide { position: absolute; right: .2rem; bottom: -.1rem; font: inherit; font-size: .7rem;
-    line-height: 1; padding: .15rem .4rem; border: 1px solid var(--line); border-radius: 4px;
+  .proto-hide { position: absolute; right: .2rem; bottom: -.15rem; font: inherit; font-size: .7rem;
+    line-height: 1; padding: .2rem .5rem; border: 1px solid var(--line); border-radius: 4px;
     background: var(--card); color: var(--dim); cursor: pointer; }
   .proto-hide:hover { color: var(--ink); border-color: var(--accent); }
-  :root[data-proto="off"] .proto-hide { transform: rotate(180deg); }
+  /**
+   * ⛔ IT SAYS WHICH WAY IT GOES, AND IT IS LEGIBLE WHEN COLLAPSED — the state is remembered, so a
+   * collapsed frame is what a reader comes back to days later. A 20px caret with a tooltip reading
+   * "hide the screen" about an already-hidden screen is a dead end somebody never gets out of.
+   */
+  .proto-hide .when-off { display: none; }
+  :root[data-proto="off"] .proto-hide .when-open { display: none; }
+  :root[data-proto="off"] .proto-hide .when-off { display: inline; }
+  :root[data-proto="off"] .proto-hide { position: static; border-color: var(--accent); color: var(--accent); }
+  :root[data-proto="off"] .proto-grip { height: auto; padding: .25rem 0; cursor: default; }
+  :root[data-proto="off"] .proto-grip::before { display: none; }
   /** ⛔ Small. Peter: *"get rid of that, make the title pretty small."* */
   .feature-title { font-size: 1rem; font-weight: 600; margin: 0 0 .5rem; letter-spacing: -.01em; }
   table.beh-table { width: 100%; border-collapse: collapse; font-size: .92rem; }

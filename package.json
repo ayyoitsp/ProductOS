@@ -30,7 +30,10 @@
     "dev:serve": "tsx watch src/cli/index.ts serve --ui",
     "start": "node bin/productos.js",
     "typecheck": "tsc --noEmit",
-    "test": "node --test test/*.test.mjs"
+    "test": "node --test test/*.test.mjs",
+    "db:generate": "drizzle-kit generate",
+    "hosted": "node dist/v2/store/boot.js",
+    "dev:hosted": "tsx src/v2/store/boot.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.81",
@@ -40,15 +43,19 @@
     "@modelcontextprotocol/sdk": "^1.0.4",
     "ai": "^6.0.192",
     "commander": "^12.1.0",
+    "drizzle-orm": "^0.45.3",
     "globby": "^16.2.0",
     "gray-matter": "^4.0.3",
     "marked": "^18.0.4",
     "picocolors": "^1.1.1",
+    "postgres": "^3.4.9",
     "yaml": "^2.6.1",
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
     "@types/node": "^22.10.2",
+    "drizzle-kit": "^0.31.11",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"
   }
