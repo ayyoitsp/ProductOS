@@ -10,7 +10,7 @@
  *   note     worth a person's attention; never blocks
  *   shape    an observation about proportions, which no single page can show
  */
-import { SLOTS, SLOT_ASKS, statements, saysText, type SlotName, type Says } from "./schema.js";
+import { SLOTS, SLOT_ASKS, statements, saysText, NOT_A_DOCUMENT, type SlotName, type Says } from "./schema.js";
 import {
   DOWNSTREAM_OF_ANSWER,
   answerIsUnknown,
@@ -1870,6 +1870,69 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
       });
     if (screenOnly.length > nowhere.length + silentParts.length)
       void 0; // nothing to say: naming the screen without a control is normal for whole-screen rules
+  }
+
+  /**
+   * ---- a product-wide document holding something that is not product-wide ----
+   *
+   * ⛔ Peter, reading them: *"'Decisions' - these are all way too feature specific, doesn't belong
+   * at top level, should be behaviors. 'Non-goals' - also feature specific, should be behaviors.
+   * 'Design principles' - These are generally fine, but should be design principles not product
+   * principles. like 'nothing reaches a deal until a person applies it' has nothing to do with
+   * design, this is a product feature nugget."*
+   *
+   * The migrator no longer creates the two documents, which stops this arriving again — but a corpus
+   * that already has them gets told, because the fix is not deletion: each sentence has a home where
+   * it is attached to the feature it constrains, agreed to on its own, and goes stale when it
+   * changes. In a document it has none of those things.
+   *
+   * ⛔ A NOTE, AND IT NAMES THE HOME. Refusing would reject a real corpus on its first day over
+   * thirteen sections somebody wrote in good faith, and a finding whose fix is "delete this" is one
+   * nobody acts on.
+   */
+  {
+    /**
+     * ⛔ THE DOCUMENT IS THE SIGNAL, NOT THE SENTENCE — and the first version of this got that
+     * backwards. It matched prose for "chosen <year>" and for exclusions, and found 8 of the 13
+     * misfiled sections on the real corpus: it missed *"This product … never writes into their
+     * calc"* because the negation was not at the front, and *"Settings save; they do not mint
+     * versions"* entirely. A regex over prose will always under-report, and an under-reporting
+     * finding is worse than none here, because the five it stayed quiet about read as fine.
+     *
+     * Nothing needs inferring. These two documents are not documents in this model, so every
+     * section in them is misfiled by construction.
+     */
+    for (const doc of corpus.charter) {
+      const home = NOT_A_DOCUMENT[doc.charter.id];
+      if (!home) continue;
+      for (const sec of doc.charter.sections)
+        add({
+          severity: "note",
+          kind: "this-belongs-to-a-feature",
+          where: `${doc.charter.id}#${sec.id}`,
+          what: `"${norm(sec.title ?? sec.id)}" sits at the top of the corpus, above every feature, while being about one of them — so nobody reading that feature meets it, and nothing here goes stale when the thing it is about changes`,
+          fix: `move it to ${home}`,
+        });
+    }
+
+    /**
+     * ⛔ AND A CHOICE RECORDED IN ONE OF THE FOUR THAT REMAIN. Here a heuristic is the only option —
+     * the document is legitimate and the sentence is the problem — so it is used only where there
+     * is nothing exact to key on.
+     */
+    const DECIDED = /\*\*chosen\b|\b(?:we )?(?:chose|decided)\b.{0,30}\b(?:19|20)\d\d\b/i;
+    for (const doc of corpus.charter) {
+      if (NOT_A_DOCUMENT[doc.charter.id]) continue;
+      for (const sec of doc.charter.sections)
+        if (DECIDED.test(saysText(sec.says)))
+          add({
+            severity: "note",
+            kind: "a-decision-kept-as-prose",
+            where: `${doc.charter.id}#${sec.id}`,
+            what: `this records a choice somebody made, inside "${norm(doc.charter.title)}" — so it carries no hash, and nothing can tell that what it decided has since moved`,
+            fix: `record it where a decision lives: a ruling or an acceptance by whoever decided, against the slot or rule it settles. ⛔ Then it goes stale when that sentence is reworded, which is the whole difference`,
+          });
+    }
   }
 
   /**

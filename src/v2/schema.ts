@@ -2260,6 +2260,51 @@ export const Charter = z
 export type Charter = z.infer<typeof Charter>;
 
 /**
+ * ⛔ WHAT A PRODUCT-WIDE DOCUMENT MAY BE, AND THE TWO THAT STOPPED BEING ONE.
+ *
+ * Peter, reading them on a real corpus: *"'Decisions' - these are all way too feature specific,
+ * doesn't belong at top level, should be behaviors. 'Non-goals' - also feature specific, should be
+ * behaviors"* — and then the question that settled it: *"why can't we delete the non-goals section
+ * and decisions section?"*
+ *
+ * Nothing stopped us. They existed because the migrator carried v1's context model across
+ * unchanged, and nobody asked whether the Exchange model still needed them. It does not — it has a
+ * better home for every sentence in both, and those homes are attached to the feature they
+ * constrain, agreed to one at a time, and go stale when the thing they are about changes. A
+ * document gives a sentence none of those three.
+ *
+ * ⛔ THE SURVIVING FOUR ARE THE ONES WITH NO OTHER HOME. A goal, a design principle, a persona and
+ * a product's voice are genuinely about the whole product and cannot be attached to one feature
+ * without becoming something else.
+ *
+ * ⛔ AND THIS LIST IS A REFERENCE, NEVER A WHITELIST. Peter: *"the top level outside of these
+ * should probably be user/project configurable - a place where they can add there own top level
+ * rules."* He is right, and the thing to avoid is obvious from how we got here: v1 had a fixed list
+ * of six, the migrator carried it across, and two documents existed for years because a list said
+ * they should. Replacing six hardcoded names with four would be the same mistake with a shorter
+ * list.
+ *
+ * So the loader reads whatever is in `charter/` — a project adding `charter/compliance.md` works
+ * today and nothing here gates it. These four are the ones ProductOS can say something useful
+ * about; `NOT_A_DOCUMENT` below is the only list with teeth, and it names what has a better home
+ * rather than what is allowed. See PT-0003 for making the per-project half first-class.
+ *
+ * ⛔ AND THIS IS NOT A `kind` FIELD. Charter once had one; it was deleted because nothing read it,
+ * with a note saying it would come back with its reader. A reader nearly appeared here — to tell a
+ * design principle from a product rule — and it was the wrong answer: *"a self-check the lender
+ * runs for its own benefit does not prevent the save"* is not a mislabelled principle, it is a
+ * **Rule**, which the model already has. Labelling a misfiling is not fixing it.
+ */
+export const DOCUMENTS = ["goals", "principles", "personas", "voice"] as const;
+
+export const NOT_A_DOCUMENT: Record<string, string> = {
+  "non-goals":
+    "a slot's `standing: out_of_scope` with this as the reason, a named `refuses` outcome, or the feature's `happy_path.not` — attached to what it constrains, where a reader actually meets it",
+  decisions:
+    "a `Verdict` — recorded by whoever decided, with their reason and what it replaced. In a document it carries no hash, so it reads as current forever after the thing it decided has moved",
+};
+
+/**
  * Something a person wants changed, addressed to whoever authors.
  *
  * ⛔ A NOTE IS NOT PRODUCT TRUTH, AND KEEPING THAT LINE IS THE WHOLE DESIGN.

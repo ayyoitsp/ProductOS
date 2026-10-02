@@ -1,0 +1,17 @@
+id: "0069"
+said: "'Decisions' - these are all way too feature specific, doesn't belong at top level, should be behaviors. 'Non-goals' - also feature specific, should be behaviors. why can't we delete the non-goals section and decisions section? i'm not sure why we need charter.kind"
+at: 2026-10-02
+kind: concept
+reaches:
+  model: NOT_A_DOCUMENT
+  derive: ""
+  generate: NO_LONGER_DOCUMENTS
+  surface: ""
+  check: this-belongs-to-a-feature
+  instruct: ""
+  pin: every section of a no-longer-document is reported, with its home named
+waived:
+  derive: nothing is derived. The whole point is that these two documents are misfiled BY CONSTRUCTION, so the finding keys on the document id rather than inferring anything from the prose. ⛔ The first version did infer — a regex for exclusions and dated choices — and found 8 of the 13 on the real corpus, missing the ones whose negation was not at the front. A derivation here was the bug.
+  surface: no new surface. These sections already render, and since top-level consent landed they already carry the act and the badge. What was missing was anybody saying they are in the wrong place, which is a finding.
+  instruct: the homes are already in the scoper's instructions — out_of_scope with a reason, a named refuses outcome, happy_path.not — and the finding names them at the point somebody reads it. ⛔ Adding a paragraph telling authors not to create a document the tool no longer creates would be instructing against a mistake nothing invites any more.
+closed: 2026-10-02
