@@ -691,7 +691,7 @@ Held three ways rather than one: no author declares `ask-the-human`, so no host 
 
 What `--help` cannot tell you, and why this exists: **who** types it, and **which track** it belongs to. *Never hand a human a flag* is a rule the skills state and nothing enforced — a command marked `claude` appearing in instructions addressed to a person is now a visible contradiction. And two parallel models have been running for months with nothing saying which commands belong to which.
 
-### Current — 36 commands
+### Current — 44 commands
 
 | command | does | layer | typed by |
 |---|---|---|---|
@@ -703,6 +703,14 @@ What `--help` cannot tell you, and why this exists: **who** types it, and **whic
 | `productos byok` | Toggle and report the state of bring-your-own-key verification | surface | **a person** |
 | `productos todo` | Framework gaps — where the model could not express what the corpus needed | check | either |
 | `productos learn` | What the record of feedback says about how this project works — computed, never written back | check | either |
+| `productos hosted` | Operate a hosted instance: accounts, projects, tokens, and corpus in and out | surface | either |
+| `productos hosted doctor` | Whether the store can be reached, the schema is current, and what is in it | check | either |
+| `productos hosted projects` | Every project in the store, with its owner and how much it holds | surface | either |
+| `productos hosted project` | Create a project, owned by an account that is made if it is new | surface | either |
+| `productos hosted token` | Issue, list and revoke what something automated holds to reach a project | surface | either |
+| `productos hosted import` | Put a corpus directory into a project on an instance | generate | either |
+| `productos hosted export` | Write a project's corpus out as a directory, byte for byte | generate | either |
+| `productos hosted session` | A browser session for one account, which is what makes a press provable | surface | either |
 | `productos v2` | The Exchange model — the tree every verb below it hangs from | surface | either |
 | `productos v2 check` | What this corpus refuses, and what it merely reports | check | the model |
 | `productos v2 grid` | The behaviours a scope states, and where each one stands | derive | the model |

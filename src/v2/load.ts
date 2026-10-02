@@ -117,8 +117,35 @@ export const diskStore: Store = {
  * remote copy silently does not have — and the two would disagree about what the corpus says while
  * both reported themselves healthy.
  */
-export const CORPUS_DIRS = ["truth", "rules", "charter", "readings", "notes", "verdicts"] as const;
+export const CORPUS_DIRS = [
+  "truth",
+  "rules",
+  "charter",
+  "readings",
+  "notes",
+  "verdicts",
+  /**
+   * ⛔ ADDED LATE, AND IT HAD BEEN SILENTLY MISSING. `loadCorpus` has read `steers/` since steers
+   * existed; this list did not have it, so every steer was invisible over `--at <url>` and absent
+   * from the hosted store — where the store is the AUTHORITY, so a missed file is not a stale read
+   * but a deletion. Caught by `test/v2-corpus-complete.test.mjs`, which compares the two instead of
+   * trusting that somebody updated both.
+   */
+  "steers",
+] as const;
 
+/**
+ * Every file a corpus is made of, keyed by the path a directory would give it.
+ *
+ * ⛔ AND "WHICH DIRECTORIES" WAS THE WRONG QUESTION. `access.yaml` lives at the corpus ROOT, not in
+ * a directory, so a list of subdirectories could never have carried it however carefully it was
+ * maintained. Root-level YAML is enumerated too, which is what makes this match the parser rather
+ * than merely resemble it.
+ *
+ * ⛔ `events/` IS STILL EXCLUDED, DELIBERATELY. The event log is how a session is told what
+ * happened; it is not a claim about the product, and a `documents` row would put it in markdown
+ * export and in a packet.
+ */
 export function corpusFiles(root: string): Record<string, string> {
   const out: Record<string, string> = {};
   for (const sub of CORPUS_DIRS) {
@@ -127,6 +154,12 @@ export function corpusFiles(root: string): Record<string, string> {
     for (const f of fs.readdirSync(here)) {
       if (!/\.(md|ya?ml)$/.test(f)) continue;
       out[`${sub}/${f}`] = fs.readFileSync(path.join(here, f), "utf-8");
+    }
+  }
+  if (fs.existsSync(root)) {
+    for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
+      if (!entry.isFile() || !/\.ya?ml$/.test(entry.name)) continue;
+      out[entry.name] = fs.readFileSync(path.join(root, entry.name), "utf-8");
     }
   }
   return out;
@@ -138,8 +171,16 @@ export const memoryStore = (root: string, files: Record<string, string>): Store 
   return {
     list: (dir, ext) => {
       const base = rel(dir);
+      /**
+       * ⛔ THE ROOT IS A DIRECTORY TOO, AND THIS RETURNED NOTHING FOR IT. `rel(root)` is the empty
+       * string, so the filter below asked for keys starting with `"/"` and found none — which made
+       * `access.yaml` unreadable over the wire and out of the hosted store even once `corpusFiles`
+       * carried it. Half a fix is indistinguishable from none here, because both ends report
+       * themselves healthy.
+       */
+      const atRoot = base === "";
       return Object.keys(files)
-        .filter((k) => k.startsWith(base + "/") && !k.slice(base.length + 1).includes("/"))
+        .filter((k) => (atRoot ? !k.includes("/") : k.startsWith(base + "/") && !k.slice(base.length + 1).includes("/")))
         .filter((k) => ext.some((e) => k.endsWith(e)))
         .sort()
         .map((k) => path.join(root, k));

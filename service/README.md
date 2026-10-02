@@ -1,4 +1,27 @@
-# ProductOS service
+# ProductOS service — ⛔ RETIRED, and still deployed
+
+> **This models v1.** `containers`, `behaviors`, `test_cases`, `surfaces`, `elements` — the schema
+> the **Exchange** model replaced. It cannot read a v2 corpus at all.
+>
+> The hosted instance is now `src/v2/store/`, with `Dockerfile` and `docker-compose.yml` at the repo
+> root. A corpus is `documents` rows holding the bytes the one parser already reads; a project is
+> the isolation boundary; `/p/<project-id>/mcp` is the agent surface. See
+> `planning/HOSTED_TENANCY.md`.
+>
+> **What was salvaged** and what was not:
+>
+> | Carried over | Left here |
+> | --- | --- |
+> | the two-credential idea, generalized into `accounts` / `tokens` / `sessions` | the eleven v1 tables |
+> | `drizzle generate` + `migrate`, and the note that `push` fails on this schema | `src/routes/*` |
+> | MCP over Streamable HTTP | `src/app/*`, the v1 review app |
+>
+> ⛔ **Not deleted, because it is running.** `ARCHITECTURE.md` §8 records a live Azure Container Apps
+> deployment of this code. Deleting the source for something serving traffic is not a tidy-up, so
+> the decision to tear it down — and what happens to anything in its database — is Peter's. Until
+> then this notice is the only thing stopping somebody extending it.
+
+---
 
 The hosted truth authority. Postgres-backed API; the database is the authority and markdown is an export.
 

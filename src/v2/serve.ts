@@ -19,12 +19,31 @@ import { appStyleFor } from "./appcss.js";
 import { watchLog, lineFor } from "./log.js";
 import { inbox, DEFAULT_LEASE_MS } from "./inbox.js";
 import { working } from "./presence.js";
-import { mayRecord, mayRelay, principalOf, localAccount } from "./identity.js";
+import { mayRecord, mayRelay, principalOf, localAccount, type Principal } from "./identity.js";
 
 
 export interface V2Routes {
   /** The corpus directory this server is serving. */
   dir: string;
+  /**
+   * ⛔ WHO IS ASKING, WHEN SOMETHING ABOVE THIS ALREADY KNOWS.
+   *
+   * Locally nothing does, so this is absent and `principalOf` answers from the request — one person
+   * is at the machine. Hosted, the instance authenticated an account and issued the session the
+   * press arrived on, and THAT is the principal every write path must be asked about. Passing it in
+   * rather than re-deriving it here keeps `mayRecord` the one decision: a second opinion about
+   * whether a request is a browser or a token would be a second place the guarantee could be wrong.
+   */
+  who?: Principal;
+  /**
+   * Whose name goes on a press.
+   *
+   * ⛔ THIS IS `fg-0002`, ANSWERED. Locally `by` is the OS account of the process — evidence about
+   * where the server runs, not about who pressed, which is wrong the moment a press arrives from
+   * another machine. Hosted there is a real account, so the gap closes rather than being worked
+   * around.
+   */
+  by?: string;
 }
 
 const json = (res: http.ServerResponse, body: unknown, status = 200): void => {
@@ -103,13 +122,14 @@ const LOOPBACK = /^(::1|(::ffff:)?127(\.\d{1,3}){3})$/;
 /** Whether a request came from this machine. ⛔ Anchored at both ends, so a hostname cannot pass. */
 export const isLocal = (req: http.IncomingMessage): boolean => LOOPBACK.test(req.socket.remoteAddress ?? "");
 
-const whoIsPressing = (_req: http.IncomingMessage): string => localAccount();
+const whoIsPressing = (_req: http.IncomingMessage, override?: string): string => override ?? localAccount();
 
 /**
  * Handle a `/v2` request. Returns `false` when the path is not ours, so the v1 server can carry
  * on — v2 is a parallel track and must not shadow a single v1 route.
  */
-export async function v2Route(req: http.IncomingMessage, res: http.ServerResponse, p: string, { dir }: V2Routes): Promise<boolean> {
+export async function v2Route(req: http.IncomingMessage, res: http.ServerResponse, p: string, opts: V2Routes): Promise<boolean> {
+  const { dir } = opts;
   /**
    * ⛔ ONE LIST, AND IT IS THE INSTANCE API. `productos serve` is not a preview of a hosted thing —
    * it IS the thing, deployed locally, with a directory behind it instead of a database. A route
@@ -143,7 +163,7 @@ export async function v2Route(req: http.IncomingMessage, res: http.ServerRespons
    * month. So the principal is established here and `mayRecord` is asked by every write path.
    */
   const session = sessionOf(req, res);
-  const who = principalOf(req.headers as Record<string, string | undefined>, session);
+  const who = opts.who ?? principalOf(req.headers as Record<string, string | undefined>, session);
 
   /**
    * ⛔ THE PAGE UPDATES ITSELF, WHICH IS WHAT MAKES THIS ONE INTERFACE RATHER THAN THREE.
@@ -349,7 +369,7 @@ export async function v2Route(req: http.IncomingMessage, res: http.ServerRespons
      * which is the `gateFor`/`check` shape again — two writers for one file, diverging by whichever
      * field one of them forgot.
      */
-    const asker = typeof body.by === "string" && body.by.trim() ? body.by.trim() : whoIsPressing(req);
+    const asker = typeof body.by === "string" && body.by.trim() ? body.by.trim() : whoIsPressing(req, opts.by);
     const r = fileNote(dir, {
       about: String(body.about ?? ""),
       says: String(body.says ?? ""),
@@ -405,7 +425,7 @@ export async function v2Route(req: http.IncomingMessage, res: http.ServerRespons
       appCss: app.css || undefined,
       mockClass: app.mockClass,
       linkBase: "/v2",
-      by: whoIsPressing(req),
+      by: whoIsPressing(req, opts.by),
       recordsTo: `written into ${dir}`,
     });
     if (!page) {

@@ -23,6 +23,7 @@ import { v2Command } from "./commands/v2.js";
 import { verifyCommand, unverifyCommand } from "./commands/verify.js";
 import { testCommand } from "./commands/test.js";
 import { queueCommand } from "./commands/queue.js";
+import { hostedCommand } from "./commands/hosted.js";
 
 const program = new Command();
 
@@ -32,6 +33,7 @@ program
   .version("0.1.0");
 
 program.addCommand(initCommand());
+program.addCommand(hostedCommand());
 program.addCommand(serveCommand());
 program.addCommand(envCommand());
 program.addCommand(productCommand());
