@@ -490,7 +490,13 @@ test("a feature offers its behaviours one at a time, and the slot machinery is f
   const scopes = corpus.scopes.filter((s) => s.scope.exchanges.length);
   assert.ok(scopes.length, "the seed has no scope with behaviours");
   for (const { scope } of scopes) {
-    const html = renderScopePage(corpus, scope.id, { linkBase: "/v2" });
+    /**
+     * ⛔ `interactive`, BECAUSE THE ACTS ARE NOW GATED ON IT. A render with no way to record
+     * anything no longer draws buttons — a control that cannot work is worse than none, which this
+     * codebase says in several places and the read-only CLI message used to contradict. What this
+     * test is about is the GRAIN: one offering per statement, not per slot.
+     */
+    const html = renderScopePage(corpus, scope.id, { linkBase: "/v2", interactive: true });
 
     // Every stated sentence is offered on its own, and nothing blank is.
     const said = scope.exchanges.flatMap((ex) =>
@@ -526,7 +532,13 @@ test("a feature offers its behaviours one at a time, and the slot machinery is f
         }, 0),
       0
     );
-    const cards = (html.match(/article class="beh"/g) ?? []).length;
+    /**
+     * ⛔ `tr`, NOT `article`. Behaviours became a single table grouped by screen — Peter: *"even
+     * MORE tabular. single table."* The claim this test protects is unchanged and still the point:
+     * one offering per STATEMENT, not per slot, because thirteen claims under one "That is right"
+     * is not review. Only the element carrying it changed.
+     */
+    const cards = (html.match(/tr class="beh"/g) ?? []).length;
     assert.equal(cards, expected, `${scope.id}: ${cards} cards for ${expected} statements`);
 
     /**

@@ -67,7 +67,8 @@ test("agreeing to it changes what the card says, and retires the agree button", 
    * ⛔ CONFIRMED MEANS THE AGREE BUTTON IS GONE. Offering "That is right" under a badge reading
    * confirmed asks for the same consent twice and makes the badge look advisory.
    */
-  const card = /<article class="beh"[^>]*data-beh="tasks#complete-a-task#may"[\s\S]*?<\/article>/.exec(html);
+  /** ⛔ A row now, not an article — the behaviours became one table grouped by screen. */
+  const card = /<tr class="beh"[^>]*data-beh="tasks#complete-a-task#may"[\s\S]*?<\/tr>/.exec(html);
   assert.ok(card, "the behaviour card for the sentence that was agreed to is not on the page");
   {
     assert.ok(!/data-act="accept"/.test(card[0]), "a confirmed behaviour still offers to be agreed to");

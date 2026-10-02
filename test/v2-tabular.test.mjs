@@ -36,13 +36,22 @@ const page = (dir) => renderScopePage(loadCorpus(dir), "tasks", { interactive: t
 
 test("a behaviour is a collapsed row, and what supports the judgement is behind the tap", () => {
   const html = page(seeded());
-  assert.match(html, /<details class="beh-row">/, "behaviours are not rows");
-  /** ⛔ No `open` attribute anywhere: every row starts closed, or it is a stack of cards again. */
-  assert.ok(!/<details class="beh-row" open/.test(html), "a row renders already expanded");
-  /** The sentence is in the summary — it is what you choose by. */
-  assert.match(html, /<span class="row-says">/);
+  /**
+   * ⛔ ONE TABLE, GROUPED BY SCREEN. Peter went further the next turn: *"even MORE tabular. single
+   * table. do not truncate text, make the text all visible, group into subsections based on which
+   * screen it applies to."* This test pinned the intermediate shape — 201 separate collapsed
+   * elements — and the sentence was clipped with an ellipsis, which put the one thing a reviewer
+   * judges behind a tap.
+   */
+  assert.match(html, /<table class="beh-table">/, "behaviours are not one table");
+  assert.match(html, /<tbody data-screen=/, "the rows are not grouped by the screen they apply to");
+  assert.ok(!/<details class="beh-row"/.test(html), "the old per-behaviour collapsed element is back");
+  /** The sentence is a cell, in full. */
+  assert.match(html, /<td class="row-says">/);
+  /** ⛔ Detail opens as its own row, because a table cannot nest a details element. */
+  assert.match(html, /<tr class="beh-detail"[^>]*hidden>/, "there is nothing to open under a row");
   /** The evidence is not. */
-  assert.match(html, /beh-shows|beh-nothing/, "the evidence block is gone rather than collapsed");
+  assert.match(html, /beh-shows|beh-nothing/, "the evidence block is gone rather than behind the tap");
 });
 
 test("the row carries confirm, reword and take-out", () => {
@@ -65,20 +74,18 @@ test("a confirmed row offers no trash, and no second confirm", () => {
   const dir = seeded();
   perform(dir, "accept", { target: "tasks#complete-a-task#with" }, { by: "a-person", via: "page" });
   const html = page(dir);
-  const row = /<details class="beh-row">[\s\S]*?data-act="say" data-ref="tasks#complete-a-task#with"[\s\S]*?<\/details>/.exec(html);
-  /** The row for an accepted slot: find it by the article that holds its ref. */
-  const card = /<article class="beh"[^>]*data-ref="tasks#complete-a-task#with"[\s\S]*?<\/article>/.exec(html);
+  const card = /<tr class="beh"[^>]*data-ref="tasks#complete-a-task#with"[\s\S]*?<\/tr>/.exec(html);
   assert.ok(card, "the accepted behaviour is not on the page");
   assert.ok(!/data-act="withdraw"/.test(card[0]), "a confirmed row offers a trash icon that can only refuse");
   assert.ok(!/data-act="accept"/.test(card[0]), "a confirmed row still asks to be confirmed");
   assert.match(card[0], /data-act="say"/, "a confirmed row cannot be reworded — the only honest act is gone");
-  void row;
 });
 
 /** ⛔ A press in the summary must not also toggle the row, or every confirmation opens what it confirmed. */
 test("a row act stops the row from toggling", () => {
   const html = page(seeded());
-  assert.match(html, /if \(b\.closest\("summary"\)\) \{ ev\.preventDefault\(\); ev\.stopPropagation\(\); \}/,
+  /** ⛔ The toggle ignores a press on a button, so confirming does not also open what it confirmed. */
+  assert.match(html, /if \(ev\.target\.closest\("button, a, textarea, summary"\)\) return;/,
     "pressing a row's button also opens the row, which reads as the press having done something else");
 });
 

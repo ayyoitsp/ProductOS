@@ -1229,7 +1229,16 @@ function renderBehaviours(
 ): string {
   const entry = corpus.scopes.find((s) => s.scope.id === scopeId);
   if (!entry) return "";
-  const cards: string[] = [];
+  const rows: Array<{
+    view?: string;
+    sref: string;
+    slot: SlotName;
+    says: string;
+    label: string;
+    settled: boolean;
+    standing: string;
+    detail: string;
+  }> = [];
   for (const ex of entry.scope.exchanges) {
     const ref = `${scopeId}#${ex.id}`;
     for (const slot of SLOTS) {
@@ -1281,100 +1290,44 @@ function renderBehaviours(
             : slotShows;
         const sref = shown.length > 1 && said.id !== "it" ? `${ref}#${slot}#${said.id}` : `${ref}#${slot}`;
         const past = decisionsOn(corpus, sref);
-        cards.push(`
-        <article class="beh" id="beh-${slug(sref)}" data-beh="${esc(sref)}" data-ref="${esc(sref)}" data-label="${esc(`${SLOT_ASKS_SHORT[slot] ?? slot} · ${plain(ex.title)}`)}">
-          ${
-            /**
-             * ⛔ A ROW, COLLAPSED, WITH THE THREE THINGS A READER DOES TO IT.
-             *
-             * Peter: *"let's make the behaviors more tabular now - collapse all the info, only on
-             * row tap does it expand. and have a 'checkmark' to approve, 'trash' icon to delete,
-             * 'edit' button to make changes. they should also be able to just edit the text
-             * directly."*
-             *
-             * A card carried the sentence, where it happens, its evidence, a screenshot of the
-             * control, its state and three buttons — about four hundred pixels each, and a feature
-             * has thirty. So reading a feature meant scrolling past everything about sentence one to
-             * reach sentence two, and the shape of the whole — which of thirty are confirmed —
-             * could not be seen at all.
-             *
-             * ⛔ WHAT STAYS IN THE ROW IS WHAT YOU CHOOSE BY: the sentence, whether it is confirmed,
-             * and the three acts. Everything that supports a judgement rather than being one —
-             * evidence, the drawing, where it lands — is behind the tap, because it is what you
-             * look at AFTER deciding the sentence is worth examining.
-             *
-             * ⛔ A details element, not a click handler. It opens with no JavaScript, keyboard and screen
-             * readers get it for free, and a reader who opens five rows and reloads keeps nothing —
-             * which is correct, because the row's state is not truth.
-             */
-            ""
-          }
-          <details class="beh-row">
-            <summary>
-              ${
-                /** ⛔ The state first, so a column of thirty reads as a column rather than prose. */
-                (() => {
-                  const st = stampFor(corpus, sref);
-                  const ok = st.state === "accepted";
-                  return `<span class="tick ${ok ? "on" : ""}" title="${ok ? `confirmed by ${esc(st.by)} on ${esc(st.at)}` : "nobody has agreed to this yet"}">${ok ? "✓" : "○"}</span>`;
-                })()
-              }
-              <span class="row-says">${shown.length > 1 ? line(said.says) : says}</span>
-              <span class="row-slot">${esc(SLOT_ASKS_SHORT[slot] ?? slot)}</span>
-              ${
-                /**
-                 * ⛔ THE ACTS ON THE ROW, so agreeing to twenty sentences is twenty presses and no
-                 * opening. ⛔ And they are in the summary, so a press must not also toggle the row:
-                 * the handler stops the event. Found by pressing one and watching the row open.
-                 */
-                settled && interactive
-                  ? `<span class="row-acts">${
-                      stampFor(corpus, sref).state === "accepted"
-                        ? ""
-                        : `<button class="act icon" data-act="accept" data-ref="${esc(sref)}" title="That is right — confirm it">✓</button>`
-                    }<button class="act icon" data-act="say" data-ref="${esc(sref)}" title="Reword it">✎</button>${
-                      /**
-                       * ⛔ NO TRASH ON A ROW SOMEBODY AGREED TO, because the act cannot succeed
-                       * there. A slot and a statement have no `exists` field, so withdrawing one
-                       * that carries a stamp is refused — agreed truth is reworded, which keeps the
-                       * id and breaks the stamp. Rendering the icon anyway would be a button whose
-                       * only possible outcome is a refusal, and this codebase has shipped that
-                       * three times.
-                       */
-                      stampFor(corpus, sref).state === "accepted"
-                        ? ""
-                        : `<button class="act icon danger" data-act="withdraw" data-ref="${esc(sref)}" title="Take it out — nobody has agreed to this yet">🗑</button>`
-                    }</span>`
-                  : ""
-              }
-            </summary>
-          <p class="beh-where">
+        rows.push({
+          view: ex.at?.view,
+          sref,
+          slot,
+          /**
+           * ⛔ THE LABEL COMES FROM THE RAW SENTENCE, NOT THE RENDERED ONE.
+           *
+           * The row's `says` is already HTML — `<em>nothing to refuse</em>` for a slot with nothing
+           * to refuse — so putting it through `esc` for the label produced
+           * `&lt;em&gt;nothing to refuse&lt;/em&gt;`, which the browser then writes out as visible
+           * markup in a tooltip. A test for exactly this double-escape has existed since an earlier
+           * round and caught it on the first full run.
+           */
+          label: `${SLOT_ASKS_SHORT[slot] ?? slot} · ${(shown.length > 1 && said.says
+            ? said.says
+            : fill?.says
+              ? saysText(fill.says as Says)
+              : fill?.none
+                ? "nothing to refuse"
+                : fill?.cannot_fail
+                  ? "cannot fail"
+                  : plain(ex.title)
+          )
+            .replace(/\s+/g, " ")
+            .slice(0, 40)}`,
+          /** ⛔ The whole sentence. See the table below for why nothing is cut. */
+          says: shown.length > 1 ? line(said.says) : says,
+          settled,
+          standing,
+          detail: `
+            <p class="beh-where">
             ${esc(SLOT_ASKS_SHORT[slot] ?? slot)} · on ${refLink(ref, ctx, ex.title)}${
-              /**
-               * ⛔ THE CONTROL, AS SOMETHING YOU CAN GO AND LOOK AT.
-               *
-               * This printed the part id as bare code — `deal-row` — beside a sentence about
-               * refusing. Peter: "wtf does 'Deal row on CRE Deals' -> refuses even mean?" It meant
-               * nothing, because the row was nowhere on screen. Now it walks to that control on the
-               * screen and selects it, so the sentence and the thing it describes are together.
-               */
               ex.at?.view
                 ? ` · <button type="button" class="show-part" data-show-part="${esc(`${ex.at.view}/${ex.at.part ?? ""}`)}">${
                     ex.at.part ? `show me ${esc(partLabel(corpus, scopeId, ex.at.view, ex.at.part))}` : "show me the screen"
                   }</button>`
                 : ` · <span class="n owes-inline">nothing says where this happens</span>`
             }${cell && cell.rule ? ` · from <code>${esc(cell.rule)}</code>` : ""}${
-              /**
-               * ⛔ WHERE PRESSING IT GOES, ON THE CARD — not only in the walk.
-               *
-               * Peter, early on: *"i can't tell if clicking on next is actually navigating"*. The
-               * prototype moved, eventually, and the card describing the control still said nothing
-               * about where it leads. So a reviewer reading the sentence had to press the button to
-               * find out, and pressing it is the thing they were trying to judge.
-               *
-               * ⛔ `finishes` first, because it is the stronger claim: a press that ends the feature
-               * is not "goes to the completion screen", it is the end of the thing being reviewed.
-               */
               (() => {
                 if (!ex.at?.part) return "";
                 const sc2 = corpus.scopes.find((x) => x.scope.id === scopeId)?.scope;
@@ -1388,137 +1341,153 @@ function renderBehaviours(
                   ex.lands_on ? "" : " <i>(read from what it says, not stated)</i>"
                 }</span>`;
               })()
+            }</p>
+            ${
+              (ex.slots?.may?.held_by ?? []).length && slot === "may"
+                ? `<p class="held-by">${(ex.slots!.may!.held_by ?? [])
+                    .map((id: string) => {
+                      const a = corpus.access.find((x) => x.id === id);
+                      return `<span class="who ${a ? a.kind : "unknown"}" title="${esc(a ? a.means : "nothing in this product is called that")}">${esc(id)}</span>`;
+                    })
+                    .join("")}</p>`
+                : ""
             }
-          </p>
-          ${
-            /**
-             * ⛔ The evidence hangs off the SLOT, not the statement, so it is shown once per set
-             * rather than repeated on all thirteen cards. Criteria naming which statement they
-             * demonstrate is the next change; until then repeating them would be thirteen copies of
-             * thirty-one lines.
-             */
-            /**
-             * ⛔ ONLY THIS STATEMENT'S EVIDENCE. Hanging every criterion off the first card showed a
-             * reviewer reading claim one the evidence for all thirteen — thirty-one lines, most of
-             * them about something else. A criterion names the statement it demonstrates; the ones
-             * that name none belong to the slot and show on the first card, because that is where
-             * they were before anybody said otherwise.
-             */
-            shows.length
-              ? `<details class="beh-shows"><summary>${shows.length} thing${
-                  shows.length === 1 ? "" : "s"
-                } that would show this</summary><ul>${shows
-                  .map(
-                    (c) =>
-                      `<li>${[c.given && `<span class="g">given</span> ${line(c.given)}`, c.when && `<span class="g">when</span> ${line(c.when)}`, c.then && `<span class="g">then</span> ${line(c.then)}`]
-                        .filter(Boolean)
-                        .join(" ")}</li>`
-                  )
-                  .join("")}</ul></details>`
-              : `<p class="beh-nothing">Nothing here says what would show this working.</p>`
-          }
-          ${
-            /**
-             * ⛔ THE SCREEN GOES IN THE CARD, not behind a link to somewhere else on the page.
-             *
-             * Peter: "screens should be embedded into every card, relevant to the behavior it's
-             * talking about. don't see this happening."
-             *
-             * "show me the deal row" was a scroll away from the sentence, which means reading the
-             * sentence and seeing the thing it describes are two acts with the page moving in
-             * between. The judgement is "is this true of THAT", and both halves have to be in front
-             * of somebody at once.
-             *
-             * ⛔ A PLACEHOLDER, FILLED BY CLONING THE ONE COPY. Rendering the screen again inside
-             * every card would put one screen's controls in the DOM a hundred times over, with the
-             * same `data-part` on all of them — so selecting a control would resolve to whichever
-             * copy came first, possibly inside a hidden view. The screen keeps one home; the card
-             * gets a copy of it made in the browser, with its ids stripped, focused on the part this
-             * sentence is about.
-             */
-            ex.at?.view
-              ? (() => {
-                  /**
-                   * ⛔ THE PICTURE THE SENTENCE IS ACTUALLY ABOUT.
-                   *
-                   * Peter: *"most of the prototypes per behavior card are wrong. on at-create-deal,
-                   * they all show the entry form, even if talking about folder matching..."*
-                   *
-                   * Four behaviours on four different controls of one view, every card showing the
-                   * same frame — because a reference to a view resolved to its default picture and
-                   * nothing else. Three of those controls are not in the default picture at all, so
-                   * each folder sentence was shown beside a screen with no folders on it.
-                   *
-                   * Written by the author when they say so, derived from the drawings when they do
-                   * not, and ⛔ left on the default when neither can tell — a frame picked by
-                   * guessing is the same defect with a different picture.
-                   */
-                  const v = corpus.scopes.find((x) => x.scope.id === scopeId)?.scope.views.find((x) => x.id === ex.at!.view);
-                  const named = ex.at!.state && v ? v.states?.findIndex((st) => st.when === ex.at!.state) : -1;
-                  const frame = named !== undefined && named >= 0 ? named + 1 : v && ex.at!.part ? stateShowing(v, ex.at!.part) : null;
-                  const stateLabel = frame && v?.states?.[frame - 1] ? v.states[frame - 1]!.label || v.states[frame - 1]!.when : "";
-                  return `<figure class="card-screen" data-of="${esc(ex.at!.view)}"${
-                    ex.at!.part ? ` data-focus="${esc(ex.at!.part)}"` : ""
-                  }${frame ? ` data-frame="${frame}"` : ""}><figcaption>${
-                    ex.at!.part
-                      ? `${esc(partLabel(corpus, scopeId, ex.at!.view, ex.at!.part))} on ${esc(viewTitle(corpus, scopeId, ex.at!.view))}`
-                      : esc(viewTitle(corpus, scopeId, ex.at!.view))
-                  }${
-                    /** ⛔ Name the state, or a reader cannot tell this is one picture of several. */
-                    stateLabel ? ` · <span class="of-state">${esc(stateLabel)}</span>` : ""
-                  }</figcaption></figure>`;
-                })()
-              : ""
-          }
-          ${
-            /**
-             * ⛔ WHO MAY, BY NAME, BESIDE THE SENTENCE. Peter: *"enumerate which permissions can
-             * access it."* The sentence stays — it is what somebody agrees to — and the names are
-             * what make it answerable from the other end and the same on every feature that means
-             * the same thing.
-             */
-            slot === "may" && (ex.slots?.[slot]?.held_by ?? []).length
-              ? `<p class="held-by">${(ex.slots![slot]!.held_by ?? [])
-                  .map((id: string) => {
-                    const a = corpus.access.find((x) => x.id === id);
-                    return `<span class="who ${a ? a.kind : "unknown"}" title="${esc(a ? a.means : "nothing in this product is called that")}">${esc(
-                      id
-                    )}</span>`;
-                  })
-                  .join("")}</p>`
-              : ""
-          }
-          </details>
-          ${renderState(corpus, sref)}
-          ${
-            settled
-              ? /**
-                 * ⛔ CONFIRMED MEANS THE "THAT IS RIGHT" BUTTON GOES. Offering it again under a
-                 * badge saying confirmed asks somebody to agree twice and makes the badge look
-                 * advisory. ⛔ Rewording stays, always: product truth is the target state and has to
-                 * remain changeable, so the one act that is still honest here is changing it.
-                 */
-                stampFor(corpus, sref).state === "accepted"
-                ? `<footer class="beh-acts quiet">
-                     <button class="act ghost" data-act="say" data-ref="${esc(sref)}">This needs to change</button>
-                   </footer>`
-                : `<footer class="beh-acts">
-                   <button class="act" data-act="accept" data-ref="${esc(sref)}">That is right</button>
-                   <button class="act ghost" data-act="say" data-ref="${esc(sref)}">Not quite — reword it</button>
-                   <button class="act ghost" data-act="waive" data-ref="${esc(sref)}">Not ours to say</button>
-                 </footer>`
-              : `<p class="owes">Not settled yet — ${esc(standing.replace(/_/g, " "))}. It is in the queue.</p>`
-          }
-        </article>`);
+            ${
+              shows.length
+                ? `<details class="beh-shows"><summary>${shows.length} thing${shows.length === 1 ? "" : "s"} that would show this</summary><ul>${shows
+                    .map(
+                      (c) =>
+                        `<li>${[c.given && `<span class="g">given</span> ${line(c.given)}`, c.when && `<span class="g">when</span> ${line(c.when)}`, c.then && `<span class="g">then</span> ${line(c.then)}`]
+                          .filter(Boolean)
+                          .join(" ")}</li>`
+                    )
+                    .join("")}</ul></details>`
+                : `<p class="beh-nothing">Nothing here says what would show this working.</p>`
+            }
+            ${
+              ex.at?.view
+                ? `<figure class="card-screen" data-of="${esc(ex.at.view)}"${ex.at.part ? ` data-focus="${esc(ex.at.part)}"` : ""}><figcaption>${
+                    ex.at.part
+                      ? `${esc(partLabel(corpus, scopeId, ex.at.view, ex.at.part))} on ${esc(viewTitle(corpus, scopeId, ex.at.view))}`
+                      : esc(viewTitle(corpus, scopeId, ex.at.view))
+                  }</figcaption></figure>`
+                : ""
+            }
+            ${
+              /**
+               * ⛔ WHO AGREED AND WHEN, IN THE DETAIL. The chip has to fit a column, so it says one
+               * word and carries the rest in its title — and a tooltip is not a record. An earlier
+               * round established that a badge reading "confirmed" has to say by whom, or it is a
+               * claim nobody can check; this is where that sentence went when the badge became a
+               * chip.
+               */
+              renderState(corpus, sref)
+            }
+            ${renderRecord(past)}`,
+        });
       }
     }
   }
-  if (!cards.length) return "";
-  return `<section class="behaviours">
-    <h3 class="sub">${cards.length} behaviour${cards.length === 1 ? "" : "s"} to read</h3>
-    <p class="what-next">One sentence at a time. Is it right? Reword it if not — your words are what gets recorded.</p>
-    ${cards.join("")}
+  if (!rows.length) return "";
+
+  /**
+   * ⛔ ONE TABLE, GROUPED BY SCREEN, NOTHING CUT.
+   *
+   * Peter: *"even MORE tabular. single table. do not truncate text, make the text all visible,
+   * group into subsections based on which screen it applies to. add a chip for confirmed or not,
+   * chip for 'type'. we don't need 'this is right', 'not quite- reword it', 'not ours to say' -
+   * those are the check/edit/delete buttons."*
+   *
+   * The previous pass made each behaviour a collapsed row and left three things wrong. The rows
+   * were 201 separate elements rather than a table, so nothing lined up in columns and the eye had
+   * no edge to run down. The sentence was clipped with an ellipsis, so the one thing a reviewer is
+   * judging was the one thing they could not read without opening it. And the three worded buttons
+   * stayed below each row, duplicating the icons above them — two ways to perform one act, which is
+   * how a reader learns to distrust both.
+   *
+   * ⛔ GROUPED BY SCREEN, BECAUSE THAT IS THE UNIT A REVIEWER HOLDS IN THEIR HEAD. Thirty sentences
+   * in exchange order is thirty unrelated judgements; the same thirty under "Create a deal" and
+   * "Folder step" is two screens, each of which can be read as a whole and found wrong as a whole.
+   *
+   * ⛔ ONE `<tbody>` PER SCREEN rather than one table each: a reader comparing two screens needs the
+   * columns to be the same width, and separate tables size their columns independently.
+   */
+  const groups = new Map<string | undefined, typeof rows>();
+  for (const r of rows) {
+    const at = groups.get(r.view) ?? [];
+    at.push(r);
+    groups.set(r.view, at);
+  }
+  /** Screens in the order the feature's own path meets them, then anything not on a screen. */
+  const order = [...(entry.scope.happy_path?.through ?? []), ...entry.scope.views.map((v) => v.id)];
+  const keys = [...groups.keys()].sort((a, b) => {
+    if (a === undefined) return 1;
+    if (b === undefined) return -1;
+    const ia = order.indexOf(a), ib = order.indexOf(b);
+    return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib);
+  });
+
+  const confirmed = rows.filter((r) => stampFor(corpus, r.sref).state === "accepted").length;
+  const bodies = keys
+    .map((view) => {
+      const mine = groups.get(view)!;
+      const title = view ? viewTitle(corpus, scopeId, view) : "Not on any screen";
+      const done = mine.filter((r) => stampFor(corpus, r.sref).state === "accepted").length;
+      return `<tbody data-screen="${esc(view ?? "")}">
+        <tr class="group"><th colspan="4">${line(title)} <span class="n">${done} of ${mine.length} confirmed</span></th></tr>
+        ${mine.map((r) => behRow(corpus, r, interactive)).join("")}
+      </tbody>`;
+    })
+    .join("");
+
+  /**
+   * ⛔ `data-sync` IS WHAT LETS THIS UPDATE WITHOUT A RELOAD. Peter: *"table should refresh
+   * dynamically and not do the screen reload thing."* The id has to be stable across renders, or a
+   * refresh would have nothing to swap into.
+   */
+  return `<section class="behaviours" data-sync="behaviours-${esc(scopeId)}">
+    <h3 class="sub">${rows.length} behaviour${rows.length === 1 ? "" : "s"} · ${confirmed} confirmed</h3>
+    <p class="what-next">One sentence at a time. ✓ if it is right, ✎ to reword it, 🗑 to take it out. Tap a row for what shows it, the screen, and what has been decided.</p>
+    <table class="beh-table">
+      <thead><tr><th>Confirmed</th><th>Type</th><th>What the product promises</th><th></th></tr></thead>
+      ${bodies}
+    </table>
   </section>`;
+}
+
+/** One behaviour, as a row plus the row that opens under it. */
+function behRow(
+  corpus: Corpus,
+  r: { sref: string; slot: SlotName; says: string; label: string; settled: boolean; standing: string; detail: string },
+  interactive: boolean
+): string {
+  const st = stampFor(corpus, r.sref);
+  const ok = st.state === "accepted";
+  /**
+   * ⛔ A CHIP FOR EACH, because a word in a sentence is not something you can scan a column of.
+   * The stale states read as NOT confirmed and say why — a chip saying confirmed over a sentence
+   * nobody read is the failure those states exist to catch.
+   */
+  const chip = ok
+    ? `<span class="chip ok" title="by ${esc(st.by)} on ${esc(st.at)}">confirmed</span>`
+    : st.state === "never"
+      ? `<span class="chip">not confirmed</span>`
+      : `<span class="chip warn" title="${esc(st.by)} agreed on ${esc(st.at)}, and it changed after">changed since</span>`;
+  return `<tr class="beh" id="beh-${slug(r.sref)}" data-beh="${esc(r.sref)}" data-ref="${esc(r.sref)}" data-label="${esc(r.label)}">
+      <td>${chip}</td>
+      <td><span class="chip type">${esc(SLOT_ASKS_SHORT[r.slot] ?? r.slot)}</span></td>
+      <td class="row-says">${r.says}${
+        r.settled ? "" : `<p class="owes">Not settled yet — ${esc(r.standing.replace(/_/g, " "))}. It is in the queue.</p>`
+      }</td>
+      <td class="row-acts">${
+        r.settled && interactive
+          ? `${ok ? "" : `<button class="act icon" data-act="accept" data-ref="${esc(r.sref)}" title="That is right — confirm it">✓</button>`}<button class="act icon" data-act="say" data-ref="${esc(r.sref)}" title="Reword it">✎</button>${
+              ok ? "" : `<button class="act icon danger" data-act="withdraw" data-ref="${esc(r.sref)}" title="Take it out — nobody has agreed to this yet">🗑</button>`
+            }`
+          : ""
+      }</td>
+    </tr>
+    <tr class="beh-detail" data-for="${esc(r.sref)}" hidden><td colspan="4">${r.detail}</td></tr>`;
 }
 
 
@@ -1672,9 +1641,10 @@ function renderHappyPath(corpus: Corpus, scopeId: string, ctx: Ctx, past: Decisi
       ${
         agreed
           ? `<p class="happy-ok">Agreed by ${esc(stamp.by ?? "somebody")} on ${esc(stamp.at ?? "")} — the sentences below can be read against it.</p>`
-          : `<footer class="beh-acts">
-               <button class="act" data-act="accept" data-ref="${esc(ref)}">That is what it is for</button>
-               <button class="act ghost" data-act="say" data-ref="${esc(ref)}">Not quite — reword it</button>
+          : /** ⛔ The same icons as a row, so one gesture means one thing everywhere on the page. */
+            `<footer class="beh-acts icons">
+               <button class="act icon" data-act="accept" data-ref="${esc(ref)}" title="That is what it is for">✓</button>
+               <button class="act icon" data-act="say" data-ref="${esc(ref)}" title="Reword it">✎</button>
              </footer>
              <p class="happy-why">${
                stamp.state === "never"
@@ -1883,11 +1853,22 @@ function renderGroupRules(corpus: Corpus, scopeId: string, ctx: Ctx, homes: Map<
           ${
             open
               ? `<p class="owes">Nobody has answered this. Answering it once settles it everywhere it reaches.</p>`
-              : `<footer class="beh-acts">
-                   <button class="act" data-act="accept" data-ref="${esc(r.rule.id)}">That is right, everywhere</button>
-                   <button class="act ghost" data-act="say" data-ref="${esc(r.rule.id)}" data-owes="then">Not quite — reword it</button>
-                   <button class="act ghost" data-act="waive" data-ref="${esc(r.rule.id)}">Not ours to say</button>
-                 </footer>`
+              : /**
+                 * ⛔ THE SAME THREE ICONS AS A BEHAVIOUR ROW. Peter: *"we don't need 'this is right',
+                 * 'not quite- reword it', 'not ours to say' - those are the check/edit/delete
+                 * buttons."* Those exact three words were here, on every rule card.
+                 *
+                 * ⛔ AND `waive` IS GONE RATHER THAN RENAMED. "Not ours to say" hands a decided
+                 * sentence to whoever builds it, which is an answer to an OPEN question — it belongs
+                 * in the queue, where a slot is actually undecided, and the question interface
+                 * already offers it there. Offering it beside a stated sentence asked somebody to
+                 * un-decide something.
+                 */
+                `<footer class="beh-acts icons">${
+                   stampFor(corpus, r.rule.id).state === "accepted"
+                     ? ""
+                     : `<button class="act icon" data-act="accept" data-ref="${esc(r.rule.id)}" title="That is right, everywhere">✓</button>`
+                 }<button class="act icon" data-act="say" data-ref="${esc(r.rule.id)}" data-owes="then" title="Reword it">✎</button></footer>`
           }
         </article>`;
       })
@@ -2105,7 +2086,7 @@ function renderExchanges(corpus: Corpus, scopeIds: string[], cellOf: Map<string,
                        )
                        .join("")}</ul>
                    </div>`
-                : `<button class="act primary" data-act="accept" data-ref="${esc(ref)}">I have read this and agree to it</button>`
+                : `<button class="act icon" data-act="accept" data-ref="${esc(ref)}" title="I have read this and agree to it">✓</button>`
             }
           </footer>
         </article>`);
@@ -2817,10 +2798,10 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
                        ${
                          opts.interactive
                            ? stampFor(corpus, `${c.charter.id}#${sec.id}`).state === "accepted"
-                             ? `<footer class="beh-acts quiet"><button class="act ghost" data-act="say" data-ref="${esc(`${c.charter.id}#${sec.id}`)}">This needs to change</button></footer>`
-                             : `<footer class="beh-acts">
-                                  <button class="act" data-act="accept" data-ref="${esc(`${c.charter.id}#${sec.id}`)}">That is right</button>
-                                  <button class="act ghost" data-act="say" data-ref="${esc(`${c.charter.id}#${sec.id}`)}">Not quite — reword it</button>
+                             ? `<footer class="beh-acts icons quiet"><button class="act icon" data-act="say" data-ref="${esc(`${c.charter.id}#${sec.id}`)}" title="This needs to change">✎</button></footer>`
+                             : `<footer class="beh-acts icons">
+                                  <button class="act icon" data-act="accept" data-ref="${esc(`${c.charter.id}#${sec.id}`)}" title="That is right">✓</button>
+                                  <button class="act icon" data-act="say" data-ref="${esc(`${c.charter.id}#${sec.id}`)}" title="Reword it">✎</button>
                                 </footer>`
                            : ""
                        }
@@ -3198,7 +3179,23 @@ if (typeof EventSource !== "undefined") {
    * for; it matters far more now that one happens on its own — a page that silently jumps to the
    * top mid-review is worse than the bar it replaced.
    */
-  const apply = () => {
+  /**
+   * ⛔ SWAP WHAT CHANGED, DO NOT RELOAD THE PAGE. Peter: *"table should refresh dynamically and not
+   * do the screen reload thing."*
+   *
+   * A reload was already careful — it saved the view and the scroll position and put you back. It
+   * still threw away everything else: which rows you had opened, where the horizontal scroll of a
+   * wide table was, a prototype you had walked three states into. And it flashed, which on a page
+   * you press twenty times is twenty flashes.
+   *
+   * So: fetch the same URL, parse it, and replace the inside of each data-sync region. The
+   * regions are the parts that can change as a result of a press — the behaviour tables.
+   *
+   * ⛔ RELOAD IS STILL THE FALLBACK, and that matters more than the refresh. If the fetch fails or
+   * the new document has no matching region, the page must not go on showing truth that moved: a
+   * stale page with nothing saying so is the one failure a reader cannot detect for themselves.
+   */
+  const reload = () => {
     pending = 0;
     const view = [...document.querySelectorAll("section.view")].find((v) => !v.hidden);
     try {
@@ -3206,6 +3203,43 @@ if (typeof EventSource !== "undefined") {
     } catch (e) {}
     location.reload();
   };
+
+  const apply = async () => {
+    pending = 0;
+    try {
+      const res = await fetch(location.pathname + location.search, { headers: { "cache-control": "no-cache" } });
+      if (!res.ok) return reload();
+      const doc = new DOMParser().parseFromString(await res.text(), "text/html");
+      const mine = [...document.querySelectorAll("[data-sync]")];
+      if (!mine.length) return reload();
+      let swapped = 0;
+      for (const region of mine) {
+        const fresh = doc.querySelector('[data-sync="' + CSS.escape(region.dataset.sync) + '"]');
+        if (!fresh) continue;
+        /** ⛔ Which rows were open is the reader's place in the table, so it survives the swap. */
+        const open = new Set([...region.querySelectorAll("tr.beh.open")].map((r) => r.dataset.ref));
+        region.innerHTML = fresh.innerHTML;
+        for (const ref of open) {
+          const row = region.querySelector('tr.beh[data-ref="' + CSS.escape(ref) + '"]');
+          const detail = region.querySelector('tr.beh-detail[data-for="' + CSS.escape(ref) + '"]');
+          if (row && detail) {
+            detail.hidden = false;
+            row.classList.add("open");
+            if (window.fillCardScreen)
+              for (const f of detail.querySelectorAll("figure.card-screen")) window.fillCardScreen(f);
+          }
+        }
+        swapped++;
+      }
+      /** ⛔ Nothing swapped means this page does not show what changed — reload rather than lie. */
+      if (!swapped) reload();
+    } catch (e) {
+      reload();
+    }
+  };
+  /** ⛔ Same boundary as the card filler: the acts script records a press and needs to refresh. */
+  window.refreshNow = apply;
+
   const es = new EventSource("/api/v2/live");
   es.addEventListener("changed", () => {
     heard = Date.now();
@@ -3381,6 +3415,12 @@ async function record(payload, form, button) {
     status.classList.add("ok");
     form.querySelectorAll("input,textarea,button").forEach((e) => (e.disabled = true));
     if (button) button.disabled = true;
+    /**
+     * ⛔ THE ROW YOU JUST PRESSED HAS TO CHANGE. Without this, confirming a behaviour left its chip
+     * reading "not confirmed" until the stream happened to come back — so the press looked like it
+     * had not worked, which is the complaint that started the whole live-update thread.
+     */
+    if (typeof window.refreshNow === "function") window.refreshNow();
   } catch (e) {
     status.textContent = "Not recorded: " + (e && e.message ? e.message : String(e));
     status.classList.add("bad");
@@ -3588,6 +3628,25 @@ if (noteBar) {
  * becomes the text, with the reason asked for underneath, because ⛔ the reason is not optional:
  * it is the floor that stops a sentence being quietly replaced by whoever was last in the file.
  */
+/**
+ * ⛔ A ROW OPENS THE ROW UNDER IT. A table cannot nest a details element, so the detail is
+ * its own table row — hidden until the row above is tapped. Without JavaScript the sentence is still fully
+ * visible, which is the part a reviewer judges; what stays hidden is only what supports it.
+ */
+document.addEventListener("click", (ev) => {
+  if (ev.target.closest("button, a, textarea, summary")) return;
+  const row = ev.target.closest("tr.beh");
+  if (!row || !row.dataset.ref) return;
+  const detail = row.parentElement.querySelector('tr.beh-detail[data-for="' + CSS.escape(row.dataset.ref) + '"]');
+  if (!detail) return;
+  detail.hidden = !detail.hidden;
+  row.classList.toggle("open", !detail.hidden);
+  /** The screens inside a detail row are filled on demand, the same as before. */
+  /** ⛔ Guarded: it belongs to another block, and a missing picture is better than a dead page. */
+  if (!detail.hidden && window.fillCardScreen)
+    for (const f of detail.querySelectorAll("figure.card-screen")) window.fillCardScreen(f);
+});
+
 document.addEventListener("dblclick", (ev) => {
   const says = ev.target.closest(".row-says");
   if (!says || says.querySelector("textarea")) return;
@@ -4242,6 +4301,14 @@ const PROTOTYPE = `<script>
    * of DOM for cards nobody has scrolled to yet, so each one is filled the first time it comes near
    * the viewport.
    */
+  /**
+   * ⛔ PUT ON THE WINDOW BECAUSE TWO OTHER SCRIPT BLOCKS NEED IT, AND THEY ARE DIFFERENT SCOPES.
+   *
+   * This lives inside its own IIFE. The row-toggle handler and the live refresh are both in the
+   * acts script, so calling it there by name is a ReferenceError, which does not fail loudly: it
+   * kills the rest of that block, so the stream, the presence bar and the refresh all stop, on a
+   * page that looks perfectly fine. That has happened twice in this file already, with the escape helper.
+   */
   const fillCardScreen = (fig) => {
     if (fig.dataset.filled) return;
     const viewId = fig.dataset.of;
@@ -4320,6 +4387,8 @@ const PROTOTYPE = `<script>
       if ("disabled" in el) el.disabled = true;
     }
   }
+
+  window.fillCardScreen = fillCardScreen;
 
   const figures = [...document.querySelectorAll("figure.card-screen")];
   if (figures.length) {
@@ -5016,29 +5085,42 @@ const STYLE = `<style>
   .beh-where .goes.done { color: var(--ok); }
   .beh-where .goes i { color: var(--dim); font-style: italic; }
   /**
-   * ⛔ A TABLE OF ROWS. Peter: *"let's make the behaviors more tabular now - collapse all the info,
-   * only on row tap does it expand."* A grid rather than a flex row, so thirty sentences line up in
-   * columns a reader can scan down — the shape of the whole feature was the thing a stack of cards
-   * could not show.
+   * ⛔ A SINGLE TABLE, NOTHING CLIPPED. Peter: *"even MORE tabular. single table. do not truncate
+   * text, make the text all visible."*
+   *
+   * The previous pass clipped the sentence with an ellipsis, which put the one thing a reviewer is
+   * judging behind a tap. ⛔ So the sentence column wraps and has no max-height: a long behaviour
+   * makes a tall row, which is correct — the row is as big as what it says.
    */
-  .beh-row > summary { display: grid; grid-template-columns: 1.4rem 1fr auto auto; gap: .6rem;
-    align-items: center; cursor: pointer; padding: .45rem .2rem; border-bottom: 1px solid var(--line);
-    list-style: none; }
-  .beh-row > summary::-webkit-details-marker { display: none; }
-  .beh-row > summary:hover { background: var(--code); }
-  .beh-row[open] > summary { border-bottom-color: var(--accent); }
-  .row-says { font-size: .92rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .beh-row[open] .row-says { white-space: normal; }
-  .row-slot { font-size: .72rem; color: var(--dim); letter-spacing: .03em; text-transform: uppercase; }
-  .tick { text-align: center; color: var(--dim); }
-  .tick.on { color: var(--ok); font-weight: 700; }
-  /** ⛔ Visible without hovering: a control nobody can see is one nobody uses. */
-  .row-acts { display: flex; gap: .15rem; }
-  .row-acts .act.icon { font: inherit; font-size: .9rem; line-height: 1; padding: .2rem .35rem;
+  table.beh-table { width: 100%; border-collapse: collapse; font-size: .92rem; }
+  table.beh-table th { text-align: left; font-size: .7rem; letter-spacing: .05em; text-transform: uppercase;
+    color: var(--dim); font-weight: 600; padding: .3rem .5rem; border-bottom: 1px solid var(--line); }
+  table.beh-table td { padding: .5rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+  /** ⛔ Narrow and fixed, so the chips line up into columns the eye can run down. */
+  table.beh-table td:first-child, table.beh-table th:first-child { width: 7.5rem; }
+  table.beh-table td:nth-child(2), table.beh-table th:nth-child(2) { width: 6rem; }
+  table.beh-table td:last-child { width: 5.5rem; text-align: right; white-space: nowrap; }
+  tr.beh { cursor: pointer; }
+  tr.beh:hover > td { background: var(--code); }
+  tr.beh.open > td { background: var(--code); }
+  /** ⛔ One tbody per screen, with its own heading row — the unit a reviewer holds in their head. */
+  tr.group th { padding: .9rem .5rem .35rem; font-size: .8rem; text-transform: none; letter-spacing: 0;
+    color: var(--ink); border-bottom: 2px solid var(--accent); }
+  tr.group th .n { font-weight: 400; color: var(--dim); font-size: .75rem; }
+  tr.beh-detail > td { background: var(--bg); padding: .2rem 1rem 1rem; }
+  .row-says { line-height: 1.45; }
+  .chip { display: inline-block; font-size: .7rem; letter-spacing: .03em; padding: .12rem .45rem;
+    border: 1px solid var(--line); border-radius: 999px; color: var(--dim); white-space: nowrap; }
+  .chip.ok { border-color: var(--ok); color: var(--ok); }
+  .chip.warn { border-color: var(--warn); color: var(--warn); }
+  .chip.type { border-style: dashed; }
+  .row-acts { display: flex; gap: .15rem; justify-content: flex-end; }
+  /** ⛔ One gesture, one meaning: the footers use the same icons as a row. */
+  footer.beh-acts.icons { display: flex; gap: .25rem; margin: .5rem 0 0; }
+  footer.beh-acts.icons .act.icon, .row-acts .act.icon { font: inherit; font-size: .9rem; line-height: 1; padding: .2rem .35rem;
     border: 1px solid var(--line); border-radius: 4px; background: var(--card); color: var(--dim); cursor: pointer; }
-  .row-acts .act.icon:hover { color: var(--ink); border-color: var(--accent); }
+  footer.beh-acts.icons .act.icon:hover, .row-acts .act.icon:hover { color: var(--ink); border-color: var(--accent); }
   .row-acts .act.icon.danger:hover { color: var(--bad); border-color: var(--bad); }
-  /** ⛔ Edited in place, and it looks edited — a textarea that looks like text loses what was typed. */
   .says-edit { width: 100%; font: inherit; font-size: .92rem; padding: .3rem; border: 1px solid var(--accent);
     border-radius: 4px; background: var(--card); color: var(--ink); }
   .beh-state { display: flex; align-items: baseline; gap: .5rem; margin: .6rem 0 .2rem; font-size: .85rem; }

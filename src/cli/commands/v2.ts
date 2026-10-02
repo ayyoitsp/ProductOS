@@ -740,7 +740,13 @@ export function v2Command(): Command {
       fs.mkdirSync(path.dirname(path.resolve(o.out)), { recursive: true });
       fs.writeFileSync(path.resolve(o.out), standalone(entry.scope.title || scope, page));
       console.log(pc.green("✓"), `${o.out}`);
-      console.log(pc.dim("  read-only — the acts are shown inert, because a button that records nothing is worse than none"));
+      /**
+       * ⛔ IT SAID THE OPPOSITE OF WHAT IT DID, in one sentence: "the acts are shown inert, because
+       * a button that records nothing is worse than none". If an inert button is worse than none —
+       * and this codebase says so repeatedly — then showing them inert is the thing the reason
+       * forbids. The acts are omitted, which is what the second half was arguing for.
+       */
+      console.log(pc.dim("  read-only — no acts on it, because a button that records nothing is worse than none"));
     });
 
   cmd
