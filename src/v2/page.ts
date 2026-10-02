@@ -2536,7 +2536,15 @@ function renderNav(
      * It shares the second row with the trail, one at a time: both at once is two navigations
      * competing for the line that says where you are.
      */
-    `<div class="subtabs" hidden><button type="button" class="subtab" data-sub="queue">Queue${
+    /**
+     * ⛔ `data-tabs` NAMES WHOSE STRIP THIS IS, and adding a feature's own tabs is what forced it.
+     *
+     * `.sub-view` and `.subtab` were one global set: `showSub` hid EVERY sub-view in the document
+     * whose name did not match. So three tabs added inside a feature were hidden by the product's
+     * tab selection — and with them the behaviour table, which simply vanished from every feature
+     * page. ⛔ The markup was all present, which is why a test asserting the markup passed it.
+     */
+    `<div class="subtabs" data-tabs="product" hidden><button type="button" class="subtab" data-sub="queue">Queue${
       open ? ` <span class="pill">${open}</span>` : ""
     }</button><button type="button" class="subtab" data-sub="screens">Screens${
       screens ? ` <span class="pill quiet">${screens}</span>` : ""
@@ -2697,7 +2705,7 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
         renderPrototype(protoScreens, protoPromises) +
         renderSettings(corpus) +
         `<section class="view" id="view-overview" data-view="overview" data-ref="${esc(scopeId)}" data-label="Overview">
-           <div class="sub-view" data-sub-view="queue" data-ref="queue" data-label="Queue">
+           <div class="sub-view" data-tabs="product" data-sub-view="queue" data-ref="queue" data-label="Queue">
              ${
                live.length
                  ? `<p class="lede"><strong>${live.length}</strong> question${live.length === 1 ? "" : "s"} nobody has answered. Each reaches every behaviour its selector touches, and every one written after it.</p>
@@ -2749,7 +2757,7 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
                     }`
              }
            </div>
-           <div class="sub-view" data-sub-view="screens" data-ref="screens" data-label="Screens">
+           <div class="sub-view" data-tabs="product" data-sub-view="screens" data-ref="screens" data-label="Screens">
              ${
                /**
                 * ⛔ THE PRODUCT ROOT IS A GROUP TOO, AND IT WAS THE ONE WITHOUT A MAP.
@@ -2764,7 +2772,7 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
              }
              ${renderScreenIndex(corpus, ids, ctx)}
            </div>
-           <div class="sub-view" data-sub-view="about" data-ref="${esc(scopeId)}" data-label="Product Truth">
+           <div class="sub-view" data-tabs="product" data-sub-view="about" data-ref="${esc(scopeId)}" data-label="Product Truth">
              <h2>${line(entry.scope.title || scopeId)}</h2>
              ${
                /**
@@ -2799,7 +2807,7 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
              (() => {
                const shown = corpus.steers.filter((x) => x.steers === "truth");
                if (!shown.length) return "";
-               return `<div class="sub-view" data-sub-view="steers" data-ref="steers" data-label="what holds across this product">
+               return `<div class="sub-view" data-tabs="product" data-sub-view="steers" data-ref="steers" data-label="what holds across this product">
                  <h2>What holds across this product</h2>
                  <p class="lede">Constraints somebody decided, which every feature is held to. ⛔ Not
                  claims about one screen — those live on the feature they belong to.</p>
@@ -2833,7 +2841,7 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
                  const ex = sc?.exchanges.find((x) => x.id === eid);
                  return `${plain(ex?.title ?? eid ?? ref)} — ${plain(sc?.title ?? sid ?? "")}`;
                };
-               return `<div class="sub-view" data-sub-view="access" data-ref="access" data-label="Who may">
+               return `<div class="sub-view" data-tabs="product" data-sub-view="access" data-ref="access" data-label="Who may">
                  <h2>Who may</h2>
                  <p class="lede">The roles and permissions this product has, and what each one reaches.
                  ⛔ Read from what the features say, not kept as a second list.</p>
@@ -2862,7 +2870,7 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
            }
            ${corpus.charter
              .map(
-               (c) => `<div class="sub-view" data-sub-view="${esc(c.charter.id)}" data-ref="${esc(c.charter.id)}" data-label="${esc(plain(c.charter.title))}">
+               (c) => `<div class="sub-view" data-tabs="product" data-sub-view="${esc(c.charter.id)}" data-ref="${esc(c.charter.id)}" data-label="${esc(plain(c.charter.title))}">
                  <h2>${line(c.charter.title)}</h2>
                  ${renderProse(c.body)}
                  ${c.charter.sections
@@ -2993,20 +3001,32 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
                   held.map((c) => renderCard(corpus, g.scope, list, c, !!opts.interactive)).join("");
                 const none = (what: string, how: string) =>
                   `<p class="owes">Nothing here says ${what}. ${how}</p>`;
-                return `<div class="sub-view" data-sub-view="overview" data-ref="${esc(g.scope)}" data-label="Overview">
+                /** ⛔ Inside the feature's view, so it appears and disappears with the feature. */
+                return `<div class="subtabs own" data-tabs="${esc(g.scope)}">
+                    <button type="button" class="subtab" data-sub="overview">Overview</button>
+                    <button type="button" class="subtab" data-sub="metrics">Metrics${
+                      sc.measures.length || sc.instruments.length
+                        ? ` <span class="pill quiet">${sc.measures.length + sc.instruments.length}</span>`
+                        : ""
+                    }</button>
+                    <button type="button" class="subtab" data-sub="behaviours">Behaviors${
+                      sc.exchanges.length ? ` <span class="pill quiet">${sc.exchanges.length}</span>` : ""
+                    }</button>
+                  </div>
+                  <div class="sub-view" data-tabs="${esc(g.scope)}" data-sub-view="overview" data-ref="${esc(g.scope)}" data-label="Overview">
                   ${renderHappyPath(corpus, g.scope, ctx, decisionsOn(corpus, `${g.scope}#happy-path`))}
                   <h3 class="sub">Why this is worth building</h3>
                   ${sc.why.length ? cards("why", sc.why) : none("what is wrong today", "Every behaviour below is justified against a reason nobody has written down.")}
                   <h3 class="sub">What could go wrong</h3>
                   ${sc.risks.length ? cards("risk", sc.risks) : none("what could go wrong", "A risk nobody wrote down is one nobody is watching for.")}
                 </div>
-                <div class="sub-view" data-sub-view="metrics" data-ref="${esc(g.scope)}" data-label="Metrics">
+                <div class="sub-view" data-tabs="${esc(g.scope)}" data-sub-view="metrics" data-ref="${esc(g.scope)}" data-label="Metrics">
                   <h3 class="sub">How we would know it worked</h3>
                   ${sc.measures.length ? cards("measure", sc.measures) : none("how anybody would know this worked", "Without one, nothing afterwards can be held against it.")}
                   <h3 class="sub">What gets recorded</h3>
                   ${sc.instruments.length ? cards("instrument", sc.instruments) : none("what gets recorded", "A measure nothing records cannot be known.")}
                 </div>
-                <div class="sub-view" data-sub-view="behaviours" data-ref="${esc(g.scope)}" data-label="Behaviors">
+                <div class="sub-view" data-tabs="${esc(g.scope)}" data-sub-view="behaviours" data-ref="${esc(g.scope)}" data-label="Behaviors">
             ${
               /* ⛔ A leaf shows this only when it owns something. "Nothing holds everywhere in here"
                  on a feature with no children is noise, and noise is what stops the real blanks
@@ -5041,14 +5061,31 @@ const VIEW_SWITCH = `<script>
   window.addEventListener("popstate", fromAddress);
   window.addEventListener("hashchange", fromAddress);
 
-  const subs = [...document.querySelectorAll(".subtab")];
-  const subViews = [...document.querySelectorAll(".sub-view")];
-  const showSub = (name) => {
-    for (const v of subViews) v.hidden = v.dataset.subView !== name;
-    for (const t of subs) t.classList.toggle("on", t.dataset.sub === name);
+  /**
+   * ⛔ ONE SWITCHER, SCOPED BY WHOSE TABS THEY ARE. This hid EVERY sub-view in the document whose
+   * name did not match the selected tab — fine while there was one strip, and the moment a feature
+   * gained three tabs of its own they were hidden by the product's selection. The behaviour table
+   * went with them: every feature page rendered its content and showed none of it.
+   *
+   * ⛔ Found by Peter saying "i don't see the tabs at all", not by the test I had just written —
+   * which asserted the markup was in the HTML and never that any of it was visible. The markup was
+   * all there.
+   */
+  const strips = [...document.querySelectorAll(".subtabs")];
+  const showSub = (owner, name) => {
+    for (const v of document.querySelectorAll('.sub-view[data-tabs="' + CSS.escape(owner) + '"]'))
+      v.hidden = v.dataset.subView !== name;
+    for (const t of document.querySelectorAll('.subtabs[data-tabs="' + CSS.escape(owner) + '"] .subtab'))
+      t.classList.toggle("on", t.dataset.sub === name);
   };
-  for (const t of subs) t.addEventListener("click", () => { showSub(t.dataset.sub); window.scrollTo(0, 0); });
-  if (subs.length) showSub(subs[0].dataset.sub);
+  for (const strip of strips) {
+    const owner = strip.dataset.tabs;
+    for (const t of strip.querySelectorAll(".subtab"))
+      t.addEventListener("click", () => { showSub(owner, t.dataset.sub); window.scrollTo(0, 0); });
+    /** ⛔ Each strip opens on its own first tab. Globally, one strip decided for all of them. */
+    const first = strip.querySelector(".subtab");
+    if (first) showSub(owner, first.dataset.sub);
+  }
 
   const opening = location.hash.replace(/^#/, "");
   const fromHash = opening === "view-overview" ? "overview" : views.find((v) => v.id === opening)?.dataset.view;

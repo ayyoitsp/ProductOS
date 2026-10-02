@@ -123,6 +123,37 @@ test("a feature with behaviours and no stated reason is reported", () => {
   assert.match(f.fix, /name changed/, "the fix does not warn that restating the feature is not a reason");
 });
 
+/**
+ * ⛔ A FEATURE'S TABS BELONG TO THAT FEATURE, AND THE TEST BELOW THIS ONE DID NOT CATCH THAT THEY
+ * DID NOT.
+ *
+ * `.sub-view` and `.subtab` were ONE GLOBAL SET: `showSub` hid every sub-view in the document whose
+ * name did not match the selected tab. Fine while there was one strip; the moment a feature gained
+ * three tabs of its own they were hidden by the PRODUCT's tab selection — and the behaviour table
+ * went with them. Every feature page rendered its content and displayed none of it.
+ *
+ * ⛔ The test below passed throughout, because it asserted the markup was in the HTML. It was. All
+ * of it. Peter found it in one sentence: *"i odn't see the tabs at all.."* — so what is pinned here
+ * is OWNERSHIP, which is the part a string match on rendered HTML can actually check: a strip, its
+ * views, and the fact that they name each other.
+ */
+test("a feature's tabs own their own views, and the product's own a different set", () => {
+  const html = renderScopePage(loadCorpus(seeded()), "tasks", { interactive: true, by: "a-person" });
+  /** The feature's strip exists, inside the page rather than in the frame. */
+  assert.match(html, /<div class="subtabs own" data-tabs="tasks">/, "a feature has no tab strip of its own");
+  for (const name of ["overview", "metrics", "behaviours"])
+    assert.match(html, new RegExp(`<div class="sub-view" data-tabs="tasks" data-sub-view="${name}"`),
+      `the ${name} view does not say whose tabs it belongs to, so another strip will hide it`);
+  /** ⛔ And the product's six still declare themselves, or the fix traded one broken set for another. */
+  assert.match(html, /<div class="subtabs" data-tabs="product"/, "the product's strip lost its owner");
+  assert.match(html, /class="sub-view" data-tabs="product" data-sub-view="queue"/, "the product's queue lost its owner");
+  /** ⛔ Every sub-view on the page declares an owner. One that does not is hidden by every strip. */
+  const orphans = [...html.matchAll(/class="sub-view"(?! data-tabs=)/g)];
+  assert.equal(orphans.length, 0, `${orphans.length} sub-views belong to no strip, so any tab selection hides them`);
+  /** ⛔ And the switcher is scoped, not global. */
+  assert.match(html, /\.sub-view\[data-tabs="/, "the switcher still hides every sub-view on the page");
+});
+
 /** ⛔ Three tabs, and the behaviour table is in the third. */
 test("the feature renders Overview, Metrics and Behaviors", () => {
   const html = renderScopePage(loadCorpus(seeded()), "tasks", { interactive: true, by: "a-person" });
