@@ -123,6 +123,7 @@ test("a corpus with no steers directory is not an error", () => {
 // ─── the surface ──────────────────────────────────────────────────────────────────────────────
 
 import { renderScopePage } from "../dist/v2/page.js";
+import { checkCorpus } from "../dist/v2/check.js";
 
 /** The smallest corpus that renders: one scope, which is also the commonest shape in a seed. */
 const oneScope = (steers = []) => ({
@@ -199,4 +200,54 @@ test("no settings tab at all where nothing has been learned", () => {
   const html = renderScopePage(oneScope([]), "wallet", {});
   assert.doesNotMatch(html, /data-tab="settings"/);
   assert.doesNotMatch(html, /id="view-settings"/);
+});
+
+test("⛔ provenance that cites a change record has to cite one that exists", () => {
+  /**
+   * `learned_from` is free text on purpose — "every button renamed in review since August" is a
+   * good account of where a habit came from. But citing records by id makes a checkable claim, and
+   * an id resolving to nothing is worse than the prose it replaced: it reads as a citation, so
+   * nobody goes looking, and the habit keeps its authority on a reference that was never there.
+   *
+   * The same refusal `depends_on`, `affected_by` and `leads_to` already carry.
+   */
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pos-prov-"));
+  fs.cpSync(path.join(process.cwd(), "v2-seed"), path.join(dir, "v2"), { recursive: true });
+  // a project root: `<root>/productos/config.yaml` is what makes `changes/` findable
+  fs.mkdirSync(path.join(dir, "productos"), { recursive: true });
+  fs.writeFileSync(path.join(dir, "productos", "config.yaml"), "version: 0.0.1\n");
+  fs.mkdirSync(path.join(dir, "changes"), { recursive: true });
+  fs.writeFileSync(path.join(dir, "changes", "0012.yaml"), 'id: "0012"\nsaid: something somebody said\nat: 2026-10-01\nkind: surface\n');
+
+  fs.mkdirSync(path.join(dir, "v2", "steers"), { recursive: true });
+  fs.writeFileSync(
+    path.join(dir, "v2", "steers", "steers.yaml"),
+    "steers:\n" +
+      "  - id: real\n    says: Drawn from a record that exists.\n    steers: generation\n    learned_from: change 0012\n    at: 2026-10-01\n" +
+      "  - id: dangling\n    says: Drawn from a record that does not.\n    steers: generation\n    learned_from: changes 0012, 9999\n    at: 2026-10-01\n"
+  );
+
+  const { findings } = checkCorpus(path.join(dir, "v2"));
+  const hits = findings.filter((f) => f.kind === "a-steer-learned-from-nothing");
+  assert.equal(hits.length, 1, "only the dangling citation is reported");
+  assert.match(hits[0].where, /dangling/);
+  assert.match(hits[0].what, /9999/);
+  assert.doesNotMatch(hits[0].what, /0012/, "a record that resolves is not reported as missing");
+});
+
+test("free-text provenance naming no record is left alone", () => {
+  /** ⛔ The point is a citation nobody can follow — not a demand that every habit cite a ticket. */
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pos-prose-"));
+  fs.cpSync(path.join(process.cwd(), "v2-seed"), path.join(dir, "v2"), { recursive: true });
+  fs.mkdirSync(path.join(dir, "productos"), { recursive: true });
+  fs.writeFileSync(path.join(dir, "productos", "config.yaml"), "version: 0.0.1\n");
+  fs.mkdirSync(path.join(dir, "changes"), { recursive: true });
+  fs.writeFileSync(path.join(dir, "changes", "0012.yaml"), 'id: "0012"\nsaid: x\nat: 2026-10-01\nkind: surface\n');
+  fs.mkdirSync(path.join(dir, "v2", "steers"), { recursive: true });
+  fs.writeFileSync(
+    path.join(dir, "v2", "steers", "steers.yaml"),
+    "steers:\n  - id: prose\n    says: Buttons are named for the verb they perform.\n    steers: generation\n    learned_from: every button renamed in review since August\n    at: 2026-10-01\n"
+  );
+  const { findings } = checkCorpus(path.join(dir, "v2"));
+  assert.equal(findings.filter((f) => f.kind === "a-steer-learned-from-nothing").length, 0);
 });

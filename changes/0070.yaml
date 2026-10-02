@@ -8,11 +8,11 @@ said: |-
 at: 2026-10-02
 kind: concept
 reaches:
-  model: ""
-  derive: ""
-  generate: ""
-  surface: ""
-  check: ""
-  instruct: ""
-  pin: ""
+  model: declined
+  derive: inEffect
+  generate: addendum
+  surface: renderSettings
+  check: a-steer-learned-from-nothing
+  instruct: Write one with the command, never by typing the YAML
+  pin: the install adapter appends to authors and to no judge
 waived: {}

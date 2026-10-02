@@ -2887,6 +2887,22 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
    * to it. The surfaced half is the one with a failure mode: a constraint on the product that
    * nobody can see is a constraint the next person breaks, and then it reads as their mistake.
    */
+  /**
+   * The change records this project keeps, where it keeps any. ⛔ Read once — a corpus with forty
+   * steers must not stat the same directory forty times — and `undefined` where there are none, so
+   * a project that has never filed one is not told every citation is dangling.
+   */
+  const knownChanges = ((): Set<string> | undefined => {
+    const proj = projectRootOf(root);
+    if (!proj) return undefined;
+    const dir = path.join(proj, "changes");
+    if (!fs.existsSync(dir)) return undefined;
+    const ids = fs
+      .readdirSync(dir)
+      .filter((f) => f.endsWith(".yaml"))
+      .map((f) => f.replace(/\.yaml$/, ""));
+    return ids.length ? new Set(ids) : undefined;
+  })();
   for (const st of corpus.steers) {
     /**
      * ⛔ AN OPAQUE STEER SAYS WHERE IT CAME FROM, OR IT IS A RULE NOBODY CHOSE AND NOBODY CAN
@@ -2906,6 +2922,30 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
         what: `"${st.says}" shapes what gets proposed and nothing says what it was inferred from — nobody agrees to these, so what it was learned from is the only thing anybody can argue with`,
         fix: `say what it came from in \`learned_from\` — the screens, the reviews, the rejections. If somebody simply decided it, it is a claim about the product: file it as steering truth and put it in the charter`,
       });
+    /**
+     * ⛔ AND PROVENANCE THAT NAMES SOMETHING HAS TO NAME SOMETHING REAL.
+     *
+     * `learned_from` is free text on purpose — *"every button renamed in review since August"* is a
+     * perfectly good account of where a habit came from. But the moment it cites change records by
+     * id it is making a checkable claim, and an id that resolves to nothing is worse than the prose
+     * it replaced: it reads as a citation, so nobody goes looking, and the habit keeps its
+     * authority on the strength of a reference that was never there.
+     *
+     * This is the same refusal `depends_on`, `affected_by` and `leads_to` already carry. A pointer
+     * to nothing is reported wherever one can exist.
+     */
+    if (st.learned_from && knownChanges) {
+      const cited = [...st.learned_from.matchAll(/\b(\d{4})\b/g)].map((m) => m[1]!);
+      const missing = cited.filter((id) => !knownChanges.has(id));
+      if (cited.length && missing.length)
+        add({
+          severity: "note",
+          kind: "a-steer-learned-from-nothing",
+          where: `steer:${st.id}`,
+          what: `"${st.says}" says it was learned from ${missing.length === 1 ? "change" : "changes"} ${missing.join(", ")}, and ${missing.length === 1 ? "that record does" : "those records do"} not exist — a citation nobody can follow stops anybody looking, so the habit keeps its authority on a reference that was never there`,
+          fix: `name records that exist, or say where it came from in words — "every button renamed in review since August" is a better provenance than an id that resolves to nothing`,
+        });
+    }
     if (st.steers !== "truth") continue;
     /**
      * ⛔ AND IT IS NOT SATISFIED BY EXISTING. A constraint has to reach somebody — the charter is
