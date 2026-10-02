@@ -988,7 +988,21 @@ function renderScreens(scope: Scope, ctx: Ctx, scopeId: string, opts: PageOption
           const loose = statedAt(scope, v.id, undefined);
           return `<article class="screen" id="${anchorOf(`${scopeId}#view#${v.id}`)}" data-screen="${esc(v.id)}"
             data-ref="${esc(scopeId)}" data-label="${esc(`screen: ${plain(v.title)}`)}">
-            <h4>${line(v.title)}${v.view_kind ? ` <span class="n">${esc(v.view_kind)}</span>` : ""}</h4>
+            ${
+              /**
+               * ⛔ NO HEADING WHERE THERE IS ONLY ONE SCREEN. Peter: *"there's white space above the
+               * 'Create a deal' form part in the prototype - just wasted space."*
+               *
+               * 97px stood between the top of the frame and the picture, and 25 of it was this
+               * heading — naming the screen directly under a title that names the feature, which on
+               * a single-screen feature is the same thing said twice. ⛔ It stays where a feature has
+               * several: there the name is the only thing telling you which one you are looking at,
+               * and that is not waste, it is the label doing its job.
+               */
+              scope.views.filter((x) => x.exists !== "withdrawn").length > 1
+                ? `<h4>${line(v.title)}${v.view_kind ? ` <span class="n">${esc(v.view_kind)}</span>` : ""}</h4>`
+                : ""
+            }
             ${
               v.exists === "intended"
                 ? `<p class="owes">This screen does not exist yet — everything here is intent, not observation.</p>`
@@ -1637,11 +1651,34 @@ function renderNotePanel(_corpus: Corpus, _ids: string[], opts: PageOptions): st
    */
   return `
     <form id="note-bar" class="note-bar" autocomplete="off">
-      <div class="note-at"><span class="note-at-what" id="note-about-label"></span></div>
+      ${
+        /**
+         * ⛔ THE "ABOUT" LINE IS GONE. Peter: *"hide the 'about: {which page}' piece. not needed."*
+         *
+         * It named the ref the composer would attach — which a reviewer already knows, because they
+         * are looking at it. ⛔ The ref is still captured and still sent: it is the one thing a
+         * person cannot reconstruct an hour later, which is why it was shown in the first place. It
+         * simply does not need a line of the frame to say what the screen already says.
+         */
+        ""
+      }
       <div class="note-row">
         <textarea id="note-text" rows="1" placeholder="Change something here…"
           aria-label="Ask for a change to what you are looking at. Enter sends, Shift+Enter starts a new line. Start with pos: for a framework issue"></textarea>
         <button type="submit" id="note-send">Send</button>
+        ${
+          /**
+           * ⛔ THE ACKNOWLEDGEMENTS BECOME A CHIP ON THIS ROW. Peter: *"'8 framework asks' - make
+           * this just a chip inline with the send button, showing '8', and clicking it will expand
+           * it."*
+           *
+           * It was a bar of its own below the composer, carrying a sentence. Two bars stacked under
+           * a page is two lines of frame for one line of content, and the sentence said what the
+           * number says. Filled by the live script; absent until there is something to count.
+           */
+          ""
+        }
+        <button type="button" id="ack-chip" class="ack-chip" hidden></button>
         <span class="status" id="note-status"></span>
       </div>
     </form>`;
@@ -2915,35 +2952,25 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
       }
       ${grids
         .map(
-          (g) => `<section class="view" id="${anchorOf(g.scope)}" data-view="${esc(g.scope)}" data-ref="${esc(g.scope)}" data-label="${esc(plain(g.title))}">
-            <h2>${line(g.title)}</h2>
+          (g) => `<section class="view framed" id="${anchorOf(g.scope)}" data-view="${esc(g.scope)}" data-ref="${esc(g.scope)}" data-label="${esc(plain(g.title))}">
+            <h3 class="feature-title">${line(g.title)}</h3>
             ${
               /**
-               * ⛔ WHICH STAGE THIS FEATURE IS AT, AND WHY — on the surface where somebody decides.
+               * ⛔ THE STAGE LINE IS GONE FROM HERE. Peter: *"get rid of 'Sepcification 4 unsettled'
+               * - pointless."*
                *
-               * Peter: *"what are our main stages? we should have 'specification', 'ready for
-               * review', 'ready for build' - ready for review is when the builders get involved"*.
+               * Right about this position, and worth saying why rather than just deleting. The stage
+               * is DERIVED, so above the title it restated what the page already shows: "4 unsettled"
+               * is the queue, and "specification" is what every chip in the table says one row at a
+               * time. It summarised the thing immediately below it, in the one place a reader has
+               * earned no context for it yet.
                *
-               * It renders the REASON beside the stage, always. A bare badge reading "ready for
-               * review" is the kind of thing a person trusts and cannot check, and this one is
-               * derived — so if the derivation is wrong, the sentence next to it is what makes that
-               * visible instead of plausible.
-               *
-               * ⛔ Nothing stores it and nothing on this page sets it. There is no control here,
-               * deliberately: the way a feature advances is that somebody agrees to its sentences
-               * and a builder reads it through, both of which are acts that already exist. A button
-               * marking it ready would be a way to claim consent nobody gave.
+               * ⛔ `stageOf` STAYS, with its derivation and its tests. It answers a real question —
+               * which features are ready for builders — and that question is asked from a LIST of
+               * features, not from inside one. Deleting the answer because its placement was wrong
+               * would be the layout taking the model with it.
                */
-              (() => {
-                const st = stageOf(corpus, g.scope);
-                /** ⛔ A grouping has no stage, and showing one would invent a fact. */
-                if (!st) return "";
-                const tone = st.stage === "ready for build" ? "good" : st.stage === "ready for review" ? "ready" : "spec";
-                const blockers = st.blocked_by.length
-                  ? `<span class="blockers">in the way: ${st.blocked_by.map((b) => line(b)).join(", ")}</span>`
-                  : "";
-                return `<p class="stage ${tone}"><b>${esc(st.stage)}</b><span>${line(st.because)}</span>${blockers}</p>`;
-              })()
+              ""
             }
             ${
               /**
@@ -2956,7 +2983,37 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
                * before reaching a picture of it is reading a description of something you are not
                * being shown, and it is the whole reason this surface felt like a document.
                */
-              renderScreens(corpus.scopes.find((x) => x.scope.id === g.scope)!.scope, ctx, g.scope, opts, corpus)
+              /**
+               * ⛔ THE PROTOTYPE IN ITS OWN FRAME AT THE TOP, DRAGGABLE AND HIDEABLE.
+               *
+               * Peter: *"let's fix the prototype to the top half of the screen in its own frame,
+               * with the tab bars bottom half of the page"* — then, correcting himself: *"let's
+               * actually make the prototype frame draggable up or hideable."*
+               *
+               * The second version is the right one and the reason is the content. A fixed half is
+               * fine for a screen with eight controls and wrong for one with a long table under it:
+               * judging a sentence needs the control in view, and judging thirty needs the list in
+               * view, and those want different splits. ⛔ A fixed split would be the framework
+               * deciding a ratio that depends on what is being read.
+               *
+               * So: a height, a divider that sets it, and a hide. Remembered in `localStorage`
+               * because it is a reading posture and not a per-feature choice — being asked again on
+               * every feature is the same as not being asked, which is the reasoning the nav
+               * placement already runs on.
+               */
+              `<div class="proto-frame">
+                 <div class="proto-scroll">${renderScreens(
+                   corpus.scopes.find((x) => x.scope.id === g.scope)!.scope,
+                   ctx,
+                   g.scope,
+                   opts,
+                   corpus
+                 )}</div>
+                 <div class="proto-grip" role="separator" aria-orientation="horizontal" tabindex="0"
+                      aria-label="Drag to resize the screen, or press to hide it">
+                   <button type="button" class="proto-hide" title="Hide the screen">▴</button>
+                 </div>
+               </div>`
             }
             ${
               /**
@@ -3002,7 +3059,18 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
                 const none = (what: string, how: string) =>
                   `<p class="owes">Nothing here says ${what}. ${how}</p>`;
                 /** ⛔ Inside the feature's view, so it appears and disappears with the feature. */
-                return `<div class="subtabs own" data-tabs="${esc(g.scope)}">
+                /**
+                 * ⛔ ITS OWN SCROLLER. Peter: *"let's just make it a full on frame - so scrolling
+                 * the bottom frame is independent of the top."*
+                 *
+                 * Dragging the divider already set the prototype's height, but the PAGE still
+                 * scrolled as one document — so scrolling down to row forty scrolled the screen you
+                 * were judging against off the top, which is the thing a fixed frame was for. Two
+                 * panes, each with its own scroll, and the view sized to the viewport so there is a
+                 * bottom to scroll within.
+                 */
+                return `<div class="below">
+                  <div class="subtabs own" data-tabs="${esc(g.scope)}">
                     <button type="button" class="subtab" data-sub="overview">Overview</button>
                     <button type="button" class="subtab" data-sub="metrics">Metrics${
                       sc.measures.length || sc.instruments.length
@@ -3038,6 +3106,7 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
                     ${renderGrid(g, ctx)}
                     ${renderExchanges(corpus, [g.scope], cellOf, ctx, false)}
                   </details>
+                  </div>
                 </div>`;
               })()
             }
@@ -3104,7 +3173,7 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
       }
     </main>`;
 
-  return `${STYLE}${body}${appCssOnce(opts)}${partFacts(corpus, ids)}${renderNotePanel(corpus, ids, opts)}${VIEW_SWITCH}${NAV_PLACE}${PROTOTYPE}${DRIVE}${opts.interactive ? liveScript(opts) : INERT}`;
+  return `${STYLE}${body}${appCssOnce(opts)}${partFacts(corpus, ids)}${renderNotePanel(corpus, ids, opts)}${VIEW_SWITCH}${NAV_PLACE}${PROTO_FRAME}${PROTOTYPE}${DRIVE}${opts.interactive ? liveScript(opts) : INERT}`;
 }
 
 
@@ -3221,34 +3290,50 @@ if (typeof EventSource !== "undefined") {
   const safely = (x) =>
     String(x == null ? "" : x).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
+  /**
+   * ⛔ A CHIP ON THE COMPOSER'S OWN ROW, NOT A BAR OF ITS OWN. Peter: *"make this just a chip inline
+   * with the send button, showing '8', and clicking it will expand it."*
+   *
+   * It was a second fixed bar carrying "8 framework asks dealt with" — two lines of frame under
+   * every page to say what one number says. The list still opens, above the composer, where there
+   * is room for it; what it no longer does is occupy the page when nobody has asked.
+   */
   const acks = document.createElement("div");
-  acks.className = "ack-bar";
+  acks.className = "ack-panel";
   acks.hidden = true;
-  bottom.appendChild(acks);
+  const chip = document.getElementById("ack-chip");
+  const bar = document.getElementById("note-bar");
+  if (bar) bar.insertBefore(acks, bar.firstChild);
   let acksOpen = false;
 
   const paintAcks = (done) => {
-    if (!done.length) { acks.hidden = true; acks.innerHTML = ""; fit(); return; }
+    if (!chip) return;
+    if (!done.length) { chip.hidden = true; acks.hidden = true; acks.innerHTML = ""; fit(); return; }
     const n = done.length;
-    acks.innerHTML =
-      '<button type="button" class="ack-head">' +
-      '<span class="ack-n">' + n + '</span> framework ' + (n === 1 ? "ask" : "asks") + " dealt with" +
-      '<span class="ack-caret">' + (acksOpen ? "▾" : "▸") + "</span></button>" +
-      (acksOpen
-        ? '<ul class="ack-list">' +
-          done
-            .map(
-              (d) =>
-                "<li><strong>" + safely(d.says.replace(/^\s*pos\s*:\s*/i, "")) + "</strong>" +
-                (d.outcome ? '<span class="ack-what">' + safely(d.outcome) + "</span>" : "") +
-                "</li>"
-            )
-            .join("") +
-          "</ul>"
-        : "");
-    acks.hidden = false;
+    chip.hidden = false;
+    chip.textContent = String(n);
+    chip.title = n + " framework " + (n === 1 ? "ask" : "asks") + " dealt with — press to read what was done";
+    chip.classList.toggle("on", acksOpen);
+    acks.innerHTML = acksOpen
+      ? '<ul class="ack-list">' +
+        done
+          .map(
+            (d) =>
+              "<li><strong>" + safely(d.says.replace(/^\s*pos\s*:\s*/i, "")) + "</strong>" +
+              (d.outcome ? '<span class="ack-what">' + safely(d.outcome) + "</span>" : "") +
+              "</li>"
+          )
+          .join("") +
+        "</ul>"
+      : "";
+    acks.hidden = !acksOpen;
     fit();
   };
+  if (chip)
+    chip.addEventListener("click", () => {
+      acksOpen = !acksOpen;
+      paintAcks(lastAcks);
+    });
 
   let lastAcks = [];
   const askAcks = () =>
@@ -3266,11 +3351,10 @@ if (typeof EventSource !== "undefined") {
   askAcks();
   setInterval(askAcks, 30000);
 
-  document.addEventListener("click", (ev) => {
-    if (!ev.target.closest || !ev.target.closest("button.ack-head")) return;
-    acksOpen = !acksOpen;
-    paintAcks(lastAcks);
-  });
+  /**
+   * ⛔ The document-level handler for the old ack-head button went with the bar it opened. A listener for
+   * an element nothing renders is the kind of code that looks like a feature when somebody reads it.
+   */
 
   const askWho = () =>
     fetch("/api/v2/presence")
@@ -3586,6 +3670,14 @@ const noteBar = document.getElementById("note-bar");
 if (noteBar) {
   document.body.classList.add("has-note-bar");
   const text = document.getElementById("note-text");
+  /**
+   * ⛔ THE LABEL ELEMENT IS GONE AND THE REF IS NOT. Peter: *"hide the 'about: {which page}' piece.
+   * not needed."* What that line showed was the ref this note will carry — which a reader already
+   * knows, because they are looking at it. The capture below is untouched: the ref is the one thing
+   * a person cannot reconstruct an hour later, which is why it is taken from the page rather than
+   * asked for. The handle stays, and the painting below is guarded so it is a no-op rather than a
+   * throw, and a throw here would take the composer with it.
+   */
   const label = document.getElementById("note-about-label");
   const status = document.getElementById("note-status");
 
@@ -3665,14 +3757,21 @@ if (noteBar) {
   const describe = () => {
     const trail = current();
     if (!trail.length) {
-      label.textContent = "this page";
+      if (label) label.textContent = "this page";
       return "";
     }
     // ⛔ The trail is shown, not just the leaf: "Overview" and "Overview / Product goals" are
     // different places, and a bare "Product goals" does not say which product truth it is in.
-    label.textContent = trail.map((t) => t.label).join(" / ");
+    if (label) label.textContent = trail.map((t) => t.label).join(" / ");
     const leaf = trail[trail.length - 1];
-    label.title = leaf.ref;
+    /**
+     * ⛔ GUARDED LIKE THE TWO ABOVE IT, AND I MISSED THIS ONE. Removing the about-line left three
+     * writes to an element that no longer exists; I guarded the two textContent assignments and
+     * walked past the title one. It threw on every ref computation — which is how this function ENDS,
+     * so the ref was computed, the throw escaped, and handlers downstream of it never
+     * ran. Found in the browser as "Cannot set properties of null", not by reading.
+     */
+    if (label) label.title = leaf.ref;
     return leaf.ref;
   };
   describe();
@@ -4916,7 +5015,29 @@ const VIEW_SWITCH = `<script>
       v.hidden = !mine;
       found = found || mine;
     }
-    if (!found) { for (const v of views) v.hidden = false; return; }
+    if (!found) {
+      for (const v of views) v.hidden = false;
+      /** ⛔ Showing everything means the page scrolls again, so the frame has to let go. */
+      delete document.documentElement.dataset.framed;
+      return;
+    }
+    /**
+     * ⛔ THE PAGE ITSELF MUST NOT SCROLL ON A FRAMED VIEW. Peter: *"the BOTTOM scrolls
+     * INDEPENDENTLY. yet, every time i scroll the screen the prototype goes off the screen. the
+     * idea is to have the PROTOTYPE NOT MOVE. that's the POINT."*
+     *
+     * Giving the bottom pane its own scroll was half the job and read as none of it: the DOCUMENT
+     * still scrolled, so a wheel event anywhere outside that pane moved the whole view — prototype
+     * included — straight off the top. A frame whose contents scroll and which itself scrolls is
+     * not a frame.
+     *
+     * So the body stops scrolling while a framed view is the one on screen, and every scroll that
+     * remains belongs to a pane inside it. ⛔ Set here rather than in CSS because only the switcher
+     * knows which view is showing, and the product's own views are documents that must still scroll.
+     */
+    const shown = views.find((v) => v.dataset.view === name);
+    if (shown && shown.classList.contains("framed")) document.documentElement.dataset.framed = "1";
+    else delete document.documentElement.dataset.framed;
     for (const a of menu) a.classList.toggle("on", a.dataset.goto === name);
     if (trail) {
       const parts = trails[name] || [{ id: name, label: name }];
@@ -5101,6 +5222,120 @@ const VIEW_SWITCH = `<script>
  * menu still has to be movable there. It owns one fact — the placement — and announces it; what a
  * placement means for the tree belongs to the switcher, which is the only thing that knows.
  */
+/**
+ * ⛔ THE PROTOTYPE FRAME'S HEIGHT, SET BY DRAGGING, AND HIDEABLE.
+ *
+ * Peter: *"let's fix the prototype to the top half of the screen in its own frame, with the tab bars
+ * bottom half of the page"* — then: *"let's actually make the prototype frame draggable up or
+ * hideable."*
+ *
+ * The correction is the right design and the reason is the content. Half the screen is right for an
+ * eight-control form and wrong for a long table: judging one sentence needs the control in view,
+ * judging thirty needs the list in view, and a fixed ratio picks one and is wrong for the other.
+ *
+ * ⛔ REMEMBERED, like the nav placement and for the same reason: it is a reading posture, not a
+ * per-feature choice, and being asked again on every feature is the same as not being asked.
+ *
+ * ⛔ ITS OWN SCRIPT. The view switcher gives up on a page with fewer than two views, and the frame
+ * still has to be resizable there — the same reasoning the nav placement already runs on.
+ */
+const PROTO_FRAME = `<script>
+(function () {
+  const root = document.documentElement;
+  try {
+    const was = localStorage.getItem("productos:proto");
+    if (was === "off") root.dataset.proto = "off";
+    else if (was && /^[0-9.]+$/.test(was)) root.style.setProperty("--proto-h", was + "px");
+  } catch (e) {}
+
+  const remember = (v) => { try { localStorage.setItem("productos:proto", v); } catch (e) {} };
+
+  /**
+   * ⛔ MEASURED, NOT GUESSED. A framed view is sized against the viewport minus whatever the frame
+   * occupies — the top bar, the composer, and anything stacked at the bottom. Every one of those
+   * changes height when its text wraps on a narrow window, and this file has already paid for a
+   * guessed offset once: the change bar covered the tabs on exactly the screens with least room.
+   */
+  const chrome = () => {
+    const top = document.querySelector(".topframe");
+    const note = document.getElementById("note-bar");
+    const bars = document.querySelector(".bottom-bars");
+    const h =
+      (top ? top.offsetHeight : 0) +
+      (note ? note.offsetHeight : 0) +
+      (bars && !bars.hidden ? bars.offsetHeight : 0) +
+      16;
+    root.style.setProperty("--chrome-h", h + "px");
+  };
+  chrome();
+  window.addEventListener("resize", chrome);
+  /** ⛔ The bars appear and disappear on their own; re-measure when the DOM under them changes. */
+  new MutationObserver(chrome).observe(document.body, { childList: true, subtree: false });
+  /** And after the composer has had a chance to grow, which it does on its first keystroke. */
+  document.addEventListener("input", (ev) => { if (ev.target.id === "note-text") chrome(); });
+
+  /** ⛔ Delegated, because a feature's frame is rendered per view and views come and go on refresh. */
+  document.addEventListener("click", (ev) => {
+    const hide = ev.target.closest(".proto-hide");
+    if (!hide) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    const off = root.dataset.proto === "off";
+    if (off) { delete root.dataset.proto; remember(String(Math.round(px()))); }
+    else { root.dataset.proto = "off"; remember("off"); }
+    hide.title = off ? "Hide the screen" : "Show the screen";
+  });
+
+  const px = () => {
+    const v = getComputedStyle(root).getPropertyValue("--proto-h").trim();
+    if (v.endsWith("px")) return parseFloat(v);
+    /** vh at first load, before anybody has dragged. */
+    return (parseFloat(v) / 100) * window.innerHeight;
+  };
+
+  let from = null;
+  document.addEventListener("pointerdown", (ev) => {
+    const grip = ev.target.closest(".proto-grip");
+    if (!grip || ev.target.closest(".proto-hide")) return;
+    from = { y: ev.clientY, h: px() };
+    grip.setPointerCapture?.(ev.pointerId);
+    /** ⛔ Dragging a divider must not select the text either side of it. */
+    document.body.style.userSelect = "none";
+  });
+  document.addEventListener("pointermove", (ev) => {
+    if (!from) return;
+    /**
+     * ⛔ FLOORED AND CAPPED. Dragged to nothing it becomes an invisible frame with a grip in it,
+     * which reads as broken rather than hidden — hiding is what the button is for. Dragged past the
+     * viewport the tabs leave the screen entirely.
+     */
+    const h = Math.max(80, Math.min(window.innerHeight - 160, from.h + (ev.clientY - from.y)));
+    delete root.dataset.proto;
+    root.style.setProperty("--proto-h", h + "px");
+  });
+  const stop = () => {
+    if (!from) return;
+    from = null;
+    document.body.style.userSelect = "";
+    remember(String(Math.round(px())));
+  };
+  document.addEventListener("pointerup", stop);
+  document.addEventListener("pointercancel", stop);
+
+  /** ⛔ Keyboard too: a divider only a mouse can move is a divider half the readers cannot. */
+  document.addEventListener("keydown", (ev) => {
+    const grip = ev.target.closest?.(".proto-grip");
+    if (!grip) return;
+    const step = ev.key === "ArrowUp" ? -40 : ev.key === "ArrowDown" ? 40 : 0;
+    if (!step) return;
+    ev.preventDefault();
+    delete root.dataset.proto;
+    root.style.setProperty("--proto-h", Math.max(80, Math.min(window.innerHeight - 160, px() + step)) + "px");
+    remember(String(Math.round(px())));
+  });
+})();
+</script>`;
+
 const NAV_PLACE = `<script>
 (function () {
   const root = document.documentElement;
@@ -5255,6 +5490,58 @@ const STYLE = `<style>
    * judging behind a tap. ⛔ So the sentence column wraps and has no max-height: a long behaviour
    * makes a tall row, which is correct — the row is as big as what it says.
    */
+  /**
+   * ⛔ THE PROTOTYPE IN ITS OWN FRAME, AT A HEIGHT THE READER SETS. See the markup for why the
+   * height is a variable rather than a fixed half.
+   */
+  /**
+   * ⛔ A FEATURE IS A FRAME, NOT A DOCUMENT. Peter: *"let's just make it a full on frame - so
+   * scrolling the bottom frame is independent of the top."*
+   *
+   * The chrome height is measured rather than guessed: the top frame and whatever is stacked at the
+   * bottom both change height when text wraps on a narrow window, and a guessed offset is right
+   * until it is not — which is the lesson the bottom bars already taught in this file.
+   */
+  :root { --proto-h: 46vh; --chrome-h: 9rem; }
+  section.view.framed { display: flex; flex-direction: column; height: calc(100dvh - var(--chrome-h));
+    min-height: 20rem; overflow: hidden; }
+  /**
+   * ⛔ WHILE A FRAMED VIEW IS SHOWING, THE DOCUMENT DOES NOT SCROLL. Every scroll belongs to a pane
+   * inside the frame — otherwise the prototype rides off the top, which is the one thing pinning it
+   * was for. ⛔ And the composer's clearance goes with it: the frame's own height already subtracts
+   * the composer, so keeping the padding would push the bottom of the frame under it.
+   */
+  :root[data-framed] body { overflow: hidden; }
+  :root[data-framed] body.has-note-bar { padding-bottom: 0; }
+  section.view.framed > .below { flex: 1 1 auto; min-height: 0; overflow: auto; }
+  /** ⛔ A zero min-height, or a flex child refuses to shrink and scrolls the page instead of itself. */
+  section.view.framed > .proto-frame { flex: 0 0 auto; }
+  .proto-frame { position: relative; margin: 0 0 .6rem; }
+  .proto-scroll { height: var(--proto-h); overflow: auto; border: 1px solid var(--line);
+    border-radius: .4rem; background: var(--card); padding: .35rem .5rem; }
+  /**
+   * ⛔ THE SPACE ABOVE THE DRAWING. Peter: *"there's white space above the 'Create a deal' form part
+   * in the prototype - just wasted space."* It was 97px before the picture: a 1.5rem margin on the
+   * screens section, then a 1.2rem margin on the screen, then a heading on a line of its own
+   * repeating the name of the feature directly above it.
+   */
+  .proto-scroll .screens { margin: 0; }
+  .proto-scroll .screen { margin: 0; }
+  .proto-scroll .screen h4 { font-size: .78rem; font-weight: 600; color: var(--dim); margin: 0;
+    display: inline-flex; align-items: baseline; gap: .3rem; }
+  /** ⛔ Hidden means zero height and no border, never display none — the grip has to stay reachable. */
+  :root[data-proto="off"] .proto-scroll { height: 0; padding: 0; border-width: 0; overflow: hidden; }
+  .proto-grip { height: .9rem; display: flex; align-items: center; justify-content: center;
+    cursor: ns-resize; touch-action: none; }
+  .proto-grip::before { content: ""; width: 3rem; height: 3px; border-radius: 2px; background: var(--line); }
+  .proto-grip:hover::before, .proto-grip:focus-visible::before { background: var(--accent); }
+  .proto-hide { position: absolute; right: .2rem; bottom: -.1rem; font: inherit; font-size: .7rem;
+    line-height: 1; padding: .15rem .4rem; border: 1px solid var(--line); border-radius: 4px;
+    background: var(--card); color: var(--dim); cursor: pointer; }
+  .proto-hide:hover { color: var(--ink); border-color: var(--accent); }
+  :root[data-proto="off"] .proto-hide { transform: rotate(180deg); }
+  /** ⛔ Small. Peter: *"get rid of that, make the title pretty small."* */
+  .feature-title { font-size: 1rem; font-weight: 600; margin: 0 0 .5rem; letter-spacing: -.01em; }
   table.beh-table { width: 100%; border-collapse: collapse; font-size: .92rem; }
   table.beh-table th { text-align: left; font-size: .7rem; letter-spacing: .05em; text-transform: uppercase;
     color: var(--dim); font-weight: 600; padding: .3rem .5rem; border-bottom: 1px solid var(--line); }
@@ -5776,7 +6063,15 @@ const STYLE = `<style>
    * ⛔ ONE LINE UNTIL ASKED. The thread this replaces took the top third of the dock whether or not
    * anything had happened; this is a count that opens.
    */
-  .ack-bar { background: var(--card); border-top: 1px solid var(--line); }
+  /**
+   * ⛔ A CHIP ON THE COMPOSER'S ROW. Peter: *"make this just a chip inline with the send button,
+   * showing '8', and clicking it will expand it."* It was a second fixed bar carrying a sentence
+   * that said what the number says.
+   */
+  .ack-chip { font: inherit; font-size: .72rem; line-height: 1; min-width: 1.5rem; padding: .25rem .4rem;
+    border: 1px solid var(--line); border-radius: 999px; background: var(--card); color: var(--dim); cursor: pointer; }
+  .ack-chip:hover, .ack-chip.on { color: var(--accent); border-color: var(--accent); }
+  .ack-panel { max-height: 40vh; overflow: auto; border-bottom: 1px solid var(--line); }
   .ack-head { font: inherit; font-size: .82rem; width: 100%; text-align: left; cursor: pointer;
     background: none; border: 0; padding: .4rem .8rem; color: var(--ok);
     display: flex; align-items: center; gap: .4rem; }
@@ -5790,21 +6085,23 @@ const STYLE = `<style>
   .who-bar { padding: .45rem .8rem;
     font-size: .84rem; text-align: center; background: var(--warn-bg); color: var(--warn);
     border-top: 1px solid var(--line); }
+  /**
+   * ⛔ CONDENSED. Peter: *"let's condense the bottom bar... reduce the height of the text input and
+   * the send button, reduce the font size."* It was two rows — a line naming the ref, then the box —
+   * at .92rem with a 2.1rem minimum, so roughly 90px of frame under every page for one line of
+   * typing. One row now, and about half the height.
+   */
   .note-bar { position: fixed; left: 0; right: 0; bottom: var(--bottom-h); z-index: 30; display: grid;
-    gap: .3rem; padding: .5rem .8rem .55rem;
+    gap: 0; padding: .3rem .7rem .35rem;
     background: var(--card); border-top: 1px solid var(--line);
     box-shadow: 0 -2px 14px rgba(0,0,0,.14); }
-  .note-row { display: flex; gap: .55rem; align-items: flex-end; }
-  /* The captured place, on its own line above the box and never truncated. */
-  .note-at { font-size: .74rem; color: var(--dim); line-height: 1.3; }
-  .note-at::before { content: "about "; }
-  .note-at-what { color: var(--ink); }
-  .note-bar textarea { flex: 1; font: inherit; font-size: .92rem; resize: none; min-height: 2.1rem;
-    max-height: 9rem; padding: .45rem .6rem; border: 1px solid var(--line); border-radius: 6px;
-    background: var(--bg); color: var(--ink); line-height: 1.35; }
-  .note-bar button { font: inherit; font-size: .88rem; background: var(--accent); color: var(--bg);
-    border: 0; border-radius: 6px; padding: .45rem .9rem; cursor: pointer; }
-  .note-bar .status { font-size: .8rem; white-space: nowrap; padding-bottom: .45rem; }
+  .note-row { display: flex; gap: .4rem; align-items: center; }
+  .note-bar textarea { flex: 1; font: inherit; font-size: .82rem; resize: none; min-height: 1.6rem;
+    max-height: 7rem; padding: .25rem .45rem; border: 1px solid var(--line); border-radius: 5px;
+    background: var(--bg); color: var(--ink); line-height: 1.3; }
+  .note-bar button#note-send { font: inherit; font-size: .78rem; background: var(--accent); color: var(--bg);
+    border: 0; border-radius: 5px; padding: .3rem .65rem; cursor: pointer; }
+  .note-bar .status { font-size: .74rem; white-space: nowrap; }
   .note-bar .status.ok { color: var(--ok); } .note-bar .status.bad { color: var(--bad); }
   /* Clearance for the composer, so it never covers the last thing on the page. */
   /**
