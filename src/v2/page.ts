@@ -3010,8 +3010,10 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
                    corpus
                  )}</div>
                  <div class="proto-grip" role="separator" aria-orientation="horizontal" tabindex="0"
-                      aria-label="Drag to resize the screen, or press to hide it">
-                   <button type="button" class="proto-hide" title="Hide the screen">▴</button>
+                      aria-label="Drag to resize the screen, or press the button to hide it">
+                   <button type="button" class="proto-hide">
+                     <span class="when-open">▴ hide the screen</span><span class="when-off">▾ show the screen</span>
+                   </button>
                  </div>
                </div>`
             }
@@ -3127,17 +3129,39 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
           .map((id) => {
             const sc = corpus.scopes.find((s) => s.scope.id === id)!.scope;
             const kids = corpus.scopes.filter((x) => x.scope.in === id);
-            return `<section class="view" id="${anchorOf(id)}" data-view="${esc(id)}" data-ref="${esc(id)}" data-label="${esc(plain(sc.title || id))}">
-              <h2>${line(sc.title || id)}</h2>
+            /**
+             * ⛔ A GROUP GETS THE SAME FRAME, AND NOT GIVING IT ONE IS WHY HE STILL COULD NOT SEE IT.
+             *
+             * Peter, after a 29-step drive of a FEATURE page reported everything working: *"still
+             * don't see anything on the bottom half, still not moveable pane for the preview."*
+             *
+             * He was not on a feature. `/v2` with no hash lands on the product overview, and a
+             * group — an area, the product itself — renders its own screens too. Neither had a
+             * frame, so on either one there is a prototype you cannot move and no second pane at
+             * all: exactly what he described, twice, while my drive passed on the one view that
+             * worked.
+             *
+             * ⛔ The lesson is about the drive, not the layout: I navigated by clicking a leaf in
+             * the nav, which is one of several ways in and the only one I tried. A surface verified
+             * on the path the author happens to take is verified nowhere.
+             */
+            const framed = sc.views.some((v) => v.exists !== "withdrawn");
+            return `<section class="view${framed ? " framed" : ""}" id="${anchorOf(id)}" data-view="${esc(id)}" data-ref="${esc(id)}" data-label="${esc(plain(sc.title || id))}">
+              <h3 class="feature-title">${line(sc.title || id)}</h3>
               ${
-                /**
-                 * ⛔ A GROUP'S OWN SCREEN RENDERS TOO. `views` is on every Scope and only leaf
-                 * features ever drew theirs, so a group that genuinely has a screen — an area
-                 * landing page, a shell the whole group lives in — could hold one in the file and
-                 * see nothing on the page.
-                 */
-                renderScreens(sc, ctx, id, opts, corpus)
+                framed
+                  ? `<div class="proto-frame">
+                       <div class="proto-scroll">${renderScreens(sc, ctx, id, opts, corpus)}</div>
+                       <div class="proto-grip" role="separator" aria-orientation="horizontal" tabindex="0"
+                            aria-label="Drag to resize the screen, or press the button to hide it">
+                         <button type="button" class="proto-hide">
+                           <span class="when-open">▴ hide the screen</span><span class="when-off">▾ show the screen</span>
+                         </button>
+                       </div>
+                     </div>`
+                  : ""
               }
+              <div class="below">
               ${renderProse(corpus.scopes.find((x) => x.scope.id === id)?.body ?? "")}
               ${renderGroupUx(corpus, id, ctx)}
               ${renderGroupRules(corpus, id, ctx, homesOf)}
@@ -3158,6 +3182,7 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
                 })
                 .join("")}</ul>
               ${kids.length ? "" : `<p class="lede">Nothing is filed under this yet.</p>`}
+              </div>
             </section>`;
           })
           .join("")
@@ -5284,7 +5309,12 @@ const PROTO_FRAME = `<script>
   try {
     const was = localStorage.getItem("productos:proto");
     if (was === "off") root.dataset.proto = "off";
-    else if (was && /^[0-9.]+$/.test(was)) root.style.setProperty("--proto-h", was + "px");
+    /**
+     * ⛔ A REMEMBERED SLIVER FROM AN OLDER BUILD IS FORGIVEN. The floor used to be 80px, so somebody
+     * who dragged it down then is stuck with an unusable frame for good — a persisted value is a
+     * decision that outlives the code that allowed it.
+     */
+    else if (was && /^[0-9.]+$/.test(was)) root.style.setProperty("--proto-h", Math.max(140, parseFloat(was)) + "px");
   } catch (e) {}
 
   const remember = (v) => { try { localStorage.setItem("productos:proto", v); } catch (e) {} };
@@ -5333,7 +5363,12 @@ const PROTO_FRAME = `<script>
     const off = root.dataset.proto === "off";
     if (off) { delete root.dataset.proto; remember(String(Math.round(px()))); }
     else { root.dataset.proto = "off"; remember("off"); }
-    hide.title = off ? "Hide the screen" : "Show the screen";
+    /**
+     * ⛔ THE LABEL IS CSS, NOT JAVASCRIPT. It was set here on click only, so a page that LOADED
+     * collapsed showed a 20x18 caret whose tooltip said "Hide the screen" — about a screen that was
+     * already hidden. The state is remembered, so that is the state a reader comes back to, and the
+     * one control that could undo it was both unlabelled and lying.
+     */
   });
 
   const px = () => {
@@ -5359,7 +5394,12 @@ const PROTO_FRAME = `<script>
      * which reads as broken rather than hidden — hiding is what the button is for. Dragged past the
      * viewport the tabs leave the screen entirely.
      */
-    const h = Math.max(80, Math.min(window.innerHeight - 160, from.h + (ev.clientY - from.y)));
+    /**
+     * ⛔ A FLOOR YOU CAN STILL USE. 80px left a sliver with a drawing cropped to nothing, which is
+     * indistinguishable from broken — and it is REMEMBERED, so it is what you come back to. Hiding
+     * is what the button is for, and hiding says so.
+     */
+    const h = Math.max(140, Math.min(window.innerHeight - 160, from.h + (ev.clientY - from.y)));
     delete root.dataset.proto;
     root.style.setProperty("--proto-h", h + "px");
   });
@@ -5380,7 +5420,7 @@ const PROTO_FRAME = `<script>
     if (!step) return;
     ev.preventDefault();
     delete root.dataset.proto;
-    root.style.setProperty("--proto-h", Math.max(80, Math.min(window.innerHeight - 160, px() + step)) + "px");
+    root.style.setProperty("--proto-h", Math.max(140, Math.min(window.innerHeight - 160, px() + step)) + "px");
     remember(String(Math.round(px())));
   });
 })();
@@ -5596,11 +5636,21 @@ const STYLE = `<style>
     cursor: ns-resize; touch-action: none; }
   .proto-grip::before { content: ""; width: 3rem; height: 3px; border-radius: 2px; background: var(--line); }
   .proto-grip:hover::before, .proto-grip:focus-visible::before { background: var(--accent); }
-  .proto-hide { position: absolute; right: .2rem; bottom: -.1rem; font: inherit; font-size: .7rem;
-    line-height: 1; padding: .15rem .4rem; border: 1px solid var(--line); border-radius: 4px;
+  .proto-hide { position: absolute; right: .2rem; bottom: -.15rem; font: inherit; font-size: .7rem;
+    line-height: 1; padding: .2rem .5rem; border: 1px solid var(--line); border-radius: 4px;
     background: var(--card); color: var(--dim); cursor: pointer; }
   .proto-hide:hover { color: var(--ink); border-color: var(--accent); }
-  :root[data-proto="off"] .proto-hide { transform: rotate(180deg); }
+  /**
+   * ⛔ IT SAYS WHICH WAY IT GOES, AND IT IS LEGIBLE WHEN COLLAPSED — the state is remembered, so a
+   * collapsed frame is what a reader comes back to days later. A 20px caret with a tooltip reading
+   * "hide the screen" about an already-hidden screen is a dead end somebody never gets out of.
+   */
+  .proto-hide .when-off { display: none; }
+  :root[data-proto="off"] .proto-hide .when-open { display: none; }
+  :root[data-proto="off"] .proto-hide .when-off { display: inline; }
+  :root[data-proto="off"] .proto-hide { position: static; border-color: var(--accent); color: var(--accent); }
+  :root[data-proto="off"] .proto-grip { height: auto; padding: .25rem 0; cursor: default; }
+  :root[data-proto="off"] .proto-grip::before { display: none; }
   /** ⛔ Small. Peter: *"get rid of that, make the title pretty small."* */
   .feature-title { font-size: 1rem; font-weight: 600; margin: 0 0 .5rem; letter-spacing: -.01em; }
   table.beh-table { width: 100%; border-collapse: collapse; font-size: .92rem; }
