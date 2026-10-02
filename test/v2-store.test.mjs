@@ -34,10 +34,45 @@ import { loadCorpus, corpusFiles } from "../dist/v2/load.js";
 
 const CLI = path.resolve("dist/cli/index.js");
 
-/** A seeded corpus on disk, the same way every other v2 test gets one. */
+/**
+ * A seeded corpus on disk, plus the kinds the seed does not carry.
+ *
+ * ⛔ THE SEED HAS NO STEERS AND NO ACCESS, SO A ROUND TRIP BUILT ONLY FROM IT COMPARES EMPTY LISTS.
+ * `steers/` was read by `loadCorpus` and absent from `CORPUS_DIRS`, and `access.yaml` sits at the
+ * corpus root where a list of subdirectories could never reach it — both would have round-tripped
+ * perfectly here while being dropped, because there was nothing of either kind to lose.
+ */
 function corpusOnDisk() {
   const dir = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "productos-store-")), "v2");
   execFileSync("node", [CLI, "v2", "reset", "--at", dir], { stdio: "pipe" });
+
+  fs.mkdirSync(path.join(dir, "steers"), { recursive: true });
+  fs.writeFileSync(
+    path.join(dir, "steers", "steers.yaml"),
+    [
+      "steers:",
+      "  - id: prefers-plain-sentences",
+      '    says: "Write a behaviour as one plain sentence somebody could disagree with."',
+      "    steers: generation",
+      '    learned_from: "four change records saying the same thing"',
+      "    at: 2026-10-02",
+      "",
+    ].join("\n"),
+  );
+  fs.writeFileSync(
+    path.join(dir, "access.yaml"),
+    [
+      "access:",
+      "  - id: parent",
+      "    kind: role",
+      '    means: "Can see every child in the family and move money between them."',
+      "    holds: [move-money]",
+      "  - id: move-money",
+      "    kind: permission",
+      '    means: "Can move money from one balance to another."',
+      "",
+    ].join("\n"),
+  );
   return dir;
 }
 
@@ -103,6 +138,20 @@ test("the store parses into the same corpus the directory does", async () => {
   assert.equal(stored.verdicts.length, local.verdicts.length);
   assert.equal(stored.charter.length, local.charter.length);
   assert.equal(stored.notes.length, local.notes.length);
+
+  /**
+   * ⛔ NAMED EXPLICITLY, because these are the two that were being dropped. Comparing `stored` to
+   * `local` would also pass if BOTH were empty, which is exactly how this went unnoticed.
+   */
+  assert.equal(stored.steers.length, 1, "steers did not survive the store");
+  assert.deepEqual(
+    stored.steers.map((x) => x.id),
+    local.steers.map((x) => x.id),
+  );
+  if ("access" in local) {
+    assert.equal(stored.access.length, local.access.length, "access did not survive the store");
+    assert.ok(local.access.length > 0, "the fixture stopped carrying access");
+  }
   assert.deepEqual(
     stored.broken.map((b) => b.why),
     local.broken.map((b) => b.why),
