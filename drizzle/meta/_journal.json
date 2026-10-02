@@ -15,6 +15,13 @@
       "when": 1790899851133,
       "tag": "0001_login-codes",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790978498531,
+      "tag": "0002_document-migrations",
+      "breakpoints": true
     }
   ]
 }

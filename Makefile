@@ -17,7 +17,7 @@
 
 .PHONY: default help install link build watch dev dev-serve typecheck all clean doctor \
         up down logs rebuild restart nuke psql hosted-doctor seed shell hosted-help \
-        backup restore up-remote down-remote logs-remote remote-doctor
+        backup restore up-remote down-remote logs-remote remote-doctor checkpoint projects session
 
 # The hosted instance, in Docker:
 #   make up         — build and start (ProductOS + Postgres), wait until healthy
@@ -26,8 +26,23 @@
 #   make rebuild    — rebuild the image from current source and restart it
 #   make down       — stop, keeping the database
 #   make nuke       — stop and DELETE the database volume
-DB_URL ?= postgres://productos:productos@localhost:5432/productos
+# ⛔ `.env` WINS, OR `seed` WRITES TO A DIFFERENT DATABASE THAN THE APP IS READING.
+#
+# This was hardcoded to localhost, so after `make up-remote` the app was serving
+# Neon while `make seed` and `make hosted-doctor` quietly worked on the local
+# Postgres — the same corpus apparently both present and missing, depending on
+# which command you asked. Reading DATABASE_URL from `.env` when there is one
+# makes every target here address the store the instance is actually using.
+ENV_DB := $(shell ./scripts/envvar.sh .env DATABASE_URL 2>/dev/null)
+DB_URL ?= $(if $(ENV_DB),$(ENV_DB),postgres://productos:productos@localhost:5432/productos)
 PORT   ?= 4100
+
+# The store a target is about to touch, with the credential removed — so a command
+# that writes somewhere says where before it does.
+# ⛔ `|` AS THE DELIMITER, NOT `#`. A `#` starts a comment in a Makefile even inside
+# a function call, so `s#...#...#` truncated this line and make died on an
+# unterminated $(shell.
+WHICH_DB = $(shell printf '%s' '$(DB_URL)' | sed -E 's|//[^@]*@|//***@|')
 
 default: dev-serve
 
@@ -46,6 +61,7 @@ help:
 	@echo "Hosted, in Docker:"
 	@echo "  make up         → build + start ProductOS and Postgres, wait until healthy"
 	@echo "  make seed       → create a project, import the seed corpus, print the URL"
+	@echo "  make checkpoint → FROM=<corpus dir>; import a REAL corpus into the store"
 	@echo "  make logs       → follow the instance log"
 	@echo "  make rebuild    → rebuild the image from current source and restart"
 	@echo "  make restart    → restart the instance only (tests the migration ledger)"
@@ -169,10 +185,10 @@ up-remote:
 # Makefile that echoed it would put it in a scrollback and a CI log.
 remote-doctor: build
 	@test -f .env || { echo "no .env — cp .env.example .env and paste the Neon string"; exit 1; }
-	@set -a; . ./.env; set +a; \
-	test -n "$$DATABASE_URL" || { echo "DATABASE_URL is empty in .env"; exit 1; }; \
-	echo "checking $$(printf '%s' "$$DATABASE_URL" | sed -E 's#//[^@]*@#//***@#')"; \
-	DATABASE_URL="$$DATABASE_URL" node dist/cli/index.js hosted doctor
+	@url=$$(./scripts/envvar.sh .env DATABASE_URL); \
+	test -n "$$url" || { echo "DATABASE_URL is empty in .env"; exit 1; }; \
+	echo "checking $$(printf '%s' "$$url" | sed -E 's#//[^@]*@#//***@#')"; \
+	DATABASE_URL="$$url" node dist/cli/index.js hosted doctor
 
 down-remote:
 	docker compose -f docker-compose.remote.yml down
@@ -210,8 +226,21 @@ psql:
 shell:
 	docker compose exec productos sh
 
+# A browser session for one account. ⛔ The only way into the page today that is not
+# single-account mode — there is no sign-in route, so this is it.
+session: build
+	@test -n "$(AS)" || { echo "usage: make session AS=you@example.com"; exit 1; }
+	@echo "store: $(WHICH_DB)"
+	@DATABASE_URL="$(DB_URL)" node dist/cli/index.js hosted session --as "$(AS)"
+
+# Every project in the store the instance is using.
+projects: build
+	@echo "store: $(WHICH_DB)"
+	@DATABASE_URL="$(DB_URL)" node dist/cli/index.js hosted projects
+
 hosted-doctor: build
-	DATABASE_URL=$(DB_URL) node dist/cli/index.js hosted doctor
+	@echo "store: $(WHICH_DB)"
+	@DATABASE_URL="$(DB_URL)" node dist/cli/index.js hosted doctor
 
 # Put something in it, so the instance is worth opening.
 #
@@ -225,16 +254,40 @@ hosted-doctor: build
 # the real reason never reached the terminal. A dev target whose second run lies
 # about what went wrong costs more than the one it saves.
 seed: build
+	@echo "store: $(WHICH_DB)"
 	@set -e; \
 	tmp=$$(mktemp -d)/v2; \
 	node dist/cli/index.js v2 reset --at $$tmp >/dev/null; \
 	slug=seed-$$(date +%H%M%S); \
-	made=$$(DATABASE_URL=$(DB_URL) node dist/cli/index.js hosted project new $$slug --as me@localhost --name "Seed"); \
+	made=$$(DATABASE_URL="$(DB_URL)" node dist/cli/index.js hosted project new $$slug --as me@localhost --name "Seed"); \
 	id=$$(printf '%s' "$$made" | sed -n 's/.*project \([a-zA-Z0-9_-]*\) .*/\1/p'); \
 	test -n "$$id" || { echo "could not create a project:"; printf '%s\n' "$$made"; exit 1; }; \
-	DATABASE_URL=$(DB_URL) node dist/cli/index.js hosted import $$tmp --into $$id; \
+	DATABASE_URL="$(DB_URL)" node dist/cli/index.js hosted import $$tmp --into $$id; \
 	echo ""; \
 	echo "✓ open http://localhost:$(PORT)/p/$$id/v2"
+
+# Put a real corpus into the store, as a named checkpoint.
+#
+# ⛔ DISTINCT FROM `seed`, WHICH GENERATES ITS OWN. This one imports a directory
+# somebody is actually working in, so it is the command that can publish real
+# product truth to wherever DB_URL points — it prints the store first for that
+# reason, and takes the directory explicitly rather than guessing `./v2`.
+#
+#   make checkpoint FROM=/path/to/v2 [SLUG=checkpoint]
+checkpoint: build
+	@test -n "$(FROM)" || { echo "usage: make checkpoint FROM=<corpus dir> [SLUG=name]"; exit 1; }
+	@test -d "$(FROM)" || { echo "no directory at $(FROM)"; exit 1; }
+	@echo "store: $(WHICH_DB)"
+	@echo "from:  $(FROM)"
+	@set -e; \
+	slug=$${SLUG:-checkpoint-$$(date +%Y%m%d-%H%M%S)}; \
+	made=$$(DATABASE_URL="$(DB_URL)" node dist/cli/index.js hosted project new $$slug \
+	        --as me@localhost --name "$${NAME:-Checkpoint}"); \
+	id=$$(printf '%s' "$$made" | sed -n 's/.*project \([a-zA-Z0-9_-]*\) .*/\1/p'); \
+	test -n "$$id" || { echo "could not create a project:"; printf '%s\n' "$$made"; exit 1; }; \
+	DATABASE_URL="$(DB_URL)" node dist/cli/index.js hosted import "$(FROM)" --into $$id; \
+	echo ""; \
+	echo "✓ $$id — open /p/$$id/v2 on the instance"
 
 # ---------------------------------------------------------------------------
 # The data, and where it lives.

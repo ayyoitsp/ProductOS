@@ -5477,7 +5477,12 @@ export function standalone(title: string, page: string): string {
 <title>${esc(title)}</title></head><body>${page}</body></html>`;
 }
 
-const STYLE = `<style>
+/**
+ * ⛔ EXPORTED SO THERE IS ONE DESIGN SYSTEM, NOT TWO. The project selector at an instance's root is
+ * a page a person looks at, and giving it its own CSS would start a second set of tokens that drift
+ * — the thing this file is most careful about everywhere else.
+ */
+export const STYLE = `<style>
   :root {
     --bg: #fbfaf8; --card: #fff; --ink: #1a1a18; --dim: #6b6b64; --line: #e4e1da;
     --accent: #7c4a2d; --warn: #8a5a00; --warn-bg: #fdf5e3; --bad: #a8301c; --bad-bg: #fcefec;

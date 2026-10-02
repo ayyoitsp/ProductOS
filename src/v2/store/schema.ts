@@ -210,8 +210,31 @@ export const documents = pgTable("documents", {
   deprecatedAt: timestamp("deprecated_at", { withTimezone: true }),
 }, (t) => [primaryKey({ columns: [t.projectId, t.path] })]);
 
+/**
+ * Which document migrations a project has already had.
+ *
+ * ⛔ A SECOND LEDGER, NOT A ROW IN THE FIRST. `_productos_migrations` records the shape of the STORE
+ * moving forward; this records the CONTENT OF DOCUMENTS moving forward, and they advance
+ * independently — a fresh database is current on one and has every document rule still to run on
+ * any corpus later imported into it. One table for both would make "up to date" ambiguous.
+ *
+ * ⛔ KEYED BY PROJECT, because corpora arrive by import at any time. A project added after a rule
+ * ran would otherwise never see it, and would be the one broken corpus on an instance that believes
+ * it is current.
+ *
+ * `documents` keeps what the rule actually touched, so a changed sentence has something to point at
+ * besides "the server did it".
+ */
+export const documentMigrations = pgTable("document_migrations", {
+  projectId: text("project_id").notNull().references(() => projects.id),
+  migrationId: text("migration_id").notNull(),
+  documents: jsonb("documents").$type<string[]>().notNull().default([]),
+  appliedAt: timestamp("applied_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [primaryKey({ columns: [t.projectId, t.migrationId] })]);
+
 export const schema = {
   accounts,
+  documentMigrations,
   loginCodes,
   projects,
   projectMembers,

@@ -31,5 +31,12 @@ services:
       # ⛔ Unset by default. A shared store usually means a reachable instance, and
       #    single-account mode signs in anything that reaches the port.
       PRODUCTOS_SINGLE_ACCOUNT: ${PRODUCTOS_SINGLE_ACCOUNT:-}
+      # ⛔ One line per query, for finding out how many a request makes. Off unless asked:
+      #    it would put a customer's corpus in a log.
+      PRODUCTOS_DB_DEBUG: ${PRODUCTOS_DB_DEBUG:-}
+      # ⛔ `off` treats every request as a signed-in person and makes every project
+      #    reachable. There is no sign-in route yet, so this is how the page is used
+      #    until there is one. Verdicts written while it is set are not provably human.
+      PRODUCTOS_AUTH: ${PRODUCTOS_AUTH:-}
     ports:
       - "4100:4100"

@@ -13,6 +13,7 @@
 import { and, asc, eq, gt, isNull, sql } from "drizzle-orm";
 import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 import type { Refusal } from "../identity.js";
+import { authIsOff } from "./identity.js";
 import { documents, events, projectMembers, projects } from "./schema.js";
 
 /** Any drizzle Postgres instance. ⛔ The driver is the caller's business — see `migrate.ts`. */
@@ -89,14 +90,36 @@ export const isRefusal = (x: ProjectStore | Refusal): x is Refusal => (x as Refu
 
 export function storeFor(db: Db, who: Who): Reachable {
   async function reachable(): Promise<string[]> {
-    const owned = await db
-      .select({ id: projects.id })
-      .from(projects)
-      .where(eq(projects.ownerId, who.account));
-    const shared = await db
-      .select({ id: projectMembers.projectId })
-      .from(projectMembers)
-      .where(eq(projectMembers.accountId, who.account));
+    /**
+     * ⛔ WITH AUTH OFF, EVERY PROJECT IS REACHABLE — or the switch does not do what it says.
+     *
+     * Leaving this narrowed to the one account's own projects would keep handing out 404s for
+     * anything created under a different address, which is the exact confusion `PRODUCTOS_AUTH=off`
+     * exists to remove. The isolation seam itself is untouched: `project(id)` still goes through
+     * this function, so there is still exactly one place that decides, and turning auth back on
+     * restores the boundary without a code change.
+     */
+    if (authIsOff()) {
+      const all = await db.select({ id: projects.id }).from(projects);
+      return all.map((r) => r.id);
+    }
+
+    /**
+     * ⛔ CONCURRENT, BECAUSE THEY DO NOT NEED EACH OTHER AND A ROUND TRIP IS 90ms.
+     *
+     * Measured against Neon in us-east-2: one trip ~90ms, five sequential 611ms, the
+     * same five concurrent 157ms. These two selects were awaited in series for no
+     * reason — owned projects and shared ones are independent, so waiting for the
+     * first before asking for the second bought a whole trip per request. Against a
+     * local Postgres that was invisible; against a hosted one it is most of the page.
+     */
+    const [owned, shared] = await Promise.all([
+      db.select({ id: projects.id }).from(projects).where(eq(projects.ownerId, who.account)),
+      db
+        .select({ id: projectMembers.projectId })
+        .from(projectMembers)
+        .where(eq(projectMembers.accountId, who.account)),
+    ]);
 
     const all = new Set<string>([...owned.map((r) => r.id), ...shared.map((r) => r.id)]);
 

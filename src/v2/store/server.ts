@@ -17,12 +17,15 @@ import os from "node:os";
 import path from "node:path";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
-import { sql } from "drizzle-orm";
-import type { Db } from "./access.js";
+import { eq, sql } from "drizzle-orm";
+import { type Db, isRefusal, storeFor } from "./access.js";
 import { applyMigrations } from "./migrate.js";
+import { migrateAllDocuments } from "./doc-migrations.js";
+import { projects } from "./schema.js";
 import { instanceRoute } from "./instance.js";
 import { projectMcpRoute } from "./mcp.js";
-import { singleAccount } from "./identity.js";
+import { chooseRoute } from "./choose.js";
+import { authIsOff, singleAccount } from "./identity.js";
 
 export interface HostedConfig {
   databaseUrl: string;
@@ -54,8 +57,30 @@ export function configFromEnv(env: NodeJS.ProcessEnv = process.env): HostedConfi
 }
 
 export function openStore(databaseUrl: string): { db: Db; close: () => Promise<void> } {
+  /**
+   * ⛔ COUNT THE QUERIES WHEN SOMETHING IS SLOW, RATHER THAN REASONING ABOUT THEM.
+   *
+   * Every query to a hosted Postgres costs about the same — a 37KB document read
+   * measured the same as `select 1`, so latency is round trips and nothing else. That
+   * makes "how many did this request make" the only question worth asking, and it was
+   * the one I kept answering by reading code and getting wrong: three by inspection,
+   * about nine in fact.
+   *
+   * `PRODUCTOS_DB_DEBUG=1` prints one line per query. Off by default — it would put a
+   * customer's corpus in a log.
+   */
+  const debug = process.env.PRODUCTOS_DB_DEBUG === "1";
+  let n = 0;
   const client = postgres(databaseUrl, {
     max: 10,
+    ...(debug
+      ? {
+          debug: (_conn: number, query: string) => {
+            n += 1;
+            process.stderr.write(`[db ${String(n).padStart(3)}] ${query.replace(/\s+/g, " ").slice(0, 110)}\n`);
+          },
+        }
+      : {}),
     /**
      * ⛔ A NOTICE IS NOT A FAULT, AND BY DEFAULT IT LOOKS EXACTLY LIKE ONE.
      *
@@ -153,6 +178,53 @@ export async function startHosted(
   }
 
   /**
+   * Open the connections before a person is waiting on them.
+   *
+   * ⛔ AND WHAT THIS DID NOT DO, SINCE I BUILT IT ON A WRONG THEORY. I thought TLS handshakes
+   * explained why making independent reads concurrent took a page from 1.2s to 0.9s rather than the
+   * 4x the round-trip arithmetic promised. Warming made no measurable difference to a warm request,
+   * so that was not it — the real answer was that the page render costs ~0.9s whether the store is
+   * in Neon or on localhost, which `scripts/bench-store.mjs` and a local comparison both show.
+   *
+   * It stays because it still moves the first request's connection setup to boot, which is a small
+   * real thing. It is not a latency fix, and the comment says so rather than implying one.
+   */
+  const warm = Math.max(1, Number(process.env.PRODUCTOS_POOL_WARM ?? 4));
+  try {
+    await Promise.all(Array.from({ length: warm }, () => db.execute(sql.raw("select 1"))));
+    process.stderr.write(`[productos] ${warm} connections warm\n`);
+  } catch {
+    /** Reported by its absence in the log. */
+  }
+
+  /**
+   * ⛔ THE DOCUMENTS, BROUGHT FORWARD TOO — AND BEFORE ANYTHING IS SERVED.
+   *
+   * Peter: *"as we move the schema forward, the server ensures the database is up to date"*. The
+   * store's own shape is handled above; this is the other half, because a schema change that
+   * removes a key does not merely degrade an old corpus — `check` answers
+   * `cannot-judge-this-corpus`, so the corpus is offline until something migrates it.
+   *
+   * Running it here rather than on first read means nobody opens a page that is about to change
+   * underneath them, and the cost is paid once per boot instead of once per request.
+   */
+  const migratedDocs = await migrateAllDocuments(db, async (projectId) => {
+    const [row] = await db.select({ owner: projects.ownerId }).from(projects).where(eq(projects.id, projectId));
+    if (!row) return null;
+    const reached = await storeFor(db, { kind: "browser", account: row.owner, reach: [] }).project(projectId);
+    return isRefusal(reached) ? null : reached;
+  });
+  for (const a of migratedDocs.applied) {
+    process.stderr.write(`[productos] ${a.migration}: brought ${a.documents.length} document(s) up to date\n`);
+  }
+  if (migratedDocs.failed.length) {
+    /** ⛔ Named, because a project that could not be migrated is one somebody has to look at. */
+    process.stderr.write(
+      `[productos] ⚠ could not migrate documents for: ${migratedDocs.failed.join(", ")}\n`,
+    );
+  }
+
+  /**
    * ⛔ ONE SESSION FOR THE LOCAL CASE, ESTABLISHED AT BOOT. `singleAccount` is idempotent, so a
    * restart reuses the session rather than minting one per boot and leaving a trail of them.
    */
@@ -161,6 +233,20 @@ export async function startHosted(
     : undefined;
   if (config.singleAccount) {
     process.stderr.write(`[productos] single-account mode: ${config.singleAccount}\n`);
+  }
+
+  /**
+   * ⛔ SAID EVERY BOOT, AND NOT QUIETLY. An instance with auth off looks identical to one with auth
+   * on until somebody else finds the port — and by then every verdict in it is unprovable. A banner
+   * nobody can miss is the only honest way to run in this state.
+   */
+  if (authIsOff()) {
+    process.stderr.write(
+      "\n[productos] ⛔ AUTH IS OFF (PRODUCTOS_AUTH=off)\n" +
+        "[productos]    Every request is treated as a signed-in person, and every project is reachable.\n" +
+        "[productos]    Verdicts written now are ones NOBODY CAN PROVE A HUMAN MADE — tenet 1 does not\n" +
+        "[productos]    hold while this is set. Fine on a laptop; never on anything reachable.\n\n",
+    );
   }
 
   const server = http.createServer(async (req, res) => {
@@ -177,6 +263,9 @@ export async function startHosted(
         res.end(JSON.stringify({ ok: true, service: "productos", version: "0.1.0" }));
         return;
       }
+
+      /** The root: which product are you looking at. ⛔ Claims only `/` and `/projects`. */
+      if (await chooseRoute(req, res, pathname, { db, localSession })) return;
 
       /** ⛔ MCP first: `/p/<id>/mcp` would otherwise be swallowed by the instance route's catch-all. */
       if (await projectMcpRoute(req, res, pathname, { db, localSession })) return;

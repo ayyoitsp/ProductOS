@@ -57,16 +57,55 @@ const randomId = (prefix: string): string =>
 
 /** ⛔ Every command runs through here, so none of them can forget to close the pool. */
 async function withStore<T>(opts: { db?: string }, work: (db: Db) => Promise<T>): Promise<T> {
+  const url = opts.db ?? process.env.DATABASE_URL ?? "";
   const { db, close } = open(opts);
   try {
     return await work(db);
+  } catch (e) {
+    /** ⛔ Named here, where the url is known — `die` cannot guess which store was meant. */
+    return die(e, url);
   } finally {
     await close();
   }
 }
 
-const die = (e: unknown): never => {
-  console.error(pc.red("✗"), (e as Error).message);
+/**
+ * ⛔ "CANNOT REACH IT" AND "IT REFUSED THAT" ARE DIFFERENT PROBLEMS, AND THE DRIVER
+ * REPORTS THEM IDENTICALLY.
+ *
+ * Pointing this at a Postgres that was not running printed `Failed query: create
+ * table if not exists _productos_migrations …` followed by `params:` — which reads
+ * as a schema bug in ProductOS, and sent me looking at the migration instead of at
+ * the fact that nothing was listening. The first statement a connection runs is
+ * whatever happens to be first; naming it is noise.
+ */
+const UNREACHABLE = /ECONNREFUSED|ENOTFOUND|EAI_AGAIN|ETIMEDOUT|ECONNRESET|CONNECT_TIMEOUT|terminating connection/i;
+
+const die = (e: unknown, url?: string): never => {
+  const err = e as Error & { code?: string; cause?: { code?: string } };
+  const code = err.code ?? err.cause?.code ?? "";
+  const where = url ? ` at ${url.replace(/\/\/[^@]*@/, "//***@")}` : "";
+
+  if (UNREACHABLE.test(code) || UNREACHABLE.test(err.message ?? "")) {
+    console.error(pc.red("✗"), `cannot reach the store${where}`);
+    console.error(pc.dim("  "), code || err.message.split("\n")[0]);
+    console.error(
+      pc.dim("  "),
+      "⛔ nothing was read or written. Check the host, the port, and whether it is running —",
+    );
+    console.error(pc.dim("  "), "for the compose stack: make up");
+    process.exit(1);
+  }
+
+  /** Authentication and TLS are their own class: reachable, and saying no. */
+  if (/password authentication|no pg_hba|SASL|certificate|SSL/i.test(err.message ?? "")) {
+    console.error(pc.red("✗"), `the store${where} refused this credential`);
+    console.error(pc.dim("  "), err.message.split("\n")[0]);
+    console.error(pc.dim("  "), "a Neon string needs ?sslmode=require, and the pooled host for this workload");
+    process.exit(1);
+  }
+
+  console.error(pc.red("✗"), err.message);
   process.exit(1);
 };
 

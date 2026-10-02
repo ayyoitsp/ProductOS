@@ -51,6 +51,7 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgres://productos:productos@postgres:5432/productos}
       PORT: "4100"
       PRODUCTOS_SINGLE_ACCOUNT: ${PRODUCTOS_SINGLE_ACCOUNT:-me@localhost}
+      PRODUCTOS_AUTH: ${PRODUCTOS_AUTH:-}
     ports:
       - "4100:4100"
     depends_on:

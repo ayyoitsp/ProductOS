@@ -180,9 +180,15 @@ export interface Materialized {
 }
 
 export async function materializeProject(store: ProjectStore): Promise<Materialized> {
-  const documents = await store.documents();
+  /**
+   * ⛔ ONE ROUND TRIP, NOT TWO. The documents and the log are independent reads, and
+   * asking for the second only after the first arrived cost a full trip — 90ms against
+   * Neon, on every single request, for nothing. `scripts/bench-store.mjs` is where that
+   * number came from and is how to check it again.
+   */
+  const [documents, events] = await Promise.all([store.documents(), store.since(0, LOG_CEILING)]);
   const dir = materialize(documents);
-  const logHad = writeLog(dir, await store.since(0, LOG_CEILING));
+  const logHad = writeLog(dir, events);
   return { dir, documents, logHad };
 }
 

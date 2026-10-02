@@ -180,11 +180,48 @@ export async function revokeToken(db: Db, tokenId: string): Promise<void> {
  * Returns `null` only when there is no credential at all — see the file header for why that is a
  * `null` and not a scopeless browser.
  */
+/**
+ * ⛔ AUTH OFF, DELIBERATELY AND LOUDLY — `PRODUCTOS_AUTH=off`.
+ *
+ * Peter: *"just disable auth for now until we're ready to implement a full flow"*. There is no
+ * sign-in route yet, so the only ways into the page were single-account mode or a session minted
+ * from a terminal — and the second produces a 404 the moment you name an address that is not the
+ * owner's, which reads as a broken login rather than a different account.
+ *
+ * ⛔ WHAT IT COSTS, SAID WHERE IT IS SWITCHED ON: every verdict written while this is set is one
+ * NOBODY CAN PROVE A HUMAN MADE. `mayRecord` gates consent on being a browser session the instance
+ * issued, and this hands that out to anything that connects. That is acceptable on a laptop and is
+ * the whole of tenet 1 on anything else.
+ *
+ * ⛔ AND IT IS NOT A DEFAULT, NOT A FALLBACK, AND NOT INFERRED. One exact value of one variable, so
+ * it cannot be arrived at by a misconfiguration — a half-set environment leaves auth ON.
+ */
+export const authIsOff = (env: NodeJS.ProcessEnv = process.env): boolean =>
+  env.PRODUCTOS_AUTH?.trim().toLowerCase() === "off";
+
 export async function principalFrom(
   db: Db,
   headers: Record<string, string | string[] | undefined>,
   session?: string,
+  env: NodeJS.ProcessEnv = process.env,
 ): Promise<HostedPrincipal | null> {
+  /**
+   * ⛔ BEFORE THE BEARER CHECK, because with auth off a token is pointless and an unrecognised one
+   * would otherwise come back as a principal that can do nothing — which looks exactly like auth
+   * still being on.
+   */
+  if (authIsOff(env)) {
+    const account = await accountFor(db, env.PRODUCTOS_SINGLE_ACCOUNT?.trim() || "nobody@auth-is-off");
+    return {
+      kind: "browser",
+      actor: env.PRODUCTOS_SINGLE_ACCOUNT?.trim() || "nobody@auth-is-off",
+      account,
+      session: "auth-is-off",
+      reach: [],
+      scopes: ["read", "author"],
+    };
+  }
+
   const auth = String(headers.authorization ?? "");
   const bearer = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
 
