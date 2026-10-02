@@ -7,6 +7,7 @@ import os from "node:os";
 import pc from "picocolors";
 import { resolvePathsOrThrow } from "../core/paths.js";
 import { v2Route } from "../v2/serve.js";
+import { appStyleFor } from "../v2/appcss.js";
 import { readConfig, resolveTruthVerificationByok } from "../core/config.js";
 import { groupingAdvice } from "../core/grouping.js";
 import { buildWorklist, groupWorklist } from "../core/worklist.js";
@@ -394,36 +395,6 @@ export async function startUiServer(opts: StartUiServerOptions = {}): Promise<vo
         }
       }
 
-      // ---- User stylesheet passthrough ----
-      // If web.stylesheet is configured, serve the file at /_user-style.css
-      // so the rendered shell can <link> to it and the UX mocks pick up
-      // the user's actual design system.
-      if (p === "/_user-style.css") {
-        const cssRel = config.web?.stylesheet;
-        if (!cssRel) {
-          res.writeHead(404, { "content-type": "text/plain" });
-          res.end("no web.stylesheet configured");
-          return;
-        }
-        const cssAbs = path.resolve(paths.repoRoot, cssRel);
-        // Prevent path traversal: ensure resolved path stays within repoRoot.
-        const repoRootResolved = path.resolve(paths.repoRoot);
-        if (!cssAbs.startsWith(repoRootResolved + path.sep)) {
-          res.writeHead(403, { "content-type": "text/plain" });
-          res.end("stylesheet path escapes repo root");
-          return;
-        }
-        if (!fs.existsSync(cssAbs)) {
-          res.writeHead(404, { "content-type": "text/plain" });
-          res.end(`stylesheet not found at ${cssRel}`);
-          return;
-        }
-        const cssBody = fs.readFileSync(cssAbs, "utf-8");
-        res.writeHead(200, { "content-type": "text/css; charset=utf-8", "cache-control": "no-cache" });
-        res.end(cssBody);
-        return;
-      }
-
       // ---- JSON API ----
       if (p === "/api/features") return json(res, listAllContainers(paths).map((f) => f.frontmatter));
       if (p === "/api/areas") return json(res, listAreas(paths).map((a) => ({ slug: a.slug, title: a.title, feature_count: a.features.length })));
@@ -509,9 +480,18 @@ export async function startUiServer(opts: StartUiServerOptions = {}): Promise<vo
           capabilitySystems,
           products
         );
-      const shellOpts = config.web?.stylesheet
-        ? { userStylesheetUrl: "/_user-style.css" }
-        : {};
+      /**
+       * ⛔ READ ON EVERY REQUEST, like everything else this server renders from. The application's
+       * stylesheet is a build output — its Tailwind chunk is content-hashed and replaced on each
+       * build — so a copy cached at boot is a copy that stops being the product's CSS the first
+       * time somebody rebuilds the app this corpus describes.
+       */
+      const app = appStyleFor(paths.repoRoot);
+      const shellOpts = {
+        appCss: app.css || undefined,
+        mockClass: app.mockClass,
+        theme: app.theme,
+      };
 
       if (p === "/" || p === "") {
         const fp = topReadmePath(paths);

@@ -16,6 +16,7 @@
  * would be the MCP boundary broken by a longer path.
  */
 import { resolveRules, type Corpus } from "./load.js";
+import { scopeToShadow } from "./appcss.js";
 import { promisesOf, screensOf, type ProtoPromise, type ProtoScreen } from "./prototype.js";
 import { inferConnections, landingsFor, finishesFor, stateShowing } from "./connects.js";
 import { inEffect, declined as declinedSteers } from "./steers.js";
@@ -106,6 +107,18 @@ export interface PageOptions {
   appCss?: string;
   /** Wrapper class the app's CSS expects around its own markup, from `web.mock_container_class`. */
   mockClass?: string;
+  /**
+   * The scheme the product ships, from `web.theme` — stamped on every mock's host.
+   *
+   * ⛔ THE MOCK OPTS IN THE WAY THE APPLICATION OPTS IN. A themed design system is scoped to an
+   * attribute on the document root and does nothing without it, so the host carries that attribute
+   * and the rewritten selectors ask for it there. Folding the chosen scheme in unconditionally was
+   * the other option and it loses by one point of specificity: `html[data-theme=X]` outranks the
+   * Tailwind build's `:root` deliberately, and a theme flattened to `:host` would be outranked by
+   * the utilities it is supposed to re-colour — which looks like no theme at all, the exact defect
+   * this field exists to end.
+   */
+  theme?: string;
   /**
    * Prefix for links to OTHER scopes, e.g. `/v2`. Omit for a standalone file, where a link
    * to a sibling page cannot resolve.
@@ -790,7 +803,7 @@ function renderScreens(scope: Scope, ctx: Ctx, scopeId: string, opts: PageOption
            * names, so they need a shadow root each, exactly as the main drawing does.
            */
           const asMock = (html: string): string =>
-            `<div class="proto html"><template shadowrootmode="open">${PT_STYLE}<div class="${esc(
+            `<div class="proto html"${themeAttr(opts)}><template shadowrootmode="open">${PT_STYLE}<div class="${esc(
               opts.mockClass || "productos-mock"
             )}">${html}</div></template></div>`;
           const states = v.states ?? [];
@@ -1085,14 +1098,27 @@ function renderScreens(scope: Scope, ctx: Ctx, scopeId: string, opts: PageOption
 /**
  * The application's stylesheet, once, for every shadow root on the page to adopt.
  *
- * ⛔ `:root` DOES NOT MATCH INSIDE A SHADOW TREE, so a design system that defines its tokens there
- * would hand every mock variables that resolve to nothing — every colour and spacing value empty,
- * which renders as an unstyled page rather than as an error. `:host` is the shadow root's own
- * equivalent, so both are named.
+ * ⛔ `:root`, `html` AND `body` DO NOT MATCH INSIDE A SHADOW TREE, and a design system defines its
+ * tokens and its entire theme layer on exactly those three. Inlined verbatim they hand every mock
+ * variables that resolve to nothing and a theme that applies to nothing — which renders as a
+ * plausible-looking unthemed page rather than as an error. `scopeToShadow` rewrites that one
+ * construct and leaves every other selector byte-identical; it lives in appcss.ts, beside the
+ * reading of the files, because it is a fact about the stylesheet rather than about this page.
  */
 function appCssOnce(opts: PageOptions): string {
   if (!opts.appCss) return "";
-  return `<template id="app-css">${opts.appCss.replace(/:root\b/g, ":host, :root").replace(/<\/(script|template)/gi, "<\\/$1")}</template>`;
+  const css = scopeToShadow(opts.appCss, opts.mockClass || "productos-mock");
+  /**
+   * The scheme rides on the template rather than being baked into each host, because hosts are made
+   * in four places — two of them in script, after a tile is opened — and a theme that three of them
+   * remembered to set is a page where some drawings are the product and some are not.
+   */
+  return `<template id="app-css"${themeAttr(opts)}>${css.replace(/<\/(script|template)/gi, "<\\/$1")}</template>`;
+}
+
+/** `data-theme="…"`, or nothing at all where the product ships no scheme. */
+function themeAttr(opts: PageOptions): string {
+  return opts.theme ? ` data-theme="${esc(opts.theme)}"` : "";
 }
 
 /**
@@ -4591,6 +4617,8 @@ const PROTOTYPE = `<script>
        */
       const host = document.createElement("div");
       host.className = "proto html";
+      /** The clone wears what the original wore, or it is a different product in the same card. */
+      if (proto.getAttribute("data-theme")) host.setAttribute("data-theme", proto.getAttribute("data-theme"));
       const root = host.attachShadow({ mode: "open" });
       const from = proto.shadowRoot;
       if (from) {
@@ -4840,6 +4868,14 @@ const DRIVE = `<script>
   function hydrate(host) {
     const tpl = host.querySelector("template");
     if (!tpl || host.shadowRoot) return host.shadowRoot;
+    /**
+     * ⛔ THE HOST OPTS INTO THE PRODUCT'S THEME BEFORE ITS SHADOW ROOT EXISTS. The design system is
+     * scoped to this attribute and is inert without it, so a tile hydrated without it renders in
+     * the stylesheet's fallbacks — which looks like a styled screen of some other product.
+     */
+    const themed = document.getElementById("app-css");
+    const scheme = themed && themed.getAttribute("data-theme");
+    if (scheme) host.setAttribute("data-theme", scheme);
     const root = host.attachShadow({ mode: "open" });
     if ("adoptedStyleSheets" in root) root.adoptedStyleSheets = [sheet, marks, ...root.adoptedStyleSheets].filter(Boolean);
     else {

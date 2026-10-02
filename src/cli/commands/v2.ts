@@ -731,7 +731,11 @@ export function v2Command(): Command {
       const corpus = loadCorpus(dir);
       warnIfBroken(corpus);
       const app = appStyleFor(dir);
-      const page = renderScopePage(corpus, scope, { appCss: app.css || undefined, mockClass: app.mockClass });
+      const page = renderScopePage(corpus, scope, {
+        appCss: app.css || undefined,
+        mockClass: app.mockClass,
+        theme: app.theme,
+      });
       if (!page) {
         console.error(pc.red("✗"), `no scope "${scope}"`);
         process.exit(1);
@@ -825,6 +829,7 @@ export function v2Command(): Command {
         recordsTo: o.viaDb ? "read back from this page and written into the product truth" : dir,
         appCss: app.css || undefined,
         mockClass: app.mockClass,
+        theme: app.theme,
       });
       if (!page) {
         console.error(pc.red("✗"), `no scope "${scope}"`);

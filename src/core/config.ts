@@ -245,6 +245,23 @@ export const WebConfig = z.object({
    * to appear most often across the app, which cannot tell a button from a thing shaped like one.
    */
   design_system: z.string().optional(),
+  /**
+   * ⛔ WHICH THEME THE PRODUCT ACTUALLY SHIPS. Peter: *"the rendered style for bilrost currently at
+   * localhost:7878 doesn't match at all"*.
+   *
+   * A design system that supports theming does not apply one: every rule in it is scoped to an
+   * opt-in on the document root — `html[data-theme='bilrost']` in the application this was built
+   * against, which says so in its own header: *no `data-theme` attribute on &lt;html&gt; → nothing in
+   * this file applies*. So the whole theme layer shipped into every mock and did nothing, and the
+   * drawings rendered in the stylesheet's defaults — in that app's case Tailwind blue and grey,
+   * which is a plausible-looking product and the wrong one.
+   *
+   * ⛔ IT IS NAMED, NEVER INFERRED. A design system offering four schemes is a product offering
+   * four, and picking the first one alphabetically — or the one with the most rules — would be a
+   * guess wearing a decision's clothes: the mock would look authoritative and nobody could tell it
+   * had chosen. Unset means unthemed, which is what the application itself does.
+   */
+  theme: z.string().optional(),
 });
 export type WebConfig = z.infer<typeof WebConfig>;
 

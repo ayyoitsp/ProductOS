@@ -314,6 +314,37 @@ It refuses a corpus that cannot be handed over, and it is the difference between
 apology. ⛔ The `v2` is load-bearing — the bare verb is the v1 command and cannot read an Exchange
 corpus at all.
 
+## ⛔ A drawing wears the product's own style, and nothing says so when it does not
+
+A screen is drawn in the application's real class names, so it needs the application's real CSS or
+it is a drawing of some other product. Four lines of `web:` in `productos/config.yaml` decide that,
+and every one of them fails by **looking fine** — the screen still renders, laid out and legible and
+reviewable, in whatever the fallbacks are.
+
+```yaml
+web:
+  design_system: frontend/design-system   # the parts the product ships, so a drawn screen uses them
+  theme: bilrost                          # ⛔ WHICH SCHEME. Nothing infers this.
+  stylesheets:                            # ⛔ EVERY file, in cascade order — one of them is not enough
+    - frontend/design-system/src/tokens.css
+    - frontend/design-system/src/themes.css
+    - frontend/.next/static/chunks/*.css  # a build output is content-hashed; glob it
+```
+
+⛔ **`theme` is a decision, and only a person can make it.** A design system that supports theming
+does not apply one — every rule in it is scoped to an opt-in on the document root, and without the
+attribute the whole theme layer is inert. A system offering four schemes is a product offering four;
+picking one by position or by rule count would be a guess wearing a decision's clothes. Unset is
+legitimate where the application itself runs unthemed. **Ask; do not choose.**
+
+⛔ **Naming one stylesheet is worse than naming none.** The right class names with none of the
+values they resolve to renders as a badly written mock rather than as a missing file, and nobody
+reading it can tell which.
+
+`productos v2 check` reports a path that resolves to nothing, a scheme the stylesheets do not
+define, and schemes defined with none chosen. Run it **before** reading a drawing as evidence of
+anything: the only thing a reviewer compares a drawing against is the drawing.
+
 ## The reviewers
 
 ```bash

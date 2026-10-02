@@ -404,6 +404,7 @@ export async function v2Route(req: http.IncomingMessage, res: http.ServerRespons
       records: "http",
       appCss: app.css || undefined,
       mockClass: app.mockClass,
+      theme: app.theme,
       linkBase: "/v2",
       by: whoIsPressing(req),
       recordsTo: `written into ${dir}`,

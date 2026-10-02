@@ -163,9 +163,48 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
    * this from the codebase" is only honest where the corpus names a codebase to read; asking every
    * caller to pass that in is how one of them forgets and the finding fires on a corpus with no app.
    */
-  const opts = { hasAppStyles: appStyleFor(root).from.length > 0 };
+  const app = appStyleFor(root);
+  const opts = { hasAppStyles: app.from.length > 0 };
   const findings: Finding[] = [];
   const add = (f: Finding) => findings.push(f);
+
+  /**
+   * ⛔ A MOCK THAT CANNOT WEAR THE PRODUCT'S STYLE FAILS BY LOOKING FINE.
+   *
+   * Every defect below renders: the drawing is there, it is laid out, somebody reviews it and
+   * agrees to what it shows. It is simply not the product. Peter, after weeks of exactly that:
+   * *"the rendered style for bilrost currently at localhost:7878 doesn't match at all"*. Nothing
+   * downstream can catch it, because the thing a reviewer compares against is the thing on screen.
+   */
+  for (const m of app.missing) {
+    add({
+      severity: "note",
+      kind: "mock-stylesheet-missing",
+      where: "productos/config.yaml",
+      what: `web.stylesheets names ${m}, and there is no such file.`,
+      fix: "Fix the path, or drop it. A name that resolves to nothing renders identically to a mock nobody styled.",
+    });
+  }
+  if (app.theme && !app.themes.includes(app.theme)) {
+    add({
+      severity: "refuse",
+      kind: "mock-theme-unknown",
+      where: "productos/config.yaml",
+      what: `web.theme is "${app.theme}", and the stylesheets define ${
+        app.themes.length ? app.themes.map((t) => `"${t}"`).join(", ") : "no scheme of that kind"
+      }.`,
+      fix: "Name a scheme the stylesheets actually define. A scheme that is not there applies nothing, and every drawing renders in the fallback colours.",
+    });
+  }
+  if (!app.theme && app.themes.length) {
+    add({
+      severity: "note",
+      kind: "mock-theme-unchosen",
+      where: "productos/config.yaml",
+      what: `The stylesheets define ${app.themes.map((t) => `"${t}"`).join(", ")} and web.theme names none of them.`,
+      fix: "Set web.theme to the one the product ships. Unset is legitimate where the application itself runs unthemed — but it is a decision, and nothing else can make it.",
+    });
+  }
 
   for (const b of corpus.broken) {
     add({ severity: "refuse", kind: "will-not-parse", where: b.file, what: b.why });

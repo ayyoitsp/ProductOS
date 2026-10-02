@@ -168,7 +168,24 @@ export const AREAS: Area[] = [
      * test that makes the map trustworthy only walks `src/v2` — so the file that implements the map
      * was the one place it did not cover, which a reviewer caught immediately.
      */
-    files: ["src/v2/schema.ts", "src/v2/load.ts", "src/v2/ref.ts", "src/core/jobs.ts", "src/core/change.ts"],
+    files: [
+      "src/v2/schema.ts",
+      "src/v2/load.ts",
+      "src/v2/ref.ts",
+      "src/core/jobs.ts",
+      "src/core/change.ts",
+      /**
+       * ⛔ WHAT A PROJECT CAN SAY ABOUT ITSELF IS PART OF THE MODEL, AND IT WAS ON NOBODY'S MAP.
+       *
+       * A design system with four schemes and nothing in the model naming which one the product
+       * ships is a field that does not exist — so every drawing rendered in the fallback colours,
+       * for weeks, with no layer anywhere able to ask the question. Peter: *"the rendered style for
+       * bilrost currently at localhost:7878 doesn't match at all"*. The same argument the surface
+       * list already makes for `src/ui/server.ts`: a file missing from the map is a place no
+       * reviewer will look.
+       */
+      "src/core/config.ts",
+    ],
     needs: ["read-files", "run-commands", "search-files"],
   },
   {
@@ -254,6 +271,14 @@ export const AREAS: Area[] = [
        * printing "localhost". A file missing from the map is a place no reviewer will look.
        */
       "src/ui/server.ts",
+      /**
+       * ⛔ AND THE TREE THAT SERVER LANDS ON. `/` is this renderer; `/v2` is page.ts. One of them
+       * was on the map and the other was not, and the one that was not spent months rendering
+       * every drawing unstyled — it linked a route that served `web.stylesheet` while the project
+       * in front of it set `web.stylesheets`. A reviewer asked whether a concept is present
+       * everywhere needs both trees on the list, or "everywhere" means "the half somebody added".
+       */
+      "src/ui/renderer.ts",
       "src/v2/packet.ts",
       "src/v2/notes.ts",
       "src/v2/watch.ts",
