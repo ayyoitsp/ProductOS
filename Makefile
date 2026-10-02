@@ -72,9 +72,14 @@ help:
 	@echo "  make restore    → FILE=<dump>; ⛔ replaces the current database"
 	@echo ""
 	@echo "Against a managed Postgres (Neon etc), no local database:"
-	@echo "  make remote-doctor → is the string in .env a usable store? (run this first)"
-	@echo "  make up-remote   → needs DATABASE_URL in .env; no volume, nothing to back up"
+	@echo "  make remote-doctor  → is the string in .env a usable store? (run this first)"
+	@echo "  make up-remote      → needs DATABASE_URL in .env; no volume, nothing to back up"
+	@echo "  make rebuild-remote → rebuild from current source and restart ⛔ NOT 'make rebuild'"
+	@echo "  make restart-remote → restart the instance only ⛔ NOT 'make restart'"
 	@echo "  make down-remote / logs-remote"
+	@echo ""
+	@echo "⛔ The plain 'rebuild' and 'restart' above act on the LOCAL-Postgres stack. Against a"
+	@echo "   managed store they stand up a SECOND stack instead of updating the one you have."
 
 install:
 	npm install
@@ -189,6 +194,28 @@ remote-doctor: build
 	test -n "$$url" || { echo "DATABASE_URL is empty in .env"; exit 1; }; \
 	echo "checking $$(printf '%s' "$$url" | sed -E 's#//[^@]*@#//***@#')"; \
 	DATABASE_URL="$$url" node dist/cli/index.js hosted doctor
+
+# ⛔ THE TWO TARGETS SOMEBODY REACHES FOR DID NOT EXIST HERE, AND THE ONES THAT DO ARE A TRAP.
+#
+# Peter, running the managed-store stack: *"is it clear how to update things and restart the docker
+# image?"* Half of it was. `up-remote` already rebuilds — it is `up --build -d` — and nothing said
+# so, while the two targets a person actually reaches for are `rebuild` and `restart`, which use the
+# DEFAULT compose file. Run either against a managed store and you have not updated your instance:
+# you have stood a second one up beside it with a local Postgres, which looks like it worked.
+#
+# So they exist by name, and the help says which stack each belongs to.
+rebuild-remote: build
+	@test -f .env || { echo "no .env here — DATABASE_URL lives beside the compose file you started from"; exit 1; }
+	docker compose -f docker-compose.remote.yml up --build -d
+	@sleep 2
+	@docker compose -f docker-compose.remote.yml logs --tail 15 productos
+
+# ⛔ Exercises the migration ledger against the real store: a second boot must skip what it applied.
+restart-remote:
+	@test -f .env || { echo "no .env here — DATABASE_URL lives beside the compose file you started from"; exit 1; }
+	docker compose -f docker-compose.remote.yml restart productos
+	@sleep 3
+	@docker compose -f docker-compose.remote.yml logs --tail 10 productos
 
 down-remote:
 	docker compose -f docker-compose.remote.yml down
