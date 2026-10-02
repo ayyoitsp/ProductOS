@@ -131,31 +131,52 @@ test("a returning control needs nothing said about it", () => {
 const { finishesFor } = await import(path.resolve("dist/v2/connects.js"));
 
 /**
- * ⛔ THE EXCHANGE HAS TO SAY WHAT THE CONTROL LEAVES BEHIND, because finishing is no longer "any
- * commit on the last screen". That was too blunt — it marked "New Deal" as finishing the deals
- * list, a control which LEAVES the feature, and suppressing its link broke the one cross-feature
- * connection in the corpus. A control finishes when what it leaves behind is what the feature says
- * it ends with.
+ * ⛔ THE EXCHANGE SAYS IT FINISHES. IT IS NO LONGER READ OUT OF THE PROSE, AND THIS TEST USED TO
+ * ASSERT THAT IT WAS.
+ *
+ * Finishing was scored by matching a control's sentence against `happy_path.ends_with` and taking
+ * anything sharing three words. Peter found what that produces by pressing the button: *"the screen
+ * linking is wrong"*, and before that *"it dead ends. no way to complete setup"*. On create-deal it
+ * declared **Continue** to be where the feature ends — from a sentence whose own words are
+ * *"Nothing has been created yet"* — because it shared "deal" and "folder" with the outcome.
+ *
+ * ⛔ Every sentence in a feature is about the same nouns, so overlap can never separate "the deal is
+ * now on the list" from "no deal has been created". A claim this strong has to be made, not
+ * inferred, and where nobody makes it `nothing-finishes-this-feature` asks — incomplete beats
+ * confidently wrong about your own flow.
  */
-const withPath = (through, ends, after) => ({
+const withPath = (through, ends, after, finishes) => ({
   ...screen({ after: { says: after ?? ends } }),
+  exchanges: [{ id: "form", at: { view: "the-form" }, slots: { after: { says: after ?? ends } }, ...(finishes ? { finishes: true } : {}) }],
   happy_path: { accomplishes: "An analyst starts a deal", brings: "a name", ends_with: ends, through },
 });
 
-test("the control that ends the happy path is the one that finishes the feature", () => {
-  const done = finishesFor(withPath(["the-form"], "the deal exists on the list"), view);
+test("the control whose exchange says it finishes is the one that finishes", () => {
+  const done = finishesFor(withPath(["the-form"], "the deal exists on the list", undefined, true), view);
   assert.deepEqual(done, ["continue"], `expected the commit to finish it, got ${JSON.stringify(done)}`);
+});
+
+test("a sentence that merely shares words with the outcome finishes nothing", () => {
+  /**
+   * ⛔ The exact shape that shipped: a sentence about the same nouns as `ends_with`, saying the
+   * opposite. It scored three shared words and was declared the end of the feature.
+   */
+  const done = finishesFor(
+    withPath(["the-form"], "the deal exists on the CRE deals list, bound to its folder", "no deal exists yet, and they are asked where its folder should be"),
+    view
+  );
+  assert.deepEqual(done, [], "a control saying nothing has happened yet was read as completing the feature");
 });
 
 /** ⛔ Only the LAST screen of the path. A commit in the middle lands on the next step. */
 test("a commit part-way through the path does not finish it", () => {
-  const done = finishesFor(withPath(["the-form", "a-later-screen"], "the deal exists"), view);
+  const done = finishesFor(withPath(["the-form", "a-later-screen"], "the deal exists", undefined, true), view);
   assert.deepEqual(done, [], "a control in the middle of a flow was treated as the end of it");
 });
 
 /** ⛔ And a control that RETURNS never finishes anything — it puts somebody back where they were. */
 test("a returning control does not finish the feature", () => {
-  const done = finishesFor(withPath(["the-form"], "the deal exists"), {
+  const done = finishesFor(withPath(["the-form"], "the deal exists", undefined, true), {
     ...view,
     parts: [{ id: "back", role: "navigates", label: "Back", returns: true }],
   });

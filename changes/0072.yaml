@@ -1,0 +1,9 @@
+id: "0072"
+said: even MORE tabular.  single table.  do not truncate text, make the text all visible, group into subsections based on which screen it applies to.  add a chip for confirmed or not, chip for 'type'.  we don't need ' this is right', 'not quite- reword it', 'not ours to say' - those are the check/edit/delete buttons. table should refresh dynamically and not do the screen reload thing
+at: 2026-10-02
+kind: surface
+reaches:
+  surface: ONE TABLE, GROUPED BY SCREEN, NOTHING CUT
+  pin: a behaviour is a collapsed row, and what supports the judgement is behind the tap
+waived: {}
+closed: 2026-10-02

@@ -884,3 +884,47 @@ export function stageOf(corpus: Corpus, scopeId: string): StageState | null {
     blocked_by: [],
   };
 }
+
+
+/**
+ * ⛔ WHAT EACH ROLE OR PERMISSION REACHES — the question prose could never answer.
+ *
+ * Peter: *"enumerate which permissions can access it."* Said from the exchange's side that is
+ * `held_by`; this is the same fact read from the other end, which is the end somebody actually asks
+ * from: *what can an underwriter do in this product.* With the answer in prose, that question could
+ * only be answered by reading every feature and trusting that four spellings of "whoever may create
+ * deals" meant one thing.
+ *
+ * ⛔ A ROLE REACHES WHAT ITS PERMISSIONS REACH, so `holds` is followed. Without that, a product
+ * using both would answer the question twice and differently depending on whether an exchange
+ * happened to name the role or one of its permissions.
+ */
+export interface Reach {
+  id: string;
+  kind: "role" | "permission";
+  means: string;
+  /** Exchange refs this may perform, directly or through a permission it holds. */
+  reaches: string[];
+  /** For a role: the permissions it holds that no exchange anywhere names. */
+  idle: string[];
+}
+
+export function reachOf(corpus: Corpus): Reach[] {
+  const named = new Map<string, string[]>();
+  for (const { scope } of corpus.scopes)
+    for (const ex of scope.exchanges)
+      for (const id of ex.slots?.may?.held_by ?? []) {
+        const at = named.get(id) ?? [];
+        at.push(`${scope.id}#${ex.id}`);
+        named.set(id, at);
+      }
+
+  const byId = new Map(corpus.access.map((a) => [a.id, a]));
+  return corpus.access.map((a) => {
+    const direct = named.get(a.id) ?? [];
+    /** ⛔ One level. A role holding a role is not in the model, and inventing it here would be a second model. */
+    const through = a.holds.flatMap((h) => named.get(h) ?? []);
+    const idle = a.holds.filter((h) => byId.has(h) && !(named.get(h) ?? []).length);
+    return { id: a.id, kind: a.kind, means: a.means, reaches: [...new Set([...direct, ...through])], idle };
+  });
+}

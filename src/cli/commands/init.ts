@@ -3,6 +3,7 @@ import path from "node:path";
 import pc from "picocolors";
 import { Command } from "commander";
 import { installClaudeSkills, uninstallClaudeSkills } from "../../adapters/claude.js";
+import { readSteers, inEffect } from "../../v2/steers.js";
 import {
   ensureDirs,
   pathsFor,
@@ -61,7 +62,18 @@ export function initCommand(): Command {
         projectConfig = undefined;
         projectRoot = undefined;
       }
-      const install = installClaudeSkills({ update: opts.update, config: projectConfig, configRoot: projectRoot });
+      /**
+       * ⛔ AND WHAT THIS PROJECT HAS LEARNED, so every author installs with it. Peter asked for an
+       * addendum that "will run per org/project"; this is the install-time half of it. Resolved
+       * here rather than in the adapter, because this is the layer that knows where a corpus is.
+       */
+      const steers = projectRoot ? readSteers(path.join(projectRoot, "v2")) : [];
+      const install = installClaudeSkills({
+        update: opts.update,
+        config: projectConfig,
+        configRoot: projectRoot,
+        steers,
+      });
       const verb = install.symlinked ? "Linked" : "Installed";
       for (const s of install.installed) {
         /**
@@ -100,6 +112,20 @@ export function initCommand(): Command {
         } else {
           console.log(pc.green("✓"), `Wrote agent: ${path.join(install.agentsDir, `${a}.md`)}`);
         }
+      }
+      /**
+       * ⛔ AN ADDENDUM NOBODY WAS TOLD ABOUT IS A CONSTRAINT NOBODY CHOSE — the same defect
+       * `decidedFor` exists to prevent. Every author just had this project's habits appended to its
+       * instructions; saying so here is the only moment somebody finds out without going to look.
+       */
+      const live = inEffect(steers);
+      if (live.length) {
+        console.log(
+          pc.green("✓"),
+          `${live.length} ${live.length === 1 ? "steer" : "steers"} this project has learned, into every author ${pc.dim("(no judge gets one)")}`
+        );
+        for (const st of live) console.log(pc.dim(`   ${st.id} — ${st.says}`));
+        console.log(pc.dim("   productos v2 steer list — what they are and where each was learned"));
       }
       console.log(pc.green("✓"), `MCP server registered in ${install.mcpRegisteredAt}`);
 

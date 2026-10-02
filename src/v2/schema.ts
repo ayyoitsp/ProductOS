@@ -715,6 +715,19 @@ export const SlotFill = z
      *  latitude reaches a builder by declaration rather than by absence. */
     none: z.boolean().optional(),
     cannot_fail: z.string().optional(),
+    /**
+     * ⛔ WHO MAY, BY NAME — only on `may`, and refused on every other slot.
+     *
+     * Peter: *"enumerate which permissions can access it."* The slot already asks who may; what it
+     * could not do was answer in terms the product shares with its other features, so the answer
+     * was prose and the question "what can an underwriter reach" was unanswerable.
+     *
+     * ⛔ `says` STAYS AND IS STILL REQUIRED. A list of ids is not a sentence a reviewer can judge —
+     * "nobody outside the deal's own team, even an admin" is the part a person agrees to, and the
+     * ids are what makes it checkable and listable. Replacing the sentence with the list would
+     * trade the thing a human validates for the thing a machine reads.
+     */
+    held_by: z.array(z.string()).default([]),
     /* ⛔ `notes` REMOVED. It answered no slot question, so it had no honest content — and it
      * carried unsettled product truth straight through every guard: *"How far back the history
      * goes is not decided… Whether a kid sees the same history as a parent is also unsettled"*
@@ -1002,6 +1015,48 @@ export const Exchange = z
       .strict()
       .optional(),
     exists: z.enum(["intended", "kept", "withdrawn"]).optional(),
+    /**
+     * ⛔ THIS IS THE ACT THAT ENDS THE FEATURE — SAID, NOT GUESSED.
+     *
+     * Peter, driving the prototype: *"the screen linking is wrong - clicking continue from the first
+     * page shoudl take you to folder selection"* — and before that, *"it dead ends. no way to
+     * complete setup"*.
+     *
+     * Finishing used to be derived by scoring a control's sentence against `happy_path.ends_with`
+     * and taking anything sharing three words. ⛔ So **Continue** was declared to complete
+     * create-deal, on a sentence whose own words are *"Nothing has been created yet"* — it shared
+     * "deal" and "folder" with the outcome, and that was enough. A claim as strong as "this is
+     * where the feature ends" cannot rest on shared nouns: every sentence in a feature is about the
+     * same nouns.
+     *
+     * So an author says it. One boolean, on the exchange whose press ends the thing. Nothing infers
+     * it, and where nothing says it, `nothing-finishes-this-feature` asks for it rather than
+     * inventing an answer — which is the difference between a corpus that is incomplete and one
+     * that is confidently wrong about its own flow.
+     */
+    finishes: z.boolean().optional(),
+    /**
+     * ⛔ WHICH APPEARANCE OF THE SCREEN THIS PRESS PUTS SOMEBODY IN — said, where prose cannot tell.
+     *
+     * Peter: *"the screen linking is wrong - clicking continue from the first page shoudl take you
+     * to folder selection."*
+     *
+     * The destination was scored out of the `after` sentence against each state's name. That works
+     * when the sentence happens to name the state and fails in a way nobody can see when it does
+     * not: Continue's sentence says *"They are being asked where this deal's folder is… Nothing has
+     * been created yet"* — which names **Folder** and **Creating** equally well, so the tie rule
+     * refused both and the prototype moved nowhere. Before that, with no `after` at all, it read
+     * the `answer` and landed on Creating.
+     *
+     * ⛔ Every one of those outcomes is a sentence being asked a question it was not written to
+     * answer. `after` says what is different afterwards; it is not a pointer. So where the picture
+     * has to move somewhere specific, name it — the value is a state's `when`, the same vocabulary
+     * `at.state` uses, because two spellings of "which appearance" is how the two come to disagree.
+     *
+     * Still derived when absent: a sentence that unambiguously names one appearance is a lookup, and
+     * making an author restate it would be the hand-authoring this project keeps failing at.
+     */
+    lands_on: z.string().optional(),
     reads: z.array(z.string()).default([]),
     changes: z.array(z.string()).default([]),
     /** Rules this exchange is exempt from, each with a required reason. */
@@ -1012,6 +1067,20 @@ export const Exchange = z
     criteria: z.array(Criterion).default([]),
   }).strict()
   .superRefine((e, ctx) => {
+    /**
+     * ⛔ `held_by` ANSWERS "WHO MAY", SO IT BELONGS TO THAT SLOT AND NOWHERE ELSE.
+     *
+     * The same reasoning as `outcomes` on `refuses` and `cannot_fail` on `fails`: a field that is
+     * meaningful on one slot and accepted on all eight is a field that will be written on the
+     * wrong one, read by nothing, and look correct in the file.
+     */
+    for (const [slot, fill] of Object.entries(e.slots ?? {}))
+      if (slot !== "may" && (fill as { held_by?: string[] })?.held_by?.length)
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["slots", slot, "held_by"],
+          message: `held_by says who may perform this, so it belongs on the \`may\` slot — not on \`${slot}\``,
+        });
     // ⛔ A person's ask arrives somewhere. Without this an exchange can claim a human
     // trigger and name no screen, which is how v1 accumulated screen-shaped behaviours
     // nobody could find.
@@ -1317,6 +1386,79 @@ export type Part = z.infer<typeof Part>;
  * feature FOR", which is a question about the feature, and folding it into a slot would make it
  * agreeable at the same grain as the details it is supposed to frame.
  */
+/**
+ * ⛔ THE FRAMING A PRD HAS AND PRODUCT TRUTH DID NOT.
+ *
+ * Peter, after reviewing create-deal against what a PRD carries: *"let's add tabs here - 'why',
+ * 'success measures', 'risks' can all be cards that are added in the 'overview' tab.
+ * instrumentation should be added as well. success measures and instrumentation should be in a
+ * 'Metrics' tab."*
+ *
+ * The functional half was already stronger than most PRDs — forty-eight specified behaviours for
+ * create-deal, including what happens when it is pressed twice and when two people do it at once,
+ * which teams usually discover in production. What the model had nowhere for was everything around
+ * it: why the feature is worth building, how anybody would know it worked, what could go wrong, and
+ * what gets recorded. `Scope` had eleven fields and not one of them could hold any of it.
+ *
+ * ⛔ EACH IS A LIST OF CARDS, NOT A PARAGRAPH, for the same reason a charter has sections rather
+ * than prose: one risk is agreed to, reworded or dropped on its own. A paragraph holding four risks
+ * takes one stamp for four claims, which is the grain error this model has corrected twice.
+ */
+export const Reason = z
+  .object({
+    id: z.string().regex(new RegExp(`^${SEGMENT}$`), "a reason id is one segment, kebab-case"),
+    /** ⛔ What is wrong TODAY. "Users want X" is a restatement of the feature, not a reason for it. */
+    says: z.string().min(20, "say what is wrong today — a sentence that only restates the feature is not a reason for it"),
+  })
+  .strict();
+export type Reason = z.infer<typeof Reason>;
+
+export const Risk = z
+  .object({
+    id: z.string().regex(new RegExp(`^${SEGMENT}$`), "a risk id is one segment, kebab-case"),
+    says: z.string().min(20, "say what could go wrong, in terms somebody could later agree had happened"),
+    /**
+     * ⛔ WHAT WOULD BE DONE, where anything would. Absent is meaningful and left absent on purpose:
+     * a risk nobody has a plan for is a real state, and forcing a mitigation would produce a
+     * sentence invented to fill a field.
+     */
+    mitigated_by: z.string().min(10).optional(),
+  })
+  .strict();
+export type Risk = z.infer<typeof Risk>;
+
+export const Measure = z
+  .object({
+    id: z.string().regex(new RegExp(`^${SEGMENT}$`), "a measure id is one segment, kebab-case"),
+    says: z.string().min(15, "say what would be true if this worked, in something somebody could observe"),
+    /**
+     * ⛔ A NUMBER WHERE THERE IS ONE, and optional because an early feature often has no defensible
+     * target and inventing one is worse than admitting it. `check` reports a measure with no target
+     * rather than the schema refusing it.
+     */
+    target: z.string().optional(),
+  })
+  .strict();
+export type Measure = z.infer<typeof Measure>;
+
+export const Instrument = z
+  .object({
+    id: z.string().regex(new RegExp(`^${SEGMENT}$`), "an instrument id is one segment, kebab-case"),
+    /** What gets recorded, in product terms — not a column name or an event schema. */
+    says: z.string().min(15, "say what gets recorded, in terms a reader of this product would use"),
+    /**
+     * ⛔ WHICH MEASURES THIS FEEDS, AND THIS IS THE LOAD-BEARING FIELD.
+     *
+     * A measure nothing feeds cannot be known, and an instrument feeding nothing is telemetry
+     * somebody will maintain for nobody. Both are invisible when the two live in separate lists,
+     * and both are exactly the shape of `nothing-reads-what-this-sets` — which already exists in
+     * this model because the same mistake happened with terms.
+     */
+    feeds: z.array(z.string()).default([]),
+  })
+  .strict();
+export type Instrument = z.infer<typeof Instrument>;
+
 export const HappyPath = z
   .object({
     /** What the person gets done. The reason the feature exists, in one sentence. */
@@ -1864,6 +2006,14 @@ export const Scope = z.object({
   depends_on: z.array(z.string()).default([]),
   views: z.array(View).default([]),
   exchanges: z.array(Exchange).default([]),
+  /** ⛔ Why this is worth building — what is wrong today. See `Reason`. */
+  why: z.array(Reason).default([]),
+  /** What could go wrong, each on its own so each can be agreed to or dropped. See `Risk`. */
+  risks: z.array(Risk).default([]),
+  /** How anybody would know it worked. See `Measure`. */
+  measures: z.array(Measure).default([]),
+  /** What gets recorded, and which measures it feeds. See `Instrument`. */
+  instruments: z.array(Instrument).default([]),
   /** Migration alias — what this was called in v1. */
   was: z.string().optional(),
 }).strict();
@@ -2191,6 +2341,51 @@ export const Charter = z
 export type Charter = z.infer<typeof Charter>;
 
 /**
+ * ⛔ WHAT A PRODUCT-WIDE DOCUMENT MAY BE, AND THE TWO THAT STOPPED BEING ONE.
+ *
+ * Peter, reading them on a real corpus: *"'Decisions' - these are all way too feature specific,
+ * doesn't belong at top level, should be behaviors. 'Non-goals' - also feature specific, should be
+ * behaviors"* — and then the question that settled it: *"why can't we delete the non-goals section
+ * and decisions section?"*
+ *
+ * Nothing stopped us. They existed because the migrator carried v1's context model across
+ * unchanged, and nobody asked whether the Exchange model still needed them. It does not — it has a
+ * better home for every sentence in both, and those homes are attached to the feature they
+ * constrain, agreed to one at a time, and go stale when the thing they are about changes. A
+ * document gives a sentence none of those three.
+ *
+ * ⛔ THE SURVIVING FOUR ARE THE ONES WITH NO OTHER HOME. A goal, a design principle, a persona and
+ * a product's voice are genuinely about the whole product and cannot be attached to one feature
+ * without becoming something else.
+ *
+ * ⛔ AND THIS LIST IS A REFERENCE, NEVER A WHITELIST. Peter: *"the top level outside of these
+ * should probably be user/project configurable - a place where they can add there own top level
+ * rules."* He is right, and the thing to avoid is obvious from how we got here: v1 had a fixed list
+ * of six, the migrator carried it across, and two documents existed for years because a list said
+ * they should. Replacing six hardcoded names with four would be the same mistake with a shorter
+ * list.
+ *
+ * So the loader reads whatever is in `charter/` — a project adding `charter/compliance.md` works
+ * today and nothing here gates it. These four are the ones ProductOS can say something useful
+ * about; `NOT_A_DOCUMENT` below is the only list with teeth, and it names what has a better home
+ * rather than what is allowed. See PT-0003 for making the per-project half first-class.
+ *
+ * ⛔ AND THIS IS NOT A `kind` FIELD. Charter once had one; it was deleted because nothing read it,
+ * with a note saying it would come back with its reader. A reader nearly appeared here — to tell a
+ * design principle from a product rule — and it was the wrong answer: *"a self-check the lender
+ * runs for its own benefit does not prevent the save"* is not a mislabelled principle, it is a
+ * **Rule**, which the model already has. Labelling a misfiling is not fixing it.
+ */
+export const DOCUMENTS = ["goals", "principles", "personas", "voice"] as const;
+
+export const NOT_A_DOCUMENT: Record<string, string> = {
+  "non-goals":
+    "a slot's `standing: out_of_scope` with this as the reason, a named `refuses` outcome, or the feature's `happy_path.not` — attached to what it constrains, where a reader actually meets it",
+  decisions:
+    "a `Verdict` — recorded by whoever decided, with their reason and what it replaced. In a document it carries no hash, so it reads as current forever after the thing it decided has moved",
+};
+
+/**
  * Something a person wants changed, addressed to whoever authors.
  *
  * ⛔ A NOTE IS NOT PRODUCT TRUTH, AND KEEPING THAT LINE IS THE WHOLE DESIGN.
@@ -2338,6 +2533,19 @@ export const Steer = z
      */
     learned_from: z.string().min(3).optional(),
     at: dateish,
+    /**
+     * ⛔ TURNED OFF, AND WHY — BECAUSE OTHERWISE IT COMES STRAIGHT BACK.
+     *
+     * A learned steer is noticed from a pattern in what somebody corrected. So deleting one that
+     * turned out to be wrong does not end it: the pattern it was drawn from is still sitting in the
+     * record, and the next scan learns it again. Declining is how a person says "I saw this and it
+     * is not a rule here", in a form the noticer can read.
+     *
+     * ⛔ And it carries the reason, for the same argument `waived` on a change record carries one: a
+     * decline with no argument is indistinguishable from a steer nobody got round to, and the next
+     * person cannot tell which.
+     */
+    declined: z.string().min(3).optional(),
   })
   .strict()
   .superRefine((x, ctx) => {
@@ -2353,10 +2561,77 @@ export const Steer = z
         message:
           "a steer that constrains the product is somebody's decision, not a pattern noticed — say who decided it, or file it as steering generation",
       });
+    /**
+     * ⛔ DECLINING IS FOR A PATTERN, NOT FOR A CLAIM. Turning off something that steers TRUTH is
+     * withdrawing a constraint on the product, which is a verdict — it belongs in a scope, where it
+     * can be argued with and where something records who withdrew it. Letting it happen here would
+     * make a line in a settings file into a quiet retraction of product truth.
+     */
+    if (x.steers === "truth" && x.declined)
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["declined"],
+        message:
+          "a constraint on the product is withdrawn where it was agreed to, not turned off in settings — take it out of the charter, or file it as steering generation",
+      });
   });
 export type Steer = z.infer<typeof Steer>;
 
 export const SteersFile = z.object({ steers: z.array(Steer).default([]) }).strict();
+
+/**
+ * ⛔ WHO MAY — AS A THING THE PRODUCT HAS, NOT A SENTENCE EACH FEATURE WRITES AGAIN.
+ *
+ * Peter, reading a `may` slot that said *"Anybody in the organization whose role lets them create
+ * deals here"*: *"we should probably solidify 'roles/permissions' as a cross-product concept, and
+ * enumerate which permissions can access it. and at the top level we can configure whether we use
+ * roles, permissions, or nothing like that."*
+ *
+ * That sentence is the tell. It is prose standing where a concept should be: it names a role
+ * without naming it, cannot be checked, cannot be listed, and is retyped slightly differently on
+ * every exchange in the product — so "which features can an underwriter reach" was a question
+ * nobody could answer except by reading everything and trusting four spellings of the same idea.
+ * `CLAUDE.md` names this exact shape: when something true has nowhere to live, add the field.
+ *
+ * ⛔ AND NOT EVERY PRODUCT HAS THEM. A single-user tool has no roles and a `may` naming one would be
+ * an invention; forcing the concept everywhere is how a framework starts making products describe
+ * themselves in its vocabulary rather than their own. So the product says which model it uses —
+ * `access:` in the corpus's config — and the checks follow that answer rather than assuming one.
+ */
+export const AccessKind = z.enum(["role", "permission"]);
+export type AccessKind = z.infer<typeof AccessKind>;
+
+export const Access = z
+  .object({
+    id: z.string().regex(new RegExp(`^${SEGMENT}$`), "an access id is one segment, kebab-case"),
+    kind: AccessKind,
+    /** What somebody holding it is thereby able to do, in product language. */
+    means: z.string().min(10, "say what holding this lets somebody do — a name alone is not a definition"),
+    /**
+     * ⛔ A ROLE IS A BAG OF PERMISSIONS, AND SAYS SO. Without this, a product using both has roles
+     * whose contents live in whichever exchanges happen to name them — so removing a permission
+     * from a role is a search-and-replace, and nobody can tell what a role grants without reading
+     * the whole corpus. Empty on a permission, and refused there.
+     */
+    holds: z.array(z.string()).default([]),
+    /**
+     * ⛔ WHO DECIDES WHO HOLDS IT, where that is not this product. An access name the product
+     * cannot grant is one somebody will look for a screen to manage and not find.
+     */
+    granted_by: z.string().optional(),
+  })
+  .strict()
+  .superRefine((x, ctx) => {
+    if (x.kind === "permission" && x.holds.length)
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["holds"],
+        message: "a permission holds nothing — only a role is a bag of permissions. Make this a role, or drop `holds`",
+      });
+  });
+export type Access = z.infer<typeof Access>;
+
+export const AccessFile = z.object({ access: z.array(Access).default([]) }).strict();
 
 export const ScopeFile = Scope;
 export const RulesFile = z.object({ rules: z.array(Rule).default([]) }).strict();

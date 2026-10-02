@@ -10,7 +10,7 @@
  *   note     worth a person's attention; never blocks
  *   shape    an observation about proportions, which no single page can show
  */
-import { SLOTS, SLOT_ASKS, statements, type SlotName, type Says } from "./schema.js";
+import { SLOTS, SLOT_ASKS, statements, saysText, NOT_A_DOCUMENT, type SlotName, type Says } from "./schema.js";
 import {
   DOWNSTREAM_OF_ANSWER,
   answerIsUnknown,
@@ -28,7 +28,7 @@ import {
 import { stampFor, staleReason, coveredBy } from "./stamp.js";
 import { resolveRef } from "./ref.js";
 import { descendants } from "./settle.js";
-import { ruleHomes } from "./grid.js";
+import { ruleHomes, reachOf } from "./grid.js";
 import { appStyleFor } from "./appcss.js";
 import { readLog } from "./log.js";
 import { landingsFor, finishesFor } from "./connects.js";
@@ -141,11 +141,18 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
    * is a defect or simply the truth about a product nobody has built yet.
    */
   let hasCode = false;
+  /**
+   * ⛔ WHICH ACCESS MODEL THE PRODUCT SAYS IT HAS, read once. `neither` on no config at all, which
+   * is the right default: a corpus that has never been configured has not claimed to have roles.
+   */
+  let accessModel: "roles" | "permissions" | "both" | "neither" = "neither";
   try {
     const paths = resolvePathsOrThrow(root);
     const cfgRoot = path.dirname(path.dirname(paths.configFile));
-    const dir = readConfig(paths).web.components_dir;
+    const conf = readConfig(paths);
+    const dir = conf.web.components_dir;
     hasCode = Boolean(dir) && fs.existsSync(path.resolve(cfgRoot, dir!));
+    accessModel = conf.exchange.access;
   } catch {
     hasCode = false;
   }
@@ -1509,11 +1516,53 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
               fix: `say where a control on "${st.label}" leaves somebody, in the \`answer\` of an exchange at that control. Where the way out is "back to the screen as it was", the model cannot express it yet — that is a framework gap, not yours`,
             });
           }
+          /**
+           * ⛔ A CONTROL THAT FINISHES THE FEATURE MOVES SOMEBODY — to the completion appearance.
+           *
+           * `landingsFor` stopped returning finishing controls, because a press that ends a feature
+           * must not also land inside it. This counted them as dead the moment that changed, and
+           * told an author that the three controls which complete create-deal lead nowhere. One
+           * question — does pressing this move the picture — and `finishesFor` is the other half of
+           * the answer, so it has to be asked here too.
+           */
+          const finishes = new Set(finishesFor(scope, v));
           const drives = new Set(landings.map((l) => l.part));
+
+          /**
+           * ⛔ A DRAWN APPEARANCE NOTHING CAN PUT SOMEBODY IN.
+           *
+           * Peter, driving the prototype: *"'creating' is not a valid screen, since it creates
+           * after folder selection is done"*.
+           *
+           * He is right, and the drawing is not lying — `state.isCreating` is a real branch in the
+           * component. It is a branch of a region the person is not looking at by then, so the
+           * product can never be in that appearance at that point. `draw` extracts branches and
+           * cannot know which are reachable, which is the correct division of labour; what was
+           * missing is anybody saying so afterwards.
+           *
+           * ⛔ A NOTE AGAINST THE DRAWING, NOT THE AUTHOR. An appearance no control reaches is
+           * either output that should not have been produced, or a state whose way in nobody has
+           * written — and the author cannot tell which from here, so neither does this.
+           */
+          /** ⛔ The same `reached` map computed above — one reading of which appearances a press can put somebody in. */
+          const unreachable = states.flatMap((st, i) => (reached.has(i + 1) ? [] : [st.label || st.when]));
+          if (unreachable.length && landings.length)
+            add({
+              severity: "note",
+              kind: "nothing-reaches-this-appearance",
+              where: `${scope.id}#${v.id}`,
+              what: `${unreachable.length} of this screen's ${states.length} drawn appearances — ${unreachable.join(
+                ", "
+              )} — ${unreachable.length === 1 ? "is one" : "are ones"} no control puts somebody in, so a reviewer can only reach ${
+                unreachable.length === 1 ? "it" : "them"
+              } by pressing a tab that the product does not have`,
+              fix: `either say what leads there, in the \`after\` of a control that commits — or, where the product genuinely cannot be in that appearance here, the drawing is output that should not have been produced: ⛔ do not delete it by hand, redraw the screen and report it if it comes back`,
+            });
           const dead = v.parts.filter(
             (pt) =>
               pt.role === "commits" &&
               !drives.has(pt.id) &&
+              !finishes.has(pt.id) &&
               scope.exchanges.some((e) => e.at?.view === v.id && (e.at?.part === pt.id || !e.at?.part))
           );
           if (dead.length)
@@ -1547,6 +1596,42 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
          * is the fix, never "delete the sentence".
          */
         {
+          /**
+           * ⛔ A DRAWING OLDER THAN THE PARTS, REPORTED ONCE — NOT AS ONE FINDING PER BEHAVIOUR.
+           *
+           * `v2 draw` writes a `data-part` marker only for a control the view already DECLARES, so
+           * a screen drawn before its parts were written comes out with none at all. Everything
+           * that points into a picture then fails at once: every anchored behaviour reports
+           * `the-picture-does-not-contain-the-control`, and `this-state-is-a-dead-end` fires with
+           * landings that are nonsense because no control can be located.
+           *
+           * A scoper hit exactly this and reported the cascade as a defect in `draw` — reasonably,
+           * since from inside it looks like one. It is an ORDERING problem: the drawing was made
+           * when the view had `parts: []`, and redrawing after the parts landed wrote seventeen
+           * markers and cleared every one of the false findings. ⛔ Verified by running it, not
+           * assumed — the fix text said "regenerate" and the agent's report said regenerating
+           * reproduces them, which turned out to be wrong.
+           *
+           * So this says the one true thing, and the per-behaviour checks below are skipped while
+           * it holds. N confident false findings cost more than a missing one: they are acted on.
+           */
+          const anyMarker = [v.sketch_html, ...(v.states ?? []).map((st) => st.sketch_html)].some(
+            (html) => !!html && html.includes("data-part=")
+          );
+          const drawn = !!v.sketch_html || (v.states ?? []).some((st) => st.sketch_html);
+          if (drawn && !anyMarker && v.parts.some((pt) => !pt.decorative)) {
+            add({
+              severity: "note",
+              kind: "the-drawing-is-older-than-the-controls",
+              where: `${scope.id}#${v.id}`,
+              what: `this screen is drawn and declares ${v.parts.length} control${
+                v.parts.length === 1 ? "" : "s"
+              }, and the drawing marks none of them — so it was made before they were written. Nothing can point at a control on it: no behaviour card can focus one, no press can be followed, and no state can be resolved from one`,
+              fix: `redraw it — \`productos v2 generate --into <corpus>\`, or name the route by hand with \`productos v2 draw "${scope.id}#${v.id}" --route <file>\`. ⛔ Nothing here is an authoring mistake; the drawing is output and is simply out of date`,
+            });
+            continue;
+          }
+
           const drawnAnywhere = (part: string) =>
             [v.sketch_html, ...(v.states ?? []).map((st) => st.sketch_html)].some(
               (html) => !!html && html.includes(`data-part="${part}"`)
@@ -1716,8 +1801,54 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
            */
           if (pt.decorative || pt.role === "display" || pt.role === "region") continue;
           if (pt.role === "entry" || pt.role === "navigates") continue;
-          if (!scope.exchanges.some((e) => e.at?.view === v.id && e.at?.part === pt.id))
-            silentParts.push(`${scope.id}#${v.id}#${pt.id}`);
+          const says = scope.exchanges.find((e) => e.at?.view === v.id && e.at?.part === pt.id);
+          /**
+           * ⛔ A CONTROL THAT COMMITS AND PROMISES NOTHING IS NOT ORDINARY INCOMPLETENESS.
+           *
+           * Peter, after clicking through a prototype: *"it dead ends. no way to complete setup"*,
+           * and later *"what isn't back is the linking between features and any behaviors"*.
+           *
+           * ⛔ THE DETECTION WAS NEVER MISSING, WHICH IS THE WHOLE LESSON. Both shapes of this were
+           * already reported — one as `slot-blank`, in the same words it uses for a blank slot on a
+           * label, among 322 of them; the other inside an aggregated note reading "9 controls the
+           * screens draw, that no behaviour says anything about", with one `where` and the
+           * committing ones mixed in with the decorative. Every dead end he walked into was in the
+           * output the whole time, indistinguishable from a sentence nobody had got round to.
+           *
+           * So the serious case gets its own name, its own severity, and ⛔ ONE PER EXIT rather
+           * than a count — because the question a reader has is *which* door, and a number cannot
+           * answer it.
+           *
+           * Two ways it happens, one hole, one kind: nothing is anchored at the control at all, or
+           * something is and its `answer` does not say where somebody arrives. ⛔ Both here rather
+           * than one here and one in the slot loop — the same predicate in two places is the
+           * gateFor/check divergence this codebase paid for once already.
+           */
+          if (pt.role === "commits") {
+            const lands = says?.slots?.answer?.says;
+            const said = typeof lands === "string" ? lands.trim() : Array.isArray(lands) ? lands.length : 0;
+            if (!said)
+              add({
+                severity: "refuse",
+                kind: "pressing-this-promises-nothing",
+                where: `${scope.id}#${v.id}#${pt.id}`,
+                /**
+                 * ⛔ NOT "TAKES SOMEBODY AWAY", WHICH THE FIRST VERSION OF THIS SAID.
+                 *
+                 * It ran against the real corpus and reported *"Add row commits, so pressing it
+                 * takes somebody away"* about a button that adds a row to the table it is standing
+                 * in. A `commits` control CHANGES something; only some of them also move somebody.
+                 * A finding whose first clause is false about the thing it names is a finding the
+                 * reader stops believing, and they are right to.
+                 */
+                what: `${pt.label ?? pt.id} commits — pressing it changes something — and nothing says what happens${
+                  says ? "" : ". No behaviour is anchored at it at all"
+                }. Whoever builds it decides, and a reviewer clicking the prototype arrives at a control that does nothing`,
+                fix: `state it in the \`answer\` of an exchange at this control: what is true afterwards, and where somebody is left if they are left anywhere. ⛔ Where it moves them into another feature, say that — a destination the reader has to infer is the same hole with a sentence over it`,
+              });
+            continue;
+          }
+          if (!says) silentParts.push(`${scope.id}#${v.id}#${pt.id}`);
         }
       }
     }
@@ -1739,6 +1870,224 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
       });
     if (screenOnly.length > nowhere.length + silentParts.length)
       void 0; // nothing to say: naming the screen without a control is normal for whole-screen rules
+  }
+
+  /**
+   * ---- a product-wide document holding something that is not product-wide ----
+   *
+   * ⛔ Peter, reading them: *"'Decisions' - these are all way too feature specific, doesn't belong
+   * at top level, should be behaviors. 'Non-goals' - also feature specific, should be behaviors.
+   * 'Design principles' - These are generally fine, but should be design principles not product
+   * principles. like 'nothing reaches a deal until a person applies it' has nothing to do with
+   * design, this is a product feature nugget."*
+   *
+   * The migrator no longer creates the two documents, which stops this arriving again — but a corpus
+   * that already has them gets told, because the fix is not deletion: each sentence has a home where
+   * it is attached to the feature it constrains, agreed to on its own, and goes stale when it
+   * changes. In a document it has none of those things.
+   *
+   * ⛔ A NOTE, AND IT NAMES THE HOME. Refusing would reject a real corpus on its first day over
+   * thirteen sections somebody wrote in good faith, and a finding whose fix is "delete this" is one
+   * nobody acts on.
+   */
+  {
+    /**
+     * ⛔ THE DOCUMENT IS THE SIGNAL, NOT THE SENTENCE — and the first version of this got that
+     * backwards. It matched prose for "chosen <year>" and for exclusions, and found 8 of the 13
+     * misfiled sections on the real corpus: it missed *"This product … never writes into their
+     * calc"* because the negation was not at the front, and *"Settings save; they do not mint
+     * versions"* entirely. A regex over prose will always under-report, and an under-reporting
+     * finding is worse than none here, because the five it stayed quiet about read as fine.
+     *
+     * Nothing needs inferring. These two documents are not documents in this model, so every
+     * section in them is misfiled by construction.
+     */
+    for (const doc of corpus.charter) {
+      const home = NOT_A_DOCUMENT[doc.charter.id];
+      if (!home) continue;
+      for (const sec of doc.charter.sections)
+        add({
+          /**
+           * ⛔ A REFUSAL, NOT A NOTE. Peter, after being shown the reasoning for keeping one:
+           * *"don't care - just delete them. this is a framework thing. decisions at the top level
+           * don't exist. DELETE THEM."*
+           *
+           * It was a note because refusing would reject a corpus over sections somebody wrote in
+           * good faith. That reasoning was wrong, and the giveaway is that I used it to keep the
+           * document rather than to move it: a note let me explain at length why the content was
+           * valuable and leave it exactly where it should not be. These documents do not exist in
+           * this model — the same kind of structural error as a container at the wrong depth, which
+           * `check` already refuses — and a corpus carrying one cannot be handed over until the
+           * sentences are where a reader meets them.
+           */
+          severity: "refuse",
+          kind: "this-belongs-to-a-feature",
+          where: `${doc.charter.id}#${sec.id}`,
+          what: `"${norm(sec.title ?? sec.id)}" sits at the top of the corpus, above every feature, while being about one of them — so nobody reading that feature meets it, and nothing here goes stale when the thing it is about changes`,
+          fix: `move it to ${home}`,
+        });
+    }
+
+    /**
+     * ⛔ AND A CHOICE RECORDED IN ONE OF THE FOUR THAT REMAIN. Here a heuristic is the only option —
+     * the document is legitimate and the sentence is the problem — so it is used only where there
+     * is nothing exact to key on.
+     */
+    const DECIDED = /\*\*chosen\b|\b(?:we )?(?:chose|decided)\b.{0,30}\b(?:19|20)\d\d\b/i;
+    for (const doc of corpus.charter) {
+      if (NOT_A_DOCUMENT[doc.charter.id]) continue;
+      for (const sec of doc.charter.sections)
+        if (DECIDED.test(saysText(sec.says)))
+          add({
+            severity: "note",
+            kind: "a-decision-kept-as-prose",
+            where: `${doc.charter.id}#${sec.id}`,
+            what: `this records a choice somebody made, inside "${norm(doc.charter.title)}" — so it carries no hash, and nothing can tell that what it decided has since moved`,
+            fix: `record it where a decision lives: a ruling or an acceptance by whoever decided, against the slot or rule it settles. ⛔ Then it goes stale when that sentence is reworded, which is the whole difference`,
+          });
+    }
+  }
+
+  /**
+   * ---- a feature's framing: why, risks, measures, instruments ----
+   *
+   * ⛔ THE MEASURE-TO-INSTRUMENT PAIRING IS THE WHOLE REASON THESE ARE NOT FOUR INDEPENDENT LISTS.
+   *
+   * A measure nothing records cannot be known — it is an aspiration written where a target belongs.
+   * An instrument feeding no measure is telemetry somebody will maintain for nobody. Both are
+   * invisible while the two live in separate lists, and both are the same shape as
+   * `nothing-reads-what-this-sets`, which exists in this model because the identical mistake
+   * happened with terms.
+   */
+  for (const { scope } of corpus.scopes) {
+    const leaf = !corpus.scopes.some((x) => x.scope.in === scope.id);
+    const fed = new Set(scope.instruments.flatMap((i) => i.feeds));
+    const known = new Set(scope.measures.map((m) => m.id));
+
+    for (const m of scope.measures) {
+      if (!fed.has(m.id))
+        add({
+          severity: "note",
+          kind: "a-measure-nothing-records",
+          where: `${scope.id}#measure#${m.id}`,
+          what: `nothing recorded here would tell anybody whether this happened — so it is an aspiration standing where a measure should be`,
+          fix: `say what gets recorded, as an instrument that \`feeds\` this measure. ⛔ Or drop the measure: a success criterion nobody can read is one nobody will be held to`,
+        });
+      if (!m.target)
+        add({
+          severity: "note",
+          kind: "a-measure-with-no-target",
+          where: `${scope.id}#measure#${m.id}`,
+          what: `this says what would be true if it worked and not how much — so nobody can say afterwards whether it did`,
+          fix: `give it a number, or say plainly that there is no defensible target yet. ⛔ An invented number is worse than an admitted absence: it gets reported against`,
+        });
+    }
+    for (const i of scope.instruments) {
+      const dangling = i.feeds.filter((f) => !known.has(f));
+      if (dangling.length)
+        add({
+          severity: "refuse",
+          kind: "an-instrument-feeds-nothing-that-exists",
+          where: `${scope.id}#instrument#${i.id}`,
+          what: `it says it feeds ${dangling.join(", ")}, and this feature has no such measure`,
+          fix: `correct the name or add the measure. ⛔ A ref that resolves to nothing reads as a connection and is none`,
+        });
+      else if (!i.feeds.length)
+        add({
+          severity: "note",
+          kind: "nothing-asked-for-this-recording",
+          where: `${scope.id}#instrument#${i.id}`,
+          what: `this is recorded and feeds no measure, so somebody will maintain it for nobody and nobody will notice when it breaks`,
+          fix: `say which measure it feeds, or drop it. ⛔ Telemetry whose purpose nobody wrote down is the kind that survives the question it was added for`,
+        });
+    }
+
+    /**
+     * ⛔ AND A FEATURE WITH NO STATED REASON. Only a leaf that actually promises something — a
+     * grouping has no behaviours of its own, and nagging an empty feature about why it exists is
+     * asking for a sentence before there is anything to justify.
+     */
+    if (leaf && scope.exchanges.length && !scope.why.length)
+      add({
+        severity: "note",
+        kind: "nothing-says-why-this-is-worth-building",
+        where: scope.id,
+        what: `${scope.exchanges.length} behaviours are specified here and nothing says what is wrong today — so every one of them is justified against a reason nobody wrote down`,
+        fix: `say what is broken now, as a reason. ⛔ Not what the feature does: "a parent and a kid remember the same chore differently" is a reason, "parents want to assign chores" is the feature with its name changed`,
+      });
+  }
+
+  /**
+   * ---- who may, where the product has roles or permissions ----
+   *
+   * ⛔ Peter, reading *"Anybody in the organization whose role lets them create deals here"*: *"we
+   * should probably solidify 'roles/permissions' as a cross-product concept, and enumerate which
+   * permissions can access it."*
+   *
+   * ⛔ EVERY ONE OF THESE IS GATED ON THE PRODUCT SAYING IT HAS THE CONCEPT. A tool with one user
+   * has no roles, and nagging it about them would be the framework making a product describe itself
+   * in a vocabulary it does not use. `access:` in the config is the answer, and `neither` is a real
+   * one — so the only finding in that case is an exchange naming a role the product says it has not
+   * got.
+   */
+  {
+    const model = accessModel;
+    const byId = new Map(corpus.access.map((a) => [a.id, a]));
+    const wants = (k: "role" | "permission") =>
+      model === "both" || (model === "roles" && k === "role") || (model === "permissions" && k === "permission");
+
+    for (const { scope } of corpus.scopes)
+      for (const ex of scope.exchanges) {
+        const held = ex.slots?.may?.held_by ?? [];
+        /** ⛔ A ref that resolves to nothing, which is a refusal everywhere else in this model. */
+        for (const id of held)
+          if (!byId.has(id))
+            add({
+              severity: "refuse",
+              kind: "may-names-nothing",
+              where: `${scope.id}#${ex.id}#may`,
+              what: `this says only "${id}" may perform it, and the product has no role or permission by that name`,
+              fix: `add it where the product's roles and permissions are listed, or correct the name. ⛔ A name that resolves to nothing reads as a constraint and enforces none`,
+            });
+          else if (!wants(byId.get(id)!.kind))
+            add({
+              severity: "note",
+              kind: "an-access-model-this-product-does-not-use",
+              where: `${scope.id}#${ex.id}#may`,
+              what: `this names the ${byId.get(id)!.kind} "${id}", and this product is configured as access: ${model}`,
+              fix: `either change \`access:\` in the corpus config to the model the product actually has, or say who may in terms of the one it does`,
+            });
+
+        /**
+         * ⛔ AND PROSE WHERE A NAME BELONGS — the finding this whole concept exists for. Only on a
+         * product that HAS the concept, and only a note: the sentence is still the thing a person
+         * agrees to, and an author may legitimately not know the role yet.
+         */
+        if (model !== "neither" && !held.length && saysText(ex.slots?.may?.says).trim())
+          add({
+            severity: "note",
+            kind: "who-may-is-only-prose",
+            where: `${scope.id}#${ex.id}#may`,
+            what: `who may perform this is a sentence and names no ${model === "permissions" ? "permission" : "role"} — so it cannot be listed, cannot be checked, and is spelled differently on every exchange that means the same thing`,
+            fix: `name ${model === "permissions" ? "the permissions" : "the roles"} in \`held_by\`, beside the sentence. ⛔ The sentence stays: it is what somebody agrees to, and the names are what make it answerable from the other end — "what can an underwriter reach"`,
+          });
+      }
+
+    /**
+     * ⛔ A ROLE OR PERMISSION NOTHING USES. Dead access is worse than a missing one: it reads as
+     * something the product enforces, and somebody will build a screen to grant it.
+     */
+    if (corpus.access.length) {
+      const reach = reachOf(corpus);
+      for (const r of reach.filter((x) => !x.reaches.length))
+        add({
+          severity: "note",
+          kind: "nothing-uses-this-access",
+          where: r.id,
+          what: `the ${r.kind} "${r.id}" is defined and no exchange anywhere says it may do anything — so it reads as something the product enforces and reaches nothing`,
+          fix: `name it in the \`may\` of what it is for, or delete it. ⛔ Do not leave it: somebody will build a screen to grant a ${r.kind} that controls nothing`,
+        });
+    }
   }
 
   /**
@@ -2607,6 +2956,22 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
    * to it. The surfaced half is the one with a failure mode: a constraint on the product that
    * nobody can see is a constraint the next person breaks, and then it reads as their mistake.
    */
+  /**
+   * The change records this project keeps, where it keeps any. ⛔ Read once — a corpus with forty
+   * steers must not stat the same directory forty times — and `undefined` where there are none, so
+   * a project that has never filed one is not told every citation is dangling.
+   */
+  const knownChanges = ((): Set<string> | undefined => {
+    const proj = projectRootOf(root);
+    if (!proj) return undefined;
+    const dir = path.join(proj, "changes");
+    if (!fs.existsSync(dir)) return undefined;
+    const ids = fs
+      .readdirSync(dir)
+      .filter((f) => f.endsWith(".yaml"))
+      .map((f) => f.replace(/\.yaml$/, ""));
+    return ids.length ? new Set(ids) : undefined;
+  })();
   for (const st of corpus.steers) {
     /**
      * ⛔ AN OPAQUE STEER SAYS WHERE IT CAME FROM, OR IT IS A RULE NOBODY CHOSE AND NOBODY CAN
@@ -2626,6 +2991,30 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
         what: `"${st.says}" shapes what gets proposed and nothing says what it was inferred from — nobody agrees to these, so what it was learned from is the only thing anybody can argue with`,
         fix: `say what it came from in \`learned_from\` — the screens, the reviews, the rejections. If somebody simply decided it, it is a claim about the product: file it as steering truth and put it in the charter`,
       });
+    /**
+     * ⛔ AND PROVENANCE THAT NAMES SOMETHING HAS TO NAME SOMETHING REAL.
+     *
+     * `learned_from` is free text on purpose — *"every button renamed in review since August"* is a
+     * perfectly good account of where a habit came from. But the moment it cites change records by
+     * id it is making a checkable claim, and an id that resolves to nothing is worse than the prose
+     * it replaced: it reads as a citation, so nobody goes looking, and the habit keeps its
+     * authority on the strength of a reference that was never there.
+     *
+     * This is the same refusal `depends_on`, `affected_by` and `leads_to` already carry. A pointer
+     * to nothing is reported wherever one can exist.
+     */
+    if (st.learned_from && knownChanges) {
+      const cited = [...st.learned_from.matchAll(/\b(\d{4})\b/g)].map((m) => m[1]!);
+      const missing = cited.filter((id) => !knownChanges.has(id));
+      if (cited.length && missing.length)
+        add({
+          severity: "note",
+          kind: "a-steer-learned-from-nothing",
+          where: `steer:${st.id}`,
+          what: `"${st.says}" says it was learned from ${missing.length === 1 ? "change" : "changes"} ${missing.join(", ")}, and ${missing.length === 1 ? "that record does" : "those records do"} not exist — a citation nobody can follow stops anybody looking, so the habit keeps its authority on a reference that was never there`,
+          fix: `name records that exist, or say where it came from in words — "every button renamed in review since August" is a better provenance than an id that resolves to nothing`,
+        });
+    }
     if (st.steers !== "truth") continue;
     /**
      * ⛔ AND IT IS NOT SATISFIED BY EXISTING. A constraint has to reach somebody — the charter is

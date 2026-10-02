@@ -19,7 +19,7 @@ You write. You do not decide. Those are different jobs and this is the line betw
 - You may **record what is undecided** — a `question:` on a behaviour, with no claim beside it.
 - You may **never answer a question you raised.** An author who resolves their own ambiguity has
   recorded a decision that nobody made, in a form indistinguishable from one somebody agreed to.
-- You may never mark anything walked, validated or accepted, and you have no way to ask a person
+- You may never mark anything validated or accepted, and you have no way to ask a person
   anything. That is deliberate: consent obtained inside a subagent has no record of how it was
   obtained. If you need a human, write the question down and stop.
 
@@ -66,6 +66,45 @@ Same altitude for `ends_with` and `not`: the outcome and the deliberate exclusio
 `productos v2 check` reports a `brings` that names two or more of the form's own fields.
 
 Then the screens, their parts, and the exchanges at each.
+
+⛔ **A feature says why it is worth building, what could go wrong, how anybody would know it
+worked, and what gets recorded.** Four lists on the scope, each a card agreed to on its own:
+
+```yaml
+why:
+  - id: chores-are-argued-about
+    says: A parent and a kid remember the same chore differently, so pocket money is
+      negotiated every week instead of earned.
+risks:
+  - id: kids-game-the-list
+    says: A kid marks a task done that nobody checked, and the money moves before a parent sees it.
+    mitigated_by: a parent approves before anything moves into the kid's money   # omit where nothing is planned
+measures:
+  - id: fewer-arguments
+    says: Chores stop being renegotiated — a week passes with no task disputed.
+    target: in four of five households, zero disputed tasks in a fortnight       # omit rather than invent
+instruments:
+  - id: disputed-tasks
+    says: Each time a parent rejects a completion a kid claimed, with the task and the day.
+    feeds: [fewer-arguments]        # ⛔ which measures this tells us about
+```
+
+Peter, after reading a feature with forty-eight specified behaviours against what a PRD carries:
+*"let's add tabs here - 'why', 'success measures', 'risks' can all be cards... instrumentation
+should be added as well."* The functional half was already stronger than a PRD — what the model had
+nowhere for was everything around it.
+
+⛔ **`why` says what is wrong TODAY, not what the feature does.** *"A parent and a kid remember the
+same chore differently"* is a reason; *"parents want to assign chores"* is the feature with its name
+changed, and it justifies nothing.
+
+⛔ **`feeds` is the load-bearing field.** A measure nothing records cannot be known; an instrument
+feeding no measure is telemetry somebody maintains for nobody. `check` reports both, and refuses a
+`feeds` naming a measure that does not exist.
+
+⛔ **Omit a `target` or a `mitigated_by` rather than invent one.** An invented number is worse than
+an admitted absence — it gets reported against. `check` notes a measure with no target; that note is
+the honest state, not a failure.
 
 ⛔ **And no prose preface on a feature.** Do not write an introductory paragraph under the
 frontmatter describing what the feature is, where it is reached from, or what it does not do. Every
@@ -190,14 +229,16 @@ terms:                        # the words THIS scope defines, and a rule may sel
     means: A financing request against one property.     # ⛔ an object, not a string
     closed: false             # true = the members below are the only allowed values
     members: []               # the values, when closed
-    set_outside: false        # something outside this product decides it
-    read_outside: false       # something outside this product reads it
+    set_outside:              # ⛔ AN OBJECT, NOT A BOOLEAN — and it owes a reason
+      because: the servicer sets this on the loan and this product only displays it
+      by: the servicer's system of record
+      at: 2026-09-01
+    read_outside:             # same shape. Omit both where neither is true
 views:                        # the screens. See "Screens" below
   - id: deals-list
     title: CRE Deals
     view_kind: list           # form | list | detail | modal | strip — a rule can select on it
     exists: kept
-    walked: false             # ⛔ has a person opened this screen and confirmed what it holds?
     sketch_html: |            # generated — see below. Never typed
       …
     shows:                    # which of this scope's sentences the drawing demonstrates
@@ -215,9 +256,10 @@ exchanges:                    # the asks. Eight slots each
 intent; `withdrawn` means it was real and is gone, and it stays in the file so the ids it owned
 cannot be reused. `kept` is the ordinary case.
 
-⛔ **`walked: false` means nobody has opened the screen.** It is not "I did not get round to
-sketching" — it is the difference between a drawing somebody confirmed and a drawing somebody
-imagined, and it is rendered on the page in those terms.
+⛔ **There is no `walked:` field.** It existed, it asked whether a person had opened a screen and
+confirmed what it holds, and Peter had it removed — a per-screen confirmation nobody was going to
+perform, rendered as a warning on every screen that had not had one. ⛔ Do not reintroduce it: a
+drawing is generated output, and what a person agrees to is the sentences, not the picture.
 
 ⛔ **`tags`, `view_kind` and a part's `role` exist so a rule can select on them** — `tag:`,
 `view_kind:` and `part_role:` in a selector. A label nothing selects on is decoration; add one when
@@ -586,7 +628,10 @@ answer:
   says: …
   within: 2 seconds          # ⛔ a budget a PERSON would notice, never an engineering target
 fails:
-  cannot_fail: true          # ⛔ a claim, not a blank: nothing here can fail
+  cannot_fail: nothing is written until the folder is bound, so there is no half-finished deal
+                             # ⛔ A STRING, NOT `true` — the reason it cannot fail. "true" asserts
+                             # the claim without the argument, which is the one thing a reader
+                             # cannot check and the next author cannot inherit
 again:
   none: true                 # asked twice, nothing further happens
 refuses:
@@ -596,7 +641,8 @@ refuses:
       told: that it is not theirs to change
       standing:              # a named case can itself be undecided
         kind: open
-        asks: whether a manager may override
+        question: whether a manager may override, and what the reader is told if they do
+                             # ⛔ `question:`, not `asks:` — see below
 ```
 
 And a slot's standing, where it is not simply `stated`:
@@ -604,7 +650,13 @@ And a slot's standing, where it is not simply `stated`:
 ```yaml
 standing:
   kind: open                 # open | disputed | out_of_scope | stated
-  asks: what a reader without the permission is told    # required while it is open
+  question: what a reader without the permission is told, when they try
+                             # ⛔ `question:` IS THE FIELD, and it is required while a standing is
+                             # open. This document told you to write `asks:` here for months, and
+                             # `asks` is an enum — `whether | when | told` — on a refusal OUTCOME,
+                             # describing what kind of thing is undecided about it. Writing prose
+                             # there is a parse refusal, so following these instructions produced
+                             # truth that would not load.
   targets: [money#spend#refuses]   # ⛔ required by `disputed` — what it contradicts
   cost: what guessing wrong costs
   asked_of: the Chief Underwriter
@@ -720,6 +772,107 @@ at:
   view: deals-list
   part: deal-row          # ⛔ the card can now say "show me the deal row" and take them to it
 ```
+
+⛔ **Who may is a thing the product HAS — name it, do not describe it.** Where the product has roles
+or permissions, the `may` slot names them in `held_by` beside its sentence:
+
+```yaml
+      may:
+        says: >
+          An underwriter on this deal's own team. Somebody who can read the deals list but not
+          add to it never reaches this screen.
+        held_by: [underwriter]      # ⛔ roles/permissions the product enumerates, not free text
+```
+
+Peter, reading *"Anybody in the organization whose role lets them create deals here"*: *"we should
+probably solidify 'roles/permissions' as a cross-product concept, and enumerate which permissions
+can access it."* That sentence names a role without naming it — it cannot be listed, cannot be
+checked, and gets retyped differently on every exchange that means the same thing, so *"what can an
+underwriter reach"* was answerable only by reading the whole corpus.
+
+⛔ **The sentence stays and is still required.** A list of ids is not something a person can judge;
+*"nobody outside the deal's own team, even an admin"* is the part somebody agrees to, and the ids are
+what make it answerable from the other end.
+
+The product's roles and permissions live in one file at the top of the corpus, each with what
+holding it lets somebody do. A role may `hold` permissions; a permission holds nothing. ⛔ **And not
+every product has them** — `access:` in the corpus config says `roles`, `permissions`, `both` or
+`neither`, and where it is `neither` naming one is the finding rather than omitting one.
+`productos v2 check` reports a `may` that is only prose, a name no access item defines, and a role
+or permission nothing anywhere uses.
+
+⛔ **`held_by` belongs to `may` and is refused on every other slot** — the same reasoning as
+`outcomes` on `refuses`.
+
+```yaml
+# <corpus>/access.yaml
+access:
+  - id: underwriter
+    kind: role
+    means: Can price a deal and send it back to the broker with terms.
+    holds: [price-a-deal, return-with-terms]    # ⛔ a role is a bag of permissions, and says so
+  - id: price-a-deal
+    kind: permission
+    means: Can set the rate and fees on a deal that is still open.
+  - id: org-admin
+    kind: role
+    means: Can add and remove people from the organisation.
+    granted_by: the customer's own identity provider   # ⛔ not this product
+```
+
+⛔ **`holds:` is what a role actually grants, listed.** Without it a role's contents live in
+whichever exchanges happen to name it — so removing a permission from a role becomes a
+search-and-replace, and nobody can say what a role grants without reading the whole corpus. ⛔ **A
+permission holds nothing**, and the schema refuses `holds` on one.
+
+⛔ **`granted_by:` where this product does not decide who holds it.** An access name the product
+cannot grant is one somebody will go looking for a screen to manage and not find — and its absence
+is then read as a missing feature rather than as somebody else's system.
+
+⛔ **The control that ENDS the feature says so: `finishes: true` on its exchange.** And where a
+press moves the picture to a particular appearance of the screen, name it: `lands_on:` carrying that
+state's `when`, the same spelling `at.state` uses.
+
+```yaml
+  - id: use-a-folder-that-exists
+    at: { view: create-deal-form, part: use-existing-folder, state: "phase === 'folder'" }
+    finishes: true                    # ⛔ pressing this is where the feature ends
+
+  - id: create-deal-form
+    at: { view: create-deal-form, part: continue-to-folder }
+    lands_on: "phase === 'folder'"    # ⛔ and this is where the press puts them
+```
+
+Peter found the absence of both by pressing buttons: *"it dead ends. no way to complete setup"*,
+then *"the screen linking is wrong - clicking continue from the first page shoudl take you to folder
+selection. 'creating' is not a valid screen"*.
+
+Both used to be **guessed from your prose**, by scoring a sentence against the state names and
+against `ends_with`. ⛔ That cannot work, and the reason is worth keeping: every sentence in a
+feature is about the same nouns. So *Continue* — whose own sentence reads *"Nothing has been created
+yet"* — was declared to complete the feature, because it shared "deal" and "folder" with the
+outcome; and its destination resolved to the **Creating** appearance, because the sentence said
+"created".
+
+⛔ **`finishes` is never inferred.** Where nothing claims it, `nothing-finishes-this-feature` asks
+you — which is a corpus that is incomplete rather than one confidently wrong about its own flow.
+`lands_on` is still derived when a sentence unambiguously names one appearance, so write it only
+where it does not.
+
+⛔ **And a control that `commits` owes an `answer`.** A commit changes something; state what is
+true afterwards, and where somebody is left if they are left anywhere. `productos v2 check`
+**refuses** `pressing-this-promises-nothing` for every committing control that has no exchange at
+all, or has one whose `answer` is blank.
+
+Peter found these by clicking: *"it dead ends. no way to complete setup"*. ⛔ They were being
+reported the whole time — as `slot-blank`, in the same words used for a blank slot on a label, among
+three hundred of them, and inside a note that counted them without naming them. A control a person
+can press that the product makes no promise about is **whoever-builds-it's decision**, and it is the
+one hole a reviewer discovers by walking into it rather than by reading.
+
+⛔ **`leads_to` is refused on a `commits` part** — a commit's destination is its `answer`, not a
+link. Where a press moves somebody into another feature, the `answer` has to say so; a destination
+the reader infers is the same hole with a sentence over it.
 
 Without the part, a card reads *"Deal row on CRE Deals — refuses"* with nothing to look at, which
 is unjudgeable — and was the exact complaint that made this exist. In a real 47-exchange corpus 21
@@ -1006,6 +1159,30 @@ as a decision is how a habit nobody agreed to becomes a rule everybody is held t
 ⛔ **An opaque steer says where it was learned.** A pattern inferred from what somebody accepted is
 only worth trusting if the next person can go and look at what it was inferred from.
 
+⛔ **Write one with the command, never by typing the YAML.** The shape above is what it produces, not
+an invitation to hand-author it — and for the life of this concept hand-authoring was the only way,
+which is why no corpus had one.
+
+```bash
+productos v2 steer new "<the habit>" --steers generation \
+    --learned-from "<the screens, the reviews, the rejections>"
+productos v2 steer list                                   # what is in force, and where each came from
+productos v2 steer decline <id> --because "<why it is not a rule here>"
+```
+
+**A generation steer reaches every author's instructions**, at install and again when a screen is
+proposed — so after writing one, `productos init claude --update`. ⛔ **And it reaches no judge,
+ever.** A reviewer told what this project likes can no longer notice that the project is wrong,
+which is the same reason the newcomer is never told what ProductOS is.
+
+⛔ **`declined:` turns a habit off and says why — it is not deleted.** A learned steer was noticed
+from a pattern sitting in the record, so deleting it ends nothing: the next scan reads the same
+pattern and learns the same habit again. Declining is how somebody says *"I saw this and it is not a
+rule here"* in a form the noticer can read, and the reason is the part a future person can argue
+with. ⛔ **Only a habit can be declined.** Turning off something that `steers: truth` is withdrawing
+a constraint on the product — that is a verdict, and it happens where it was agreed to, by taking it
+out of the charter.
+
 ## Before handing anything over
 
 ```bash
@@ -1058,3 +1235,48 @@ dropped.
 
 ⛔ **Never answer a note by editing the note.** If the request is wrong, or you cannot do it, say so
 in the outcome and leave the truth alone — the note is the record that somebody asked.
+
+### ⛔ A note is a conversation, so reply where he is standing
+
+Peter: *"let's add a 2-way window so you can send messages back as well"*. Before `replies:` the
+only thing that could be said back was `outcome`, which closes the note — so every answer was also a
+decision that the matter was finished, and a question, a progress line or *"this is a framework gap
+and here is why"* had nowhere to go but a chat window he is deliberately moving away from.
+
+```bash
+productos v2 notes say <id> --says "<the reply>"        # answer, leave it open
+productos v2 notes done <id> --outcome "<what you did>" # the last reply, and close
+```
+
+⛔ **`replies:` is a thread, and `outcome:` is the end of it.** Use `say` while anything is still
+owed — a question back, what you have done so far, why it is going to take another pass. Use `done`
+only when there is nothing left to do about it.
+
+⛔ **A `kind: framework` note gets a CONCISE reply.** He is reviewing a product, not reading a
+changelog: one or two sentences saying what now happens differently. The full account belongs in the
+commit and in `productos v2 change`. And `kind` is set from the `pos:` tag he typed — ⛔ **never
+inferred from the sentence**, because a classifier reading prose is a guess wearing a decision's
+clothes, and getting this backwards is expensive in both directions.
+
+### ⛔ Claiming a note, so two sessions do not both do it
+
+`claimed_by` and `claimed_until` are a lease: who is working on this, and when the claim lapses.
+Several sessions can be pointed at one corpus, and without a lease the second one to read the queue
+authors the same change again on top of the first.
+
+⛔ **You do not claim a note by name — reading the queue claims what it hands you.**
+
+```bash
+productos v2 inbox --claim <session>   # ⛔ every note this hands back is now leased to you
+```
+
+So the act of finding out what is owed is the act of taking it, and there is no window between the
+two in which a second session can pick up the same request. Handing one back is explicit:
+`productos_exchange_release_note` over MCP — ⛔ **use it rather than going quiet**, because a lease
+that has to expire on its own strands the request for as long as the lease lasts, and the person who
+asked is watching a queue that looks like somebody is on it.
+
+⛔ **A claim is a name AND an expiry — the schema refuses one without the other.** A claim with no
+expiry strands the note the first time the session holding it dies; an expiry with no claimant
+cannot say who to ask. ⛔ **An expired claim is not a done note.** It goes back in the queue, because
+the session that held it may have finished nothing.

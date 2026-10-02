@@ -102,6 +102,52 @@ the only part that was checkable.
 On its first real run this caught a layer I had skipped in the previous commit: a group's
 high-level view, built and rendered and driven in a browser, with nothing asserting a line of it.
 
+### ⛔ Read what the record already says — `productos learn`
+
+```bash
+productos learn        # what seventy corrections say about how this project works
+```
+
+Peter: *"we should have product OS self improve from the get-go. all the feedback it receives we
+should record and figure out how to improve the agents."* Recording was done long ago; **reading it
+was not.** Nothing looked at seventy change records and noticed that four were the same mistake —
+that was found by a person remembering, which is how `walked:` survived its own deletion for months.
+
+This is the half that needs no model, and it is arithmetic, so it cannot be wrong about what it
+counted. Today it answers: **`derive` and `check` are each waived eleven times** against eight for
+the next — the layer whose absence makes every other layer unfalsifiable is among the two this
+project most often argues its way past.
+
+⛔ **It reports and writes nothing.** A finding goes to one of exactly two places, and both need a
+person:
+
+| the lesson is | where it goes |
+| --- | --- |
+| universal | `productos v2 change new "<what was said>" --kind instruction` — through the same cascade every piece of feedback goes through |
+| true of this project only | `productos v2 steer new "<the habit>" --steers generation --learned-from "<the records>"` |
+
+⛔ **An agent does not edit its own instructions, and it is structural rather than a rule.** The only
+route from a noticed pattern to a framework change is a change record, which requires `said:` —
+somebody's verbatim words. A pattern has no words of its own, so it cannot author an instruction
+change without quoting the human corrections it was drawn from.
+
+### ⛔ What this project has learned — `productos v2 steer`
+
+```bash
+productos v2 steer list                                   # habits in force, and where each came from
+productos v2 steer new "<the habit>" --steers generation --learned-from "<what you noticed it in>"
+productos v2 steer decline <id> --because "<why it is not a rule here>"
+```
+
+A **generation** steer reaches every author's instructions, at install and when a screen is proposed
+— so after writing one, `productos init claude --update`. ⛔ **And no judge ever gets one**: a
+reviewer told what this project likes can no longer notice the project is wrong. They are visible on
+the page under **What steers this**, which is a settings surface and deliberately not the charter —
+nobody agrees to a habit.
+
+⛔ **Declining keeps it.** Deleting a learned steer ends nothing: the pattern it came from is still
+in the record, and the next read learns it again.
+
 ### ⛔ If it can be generated, generate it — hand-authoring is the trap
 
 The specific thing that went wrong four times was hand-writing screens into a corpus. A typed

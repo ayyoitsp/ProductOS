@@ -195,6 +195,9 @@ export const AREAS: Area[] = [
       "src/v2/record.ts",
       "src/v2/spoken.ts",
       "src/v2/connects.ts",
+      "src/v2/steers.ts",
+      /** ⛔ Reading the record of what was corrected is a derivation over it, and writes nothing. */
+      "src/core/learn.ts",
       "src/adapters/claude.ts",
     ],
     needs: ["read-files", "run-commands", "search-files"],
@@ -1001,6 +1004,13 @@ export const COMMANDS: Verb[] = [
   { name: "env", does: "Drive a dev environment", owns: "surface", who: "claude", track: "both" },
   { name: "byok", does: "Toggle and report the state of bring-your-own-key verification", owns: "surface", who: "person", track: "both" },
   { name: "todo", does: "Framework gaps — where the model could not express what the corpus needed", owns: "check", who: "both", track: "both" },
+  /**
+   * ⛔ `check`, BECAUSE IT DETECTS AND DOES NOT FIX — the same layer `todo` sits in, and for the
+   * same reason: both read a record and report what is wrong with the shape of it. Nothing it finds
+   * is applied by it, and the only routes onward are `v2 change` and `v2 steer`, both of which
+   * require a person.
+   */
+  { name: "learn", does: "What the record of feedback says about how this project works — computed, never written back", owns: "check", who: "both", track: "both" },
 
   // ─── operating a hosted instance ────────────────────────────────────────────────────────────
   /**
@@ -1056,6 +1066,13 @@ export const COMMANDS: Verb[] = [
   { name: "v2 watch", does: "Wait, and print a line whenever somebody records an act or asks for a change", owns: "surface", who: "claude", track: "exchange" },
   { name: "v2 whoami", does: "What an instance thinks you are, and what it will let you do", owns: "surface", who: "claude", track: "exchange" },
   { name: "v2 change", does: "Record a piece of feedback and drive it into every layer it must reach", owns: "instruct", who: "claude", track: "exchange" },
+  /**
+   * ⛔ `instruct`, BECAUSE A GENERATION STEER LANDS IN AN AUTHOR'S INSTRUCTIONS. It is tempting to
+   * file this under `surface` — the verb is in the CLI and a person reads the list. But what the
+   * verb produces is appended to every author's prompt at install, which makes it the same layer
+   * `init` and `v2 change` serve: what a future session will be told.
+   */
+  { name: "v2 steer", does: "What this project has learned — habits that shape what gets made, never what it promises", owns: "instruct", who: "both", track: "exchange" },
   { name: "v2 agents", does: "The roles: what each asks, and which skill orchestrates which", owns: "instruct", who: "both", track: "exchange" },
   { name: "v2 reset", does: "Restore a corpus from the pristine seed, so every run starts identical", owns: "generate", who: "claude", track: "exchange" },
 

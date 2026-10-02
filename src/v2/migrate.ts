@@ -772,7 +772,42 @@ export function migrate(v1Root: string, outDir: string, at: string): Migration {
    * Sections are split on `##`, because that is the grain v1 verified at: its principles file
    * carries `verified_by` per section, not per document.
    */
-  const KINDS = ["goals", "non-goals", "principles", "personas", "voice", "decisions"];
+  /**
+   * ⛔ FOUR, NOT SIX — AND THIS LIST IS WHY TWO DOCUMENTS EXISTED THAT SHOULD NOT HAVE.
+   *
+   * Peter, reading them on a real corpus: *"'Decisions' - these are all way too feature specific,
+   * doesn't belong at top level, should be behaviors. 'Non-goals' - also feature specific, should be
+   * behaviors"* — then, correctly: *"why can't we delete the non-goals section and decisions
+   * section?"*
+   *
+   * They existed because this list carried v1's context model across unchanged. Nobody asked
+   * whether the Exchange model still needed them, and it does not — it has a better home for every
+   * sentence in both, and those homes are agreed to one at a time and go stale when they change:
+   *
+   *   a non-goal  →  a slot's `standing: out_of_scope` with a reason · a `refuses` outcome ·
+   *                  `happy_path.not`
+   *   a decision  →  a `Verdict`, which carries who decided, when, why, and what it replaced
+   *
+   * ⛔ SO A DOCUMENT OF THEM IS A SECOND HOME FOR A FACT THAT HAS A FIRST ONE, which `CLAUDE.md`
+   * calls the primary lever on review cost. Worse than duplication: a non-goal in prose is not
+   * attached to the feature it constrains, so nobody reading that feature meets it; and a decision
+   * in prose has no hash, so it reads as current forever after the thing it decided has moved.
+   *
+   * ⛔ REFUSED, NOT DROPPED. The migration tells somebody what it would not carry and where each
+   * sentence goes — silently discarding a document somebody wrote is the one thing worse than
+   * carrying it to the wrong place.
+   */
+  const KINDS = ["goals", "principles", "personas", "voice"];
+  const NO_LONGER_DOCUMENTS: Record<string, string> = {
+    "non-goals": "each one is a slot's `standing: out_of_scope` with a reason, a `refuses` outcome, or the feature's `happy_path.not` — attached to the feature it constrains, where a reader actually meets it",
+    decisions:
+      "each one is a `Verdict` — recorded by whoever decided, with their reason and what it replaced. In a document it has no hash, so it goes on reading as current after the thing it decided has moved",
+  };
+  for (const base of Object.keys(NO_LONGER_DOCUMENTS)) {
+    const f = path.join(v1Root, "context", `${base}.md`);
+    if (!fs.existsSync(f)) continue;
+    refused.push({ what: `context/${base}.md`, from: f, why: NO_LONGER_DOCUMENTS[base]! });
+  }
   const contextDir = path.join(v1Root, "context");
   fs.mkdirSync(path.join(outDir, "charter"), { recursive: true });
   let order = 0;

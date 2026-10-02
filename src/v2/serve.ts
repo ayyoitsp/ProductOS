@@ -70,7 +70,15 @@ const readJson = (req: http.IncomingMessage): Promise<Record<string, unknown>> =
     req.on("error", reject);
   });
 
-const ACTS: readonly Act[] = ["accept", "rule", "read", "waive", "defer"] as const;
+/**
+ * ⛔ EVERY ACT THE PAGE CAN PRESS, AND `withdraw` WAS MISSING FROM IT.
+ *
+ * This list is what the HTTP endpoint will accept, and it is maintained by hand beside an `Act`
+ * union that is not. So the trash icon was rendered, pressed, and refused by the server as an
+ * unknown act — a control that exists and cannot work, which this codebase treats as worse than no
+ * control at all. Caught by reading the two lists side by side; nothing connects them.
+ */
+const ACTS: readonly Act[] = ["accept", "rule", "read", "waive", "defer", "withdraw"] as const;
 
 
 /**
