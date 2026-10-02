@@ -1231,6 +1231,7 @@ function renderBehaviours(
   if (!entry) return "";
   const rows: Array<{
     view?: string;
+    state?: string;
     sref: string;
     slot: SlotName;
     says: string;
@@ -1292,6 +1293,17 @@ function renderBehaviours(
         const past = decisionsOn(corpus, sref);
         rows.push({
           view: ex.at?.view,
+          /**
+           * ⛔ THE APPEARANCE, NOT JUST THE SCREEN. Peter, after the first grouping landed: *"should
+           * have subsections for which screen we're talking about."*
+           *
+           * Grouping by view alone gave create-deal ONE subsection, because all six of its exchanges
+           * are on `create-deal-form` — so the grouping existed and did nothing. The division a
+           * reviewer actually means there is the details form against the folder step, and that is
+           * `at.state`, which the model gained earlier today. Two screens as far as anybody using
+           * the product is concerned.
+           */
+          state: ex.at?.state,
           sref,
           slot,
           /**
@@ -1412,29 +1424,45 @@ function renderBehaviours(
    * ⛔ ONE `<tbody>` PER SCREEN rather than one table each: a reader comparing two screens needs the
    * columns to be the same width, and separate tables size their columns independently.
    */
-  const groups = new Map<string | undefined, typeof rows>();
+  const groups = new Map<string, typeof rows>();
+  const key = (r: (typeof rows)[number]) => `${r.view ?? ""}\u0000${r.state ?? ""}`;
   for (const r of rows) {
-    const at = groups.get(r.view) ?? [];
+    const at = groups.get(key(r)) ?? [];
     at.push(r);
-    groups.set(r.view, at);
+    groups.set(key(r), at);
   }
-  /** Screens in the order the feature's own path meets them, then anything not on a screen. */
+  /**
+   * Screens in the order the feature's own path meets them, then anything not on a screen. Within
+   * one screen, the default appearance first and its states in the order they are drawn — which is
+   * the order somebody moves through them.
+   */
   const order = [...(entry.scope.happy_path?.through ?? []), ...entry.scope.views.map((v) => v.id)];
+  const rank = (k: string): [number, number] => {
+    const [v, st] = k.split("\u0000");
+    if (!v) return [999, 999];
+    const i = order.indexOf(v);
+    const states = entry.scope.views.find((x) => x.id === v)?.states ?? [];
+    return [i < 0 ? 998 : i, st ? states.findIndex((x) => x.when === st) + 1 : 0];
+  };
   const keys = [...groups.keys()].sort((a, b) => {
-    if (a === undefined) return 1;
-    if (b === undefined) return -1;
-    const ia = order.indexOf(a), ib = order.indexOf(b);
-    return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib);
+    const [av, as] = rank(a), [bv, bs] = rank(b);
+    return av - bv || as - bs;
   });
 
   const confirmed = rows.filter((r) => stampFor(corpus, r.sref).state === "accepted").length;
   const bodies = keys
-    .map((view) => {
-      const mine = groups.get(view)!;
-      const title = view ? viewTitle(corpus, scopeId, view) : "Not on any screen";
+    .map((k) => {
+      const mine = groups.get(k)!;
+      const [view, state] = k.split("\u0000");
+      const screen = view ? viewTitle(corpus, scopeId, view) : "Not on any screen";
+      /** ⛔ The state's own label, which is what a reviewer would call that step. */
+      const st = state
+        ? entry.scope.views.find((x) => x.id === view)?.states?.find((x) => x.when === state)
+        : undefined;
+      const title = st ? `${screen} — ${st.label || st.when}` : screen;
       const done = mine.filter((r) => stampFor(corpus, r.sref).state === "accepted").length;
-      return `<tbody data-screen="${esc(view ?? "")}">
-        <tr class="group"><th colspan="4">${line(title)} <span class="n">${done} of ${mine.length} confirmed</span></th></tr>
+      return `<tbody data-screen="${esc(view)}" data-state="${esc(state)}">
+        <tr class="group"><th colspan="2">${line(title)} <span class="n">${done} of ${mine.length} confirmed</span></th></tr>
         ${mine.map((r) => behRow(corpus, r, interactive)).join("")}
       </tbody>`;
     })
@@ -1449,7 +1477,7 @@ function renderBehaviours(
     <h3 class="sub">${rows.length} behaviour${rows.length === 1 ? "" : "s"} · ${confirmed} confirmed</h3>
     <p class="what-next">One sentence at a time. ✓ if it is right, ✎ to reword it, 🗑 to take it out. Tap a row for what shows it, the screen, and what has been decided.</p>
     <table class="beh-table">
-      <thead><tr><th>Confirmed</th><th>Type</th><th>What the product promises</th><th></th></tr></thead>
+      <thead><tr><th>What the product promises</th><th></th></tr></thead>
       ${bodies}
     </table>
   </section>`;
@@ -1474,9 +1502,18 @@ function behRow(
       ? `<span class="chip">not confirmed</span>`
       : `<span class="chip warn" title="${esc(st.by)} agreed on ${esc(st.at)}, and it changed after">changed since</span>`;
   return `<tr class="beh" id="beh-${slug(r.sref)}" data-beh="${esc(r.sref)}" data-ref="${esc(r.sref)}" data-label="${esc(r.label)}">
-      <td>${chip}</td>
-      <td><span class="chip type">${esc(SLOT_ASKS_SHORT[r.slot] ?? r.slot)}</span></td>
       <td class="row-says">${r.says}${
+        /**
+         * ⛔ THE CHIPS RUN ON FROM THE SENTENCE. Peter: *"chips inline with the text at the end of
+         * the sentence."*
+         *
+         * They were two fixed columns, which cost twelve rems of width on every row to say one word
+         * each — and on a long sentence the chip sat level with the FIRST line, several lines away
+         * from where the sentence ended. ⛔ A chip is an annotation on the sentence, so it reads at
+         * the end of it, the way a footnote does.
+         */
+        ""
+      } <span class="chips">${chip}<span class="chip type">${esc(SLOT_ASKS_SHORT[r.slot] ?? r.slot)}</span></span>${
         r.settled ? "" : `<p class="owes">Not settled yet — ${esc(r.standing.replace(/_/g, " "))}. It is in the queue.</p>`
       }</td>
       <td class="row-acts">${
@@ -1487,7 +1524,7 @@ function behRow(
           : ""
       }</td>
     </tr>
-    <tr class="beh-detail" data-for="${esc(r.sref)}" hidden><td colspan="4">${r.detail}</td></tr>`;
+    <tr class="beh-detail" data-for="${esc(r.sref)}" hidden><td colspan="2">${r.detail}</td></tr>`;
 }
 
 
@@ -5096,10 +5133,10 @@ const STYLE = `<style>
   table.beh-table th { text-align: left; font-size: .7rem; letter-spacing: .05em; text-transform: uppercase;
     color: var(--dim); font-weight: 600; padding: .3rem .5rem; border-bottom: 1px solid var(--line); }
   table.beh-table td { padding: .5rem; border-bottom: 1px solid var(--line); vertical-align: top; }
-  /** ⛔ Narrow and fixed, so the chips line up into columns the eye can run down. */
-  table.beh-table td:first-child, table.beh-table th:first-child { width: 7.5rem; }
-  table.beh-table td:nth-child(2), table.beh-table th:nth-child(2) { width: 6rem; }
   table.beh-table td:last-child { width: 5.5rem; text-align: right; white-space: nowrap; }
+  /** ⛔ Inline, at the end of the sentence — an annotation on it rather than a column beside it. */
+  .chips { display: inline; white-space: nowrap; }
+  .chips .chip { margin-left: .3rem; vertical-align: .05em; }
   tr.beh { cursor: pointer; }
   tr.beh:hover > td { background: var(--code); }
   tr.beh.open > td { background: var(--code); }

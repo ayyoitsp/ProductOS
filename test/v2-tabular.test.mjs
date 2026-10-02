@@ -125,3 +125,38 @@ test("every act the page can press is one the endpoint accepts", () => {
     assert.match(listed[1], new RegExp(`"${act}"`), `the page presses "${act}" and the endpoint does not accept it`);
   }
 });
+
+/**
+ * ⛔ THE CHIPS RUN ON FROM THE SENTENCE, AND A SUBSECTION IS AN APPEARANCE OF A SCREEN.
+ *
+ * Peter, after the first table landed: *"chips inline with the text at the end of the sentence.
+ * should have subsections for which screen we're talkinga bout."*
+ *
+ * Two corrections. The chips were fixed columns, costing twelve rems of width on every row to say
+ * one word each — and on a sentence that wrapped, the chip sat level with the FIRST line, several
+ * lines from where the sentence ended. A chip annotates the sentence, so it reads at the end of it.
+ *
+ * ⛔ And the grouping existed while doing nothing. Grouped by VIEW, create-deal had one subsection:
+ * all six of its exchanges are on `create-deal-form`. The division a reviewer means there is the
+ * details form against the folder step — which is `at.state`, the field the model gained the same
+ * day. Now: "Create a deal" with 20, "Create a deal — Folder" with 41.
+ */
+test("a subsection is one appearance of one screen, not just one screen", async () => {
+  const dir = seeded();
+  const html = page(dir);
+  /** The seed's screens have states, so a view with several appearances splits. */
+  const heads = [...html.matchAll(/<tbody data-screen="([^"]*)" data-state="([^"]*)">/g)].map((m) => `${m[1]}/${m[2]}`);
+  assert.ok(heads.length, "the rows are not grouped at all");
+  /** ⛔ The state is in the grouping key, or a two-step wizard reads as one undifferentiated screen. */
+  assert.match(html, /<tbody data-screen="[^"]*" data-state="/, "a subsection cannot tell two appearances apart");
+});
+
+test("the chips are inside the sentence cell, not columns beside it", () => {
+  const html = page(seeded());
+  assert.match(html, /<td class="row-says">[\s\S]*?<span class="chips">/,
+    "the chips are not inside the sentence cell, so on a wrapping sentence they sit level with its first line");
+  /** ⛔ Two columns now: the sentence, and the acts. */
+  assert.match(html, /<thead><tr><th>What the product promises<\/th><th><\/th><\/tr><\/thead>/,
+    "the chip columns are back, costing width on every row to say one word each");
+  assert.match(html, /<td colspan="2">/, "the detail row still spans the old four columns");
+});
