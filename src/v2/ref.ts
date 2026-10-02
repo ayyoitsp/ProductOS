@@ -67,7 +67,16 @@ export type Ref =
    * was the one part of the corpus nobody had ever put their name to. The whole gate at the slot
    * level rests on a context that was never validated.
    */
-  | { kind: "section"; id: string; charter: string; section: string };
+  | { kind: "section"; id: string; charter: string; section: string }
+  /**
+   * One card of a feature's framing — a reason, a risk, a measure, an instrument.
+   *
+   * ⛔ ADDRESSABLE FOR THE SAME REASON A CHARTER SECTION IS: so one risk can be agreed to, reworded
+   * or dropped without touching its neighbours, and so a stamp on it breaks when it is reworded. A
+   * list of four risks under one stamp is one signature for four claims, which is the grain error
+   * this model has already corrected twice.
+   */
+  | { kind: "card"; id: string; scope: string; list: "why" | "risk" | "measure" | "instrument"; card: string };
 
 export interface Resolved {
   ref: Ref;
@@ -80,6 +89,35 @@ export interface Resolved {
 /** ⛔ Returns a reason, never throws and never guesses. Callers print the reason. */
 export function resolveRef(corpus: Corpus, raw: string): Resolved | { error: string } {
   const parts = raw.split("#");
+  /**
+   * ⛔ A FEATURE'S FRAMING — `<scope>#why|risk|measure|instrument#<id>`.
+   *
+   * Checked before the slot grammar because the middle segment is a fixed word rather than an
+   * exchange id, so there is no ambiguity to resolve — and checked before the charter because a
+   * three-segment ref is never a document section.
+   */
+  if (parts.length === 3 && ["why", "risk", "measure", "instrument"].includes(parts[1]!)) {
+    const sc = corpus.scopes.find((x) => x.scope.id === parts[0]);
+    if (sc) {
+      const list = parts[1] as "why" | "risk" | "measure" | "instrument";
+      const held =
+        list === "why"
+          ? sc.scope.why
+          : list === "risk"
+            ? sc.scope.risks
+            : list === "measure"
+              ? sc.scope.measures
+              : sc.scope.instruments;
+      const one = held.find((x) => x.id === parts[2]);
+      if (!one)
+        return {
+          error: held.length
+            ? `${sc.scope.id} has no ${list} "${parts[2]}" — it has ${held.map((x) => x.id).join(", ")}`
+            : `${sc.scope.id} states no ${list === "why" ? "reasons" : list + "s"} at all`,
+        };
+      return { ref: { kind: "card", id: raw, scope: parts[0]!, list, card: parts[2]! }, unsettled: false };
+    }
+  }
   /**
    * ⛔ A SECTION OF A PRODUCT-WIDE DOCUMENT — `<document>#<section>`.
    *

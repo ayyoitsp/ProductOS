@@ -330,9 +330,11 @@ function aimOf(corpus: Corpus, target: string): Refused | { kind: string } {
     aim.ref.kind !== "rule" &&
     aim.ref.kind !== "slot" &&
     aim.ref.kind !== "statement" &&
-    aim.ref.kind !== "section"
+    aim.ref.kind !== "section" &&
+    /** ⛔ And a feature's framing — a reason, a risk, a measure, an instrument. */
+    aim.ref.kind !== "card"
   )
-    return no(`${target} is a ${aim.ref.kind} — an acceptance covers one behaviour, one whole exchange, one rule, or one section of a product-wide document`, [
+    return no(`${target} is a ${aim.ref.kind} — an acceptance covers one behaviour, one whole exchange, one rule, one section of a product-wide document, or one card of a feature's framing`, [
       aim.ref.kind === "case"
         ? `you are probably after the slot: ${target.split("#").slice(0, 3).join("#")}`
         : "name a behaviour as <scope>#<exchange>#<slot>, an exchange as <scope>#<exchange>, a rule by its id, or a section as <document>#<section>",

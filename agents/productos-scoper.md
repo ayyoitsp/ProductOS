@@ -62,6 +62,45 @@ Same altitude for `ends_with` and `not`: the outcome and the deliberate exclusio
 
 Then the screens, their parts, and the exchanges at each.
 
+⛔ **A feature says why it is worth building, what could go wrong, how anybody would know it
+worked, and what gets recorded.** Four lists on the scope, each a card agreed to on its own:
+
+```yaml
+why:
+  - id: chores-are-argued-about
+    says: A parent and a kid remember the same chore differently, so pocket money is
+      negotiated every week instead of earned.
+risks:
+  - id: kids-game-the-list
+    says: A kid marks a task done that nobody checked, and the money moves before a parent sees it.
+    mitigated_by: a parent approves before anything moves into the kid's money   # omit where nothing is planned
+measures:
+  - id: fewer-arguments
+    says: Chores stop being renegotiated — a week passes with no task disputed.
+    target: in four of five households, zero disputed tasks in a fortnight       # omit rather than invent
+instruments:
+  - id: disputed-tasks
+    says: Each time a parent rejects a completion a kid claimed, with the task and the day.
+    feeds: [fewer-arguments]        # ⛔ which measures this tells us about
+```
+
+Peter, after reading a feature with forty-eight specified behaviours against what a PRD carries:
+*"let's add tabs here - 'why', 'success measures', 'risks' can all be cards... instrumentation
+should be added as well."* The functional half was already stronger than a PRD — what the model had
+nowhere for was everything around it.
+
+⛔ **`why` says what is wrong TODAY, not what the feature does.** *"A parent and a kid remember the
+same chore differently"* is a reason; *"parents want to assign chores"* is the feature with its name
+changed, and it justifies nothing.
+
+⛔ **`feeds` is the load-bearing field.** A measure nothing records cannot be known; an instrument
+feeding no measure is telemetry somebody maintains for nobody. `check` reports both, and refuses a
+`feeds` naming a measure that does not exist.
+
+⛔ **Omit a `target` or a `mitigated_by` rather than invent one.** An invented number is worse than
+an admitted absence — it gets reported against. `check` notes a measure with no target; that note is
+the honest state, not a failure.
+
 ⛔ **And no prose preface on a feature.** Do not write an introductory paragraph under the
 frontmatter describing what the feature is, where it is reached from, or what it does not do. Every
 one of those belongs to something a person can AGREE to — the purpose is `happy_path`, the route in

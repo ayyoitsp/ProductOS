@@ -1386,6 +1386,79 @@ export type Part = z.infer<typeof Part>;
  * feature FOR", which is a question about the feature, and folding it into a slot would make it
  * agreeable at the same grain as the details it is supposed to frame.
  */
+/**
+ * ⛔ THE FRAMING A PRD HAS AND PRODUCT TRUTH DID NOT.
+ *
+ * Peter, after reviewing create-deal against what a PRD carries: *"let's add tabs here - 'why',
+ * 'success measures', 'risks' can all be cards that are added in the 'overview' tab.
+ * instrumentation should be added as well. success measures and instrumentation should be in a
+ * 'Metrics' tab."*
+ *
+ * The functional half was already stronger than most PRDs — forty-eight specified behaviours for
+ * create-deal, including what happens when it is pressed twice and when two people do it at once,
+ * which teams usually discover in production. What the model had nowhere for was everything around
+ * it: why the feature is worth building, how anybody would know it worked, what could go wrong, and
+ * what gets recorded. `Scope` had eleven fields and not one of them could hold any of it.
+ *
+ * ⛔ EACH IS A LIST OF CARDS, NOT A PARAGRAPH, for the same reason a charter has sections rather
+ * than prose: one risk is agreed to, reworded or dropped on its own. A paragraph holding four risks
+ * takes one stamp for four claims, which is the grain error this model has corrected twice.
+ */
+export const Reason = z
+  .object({
+    id: z.string().regex(new RegExp(`^${SEGMENT}$`), "a reason id is one segment, kebab-case"),
+    /** ⛔ What is wrong TODAY. "Users want X" is a restatement of the feature, not a reason for it. */
+    says: z.string().min(20, "say what is wrong today — a sentence that only restates the feature is not a reason for it"),
+  })
+  .strict();
+export type Reason = z.infer<typeof Reason>;
+
+export const Risk = z
+  .object({
+    id: z.string().regex(new RegExp(`^${SEGMENT}$`), "a risk id is one segment, kebab-case"),
+    says: z.string().min(20, "say what could go wrong, in terms somebody could later agree had happened"),
+    /**
+     * ⛔ WHAT WOULD BE DONE, where anything would. Absent is meaningful and left absent on purpose:
+     * a risk nobody has a plan for is a real state, and forcing a mitigation would produce a
+     * sentence invented to fill a field.
+     */
+    mitigated_by: z.string().min(10).optional(),
+  })
+  .strict();
+export type Risk = z.infer<typeof Risk>;
+
+export const Measure = z
+  .object({
+    id: z.string().regex(new RegExp(`^${SEGMENT}$`), "a measure id is one segment, kebab-case"),
+    says: z.string().min(15, "say what would be true if this worked, in something somebody could observe"),
+    /**
+     * ⛔ A NUMBER WHERE THERE IS ONE, and optional because an early feature often has no defensible
+     * target and inventing one is worse than admitting it. `check` reports a measure with no target
+     * rather than the schema refusing it.
+     */
+    target: z.string().optional(),
+  })
+  .strict();
+export type Measure = z.infer<typeof Measure>;
+
+export const Instrument = z
+  .object({
+    id: z.string().regex(new RegExp(`^${SEGMENT}$`), "an instrument id is one segment, kebab-case"),
+    /** What gets recorded, in product terms — not a column name or an event schema. */
+    says: z.string().min(15, "say what gets recorded, in terms a reader of this product would use"),
+    /**
+     * ⛔ WHICH MEASURES THIS FEEDS, AND THIS IS THE LOAD-BEARING FIELD.
+     *
+     * A measure nothing feeds cannot be known, and an instrument feeding nothing is telemetry
+     * somebody will maintain for nobody. Both are invisible when the two live in separate lists,
+     * and both are exactly the shape of `nothing-reads-what-this-sets` — which already exists in
+     * this model because the same mistake happened with terms.
+     */
+    feeds: z.array(z.string()).default([]),
+  })
+  .strict();
+export type Instrument = z.infer<typeof Instrument>;
+
 export const HappyPath = z
   .object({
     /** What the person gets done. The reason the feature exists, in one sentence. */
@@ -1933,6 +2006,14 @@ export const Scope = z.object({
   depends_on: z.array(z.string()).default([]),
   views: z.array(View).default([]),
   exchanges: z.array(Exchange).default([]),
+  /** ⛔ Why this is worth building — what is wrong today. See `Reason`. */
+  why: z.array(Reason).default([]),
+  /** What could go wrong, each on its own so each can be agreed to or dropped. See `Risk`. */
+  risks: z.array(Risk).default([]),
+  /** How anybody would know it worked. See `Measure`. */
+  measures: z.array(Measure).default([]),
+  /** What gets recorded, and which measures it feeds. See `Instrument`. */
+  instruments: z.array(Instrument).default([]),
   /** Migration alias — what this was called in v1. */
   was: z.string().optional(),
 }).strict();

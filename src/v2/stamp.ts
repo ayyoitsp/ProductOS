@@ -103,6 +103,30 @@ export function coveredBy(corpus: Corpus, target: string): Covered | null {
    * record a verdict against something whose text nothing hashed, so it could never go stale and
    * would read as current forever. A permanent stamp is worse than no stamp.
    */
+  /**
+   * ⛔ A FEATURE'S FRAMING CARD, HASHED — so agreeing to a risk breaks when the risk is reworded.
+   * Being coverable is what makes it acceptable at all: an accept against something nothing hashes
+   * could never go stale, and a permanent stamp is worse than no stamp.
+   */
+  {
+    const seg = target.split("#");
+    if (seg.length === 3 && ["why", "risk", "measure", "instrument"].includes(seg[1]!)) {
+      const sc = corpus.scopes.find((x) => x.scope.id === seg[0])?.scope;
+      const held =
+        seg[1] === "why" ? sc?.why : seg[1] === "risk" ? sc?.risks : seg[1] === "measure" ? sc?.measures : sc?.instruments;
+      const one = held?.find((x) => x.id === seg[2]);
+      if (sc && one)
+        return {
+          slots: h(canon(one)),
+          /** Nothing demonstrates a reason or a risk; there is nothing to run. */
+          criteria: h(canon([])),
+          parts: [`${seg[1]}: ${one.id}`],
+          criteriaCount: 0,
+          reads: [norm((one as { says: string }).says), `  ${seg[1]} of ${norm(sc.title)}`],
+        };
+    }
+  }
+
   const dot = target.indexOf("#");
   if (dot > 0) {
     const doc = corpus.charter.find((x) => x.charter.id === target.slice(0, dot));

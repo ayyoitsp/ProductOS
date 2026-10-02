@@ -1,0 +1,15 @@
+id: "0074"
+said: let's add tabs here - 'why', 'success measures', 'risks' can all be cards that are added in the 'overview' tab.  instrumentation should be added as well.  success measures and instrumentation should be in a 'Metrics' tab.  the existing table should be in the 'Behaviors' tab
+at: 2026-10-02
+kind: concept
+reaches:
+  model: THE FRAMING A PRD HAS AND PRODUCT TRUTH DID NOT
+  derive: A FEATURE'S FRAMING CARD, HASHED
+  generate: ""
+  surface: THREE TABS ON A FEATURE
+  check: a-measure-nothing-records
+  instruct: "feeds: [fewer-arguments]"
+  pin: a card can be agreed to, and rewording it breaks the agreement
+waived:
+  generate: nothing generates these. Why a feature is worth building, what could go wrong and how anybody would know it worked are judgements a person makes — software proposing them would be inventing the justification every behaviour beneath is measured against. The one derivable thing, which measure an instrument feeds, is written by the author and CHECKED rather than inferred, because guessing it would connect telemetry to a goal nobody chose.
+closed: 2026-10-02

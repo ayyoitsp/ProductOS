@@ -1483,6 +1483,61 @@ function renderBehaviours(
   </section>`;
 }
 
+/**
+ * ⛔ ONE CARD OF A FEATURE'S FRAMING, AGREED TO ON ITS OWN.
+ *
+ * Peter: *"'why', 'success measures', 'risks' can all be cards that are added in the 'overview'
+ * tab. instrumentation should be added as well."*
+ *
+ * The same badge and the same two acts as everything else on the page. ⛔ A fourth shape of consent
+ * for the framing would be a fourth thing to trust, and the whole point of these cards being
+ * addressable is that a risk is agreed to or dropped without touching its neighbours.
+ */
+function renderCard(
+  corpus: Corpus,
+  scopeId: string,
+  list: "why" | "risk" | "measure" | "instrument",
+  card: { id: string; says: string; target?: string; mitigated_by?: string; feeds?: string[] },
+  interactive: boolean
+): string {
+  const ref = `${scopeId}#${list}#${card.id}`;
+  const st = stampFor(corpus, ref);
+  const ok = st.state === "accepted";
+  return `<article class="frame-card" id="${anchorOf(ref)}" data-ref="${esc(ref)}" data-label="${esc(plain(card.says).slice(0, 48))}">
+    <p class="frame-says">${line(card.says)}</p>
+    ${card.target ? `<p class="frame-extra"><span class="k">target</span> ${line(card.target)}</p>` : ""}
+    ${card.mitigated_by ? `<p class="frame-extra"><span class="k">what would be done</span> ${line(card.mitigated_by)}</p>` : ""}
+    ${
+      /**
+       * ⛔ WHICH MEASURES IT FEEDS, NAMED. An instrument whose purpose is only in a field nobody
+       * renders is telemetry whose reason is invisible — which is the state this pairing exists to
+       * end.
+       */
+      card.feeds?.length
+        ? `<p class="frame-extra"><span class="k">tells us</span> ${card.feeds
+            .map((f) => `<a href="#${anchorOf(`${scopeId}#measure#${f}`)}">${esc(f)}</a>`)
+            .join(", ")}</p>`
+        : ""
+    }
+    <p class="chips">${
+      ok
+        ? `<span class="chip ok" title="by ${esc(st.by)} on ${esc(st.at)}">confirmed</span>`
+        : st.state === "never"
+          ? `<span class="chip">not confirmed</span>`
+          : `<span class="chip warn">changed since</span>`
+    }</p>
+    ${
+      interactive
+        ? `<footer class="beh-acts icons">${
+            ok ? "" : `<button class="act icon" data-act="accept" data-ref="${esc(ref)}" title="That is right">✓</button>`
+          }<button class="act icon" data-act="say" data-ref="${esc(ref)}" title="Reword it">✎</button>${
+            ok ? "" : `<button class="act icon danger" data-act="withdraw" data-ref="${esc(ref)}" title="Take it out">🗑</button>`
+          }</footer>`
+        : ""
+    }
+  </article>`;
+}
+
 /** One behaviour, as a row plus the row that opens under it. */
 function behRow(
   corpus: Corpus,
@@ -2920,18 +2975,52 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
                */
               ""
             }
-            ${renderHappyPath(corpus, g.scope, ctx, decisionsOn(corpus, `${g.scope}#happy-path`))}
+            ${
+              /**
+               * ⛔ THREE TABS ON A FEATURE. Peter: *"let's add tabs here - 'why', 'success
+               * measures', 'risks' can all be cards that are added in the 'overview' tab...
+               * success measures and instrumentation should be in a 'Metrics' tab. the existing
+               * table should be in the 'Behaviors' tab."*
+               *
+               * ⛔ THE SAME `sub-view` MECHANISM THE ROOT SCOPE ALREADY USES, not a second one. The
+               * product's own tabs — goals, personas, voice — are built from it, and a feature
+               * growing its own tab machinery would be two implementations of "which part of this
+               * am I looking at", disagreeing the first time one gained a keyboard shortcut.
+               */
+              (() => {
+                const sc = corpus.scopes.find((x) => x.scope.id === g.scope)!.scope;
+                const cards = (list: "why" | "risk" | "measure" | "instrument", held: typeof sc.why) =>
+                  held.map((c) => renderCard(corpus, g.scope, list, c, !!opts.interactive)).join("");
+                const none = (what: string, how: string) =>
+                  `<p class="owes">Nothing here says ${what}. ${how}</p>`;
+                return `<div class="sub-view" data-sub-view="overview" data-ref="${esc(g.scope)}" data-label="Overview">
+                  ${renderHappyPath(corpus, g.scope, ctx, decisionsOn(corpus, `${g.scope}#happy-path`))}
+                  <h3 class="sub">Why this is worth building</h3>
+                  ${sc.why.length ? cards("why", sc.why) : none("what is wrong today", "Every behaviour below is justified against a reason nobody has written down.")}
+                  <h3 class="sub">What could go wrong</h3>
+                  ${sc.risks.length ? cards("risk", sc.risks) : none("what could go wrong", "A risk nobody wrote down is one nobody is watching for.")}
+                </div>
+                <div class="sub-view" data-sub-view="metrics" data-ref="${esc(g.scope)}" data-label="Metrics">
+                  <h3 class="sub">How we would know it worked</h3>
+                  ${sc.measures.length ? cards("measure", sc.measures) : none("how anybody would know this worked", "Without one, nothing afterwards can be held against it.")}
+                  <h3 class="sub">What gets recorded</h3>
+                  ${sc.instruments.length ? cards("instrument", sc.instruments) : none("what gets recorded", "A measure nothing records cannot be known.")}
+                </div>
+                <div class="sub-view" data-sub-view="behaviours" data-ref="${esc(g.scope)}" data-label="Behaviors">
             ${
               /* ⛔ A leaf shows this only when it owns something. "Nothing holds everywhere in here"
                  on a feature with no children is noise, and noise is what stops the real blanks
                  being read. */
               [...homesOf.values()].includes(g.scope) ? renderGroupRules(corpus, g.scope, ctx, homesOf) : ""
             }
-            ${renderBehaviours(corpus, g.scope, cellOf, ctx, !!opts.interactive)}
-            <details class="fold"><summary>Every slot, and where each came from — the authoring view</summary>
-              ${renderGrid(g, ctx)}
-              ${renderExchanges(corpus, [g.scope], cellOf, ctx, false)}
-            </details>
+                  ${renderBehaviours(corpus, g.scope, cellOf, ctx, !!opts.interactive)}
+                  <details class="fold"><summary>Every slot, and where each came from — the authoring view</summary>
+                    ${renderGrid(g, ctx)}
+                    ${renderExchanges(corpus, [g.scope], cellOf, ctx, false)}
+                  </details>
+                </div>`;
+              })()
+            }
           </section>`
         )
         .join("")}
@@ -5135,6 +5224,14 @@ const STYLE = `<style>
   table.beh-table td { padding: .5rem; border-bottom: 1px solid var(--line); vertical-align: top; }
   table.beh-table td:last-child { width: 5.5rem; text-align: right; white-space: nowrap; }
   /** ⛔ Inline, at the end of the sentence — an annotation on it rather than a column beside it. */
+  /** ⛔ A framing card, the same shape as everything else somebody agrees to on this page. */
+  .frame-card { border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: .3rem;
+    padding: .6rem .8rem; margin: 0 0 .6rem; background: var(--card); }
+  .frame-says { margin: 0; line-height: 1.5; }
+  .frame-extra { margin: .35rem 0 0; font-size: .88rem; color: var(--dim); }
+  .frame-extra .k { font-size: .7rem; letter-spacing: .04em; text-transform: uppercase; margin-right: .3rem; }
+  .frame-card .chips { display: block; margin: .45rem 0 0; }
+  .frame-card footer.beh-acts.icons { margin: .4rem 0 0; }
   .chips { display: inline; white-space: nowrap; }
   .chips .chip { margin-left: .3rem; vertical-align: .05em; }
   tr.beh { cursor: pointer; }

@@ -1949,6 +1949,75 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
   }
 
   /**
+   * ---- a feature's framing: why, risks, measures, instruments ----
+   *
+   * ⛔ THE MEASURE-TO-INSTRUMENT PAIRING IS THE WHOLE REASON THESE ARE NOT FOUR INDEPENDENT LISTS.
+   *
+   * A measure nothing records cannot be known — it is an aspiration written where a target belongs.
+   * An instrument feeding no measure is telemetry somebody will maintain for nobody. Both are
+   * invisible while the two live in separate lists, and both are the same shape as
+   * `nothing-reads-what-this-sets`, which exists in this model because the identical mistake
+   * happened with terms.
+   */
+  for (const { scope } of corpus.scopes) {
+    const leaf = !corpus.scopes.some((x) => x.scope.in === scope.id);
+    const fed = new Set(scope.instruments.flatMap((i) => i.feeds));
+    const known = new Set(scope.measures.map((m) => m.id));
+
+    for (const m of scope.measures) {
+      if (!fed.has(m.id))
+        add({
+          severity: "note",
+          kind: "a-measure-nothing-records",
+          where: `${scope.id}#measure#${m.id}`,
+          what: `nothing recorded here would tell anybody whether this happened — so it is an aspiration standing where a measure should be`,
+          fix: `say what gets recorded, as an instrument that \`feeds\` this measure. ⛔ Or drop the measure: a success criterion nobody can read is one nobody will be held to`,
+        });
+      if (!m.target)
+        add({
+          severity: "note",
+          kind: "a-measure-with-no-target",
+          where: `${scope.id}#measure#${m.id}`,
+          what: `this says what would be true if it worked and not how much — so nobody can say afterwards whether it did`,
+          fix: `give it a number, or say plainly that there is no defensible target yet. ⛔ An invented number is worse than an admitted absence: it gets reported against`,
+        });
+    }
+    for (const i of scope.instruments) {
+      const dangling = i.feeds.filter((f) => !known.has(f));
+      if (dangling.length)
+        add({
+          severity: "refuse",
+          kind: "an-instrument-feeds-nothing-that-exists",
+          where: `${scope.id}#instrument#${i.id}`,
+          what: `it says it feeds ${dangling.join(", ")}, and this feature has no such measure`,
+          fix: `correct the name or add the measure. ⛔ A ref that resolves to nothing reads as a connection and is none`,
+        });
+      else if (!i.feeds.length)
+        add({
+          severity: "note",
+          kind: "nothing-asked-for-this-recording",
+          where: `${scope.id}#instrument#${i.id}`,
+          what: `this is recorded and feeds no measure, so somebody will maintain it for nobody and nobody will notice when it breaks`,
+          fix: `say which measure it feeds, or drop it. ⛔ Telemetry whose purpose nobody wrote down is the kind that survives the question it was added for`,
+        });
+    }
+
+    /**
+     * ⛔ AND A FEATURE WITH NO STATED REASON. Only a leaf that actually promises something — a
+     * grouping has no behaviours of its own, and nagging an empty feature about why it exists is
+     * asking for a sentence before there is anything to justify.
+     */
+    if (leaf && scope.exchanges.length && !scope.why.length)
+      add({
+        severity: "note",
+        kind: "nothing-says-why-this-is-worth-building",
+        where: scope.id,
+        what: `${scope.exchanges.length} behaviours are specified here and nothing says what is wrong today — so every one of them is justified against a reason nobody wrote down`,
+        fix: `say what is broken now, as a reason. ⛔ Not what the feature does: "a parent and a kid remember the same chore differently" is a reason, "parents want to assign chores" is the feature with its name changed`,
+      });
+  }
+
+  /**
    * ---- who may, where the product has roles or permissions ----
    *
    * ⛔ Peter, reading *"Anybody in the organization whose role lets them create deals here"*: *"we
