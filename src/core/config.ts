@@ -260,6 +260,22 @@ export const WebConfig = z.object({
    * four, and picking the first one alphabetically — or the one with the most rules — would be a
    * guess wearing a decision's clothes: the mock would look authoritative and nobody could tell it
    * had chosen. Unset means unthemed, which is what the application itself does.
+   *
+   * ⛔ OR IT POINTS AT WHERE THE PRODUCT DECIDES — `<file>#<KEY>`, read from the application's own
+   * env file every time a page is built:
+   *
+   *     theme: frontend/.env.local#NEXT_PUBLIC_DS_THEME
+   *
+   * Peter, told the literal form existed: *"NEXT_PUBLIC_DS_THEME is the only live theme, we always
+   * use that — use this theme. how would productOS remember this?"* A scheme name copied in here is
+   * a second record of a fact that already has a home, with nothing forcing the two to agree: the
+   * app's flag moves, this does not, and from then on every drawing is of the old scheme while
+   * looking exactly as authoritative as before. The pointer has no copy to go stale.
+   *
+   * ⛔ A FILE, NEVER THE PROCESS ENVIRONMENT. `productos serve` runs in whatever shell started it,
+   * which is not the one the application's build runs in — reading `process.env` would resolve to
+   * nothing on most machines and to somebody's stray export on the rest, and both render as a
+   * perfectly plausible unthemed mock.
    */
   theme: z.string().optional(),
 });

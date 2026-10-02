@@ -20,7 +20,7 @@
  */
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { scopeToShadow, themesIn, appStyleFor } from "../dist/v2/appcss.js";
+import { scopeToShadow, themesIn, appStyleFor, resolveTheme } from "../dist/v2/appcss.js";
 import { renderScopePage } from "../dist/v2/page.js";
 import { renderShell } from "../dist/ui/renderer.js";
 import { loadCorpus } from "../dist/v2/load.js";
@@ -159,6 +159,78 @@ test("a mock's markup never sits loose in the review page", () => {
   const mock = /<div class="ux-mock">([\s\S]*?)<\/div>\s*<\/template>/.exec(shell);
   assert.ok(mock, "the mock is not wrapped in a template at all");
   assert.match(mock[1], /^<template>/, "the mock's markup is in the page rather than in a template");
+});
+
+test("the scheme can point at where the product declares it, instead of copying it", () => {
+  /**
+   * ⛔ Peter, told the literal form existed: *"NEXT_PUBLIC_DS_THEME is the only live theme, we
+   * always use that — use this theme. how would productOS remember this?"* By not remembering it.
+   * A scheme name written into this config is a second record of a fact that already has a home,
+   * and nothing makes the two agree: the app's flag moves, the copy does not, and every drawing
+   * from then on is of the old scheme and looks exactly as authoritative as it did before.
+   */
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "productos-theme-"));
+  fs.mkdirSync(path.join(root, "app"), { recursive: true });
+  fs.writeFileSync(
+    path.join(root, "app", ".env.local"),
+    ["# the product's own flag", "OTHER=x", "export NEXT_PUBLIC_DS_THEME='brand'  # a trailing note", ""].join("\n")
+  );
+  assert.deepEqual(resolveTheme(root, "app/.env.local#NEXT_PUBLIC_DS_THEME"), {
+    theme: "brand",
+    from: { file: "app/.env.local", key: "NEXT_PUBLIC_DS_THEME", found: true },
+  });
+
+  // A literal still works, and is still a copy somebody chose to keep.
+  assert.deepEqual(resolveTheme(root, "brand"), { theme: "brand" });
+
+  // ⛔ A key nobody declared resolves to nothing AND SAYS SO. Unthemed is a legitimate answer; an
+  //    unthemed drawing nobody decided on is not, and the two look identical on the page.
+  for (const [raw, file] of [
+    ["app/.env.local#NOT_SET", "app/.env.local"],
+    ["nope/.env#NEXT_PUBLIC_DS_THEME", "nope/.env"],
+  ]) {
+    const r = resolveTheme(root, raw);
+    assert.equal(r.theme, undefined, `${raw} invented a scheme`);
+    assert.deepEqual(r.from, { file, key: raw.split("#")[1], found: false }, `${raw} did not say where it looked`);
+  }
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test("a face the stylesheet loads travels with the drawing", () => {
+  /**
+   * ⛔ A MISSING FACE DOES NOT ERROR, IT FALLS BACK. A product whose display face is a serif renders
+   * in whatever serif the machine has — close enough to look deliberate, wrong enough that no line
+   * of type on the page can be judged. There is nowhere for a mock to fetch one from: a published
+   * page is under a CSP that blocks every fetch, and `serve` has no route into a build directory.
+   */
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "productos-faces-"));
+  fs.mkdirSync(path.join(root, "productos"), { recursive: true });
+  fs.mkdirSync(path.join(root, "build", "css"), { recursive: true });
+  fs.mkdirSync(path.join(root, "build", "media"), { recursive: true });
+  fs.writeFileSync(path.join(root, "build", "media", "face.woff2"), Buffer.from([0x77, 0x4f, 0x46, 0x32]));
+  fs.writeFileSync(
+    path.join(root, "build", "css", "app.css"),
+    [
+      "@font-face { font-family: Brand; src: url(../media/face.woff2) format('woff2') }",
+      "@font-face { font-family: Gone; src: url(../media/absent.woff2) }",
+      "@font-face { font-family: Rooted; src: url(/_next/static/media/face.woff2) }",
+      ".x { background: url(https://example.com/a.png) }",
+    ].join("\n")
+  );
+  fs.writeFileSync(
+    path.join(root, "productos", "config.yaml"),
+    ["version: 0.0.1", "web:", "  stylesheets:", "    - build/css/app.css", ""].join("\n")
+  );
+
+  const app = appStyleFor(root);
+  assert.match(app.css, /url\(data:font\/woff2;base64,d09GMg==\)/, "the face did not travel with the page");
+  assert.deepEqual(app.inlined, ["face.woff2"]);
+  // ⛔ Named, never dropped quietly: a budget that silently loses a face is a page claiming to show
+  //    the product's type while lying about part of it.
+  assert.deepEqual(app.unreachable, ["../media/absent.woff2", "/_next/static/media/face.woff2"]);
+  // Somewhere else entirely is not ours to fetch, and is left exactly as written.
+  assert.match(app.css, /url\(https:\/\/example\.com\/a\.png\)/, "an external URL was touched");
+  fs.rmSync(root, { recursive: true, force: true });
 });
 
 test("the list of stylesheets is what gets read, not the single one", () => {

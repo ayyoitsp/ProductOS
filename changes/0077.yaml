@@ -1,0 +1,9 @@
+id: "0077"
+said: Carry webfonts into mocks — the app loads Geist and Bona Nova via next/font; a mock has no @font-face, so themed titles fall back to a generic serif
+at: 2026-10-02
+kind: generator
+reaches:
+  generate: inlineAssets
+  pin: a face the stylesheet loads travels with the drawing
+waived: {}
+closed: 2026-10-02

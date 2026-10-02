@@ -196,13 +196,34 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
       fix: "Name a scheme the stylesheets actually define. A scheme that is not there applies nothing, and every drawing renders in the fallback colours.",
     });
   }
-  if (!app.theme && app.themes.length) {
+  if (app.unreachable.length) {
+    add({
+      severity: "note",
+      kind: "mock-face-unreachable",
+      where: "productos/config.yaml",
+      what: `${app.unreachable.length} thing${
+        app.unreachable.length === 1 ? "" : "s"
+      } the stylesheets load cannot travel with a drawing — ${app.unreachable.slice(0, 3).join(", ")}${
+        app.unreachable.length > 3 ? ", …" : ""
+      }.`,
+      fix: "A face that cannot be carried falls back silently, so the type on every drawing is some other type. Name the built stylesheet rather than the source one where its URLs are relative to a build directory, and a root-relative URL has no document root here to resolve against.",
+    });
+  }
+  if (app.themeFrom && !app.themeFrom.found) {
+    add({
+      severity: "note",
+      kind: "mock-theme-undeclared",
+      where: app.themeFrom.file,
+      what: `web.theme points at ${app.themeFrom.key} here, and nothing declares it.`,
+      fix: "Either the product is running unthemed — in which case the drawings are right and this note is the record of it — or the scheme is decided somewhere this pointer cannot see, and the pointer should name that place instead.",
+    });
+  } else if (!app.theme && app.themes.length) {
     add({
       severity: "note",
       kind: "mock-theme-unchosen",
       where: "productos/config.yaml",
       what: `The stylesheets define ${app.themes.map((t) => `"${t}"`).join(", ")} and web.theme names none of them.`,
-      fix: "Set web.theme to the one the product ships. Unset is legitimate where the application itself runs unthemed — but it is a decision, and nothing else can make it.",
+      fix: "Point web.theme at where the product declares its scheme — `<file>#<KEY>` — or name the scheme outright. Unset is legitimate where the application runs unthemed, but it is a decision and nothing else can make it.",
     });
   }
 

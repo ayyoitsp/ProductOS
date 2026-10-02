@@ -22,8 +22,20 @@ export interface AppStyle {
   /** Named in config and not found — a typo here is byte-identical to an unstyled mock. */
   missing: string[];
   mockClass?: string;
-  /** The scheme the product ships, from `web.theme`. Stamped on every mock's host. */
+  /** The scheme the product ships, resolved from `web.theme`. Stamped on every mock's host. */
   theme?: string;
+  /**
+   * Where that scheme came from, where `web.theme` pointed at a file instead of naming one.
+   *
+   * ⛔ CARRIED SO THE ANSWER "NOTHING" IS TELLABLE FROM "NOTHING THERE". A pointer whose key is
+   * absent and a config with no theme at all produce the same unthemed mock, and only one of them
+   * is somebody's decision.
+   */
+  themeFrom?: { file: string; key: string; found: boolean };
+  /** Faces and images carried into the page as bytes, so a mock has the product's own type. */
+  inlined: string[];
+  /** Named in the stylesheet and not carried — the type on the page is not the product's there. */
+  unreachable: string[];
   /**
    * Theme schemes this stylesheet defines — the `html[data-theme=X]` names it is scoped to.
    *
@@ -63,12 +75,14 @@ export function appStyleFor(dir: string): AppStyle {
     cfg = readConfig(paths);
     root = path.dirname(path.dirname(paths.configFile));
   } catch {
-    return { css: "", from: [], missing: [], themes: [] };
+    return { css: "", from: [], missing: [], themes: [], inlined: [], unreachable: [] };
   }
   // `stylesheet` is v1's single path; `stylesheets` is the list. Both, in that order.
   const named = [...(cfg.web.stylesheet ? [cfg.web.stylesheet] : []), ...cfg.web.stylesheets];
   const from: string[] = [];
   const missing: string[] = [];
+  // Shared across every stylesheet, because the budget is about the page rather than about a file.
+  const budget: Budget = { spent: 0, inlined: [], unreachable: [], seen: new Map() };
   let css = "";
   for (const rel of named) {
     /**
@@ -93,18 +107,140 @@ export function appStyleFor(dir: string): AppStyle {
         continue;
       }
       from.push(hit);
-      css += `\n/* ${hit} */\n${dropImports(fs.readFileSync(file, "utf-8"))}`;
+      css += `\n/* ${hit} */\n${inlineAssets(dropImports(fs.readFileSync(file, "utf-8")), path.dirname(file), budget)}`;
     }
   }
   const trimmed = css.trim();
+  const scheme = resolveTheme(root, cfg.web.theme);
   return {
     css: trimmed,
     from,
     missing,
     mockClass: cfg.web.mock_container_class,
-    theme: cfg.web.theme,
+    theme: scheme.theme,
+    themeFrom: scheme.from,
     themes: themesIn(trimmed),
+    inlined: budget.inlined,
+    unreachable: budget.unreachable,
   };
+}
+
+/**
+ * ⛔ A FONT IS A SUBRESOURCE, AND A MOCK HAS NOWHERE TO FETCH ONE FROM.
+ *
+ * The application's stylesheet declares its faces with `url(../media/….woff2)`, relative to a build
+ * directory that does not exist beside this page. Nothing errors: a missing face falls back, so a
+ * product whose display face is a serif renders in whatever serif the machine has, and a product
+ * whose body face is Geist renders in Helvetica — close enough to look deliberate and wrong enough
+ * that nobody can judge a line of type on it.
+ *
+ * The same argument the stylesheet itself travels on, one step further: a published page is under a
+ * CSP that blocks every fetch, and `serve` has no route into somebody's build output. The bytes
+ * travel or the face is not there.
+ *
+ * ⛔ WHAT IS LEFT OUT IS NAMED. A budget that silently drops the twenty-sixth face is a page that
+ * says "this is the product's type" and is lying about one weight of it.
+ */
+const ASSET_BUDGET = 8 * 1024 * 1024;
+const ONE_ASSET_MAX = 2 * 1024 * 1024;
+const MIME: Record<string, string> = {
+  ".woff2": "font/woff2",
+  ".woff": "font/woff",
+  ".ttf": "font/ttf",
+  ".otf": "font/otf",
+  ".eot": "application/vnd.ms-fontobject",
+  ".svg": "image/svg+xml",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".webp": "image/webp",
+  ".avif": "image/avif",
+};
+
+interface Budget {
+  spent: number;
+  inlined: string[];
+  unreachable: string[];
+  /**
+   * ⛔ ONE FACE IS ONE COST, however many stylesheets declare it. The build this was written
+   * against splits its chunks, and the same woff2 is referenced from several of them — charged per
+   * occurrence, a page's worth of type counted two and a half times against its own budget and
+   * would start dropping real faces while the bytes were already there.
+   */
+  seen: Map<string, string>;
+}
+
+export function inlineAssets(css: string, dir: string, budget: Budget): string {
+  return css.replace(/url\(\s*(['"]?)([^'")]+)\1\s*\)/g, (whole, _q, ref: string) => {
+    const url = ref.trim();
+    // Already carried, or somewhere else entirely — neither is ours to fetch.
+    if (/^(data:|https?:|\/\/|#)/i.test(url)) return whole;
+    const clean = url.replace(/[?#].*$/, "");
+    const ext = path.extname(clean).toLowerCase();
+    const mime = MIME[ext];
+    if (!mime) return whole;
+    /**
+     * A root-relative URL is relative to a server's document root, and there is no server here that
+     * knows where that is. Named rather than guessed at: guessing lands on the wrong file as often
+     * as the right one, and a wrong font is harder to notice than a missing one.
+     */
+    const file = url.startsWith("/") ? null : path.resolve(dir, clean);
+    if (!file || !fs.existsSync(file)) {
+      budget.unreachable.push(url);
+      return whole;
+    }
+    const already = budget.seen.get(file);
+    if (already) return already;
+    const size = fs.statSync(file).size;
+    if (size > ONE_ASSET_MAX || budget.spent + size > ASSET_BUDGET) {
+      budget.unreachable.push(`${url} (${Math.round(size / 1024)} KB — over the budget for one page)`);
+      return whole;
+    }
+    budget.spent += size;
+    budget.inlined.push(path.basename(clean));
+    const carried = `url(data:${mime};base64,${fs.readFileSync(file).toString("base64")})`;
+    budget.seen.set(file, carried);
+    return carried;
+  });
+}
+
+/**
+ * `web.theme` is either a scheme name or `<file>#<KEY>` pointing at where the product declares one.
+ *
+ * ⛔ THE POINTER IS THE FORM TO PREFER, because a scheme name written here is a copy of a fact that
+ * lives somewhere else and nothing makes the two agree. Peter: *"NEXT_PUBLIC_DS_THEME is the only
+ * live theme, we always use that — use this theme. how would productOS remember this?"* By not
+ * remembering it: by reading it, every time, from the file the application reads it from.
+ *
+ * ⛔ A KEY THAT IS NOT THERE RESOLVES TO NOTHING AND SAYS SO. It is not an error — a product may
+ * genuinely be running unthemed, and refusing would be this tool having an opinion about that. But
+ * it is reported, because "nobody has declared one" and "there is nothing to declare" look
+ * identical on the page and only one of them is a decision somebody made.
+ */
+export function resolveTheme(
+  root: string,
+  raw: string | undefined
+): { theme?: string; from?: AppStyle["themeFrom"] } {
+  if (!raw) return {};
+  const hash = raw.lastIndexOf("#");
+  if (hash <= 0) return { theme: raw };
+  const file = raw.slice(0, hash);
+  const key = raw.slice(hash + 1);
+  const abs = path.resolve(root, file);
+  if (!fs.existsSync(abs)) return { from: { file, key, found: false } };
+  /**
+   * Dotenv's shape, not dotenv: `KEY=value`, `export KEY=value`, `#` comments, optional quotes.
+   * A dependency for four lines of parsing would be a dependency on somebody else's idea of what
+   * an env file is, and this only ever reads one key out of a file the product already parses.
+   */
+  let value: string | undefined;
+  for (const line of fs.readFileSync(abs, "utf-8").split(/\r?\n/)) {
+    const m = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/.exec(line);
+    if (!m || m[1] !== key) continue;
+    value = m[2].trim().replace(/\s+#.*$/, "").replace(/^(['"])(.*)\1$/, "$2").trim();
+  }
+  return value ? { theme: value, from: { file, key, found: true } } : { from: { file, key, found: false } };
 }
 
 /**

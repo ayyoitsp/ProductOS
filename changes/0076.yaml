@@ -1,0 +1,14 @@
+id: "0076"
+said: NEXT_PUBLIC_DS_THEME is the only live theme, we always use that - use this theme.  how would productOS remember this?
+at: 2026-10-02
+kind: concept
+reaches:
+  model: OR IT POINTS AT WHERE THE PRODUCT DECIDES
+  generate: resolveTheme
+  surface: themeAttr
+  check: mock-theme-undeclared
+  instruct: Prefer the pointer to the name
+  pin: the scheme can point at where the product declares it, instead of copying it
+waived:
+  derive: "the same waiver 0075 carries, and for the same reason: nothing about product truth is computed, inherited or gated. Resolving a pointer is reading a file the product already reads, in appcss.ts, which the map files under generate beside design.ts. The argument against is that a value read from somewhere else at render time looks like a derivation — it is not, because nothing in the corpus depends on it and no gate consults it. Only what the drawing is painted with changes."
+closed: 2026-10-02
