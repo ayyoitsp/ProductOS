@@ -161,7 +161,10 @@ function capture(res: http.ServerResponse): {
   };
 }
 
-/** Lay the store's corpus out as a directory the existing routes can read. */
+/** Lay the store's corpus out as a directory the existing routes can read. ⛔ One implementation,
+ *  shared with the MCP layer — two would drift on which directories a corpus consists of. */
+export const materializeFor = (files: Record<string, string>): string => materialize(files);
+
 function materialize(files: Record<string, string>): string {
   const dir = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "productos-project-")), "corpus");
   for (const sub of CORPUS_DIRS) fs.mkdirSync(path.join(dir, sub), { recursive: true });
