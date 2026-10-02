@@ -17,7 +17,7 @@
 
 .PHONY: default help install link build watch dev dev-serve typecheck all clean doctor \
         up down logs rebuild restart nuke psql hosted-doctor seed shell hosted-help \
-        backup restore up-remote down-remote logs-remote
+        backup restore up-remote down-remote logs-remote remote-doctor
 
 # The hosted instance, in Docker:
 #   make up         — build and start (ProductOS + Postgres), wait until healthy
@@ -56,6 +56,7 @@ help:
 	@echo "  make restore    → FILE=<dump>; ⛔ replaces the current database"
 	@echo ""
 	@echo "Against a managed Postgres (Neon etc), no local database:"
+	@echo "  make remote-doctor → is the string in .env a usable store? (run this first)"
 	@echo "  make up-remote   → needs DATABASE_URL in .env; no volume, nothing to back up"
 	@echo "  make down-remote / logs-remote"
 
@@ -156,6 +157,22 @@ up-remote:
 	done; \
 	echo ""; echo "✗ never became healthy. Its log:"; \
 	docker compose -f docker-compose.remote.yml logs --tail 40 productos; exit 1
+
+# Is the string in .env actually a store we can use?
+#
+# ⛔ BEFORE STANDING ANYTHING UP, because a bad connection string fails as a
+# container that will not become healthy, and that looks like a bug in ProductOS
+# rather than a typo in a URL. This says which it is, and applies the migrations
+# while it is there — so the first real run has nothing left to go wrong.
+#
+# ⛔ It never prints the string. A connection string is a credential, and a
+# Makefile that echoed it would put it in a scrollback and a CI log.
+remote-doctor: build
+	@test -f .env || { echo "no .env — cp .env.example .env and paste the Neon string"; exit 1; }
+	@set -a; . ./.env; set +a; \
+	test -n "$$DATABASE_URL" || { echo "DATABASE_URL is empty in .env"; exit 1; }; \
+	echo "checking $$(printf '%s' "$$DATABASE_URL" | sed -E 's#//[^@]*@#//***@#')"; \
+	DATABASE_URL="$$DATABASE_URL" node dist/cli/index.js hosted doctor
 
 down-remote:
 	docker compose -f docker-compose.remote.yml down
