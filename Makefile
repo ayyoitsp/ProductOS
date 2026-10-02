@@ -17,7 +17,7 @@
 
 .PHONY: default help install link build watch dev dev-serve typecheck all clean doctor \
         up down logs rebuild restart nuke psql hosted-doctor seed shell hosted-help \
-        backup restore
+        backup restore up-remote down-remote logs-remote
 
 # The hosted instance, in Docker:
 #   make up         — build and start (ProductOS + Postgres), wait until healthy
@@ -54,6 +54,10 @@ help:
 	@echo "  make nuke       → stop and DELETE the database volume"
 	@echo "  make backup     → dump the database to ./backups/"
 	@echo "  make restore    → FILE=<dump>; ⛔ replaces the current database"
+	@echo ""
+	@echo "Against a managed Postgres (Neon etc), no local database:"
+	@echo "  make up-remote   → needs DATABASE_URL in .env; no volume, nothing to back up"
+	@echo "  make down-remote / logs-remote"
 
 install:
 	npm install
@@ -133,6 +137,31 @@ up:
 	done; \
 	echo ""; echo "✗ never became healthy. Its log:"; \
 	docker compose logs --tail 40 productos; exit 1
+
+# Against a store this stack does not own — Neon, or any managed Postgres.
+#
+# ⛔ NO LOCAL POSTGRES AND NO VOLUME, which is the point: with an external store
+# nothing about this stack is durable, so nothing about it needs backing up.
+# `make backup` and `make restore` are for the compose Postgres only and will not
+# find a container here — the managed service's own snapshots are the answer.
+up-remote:
+	@test -f .env || { echo "no .env — cp .env.example .env and set DATABASE_URL"; exit 1; }
+	docker compose -f docker-compose.remote.yml up --build -d
+	@printf "waiting for the instance"
+	@for i in $$(seq 1 60); do \
+		if curl -fsS -m 2 http://localhost:$(PORT)/health >/dev/null 2>&1; then \
+			echo ""; echo "✓ healthy at http://localhost:$(PORT) (external store)"; exit 0; \
+		fi; \
+		printf "."; sleep 1; \
+	done; \
+	echo ""; echo "✗ never became healthy. Its log:"; \
+	docker compose -f docker-compose.remote.yml logs --tail 40 productos; exit 1
+
+down-remote:
+	docker compose -f docker-compose.remote.yml down
+
+logs-remote:
+	docker compose -f docker-compose.remote.yml logs -f productos
 
 down:
 	docker compose down

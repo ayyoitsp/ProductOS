@@ -1,0 +1,35 @@
+# ProductOS against a store it does not own — Neon, Azure Database for PostgreSQL,
+# RDS, Cloud SQL, or a Postgres on another machine.
+#
+#   cp .env.example .env     # fill in DATABASE_URL
+#   make up-remote
+#
+# ⛔ A SEPARATE FILE RATHER THAN AN OVERRIDE. Compose merges `depends_on`
+# additively, so an override cannot un-depend the app from a Postgres service —
+# it would keep waiting for a container this stack does not start. Two small
+# files that each say one true thing beat one file with a condition in it.
+#
+# ⛔ AND THERE IS NO VOLUME HERE, WHICH IS THE POINT. The app container holds no
+# state: every file it writes is a scratch copy of a corpus under the OS temp
+# directory, removed when the request ends and swept at boot if a hard kill
+# skipped that. So with an external store, nothing about this stack is durable
+# and nothing about it needs backing up — that moves to whoever runs the Postgres.
+name: productos-remote
+
+services:
+  productos:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      # ⛔ No default. The instance refuses to start without it, which is the
+      #    behaviour wanted here: a remote stack that silently fell back to a
+      #    local database would be the "two surfaces, one truth" failure with a
+      #    connection string instead of a directory.
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env — see .env.example}
+      PORT: "4100"
+      # ⛔ Unset by default. A shared store usually means a reachable instance, and
+      #    single-account mode signs in anything that reaches the port.
+      PRODUCTOS_SINGLE_ACCOUNT: ${PRODUCTOS_SINGLE_ACCOUNT:-}
+    ports:
+      - "4100:4100"

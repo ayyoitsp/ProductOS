@@ -44,9 +44,13 @@ services:
       context: .
       dockerfile: Dockerfile
     environment:
-      DATABASE_URL: postgres://productos:productos@postgres:5432/productos
+      # ⛔ An external store wins if one is named. Set DATABASE_URL in `.env` (which
+      #    compose reads automatically) to point at Neon or any managed Postgres and
+      #    the container below stops being the store — see docker-compose.remote.yml
+      #    for running the app WITHOUT a local Postgres at all.
+      DATABASE_URL: ${DATABASE_URL:-postgres://productos:productos@postgres:5432/productos}
       PORT: "4100"
-      PRODUCTOS_SINGLE_ACCOUNT: me@localhost
+      PRODUCTOS_SINGLE_ACCOUNT: ${PRODUCTOS_SINGLE_ACCOUNT:-me@localhost}
     ports:
       - "4100:4100"
     depends_on:
