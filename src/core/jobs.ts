@@ -119,6 +119,16 @@ export const LAYERS = [
   "instruct",
   /** Whether any of it is pinned. */
   "pin",
+  /**
+   * Whether the running instance can be updated, restarted, and put back.
+   *
+   * ⛔ ADDED BECAUSE A REAL CHANGE COULD NOT BE ROUTED. Backup and restore for the managed store
+   * landed in the Makefile, and the Makefile was on nobody's map — so the only kind that fit was
+   * `generator`, whose files are the corpus generators, and the only way to close the record was to
+   * waive a layer that had actually been reached. The repo ships a hosted instance now; operating
+   * it is a layer of this system, not a detail beneath it.
+   */
+  "operate",
 ] as const;
 export type Layer = (typeof LAYERS)[number];
 
@@ -231,6 +241,28 @@ export const AREAS: Area[] = [
       "src/v2/design.ts",
     ],
     needs: ["read-files", "run-commands", "search-files", "write-corpus"],
+  },
+  {
+    name: "operate",
+    does: "Bring an instance up, update it, and get its database back",
+    /**
+     * ⛔ THIS AREA EXISTS BECAUSE ITS FILES WERE ON NOBODY'S MAP.
+     *
+     * `rebuild`, `restart`, `backup` and `restore` all reached for a `postgres` container that the
+     * managed-store stack does not have — so the four commands you need to update the instance
+     * serving the corpus, and to not lose it, could not be run against it. Every one of them read
+     * as general and was about the local stack only. Nothing was asked to notice, because no area
+     * claimed the Makefile.
+     */
+    never: [
+      "name a command for one stack as though it serves both — a target that assumes a container reads as general and silently is not",
+      "take a connection string in argv: it is a credential, and make echoes its own lines",
+      "destroy or replace a store nobody named, or without a confirmation somebody has to type",
+      "report success for a dump that is empty, or that cannot replace a schema already there",
+    ],
+    owns: ["operate"],
+    files: ["Makefile", "Dockerfile", "docker-compose.yml", "docker-compose.remote.yml", "scripts/"],
+    needs: ["read-files", "run-commands"],
   },
   {
     name: "surface",
@@ -1484,5 +1516,13 @@ export const CASCADE: Record<string, Layer[]> = {
   generator: ["generate", "pin"],
   /** A change to how a future session must work. */
   instruction: ["instruct", "pin"],
+  /**
+   * A change to how the running instance is updated, restarted, backed up or restored.
+   *
+   * ⛔ Pinned like everything else. An operations command is the one kind of code nobody runs until
+   * the day it matters, which is the worst possible day to find out it assumed the other stack —
+   * exactly what `backup` and `restore` did.
+   */
+  operations: ["operate", "pin"],
 };
 export const KINDS = Object.keys(CASCADE);
