@@ -101,6 +101,41 @@ test("a project is addressed in the path, and the pattern is anchored", () => {
   assert.equal(projectOf("/x/p/prj-abc/"), null, "the pattern is not anchored at the start");
 });
 
+test("the obvious URL reaches the page, and authorization still comes first", async () => {
+  const { base, server, session, db } = await hosted();
+  try {
+    /**
+     * ⛔ `v2Route`'s allowlist claims `/v2` and `/api/v2/*` and nothing else, so `/p/<id>/` used to
+     * 404 — and that is the URL a person is handed, types, and guesses. `make seed` printed it and
+     * it did not work, which is how this was found.
+     */
+    const root = await fetch(`${base}/p/prj-ada/`, {
+      redirect: "manual",
+      headers: { cookie: `productos_session=${session}` },
+    });
+    assert.equal(root.status, 302, "the obvious URL is still a 404");
+    assert.equal(root.headers.get("location"), "/p/prj-ada/v2");
+
+    /**
+     * ⛔ AND THE REDIRECT MUST NOT OUTRANK THE REFUSAL. Answering 302 before checking reach would
+     * confirm a project exists to anybody who asks — the enumeration oracle, reintroduced by a
+     * convenience.
+     */
+    const bo = await accountFor(db, "bo@example.com");
+    const theirs = await issueToken(db, { account: bo, actor: "bo", scopes: ["read"] });
+    const crossed = await fetch(`${base}/p/prj-ada/`, {
+      redirect: "manual",
+      headers: { authorization: `Bearer ${theirs.token}` },
+    });
+    assert.equal(crossed.status, 404, "the redirect leaked that the project exists");
+
+    const anon = await fetch(`${base}/p/prj-ada/`, { redirect: "manual" });
+    assert.equal(anon.status, 401, "an anonymous request was redirected instead of refused");
+  } finally {
+    await new Promise((r) => server.close(r));
+  }
+});
+
 test("the corpus comes back over the wire, addressed by project", async () => {
   const { base, session, server, store } = await hosted();
   try {

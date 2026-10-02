@@ -304,6 +304,19 @@ export async function instanceRoute(
   /** ⛔ 404 for both "not yours" and "does not exist" — see `unreachable` in `access.ts`. */
   if (isRefusal(reached)) return json(res, reached, 404), true;
 
+  /**
+   * ⛔ THE OBVIOUS URL HAS TO WORK, OR THE 404 IS THE PRODUCT.
+   *
+   * `v2Route`'s allowlist claims `/v2` and `/api/v2/*` and nothing else, so `/p/<id>/` fell through
+   * to a not-found — and that is the URL a person is handed, types, and guesses. Found by actually
+   * opening what `make seed` printed, which was wrong for exactly this reason.
+   */
+  if (addressed.rest === "/" || addressed.rest === "") {
+    res.writeHead(302, { location: `/p/${addressed.id}/v2` });
+    res.end();
+    return true;
+  }
+
   const mutating = req.method !== "GET" && req.method !== "HEAD";
 
   const run = async (): Promise<boolean> => {

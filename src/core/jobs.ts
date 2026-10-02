@@ -973,8 +973,21 @@ export interface Verb {
    * The skills say "never hand a human a flag" and the only thing enforcing it was somebody
    * remembering. A command this marks `claude` appearing in instructions addressed to a person is
    * a contradiction somebody can now see.
+   *
+   * ⛔ `operator` IS A FOURTH AUDIENCE, AND IT WAS MISSING UNTIL HOSTING NEEDED IT.
+   *
+   * Whoever runs an instance is a person at a terminal, but they are NOT the product's user — the
+   * premise this project keeps is that a PM needs a browser and nothing else, and `forPeople()`
+   * guards it with a cap. Marking `productos hosted token new` as `person` tripped that cap, and
+   * the refusal was right about the number while wrong about the fact: eight provisioning commands
+   * are not eight things a PM has to learn.
+   *
+   * Both alternatives were lies. `claude` would claim a model runs it, which is the mislabel this
+   * field exists to catch; raising the cap would delete the check that protects the premise. So the
+   * vocabulary gained the value it was missing — which is what this project does when something
+   * true has nowhere to live, instead of writing it as prose.
    */
-  who: "person" | "claude" | "both";
+  who: "person" | "claude" | "both" | "operator";
   /** Which of the two parallel models it belongs to. */
   track: "v1" | "exchange" | "both";
 }
@@ -988,6 +1001,27 @@ export const COMMANDS: Verb[] = [
   { name: "env", does: "Drive a dev environment", owns: "surface", who: "claude", track: "both" },
   { name: "byok", does: "Toggle and report the state of bring-your-own-key verification", owns: "surface", who: "person", track: "both" },
   { name: "todo", does: "Framework gaps — where the model could not express what the corpus needed", owns: "check", who: "both", track: "both" },
+
+  // ─── operating a hosted instance ────────────────────────────────────────────────────────────
+  /**
+   * ⛔ THESE SIT BELOW THE AUTH BOUNDARY, AND THAT IS WHY THEY ARE A SEPARATE FAMILY.
+   *
+   * Every route on an instance needs a credential, and a credential is a row in the store — so a
+   * tool that had to authenticate before it could create the first account could never create it.
+   * Provisioning is the one job that legitimately holds `DATABASE_URL` instead of a token: having
+   * the connection string IS the authorization.
+   *
+   * ⛔ AND NONE OF THEM CAN RECORD A VERDICT. Nothing here calls `perform`, because a provisioning
+   * tool that could stamp agreement would be a way to mint human consent from a shell.
+   */
+  { name: "hosted", does: "Operate a hosted instance: accounts, projects, tokens, and corpus in and out", owns: "surface", who: "operator", track: "exchange" },
+  { name: "hosted doctor", does: "Whether the store can be reached, the schema is current, and what is in it", owns: "check", who: "operator", track: "exchange" },
+  { name: "hosted projects", does: "Every project in the store, with its owner and how much it holds", owns: "surface", who: "operator", track: "exchange" },
+  { name: "hosted project", does: "Create a project, owned by an account that is made if it is new", owns: "surface", who: "operator", track: "exchange" },
+  { name: "hosted token", does: "Issue, list and revoke what something automated holds to reach a project", owns: "surface", who: "operator", track: "exchange" },
+  { name: "hosted import", does: "Put a corpus directory into a project on an instance", owns: "generate", who: "operator", track: "exchange" },
+  { name: "hosted export", does: "Write a project's corpus out as a directory, byte for byte", owns: "generate", who: "operator", track: "exchange" },
+  { name: "hosted session", does: "A browser session for one account, which is what makes a press provable", owns: "surface", who: "operator", track: "exchange" },
 
   // ─── the Exchange model ─────────────────────────────────────────────────────────────────────
   /** ⛔ The parent is a command too — `productos v2` with no verb lists the tree. */
@@ -1050,7 +1084,19 @@ export const COMMANDS: Verb[] = [
 export const retiring = (): Verb[] => COMMANDS.filter((c) => c.track === "v1");
 
 /** Everything a PERSON is expected to type. ⛔ The rest are the model's, and a skill must not offer them. */
-export const forPeople = (): Verb[] => COMMANDS.filter((c) => c.who !== "claude");
+/**
+ * Commands aimed at the product's user.
+ *
+ * ⛔ `operator` IS EXCLUDED, AND NOT AS A LOOPHOLE. The cap this feeds exists to protect "a PM needs
+ * a browser and nothing else". Provisioning an instance is a different job for a different person,
+ * and counting it would make the number say something about the product that is not true. What
+ * stops this becoming a dumping ground is that `forOperators` is just as visible — a command filed
+ * there to dodge the cap is a command claiming nobody using the product will ever type it.
+ */
+export const forPeople = (): Verb[] => COMMANDS.filter((c) => c.who === "person" || c.who === "both");
+
+/** Whoever runs an instance. ⛔ Never the product's user — see `who` on `Verb`. */
+export const forOperators = (): Verb[] => COMMANDS.filter((c) => c.who === "operator");
 
 /**
  * ⛔ THE PRESET — WHICH ROLES EACH SKILL ORCHESTRATES, AND WHAT IT MAY NOT HAND OFF.
