@@ -24,6 +24,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { Corpus } from "./load.js";
 import type { View } from "./schema.js";
+import { parseFrontmatter } from "../core/frontmatter.js";
 
 export interface Resolution {
   /** The component, relative to the repo root. */
@@ -213,5 +214,68 @@ function rel(root: string, file: string): string {
 export function everyView(corpus: Corpus): Array<{ scope: string; view: View }> {
   const out: Array<{ scope: string; view: View }> = [];
   for (const s of corpus.scopes) for (const v of s.scope.views) out.push({ scope: s.scope.id, view: v });
+  return out;
+}
+
+/**
+ * ⛔ AND EVERY VIEW IN THE OTHER LAYOUT, BECAUSE A GENERATOR THAT SWEEPS ONE OF TWO CORPORA IS A
+ * CORPUS THAT GOES STALE WITH NOTHING SAYING SO.
+ *
+ * `draw-write.ts` opens with the argument for this and makes it about the writer: *"Asking the
+ * caller which is how a generator ends up only ever run against one of them."* The writer took the
+ * lesson and the sweep did not — it loads the Exchange corpus and nothing else, so the screens
+ * under `productos/products/` have not been regenerated since whatever produced them stopped
+ * existing. Peter, looking at one of those: *"the rendered style for bilrost currently at
+ * localhost:7878 doesn't match at all"* — and a third of that page was drawings from a `draw` three
+ * versions old, rendering component names as body text.
+ *
+ * ⛔ A v1 VIEW IS SHIMMED, NOT CONVERTED. Only what a sweep reads is mapped — the labels it is
+ * fingerprinted by, and the parts the drawing is wired to. Converting the rest would be a second
+ * reading of the v1 schema living here, a long way from the v1 schema.
+ */
+export function everyViewV1(root: string): Array<{ scope: string; view: View; root: string }> {
+  /**
+   * ⛔ IT CARRIES ITS OWN ROOT. The writer looks for a scope under the root it is handed, and the
+   * two trees do not share one: an Exchange corpus is `<repo>/v2/truth`, a products corpus is
+   * `<repo>/productos/products`. Swept with the Exchange corpus's root, every v1 screen reported
+   * as redrawn and not one of them was written — the file it landed on was the Exchange file with
+   * a similar id, so both trees still parsed, both still rendered, and the stale one stayed stale.
+   */
+  const out: Array<{ scope: string; view: View; root: string }> = [];
+  const walk = (dir: string): void => {
+    if (!fs.existsSync(dir)) return;
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) walk(p);
+      else if (e.name.endsWith(".md")) read(p);
+    }
+  };
+  const read = (file: string): void => {
+    let doc: { id?: string; ux?: unknown[]; surfaces?: unknown[] };
+    try {
+      doc = parseFrontmatter(fs.readFileSync(file, "utf-8")).data as typeof doc;
+    } catch {
+      return;
+    }
+    if (!doc?.id) return;
+    for (const raw of (doc.ux ?? doc.surfaces ?? []) as Array<Record<string, unknown>>) {
+      if (!raw || typeof raw.id !== "string") continue;
+      const elements = Array.isArray(raw.elements) ? (raw.elements as Array<Record<string, unknown>>) : [];
+      out.push({
+        root,
+        scope: doc.id,
+        view: {
+          ...(raw as object),
+          parts: elements.map((el) => ({
+            id: String(el.id ?? ""),
+            label: typeof el.label === "string" ? el.label : undefined,
+            role: typeof el.kind === "string" ? el.kind : undefined,
+          })),
+        } as unknown as View,
+      });
+    }
+  };
+  walk(path.join(root, "productos", "products"));
+  walk(path.join(root, "productos", "capabilities"));
   return out;
 }

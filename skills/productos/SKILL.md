@@ -50,7 +50,10 @@ You are the **orchestrator**, and you are the session — not a subagent. That i
 
 **⛔ You keep these yourself:**
 
-- running `productos v2 generate`, because a screen a component renders is DRAWN and never designed
+- running `productos v2 generate`, because a screen a component renders is DRAWN and never designed —
+  ⛔ it sweeps **both** corpus layouts from one aim, so a repo holding an Exchange corpus and a
+  products corpus gets both regenerated; a drawing that is stale is a drawing nobody swept, and the
+  way to find out is to run it and read what it says it could not resolve
 - running `productos v2 check` before anybody is asked to look
 - putting the survey in front of a person before thirty scopers start against a partition that is wrong
 - every act of judgement — nothing here is validated by having been written

@@ -4,7 +4,7 @@ import { Command } from "commander";
 import pc from "picocolors";
 import { checkCorpus, summarise } from "../../v2/check.js";
 import { loadCorpus } from "../../v2/load.js";
-import { SLOTS, SLOT_ASKS_SHORT, Steer, type SlotName, statements } from "../../v2/schema.js";
+import { SLOTS, SLOT_ASKS_SHORT, Steer, type SlotName, type View, statements } from "../../v2/schema.js";
 import YAML from "yaml";
 import { gridFor, renderGridText, actsFor, gateFor } from "../../v2/grid.js";
 import { compilePacket } from "../../v2/packet.js";
@@ -18,7 +18,7 @@ import { inbox } from "../../v2/inbox.js";
 import { looksLikeInstance, instanceOf, mirror, act as remoteAct, note as remoteNote, inbox as remoteInbox, preview as remotePreview, whoami as remoteWhoami, presence as remotePresence } from "../../v2/client.js";
 import { lineFor } from "../../v2/log.js";
 import { drawFromRoute } from "../../v2/draw.js";
-import { everyView, isResolved, resolveRoute } from "../../v2/routes.js";
+import { everyView, everyViewV1, isResolved, resolveRoute } from "../../v2/routes.js";
 import { spokenFor } from "../../v2/spoken.js";
 import { idiomOf, proposeScreen } from "../../v2/propose.js";
 import { inEffect, readSteers, declined } from "../../v2/steers.js";
@@ -2236,12 +2236,19 @@ export function v2Command(): Command {
  * it would not resolve say why, in words somebody can act on.
  */
 function drawEverything(into: string, dryRun: boolean): void {
+  /**
+   * ⛔ BOTH TREES, OR THE ONE NOBODY SWEEPS QUIETLY ROTS. A repo can hold an Exchange corpus under
+   * `truth/` and a products corpus under `productos/products/`, and this read only the first — so
+   * the second kept whatever an older `draw` left in it, rendering component names as body text on
+   * a page somebody was reviewing. A corpus with neither is still an error; a corpus with one is
+   * not.
+   */
   let corpus;
+  let readFailed: string | undefined;
   try {
     corpus = loadCorpus(into);
   } catch (e) {
-    console.error(pc.red("✗"), `cannot read a corpus at ${into}: ${(e as Error).message}`);
-    process.exit(1);
+    readFailed = (e as Error).message;
   }
 
   let repoRoot = into;
@@ -2255,12 +2262,19 @@ function drawEverything(into: string, dryRun: boolean): void {
     /* a corpus with no config still gets swept — it just searches from where it sits */
   }
 
-  const views = everyView(corpus);
+  const views: Array<{ scope: string; view: View; root?: string }> = [
+    ...(corpus ? everyView(corpus) : []),
+    ...everyViewV1(repoRoot),
+  ];
+  if (!views.length) {
+    console.error(pc.red("✗"), `cannot read a corpus at ${into}${readFailed ? `: ${readFailed}` : ""}`);
+    process.exit(1);
+  }
   const drew: string[] = [];
   const redrew: string[] = [];
   const stuck: Array<{ ref: string; why: string; detail: string; candidates?: Array<{ file: string; matched: number }> }> = [];
 
-  for (const { scope, view } of views) {
+  for (const { scope, view, root: viewRoot } of views) {
     const ref = `${scope}#${view.id}`;
     /**
      * ⛔ A SCREEN THAT IS NOT BUILT YET CANNOT BE DRAWN FROM CODE, and saying so is not a failure.
@@ -2311,7 +2325,8 @@ function drawEverything(into: string, dryRun: boolean): void {
     }
     const origin = repoOf(route);
     const written = writeSketchHtml(
-      into,
+      // ⛔ The tree this view came out of, which is not always the one the sweep was aimed at.
+      viewRoot ?? into,
       scopeId(scope),
       view.id,
       drawn.html,

@@ -24,6 +24,8 @@ import { scopeToShadow, themesIn, appStyleFor, resolveTheme } from "../dist/v2/a
 import { renderScopePage } from "../dist/v2/page.js";
 import { renderShell } from "../dist/ui/renderer.js";
 import { loadCorpus } from "../dist/v2/load.js";
+import { everyViewV1 } from "../dist/v2/routes.js";
+import { writeSketchHtml } from "../dist/v2/draw-write.js";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
@@ -230,6 +232,47 @@ test("a face the stylesheet loads travels with the drawing", () => {
   assert.deepEqual(app.unreachable, ["../media/absent.woff2", "/_next/static/media/face.woff2"]);
   // Somewhere else entirely is not ours to fetch, and is left exactly as written.
   assert.match(app.css, /url\(https:\/\/example\.com\/a\.png\)/, "an external URL was touched");
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test("a sweep finds the screens in both corpus layouts, and writes each into its own", () => {
+  /**
+   * ⛔ A GENERATOR THAT SWEEPS ONE OF TWO CORPORA IS A CORPUS THAT GOES STALE WITH NOTHING SAYING
+   * SO. `draw-write.ts` opens with that argument and makes it about the writer; the sweep above it
+   * loaded the Exchange corpus and nothing else, so the products tree kept whatever an older
+   * `draw` left in it — component names rendered as body text on a page somebody was reviewing.
+   *
+   * ⛔ AND EACH TREE IS WRITTEN IN ITS OWN ROOT. The writer finds a scope by the leaf of its id, so
+   * `cre/deals/deal-list` and `deal-list` are the same scope to it: swept with one root, every v1
+   * screen reported as redrawn, each one landed on the Exchange file with the similar id, and the
+   * products tree was never touched. Both trees still parsed, so nothing anywhere said a word.
+   */
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "productos-sweep-"));
+  const put = (rel, body) => {
+    fs.mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
+    fs.writeFileSync(path.join(root, rel), body);
+  };
+  put(
+    "productos/products/cre/deals/deal-list.md",
+    ["---", "id: cre/deals/deal-list", "ux:", "  - id: deals-list", "    title: Deals", "    elements:", "      - id: new-deal", "        kind: button", "        label: New Deal", "---", ""].join("\n")
+  );
+  put("v2/truth/deal-list.md", ["---", "id: deal-list", "views:", "  - id: deals-list", "    title: Deals", "---", ""].join("\n"));
+
+  const found = everyViewV1(root);
+  assert.equal(found.length, 1, "the products tree was not swept at all");
+  assert.equal(found[0].scope, "cre/deals/deal-list", "a v1 screen lost the scope it belongs to");
+  assert.equal(found[0].root, root, "a v1 screen does not carry the tree it has to be written back into");
+  // ⛔ The labels are what a route is resolved by, so an unshimmed element list is a screen that
+  //    reports "nothing to find it by" and is skipped for the life of the corpus.
+  assert.deepEqual(found[0].view.parts, [{ id: "new-deal", label: "New Deal", role: "button" }]);
+
+  // The writer, handed each tree's own root, puts each drawing in that tree and not the other.
+  const v1 = writeSketchHtml(root, "cre/deals/deal-list", "deals-list", "<b>one</b>");
+  const v2 = writeSketchHtml(path.join(root, "v2"), "deal-list", "deals-list", "<b>two</b>");
+  assert.equal(v1, path.join(root, "productos/products/cre/deals/deal-list.md"));
+  assert.equal(v2, path.join(root, "v2/truth/deal-list.md"));
+  assert.match(fs.readFileSync(v1, "utf-8"), /<b>one<\/b>/, "the products tree got the other tree's drawing");
+  assert.match(fs.readFileSync(v2, "utf-8"), /<b>two<\/b>/, "the Exchange tree got the other tree's drawing");
   fs.rmSync(root, { recursive: true, force: true });
 });
 

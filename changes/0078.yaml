@@ -1,0 +1,9 @@
+id: "0078"
+said: "Re-draw the v1 corpus — the drawings under / are from an older draw: literal Building2, SkeletonTable, XIcon as visible text, and a toolbar that lost its layout"
+at: 2026-10-02
+kind: generator
+reaches:
+  generate: everyViewV1
+  pin: a sweep finds the screens in both corpus layouts, and writes each into its own
+waived: {}
+closed: 2026-10-02
