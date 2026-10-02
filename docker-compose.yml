@@ -1,32 +1,48 @@
+# ProductOS, standing up on its own.
+#
+# ⛔ THIS FILE USED TO BE FAMILY WALLET'S. The demo consumer app's API and database sat at the repo
+# root reading as this project's infrastructure, which is exactly the kind of thing somebody deploys
+# by accident. It moved to `backend/docker-compose.yml`, next to the app it belongs to.
+#
+#   docker compose up --build
+#   curl localhost:4100/health
+#
+# Single-account mode is on here, because a compose file is somebody's machine. ⛔ Remove
+# PRODUCTOS_SINGLE_ACCOUNT for a hosted deployment, where signing in or holding a token is the only
+# way in.
+
 services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: wallet
-      POSTGRES_PASSWORD: wallet
-      POSTGRES_DB: family_wallet
+      POSTGRES_USER: productos
+      POSTGRES_PASSWORD: productos
+      POSTGRES_DB: productos
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - productos_data:/var/lib/postgresql/data
+    # ⛔ The instance refuses to start without a reachable store, so waiting on this is not
+    #    optional — without it the first boot is a crash loop that looks like a bug in ProductOS.
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U wallet -d family_wallet"]
+      test: ["CMD-SHELL", "pg_isready -U productos -d productos"]
       interval: 2s
       timeout: 5s
       retries: 20
 
-  api:
+  productos:
     build:
-      context: ./backend
+      context: .
       dockerfile: Dockerfile
     environment:
-      DATABASE_URL: postgres://wallet:wallet@postgres:5432/family_wallet
-      PORT: "4000"
+      DATABASE_URL: postgres://productos:productos@postgres:5432/productos
+      PORT: "4100"
+      PRODUCTOS_SINGLE_ACCOUNT: me@localhost
     ports:
-      - "4000:4000"
+      - "4100:4100"
     depends_on:
       postgres:
         condition: service_healthy
 
 volumes:
-  postgres_data:
+  productos_data:

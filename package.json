@@ -30,7 +30,10 @@
     "dev:serve": "tsx watch src/cli/index.ts serve --ui",
     "start": "node bin/productos.js",
     "typecheck": "tsc --noEmit",
-    "test": "node --test test/*.test.mjs"
+    "test": "node --test test/*.test.mjs",
+    "db:generate": "drizzle-kit generate",
+    "hosted": "node dist/v2/store/boot.js",
+    "dev:hosted": "tsx src/v2/store/boot.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.81",

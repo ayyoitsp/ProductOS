@@ -28,33 +28,74 @@ export function migrationsDir(from: string = fileURLToPath(import.meta.url)): st
 }
 
 /**
- * Every statement, in journal order.
+ * Each migration, in journal order, with its statements.
  *
  * ⛔ ORDER COMES FROM THE JOURNAL, NOT FROM SORTING FILENAMES. `_journal.json` is what drizzle-kit
  * maintains and what records the intended sequence; filename sort happens to agree today and stops
  * agreeing the first time one is renamed.
  */
-export function migrationStatements(dir: string = migrationsDir()): string[] {
+export function migrations(dir: string = migrationsDir()): Array<{ tag: string; statements: string[] }> {
   const journal = JSON.parse(fs.readFileSync(path.join(dir, "meta", "_journal.json"), "utf-8")) as {
     entries: Array<{ tag: string }>;
   };
-  const out: string[] = [];
-  for (const entry of journal.entries) {
-    const sql = fs.readFileSync(path.join(dir, `${entry.tag}.sql`), "utf-8");
-    for (const stmt of sql.split("--> statement-breakpoint")) {
-      const trimmed = stmt.trim();
-      if (trimmed) out.push(trimmed);
-    }
-  }
-  return out;
+  return journal.entries.map((entry) => ({
+    tag: entry.tag,
+    statements: fs
+      .readFileSync(path.join(dir, `${entry.tag}.sql`), "utf-8")
+      .split("--> statement-breakpoint")
+      .map((s) => s.trim())
+      .filter(Boolean),
+  }));
 }
 
-/** Applies every statement in order. Idempotent only if the target is empty — see `migrate.ts` note. */
+/** Every statement across every migration. Used by tests, which always start from an empty database. */
+export const migrationStatements = (dir?: string): string[] =>
+  migrations(dir).flatMap((m) => m.statements);
+
+const LEDGER = `create table if not exists _productos_migrations (
+  tag text primary key,
+  applied_at timestamptz not null default now()
+)`;
+
+/**
+ * Apply whatever has not been applied.
+ *
+ * ⛔ IDEMPOTENT, BECAUSE A CONTAINER BOOTS MORE THAN ONCE. The first cut of this ran every statement
+ * every time, which works exactly once: the second start dies on `relation already exists`, and a
+ * crash-looping container with a healthy database looks like a database problem for as long as it
+ * takes somebody to read the log.
+ *
+ * ⛔ AND THE LEDGER IS WRITTEN AFTER THE STATEMENTS, NOT BEFORE. Recording a migration that then
+ * failed would skip it forever and leave a schema nobody can reconstruct from the table.
+ *
+ * `run` takes raw SQL so the caller supplies the driver — tests drive an in-process Postgres and the
+ * container drives a managed one, and a single mechanism means the thing the tests proved is the
+ * thing that ships.
+ */
 export async function applyMigrations(
   run: (sql: string) => Promise<unknown>,
   dir?: string,
-): Promise<number> {
-  const statements = migrationStatements(dir);
-  for (const stmt of statements) await run(stmt);
-  return statements.length;
+  applied?: () => Promise<string[]>,
+): Promise<{ applied: string[]; skipped: string[] }> {
+  const all = migrations(dir);
+  if (!applied) {
+    /** No ledger reader: an empty target, which is what every test starts from. */
+    for (const m of all) for (const stmt of m.statements) await run(stmt);
+    return { applied: all.map((m) => m.tag), skipped: [] };
+  }
+
+  await run(LEDGER);
+  const already = new Set(await applied());
+  const done: string[] = [];
+  const skipped: string[] = [];
+  for (const m of all) {
+    if (already.has(m.tag)) {
+      skipped.push(m.tag);
+      continue;
+    }
+    for (const stmt of m.statements) await run(stmt);
+    await run(`insert into _productos_migrations (tag) values ('${m.tag.replace(/'/g, "''")}')`);
+    done.push(m.tag);
+  }
+  return { applied: done, skipped };
 }
