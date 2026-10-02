@@ -24,6 +24,7 @@ import os from "node:os";
 import path from "node:path";
 import http from "node:http";
 import { CORPUS_DIRS, corpusFiles } from "../load.js";
+import { appendedLines, writeLog } from "./corpus.js";
 import { v2Route } from "../serve.js";
 import { type Db, isRefusal, type ProjectStore, storeFor } from "./access.js";
 import { principalFrom } from "./identity.js";
@@ -161,8 +162,41 @@ function capture(res: http.ServerResponse): {
   };
 }
 
-/** Lay the store's corpus out as a directory the existing routes can read. ⛔ One implementation,
- *  shared with the MCP layer — two would drift on which directories a corpus consists of. */
+/**
+ * Everything a request runs against: the corpus, the log, and what both looked like going in.
+ *
+ * ⛔ ONE FUNCTION, SHARED WITH THE MCP LAYER, BECAUSE THE LOG IS THE EASY HALF TO FORGET. The first
+ * version of this materialized documents only. `acts.ts` and `notes.ts` append to
+ * `events/log.jsonl` inside a request, so every one of those appends was written into a directory
+ * that was then deleted — and nothing failed, because `carryOpenNotesIntoTheLog` re-derives events
+ * for open notes and quietly covered for it. A press, a `question-answered`, or a cursor that had
+ * to outlive one request was simply lost, and the inbox looked like it was working.
+ */
+export interface Materialized {
+  dir: string;
+  documents: Record<string, string>;
+  /** How many log lines the request was given. Anything past this is what it appended. */
+  logHad: number;
+}
+
+export async function materializeProject(store: ProjectStore): Promise<Materialized> {
+  const documents = await store.documents();
+  const dir = materialize(documents);
+  const logHad = writeLog(dir, await store.since(0, LOG_CEILING));
+  return { dir, documents, logHad };
+}
+
+/**
+ * ⛔ A BOUND, SO A LONG-LIVED PROJECT DOES NOT MATERIALIZE AN UNBOUNDED FILE ON EVERY REQUEST.
+ *
+ * It is high enough that no real corpus reaches it soon, and it is a known limit rather than a
+ * silent one: `seq` is the line position `readLog` assigns, so truncating the FRONT of the log
+ * would renumber everything and move every cursor somebody is holding. Compaction therefore needs
+ * a cursor migration, and is not something to do by lowering this number.
+ */
+export const LOG_CEILING = 100_000;
+
+/** Lay the store's corpus out as a directory the existing routes can read. */
 export const materializeFor = (files: Record<string, string>): string => materialize(files);
 
 function materialize(files: Record<string, string>): string {
@@ -189,11 +223,22 @@ export async function writeBack(
   store: ProjectStore,
   before: Record<string, string>,
   dir: string,
-): Promise<{ changed: string[] } | { conflict: string[] }> {
+  logHad?: number,
+): Promise<{ changed: string[]; logged: number } | { conflict: string[] }> {
   const after = corpusFiles(dir);
   const changed = Object.keys(after).filter((k) => after[k] !== before[k]);
   const removed = Object.keys(before).filter((k) => !(k in after));
-  if (changed.length === 0 && removed.length === 0) return { changed: [] };
+
+  /**
+   * ⛔ THE LOG IS PART OF WHAT A REQUEST PRODUCED, NOT A SIDE EFFECT OF IT. An act that records a
+   * verdict also announces it, and a session is woken by the announcement — so dropping the
+   * appended lines leaves a corpus that moved and nobody told.
+   */
+  const appended = logHad === undefined ? [] : appendedLines(dir, logHad);
+
+  if (changed.length === 0 && removed.length === 0 && appended.length === 0) {
+    return { changed: [], logged: 0 };
+  }
 
   const now = await store.documents();
   const conflict = [...changed, ...removed].filter((k) => (now[k] ?? undefined) !== (before[k] ?? undefined));
@@ -203,7 +248,16 @@ export async function writeBack(
   /** ⛔ Deprecated, never deleted — the store has no delete path to call. */
   for (const key of removed) await store.deprecate(key);
 
-  return { changed: [...changed, ...removed] };
+  /**
+   * ⛔ IN ORDER, AND AFTER THE DOCUMENTS. An event announcing a change that is not in the store yet
+   * would wake a session to read truth that has not landed.
+   */
+  for (const e of appended) {
+    const { kind, ...rest } = e as { kind?: string };
+    await store.append(String(kind ?? "corpus-changed"), rest as Record<string, unknown>);
+  }
+
+  return { changed: [...changed, ...removed], logged: appended.length };
 }
 
 /**
@@ -253,8 +307,7 @@ export async function instanceRoute(
   const mutating = req.method !== "GET" && req.method !== "HEAD";
 
   const run = async (): Promise<boolean> => {
-    const before = await reached.documents();
-    const dir = materialize(before);
+    const { dir, documents: before, logHad } = await materializeProject(reached);
     /**
      * ⛔ A MUTATING RESPONSE IS HELD UNTIL THE WRITE LANDS, OR THE CALLER IS TOLD 200 FOR A WRITE
      * THAT WAS REFUSED. The delegate answers as soon as it has performed the act against the
@@ -281,7 +334,7 @@ export async function instanceRoute(
         return false;
       }
 
-      const result = await writeBack(reached, before, dir);
+      const result = await writeBack(reached, before, dir, logHad);
       if ("conflict" in result) {
         held?.discard();
         return (
@@ -302,7 +355,18 @@ export async function instanceRoute(
         );
       }
 
-      for (const key of result.changed) await reached.append("corpus-changed", { path: key });
+      /**
+       * ⛔ NOTHING IS SYNTHESIZED HERE, DELIBERATELY.
+       *
+       * An earlier version appended a `corpus-changed` when the delegate had written documents but
+       * announced nothing. It looked like a safety net and behaved like noise: a CLAIMING INBOX
+       * READ writes `notes/notes.yaml` to record the lease, so every poll by every session appended
+       * an event saying the corpus changed. The log grew on reads.
+       *
+       * `acts.ts` and `notes.ts` announce what they did, in the words a reader sees. A write path
+       * that moves a document and says nothing is a gap in THAT path, and papering over it here
+       * both hides it and fills the log with events nobody can act on.
+       */
       held?.flush();
       return true;
     } catch (e) {

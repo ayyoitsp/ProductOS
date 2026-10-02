@@ -34,7 +34,7 @@ import { mayRecord, type Principal } from "../identity.js";
 import type { Via } from "../acts.js";
 import { type Db, isRefusal, type ProjectStore, storeFor } from "./access.js";
 import { principalFrom } from "./identity.js";
-import { materializeFor, writeBack } from "./instance.js";
+import { materializeProject, writeBack } from "./instance.js";
 
 const MCP_PATH = /^\/p\/(?!\.\.?(?:\/|$))([A-Za-z0-9_.:@+-]{1,200})\/mcp\/?$/;
 
@@ -134,8 +134,7 @@ function serverFor(store: ProjectStore, who: Principal): Server {
     const tool = exchangeTools.find((t) => t.name === req.params.name);
     if (!tool) throw new Error(`unknown tool: ${req.params.name}`);
 
-    const before = await store.documents();
-    const dir = materializeFor(before);
+    const { dir, documents: before, logHad } = await materializeProject(store);
     try {
       const guarded = guardArgs(tool, req.params.arguments, who, dir);
       if ("ok" in guarded) {
@@ -149,7 +148,7 @@ function serverFor(store: ProjectStore, who: Principal): Server {
 
       const result = await tool.handler(guarded.args, pathsFor(dir));
 
-      const written = await writeBack(store, before, dir);
+      const written = await writeBack(store, before, dir, logHad);
       if ("conflict" in written) {
         return {
           isError: true,
@@ -172,8 +171,7 @@ function serverFor(store: ProjectStore, who: Principal): Server {
           ],
         };
       }
-      for (const key of written.changed) await store.append("corpus-changed", { path: key });
-
+      /** ⛔ Nothing synthesized — see the note in `instance.ts`. A claiming read would log on every poll. */
       /** ⛔ `dir` is a scratch path on the server; it never travels back to a caller. */
       const scrubbed =
         result && typeof result === "object" && "dir" in (result as Record<string, unknown>)

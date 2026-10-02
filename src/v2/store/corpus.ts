@@ -14,7 +14,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { type Corpus, corpusFiles, loadCorpus, memoryStore } from "../load.js";
-import type { ProjectStore } from "./access.js";
+import type { ProjectStore, StoredEvent } from "./access.js";
 
 /**
  * Read a whole corpus out of the store.
@@ -47,6 +47,61 @@ export async function importFromDisk(
     imported.push(key);
   }
   return { imported };
+}
+
+/**
+ * The event log, as the lines `readLog` already parses.
+ *
+ * ⛔ THE LOG IS NOT A CORPUS DOCUMENT, AND MUST NOT BECOME ONE. It is deliberately absent from
+ * `CORPUS_DIRS`: a `documents` row would put it in markdown export and in a packet, and *what
+ * changed, when, and who caused it* is not a claim about the product.
+ * [`hosted-plan.md`](../../../planning/hosted-plan.md) §9 Q6 asks whether it belongs in the model;
+ * the answer here is no, so it lives in its own table and is materialized separately.
+ *
+ * ⛔ AND IT IS ONE LOG, NOT TWO. `acts.ts` and `notes.ts` append to `events/log.jsonl` inside a
+ * request. Before this existed, the directory was thrown away and every one of those appends went
+ * with it — the inbox only still worked because `carryOpenNotesIntoTheLog` re-derives events for
+ * open notes, which silently covered for a log that was being dropped on every call. Anything that
+ * was not an open note — a press, a `question-answered`, a cursor that had to survive a request —
+ * was simply lost.
+ */
+export const LOG_FILE = path.join("events", "log.jsonl");
+
+/** Rows out of the table as log lines, in `seq` order. ⛔ `seq` IS the line position for `readLog`. */
+export function logLines(events: StoredEvent[]): string {
+  return events
+    .slice()
+    .sort((a, b) => a.seq - b.seq)
+    .map((e) => JSON.stringify({ kind: e.kind, ...e.payload }))
+    .join("\n")
+    .concat(events.length ? "\n" : "");
+}
+
+/** Lay the log out beside the corpus so `readLog` finds it. */
+export function writeLog(root: string, events: StoredEvent[]): number {
+  const target = path.join(root, LOG_FILE);
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.writeFileSync(target, logLines(events), "utf-8");
+  return events.length;
+}
+
+/**
+ * Whatever the request appended beyond what it was given.
+ *
+ * ⛔ BY POSITION, NOT BY CONTENT. Two identical events are two events — a person pressing the same
+ * button twice is two presses — so de-duplicating would quietly drop the second one.
+ */
+export function appendedLines(root: string, had: number): Array<Record<string, unknown>> {
+  const file = path.join(root, LOG_FILE);
+  if (!fs.existsSync(file)) return [];
+  const lines = fs.readFileSync(file, "utf-8").split("\n").filter((l) => l.trim());
+  return lines.slice(had).map((line) => {
+    try {
+      return JSON.parse(line) as Record<string, unknown>;
+    } catch {
+      return { kind: "corpus-changed", at: "", by: "", ref: "", says: "an event that could not be read" };
+    }
+  });
 }
 
 /**

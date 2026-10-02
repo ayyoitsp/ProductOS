@@ -316,12 +316,30 @@ test("a change to the corpus appends an event, and the cursor is per project", a
 
     const events = await store.since(0);
     assert.ok(events.length > 0, "a press changed the corpus and announced nothing");
-    assert.ok(events.every((e) => e.kind === "corpus-changed"));
     assert.deepEqual(
       events.map((e) => e.seq),
       events.map((_, i) => i + 1),
       "the per-project sequence has holes",
     );
+
+    /**
+     * ⛔ THE ACT'S OWN ANNOUNCEMENT, NOT A SYNTHETIC ONE. `acts.ts` appends to `events/log.jsonl`
+     * inside the request, in the words a reader sees. Those appends used to be written into a
+     * scratch directory that was then deleted, and this layer replaced them with a bare
+     * `corpus-changed` carrying a file path — so a session was told "something moved" instead of
+     * what happened, and the log the inbox reads disagreed with the one the store kept.
+     */
+    assert.ok(
+      events.every((e) => typeof e.payload?.says === "string" && e.payload.says.length > 0),
+      `an event carries no words a reader could act on: ${JSON.stringify(events).slice(0, 300)}`,
+    );
+    assert.ok(
+      !events.some((e) => e.kind === "corpus-changed" && e.payload?.path),
+      "the delegate's announcement was replaced by a path",
+    );
+
+    /** ⛔ And exactly one event per press — a synthetic echo on top would wake a session twice. */
+    assert.equal(events.length, 1, `one press announced ${events.length} times`);
 
     const other = await storeFor(db, { kind: "browser", account: bo, reach: [] }).project("prj-bo");
     assert.deepEqual(await other.since(0), [], "⛔ one project's writes moved another's cursor");
