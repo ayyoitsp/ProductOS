@@ -73,9 +73,11 @@ help:
 	@echo ""
 	@echo "Against a managed Postgres (Neon etc), no local database:"
 	@echo "  make remote-doctor  → is the string in .env a usable store? (run this first)"
-	@echo "  make up-remote      → needs DATABASE_URL in .env; no volume, nothing to back up"
+	@echo "  make up-remote      → needs DATABASE_URL in .env; the store is not ours, the data is"
 	@echo "  make rebuild-remote → rebuild from current source and restart ⛔ NOT 'make rebuild'"
 	@echo "  make restart-remote → restart the instance only ⛔ NOT 'make restart'"
+	@echo "  make backup-remote  → dump the managed store to ./backups/"
+	@echo "  make restore-remote → FILE=<dump>; ⛔ replaces the managed store"
 	@echo "  make down-remote / logs-remote"
 	@echo ""
 	@echo "⛔ The plain 'rebuild' and 'restart' above act on the LOCAL-Postgres stack. Against a"
@@ -352,6 +354,64 @@ backup:
 	test -s $$out || { echo "the dump is empty — is the stack up?"; rm -f $$out; exit 1; }; \
 	gunzip -c $$out | grep -q "DROP TABLE IF EXISTS" || { echo "the dump cannot replace an existing schema"; rm -f $$out; exit 1; }; \
 	echo "✓ $$out ($$(du -h $$out | cut -f1))"
+
+# ---------------------------------------------------------------------------
+# The same two, against a managed store — Neon, RDS, Cloud SQL.
+#
+# Peter: *"let's add a simple way to backup the database now so we can keep making
+# changes to the corpus and ensuring we don't break anything. can be manually,
+# outside of the server - just a way to copy the db down and restore it via the
+# .env variable"*
+#
+# ⛔ THE TARGETS ABOVE CANNOT DO THIS, AND THEY LOOK LIKE THEY CAN. Both run
+# `docker compose exec postgres`, and on a managed store there IS no postgres
+# container — the whole point of that stack. Same trap as `rebuild`/`restart`:
+# the names imply they work everywhere and they are about the local stack.
+#
+# ⛔ THE CLIENT RUNS IN A CONTAINER, PINNED TO A MAJOR. Nothing is required on the
+# host — no brew install, no version to keep in step — and the major matters more
+# than it looks: this store is PostgreSQL 18, the local stack pins 16, and
+# `pg_dump` REFUSES a server newer than itself. Reaching for the version already
+# in the compose file would have produced a confusing mismatch error rather than
+# a backup, which is how a backup command ends up never being run twice.
+#
+# ⛔ THE URL GOES IN BY ENVIRONMENT, NEVER ARGV. It is a credential: in argv it
+# lands in `ps` on a shared machine and in make's own echo of the command.
+#
+#   make backup-remote              ./backups/productos-remote-<stamp>.sql.gz
+#   make restore-remote FILE=path   ⛔ replaces everything in the managed store
+# ---------------------------------------------------------------------------
+
+PG_CLIENT ?= postgres:18-alpine
+
+backup-remote:
+	@test -f .env || { echo "no .env here — DATABASE_URL lives beside the compose file you started from"; exit 1; }
+	@mkdir -p $(BACKUP_DIR)
+	@url=$$(./scripts/envvar.sh .env DATABASE_URL); 	test -n "$$url" || { echo "DATABASE_URL is empty in .env"; exit 1; }; 	stamp=$$(date +%Y%m%d-%H%M%S); 	out=$(BACKUP_DIR)/productos-remote-$$stamp.sql.gz; 	docker run --rm -e PGURL="$$url" $(PG_CLIENT) sh -c \
+	  'pg_dump "$$PGURL" --clean --if-exists --no-owner --no-privileges --schema=public' \
+	  | gzip > $$out || { echo "the dump failed — run 'make remote-doctor' first"; rm -f $$out; exit 1; }; 	test -s $$out || { echo "the dump is empty"; rm -f $$out; exit 1; }; 	gunzip -c $$out | grep -q "DROP TABLE IF EXISTS" || { echo "the dump cannot replace an existing schema"; rm -f $$out; exit 1; }; 	echo "✓ $$out ($$(du -h $$out | cut -f1))"; 	echo "  $$(gunzip -c $$out | grep -c '^COPY public') tables with data · restore with: make restore-remote FILE=$$out"
+
+# ⛔ DESTRUCTIVE, AND AGAINST A STORE NOTHING LOCAL CAN UNDO. `make nuke` only ever
+# cost a Docker volume; this replaces a managed database that may be the only copy.
+# So: an explicit FILE, a typed word, and the store named before anything runs.
+restore-remote:
+	@test -f .env || { echo "no .env here — DATABASE_URL lives beside the compose file you started from"; exit 1; }
+	@test -n "$(FILE)" || { echo "usage: make restore-remote FILE=$(BACKUP_DIR)/productos-remote-<stamp>.sql.gz"; exit 1; }
+	@test -f "$(FILE)" || { echo "no such file: $(FILE)"; exit 1; }
+	@url=$$(./scripts/envvar.sh .env DATABASE_URL); 	echo "⛔ This REPLACES everything in $$(printf '%s' "$$url" | sed -E 's#//[^@]*@#//***@#')"; 	echo "   with $(FILE). There is no local copy to fall back on."; 	printf "   type the word replace to continue: "; read ans; 	test "$$ans" = "replace" || { echo "cancelled"; exit 1; }; 	gunzip -c "$(FILE)" | docker run --rm -i -e PGURL="$$url" $(PG_CLIENT) \
+	  sh -c 'psql "$$PGURL" -v ON_ERROR_STOP=1 -q' >/dev/null; \
+	echo "✓ restored from $(FILE)"
+	@#
+	@# ⛔ THE INSTANCE HAS TO BE RESTARTED, AND FORGETTING IT LOOKS LIKE A FAILED RESTORE.
+	@# Same reason as the local `restore` above: the process resolved its session id at boot
+	@# and a restore replaces the table under it, so every page answers 401 on a perfectly
+	@# good database.
+	@docker compose -f docker-compose.remote.yml restart productos >/dev/null 2>&1 || true
+	@printf "waiting for the instance"
+	@for i in $$(seq 1 60); do \
+		if curl -fsS -m 2 http://localhost:$(PORT)/health >/dev/null 2>&1; then echo " ✓"; break; fi; \
+		printf "."; sleep 1; \
+	done
 
 # ⛔ DESTRUCTIVE, AND IT SAYS SO BEFORE IT RUNS. Restoring is the one operation here
 # that can lose work somebody did since the dump, so it will not run without a file
