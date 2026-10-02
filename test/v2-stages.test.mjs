@@ -28,6 +28,15 @@ import { execFileSync } from "node:child_process";
 function seed() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "v2stage-"));
   fs.cpSync("v2-seed", dir, { recursive: true });
+  /**
+   * ⛔ A SEED HAS NO VERDICTS, DELIBERATELY — AND `stamp` BELOW WRITES ONE.
+   *
+   * `v2-seed/` is committed with `truth/`, `rules/` and `readings/` and nothing else, because a
+   * seed nobody has agreed to is the point of it. So this test passed only where somebody's working
+   * copy had an untracked `v2-seed/verdicts/` left over, and failed in a fresh clone and in CI.
+   * `v2 reset` creates the directory; copying the seed by hand does not.
+   */
+  fs.mkdirSync(path.join(dir, "verdicts"), { recursive: true });
   return dir;
 }
 
