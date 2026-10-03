@@ -30,7 +30,7 @@ import { projects, tokens } from "../../v2/store/schema.js";
 import { eq, sql } from "drizzle-orm";
 import YAML from "yaml";
 import { Style } from "../../v2/schema.js";
-import { snapshotStyle } from "../../v2/appcss.js";
+import { snapshotStyle, wearTheme } from "../../v2/appcss.js";
 
 interface Opened {
   db: Db;
@@ -377,12 +377,49 @@ ${pc.dim("⛔ Needs DATABASE_URL, not a token: creating the first credential can
        * have nothing to read and no way to say so.
        */
       .command("style <projectId>")
-      .description("Push the application's design libraries into a project, without touching anything else")
-      .requiredOption("--from <dir>", "a corpus directory beside the repository, to take the snapshot from")
+      .description("Push the application's design libraries into a project, or choose which scheme it wears")
+      .option("--from <dir>", "a corpus directory beside the repository, to take the snapshot from")
+      /**
+       * ⛔ AND IT CHOOSES WITHOUT `--from`. Peter: *"we should be able to choose themes per
+       * project."* Which scheme a project wears is a decision made by whoever is looking at it, on
+       * an instance, with no checkout — so it cannot require one. `--from` is for the BYTES, which
+       * genuinely need a repository; `--wear` is for the CHOICE, which never did.
+       */
+      .option("--wear <scheme>", "which of the schemes this project's design system offers it shows")
+      .option("--bare", "wear none of them — the fallback colours, for a product that ships unthemed")
       .option("-n, --dry-run", "say what would be pushed and change nothing")
-      .action(async (projectId: string, opts: { from: string; db?: string; dryRun?: boolean }) => {
+      .action(async (projectId: string, opts: { from?: string; wear?: string; bare?: boolean; db?: string; dryRun?: boolean }) => {
         try {
-          const style = snapshotStyle(path.resolve(opts.from), new Date().toISOString().slice(0, 10));
+          const wear = opts.bare ? null : opts.wear;
+          if (!opts.from) {
+            if (wear === undefined) {
+              throw new Error(
+                "say what to do: --from <corpus> to push the design libraries, or --wear <scheme> / --bare to choose what this project shows",
+              );
+            }
+            return await withStore(opts, async (d) => {
+              const store = await reach(d, projectId);
+              const current = (await store.documents())["style.yaml"];
+              if (!current)
+                throw new Error(
+                  `${projectId} carries no style yet, so there is nothing to choose from — push one first with --from <corpus>`,
+                );
+              const worn = wearTheme(Style.parse((YAML.parse(current) ?? {}).style), wear);
+              if (opts.dryRun) {
+                console.log(pc.dim("would wear"), worn.theme ?? "nothing", pc.dim(`in ${projectId}`));
+                return;
+              }
+              await store.put("style.yaml", YAML.stringify({ style: worn }, { lineWidth: 0 }));
+              console.log(
+                pc.green("✓"),
+                worn.theme ? `${projectId} now wears ${worn.theme}` : `${projectId} now wears nothing — the fallback colours`,
+              );
+            });
+          }
+          const style = wearTheme(
+            snapshotStyle(path.resolve(opts.from), new Date().toISOString().slice(0, 10)),
+            wear ?? null,
+          );
           if (!style.css) {
             throw new Error(
               `nothing to take at ${path.resolve(opts.from)} — web.stylesheets names no file that is there, so a push would carry an empty style and the drawings would render exactly as they do now`,

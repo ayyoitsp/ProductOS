@@ -270,37 +270,34 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
       fix: "Fix the path, or drop it. A name that resolves to nothing renders identically to a mock nobody styled.",
     });
   }
-  if (app.theme && !app.themes.includes(app.theme)) {
-    add({
-      severity: "refuse",
-      kind: "mock-theme-unknown",
-      where: "productos/config.yaml",
-      what: `web.theme is "${app.theme}", and the stylesheets define ${
-        app.themes.length ? app.themes.map((t) => `"${t}"`).join(", ") : "no scheme of that kind"
-      }.`,
-      fix: "Name a scheme the stylesheets actually define. A scheme that is not there applies nothing, and every drawing renders in the fallback colours.",
-    });
-  }
   /**
-   * ⛔ THE FACES ARE REPORTED OFF THE SNAPSHOT, NOT OFF THE DISK — see `no-style` above. A corpus
-   * read on an instance has no disk to ask, and a finding that can only fire where somebody has a
-   * checkout is a finding that never fires on the surface it matters most on.
+   * ⛔ THE SCHEME IS A CHOICE SOMEBODY MAKES PER PROJECT, so what a check says about it is read off
+   * the snapshot the corpus carries — not off a repository's config, which is where it used to live
+   * and which the person doing the reviewing cannot reach.
+   *
+   * Peter: *"NEXT_PUBLIC_DS_THEME is a bilrost specific thing, doesn't belong in productos config.
+   * we should be able to choose themes per project."*
    */
-  if (app.themeFrom && !app.themeFrom.found) {
-    add({
-      severity: "note",
-      kind: "mock-theme-undeclared",
-      where: app.themeFrom.file,
-      what: `web.theme points at ${app.themeFrom.key} here, and nothing declares it.`,
-      fix: "Either the product is running unthemed — in which case the drawings are right and this note is the record of it — or the scheme is decided somewhere this pointer cannot see, and the pointer should name that place instead.",
-    });
-  } else if (!app.theme && app.themes.length) {
+  if (corpus.style && !corpus.style.theme && corpus.style.offers.length) {
     add({
       severity: "note",
       kind: "mock-theme-unchosen",
-      where: "productos/config.yaml",
-      what: `The stylesheets define ${app.themes.map((t) => `"${t}"`).join(", ")} and web.theme names none of them.`,
-      fix: "Point web.theme at where the product declares its scheme — `<file>#<KEY>` — or name the scheme outright. Unset is legitimate where the application runs unthemed, but it is a decision and nothing else can make it.",
+      where: "style.yaml",
+      what: `This product's design system offers ${corpus.style.offers
+        .map((t) => `"${t}"`)
+        .join(", ")} and this project wears none of them, so every drawing renders in the fallback colours.`,
+      fix: "Choose one — `productos v2 style --wear <scheme>`, or `productos hosted style <project> --wear <scheme>` on an instance. Unthemed is legitimate where the product itself ships unthemed, but it is a decision and nothing else can make it.",
+    });
+  }
+  if (corpus.style?.theme && !corpus.style.offers.includes(corpus.style.theme)) {
+    add({
+      severity: "refuse",
+      kind: "mock-theme-unknown",
+      where: "style.yaml",
+      what: `This project wears "${corpus.style.theme}", and the stylesheets it carries define ${
+        corpus.style.offers.length ? corpus.style.offers.map((t) => `"${t}"`).join(", ") : "no schemes at all"
+      }.`,
+      fix: "A scheme the stylesheets do not define applies nothing, so every drawing renders in the fallback and looks exactly as deliberate as a chosen one. Take the style again, and choose from what it offers.",
     });
   }
 

@@ -969,7 +969,7 @@ export interface ShellOptions {
   appCss?: string;
   /** Wrapper class the app's CSS expects around its own markup, from `web.mock_container_class`. */
   mockClass?: string;
-  /** The scheme the product ships, from `web.theme`. Stamped on every mock's host. */
+  /** The scheme this project wears, from the style it carries. Stamped on every mock's host. */
   theme?: string;
 }
 

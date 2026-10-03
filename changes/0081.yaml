@@ -1,0 +1,14 @@
+id: "0081"
+said: NEXT_PUBLIC_DS_THEME is a bilrost specific thing, doesn't belong in productos config.  we should be able to choose themes per project. NEXT_PUBLIC_DS_THEME as a parameter shouldn't even exist necessarily, unless it's to make portability in the future easier
+at: 2026-10-02
+kind: concept
+reaches:
+  model: WHICH THEME A PROJECT WEARS IS NOT CONFIGURED HERE
+  generate: wearTheme
+  surface: styleAt
+  check: mock-theme-unchosen
+  instruct: Which scheme a project wears is NOT in here
+  pin: a project chooses which scheme it wears, and the choice outlives the bytes
+waived:
+  derive: carried from 0079 and 0080. Nothing about product truth is computed, inherited or gated by this; the choice is read back exactly as it was written. The one derived thing is whether a carried choice still exists in the stylesheets, which `snapshotStyle` answers about its own output.
+closed: 2026-10-03

@@ -246,38 +246,24 @@ export const WebConfig = z.object({
    */
   design_system: z.string().optional(),
   /**
-   * ⛔ WHICH THEME THE PRODUCT ACTUALLY SHIPS. Peter: *"the rendered style for bilrost currently at
-   * localhost:7878 doesn't match at all"*.
+   * ⛔ WHICH THEME A PROJECT WEARS IS NOT CONFIGURED HERE, AND THE ATTEMPT IS WORTH RECORDING.
    *
-   * A design system that supports theming does not apply one: every rule in it is scoped to an
-   * opt-in on the document root — `html[data-theme='bilrost']` in the application this was built
-   * against, which says so in its own header: *no `data-theme` attribute on &lt;html&gt; → nothing in
-   * this file applies*. So the whole theme layer shipped into every mock and did nothing, and the
-   * drawings rendered in the stylesheet's defaults — in that app's case Tailwind blue and grey,
-   * which is a plausible-looking product and the wrong one.
+   * This field existed, and then it accepted `<file>#<KEY>` so a corpus could point at the
+   * application's own env var rather than copy its value — which answered the question asked and
+   * was the wrong shape. Peter: *"NEXT_PUBLIC_DS_THEME is a bilrost specific thing, doesn't belong
+   * in productos config. we should be able to choose themes per project. NEXT_PUBLIC_DS_THEME as a
+   * parameter shouldn't even exist necessarily."*
    *
-   * ⛔ IT IS NAMED, NEVER INFERRED. A design system offering four schemes is a product offering
-   * four, and picking the first one alphabetically — or the one with the most rules — would be a
-   * guess wearing a decision's clothes: the mock would look authoritative and nobody could tell it
-   * had chosen. Unset means unthemed, which is what the application itself does.
+   * He is right twice. One customer's variable name had become part of ProductOS's model, so every
+   * other product inherits a field shaped like somebody else's build; and a theme is a choice made
+   * PER PROJECT — changeable by whoever is reviewing, on an instance, without a checkout — which a
+   * repo config file can never be.
    *
-   * ⛔ OR IT POINTS AT WHERE THE PRODUCT DECIDES — `<file>#<KEY>`, read from the application's own
-   * env file every time a page is built:
-   *
-   *     theme: frontend/.env.local#NEXT_PUBLIC_DS_THEME
-   *
-   * Peter, told the literal form existed: *"NEXT_PUBLIC_DS_THEME is the only live theme, we always
-   * use that — use this theme. how would productOS remember this?"* A scheme name copied in here is
-   * a second record of a fact that already has a home, with nothing forcing the two to agree: the
-   * app's flag moves, this does not, and from then on every drawing is of the old scheme while
-   * looking exactly as authoritative as before. The pointer has no copy to go stale.
-   *
-   * ⛔ A FILE, NEVER THE PROCESS ENVIRONMENT. `productos serve` runs in whatever shell started it,
-   * which is not the one the application's build runs in — reading `process.env` would resolve to
-   * nothing on most machines and to somebody's stray export on the rest, and both render as a
-   * perfectly plausible unthemed mock.
+   * So the choice lives in the corpus, on `Style`, set by `productos v2 style --wear <scheme>` and
+   * carried forward across every re-snapshot. What this file still decides is where the bytes are
+   * READ FROM: `stylesheets`, `design_system`, `mock_container_class`. Those are facts about a
+   * repository, which is what config is for.
    */
-  theme: z.string().optional(),
 });
 export type WebConfig = z.infer<typeof WebConfig>;
 

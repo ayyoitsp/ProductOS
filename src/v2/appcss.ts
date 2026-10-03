@@ -15,7 +15,8 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import { readConfig, type ProductosConfig } from "../core/config.js";
 import { resolvePathsOrThrow } from "../core/paths.js";
-import type { Style } from "./schema.js";
+import YAML from "yaml";
+import { Style } from "./schema.js";
 import type { Corpus } from "./load.js";
 
 export interface AppStyle {
@@ -34,16 +35,6 @@ export interface AppStyle {
   /** Named in config and not found — a typo here is byte-identical to an unstyled mock. */
   missing: string[];
   mockClass?: string;
-  /** The scheme the product ships, resolved from `web.theme`. Stamped on every mock's host. */
-  theme?: string;
-  /**
-   * Where that scheme came from, where `web.theme` pointed at a file instead of naming one.
-   *
-   * ⛔ CARRIED SO THE ANSWER "NOTHING" IS TELLABLE FROM "NOTHING THERE". A pointer whose key is
-   * absent and a config with no theme at all produce the same unthemed mock, and only one of them
-   * is somebody's decision.
-   */
-  themeFrom?: { file: string; key: string; found: boolean };
   /** Faces and images carried into the page as bytes, so a mock has the product's own type. */
   inlined: string[];
   /** Named in the stylesheet and not carried — the type on the page is not the product's there. */
@@ -52,7 +43,7 @@ export interface AppStyle {
    * Theme schemes this stylesheet defines — the `html[data-theme=X]` names it is scoped to.
    *
    * ⛔ SO THAT "NOBODY CHOSE" IS DISTINGUISHABLE FROM "THERE IS NOTHING TO CHOOSE". A stylesheet
-   * with four schemes and no `web.theme` renders mocks in the fallback and looks fine; the only
+   * with four schemes and nothing chosen renders mocks in the fallback and looks fine; the only
    * evidence it happened is that the names exist and none was picked, so the names are carried.
    */
   themes: string[];
@@ -126,15 +117,12 @@ export function appStyleFor(dir: string): AppStyle {
     }
   }
   const trimmed = css.trim();
-  const scheme = resolveTheme(root, cfg.web.theme);
   return {
     css: trimmed,
     from,
     sources,
     missing,
     mockClass: cfg.web.mock_container_class,
-    theme: scheme.theme,
-    themeFrom: scheme.from,
     themes: themesIn(trimmed),
     inlined: budget.inlined,
     unreachable: budget.unreachable,
@@ -219,44 +207,6 @@ export function inlineAssets(css: string, dir: string, budget: Budget): string {
     budget.seen.set(file, carried);
     return carried;
   });
-}
-
-/**
- * `web.theme` is either a scheme name or `<file>#<KEY>` pointing at where the product declares one.
- *
- * ⛔ THE POINTER IS THE FORM TO PREFER, because a scheme name written here is a copy of a fact that
- * lives somewhere else and nothing makes the two agree. Peter: *"NEXT_PUBLIC_DS_THEME is the only
- * live theme, we always use that — use this theme. how would productOS remember this?"* By not
- * remembering it: by reading it, every time, from the file the application reads it from.
- *
- * ⛔ A KEY THAT IS NOT THERE RESOLVES TO NOTHING AND SAYS SO. It is not an error — a product may
- * genuinely be running unthemed, and refusing would be this tool having an opinion about that. But
- * it is reported, because "nobody has declared one" and "there is nothing to declare" look
- * identical on the page and only one of them is a decision somebody made.
- */
-export function resolveTheme(
-  root: string,
-  raw: string | undefined
-): { theme?: string; from?: AppStyle["themeFrom"] } {
-  if (!raw) return {};
-  const hash = raw.lastIndexOf("#");
-  if (hash <= 0) return { theme: raw };
-  const file = raw.slice(0, hash);
-  const key = raw.slice(hash + 1);
-  const abs = path.resolve(root, file);
-  if (!fs.existsSync(abs)) return { from: { file, key, found: false } };
-  /**
-   * Dotenv's shape, not dotenv: `KEY=value`, `export KEY=value`, `#` comments, optional quotes.
-   * A dependency for four lines of parsing would be a dependency on somebody else's idea of what
-   * an env file is, and this only ever reads one key out of a file the product already parses.
-   */
-  let value: string | undefined;
-  for (const line of fs.readFileSync(abs, "utf-8").split(/\r?\n/)) {
-    const m = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/.exec(line);
-    if (!m || m[1] !== key) continue;
-    value = m[2].trim().replace(/\s+#.*$/, "").replace(/^(['"])(.*)\1$/, "$2").trim();
-  }
-  return value ? { theme: value, from: { file, key, found: true } } : { from: { file, key, found: false } };
 }
 
 /**
@@ -420,28 +370,32 @@ function rewriteSelector(sel: string, mockClass: string): string {
   return scoped.replace(/(^|[\s>+~(,])body\b(?![-\w])/g, `$1.${mockClass}`);
 }
 
+
 /**
  * ⛔ TAKE THE SNAPSHOT, SO THE CORPUS CARRIES WHAT THE PRODUCT LOOKS LIKE.
  *
- * Peter: *"we've now moved to a docker hosted/neon database backed copy. let's update the design
- * there."*
+ * Peter: *"we should copy the appropriate css files in — were we referencing the repo before?"* We
+ * were, at render time, and a hosted instance has no repository to read: it materializes a project
+ * into a temp directory with nothing above it, so every drawing rendered in browser defaults while
+ * the identical line of code kept working locally.
  *
- * Everything above this line reads a filesystem, and a hosted instance has none worth reading: it
- * materializes a project into a temp directory with no repository above it, so `appStyleFor` found
- * no config, returned nothing, and every hosted drawing rendered in browser defaults — forty-four
- * mocks in the application's class names and not one byte of its CSS. Measured on a real store
- * before any of this was written, because "it probably does not work there" is not a finding.
- *
- * So this runs ONCE, where the repository is — and what it produces is a document like any other.
- * `web.stylesheets` says where the bytes are TAKEN FROM; `style.yaml` is where they LIVE. The same
- * relationship a drawing has to the component it was drawn from, and generated for the same reason:
- * a corpus that needed a checkout beside it to be looked at could only ever be reviewed by somebody
- * holding the repository.
+ * This runs ONCE, where the repository is, and what it produces is a document like any other.
  */
-export function snapshotStyle(dir: string, today: string): Style {
+export function snapshotStyle(dir: string, today: string, wearing?: Style): Style {
   const app = appStyleFor(dir);
+  /**
+   * ⛔ THE CHOICE SURVIVES THE RE-TAKE. Which scheme a project wears is a decision somebody made;
+   * the bytes are output. Re-reading the stylesheets must not quietly un-choose it, or the first
+   * re-snapshot after a design-system change returns every drawing to the fallback colours — which
+   * is this whole defect again, arriving through the command that exists to prevent it.
+   *
+   * ⛔ AND IT IS DROPPED IF THE SCHEME IS GONE. A choice carried forward onto a stylesheet that no
+   * longer defines it applies nothing, and the corpus would claim to be wearing something it is
+   * not; `check` can then say the schemes changed, which is true and actionable.
+   */
+  const theme = wearing?.theme && app.themes.includes(wearing.theme) ? wearing.theme : undefined;
   return {
-    theme: app.theme,
+    theme,
     mock_class: app.mockClass,
     sources: app.sources,
     taken_at: today,
@@ -450,6 +404,31 @@ export function snapshotStyle(dir: string, today: string): Style {
     offers: app.themes,
     css: app.css,
   };
+}
+
+/**
+ * Choose which scheme this project wears, without re-reading a single stylesheet.
+ *
+ * ⛔ A CHOICE, PER PROJECT, AND NOT A REPOSITORY'S SETTING. Peter: *"NEXT_PUBLIC_DS_THEME is a
+ * bilrost specific thing, doesn't belong in productos config. we should be able to choose themes
+ * per project."* This was `web.theme` in a config file, and briefly a pointer at the application's
+ * own env var — which put one customer's variable name into ProductOS's model, and put the decision
+ * somewhere the person making it cannot reach. Whoever is reviewing is on an instance, with no
+ * checkout, long after the bytes were taken.
+ *
+ * ⛔ AND IT REFUSES A SCHEME THE STYLESHEETS DO NOT DEFINE, because that failure is invisible: an
+ * unknown scheme applies nothing, so the drawings render in the fallback and look exactly as
+ * deliberate as a chosen one.
+ */
+export function wearTheme(style: Style, scheme: string | null): Style {
+  if (scheme === null) return { ...style, theme: undefined };
+  if (!style.offers.includes(scheme))
+    throw new Error(
+      `these stylesheets define ${
+        style.offers.length ? style.offers.map((t) => `"${t}"`).join(", ") : "no schemes at all"
+      }, and "${scheme}" is not among them — an unknown scheme applies nothing and renders as a plausible unthemed product`,
+    );
+  return { ...style, theme: scheme };
 }
 
 /**
@@ -493,7 +472,33 @@ export function styleDrift(
  * would always look fine while the hosted one was wrong.
  */
 export function styleOf(corpus: Corpus): { appCss?: string; mockClass?: string; theme?: string } {
-  const s = corpus.style;
+  return asOptions(corpus.style);
+}
+
+/** The same, for a surface holding a `Style` rather than a whole corpus. */
+export function asOptions(s: Style | undefined): { appCss?: string; mockClass?: string; theme?: string } {
   if (!s?.css) return {};
   return { appCss: s.css, mockClass: s.mock_class, theme: s.theme };
+}
+
+/**
+ * The style a corpus directory carries, without loading the whole corpus.
+ *
+ * ⛔ FOR A SURFACE THAT IS NOT HOLDING A `Corpus`. The v1 tree renders through a different reader
+ * entirely and still has to wear the same thing — two sources for what a product looks like is how
+ * one tree ends up themed and the other does not, with nothing on either saying which is right.
+ */
+export function styleAt(corpusDir: string): Style | undefined {
+  for (const name of ["style.yaml", "style.yml"]) {
+    const file = path.join(corpusDir, name);
+    if (!fs.existsSync(file)) continue;
+    try {
+      const raw = YAML.parse(fs.readFileSync(file, "utf-8")) ?? {};
+      if (raw.style) return Style.parse(raw.style);
+    } catch {
+      /** ⛔ A style that will not parse is no style. `check` is what says so; this only renders. */
+      return undefined;
+    }
+  }
+  return undefined;
 }

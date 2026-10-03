@@ -347,32 +347,30 @@ look at, is the failure this whole section exists to stop.
 ```yaml
 web:
   design_system: frontend/design-system   # the parts the product ships, so a drawn screen uses them
-  theme: frontend/.env.local#NEXT_PUBLIC_DS_THEME   # ⛔ WHERE the product decides, not a copy of it
   stylesheets:                            # ⛔ EVERY file, in cascade order — one of them is not enough
     - frontend/design-system/src/tokens.css
     - frontend/design-system/src/themes.css
     - frontend/.next/static/chunks/*.css  # a build output is content-hashed; glob it
 ```
 
-⛔ **`theme` is a decision, and only a person can make it.** A design system that supports theming
-does not apply one — every rule in it is scoped to an opt-in on the document root, and without the
-attribute the whole theme layer is inert. A system offering four schemes is a product offering four;
-picking one by position or by rule count would be a guess wearing a decision's clothes. Unset is
-legitimate where the application itself runs unthemed. **Ask; do not choose.**
+⛔ **Which scheme a project wears is NOT in here.** It is a choice, made per project, by whoever is
+looking at it:
 
-⛔ **Prefer the pointer to the name.** `<file>#<KEY>` reads the scheme out of the application's own
-env file every time a page is built. A scheme name written here is a second record of a fact that
-already has a home, with nothing making the two agree — the app's flag moves, the copy does not, and
-every drawing after that is of the old scheme and looks exactly as authoritative as it did before.
-A key nothing declares resolves to nothing and is reported; that is a legitimate answer, and the
-report is the difference between "running unthemed" and "nobody decided".
+```bash
+productos v2 style --wear bilrost --into <corpus>        # locally
+productos hosted style <project> --wear bilrost          # on an instance, no checkout needed
+productos v2 style --bare --into <corpus>                # a product that ships unthemed
+```
 
-⛔ **A face is a subresource, and a drawing has nowhere to fetch one from.** Fonts named by the
-stylesheets travel into the page as bytes. That only works where the URL can be resolved from the
-stylesheet's own directory — so name the **built** stylesheet rather than the source one, and expect
-a root-relative `url(/…)` to be reported as unreachable: there is no document root here to resolve
-it against. A face that does not travel falls back silently, and every drawing is then set in some
-other product's type.
+Peter: *"NEXT_PUBLIC_DS_THEME is a bilrost specific thing, doesn't belong in productos config. we
+should be able to choose themes per project."* It was a config field, and briefly a pointer at one
+application's env var — which put that customer's variable name into this model and put the decision
+somewhere the reviewer cannot reach. The snapshot records what the design system **offers**; a
+person picks one, and the pick survives every re-take of the bytes.
+
+⛔ **Never pick for them.** A system offering four schemes is a product offering four, and choosing
+by position or by rule count is a guess wearing a decision's clothes — the drawings would look
+authoritative and nobody could tell. Ask.
 
 ⛔ **Naming one stylesheet is worse than naming none.** The right class names with none of the
 values they resolve to renders as a badly written mock rather than as a missing file, and nobody

@@ -2659,7 +2659,7 @@ export const AccessFile = z.object({ access: z.array(Access).default([]) }).stri
 export const Style = z
   .object({
     /**
-     * The scheme in force, resolved at snapshot time — see `web.theme`, which may name it outright
+     * The scheme this project wears — chosen with `v2 style --wear`, carried across every re-take.
      * or point at the file where the application declares it.
      */
     theme: z.string().optional(),

@@ -7,7 +7,7 @@ import os from "node:os";
 import pc from "picocolors";
 import { resolvePathsOrThrow } from "../core/paths.js";
 import { v2Route } from "../v2/serve.js";
-import { appStyleFor } from "../v2/appcss.js";
+import { asOptions, styleAt } from "../v2/appcss.js";
 import { readConfig, resolveTruthVerificationByok } from "../core/config.js";
 import { groupingAdvice } from "../core/grouping.js";
 import { buildWorklist, groupWorklist } from "../core/worklist.js";
@@ -486,12 +486,14 @@ export async function startUiServer(opts: StartUiServerOptions = {}): Promise<vo
        * build — so a copy cached at boot is a copy that stops being the product's CSS the first
        * time somebody rebuilds the app this corpus describes.
        */
-      const app = appStyleFor(paths.repoRoot);
-      const shellOpts = {
-        appCss: app.css || undefined,
-        mockClass: app.mockClass,
-        theme: app.theme,
-      };
+      /**
+       * ⛔ FROM THE SNAPSHOT THE CORPUS CARRIES, not from this repository — even here, where the
+       * repository is right there. Which scheme a project wears is a per-project choice now, and a
+       * tree that read config for itself would be themed by something the person reviewing cannot
+       * change. Both trees in this process wear the same thing, or one of them is a drawing of a
+       * product that does not exist.
+       */
+      const shellOpts = asOptions(styleAt(v2Dir));
 
       if (p === "/" || p === "") {
         const fp = topReadmePath(paths);

@@ -12,7 +12,7 @@ import { compilePacket } from "../../v2/packet.js";
 import { questionsFor, descendants } from "../../v2/settle.js";
 import { perform, preview, payloadFrom, optionText, VIA, type Act, type Via, type Outcome, type Refused } from "../../v2/acts.js";
 import { fileNote, closeNote, replyToNote } from "../../v2/notes.js";
-import { snapshotStyle, styleOf, styleDrift } from "../../v2/appcss.js";
+import { snapshotStyle, styleOf, styleDrift, styleAt, wearTheme } from "../../v2/appcss.js";
 import { watchCorpus } from "../../v2/watch.js";
 import { inbox } from "../../v2/inbox.js";
 import { looksLikeInstance, instanceOf, mirror, act as remoteAct, note as remoteNote, inbox as remoteInbox, preview as remotePreview, whoami as remoteWhoami, presence as remotePresence } from "../../v2/client.js";
@@ -1714,9 +1714,17 @@ export function v2Command(): Command {
     .description("Copy the application's design libraries into the corpus, so a drawing looks like the product anywhere")
     .option("--into <dir>", "the corpus", ".")
     .option("--check", "say whether the design system has moved since the snapshot, and change nothing")
-    .action((o: { into?: string; check?: boolean }) => {
+    /**
+     * ⛔ THE CHOICE IS THE PROJECT'S, AND IT IS A VERB RATHER THAN A SETTING. Peter: *"we should be
+     * able to choose themes per project."* It was `web.theme` in a repository's config file, which
+     * put the decision somewhere whoever is reviewing cannot reach.
+     */
+    .option("--wear <scheme>", "which of the schemes the design system offers this project shows")
+    .option("--bare", "wear none of them — the fallback colours, for a product that ships unthemed")
+    .action((o: { into?: string; check?: boolean; wear?: string; bare?: boolean }) => {
       const into = path.resolve(o.into ?? ".");
-      if (!o.check) return takeStyle(into);
+      const wear = o.bare ? null : o.wear;
+      if (!o.check) return takeStyle(into, wear);
       const corpus = loadCorpus(into);
       if (!corpus.style) {
         console.log(pc.yellow("!"), "this corpus carries no style — every drawing in it renders unstyled");
@@ -2304,9 +2312,24 @@ export function v2Command(): Command {
  * packet and into an export, because the thing that has to look like the product is wherever the
  * corpus is read — and hosted, that is a container with no repository in it.
  */
-function takeStyle(into: string): void {
-  const style = snapshotStyle(into, new Date().toISOString().slice(0, 10));
+function takeStyle(into: string, wear?: string | null): void {
   const file = path.join(into, "style.yaml");
+  const had = styleAt(into);
+  /**
+   * ⛔ `--wear` ALONE CHANGES THE CHOICE AND NOTHING ELSE. Re-reading 800 KB of somebody's build
+   * output to record a one-word decision would make choosing a theme depend on having a checkout,
+   * which is the whole thing this stopped requiring.
+   */
+  if (wear !== undefined && had) {
+    const worn = wearTheme(had, wear);
+    fs.writeFileSync(file, YAML.stringify({ style: worn }, { lineWidth: 0 }));
+    console.log(
+      pc.green("  ✓"),
+      worn.theme ? `now wearing ${pc.cyan(worn.theme)}` : "now unthemed — the fallback colours, which is what an unthemed product ships",
+    );
+    return;
+  }
+  const style = wearTheme(snapshotStyle(into, new Date().toISOString().slice(0, 10), had), wear ?? had?.theme ?? null);
   if (!style.css) {
     /**
      * ⛔ NOT WRITTEN EMPTY. An empty snapshot and no snapshot render identically, and `check` can
@@ -2324,7 +2347,7 @@ function takeStyle(into: string): void {
     }, ${kb} KB${style.theme ? ` — wearing ${pc.cyan(style.theme)}` : ""}`
   );
   if (!style.theme && style.offers.length)
-    console.log(pc.dim(`      offers ${style.offers.join(", ")} and nothing chose one — see web.theme`));
+    console.log(pc.dim(`      offers ${style.offers.join(", ")} and nothing chose one — productos v2 style --wear <scheme>`));
   for (const u of style.unreachable.slice(0, 3))
     console.log(pc.yellow("      !"), `${u} could not travel — the type there is not the product's`);
   if (style.unreachable.length > 3)

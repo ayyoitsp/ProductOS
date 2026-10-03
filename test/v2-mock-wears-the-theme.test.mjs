@@ -20,7 +20,7 @@
  */
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { scopeToShadow, themesIn, appStyleFor, resolveTheme, snapshotStyle, styleOf, styleDrift } from "../dist/v2/appcss.js";
+import { scopeToShadow, themesIn, appStyleFor, wearTheme, snapshotStyle, styleOf, styleDrift } from "../dist/v2/appcss.js";
 import YAML from "yaml";
 import { renderScopePage } from "../dist/v2/page.js";
 import { renderShell } from "../dist/ui/renderer.js";
@@ -164,38 +164,53 @@ test("a mock's markup never sits loose in the review page", () => {
   assert.match(mock[1], /^<template>/, "the mock's markup is in the page rather than in a template");
 });
 
-test("the scheme can point at where the product declares it, instead of copying it", () => {
+test("a project chooses which scheme it wears, and the choice outlives the bytes", () => {
   /**
-   * ⛔ Peter, told the literal form existed: *"NEXT_PUBLIC_DS_THEME is the only live theme, we
-   * always use that — use this theme. how would productOS remember this?"* By not remembering it.
-   * A scheme name written into this config is a second record of a fact that already has a home,
-   * and nothing makes the two agree: the app's flag moves, the copy does not, and every drawing
-   * from then on is of the old scheme and looks exactly as authoritative as it did before.
+   * ⛔ THE SHAPE THIS ARRIVED AT, AFTER TWO WRONG ONES.
+   *
+   * It was `web.theme` in a repository's config file. Then it accepted `<file>#<KEY>` so a corpus
+   * could point at the application's own env var instead of copying its value — which answered the
+   * question that had been asked and was still wrong. Peter: *"NEXT_PUBLIC_DS_THEME is a bilrost
+   * specific thing, doesn't belong in productos config. we should be able to choose themes per
+   * project."*
+   *
+   * One customer's variable name had become part of this model, and the decision sat somewhere the
+   * person making it cannot reach — whoever reviews is on an instance, with no checkout, long after
+   * the bytes were taken.
    */
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "productos-theme-"));
-  fs.mkdirSync(path.join(root, "app"), { recursive: true });
-  fs.writeFileSync(
-    path.join(root, "app", ".env.local"),
-    ["# the product's own flag", "OTHER=x", "export NEXT_PUBLIC_DS_THEME='brand'  # a trailing note", ""].join("\n")
-  );
-  assert.deepEqual(resolveTheme(root, "app/.env.local#NEXT_PUBLIC_DS_THEME"), {
-    theme: "brand",
-    from: { file: "app/.env.local", key: "NEXT_PUBLIC_DS_THEME", found: true },
-  });
+  const { root, corpus } = project();
+  const taken = snapshotStyle(root, "2026-10-02");
+  assert.deepEqual(taken.offers, ["brand"], "the schemes on offer were not read off the stylesheets");
+  assert.equal(taken.theme, undefined, "a scheme nobody chose was applied anyway");
 
-  // A literal still works, and is still a copy somebody chose to keep.
-  assert.deepEqual(resolveTheme(root, "brand"), { theme: "brand" });
+  const worn = wearTheme(taken, "brand");
+  assert.equal(worn.theme, "brand");
+  assert.equal(worn.css, taken.css, "choosing a scheme rewrote the bytes");
 
-  // ⛔ A key nobody declared resolves to nothing AND SAYS SO. Unthemed is a legitimate answer; an
-  //    unthemed drawing nobody decided on is not, and the two look identical on the page.
-  for (const [raw, file] of [
-    ["app/.env.local#NOT_SET", "app/.env.local"],
-    ["nope/.env#NEXT_PUBLIC_DS_THEME", "nope/.env"],
-  ]) {
-    const r = resolveTheme(root, raw);
-    assert.equal(r.theme, undefined, `${raw} invented a scheme`);
-    assert.deepEqual(r.from, { file, key: raw.split("#")[1], found: false }, `${raw} did not say where it looked`);
-  }
+  // ⛔ AND IT SURVIVES THE RE-TAKE. The bytes are output; the choice is a decision somebody made.
+  //    Re-reading the stylesheets must not un-choose it, or the first re-snapshot after a design
+  //    change silently returns every drawing to the fallback — this defect, arriving through the
+  //    command that exists to prevent it.
+  const again = snapshotStyle(root, "2026-11-01", worn);
+  assert.equal(again.theme, "brand", "the re-take dropped a choice somebody had made");
+
+  // Unthemed is a legitimate choice, and distinguishable from never having chosen.
+  assert.equal(wearTheme(worn, null).theme, undefined);
+
+  // ⛔ A scheme the stylesheets do not define is refused: it applies nothing, so the drawings
+  //    render in the fallback and look exactly as deliberate as a chosen one.
+  assert.throws(() => wearTheme(taken, "mono"), /not among them/);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test("a choice carried onto stylesheets that no longer offer it is dropped, not kept", () => {
+  const { root, put } = project();
+  const worn = wearTheme(snapshotStyle(root, "2026-10-02"), "brand");
+  // The design system drops the scheme.
+  put("build/app.css", "@font-face { font-family: B; src: url(media/face.woff2) }");
+  const after = snapshotStyle(root, "2026-11-01", worn);
+  assert.deepEqual(after.offers, [], "the scheme is somehow still on offer");
+  assert.equal(after.theme, undefined, "the corpus claims to wear a scheme its stylesheets no longer define");
   fs.rmSync(root, { recursive: true, force: true });
 });
 
@@ -293,7 +308,7 @@ function project() {
   );
   put(
     "productos/config.yaml",
-    ["version: 0.0.1", "web:", "  theme: brand", "  stylesheets:", "    - ds/tokens.css", "    - build/app.css", ""].join("\n")
+    ["version: 0.0.1", "web:", "  stylesheets:", "    - ds/tokens.css", "    - build/app.css", ""].join("\n")
   );
   fs.mkdirSync(path.join(root, "v2", "truth"), { recursive: true });
   put(
@@ -311,8 +326,8 @@ test("the corpus carries the design libraries, rather than referencing a repo", 
    * repository above it. Measured on a real store before this was written.
    */
   const { root, corpus } = project();
-  const style = snapshotStyle(root, "2026-10-02");
-  assert.equal(style.theme, "brand");
+  const style = wearTheme(snapshotStyle(root, "2026-10-02"), "brand");
+  assert.equal(style.theme, "brand", "the chosen scheme did not reach the snapshot");
   assert.deepEqual(style.sources.map((s) => s.path), ["ds/tokens.css", "build/app.css"]);
   assert.ok(style.sources.every((s) => s.sha.length === 16 && s.bytes > 0), "a source carries no digest to catch it going stale");
   assert.match(style.css, /--primary: blue/);
@@ -356,7 +371,7 @@ test("a snapshot can be caught having gone stale, and says so only where it can 
   put("ds/extra.css", ".x { color: red }");
   fs.writeFileSync(
     path.join(root, "productos/config.yaml"),
-    ["version: 0.0.1", "web:", "  theme: brand", "  stylesheets:", "    - ds/tokens.css", "    - ds/extra.css", ""].join("\n")
+    ["version: 0.0.1", "web:", "  stylesheets:", "    - ds/tokens.css", "    - ds/extra.css", ""].join("\n")
   );
   drift = styleDrift(corpus, style);
   assert.deepEqual(drift.added, ["ds/extra.css"], "a stylesheet somebody added was not noticed");
@@ -413,7 +428,7 @@ test("a corpus already in a store takes the style as one document, and loses not
   // Something authored ON the instance, after the import — exactly what a clobber would take.
   await store.put("truth/authored-here.md", "---\nid: authored\ntitle: Authored\n---\n");
 
-  const style = snapshotStyle(root, "2026-10-02");
+  const style = wearTheme(snapshotStyle(root, "2026-10-02"), "brand");
   await store.put("style.yaml", YAML.stringify({ style }));
 
   const after = await store.documents();
@@ -444,7 +459,6 @@ test("the list of stylesheets is what gets read, not the single one", () => {
     [
       "version: 0.0.1",
       "web:",
-      "  theme: brand",
       "  stylesheets:",
       "    - styles/tokens.css",
       "    - styles/theme.css",
@@ -455,7 +469,6 @@ test("the list of stylesheets is what gets read, not the single one", () => {
   const app = appStyleFor(root);
   assert.equal(app.from.length, 2, "the list was not read");
   assert.deepEqual(app.missing, ["styles/gone.css"], "a path that resolves to nothing was not reported");
-  assert.equal(app.theme, "brand");
   assert.deepEqual(app.themes, ["brand"], "the schemes in the stylesheets were not read");
   fs.rmSync(root, { recursive: true, force: true });
 });
