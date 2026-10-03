@@ -44,10 +44,14 @@ else
   # ⛔ A STABLE HASH, AND cksum IS IN POSIX. Ports land in 4200-4288 and 5500-5588, so dev's 4100
   #    and 5432 are unreachable from here by construction rather than by a check somebody runs.
   #
-  # ⛔ 42xx AND NOT 41xx. The first cut started at 4101 and there is already a `productos-style-preview`
-  #    on 4101 — so the very first worktree to hash to zero would have failed to bind, against a
-  #    container with a ProductOS name that nothing here knows about. Two stacks wanting one port is
-  #    reported by Docker as "port is already allocated", which names the port and not the reason.
+  # ⛔ 42xx AND NOT 41xx, AND THE REASON OUTLIVED THE THING THAT CAUSED IT. The first cut started at
+  #    4101, and a `productos-style-preview` container was sitting on 4101 at the time — so the very
+  #    first worktree to hash to zero would have failed to bind, against a container with a ProductOS
+  #    name that nothing here knew about. That container has since been removed by the session that
+  #    ran it, so the floor is no longer about it: 41xx is dev's family, people put one-off ProductOS
+  #    containers next to dev because 4100 is the number they remember, and two stacks wanting one
+  #    port is reported by Docker as "port is already allocated" — which names the port and not the
+  #    reason. A gap costs nothing; the same hour of confusion twice costs more.
   n=$(printf '%s' "$slug" | cksum | awk '{ print $1 % 89 }')
   stack="productos-$slug"
   port=$((4200 + n))

@@ -214,8 +214,13 @@ test("the main checkout is dev, and a worktree can never be", () => {
     assert.notEqual(s.PRODUCTOS_STACK, "productos", `${w} resolved to dev's stack`);
     assert.notEqual(s.PORT, "4100", `${w} resolved to dev's port`);
     assert.notEqual(s.PG_PORT, "5432", `${w} resolved to dev's postgres port`);
-    /** ⛔ AND NOT 4101 EITHER — `productos-style-preview` is already there, and the first cut of the
-     *  range started at 4101, so the first worktree to hash to zero would have failed to bind. */
+    /**
+     * ⛔ AND NOT 41xx AT ALL. The first cut of the range started at 4101, where a one-off
+     * `productos-style-preview` container was sitting — so the first worktree to hash to zero would
+     * have failed to bind. That container is gone now, and the floor stays: 41xx is dev's family,
+     * one-off ProductOS containers get put next to 4100 because that is the number people remember,
+     * and the collision arrives as "port is already allocated" with nothing naming the reason.
+     */
     assert.ok(Number(s.PORT) >= 4200, `${w} is on ${s.PORT}, inside the 41xx family already in use`);
     assert.ok(!ports.has(s.PORT), `${w} wants ${s.PORT}, which another checkout already has`);
     ports.add(s.PORT);
