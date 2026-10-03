@@ -1,0 +1,9 @@
+id: "0079"
+said: No, let the Claude sessions deal with it. Just make a skill so they know how to resolve and handle migrations in general
+at: 2026-10-03
+kind: instruction
+reaches:
+  instruct: Never edit or delete a migration that has been applied
+  pin: never edit an applied migration — with the evidence, not just the rule
+waived: {}
+closed: 2026-10-03

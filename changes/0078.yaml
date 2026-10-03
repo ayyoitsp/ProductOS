@@ -1,0 +1,9 @@
+id: "0078"
+said: to be clear, i'd like 'dev' to be up to date, and we already redeploy 4100 with what's merged., individual trees can maintain their own docker instance/own port, but 4100 shoudl be kept clean
+at: 2026-10-03
+kind: operations
+reaches:
+  operate: dev-guard
+  pin: nothing that starts a container skips the dev guard
+waived: {}
+closed: 2026-10-03

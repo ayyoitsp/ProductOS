@@ -1142,6 +1142,14 @@ export function v2Command(): Command {
     .option("--id <id>", "one segment, kebab-case — derived from the words if absent")
     .option("--at <dir>", "corpus directory", "v2")
     .action((says: string, o: { steers: string; learnedFrom?: string; id?: string; at?: string }) => {
+      /**
+       * ⛔ A URL IS REFUSED, NOT RESOLVED AS A FOLDER. Without this, `--at https://…/p/acme` printed
+       * a green tick and wrote `./https:/…/p/acme/steers/steers.yaml` on this machine — so somebody
+       * recording a habit for a hosted corpus was told it worked, and nothing reached the instance.
+       * `path.resolve` turns a URL into a perfectly good folder name, which is why this has to be a
+       * refusal rather than something a reader would notice.
+       */
+      refuseUrl(o, "writing a steer");
       const dir = path.resolve(o.at ?? "v2");
       /**
        * ⛔ THE WORDS THAT CARRY THE MEANING, not the first four. Slicing the opening words produced
@@ -1222,6 +1230,8 @@ export function v2Command(): Command {
     .description("What steers this project, and where each was learned")
     .option("--at <dir>", "corpus directory", "v2")
     .action((o: { at?: string }) => {
+      /** ⛔ It answered "nothing steers this project yet" about somebody else's corpus, confidently. */
+      refuseUrl(o, "listing steers");
       const dir = path.resolve(o.at ?? "v2");
       const all = readSteers(dir);
       if (!all.length) {
@@ -1267,6 +1277,7 @@ export function v2Command(): Command {
     .requiredOption("--because <reason>", "⛔ why it is not a rule here — a decline with no argument cannot be told from a steer nobody got round to")
     .option("--at <dir>", "corpus directory", "v2")
     .action((id: string, o: { because: string; at?: string }) => {
+      refuseUrl(o, "declining a steer");
       const dir = path.resolve(o.at ?? "v2");
       const all = readSteers(dir);
       const hit = all.find((x) => x.id === id);
@@ -1300,7 +1311,13 @@ export function v2Command(): Command {
     .description("Record what somebody said, verbatim, and what kind of change it is")
     .argument("<said>", "their words — ⛔ quoted, never paraphrased")
     .requiredOption("--kind <kind>", `one of: ${KINDS.join(" | ")}`)
-    .option("--at <dir>", "corpus directory", "v2")
+    /**
+     * ⛔ NO `--at`. A change record is about the REPO — the framework, the agents, the
+     * instructions — not about any one corpus, and `writeChange` has always used the working
+     * directory. The option was declared here and read by nothing, so `--at <anything>` was
+     * accepted in silence and the record landed in the same place regardless. Against a hosted
+     * instance that reads as a write going somewhere it never went.
+     */
     .action((said: string, o: { kind: string; at?: string }) => {
       if (!KINDS.includes(o.kind)) {
         console.error(pc.red("✗"), `"${o.kind}" is not a kind of change`);
@@ -1331,7 +1348,13 @@ export function v2Command(): Command {
     .command("check")
     .description("Look, layer by layer, at whether this change actually landed")
     .argument("[id]", "one change, or every open one")
-    .option("--at <dir>", "corpus directory", "v2")
+    /**
+     * ⛔ NO `--at`. A change record is about the REPO — the framework, the agents, the
+     * instructions — not about any one corpus, and `writeChange` has always used the working
+     * directory. The option was declared here and read by nothing, so `--at <anything>` was
+     * accepted in silence and the record landed in the same place regardless. Against a hosted
+     * instance that reads as a write going somewhere it never went.
+     */
     .action((id: string | undefined) => {
       const root = process.cwd();
       const all = readChanges(root).filter((c) => (id ? c.id === id : !c.closed));
@@ -1365,7 +1388,13 @@ export function v2Command(): Command {
     .argument("<id>")
     .option("--waive <layer>", "waive one layer (repeatable), with --because", (v: string, all: string[]) => [...all, v], [] as string[])
     .option("--because <why>", "why that layer does not apply here")
-    .option("--at <dir>", "corpus directory", "v2")
+    /**
+     * ⛔ NO `--at`. A change record is about the REPO — the framework, the agents, the
+     * instructions — not about any one corpus, and `writeChange` has always used the working
+     * directory. The option was declared here and read by nothing, so `--at <anything>` was
+     * accepted in silence and the record landed in the same place regardless. Against a hosted
+     * instance that reads as a write going somewhere it never went.
+     */
     .action((id: string, o: { waive: string[]; because?: string }) => {
       const root = process.cwd();
       const rec = readChanges(root).find((c) => c.id === id);
