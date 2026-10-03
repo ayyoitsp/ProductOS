@@ -1,0 +1,9 @@
+id: "0076"
+said: how can we handle schema migrations between different worktrees?
+at: 2026-10-03
+kind: operations
+reaches:
+  operate: stack.sh
+  pin: a store migrated by newer code refuses to boot, and says what to do
+waived: {}
+closed: 2026-10-03

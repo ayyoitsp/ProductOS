@@ -17,7 +17,7 @@
 
 .PHONY: default help install link build watch dev dev-serve typecheck all clean doctor \
         up down logs rebuild restart nuke psql hosted-doctor seed shell hosted-help \
-        backup restore up-remote down-remote logs-remote remote-doctor checkpoint projects session
+        stacks migrations-check dev-guard backup restore up-remote down-remote logs-remote remote-doctor checkpoint projects session
 
 # The hosted instance, in Docker:
 #   make up         — build and start (ProductOS + Postgres), wait until healthy
@@ -34,8 +34,35 @@
 # which command you asked. Reading DATABASE_URL from `.env` when there is one
 # makes every target here address the store the instance is actually using.
 ENV_DB := $(shell ./scripts/envvar.sh .env DATABASE_URL 2>/dev/null)
-DB_URL ?= $(if $(ENV_DB),$(ENV_DB),postgres://productos:productos@localhost:5432/productos)
-PORT   ?= 4100
+
+# ⛔ A STACK PER WORKTREE, AND 4100 IS NOT ONE OF THEM.
+#
+# Peter: *"i'd like 'dev' to be up to date, and we already redeploy 4100 with what's merged.
+# individual trees can maintain their own docker instance/own port, but 4100 should be kept clean"*.
+#
+# The compose project name was pinned so the VOLUME would follow the stack rather than the directory
+# — which fixed data appearing to vanish from a worktree, and left every checkout sharing one
+# database, one volume and one port. `scripts/stack.sh` hands each worktree its own project and its
+# own two ports, derived from its name so the answer is the same from anywhere and survives a
+# `make down`. The main checkout keeps `productos`, 4100 and 5432; nothing else can have them.
+# ⛔ FROM GIT, NOT FROM THE SCRIPT, BECAUSE `dev-guard` BELOW MAY NOT HAVE THE SCRIPT. A worktree
+# sits on its own branch, so `scripts/stack.sh` is simply absent until that branch has it — and an
+# absent script makes `$(shell ...)` return the empty string, which compose reads as its default.
+# That is dev. Found by running: a throwaway worktree cut from a commit without the script went
+# straight for project `productos` on 4100 and only failed because the port was taken.
+MAIN_WT := $(shell git worktree list 2>/dev/null | head -1 | awk '{ print $$1 }')
+THIS_WT := $(shell git rev-parse --show-toplevel 2>/dev/null)
+
+PRODUCTOS_STACK := $(shell test -x ./scripts/stack.sh && ./scripts/stack.sh . stack)
+PG_PORT         := $(shell test -x ./scripts/stack.sh && ./scripts/stack.sh . pg)
+export PRODUCTOS_STACK PG_PORT
+
+DB_URL ?= $(if $(ENV_DB),$(ENV_DB),postgres://productos:productos@localhost:$(PG_PORT)/productos)
+
+# ⛔ `?=`, SO `make up PORT=4200` STILL WINS. The line above assigns it; a command-line variable
+# overrides a makefile assignment, which is the one escape hatch worth having here.
+PORT ?= $(shell test -x ./scripts/stack.sh && ./scripts/stack.sh . port)
+export PORT
 
 # The store a target is about to touch, with the credential removed — so a command
 # that writes somewhere says where before it does.
@@ -148,7 +175,59 @@ doctor:
 # a slow one.
 # ---------------------------------------------------------------------------
 
-up:
+# Every checkout on this machine, the stack it owns, and whether it is up.
+#
+# ⛔ DERIVED, NOT WRITTEN DOWN. Nothing records which port a worktree took, so this is the only
+# place the answer exists — and "which one am I looking at" is a question you ask at exactly the
+# moment two instances are serving two branches and both look right.
+stacks:
+	@printf "%-44s %-6s %-6s %-4s %s\n" STACK PORT PG UP WORKTREE
+	@for w in $$(git worktree list | awk '{ print $$1 }'); do \
+		eval "$$(./scripts/stack.sh "$$w")"; \
+		up=$$(docker compose -p "$$PRODUCTOS_STACK" ps -q 2>/dev/null | head -1); \
+		printf "%-44s %-6s %-6s %-4s %s\n" "$$PRODUCTOS_STACK" "$$PORT" "$$PG_PORT" \
+			"$$(test -n "$$up" && echo yes || echo no)" "$$w"; \
+	done
+	@echo ""
+	@echo "this one: $(PRODUCTOS_STACK) on $(PORT) (postgres $(PG_PORT))"
+
+# ⛔ DEV SERVES WHAT IS MERGED, AND THIS IS WHERE THAT IS ENFORCED.
+#
+# Peter: *"4100 should be kept clean"*. Two ways it stops being, and the second is the one that
+# actually happened:
+#
+#  1. The main checkout is on a branch, as it is most of the time. `make up` from here would put
+#     unmerged code on the port the corpus is reviewed on, with nothing on the page saying so.
+#  2. A worktree resolves to dev's stack ANYWAY — because `scripts/stack.sh` is not on its branch,
+#     so `$(shell ...)` is empty and compose uses its default, which is dev. A throwaway worktree
+#     did exactly this and was stopped only by `Bind for 0.0.0.0:4100 failed`, which names a port
+#     and not the mistake.
+#
+# So the first check asks GIT whether this is the main worktree, and never the script.
+dev-guard:
+	@if [ -n "$(THIS_WT)" ] && [ -n "$(MAIN_WT)" ] && [ "$(THIS_WT)" != "$(MAIN_WT)" ] \
+	   && { [ -z "$(PRODUCTOS_STACK)" ] || [ "$(PRODUCTOS_STACK)" = "productos" ] || [ "$(PORT)" = "4100" ]; }; then \
+		echo "✗ this is a worktree and it resolved to dev's stack:"; \
+		echo "    stack '$(PRODUCTOS_STACK)' · port '$(PORT)'"; \
+		echo "  scripts/stack.sh is missing or silent here, so compose would have used its"; \
+		echo "  default — which is productos on 4100, the instance that serves what is merged."; \
+		echo "  Rebase this worktree onto a branch that has scripts/stack.sh."; \
+		exit 1; \
+	fi
+	@if [ "$(PRODUCTOS_STACK)" = "productos" ] && [ -z "$(DEV_ANYWAY)" ]; then \
+		git fetch -q origin main 2>/dev/null || true; \
+		if ! git merge-base --is-ancestor HEAD origin/main 2>/dev/null; then \
+			echo "✗ $(PRODUCTOS_STACK) on $(PORT) is dev, and dev serves what is merged."; \
+			echo "  HEAD ($$(git rev-parse --abbrev-ref HEAD)) is not in origin/main."; \
+			echo ""; \
+			echo "  To try this branch, run it from a worktree — it gets its own stack and port:"; \
+			echo "    git worktree add .claude/worktrees/<name> && cd .claude/worktrees/<name> && make up"; \
+			echo "  Or, deliberately: make up DEV_ANYWAY=1"; \
+			exit 1; \
+		fi; \
+	fi
+
+up: dev-guard migrations-check
 	docker compose up --build -d
 	@printf "waiting for the instance"
 	@for i in $$(seq 1 60); do \
@@ -229,22 +308,27 @@ down:
 	docker compose down
 
 # ⛔ Named so nobody reaches for it by accident. `down` keeps the data; this does not.
+# ⛔ THIS STACK ONLY, WHICH IS WHAT A PROJECT PER WORKTREE BOUGHT. The volume is named after the
+# project, so from a worktree this takes that worktree's database and nothing else — and from the
+# main checkout it takes dev's. `make stacks` says which one you are standing in.
 nuke:
+	@echo "⛔ This removes $(PRODUCTOS_STACK) and its database volume."
+	@printf "   type the word nuke to continue: "; read ans; test "$$ans" = "nuke" || { echo "cancelled"; exit 1; }
 	docker compose down -v
-	@echo "✓ containers and the database volume are gone"
+	@echo "✓ $(PRODUCTOS_STACK) and its volume are gone"
 
 logs:
 	docker compose logs -f productos
 
 # Rebuild the image from current source. ⛔ Use this after editing src/ — the image
 # carries a BUILT dist/, so a source change is invisible until the image is rebuilt.
-rebuild: build
+rebuild: dev-guard build
 	docker compose up --build -d productos
 	@sleep 2
 	@docker compose logs --tail 15 productos
 
 # ⛔ Exercises the migration ledger: a second boot must skip what it already applied.
-restart:
+restart: dev-guard
 	docker compose restart productos
 	@sleep 3
 	@docker compose logs --tail 10 productos
@@ -349,7 +433,7 @@ BACKUP_DIR ?= backups
 backup:
 	@mkdir -p $(BACKUP_DIR)
 	@stamp=$$(date +%Y%m%d-%H%M%S); \
-	out=$(BACKUP_DIR)/productos-$$stamp.sql.gz; \
+	out=$(BACKUP_DIR)/$(PRODUCTOS_STACK)-$$stamp.sql.gz; \
 	docker compose exec -T postgres pg_dump -U productos -d productos --clean --if-exists | gzip > $$out; \
 	test -s $$out || { echo "the dump is empty — is the stack up?"; rm -f $$out; exit 1; }; \
 	gunzip -c $$out | grep -q "DROP TABLE IF EXISTS" || { echo "the dump cannot replace an existing schema"; rm -f $$out; exit 1; }; \
@@ -381,6 +465,11 @@ backup:
 #   make backup-remote              ./backups/productos-remote-<stamp>.sql.gz
 #   make restore-remote FILE=path   ⛔ replaces everything in the managed store
 # ---------------------------------------------------------------------------
+
+# ⛔ RUN BY `up`, NOT ONLY BY HAND. A numbering collision is invisible until a merge, and the one
+# moment somebody is certain to be at a terminal is the moment they bring an instance up.
+migrations-check: build
+	@node scripts/migrations-check.mjs
 
 PG_CLIENT ?= postgres:18-alpine
 
@@ -419,7 +508,7 @@ restore-remote:
 restore:
 	@test -n "$(FILE)" || { echo "usage: make restore FILE=$(BACKUP_DIR)/productos-<stamp>.sql.gz"; exit 1; }
 	@test -f "$(FILE)" || { echo "no such file: $(FILE)"; exit 1; }
-	@echo "⛔ This REPLACES the current database with $(FILE)."
+	@echo "⛔ This REPLACES $(PRODUCTOS_STACK) with $(FILE)."
 	@printf "   type the word replace to continue: "; read ans; test "$$ans" = "replace" || { echo "cancelled"; exit 1; }
 	gunzip -c "$(FILE)" | docker compose exec -T postgres psql -U productos -d productos -v ON_ERROR_STOP=1 >/dev/null
 	@echo "✓ restored from $(FILE)"

@@ -1,0 +1,9 @@
+id: "0077"
+said: i think we should have some rudimentary collision detction for migrations - like schema migrations are numbered, and they go up 0001.sql or whatever
+at: 2026-10-03
+kind: operations
+reaches:
+  operate: migrations-check
+  pin: two branches both calling it 0003 is a collision, named
+waived: {}
+closed: 2026-10-03

@@ -11,14 +11,21 @@
 # PRODUCTOS_SINGLE_ACCOUNT for a hosted deployment, where signing in or holding a token is the only
 # way in.
 
-# ⛔ PINNED, OR THE DATABASE MOVES WHEN THE DIRECTORY DOES.
+# ⛔ NAMED, NOT DERIVED FROM THE FOLDER — AND NOW NAMED DELIBERATELY PER STACK.
 #
 # Compose derives the project name from the containing folder, and the volume is
 # named `<project>_productos_data`. So the same stack run from a worktree
-# (`productos-2`) and from the main checkout (`productos`) uses two DIFFERENT
-# volumes — and the second one comes up empty, which reads exactly like the data
-# is gone. Naming it here makes the volume follow the stack rather than the path.
-name: productos
+# (`productos-2`) and from the main checkout used two DIFFERENT volumes, and the
+# second came up empty — which reads exactly like the data is gone. Pinning it
+# fixed that, and left every checkout sharing one database and one port.
+#
+# ⛔ `productos` IS DEV, AND DEV SERVES WHAT IS MERGED. Peter: *"i'd like 'dev' to be
+# up to date, and we already redeploy 4100 with what's merged. individual trees can
+# maintain their own docker instance/own port, but 4100 should be kept clean"*. So a
+# worktree gets its own project, its own volume and its own ports — set by
+# `scripts/stack.sh`, which refuses to hand a worktree this name or this port.
+# Unset is the main checkout, which is the old behaviour exactly.
+name: ${PRODUCTOS_STACK:-productos}
 
 services:
   postgres:
@@ -27,8 +34,11 @@ services:
       POSTGRES_USER: productos
       POSTGRES_PASSWORD: productos
       POSTGRES_DB: productos
+    # ⛔ ALSO A VARIABLE, OR THE SECOND STACK CANNOT START. Two projects each binding 5432 is not a
+    #    shared database — it is the second `up` failing on "port is already allocated", which reads
+    #    as Docker being broken rather than as two stacks wanting the same port.
     ports:
-      - "5432:5432"
+      - "${PG_PORT:-5432}:5432"
     volumes:
       - productos_data:/var/lib/postgresql/data
     # ⛔ The instance refuses to start without a reachable store, so waiting on this is not
@@ -53,7 +63,7 @@ services:
       PRODUCTOS_SINGLE_ACCOUNT: ${PRODUCTOS_SINGLE_ACCOUNT:-me@localhost}
       PRODUCTOS_AUTH: ${PRODUCTOS_AUTH:-}
     ports:
-      - "4100:4100"
+      - "${PORT:-4100}:4100"
     depends_on:
       postgres:
         condition: service_healthy
