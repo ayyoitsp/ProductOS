@@ -314,35 +314,21 @@ test("every route names real roles, and none delegates the settling", () => {
    * carrying which-roles-to-spawn, the authoring rules, and a v1 workflow. Only the first is a
    * skill's job, so the eight became routes under one entry point.
    */
-  const installed = fs.readdirSync("skills").filter((d) => fs.existsSync(`skills/${d}/SKILL.md`));
-  assert.ok(fs.existsSync(`skills/${SKILL}/SKILL.md`), `the entry point is not at skills/${SKILL}`);
-
   /**
-   * ⛔ ONE SKILL CARRIES ROUTES, AND THE OTHERS MUST NAME NO ROLE — WHICH IS THE ASSERTION THIS
-   * STARTED AS, MADE PRECISE.
+   * ⛔ ONE SKILL, SEVERAL ROUTES. Peter: *"why do we need skills and commands?"* — a skill was
+   * carrying which-roles-to-spawn, the authoring rules, and a v1 workflow. Only the first is a
+   * skill's job, so the eight became routes under one entry point.
    *
-   * It counted skills and demanded exactly one. The thing that count was protecting is stated two
-   * comments up and is not about counting: a skill had been carrying which-roles-to-spawn, the
-   * authoring rules and a v1 workflow at once, so nobody could tell where the routes lived. Eight
-   * became routes under one entry point to fix that.
-   *
-   * A skill that orchestrates nothing does not reintroduce it. `productos-migrations` is repo
-   * development — how to add a migration, how to resolve a numbering collision, which Docker stack
-   * a checkout may bring up — and folding that into the product-truth entry point would be mixing
-   * concerns back together, which is the collapse running backwards.
-   *
-   * So the boundary is mechanical rather than a judgement somebody renews each time: exactly one
-   * skill may name a role, and any other naming one fails here. A migrations skill that starts
-   * spawning a scoper is caught; a second entry point is caught; a standalone instruction is not.
+   * ⛔ THIS WAS BRIEFLY NARROWED TO "one skill may name a role" TO ADMIT A SECOND SKILL, AND THAT
+   * WAS THE WRONG FIX TO THE WRONG PROBLEM. Peter: *"The skill is a local dev skill, not a product
+   * os skill?"* — `skills/` is what `productos init claude` installs into every CONSUMER's
+   * ~/.claude/skills, so a skill about this repo's Makefile and `drizzle/` was being shipped to
+   * people whose repos contain neither. Repo-development guidance belongs in `.claude/skills/`,
+   * which is project-scoped and ships nowhere. The count stands.
    */
-  const roles = [...AGENTS, ...AUTHORS].map((r) => r.name);
-  for (const d of installed) {
-    if (d === SKILL) continue;
-    const body = fs.readFileSync(`skills/${d}/SKILL.md`, "utf-8");
-    const named = roles.filter((r) => new RegExp(`\\b${r}\\b`).test(body));
-    assert.deepEqual(named, [], `skills/${d} names ${named.join(", ")} — routes belong under skills/${SKILL}`);
-    assert.ok(!body.includes("productos:preset"), `skills/${d} carries the generated route block`);
-  }
+  assert.equal(fs.readdirSync("skills").filter((d) => fs.existsSync(`skills/${d}/SKILL.md`)).length, 1,
+    "there is more than one skill again — the routes belong under one entry point");
+  assert.ok(fs.existsSync(`skills/${SKILL}/SKILL.md`), `the one skill is not at skills/${SKILL}`);
 
   assert.deepEqual(danglingSteps(), [], "a route names a role that is in neither registry");
 

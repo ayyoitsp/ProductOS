@@ -15,8 +15,19 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import fs from "node:fs";
+import { execSync } from "node:child_process";
 
-const SKILL = "skills/productos-migrations/SKILL.md";
+/**
+ * ⛔ `.claude/skills/`, NOT `skills/`. Peter: *"The skill is a local dev skill, not a product os
+ * skill?"* — and the first cut of this put it in `skills/`, which is what `productos init claude`
+ * installs into every CONSUMER's ~/.claude/skills. So a skill naming this repo's Makefile targets,
+ * `drizzle/` and `src/v2/store/schema.ts` was shipped to people whose repos contain none of those,
+ * telling them to run commands they do not have against a schema that is not theirs.
+ *
+ * `.claude/skills/` is project-scoped and tracked here: committed, so every session in this repo
+ * gets it, and installed nowhere.
+ */
+const SKILL = ".claude/skills/productos-migrations/SKILL.md";
 const body = fs.readFileSync(SKILL, "utf-8");
 
 test("the skill is installable and declares itself", () => {
@@ -102,4 +113,45 @@ test("every command it tells a session to run exists", () => {
   for (const m of body.matchAll(/`make ([a-z-]+)/g)) {
     assert.match(mk, new RegExp(`^${m[1]}:`, "m"), `the skill names make ${m[1]}, which does not exist`);
   }
+});
+
+/**
+ * ⛔ AND NOTHING SHIPPED MAY NAME OUR OWN SUBSTRATE — THE MECHANICAL FORM OF WHY THIS SKILL MOVED.
+ *
+ * `skills/` is installed into every consumer's `~/.claude/skills/` by `productos init claude`.
+ * A shipped skill naming `make rebuild-remote`, `drizzle/` or `src/v2/store/schema.ts` is telling
+ * somebody to run a command they do not have against a schema that is not theirs — and it reads as
+ * authoritative, because it arrived with the tool.
+ *
+ * This is the same rule `CLAUDE.md` already states for corpora ("the output is product truth; keep
+ * the substrate out of it"), one layer up: the storage this tool is built on is not a thing its
+ * users should ever be told about. It was prose there, and prose did not stop it here.
+ */
+test("no shipped skill names ProductOS's own development substrate", () => {
+  const substrate = [
+    /\bdrizzle[/_]/,
+    /src\/v2\/store/,
+    /docker-compose(\.remote)?\.yml/,
+    /\bmake (up|down|nuke|rebuild|restart|backup|restore|stacks|psql)(-remote)?\b/,
+    /_productos_migrations/,
+    /PRODUCTOS_ALLOW_SCHEMA_AHEAD|PRODUCTOS_STACK|DEV_ANYWAY/,
+    /drizzle-kit/,
+  ];
+  for (const d of fs.readdirSync("skills")) {
+    const f = `skills/${d}/SKILL.md`;
+    if (!fs.existsSync(f)) continue;
+    const text = fs.readFileSync(f, "utf-8");
+    for (const pattern of substrate) {
+      const hit = pattern.exec(text);
+      assert.equal(hit, null, `${f} ships "${hit?.[0]}" to consumers — repo development belongs in .claude/skills/`);
+    }
+  }
+});
+
+test("the dev skill is not in the shipped set, and is tracked so sessions here get it", () => {
+  assert.ok(!fs.existsSync("skills/productos-migrations"), "the dev skill is back in the shipped directory");
+  assert.ok(fs.existsSync(SKILL));
+  /** ⛔ Committed, or only the session that wrote it ever has it. */
+  const tracked = execSync("git ls-files .claude/skills", { encoding: "utf-8" });
+  assert.match(tracked, /productos-migrations\/SKILL\.md/, "the dev skill is not tracked — no other session would see it");
 });
