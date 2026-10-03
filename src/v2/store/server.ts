@@ -115,12 +115,14 @@ export const rowsOf = <T>(result: unknown): T[] =>
   Array.isArray(result) ? (result as T[]) : (((result as { rows?: T[] })?.rows ?? []) as T[]);
 
 /** Bring the schema up to the checked-in migrations. ⛔ Idempotent — a container boots more than once. */
-export async function migrateStore(db: Db): Promise<{ applied: string[]; skipped: string[] }> {
+export async function migrateStore(
+  db: Db,
+): Promise<{ applied: string[]; skipped: string[]; renamed: Array<{ from: string; to: string }>; ahead: string[] }> {
   const run = async (statement: string): Promise<unknown> => db.execute(sql.raw(statement));
   return applyMigrations(run, undefined, async () =>
-    rowsOf<{ tag: string }>(await db.execute(sql.raw("select tag from _productos_migrations"))).map(
-      (r) => r.tag,
-    ),
+    rowsOf<{ tag: string; statements_sha: string | null }>(
+      await db.execute(sql.raw("select tag, statements_sha from _productos_migrations")),
+    ).map((r) => ({ tag: r.tag, sha: r.statements_sha ?? null })),
   );
 }
 
@@ -173,6 +175,20 @@ export async function startHosted(
   const { db, close } = openStore(config.databaseUrl);
 
   const migrated = await migrateStore(db);
+  /**
+   * ⛔ SAID OUT LOUD, BECAUSE SILENCE HERE IS INDISTINGUISHABLE FROM NOTHING HAVING HAPPENED. A
+   * migration recognised under a name a merge changed was applied by a branch, not by this boot;
+   * reporting it as applied would be a lie and reporting nothing leaves no trace of the rename.
+   */
+  for (const r of migrated.renamed) {
+    process.stderr.write(`[productos] ${r.from} was already applied — recorded now as ${r.to}\n`);
+  }
+  if (migrated.ahead.length) {
+    process.stderr.write(
+      `[productos] ⚠ booting against a store migrated by newer code: ${migrated.ahead.join(", ")} ` +
+        `(PRODUCTOS_ALLOW_SCHEMA_AHEAD is set)\n`,
+    );
+  }
   if (migrated.applied.length) {
     process.stderr.write(`[productos] applied migrations: ${migrated.applied.join(", ")}\n`);
   }

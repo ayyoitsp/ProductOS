@@ -103,7 +103,13 @@ export function verify(root: string, rec: ChangeRecord): LayerVerdict[] {
         const p = path.join(d, e.name);
         if (e.isDirectory()) {
           if (walk(p)) return true;
-        } else if (/\.(ts|md|mjs)$/.test(e.name) && fs.readFileSync(p, "utf-8").includes(needle)) return true;
+          /**
+           * ⛔ `.sh` AND `.yml` ARE HERE BECAUSE THE OPERATE LAYER IS. Its files are a Makefile, two
+           * compose files and a shell script — restricting the walk to the three extensions the
+           * framework itself is written in would have made every operations change unverifiable,
+           * which is the hole that area was added to close.
+           */
+        } else if (/\.(ts|md|mjs|sh|yml|yaml)$/.test(e.name) && fs.readFileSync(p, "utf-8").includes(needle)) return true;
       }
       return false;
     };

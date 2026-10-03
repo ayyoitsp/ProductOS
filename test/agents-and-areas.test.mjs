@@ -65,6 +65,23 @@ test("every framework file the v2 track has is on the map", () => {
   assert.deepEqual(missing, [], `these are part of the framework and on nobody's map:\n  ${missing.join("\n  ")}`);
 });
 
+/**
+ * ⛔ AND THE DEPLOYMENT IS PART OF THE FRAMEWORK TOO — THE TEST ABOVE WALKED `src/v2` ONLY.
+ *
+ * So the Makefile, both compose files and the Dockerfile were on nobody's map for as long as the
+ * hosted instance has existed. The cost was exact: `rebuild`, `restart`, `backup` and `restore` all
+ * reached for a `postgres` container the managed-store stack has none of, and no area claimed the
+ * file, so no reviewer was ever pointed at it. A change touching them could not even be routed —
+ * the nearest kind was `generator`, whose files are the corpus generators.
+ */
+test("the files that run the instance are on the map too", () => {
+  const claimed = new Set(AREAS.flatMap((a) => a.files));
+  const missing = ["Makefile", "Dockerfile", "docker-compose.yml", "docker-compose.remote.yml"].filter(
+    (f) => fs.existsSync(f) && !claimed.has(f)
+  );
+  assert.deepEqual(missing, [], `these bring the instance up and are on nobody's map:\n  ${missing.join("\n  ")}`);
+});
+
 test("an agent asks one question, says why it exists, and may not write", () => {
   assert.ok(AGENTS.length >= 4, "the agent model is thinner than the failures it has to catch");
   for (const a of AGENTS) {
@@ -296,6 +313,18 @@ test("every route names real roles, and none delegates the settling", () => {
    * ⛔ ONE SKILL, SEVERAL ROUTES. Peter: *"why do we need skills and commands?"* — a skill was
    * carrying which-roles-to-spawn, the authoring rules, and a v1 workflow. Only the first is a
    * skill's job, so the eight became routes under one entry point.
+   */
+  /**
+   * ⛔ ONE SKILL, SEVERAL ROUTES. Peter: *"why do we need skills and commands?"* — a skill was
+   * carrying which-roles-to-spawn, the authoring rules, and a v1 workflow. Only the first is a
+   * skill's job, so the eight became routes under one entry point.
+   *
+   * ⛔ THIS WAS BRIEFLY NARROWED TO "one skill may name a role" TO ADMIT A SECOND SKILL, AND THAT
+   * WAS THE WRONG FIX TO THE WRONG PROBLEM. Peter: *"The skill is a local dev skill, not a product
+   * os skill?"* — `skills/` is what `productos init claude` installs into every CONSUMER's
+   * ~/.claude/skills, so a skill about this repo's Makefile and `drizzle/` was being shipped to
+   * people whose repos contain neither. Repo-development guidance belongs in `.claude/skills/`,
+   * which is project-scoped and ships nowhere. The count stands.
    */
   assert.equal(fs.readdirSync("skills").filter((d) => fs.existsSync(`skills/${d}/SKILL.md`)).length, 1,
     "there is more than one skill again — the routes belong under one entry point");

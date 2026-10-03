@@ -1,0 +1,9 @@
+id: "0075"
+said: let's add a simple way to backup the database now so we can keep making changes to the corpus and ensuring we don't break anything. can be manualy, outside of the server - just a way to copy the db down and restore it via the .env variable
+at: 2026-10-02
+kind: operations
+reaches:
+  operate: backup-remote
+  pin: the managed store has its own backup and restore
+waived: {}
+closed: 2026-10-02
