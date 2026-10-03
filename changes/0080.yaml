@@ -1,15 +1,14 @@
 id: "0080"
-said: nothing is updated on localhost:4100? i mean we're adding a feature, don't we need a schema change to support it?
+said: the rendered style for bilrost currently at localhost:7878 doesn't match at all
 at: 2026-10-02
 kind: concept
 reaches:
-  model: Style
-  generate: snapshotStyle
-  surface: hosted style
-  check: no-style
-  instruct: The corpus CARRIES the stylesheets
-  pin: a corpus already in a store takes the style as one document, and loses nothing
+  model: theme
+  generate: themesIn
+  surface: themeAttr
+  check: mock-theme-unchosen
+  instruct: A drawing wears the product's own style
+  pin: a theme scoped to the document root is reachable inside a mock
 waived:
-  derive: carried from 0079 and unchanged — nothing about product truth is computed, inherited or gated by this, and the one derived fact (has the design system moved) is the generator's own question about its own output.
-  check: "`no-style` already fires on a corpus with drawings and no stylesheets, which is the whole of what a check can say here. The thing this feedback actually exposed — a store holding a corpus imported before the document existed — is not a corpus defect and `check` would be the wrong place for it: it reads one corpus, and the question is about every project on an instance. That went to `hosted projects`, which now says which projects carry a style and which do not. The argument against this waiver is that an operator report is a check by another name; it is separate because its subject is the instance rather than the truth."
+  derive: "nothing about product truth is computed, inherited or gated by this. The one thing derived is the set of schemes a stylesheet defines, and that is read off the product's own CSS in appcss.ts — which the map files under generate, beside design.ts, for the same reason: reading a product's vocabulary to produce output is generation, not derivation over the corpus. A screen's state, who may agree to it and what it inherits are all unchanged; only what the drawing is painted with moved. Arguable, and the argument against it would be that \"which scheme is in force\" ought to be a derived property of a corpus rather than a setting — that would be true if a product could hold more than one at once, and nothing has asked for that."
 closed: 2026-10-02

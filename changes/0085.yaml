@@ -1,0 +1,15 @@
+id: "0085"
+said: nothing is updated on localhost:4100? i mean we're adding a feature, don't we need a schema change to support it?
+at: 2026-10-02
+kind: concept
+reaches:
+  model: Style
+  generate: snapshotStyle
+  surface: hosted style
+  check: no-style
+  instruct: The corpus CARRIES the stylesheets
+  pin: a corpus already in a store takes the style as one document, and loses nothing
+waived:
+  derive: carried from 0084 and unchanged — nothing about product truth is computed, inherited or gated by this, and the one derived fact (has the design system moved) is the generator's own question about its own output.
+  check: "`no-style` already fires on a corpus with drawings and no stylesheets, which is the whole of what a check can say here. The thing this feedback actually exposed — a store holding a corpus imported before the document existed — is not a corpus defect and `check` would be the wrong place for it: it reads one corpus, and the question is about every project on an instance. That went to `hosted projects`, which now says which projects carry a style and which do not. The argument against this waiver is that an operator report is a check by another name; it is separate because its subject is the instance rather than the truth."
+closed: 2026-10-02
