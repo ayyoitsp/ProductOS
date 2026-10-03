@@ -20,6 +20,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import fs from "node:fs";
 import path from "node:path";
+import { execFileSync } from "node:child_process";
 
 const { isLocal } = await import(path.resolve("dist/v2/serve.js"));
 
@@ -50,12 +51,39 @@ test("only this machine is this machine", () => {
  * that is the point: the day this serves more than one person, the question is already answerable.
  * fg-0002 holds why it is not answered today.
  */
-test("a remote press records, and the compromise is written down rather than silent", () => {
+test("a remote press records, and the compromise is written down rather than silent", (t) => {
   const src = fs.readFileSync("src/v2/serve.ts", "utf-8");
   assert.doesNotMatch(src, /SAY_WHO/, "the refusal is back, and it blocks the review it protects");
   assert.match(src, /fg-0002/, "the compromise is in the code with nothing recording that it is one");
-  const gaps = fs.readFileSync("productos/framework-gaps.yaml", "utf-8");
-  assert.match(gaps, /fg-0002/, "fg-0002 is cited in the source and does not exist");
+  /**
+   * ⛔ THE GAP LEDGER LIVES IN EXACTLY ONE CHECKOUT, SO IT IS READ FROM THERE.
+   *
+   * This read `productos/framework-gaps.yaml` relative to the cwd, and `/productos/` is gitignored
+   * on purpose — `.gitignore` calls it derived state that anyone who runs `init` gets. A WORKTREE
+   * therefore has no such file, and this failed permanently for every session working the way the
+   * repo tells them to work. Found by a worktree session, after the suite was green in the main
+   * checkout.
+   *
+   * ⛔ RESOLVED TO THE MAIN CHECKOUT RATHER THAN SKIPPED, because unlike everything else under
+   * `productos/` the gap ledger is NOT derived — it is a record addressed to us, and the only copy
+   * is wherever `init` was run. Skipping would have made the assertion disappear for exactly the
+   * sessions most likely to add a forced fit.
+   */
+  const mainCheckout = execFileSync("git", ["worktree", "list"], { encoding: "utf-8" })
+    .trim()
+    .split("\n")[0]
+    .split(" ")[0];
+  const ledger = path.join(mainCheckout, "productos", "framework-gaps.yaml");
+  if (!fs.existsSync(ledger)) {
+    /**
+     * ⛔ UNVERIFIABLE, AND SAID SO — NOT PASSED AND NOT FAILED. Nobody has run `init` in this
+     * checkout, so there is no ledger to assert against; failing would be a statement about the
+     * environment and passing would be a lie about the corpus.
+     */
+    t.skip(`no gap ledger at ${ledger} — run \`productos init\` in the main checkout to make this checkable`);
+    return;
+  }
+  assert.match(fs.readFileSync(ledger, "utf-8"), /fg-0002/, "fg-0002 is cited in the source and does not exist");
 });
 
 /** ⛔ The banner says where it is reachable, or an exposure nobody chose stays invisible. */

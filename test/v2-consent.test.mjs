@@ -235,9 +235,29 @@ test("a corpus's publish permission comes from its own project, not the working 
   const { resolvePathsOrThrow } = await import("../dist/core/paths.js");
   const { readConfig } = await import("../dist/core/config.js");
 
-  // This project allows publishing — its only corpus is the fictional seed.
-  const here = resolvePathsOrThrow(process.cwd());
-  assert.equal(readConfig(here).exchange.publish, "allow", "the seed's own project should allow it");
+  /**
+   * ⛔ A FIXTURE, NOT THIS REPO'S OWN CORPUS, AND THAT WAS NOT A STYLE CHOICE.
+   *
+   * This read `resolvePathsOrThrow(process.cwd())` and asserted "allow", which held only in the
+   * main checkout: `/productos/` is gitignored on purpose — `.gitignore` says it is derived state
+   * that anyone who runs `init` gets — so a WORKTREE has no corpus at all, the config falls back to
+   * its default of "never", and this failed permanently for every session working the way the repo
+   * tells them to work. Reported by a worktree session after the suite was green here.
+   *
+   * ⛔ AND THE FIXTURE IS STRICTLY BETTER THAN FIXING THE PATH. The claim is about the RESOLVER —
+   * that permission comes from the corpus's own project — and tying it to whichever corpus this
+   * checkout happens to contain made it a statement about the checkout as well. A project built
+   * here says only what it means to say.
+   */
+  const allowing = fs.mkdtempSync(path.join(os.tmpdir(), "v2allow-"));
+  fs.mkdirSync(path.join(allowing, "productos"), { recursive: true });
+  fs.writeFileSync(path.join(allowing, "productos", "config.yaml"), "exchange:\n  publish: allow\n");
+  fs.cpSync("v2-seed", path.join(allowing, "v2"), { recursive: true });
+  assert.equal(
+    readConfig(resolvePathsOrThrow(allowing)).exchange.publish,
+    "allow",
+    "a project that says publish: allow did not resolve to allow",
+  );
 
   // A corpus in a directory belonging to no project carries no permission, so it cannot inherit one.
   const orphan = fs.mkdtempSync(path.join(os.tmpdir(), "v2orphan-"));

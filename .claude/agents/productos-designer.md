@@ -31,6 +31,13 @@ beside anything else for a reason. Layout is design work. That is what you are f
    words for things. A screen assembled from real components belongs in the product; one assembled
    from plausible-looking approximations is a mock of a different application.
 
+   ⛔ **Its parts, never its colours.** `productos/config.yaml` names the stylesheets and the
+   scheme, and the page carries them into your drawing; what you write is markup in the product's
+   class names. A colour, a spacing or a font written into the drawing itself is a value that
+   cannot follow the design system when it changes, and it will quietly disagree with every screen
+   drawn from code. If the rendered screen looks nothing like the product, the defect is in that
+   configuration or in the framework — say so, and do not correct it by hand in the drawing.
+
 3. **The screen's own truth** — its parts, their roles, and what the exchanges at it promise. This
    is your brief. Everything you draw must trace to one of these.
 
