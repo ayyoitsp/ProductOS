@@ -238,6 +238,20 @@ test("nothing that starts a container skips the dev guard", () => {
     assert.match(mk, new RegExp(`^${t}:[^\\n]*\\bdev-guard\\b`, "m"), `${t} can start a container without the guard`);
   }
   /**
+   * ⛔ AND THE MANAGED-STORE STACK, WHICH IS THE ONE ACTUALLY ON 4100. The first cut guarded `up`,
+   * `rebuild` and `restart` — the LOCAL stack, which is not even running — and left all three
+   * `-remote` targets open. So the hole the guard exists to close was still open on the only stack
+   * anybody uses, and every test here passed.
+   */
+  for (const t of ["up-remote", "rebuild-remote", "restart-remote"]) {
+    assert.match(mk, new RegExp(`^${t}:[^\\n]*\\bremote-guard\\b`, "m"), `${t} can reach the shared store without the guard`);
+  }
+  const rg = mk.slice(mk.indexOf("\nremote-guard:"));
+  const rbody = rg.slice(0, rg.indexOf("\nup:"));
+  /** ⛔ A worktree may not run it at all — one shared database, so no port makes it safe. */
+  assert.match(rbody, /THIS_WT.*!=.*MAIN_WT|"\$\(THIS_WT\)" != "\$\(MAIN_WT\)"/s, "a worktree can point at the shared store");
+  assert.match(rbody, /MERGED_CHECK/, "nothing checks that the managed instance serves what is merged");
+  /**
    * ⛔ THE GUARD ASKS GIT, NOT THE SCRIPT, AND THIS IS THE ASSERTION THAT WOULD HAVE CAUGHT IT. A
    * worktree on a branch without `scripts/stack.sh` makes `$(shell ...)` empty, compose uses its
    * default, and the default is dev. A throwaway worktree did exactly that and was stopped only by
@@ -247,7 +261,13 @@ test("nothing that starts a container skips the dev guard", () => {
   const body = guard.slice(0, guard.indexOf("\nup:"));
   assert.match(body, /MAIN_WT/, "the guard does not ask git which worktree is the main one");
   assert.match(body, /THIS_WT/);
-  assert.match(body, /merge-base --is-ancestor HEAD origin\/main/, "nothing checks that dev serves what is merged");
-  assert.match(body, /DEV_ANYWAY/, "there is no way to override it on purpose");
+  /**
+   * ⛔ THE MERGE CHECK IS ONE COPY SHARED BY BOTH GUARDS, so this asserts the call here and the
+   * question itself in the define — two stacks both landing on 4100 is two places to forget.
+   */
+  assert.match(body, /MERGED_CHECK/, "dev-guard does not ask whether HEAD is merged");
+  assert.match(mk, /^define MERGED_CHECK$/m, "the merge check is not shared");
+  assert.match(mk, /merge-base --is-ancestor HEAD origin\/main/, "nothing checks that dev serves what is merged");
+  assert.match(mk, /DEV_ANYWAY/, "there is no way to override it on purpose");
   assert.match(mk, /^up: dev-guard migrations-check$/m, "up does not check the numbering before starting");
 });

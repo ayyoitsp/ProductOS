@@ -17,7 +17,7 @@
 
 .PHONY: default help install link build watch dev dev-serve typecheck all clean doctor \
         up down logs rebuild restart nuke psql hosted-doctor seed shell hosted-help \
-        stacks migrations-check dev-guard backup restore up-remote down-remote logs-remote remote-doctor checkpoint projects session
+        stacks migrations-check dev-guard remote-guard backup restore up-remote down-remote logs-remote remote-doctor checkpoint projects session
 
 # The hosted instance, in Docker:
 #   make up         — build and start (ProductOS + Postgres), wait until healthy
@@ -204,6 +204,21 @@ stacks:
 #     and not the mistake.
 #
 # So the first check asks GIT whether this is the main worktree, and never the script.
+# ⛔ ONE COPY, TWO GUARDS. The local stack and the managed-store stack both land on 4100 and both
+# need this question asked; a second copy is a second place to forget to change.
+define MERGED_CHECK
+	git fetch -q origin main 2>/dev/null || true; \
+	if ! git merge-base --is-ancestor HEAD origin/main 2>/dev/null; then \
+		echo "✗ $(1) is dev, and dev serves what is merged."; \
+		echo "  HEAD ($$(git rev-parse --abbrev-ref HEAD)) is not in origin/main."; \
+		echo ""; \
+		echo "  To try this branch, run it from a worktree — it gets its own stack and port:"; \
+		echo "    git worktree add .claude/worktrees/<name> && cd .claude/worktrees/<name> && make up"; \
+		echo "  Or, deliberately: make $(2) DEV_ANYWAY=1"; \
+		exit 1; \
+	fi
+endef
+
 dev-guard:
 	@if [ -n "$(THIS_WT)" ] && [ -n "$(MAIN_WT)" ] && [ "$(THIS_WT)" != "$(MAIN_WT)" ] \
 	   && { [ -z "$(PRODUCTOS_STACK)" ] || [ "$(PRODUCTOS_STACK)" = "productos" ] || [ "$(PORT)" = "4100" ]; }; then \
@@ -215,16 +230,32 @@ dev-guard:
 		exit 1; \
 	fi
 	@if [ "$(PRODUCTOS_STACK)" = "productos" ] && [ -z "$(DEV_ANYWAY)" ]; then \
-		git fetch -q origin main 2>/dev/null || true; \
-		if ! git merge-base --is-ancestor HEAD origin/main 2>/dev/null; then \
-			echo "✗ $(PRODUCTOS_STACK) on $(PORT) is dev, and dev serves what is merged."; \
-			echo "  HEAD ($$(git rev-parse --abbrev-ref HEAD)) is not in origin/main."; \
-			echo ""; \
-			echo "  To try this branch, run it from a worktree — it gets its own stack and port:"; \
-			echo "    git worktree add .claude/worktrees/<name> && cd .claude/worktrees/<name> && make up"; \
-			echo "  Or, deliberately: make up DEV_ANYWAY=1"; \
-			exit 1; \
-		fi; \
+		$(call MERGED_CHECK,$(PRODUCTOS_STACK) on $(PORT),up) \
+	fi
+
+# ⛔ AND THE MANAGED-STORE STACK IS THE ONE ACTUALLY ON 4100.
+#
+# `dev-guard` was put on `up`, `rebuild` and `restart` — the LOCAL stack, which is not running. The
+# instance serving the corpus is `productos-remote`, on 4100, against Neon, and its three targets
+# carried no guard at all. So the hole the guard exists to close was still open on the only stack
+# anybody uses, and `make stacks` would not have shown it either.
+#
+# ⛔ A WORKTREE MAY NOT RUN THIS STACK AT ALL, which is the difference from `dev-guard`. A worktree
+# gets its own Postgres and its own volume, so its own instance costs nothing and writes to nothing;
+# the managed store is one shared database, so a worktree pointed at it would write a branch's
+# schema and a branch's corpus into the store dev is serving. There is no port that makes that safe.
+remote-guard:
+	@if [ -n "$(THIS_WT)" ] && [ -n "$(MAIN_WT)" ] && [ "$(THIS_WT)" != "$(MAIN_WT)" ]; then \
+		echo "✗ this is a worktree, and the managed store is shared."; \
+		echo "  $(WHICH_DB) is the store dev serves. A worktree writing to it would put this"; \
+		echo "  branch's schema and corpus into the instance everyone reviews on, and no port"; \
+		echo "  changes that."; \
+		echo ""; \
+		echo "  Use this worktree's own local stack instead:  make up"; \
+		exit 1; \
+	fi
+	@if [ -z "$(DEV_ANYWAY)" ]; then \
+		$(call MERGED_CHECK,the managed-store instance on $(PORT),up-remote) \
 	fi
 
 up: dev-guard migrations-check
@@ -247,7 +278,7 @@ up: dev-guard migrations-check
 # nothing about this stack is durable, so nothing about it needs backing up.
 # `make backup` and `make restore` are for the compose Postgres only and will not
 # find a container here — the managed service's own snapshots are the answer.
-up-remote:
+up-remote: remote-guard migrations-check
 	@test -f .env || { echo "no .env — cp .env.example .env and set DATABASE_URL"; exit 1; }
 	docker compose -f docker-compose.remote.yml up --build -d
 	@printf "waiting for the instance"
@@ -285,14 +316,14 @@ remote-doctor: build
 # you have stood a second one up beside it with a local Postgres, which looks like it worked.
 #
 # So they exist by name, and the help says which stack each belongs to.
-rebuild-remote: build
+rebuild-remote: remote-guard build
 	@test -f .env || { echo "no .env here — DATABASE_URL lives beside the compose file you started from"; exit 1; }
 	docker compose -f docker-compose.remote.yml up --build -d
 	@sleep 2
 	@docker compose -f docker-compose.remote.yml logs --tail 15 productos
 
 # ⛔ Exercises the migration ledger against the real store: a second boot must skip what it applied.
-restart-remote:
+restart-remote: remote-guard
 	@test -f .env || { echo "no .env here — DATABASE_URL lives beside the compose file you started from"; exit 1; }
 	docker compose -f docker-compose.remote.yml restart productos
 	@sleep 3
