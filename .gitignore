@@ -65,3 +65,16 @@ docs/example/productos/.local/
 
 # Database dumps from `make backup` — a customer roadmap, in one file.
 /backups/
+
+# ⛔ ROOTED, NOT BARE — AND DELIBERATELY BELT-AND-BRACES WITH /backups/ ABOVE.
+#
+# `make backup-remote` writes a full dump of the managed store, and that store holds a real
+# client's product truth. BACKUP_DIR is overridable and `pg_dump > something.sql` in the repo root
+# is one keystroke away, so ignoring only the directory leaves the obvious mistake available. The
+# leading slash is what keeps drizzle/*.sql — the migrations, which MUST be tracked — out of this.
+#
+# Lifted from bilrost-workers/.gitignore, which rooted its own pattern after review found two 95MB
+# dumps untracked in a working tree, one `git add -A` away from being permanent in history.
+/*.sql
+/*.sql.gz
+/*.dump
