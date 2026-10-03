@@ -60,7 +60,24 @@ export function writeSketchHtml(
   states?: WrittenState[]
 ): string | undefined {
   const scopeLeaf = scopeId.split("/").pop()!;
-  for (const file of candidates(root)) {
+  /**
+   * ⛔ THE WHOLE ID FIRST, AND THE LEAF ONLY WHERE NOTHING CARRIES THE WHOLE ID.
+   *
+   * The leaf match is what lets one writer serve both layouts, and on its own it crosses between
+   * them: a repo holding `truth/deal-list.md` (`id: deal-list`) and
+   * `productos/products/cre/deals/deal-list.md` (`id: cre/deals/deal-list`) has two files whose id
+   * ends in the same word, and both drawings landed on whichever came first in the walk. One tree
+   * then held the other tree's screen and the second tree was never written at all — invisible,
+   * because both files still parse and both still render.
+   */
+  const files = candidates(root);
+  const holds = (raw: string, id: string): boolean =>
+    new RegExp(`^id:\\s*["']?${id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}["']?\\s*$`, "m").test(raw);
+  const ordered = [
+    ...files.filter((f) => holds(fs.readFileSync(f, "utf-8"), scopeId)),
+    ...files.filter((f) => !holds(fs.readFileSync(f, "utf-8"), scopeId)),
+  ];
+  for (const file of ordered) {
     const raw = fs.readFileSync(file, "utf-8");
     // The scope this file holds, however its id is spelled in either layout.
     if (!new RegExp(`^id:\\s*["']?[^\\n]*\\b${scopeLeaf}["']?\\s*$`, "m").test(raw)) continue;

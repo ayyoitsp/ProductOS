@@ -26,6 +26,7 @@ import {
 import { readinessHeadline, acceptanceCount, type FeatureReadiness } from "../core/readiness.js";
 import { derivedVerification, DerivedVerification } from "../core/derived-state.js";
 import { buildAreaFlowGraph, renderMermaid } from "../core/flowchart.js";
+import { scopeToShadow } from "../v2/appcss.js";
 import { auditArea, auditFeature, type AuditFinding } from "../core/audit.js";
 
 const SHELL_CSS = `
@@ -127,19 +128,29 @@ header.feature .feature-title-row .feature-status { flex: 0 0 auto; }
 .ai-assist-status.warning { color: var(--yellow); }
 .ai-assist-status.error { color: var(--red); }
 
-/* UX mock — user provided sketch_html, rendered with their own CSS via
-   /_user-style.css. We give it a scoping container so the user can scope
-   styles via .ux-mock { ... } if they want. Minimal defaults: just a
-   bordered card that contains the mock cleanly. */
+/* UX mock — user provided sketch_html, rendered inside a shadow root with the
+   application's own CSS adopted into it. This is the frame around that root;
+   everything inside it is styled by the product, not by ProductOS. */
+/* ⛔ A SHADOW ROOT CONTAINS STYLE AND CONTAINS NOTHING ELSE.
+   position:fixed inside one still resolves against the viewport, so the first drawing of a screen
+   with a modal on it laid that modal across this page — a dialog over the nav, the breadcrumbs and
+   the feature title, dimming the review surface with the product's own scrim. The transform and
+   the containment make this box the containing block, which is what the other tree already does
+   to its mocks. */
 .ux-mock {
   border: 1px solid var(--surface-3);
   border-radius: 12px;
   padding: 18px;
   background: #fff;
   color: #111;
-  overflow: hidden;
+  overflow: auto;
+  transform: translateZ(0);
+  contain: layout paint;
+  position: relative;
 }
 .ux-mock * { box-sizing: border-box; }
+/* ⛔ The app's own full-height rules are about ITS viewport, not about this card. */
+.ux-mock .productos-mock { min-height: 0; }
 
 /* Collapsible surface + behavior blocks ---------------------------------- */
 .surface-details { margin: 16px 0; border: 1px solid var(--surface-3); border-radius: 12px; background: var(--surface); }
@@ -662,6 +673,53 @@ article.prose.context .anchor:hover { color: var(--accent); }
 `;
 
 const APP_JS = `
+/**
+ * ⛔ EACH MOCK IN ITS OWN SHADOW ROOT, WEARING THE APPLICATION'S CSS.
+ *
+ * A drawing is written in the product's real class names, so without the product's real
+ * stylesheet it renders in browser defaults — right markup, no layout, icons showing as the
+ * word that names them. Linking that stylesheet into this document instead is the other
+ * failure: it is a design system plus a Tailwind build, it styles '*', 'body' and ':root',
+ * and it would restyle the review surface into the thing under review.
+ *
+ * The sheet is constructed once and adopted by every root, because inlining it per mock put
+ * one stylesheet into the page as many times as there were drawings.
+ */
+(function mocks() {
+  const tpl = document.getElementById('app-css');
+  const hosts = document.querySelectorAll('.ux-mock');
+  if (!hosts.length) return;
+  // No application CSS configured: unwrap into the page, which is what this did before any
+  // of this existed. A shadow root with nothing in it is strictly worse than no isolation.
+  if (!tpl) {
+    for (const h of hosts) {
+      const t = h.querySelector('template');
+      if (t) h.replaceChildren(t.content.cloneNode(true));
+    }
+    return;
+  }
+  let sheet = null;
+  try {
+    sheet = new CSSStyleSheet();
+    sheet.replaceSync(tpl.innerHTML);
+  } catch (err) { sheet = null; }
+  const scheme = tpl.getAttribute('data-theme');
+  const wrap = tpl.getAttribute('data-mock-class') || 'productos-mock';
+  for (const h of hosts) {
+    const t = h.querySelector('template');
+    if (!t || h.shadowRoot) continue;
+    // The attribute the design system's theme is scoped to, set before the root exists.
+    if (scheme) h.setAttribute('data-theme', scheme);
+    const root = h.attachShadow({ mode: 'open' });
+    if (sheet) root.adoptedStyleSheets = [sheet];
+    else { const st = document.createElement('style'); st.textContent = tpl.innerHTML; root.appendChild(st); }
+    const box = document.createElement('div');
+    box.className = wrap;
+    box.appendChild(t.content.cloneNode(true));
+    root.appendChild(box);
+  }
+})();
+
 async function action(url, body) {
   const r = await fetch(url, {
     method: 'POST',
@@ -702,8 +760,19 @@ document.addEventListener('click', (e) => {
   // Match both decorated ASCII sketch anchors AND plain anchors inside
   // a .ux-mock HTML mock. The AI generating sketch_html shouldn't need to
   // know about a ProductOS-internal class — any <a> in .ux-mock counts.
-  const a = e.target.closest('.sketch-anchor') ||
-            (e.target.closest('.ux-mock') && e.target.closest('a'));
+  // ⛔ composedPath, NOT closest: a mock lives in a shadow root, so by the time
+  //    a click reaches this listener e.target has been retargeted to the host
+  //    and closest('a') finds nothing. The path still holds the real anchor.
+  const path = e.composedPath ? e.composedPath() : [e.target];
+  let a = null, inner = null;
+  for (const n of path) {
+    if (!n || n.nodeType !== 1) continue;
+    if (n.classList && n.classList.contains('sketch-anchor')) { a = n; break; }
+    // An anchor only counts once the walk reaches a mock around it — otherwise
+    // every link in the nav would be treated as a link drawn on a screen.
+    if (n.tagName === 'A' && !inner) inner = n;
+    if (n.classList && n.classList.contains('ux-mock')) { a = inner; break; }
+  }
   if (!a) return;
   const href = a.getAttribute('href') || '';
   if (href.startsWith('#surface-')) {
@@ -885,10 +954,23 @@ document.addEventListener('click', async (e) => {
 `;
 
 export interface ShellOptions {
-  /** When set, an additional <link rel="stylesheet"> is inserted so the
-   *  user's app CSS loads alongside ProductOS's own styles. The server
-   *  serves the file at /_user-style.css when web.stylesheet is configured. */
-  userStylesheetUrl?: string;
+  /**
+   * The application's own CSS — every file `web.stylesheet` and `web.stylesheets` name, read
+   * and concatenated, with its host-level selectors scoped for a shadow root.
+   *
+   * ⛔ THE BYTES, CARRIED INTO EACH MOCK — NOT A <link> ON THIS DOCUMENT. It was a link, to a
+   * route that served `web.stylesheet` alone, and the application this was built against sets
+   * `web.stylesheets` and not `web.stylesheet`: the route answered `404 no web.stylesheet
+   * configured` and every drawing on this tree rendered unstyled for as long as that was true.
+   * Peter: *"the rendered style for bilrost currently at localhost:7878 doesn't match at all"*.
+   * One list, read by one function, is why `appStyleFor` is shared with the Exchange tree
+   * rather than reimplemented here.
+   */
+  appCss?: string;
+  /** Wrapper class the app's CSS expects around its own markup, from `web.mock_container_class`. */
+  mockClass?: string;
+  /** The scheme this project wears, from the style it carries. Stamped on every mock's host. */
+  theme?: string;
 }
 
 export function renderShell(
@@ -897,8 +979,13 @@ export function renderShell(
   sidebar: string,
   options: ShellOptions = {}
 ): string {
-  const userCssLink = options.userStylesheetUrl
-    ? `<link rel="stylesheet" href="${escape(options.userStylesheetUrl)}" />`
+  const appCss = options.appCss
+    ? `<template id="app-css"${options.theme ? ` data-theme="${escape(options.theme)}"` : ""}${
+        options.mockClass ? ` data-mock-class="${escape(options.mockClass)}"` : ""
+      }>${scopeToShadow(options.appCss, options.mockClass || "productos-mock").replace(
+        /<\/(script|template)/gi,
+        "<\\/$1"
+      )}</template>`
     : "";
   return `<!doctype html>
 <html lang="en">
@@ -907,11 +994,11 @@ export function renderShell(
     <title>${escape(title)} — ProductOS</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <style>${SHELL_CSS}</style>
-    ${userCssLink}
   </head>
   <body>
     <aside>${sidebar}</aside>
     <main>${body}</main>
+    ${appCss}
     <script>${APP_JS}</script>
     <script type="module">
       // Lazy-load Mermaid only if a flow chart is on the page.
@@ -3528,16 +3615,22 @@ function renderUndefinedBehaviors(behaviors: Behavior[], today: string = new Dat
  * Render the visual content for ONE UX view. Fidelity chain:
  *   1. sketch_html (AI-generated mock that mirrors the user's component
  *      structure + classes, produced by reading their src/components)
- *      → rendered as HTML with the user's CSS loaded via /_user-style.css
+ *      → moved into a shadow root wearing the application's own CSS
  *   2. sketch → decorated ASCII sketch with pattern-based decoration
  *   3. nothing → empty-state placeholder
+ *
+ * ⛔ THE MARKUP SHIPS IN A <template>, NOT IN THE PAGE. It is written in the application's class
+ * names, and loose in this document the application's stylesheet — adopted a few lines later —
+ * would have to be loaded into this document to reach it, where it restyles the review surface
+ * around it. The script moves each one into its own root; with no application CSS configured it
+ * unwraps them into the page instead, which is what this did before there was any isolation.
  */
 function renderUxMockContent(
   s: Surface,
   decorateAscii: (sketch: string) => string,
   decorateHtml: (html: string) => string = (h) => h
 ): string {
-  if (s.sketch_html) return `<div class="ux-mock">${decorateHtml(s.sketch_html)}</div>`;
+  if (s.sketch_html) return `<div class="ux-mock"><template>${decorateHtml(s.sketch_html)}</template></div>`;
   if (s.sketch) return `<pre class="surface-sketch">${decorateAscii(s.sketch)}</pre>`;
   return `<div class="empty-state">No sketch.</div>`;
 }

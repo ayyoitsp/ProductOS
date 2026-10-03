@@ -2633,6 +2633,78 @@ export type Access = z.infer<typeof Access>;
 
 export const AccessFile = z.object({ access: z.array(Access).default([]) }).strict();
 
+/**
+ * ⛔ WHAT THIS PRODUCT LOOKS LIKE, CARRIED BY THE CORPUS ITSELF.
+ *
+ * Peter: *"we've now moved to a docker hosted/neon database backed copy. let's update the design
+ * there."*
+ *
+ * A drawing is written in the application's own class names, so it needs the application's own
+ * stylesheet or it is a drawing of some other product. That stylesheet used to be read off disk at
+ * render time, from paths in `productos/config.yaml` — which worked exactly as long as a repo was
+ * sitting beside the corpus. An instance materializes a project into a temp directory with no repo
+ * above it, so every hosted drawing rendered unstyled: forty-four mocks in bilrost's class names
+ * and not one byte of bilrost's CSS. Measured, not inferred.
+ *
+ * ⛔ IT IS A SNAPSHOT, AND THAT IS THE POINT. `web.stylesheets` says where the bytes are TAKEN
+ * FROM; this is where they LIVE. Same relationship a drawing has to the component it was drawn
+ * from — generated, re-taken when the design system moves, and never hand-written. A corpus that
+ * needed a checkout beside it to be looked at could only be reviewed by somebody holding the
+ * repository, which is the thing hosting it exists to end.
+ *
+ * ⛔ AND IT IS WHY LOCAL AND HOSTED CANNOT DIVERGE. One source at render time, for both. A renderer
+ * that read disk where it could and the corpus where it could not would be two products that look
+ * the same until somebody publishes one.
+ */
+export const Style = z
+  .object({
+    /**
+     * The scheme this project wears — chosen with `v2 style --wear`, carried across every re-take.
+     * or point at the file where the application declares it.
+     */
+    theme: z.string().optional(),
+    /** Class the app's CSS expects around its own markup, from `web.mock_container_class`. */
+    mock_class: z.string().optional(),
+    /**
+     * ⛔ WHAT WAS READ, AND WHAT IT SAID WHEN IT WAS READ — so a snapshot can be caught being old.
+     *
+     * Peter: *"we should have something that keeps the design libraries in sync."* A copy with no
+     * fingerprint of its source cannot be: it looks identical the day it is taken and the year
+     * after, and the only symptom of a stale one is that every drawing is of a product that has
+     * moved on. The digest is what lets `check` say the design system has changed, wherever the
+     * repository is still reachable — and say nothing at all where it is not, which is the hosted
+     * case and is not a defect.
+     */
+    sources: z
+      .array(z.object({ path: z.string(), sha: z.string(), bytes: z.number() }).strict())
+      .default([]),
+    /** When it was taken. A drawing carries the commit it came from; this carries the day. */
+    taken_at: z.string().optional(),
+    /** Faces carried into the bytes, so "the type is the product's type" is checkable. */
+    faces: z.array(z.string()).default([]),
+    /**
+     * ⛔ NAMED IN THE STYLESHEETS AND NOT CARRIED. A face that could not travel falls back silently
+     * and every drawing is then set in some other product's type; a snapshot that did not record
+     * the gap would look complete.
+     */
+    unreachable: z.array(z.string()).default([]),
+    /** The schemes the stylesheets define, so "none was chosen" is distinguishable from "none exists". */
+    offers: z.array(z.string()).default([]),
+    /**
+     * The bytes — every named stylesheet concatenated in cascade order, with its faces inlined.
+     *
+     * ⛔ NOT YET SCOPED FOR A SHADOW ROOT. Scoping depends on the surface doing the rendering and
+     * on the container class it wraps a mock in; baking it in here would make the snapshot right
+     * for one renderer and quietly wrong for the next. The faces ARE inlined, because those are
+     * files that will not exist wherever this is read.
+     */
+    css: z.string().default(""),
+  })
+  .strict();
+export type Style = z.infer<typeof Style>;
+
+export const StyleFile = z.object({ style: Style }).strict();
+
 export const ScopeFile = Scope;
 export const RulesFile = z.object({ rules: z.array(Rule).default([]) }).strict();
 export const CharterFile = Charter;

@@ -1,0 +1,14 @@
+id: "0080"
+said: the rendered style for bilrost currently at localhost:7878 doesn't match at all
+at: 2026-10-02
+kind: concept
+reaches:
+  model: theme
+  generate: themesIn
+  surface: themeAttr
+  check: mock-theme-unchosen
+  instruct: A drawing wears the product's own style
+  pin: a theme scoped to the document root is reachable inside a mock
+waived:
+  derive: "nothing about product truth is computed, inherited or gated by this. The one thing derived is the set of schemes a stylesheet defines, and that is read off the product's own CSS in appcss.ts — which the map files under generate, beside design.ts, for the same reason: reading a product's vocabulary to produce output is generation, not derivation over the corpus. A screen's state, who may agree to it and what it inherits are all unchanged; only what the drawing is painted with moved. Arguable, and the argument against it would be that \"which scheme is in force\" ought to be a derived property of a corpus rather than a setting — that would be true if a product could hold more than one at once, and nothing has asked for that."
+closed: 2026-10-02

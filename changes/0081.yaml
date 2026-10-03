@@ -1,0 +1,26 @@
+id: "0081"
+said: NEXT_PUBLIC_DS_THEME is the only live theme, we always use that - use this theme.  how would productOS remember this?
+at: 2026-10-02
+kind: concept
+reaches:
+  model: WHICH THEME A PROJECT WEARS IS NOT CONFIGURED HERE
+  generate: wearTheme
+  surface: styleAt
+  check: mock-theme-unchosen
+  instruct: Which scheme a project wears is NOT in here
+  pin: a project chooses which scheme it wears, and the choice outlives the bytes
+waived:
+  derive: >-
+    the same waiver 0080 carries, and for the same reason: nothing about product truth is computed,
+    inherited or gated. Only what the drawing is painted with changes.
+
+    ⛔ AND THE LAYERS HERE WERE REPOINTED, which is worth saying because the record does not have a
+    field for it (fg: a change record cannot say its answer was superseded). This was closed against
+    a `<file>#<KEY>` pointer at the application's own env file — resolveTheme,
+    mock-theme-undeclared, "Prefer the pointer to the name". 0086 removed every one of them, because
+    the pointer put one customer's variable name into this model. The request still stands and is
+    still satisfied: ProductOS remembers the theme in the corpus, per project, chosen with
+    `v2 style --wear`. `said:` is untouched — his words do not move when our answer does — and the
+    layers name what satisfies it now, because a record pointing at symbols nobody can find is a
+    record that has silently stopped being checkable.
+closed: 2026-10-02

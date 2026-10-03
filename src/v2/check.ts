@@ -29,7 +29,7 @@ import { stampFor, staleReason, coveredBy } from "./stamp.js";
 import { resolveRef } from "./ref.js";
 import { descendants } from "./settle.js";
 import { ruleHomes, reachOf } from "./grid.js";
-import { appStyleFor } from "./appcss.js";
+import { appStyleFor, styleDrift } from "./appcss.js";
 import { readLog } from "./log.js";
 import { landingsFor, finishesFor } from "./connects.js";
 import fs from "node:fs";
@@ -163,7 +163,8 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
    * this from the codebase" is only honest where the corpus names a codebase to read; asking every
    * caller to pass that in is how one of them forgets and the finding fires on a corpus with no app.
    */
-  const opts = { hasAppStyles: appStyleFor(root).from.length > 0 };
+  const app = appStyleFor(root);
+  const opts = { hasAppStyles: Boolean(corpus.style?.css) || app.from.length > 0 };
   const findings: Finding[] = [];
   const add = (f: Finding) => findings.push(f);
 
@@ -193,6 +194,113 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
     });
     return { corpus, findings };
   }
+
+  /**
+   * ⛔ DOES THIS CORPUS CARRY WHAT THE PRODUCT LOOKS LIKE, AND IS IT STILL TRUE?
+   *
+   * Peter: *"we should copy the appropriate css files in — were we referencing the repo before? we
+   * should have something that keeps the design libraries in sync."* We were referencing it, so a
+   * corpus read anywhere but beside a checkout rendered every drawing unstyled. Copied in, the new
+   * failure is the opposite one — a copy that is no longer what the design system says — and a copy
+   * with nothing watching it looks identical the day it was taken and the year after.
+   */
+  /**
+   * ⛔ ONLY WHERE THERE IS SOMETHING TO STYLE. A corpus whose screens are ASCII, or which has no
+   * screens yet, needs no stylesheet and is not missing one — and a note that fires on every corpus
+   * in existence is a note people learn to scroll past, which is how the real one gets scrolled
+   * past with it. `sketch_html` is the exact condition: markup in an application's own class names,
+   * which is worth nothing without the values behind them.
+   */
+  const drawnInAppClasses = corpus.scopes.some((s) => s.scope.views.some((v) => v.sketch_html));
+  /**
+   * ⛔ AND ONLY WHERE SOMEBODY COULD ACT ON IT. "Every finding says what to do. A finding you cannot
+   * act on is a complaint." The snapshot can only be taken where the repository is, so telling a
+   * reader on an instance that their corpus carries no style is telling them about work they cannot
+   * do — while the one person who could has already seen it, locally, before importing.
+   */
+  const couldCarry = app.from.length > 0 || app.missing.length > 0;
+  if (!corpus.style?.css) {
+    if (drawnInAppClasses && couldCarry)
+      add({
+        severity: "note",
+        kind: "no-style",
+        where: "style.yaml",
+        what: "This corpus does not carry the application's stylesheets, and its screens are drawn in that application's class names — so every one of them renders in browser defaults.",
+        fix: "Run `productos v2 style --into <corpus>` where the repository is. Carried in, the drawings look like the product anywhere the corpus is read; referenced, they only look right beside a checkout.",
+      });
+  } else {
+    const drift = styleDrift(root, corpus.style);
+    const moved = drift.known ? [...drift.moved, ...drift.gone, ...drift.added] : [];
+    if (moved.length)
+      add({
+        severity: "note",
+        kind: "style-has-moved",
+        where: "style.yaml",
+        what: `The design system has changed since this was taken${
+          corpus.style.taken_at ? ` on ${corpus.style.taken_at}` : ""
+        } — ${moved.slice(0, 3).join(", ")}${moved.length > 3 ? `, and ${moved.length - 3} more` : ""}.`,
+        fix: "Take it again. Every drawing is currently of a product that has moved on, and nothing about the page says so.",
+      });
+    for (const u of corpus.style.unreachable.slice(0, 1))
+      add({
+        severity: "note",
+        kind: "mock-face-unreachable",
+        where: "style.yaml",
+        what: `${corpus.style.unreachable.length} thing${
+          corpus.style.unreachable.length === 1 ? "" : "s"
+        } the stylesheets load could not be carried — ${u}${corpus.style.unreachable.length > 1 ? ", …" : ""}.`,
+        fix: "A face that cannot travel falls back silently, so the type on every drawing is some other type. Name the built stylesheet rather than the source one where its URLs are relative to a build directory.",
+      });
+  }
+
+  /**
+   * ⛔ A MOCK THAT CANNOT WEAR THE PRODUCT'S STYLE FAILS BY LOOKING FINE.
+   *
+   * Every defect below renders: the drawing is there, it is laid out, somebody reviews it and
+   * agrees to what it shows. It is simply not the product. Peter, after weeks of exactly that:
+   * *"the rendered style for bilrost currently at localhost:7878 doesn't match at all"*. Nothing
+   * downstream can catch it, because the thing a reviewer compares against is the thing on screen.
+   */
+  for (const m of app.missing) {
+    add({
+      severity: "note",
+      kind: "mock-stylesheet-missing",
+      where: "productos/config.yaml",
+      what: `web.stylesheets names ${m}, and there is no such file.`,
+      fix: "Fix the path, or drop it. A name that resolves to nothing renders identically to a mock nobody styled.",
+    });
+  }
+  /**
+   * ⛔ THE SCHEME IS A CHOICE SOMEBODY MAKES PER PROJECT, so what a check says about it is read off
+   * the snapshot the corpus carries — not off a repository's config, which is where it used to live
+   * and which the person doing the reviewing cannot reach.
+   *
+   * Peter: *"NEXT_PUBLIC_DS_THEME is a bilrost specific thing, doesn't belong in productos config.
+   * we should be able to choose themes per project."*
+   */
+  if (corpus.style && !corpus.style.theme && corpus.style.offers.length) {
+    add({
+      severity: "note",
+      kind: "mock-theme-unchosen",
+      where: "style.yaml",
+      what: `This product's design system offers ${corpus.style.offers
+        .map((t) => `"${t}"`)
+        .join(", ")} and this project wears none of them, so every drawing renders in the fallback colours.`,
+      fix: "Choose one — `productos v2 style --wear <scheme>`, or `productos hosted style <project> --wear <scheme>` on an instance. Unthemed is legitimate where the product itself ships unthemed, but it is a decision and nothing else can make it.",
+    });
+  }
+  if (corpus.style?.theme && !corpus.style.offers.includes(corpus.style.theme)) {
+    add({
+      severity: "refuse",
+      kind: "mock-theme-unknown",
+      where: "style.yaml",
+      what: `This project wears "${corpus.style.theme}", and the stylesheets it carries define ${
+        corpus.style.offers.length ? corpus.style.offers.map((t) => `"${t}"`).join(", ") : "no schemes at all"
+      }.`,
+      fix: "A scheme the stylesheets do not define applies nothing, so every drawing renders in the fallback and looks exactly as deliberate as a chosen one. Take the style again, and choose from what it offers.",
+    });
+  }
+
 
   const { inherited, constrained, contested, displaced, reach, awaiting } = resolveRules(corpus);
 

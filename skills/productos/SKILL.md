@@ -50,7 +50,7 @@ You are the **orchestrator**, and you are the session — not a subagent. That i
 
 **⛔ You keep these yourself:**
 
-- running `productos v2 generate`, because a screen a component renders is DRAWN and never designed
+- running `productos v2 generate`, because a screen a component renders is DRAWN and never designed — it sweeps BOTH corpus layouts and copies the design libraries in first, so a drawing looks like the product wherever the corpus is read rather than only beside a checkout
 - running `productos v2 check` before anybody is asked to look
 - putting the survey in front of a person before thirty scopers start against a partition that is wrong
 - every act of judgement — nothing here is validated by having been written
@@ -313,6 +313,72 @@ productos v2 check --at <corpus>
 It refuses a corpus that cannot be handed over, and it is the difference between a review and an
 apology. ⛔ The `v2` is load-bearing — the bare verb is the v1 command and cannot read an Exchange
 corpus at all.
+
+## ⛔ A drawing wears the product's own style, and nothing says so when it does not
+
+A screen is drawn in the application's real class names, so it needs the application's real CSS or
+it is a drawing of some other product. Four lines of `web:` in `productos/config.yaml` decide that,
+and every one of them fails by **looking fine** — the screen still renders, laid out and legible and
+reviewable, in whatever the fallbacks are.
+
+⛔ **The corpus CARRIES the stylesheets; it does not reference them.**
+
+```bash
+productos v2 style --into <corpus>     # copy the design libraries in — where the repository is
+productos v2 style --check --into <corpus>   # has the design system moved since?
+```
+
+`web.stylesheets` says where the bytes are **taken from**; `style.yaml` is where they **live**. Same
+relationship a drawing has to the component it was drawn from, and generated for the same reason: a
+corpus read anywhere but beside a checkout has no stylesheets to read. An instance materializes a
+project into a temp directory with no repository above it — that is not an edge case, it is the
+hosted product, and before this it rendered every drawing in browser defaults while the identical
+line of code kept working locally.
+
+So the snapshot is taken **where the repository is**, by `v2 style` or by `v2 generate`, which runs
+it first. Everything downstream — a hosted instance, a packet, a published page — reads the corpus.
+
+⛔ **A copy with nothing watching it is a copy that goes quietly wrong.** The snapshot carries a
+digest of every file it read, so `--check` and `v2 check` can say the design system has moved; take
+it again when they do. Where there is no repository to compare against they say **so**, rather than
+reporting it current — asserting something nothing checked, on the one surface nobody can go and
+look at, is the failure this whole section exists to stop.
+
+```yaml
+web:
+  design_system: frontend/design-system   # the parts the product ships, so a drawn screen uses them
+  stylesheets:                            # ⛔ EVERY file, in cascade order — one of them is not enough
+    - frontend/design-system/src/tokens.css
+    - frontend/design-system/src/themes.css
+    - frontend/.next/static/chunks/*.css  # a build output is content-hashed; glob it
+```
+
+⛔ **Which scheme a project wears is NOT in here.** It is a choice, made per project, by whoever is
+looking at it:
+
+```bash
+productos v2 style --wear bilrost --into <corpus>        # locally
+productos hosted style <project> --wear bilrost          # on an instance, no checkout needed
+productos v2 style --bare --into <corpus>                # a product that ships unthemed
+```
+
+Peter: *"NEXT_PUBLIC_DS_THEME is a bilrost specific thing, doesn't belong in productos config. we
+should be able to choose themes per project."* It was a config field, and briefly a pointer at one
+application's env var — which put that customer's variable name into this model and put the decision
+somewhere the reviewer cannot reach. The snapshot records what the design system **offers**; a
+person picks one, and the pick survives every re-take of the bytes.
+
+⛔ **Never pick for them.** A system offering four schemes is a product offering four, and choosing
+by position or by rule count is a guess wearing a decision's clothes — the drawings would look
+authoritative and nobody could tell. Ask.
+
+⛔ **Naming one stylesheet is worse than naming none.** The right class names with none of the
+values they resolve to renders as a badly written mock rather than as a missing file, and nobody
+reading it can tell which.
+
+`productos v2 check` reports a path that resolves to nothing, a scheme the stylesheets do not
+define, and schemes defined with none chosen. Run it **before** reading a drawing as evidence of
+anything: the only thing a reviewer compares a drawing against is the drawing.
 
 ## The reviewers
 

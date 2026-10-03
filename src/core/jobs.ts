@@ -178,7 +178,34 @@ export const AREAS: Area[] = [
      * test that makes the map trustworthy only walks `src/v2` — so the file that implements the map
      * was the one place it did not cover, which a reviewer caught immediately.
      */
-    files: ["src/v2/schema.ts", "src/v2/load.ts", "src/v2/ref.ts", "src/core/jobs.ts", "src/core/change.ts"],
+    files: [
+      "src/v2/schema.ts",
+      "src/v2/load.ts",
+      "src/v2/ref.ts",
+      "src/core/jobs.ts",
+      "src/core/change.ts",
+      /**
+       * ⛔ WHAT A PROJECT CAN SAY ABOUT ITSELF IS PART OF THE MODEL, AND IT WAS ON NOBODY'S MAP.
+       *
+       * A design system with four schemes and nothing in the model naming which one the product
+       * ships is a field that does not exist — so every drawing rendered in the fallback colours,
+       * for weeks, with no layer anywhere able to ask the question. Peter: *"the rendered style for
+       * bilrost currently at localhost:7878 doesn't match at all"*. The same argument the surface
+       * list already makes for `src/ui/server.ts`: a file missing from the map is a place no
+       * reviewer will look.
+       */
+      "src/core/config.ts",
+      /**
+       * ⛔ AND THE STORE'S OWN SHAPE, WHICH WAS ON NOBODY'S MAP EITHER.
+       *
+       * Peter, on the hosted instance: *"i mean we're adding a feature, don't we need a schema
+       * change to support it?"* The answer is in this file — a corpus document is a ROW, so a new
+       * kind of document needs no DDL — and nothing on the map pointed at it, so the question had
+       * no home to be answered from. A whole subsystem absent from the map is a subsystem every
+       * reviewer asking "is this concept present everywhere" will silently skip.
+       */
+      "src/v2/store/schema.ts",
+    ],
     needs: ["read-files", "run-commands", "search-files"],
   },
   {
@@ -206,6 +233,15 @@ export const AREAS: Area[] = [
       "src/v2/spoken.ts",
       "src/v2/connects.ts",
       "src/v2/steers.ts",
+      /**
+       * ⛔ AUTHORIZATION IS A GATE, AND THESE ARE WHERE IT IS DECIDED. `storeFor(db, who).project(id)`
+       * is the only route to a document and it authorizes first; `identity.ts` is what a principal
+       * is at all. They belong beside `gateFor` for the same reason `adapters/claude.ts` does — the
+       * guarantee is enforced here rather than hoped for, and a reviewer asked whether a rule holds
+       * everywhere needs to be sent to the file that holds it.
+       */
+      "src/v2/store/access.ts",
+      "src/v2/store/identity.ts",
       /** ⛔ Reading the record of what was corrected is a derivation over it, and writes nothing. */
       "src/core/learn.ts",
       "src/adapters/claude.ts",
@@ -239,6 +275,17 @@ export const AREAS: Area[] = [
       "src/core/agents-doc.ts",
       /** ⛔ The design system index: a generator source like `draw`, reading a product's own vocabulary. */
       "src/v2/design.ts",
+      /**
+       * ⛔ MOVING A CORPUS AND MOVING IT FORWARD ARE BOTH GENERATION. `corpus.ts` turns a directory
+       * into rows and back byte-identically; `doc-migrations.ts` rewrites stored documents when the
+       * corpus schema moves, which is the one thing in the system that edits truth without a person
+       * — it leaves a record for exactly that reason, and a layer nobody reviews is the worst place
+       * for that to live. `migrate.ts` and `boot.ts` move the store's own shape forward.
+       */
+      "src/v2/store/corpus.ts",
+      "src/v2/store/doc-migrations.ts",
+      "src/v2/store/migrate.ts",
+      "src/v2/store/boot.ts",
     ],
     needs: ["read-files", "run-commands", "search-files", "write-corpus"],
   },
@@ -286,6 +333,26 @@ export const AREAS: Area[] = [
        * printing "localhost". A file missing from the map is a place no reviewer will look.
        */
       "src/ui/server.ts",
+      /**
+       * ⛔ AND THE TREE THAT SERVER LANDS ON. `/` is this renderer; `/v2` is page.ts. One of them
+       * was on the map and the other was not, and the one that was not spent months rendering
+       * every drawing unstyled — it linked a route that served `web.stylesheet` while the project
+       * in front of it set `web.stylesheets`. A reviewer asked whether a concept is present
+       * everywhere needs both trees on the list, or "everywhere" means "the half somebody added".
+       */
+      "src/ui/renderer.ts",
+      /**
+       * ⛔ THE HOSTED SURFACES, WHICH ARE NOW THE PRODUCT RATHER THAN A PREVIEW OF ONE. `serve.ts`
+       * said it first — "`productos serve` is not a preview of a hosted thing, it IS the thing" —
+       * and the instance that serves a project, the MCP endpoint a session reaches it through, and
+       * the operator CLI that is the only way a corpus gets in were on no area at all. Three
+       * surfaces a reviewer would never be sent to.
+       */
+      "src/v2/store/server.ts",
+      "src/v2/store/instance.ts",
+      "src/v2/store/mcp.ts",
+      "src/v2/store/choose.ts",
+      "src/cli/commands/hosted.ts",
       "src/v2/packet.ts",
       "src/v2/notes.ts",
       "src/v2/watch.ts",
@@ -1061,6 +1128,12 @@ export const COMMANDS: Verb[] = [
   { name: "hosted projects", does: "Every project in the store, with its owner and how much it holds", owns: "surface", who: "operator", track: "exchange" },
   { name: "hosted project", does: "Create a project, owned by an account that is made if it is new", owns: "surface", who: "operator", track: "exchange" },
   { name: "hosted token", does: "Issue, list and revoke what something automated holds to reach a project", owns: "surface", who: "operator", track: "exchange" },
+  /**
+   * ⛔ ITS OWN VERB RATHER THAN A FLAG ON `import`, BECAUSE IMPORT CLOBBERS. That one puts every
+   * file in a directory, so delivering a style with it would overwrite everything authored on the
+   * instance since the corpus arrived — silently, since the result still parses and still renders.
+   */
+  { name: "hosted style", does: "Push the application's design libraries into a project, touching no other document", owns: "generate", who: "operator", track: "exchange" },
   { name: "hosted import", does: "Put a corpus directory into a project on an instance", owns: "generate", who: "operator", track: "exchange" },
   { name: "hosted export", does: "Write a project's corpus out as a directory, byte for byte", owns: "generate", who: "operator", track: "exchange" },
   { name: "hosted session", does: "A browser session for one account, which is what makes a press provable", owns: "surface", who: "operator", track: "exchange" },
@@ -1086,6 +1159,12 @@ export const COMMANDS: Verb[] = [
 
   // generating. ⛔ If it can be generated, generate it — these are why hand-authoring is a defect.
   { name: "v2 generate", does: "Regenerate everything generable: screens, their states, and the graph", owns: "generate", who: "claude", track: "exchange" },
+  /**
+   * ⛔ THE ONE GENERATOR THAT NEEDS THE REPOSITORY, WHICH IS WHY IT IS ITS OWN VERB. Every other
+   * step reads the corpus; this reads the application's design libraries and copies them in, so a
+   * drawing looks like the product on an instance that has no checkout anywhere near it.
+   */
+  { name: "v2 style", does: "Copy the application's design libraries into the corpus, and say when they have moved since", owns: "generate", who: "claude", track: "exchange" },
   { name: "v2 draw", does: "Generate one screen from the codebase", owns: "generate", who: "claude", track: "exchange" },
   { name: "v2 propose", does: "Generate a screen from a view's own parts, where no code renders it", owns: "generate", who: "claude", track: "exchange" },
   { name: "v2 connect", does: "Work out what each control leads to, from what the corpus says", owns: "derive", who: "claude", track: "exchange" },
@@ -1285,7 +1364,7 @@ export const SHIMS: Shim[] = [
       { role: "hand-authored", why: "whether anything was typed that a generator should have produced — on a run this large, nobody would notice" },
     ],
     keeps: [
-      "running `productos v2 generate`, because a screen a component renders is DRAWN and never designed",
+      "running `productos v2 generate`, because a screen a component renders is DRAWN and never designed — it sweeps BOTH corpus layouts and copies the design libraries in first, so a drawing looks like the product wherever the corpus is read rather than only beside a checkout",
       "running `productos v2 check` before anybody is asked to look",
       "putting the survey in front of a person before thirty scopers start against a partition that is wrong",
       "every act of judgement — nothing here is validated by having been written",

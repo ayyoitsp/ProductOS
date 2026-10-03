@@ -245,6 +245,25 @@ export const WebConfig = z.object({
    * to appear most often across the app, which cannot tell a button from a thing shaped like one.
    */
   design_system: z.string().optional(),
+  /**
+   * ⛔ WHICH THEME A PROJECT WEARS IS NOT CONFIGURED HERE, AND THE ATTEMPT IS WORTH RECORDING.
+   *
+   * This field existed, and then it accepted `<file>#<KEY>` so a corpus could point at the
+   * application's own env var rather than copy its value — which answered the question asked and
+   * was the wrong shape. Peter: *"NEXT_PUBLIC_DS_THEME is a bilrost specific thing, doesn't belong
+   * in productos config. we should be able to choose themes per project. NEXT_PUBLIC_DS_THEME as a
+   * parameter shouldn't even exist necessarily."*
+   *
+   * He is right twice. One customer's variable name had become part of ProductOS's model, so every
+   * other product inherits a field shaped like somebody else's build; and a theme is a choice made
+   * PER PROJECT — changeable by whoever is reviewing, on an instance, without a checkout — which a
+   * repo config file can never be.
+   *
+   * So the choice lives in the corpus, on `Style`, set by `productos v2 style --wear <scheme>` and
+   * carried forward across every re-snapshot. What this file still decides is where the bytes are
+   * READ FROM: `stylesheets`, `design_system`, `mock_container_class`. Those are facts about a
+   * repository, which is what config is for.
+   */
 });
 export type WebConfig = z.infer<typeof WebConfig>;
 

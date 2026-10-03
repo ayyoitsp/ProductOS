@@ -44,6 +44,10 @@ const SURFACES = [
   // ⛔ A reader is a reader wherever it lives. `moved.ts` is what reads a drawing's provenance, and
   // leaving it out would report both fields as read by nothing.
   "moved.ts",
+  // ⛔ And `appcss.ts` is what turns a `Style` into what a page is handed — `styleOf` is the only
+  //    thing that reads `mock_class`, because the container class is a fact about rendering a mock
+  //    and nothing else ever needs it.
+  "appcss.ts",
 ]
   .map((f) => fs.readFileSync(path.join("src/v2", f), "utf-8"))
   .concat(fs.readFileSync("src/cli/commands/v2.ts", "utf-8"))
