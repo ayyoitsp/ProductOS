@@ -184,7 +184,21 @@ const stack = (dir) => {
 };
 
 test("the main checkout is dev, and a worktree can never be", () => {
-  const here = stack(".");
+  /**
+   * ⛔ THE MAIN CHECKOUT BY NAME, NEVER `.` — THIS TEST HAS TO PASS FROM A WORKTREE.
+   *
+   * It asked `stack(".")` and asserted dev, which holds only when `npm test` is run from the main
+   * checkout. From a worktree `.` correctly resolves to that worktree's own stack, so the suite
+   * failed on the exact assertion the change was right about — and a worktree is where this
+   * project tells people to work, so it failed for everyone doing the sanctioned thing.
+   *
+   * `git worktree list` puts the main working tree first; everything after it is a worktree.
+   */
+  const checkouts = execFileSync("git", ["worktree", "list"], { encoding: "utf-8" })
+    .trim()
+    .split("\n")
+    .map((l) => l.split(" ")[0]);
+  const here = stack(checkouts[0]);
   assert.equal(here.PRODUCTOS_STACK, "productos");
   assert.equal(here.PORT, "4100");
   assert.equal(here.PG_PORT, "5432");
@@ -193,11 +207,7 @@ test("the main checkout is dev, and a worktree can never be", () => {
    * ⛔ EVERY WORKTREE GIT KNOWS ABOUT, not a fixture — the thing being asserted is that no real
    * checkout on this machine resolves to dev.
    */
-  const worktrees = execFileSync("git", ["worktree", "list"], { encoding: "utf-8" })
-    .trim()
-    .split("\n")
-    .slice(1)
-    .map((l) => l.split(" ")[0]);
+  const worktrees = checkouts.slice(1);
   const ports = new Set([here.PORT]);
   for (const w of worktrees) {
     const s = stack(w);
