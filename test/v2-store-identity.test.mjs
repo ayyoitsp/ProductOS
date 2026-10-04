@@ -170,7 +170,7 @@ test("a token stores only a hash, so reading the table hands over nothing usable
   assert.ok(!row.hash.includes(token));
 });
 
-test("an unknown scope name in a token grants nothing", async () => {
+test("an unknown scope name in a STORE-ISSUED token grants nothing", async () => {
   const { db } = await freshDb();
   const account = await accountFor(db, "ada@example.com");
   const { token } = await issueToken(db, { account, actor: "x", scopes: ["accept", "author"] });
