@@ -127,7 +127,17 @@ export function initCommand(): Command {
         for (const st of live) console.log(pc.dim(`   ${st.id} — ${st.says}`));
         console.log(pc.dim("   productos v2 steer list — what they are and where each was learned"));
       }
-      console.log(pc.green("✓"), `MCP server registered in ${install.mcpRegisteredAt}`);
+      /**
+       * ⛔ THE NAME AND THE COMMAND, NOT JUST THE FILE IT WENT IN.
+       *
+       * This said "MCP server registered in <files>" while registering `command: "productos"` — the
+       * bare name, which resolves through one global `npm link` slot. So every session on the
+       * machine ran whichever checkout linked last, and the line that would have shown it said
+       * nothing about what it had written. From a worktree the name is now per-checkout, and
+       * somebody reading `claude mcp list` has to be able to recognise their own.
+       */
+      console.log(pc.green("✓"), `MCP server registered as ${pc.bold(install.mcpName)} in ${install.mcpRegisteredAt}`);
+      console.log(pc.dim(`   it runs: ${install.mcpRuns}`));
 
       // 2. Scaffold productos/ + productos/products/
       //

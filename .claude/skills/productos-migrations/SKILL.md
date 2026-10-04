@@ -1,6 +1,6 @@
 ---
 name: productos-migrations
-description: How to add, review and resolve conflicts in ProductOS schema migrations, and which Docker stack a checkout may bring up. Triggers on "add a migration", "change the store schema", "migration conflict", "two migrations numbered the same", "this store was migrated by newer code", "relation already exists on boot", "renumber a migration", and any work touching src/v2/store/schema.ts or drizzle/.
+description: How to add, review and resolve conflicts in ProductOS schema migrations, which Docker stack a checkout may bring up, and which checkout a session's CLI and MCP server actually run. Triggers on "add a migration", "change the store schema", "migration conflict", "two migrations numbered the same", "this store was migrated by newer code", "relation already exists on boot", "renumber a migration", "which productos am I running", "my MCP server is watching the wrong corpus", "a skill disappeared", and any work touching src/v2/store/schema.ts, drizzle/ or src/adapters/claude.ts.
 version: 0.1.0
 ---
 
@@ -153,6 +153,28 @@ make stacks     # every checkout, its project, its two ports, whether it is up
 - ⛔ **Never `make up-remote`, `rebuild-remote` or `restart-remote` from a worktree.** The managed
   store is one shared database; a branch's migrations there land in the instance everyone reviews
   on. It refuses, and the local stack is the answer.
+
+## Which ProductOS a session is actually running
+
+```bash
+productos init claude --update   # ⛔ registers THIS checkout, under a name derived from it
+claude mcp list                  # productos (the main checkout) · productos-<worktree> (yours)
+```
+
+- **`npm link` is one global slot.** `productos` on PATH is whichever checkout linked last, so never
+  conclude anything from `productos --version` or from a bare `productos` in a config file about
+  which code ran. `make doctor` prints what the slot currently points at.
+- **The MCP server is registered per checkout**, as an absolute path to the checkout `init` was run
+  from, under `productos` for the main checkout and `productos-<worktree>` for a worktree. Two
+  checkouts coexist in `~/.claude.json` instead of overwriting each other, and the same slug
+  `make stacks` uses — so an MCP name and a Docker project name always point at the same tree.
+- **`init claude --update` from a worktree installs its skills and removes none.** `~/.claude/skills/`
+  is shared by every session on this machine, and a skill absent from a worktree's `skills/` is
+  absent from that BRANCH, not from the product. Only the main checkout prunes. ⛔ So after deleting
+  or renaming a skill, the removal reaches other sessions when it reaches main — not before.
+- ⛔ **`.mcp.json` is not committed here.** It names one machine's checkout absolutely. Run
+  `productos init claude --update` and you have it; if you see it in `git status`, something
+  un-ignored it.
 
 ## ⛔ Before anything that could lose a corpus
 
