@@ -427,9 +427,15 @@ export function checkoutSlug(root: string = checkoutRoot()): string {
  * session on the machine — including the main checkout's — at the worktree's code. Last install won,
  * with nothing on screen saying it had happened. Two keys cannot overwrite each other.
  *
- * The main checkout keeps the plain `productos`, for the same reason it keeps the plain stack name:
- * it is the one everybody means when they say it, and renaming it would orphan every registration
- * already on disk.
+ * The main checkout keeps the plain `productos` because it is the one everybody means when they say
+ * it, and renaming it would orphan every registration already on disk.
+ *
+ * ⛔ IT NO LONGER KEEPS THE PLAIN STACK NAME, WHICH WAS THE ORIGINAL REASON GIVEN HERE. `4100`
+ * became staging, so every checkout including the main one takes `productos-dev-<slug>` and nothing
+ * derived may be `productos`. The prefixes are deliberately allowed to differ now — `productos-dev-`
+ * means a Docker stack with a Postgres and two ports, and an MCP registration is neither. What may
+ * never differ is which TREE the two name, and a test pins the slug rather than the whole string
+ * for exactly that reason.
  */
 export function mcpServerName(root: string = checkoutRoot()): string {
   const slug = checkoutSlug(root);

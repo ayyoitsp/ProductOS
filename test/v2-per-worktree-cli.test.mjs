@@ -188,10 +188,28 @@ test("the main checkout keeps the plain name; a worktree gets its own, the same 
    * checkout's Docker project and its ports from the worktree directory. A second convention for
    * the same question means `make stacks` and `claude mcp list` disagree about which checkout you
    * are looking at, and the person reading both has no way to tell which one lied.
+   *
+   * ⛔ THE SLUG, NOT THE WHOLE NAME — AND THIS ASSERTION EARNED ITS KEEP BY FAILING. It compared the
+   * full strings, which held while a worktree's Docker project was `productos-<slug>`. `4100` then
+   * became staging, so every checkout — the main one included — got `productos-dev-<slug>` and no
+   * derived answer may be `productos` any more. This failed on `productos-review-loop-2` vs
+   * `productos-dev-review-loop-2`, which is exactly the divergence it exists to catch.
+   *
+   * The prefixes are allowed to differ: `productos-dev-` says "a Docker stack with a Postgres and
+   * two ports", and an MCP registration is neither. What may never differ is WHICH TREE each one
+   * names, so that is what is pinned.
    */
   const stack = execFileSync(path.resolve("scripts/stack.sh"), [wt, "stack"], { encoding: "utf-8" }).trim();
-  assert.equal(mcpServerName(wt), stack, `the MCP name and the stack name disagree: ${mcpServerName(wt)} vs ${stack}`);
-  assert.equal(execFileSync(path.resolve("scripts/stack.sh"), [repo, "stack"], { encoding: "utf-8" }).trim(), "productos");
+  const stackSlug = stack.replace(/^productos-dev-/, "");
+  assert.equal(
+    checkoutSlug(wt),
+    stackSlug,
+    `the MCP name and the stack name point at different trees: ${mcpServerName(wt)} vs ${stack}`,
+  );
+  /** ⛔ And the main checkout agrees too — it has a dev stack now, so there is a slug to compare. */
+  const mainStack = execFileSync(path.resolve("scripts/stack.sh"), [repo, "stack"], { encoding: "utf-8" }).trim();
+  assert.equal(mainStack, "productos-dev-main", "the main checkout no longer has a dev stack of its own");
+  assert.equal(mcpServerName(repo), "productos", "the main checkout's MCP registration should stay the plain name");
 
   /**
    * ⛔ NO GIT, OR GIT REFUSING, FALLS ON THE MAIN SIDE. An npm install of ProductOS is the product
