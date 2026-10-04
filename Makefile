@@ -61,6 +61,19 @@ STAGING_PORT  := $(shell test -x ./scripts/stack.sh && ./scripts/stack.sh . stag
 PG_PORT         := $(shell test -x ./scripts/stack.sh && ./scripts/stack.sh . pg)
 export PRODUCTOS_STACK PG_PORT
 
+# ⛔ THE DEV STACK'S COMPOSE INVOCATION, WHICH SIX TARGETS USED AND NOTHING DEFINED.
+#
+# `up`, `down`, `logs`, `rebuild`, `restart` and the no-cache build all call `$(DEV)`. Make expands
+# an undefined variable to the empty string rather than complaining, so `$(DEV) up -d` ran as
+# `up -d` and every one of them died on `make: up: No such file or directory` — on the dev stack,
+# which is now the only sanctioned way to work from a checkout that is not staging.
+#
+# The invocation is the one `docker-compose.dev.yml` documents in its own header: the base file
+# carries both services, the healthcheck, the per-stack project name and the derived ports, and the
+# overlay changes only the build target. ⛔ Both `-f` flags, always — the overlay alone has no
+# postgres and no ports, so compose would bring up something that looks like the stack and is not.
+DEV := docker compose -f docker-compose.yml -f docker-compose.dev.yml
+
 # ⛔ LOCAL BY DEFAULT, STAGING ONLY WHEN ASKED — AND THAT IS A CORRECTION TO THE ⛔ ABOVE.
 #
 # This was `$(if $(ENV_DB),$(ENV_DB),…)`, so any `.env` naming a managed store silently pointed
@@ -546,7 +559,13 @@ backup:
 migrations-check: build
 	@node scripts/migrations-check.mjs
 
-PG_CLIENT ?= postgres:18-alpine
+# ⛔ THE SERVER AND THE CLIENT THAT DUMPS INTO IT ARE ONE NUMBER. They were two — `postgres:16-alpine`
+#    in docker-compose.yml and 18 here — so a dump taken from the managed store could not be
+#    restored into a dev stack at all: pg_dump 18 writes `SET transaction_timeout`, which 16 rejects.
+#    `PG_IMAGE` is exported so compose reads the same value; override it and both move together.
+PG_IMAGE  ?= postgres:18-alpine
+PG_CLIENT ?= $(PG_IMAGE)
+export PG_IMAGE
 
 backup-remote:
 	@test -f .env || { echo "no .env here — DATABASE_URL lives beside the compose file you started from"; exit 1; }
