@@ -65,3 +65,10 @@ docs/example/productos/.local/
 
 # Database dumps from `make backup` — a customer roadmap, in one file.
 /backups/
+
+# `productos init claude` registers the MCP server here, and for a dev install the command is an
+# ABSOLUTE path to the checkout it was run from — so this checkout's copy names one machine's
+# worktree. Committing it hands everybody else a path that does not exist, and from a worktree it
+# would quietly re-aim the main checkout's sessions. Derived state, like /productos/ above: run
+# `productos init claude --update` and you have it.
+/.mcp.json
