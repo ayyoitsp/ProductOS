@@ -157,7 +157,7 @@ test("carrying needs the relay scope", async () => {
   }
 });
 
-test("an unknown scope name in a token grants nothing", () => {
+test("an unknown scope name in a CONFIGURED token grants nothing", () => {
   const env = { PRODUCTOS_TOKENS: JSON.stringify([{ token: "t", actor: "x", scopes: ["accept", "author"] }]) };
   const p = principalOf({ authorization: "Bearer t" }, undefined, env);
   assert.deepEqual(p.scopes, ["author"], "a scope nobody defined was carried into a permission check");
