@@ -16,7 +16,7 @@
  * would be the MCP boundary broken by a longer path.
  */
 import { resolveRules, type Corpus } from "./load.js";
-import { scopeToShadow } from "./appcss.js";
+import { scopeToShadow, liftFaces } from "./appcss.js";
 import { promisesOf, screensOf, type ProtoPromise, type ProtoScreen } from "./prototype.js";
 import { inferConnections, landingsFor, finishesFor, stateShowing } from "./connects.js";
 import { inEffect, declined as declinedSteers } from "./steers.js";
@@ -1107,13 +1107,23 @@ function renderScreens(scope: Scope, ctx: Ctx, scopeId: string, opts: PageOption
  */
 function appCssOnce(opts: PageOptions): string {
   if (!opts.appCss) return "";
-  const css = scopeToShadow(opts.appCss, opts.mockClass || "productos-mock");
+  /**
+   * ⛔ THE FACES GO IN THE DOCUMENT, EVERYTHING ELSE GOES IN THE SHADOW ROOTS. `@font-face` is
+   * document-scoped: inside an adopted stylesheet it is ignored silently, so every drawing rendered
+   * in a fallback while carrying the real woff2 bytes. See `liftFaces`.
+   */
+  const { faces, rest } = liftFaces(opts.appCss);
+  const css = scopeToShadow(rest, opts.mockClass || "productos-mock");
+  const safe = (s: string): string => s.replace(/<\/(script|template)/gi, "<\\/$1");
   /**
    * The scheme rides on the template rather than being baked into each host, because hosts are made
    * in four places — two of them in script, after a tile is opened — and a theme that three of them
    * remembered to set is a page where some drawings are the product and some are not.
    */
-  return `<template id="app-css"${themeAttr(opts)}>${css.replace(/<\/(script|template)/gi, "<\\/$1")}</template>`;
+  return (
+    (faces ? `<style id="app-faces">${safe(faces)}</style>` : "") +
+    `<template id="app-css"${themeAttr(opts)}>${safe(css)}</template>`
+  );
 }
 
 /** `data-theme="…"`, or nothing at all where the product ships no scheme. */

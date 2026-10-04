@@ -26,7 +26,7 @@ import {
 import { readinessHeadline, acceptanceCount, type FeatureReadiness } from "../core/readiness.js";
 import { derivedVerification, DerivedVerification } from "../core/derived-state.js";
 import { buildAreaFlowGraph, renderMermaid } from "../core/flowchart.js";
-import { scopeToShadow } from "../v2/appcss.js";
+import { scopeToShadow, liftFaces } from "../v2/appcss.js";
 import { auditArea, auditFeature, type AuditFinding } from "../core/audit.js";
 
 const SHELL_CSS = `
@@ -979,13 +979,18 @@ export function renderShell(
   sidebar: string,
   options: ShellOptions = {}
 ): string {
-  const appCss = options.appCss
-    ? `<template id="app-css"${options.theme ? ` data-theme="${escape(options.theme)}"` : ""}${
+  /**
+   * ⛔ THE FACES AT DOCUMENT LEVEL, THE REST IN THE SHADOW ROOTS. `@font-face` is document-scoped
+   * and is ignored inside an adopted stylesheet — silently, so a mock renders in a fallback while
+   * carrying every byte of the real woff2. See `liftFaces`.
+   */
+  const lifted = options.appCss ? liftFaces(options.appCss) : null;
+  const safe = (s: string): string => s.replace(/<\/(script|template)/gi, "<\\/$1");
+  const appCss = lifted
+    ? (lifted.faces ? `<style id="app-faces">${safe(lifted.faces)}</style>` : "") +
+      `<template id="app-css"${options.theme ? ` data-theme="${escape(options.theme)}"` : ""}${
         options.mockClass ? ` data-mock-class="${escape(options.mockClass)}"` : ""
-      }>${scopeToShadow(options.appCss, options.mockClass || "productos-mock").replace(
-        /<\/(script|template)/gi,
-        "<\\/$1"
-      )}</template>`
+      }>${safe(scopeToShadow(lifted.rest, options.mockClass || "productos-mock"))}</template>`
     : "";
   return `<!doctype html>
 <html lang="en">

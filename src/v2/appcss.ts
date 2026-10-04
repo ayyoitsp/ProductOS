@@ -482,6 +482,62 @@ export function asOptions(s: Style | undefined): { appCss?: string; mockClass?: 
 }
 
 /**
+ * ⛔ A FACE CANNOT BE REGISTERED FROM INSIDE A SHADOW ROOT, AND NOTHING SAYS SO.
+ *
+ * `@font-face` is document-scoped. Put it in a stylesheet a shadow root adopts and it is simply
+ * ignored — no error, no warning, and `document.fonts.size` stays at 0. The mock then renders in
+ * the fallback the family list names, which for a serif display face is Georgia: close enough to
+ * look like a deliberate choice, and wrong.
+ *
+ * This was measured rather than reasoned about, and it had been shipped: 28 `@font-face` rules
+ * carried into the page with every byte of their woff2 inlined, zero faces loaded, every title set
+ * in Georgia. The bytes were there the whole time; only their declaration was in the one place a
+ * declaration does not count.
+ *
+ * So the faces are lifted out and emitted at document level, and everything else stays scoped.
+ *
+ * ⛔ AND THE VARIABLE BINDINGS COME WITH THEM. next/font declares the family on a generated class —
+ * `.bona_nova_58b71085-module__Rh9Lnq__variable { --font-bona-nova: "Bona Nova", … }` — which the
+ * application puts on `<html>`. A mock host does not carry that class, so the variable is unset and
+ * `--font-display: var(--font-bona-nova, Georgia)` falls through to Georgia even once the face
+ * loads. A rule that is one class and declares nothing but `--font-*` IS that binding, so it is
+ * also applied to the host, which is a mock's equivalent of `<html>`.
+ */
+export function liftFaces(css: string): { faces: string; rest: string } {
+  const faces: string[] = [];
+  const rest = css.replace(/@font-face\s*\{[^}]*\}/g, (block) => {
+    faces.push(block);
+    return "";
+  });
+  /**
+   * ⛔ NARROW ON PURPOSE: ONE CLASS, AND EVERY DECLARATION A `--font-` CUSTOM PROPERTY. Anything
+   * looser starts hoisting a product's own classes onto the host, which restyles a mock by a rule
+   * that was never about it. The failure mode of being too narrow is a font variable that stays
+   * unset, which is what was already happening.
+   */
+  /**
+   * ⛔ A LOOKBEHIND, BECAUSE THE RULE BEFORE IT EATS THE DELIMITER.
+   *
+   * This asked for `(^|[}\s])` before the class and the binding was never found — next/font emits
+   * the two rules back to back: `.x__className{font-family:Bona Nova,…}.x__variable{--font-bona-
+   * nova:…}`. The first matches this same pattern and CONSUMES its own closing brace, so the scan
+   * resumes with the second rule's dot at position zero of what is left, with no delimiter in front
+   * of it and no `^` either. Matching the rule in isolation worked, which is what made it look like
+   * the body test was wrong.
+   *
+   * Same shape as the comment-stripping bug in `scopeToShadow`: a scan that consumes what the next
+   * match needs. Zero-width here, so adjacent rules cannot hide each other.
+   */
+  for (const m of css.matchAll(/(?<=^|[};\s])(\.[-\w]+)\s*\{([^}]*)\}/g)) {
+    const body = m[2].trim();
+    if (!body) continue;
+    const decls = body.split(";").map((d) => d.trim()).filter(Boolean);
+    if (decls.every((d) => /^--font-[-\w]*\s*:/.test(d))) faces.push(`:host, :root { ${decls.join("; ")} }`);
+  }
+  return { faces: faces.join("\n"), rest };
+}
+
+/**
  * The style a corpus directory carries, without loading the whole corpus.
  *
  * ⛔ FOR A SURFACE THAT IS NOT HOLDING A `Corpus`. The v1 tree renders through a different reader
