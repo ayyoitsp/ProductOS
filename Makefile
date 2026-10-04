@@ -17,7 +17,7 @@
 
 .PHONY: default help install link build watch dev dev-serve typecheck all clean doctor \
         up down logs rebuild restart nuke psql hosted-doctor seed shell hosted-help \
-        stacks migrations-check dev-guard remote-guard backup restore up-remote down-remote logs-remote remote-doctor checkpoint projects session
+        stacks migrations-check dev-guard staging-guard backup restore up-remote down-remote logs-remote remote-doctor checkpoint projects session
 
 # The hosted instance, in Docker:
 #   make up         — build and start (ProductOS + Postgres), wait until healthy
@@ -54,10 +54,30 @@ MAIN_WT := $(shell git worktree list 2>/dev/null | head -1 | awk '{ print $$1 }'
 THIS_WT := $(shell git rev-parse --show-toplevel 2>/dev/null)
 
 PRODUCTOS_STACK := $(shell test -x ./scripts/stack.sh && ./scripts/stack.sh . stack)
+# ⛔ STAGING'S IDENTITY COMES FROM THE SCRIPT TOO, NOT FROM A SECOND `4100` TYPED HERE. Both guards
+#    below compare against it, and two copies of a port number is two things to change.
+STAGING_STACK := $(shell test -x ./scripts/stack.sh && ./scripts/stack.sh . staging-stack)
+STAGING_PORT  := $(shell test -x ./scripts/stack.sh && ./scripts/stack.sh . staging-port)
 PG_PORT         := $(shell test -x ./scripts/stack.sh && ./scripts/stack.sh . pg)
 export PRODUCTOS_STACK PG_PORT
 
-DB_URL ?= $(if $(ENV_DB),$(ENV_DB),postgres://productos:productos@localhost:$(PG_PORT)/productos)
+# ⛔ LOCAL BY DEFAULT, STAGING ONLY WHEN ASKED — AND THAT IS A CORRECTION TO THE ⛔ ABOVE.
+#
+# This was `$(if $(ENV_DB),$(ENV_DB),…)`, so any `.env` naming a managed store silently pointed
+# every host-side command at it. The comment at the top of this file defends that, and the
+# invariant it defends is the right one: `seed` must write where the app reads, or the same corpus
+# is both present and missing depending which command you ask.
+#
+# What changed is the other half. `docker-compose.yml` no longer lets `.env` win either — the local
+# stack is now pinned to its own Postgres, because `make up` was starting a local database that
+# nothing used and pointing the app at the SHARED store, from any worktree. So the way to keep
+# `seed` writing where the app reads is for both to mean LOCAL, not for both to mean whatever
+# `.env` happens to say.
+#
+# Staging is addressed on purpose: `make hosted-doctor STAGING=1`. Through a variable rather than
+# `DB_URL=<url>` on the command line, because a connection string in argv lands in `ps` and in
+# make's own echo of the line.
+DB_URL ?= $(if $(STAGING),$(ENV_DB),postgres://productos:productos@localhost:$(PG_PORT)/productos)
 
 # ⛔ `?=`, SO `make up PORT=4200` STILL WINS. The line above assigns it; a command-line variable
 # overrides a makefile assignment, which is the one escape hatch worth having here.
@@ -70,6 +90,15 @@ export PORT
 # a function call, so `s#...#...#` truncated this line and make died on an
 # unterminated $(shell.
 WHICH_DB = $(shell printf '%s' '$(DB_URL)' | sed -E 's|//[^@]*@|//***@|')
+
+# ⛔ `STAGING=1` WITH NOTHING IN `.env` MUST NOT RESOLVE TO THE EMPTY STRING. A host-side command
+#    handed an empty DATABASE_URL fails somewhere deep in a driver, and the message names a socket
+#    rather than the missing file.
+ifdef STAGING
+ifeq ($(strip $(ENV_DB)),)
+$(error STAGING=1 but .env names no DATABASE_URL — cp .env.example .env and set it)
+endif
+endif
 
 default: dev-serve
 
@@ -209,57 +238,69 @@ stacks:
 define MERGED_CHECK
 	git fetch -q origin main 2>/dev/null || true; \
 	if ! git merge-base --is-ancestor HEAD origin/main 2>/dev/null; then \
-		echo "✗ $(1) is dev, and dev serves what is merged."; \
+		echo "✗ $(1) is staging, and staging serves what is merged."; \
 		echo "  HEAD ($$(git rev-parse --abbrev-ref HEAD)) is not in origin/main."; \
 		echo ""; \
-		echo "  To try this branch, run it from a worktree — it gets its own stack and port:"; \
-		echo "    git worktree add .claude/worktrees/<name> && cd .claude/worktrees/<name> && make up"; \
+		echo "  To try this branch, bring up its own dev stack — every checkout has one:"; \
+		echo "    make up        # this checkout, on its own port, against its own Postgres"; \
 		echo "  Or, deliberately: make $(2) DEV_ANYWAY=1"; \
 		exit 1; \
 	fi
 endef
 
 dev-guard:
-	@if [ -n "$(THIS_WT)" ] && [ -n "$(MAIN_WT)" ] && [ "$(THIS_WT)" != "$(MAIN_WT)" ] \
-	   && { [ -z "$(PRODUCTOS_STACK)" ] || [ "$(PRODUCTOS_STACK)" = "productos" ] || [ "$(PORT)" = "4100" ]; }; then \
-		echo "✗ this is a worktree and it resolved to dev's stack:"; \
-		echo "    stack '$(PRODUCTOS_STACK)' · port '$(PORT)'"; \
-		echo "  scripts/stack.sh is missing or silent here, so compose would have used its"; \
-		echo "  default — which is productos on 4100, the instance that serves what is merged."; \
+	@if [ -z "$(PRODUCTOS_STACK)" ] || [ "$(PRODUCTOS_STACK)" = "$(STAGING_STACK)" ] || [ "$(PORT)" = "$(STAGING_PORT)" ]; then \
+		echo "✗ this checkout resolved to staging's identity:"; \
+		echo "    stack '$(PRODUCTOS_STACK)' · port '$(PORT)'   (staging is $(STAGING_STACK) on $(STAGING_PORT))"; \
+		echo "  scripts/stack.sh is missing or silent here, so compose would have used a default —"; \
+		echo "  and the default was staging, which is how this went wrong twice."; \
 		echo "  Rebase this worktree onto a branch that has scripts/stack.sh."; \
 		exit 1; \
 	fi
-	@if [ "$(PRODUCTOS_STACK)" = "productos" ] && [ -z "$(DEV_ANYWAY)" ]; then \
-		$(call MERGED_CHECK,$(PRODUCTOS_STACK) on $(PORT),up) \
-	fi
+
+# ⛔ AND NO MERGED CHECK HERE ANY MORE, WHICH IS THE POINT OF A DEV STACK.
+#
+# `dev-guard` used to refuse an unmerged HEAD, because the stack it guarded WAS the instance on
+# 4100. Now that 4100 is staging and every checkout has its own stack on its own port, a dev stack
+# running an unmerged branch is the entire reason it exists. Refusing that would have made the
+# thing being built useless. The merged question moved to `staging-guard`, where it is about a
+# deployed instance rather than about a checkout.
+
 
 # ⛔ AND THE MANAGED-STORE STACK IS THE ONE ACTUALLY ON 4100.
 #
-# `dev-guard` was put on `up`, `rebuild` and `restart` — the LOCAL stack, which is not running. The
-# instance serving the corpus is `productos-remote`, on 4100, against Neon, and its three targets
-# carried no guard at all. So the hole the guard exists to close was still open on the only stack
-# anybody uses, and `make stacks` would not have shown it either.
+# Peter: *"Treat 4100 as staging for now"*. Two things this refuses, and the second is the half
+# that was missing the first time — `dev-guard` was put only on the local stack, which was not even
+# running, leaving all three `-remote` targets open on the one instance anybody uses.
 #
-# ⛔ A WORKTREE MAY NOT RUN THIS STACK AT ALL, which is the difference from `dev-guard`. A worktree
-# gets its own Postgres and its own volume, so its own instance costs nothing and writes to nothing;
-# the managed store is one shared database, so a worktree pointed at it would write a branch's
-# schema and a branch's corpus into the store dev is serving. There is no port that makes that safe.
-remote-guard:
+# ⛔ A WORKTREE MAY NOT RUN THIS STACK AT ALL, which is the difference from `dev-guard`. A dev stack
+# gets its own Postgres and its own volume, so its own instance costs nothing and writes to
+# nothing; staging is one shared database, so a worktree pointed at it would write a branch's
+# schema and a branch's corpus into the instance everyone reviews on. There is no port that makes
+# that safe.
+#
+# ⛔ AND THIS TARGET WENT MISSING ONCE, SILENTLY. A careless edit removed the recipe while three
+# targets still named it as a prerequisite, and make answers "Nothing to be done for
+# `staging-guard'" — which looks like a guard that passed. If you are reading this because you are
+# about to restructure the guards: `make staging-guard` from an unmerged branch must REFUSE, and
+# that is the check, not the presence of the word in the file.
+staging-guard:
+	@test -n "$(STAGING_STACK)" || { echo "✗ staging's identity is unknown — scripts/stack.sh is missing here"; exit 1; }
 	@if [ -n "$(THIS_WT)" ] && [ -n "$(MAIN_WT)" ] && [ "$(THIS_WT)" != "$(MAIN_WT)" ]; then \
-		echo "✗ this is a worktree, and the managed store is shared."; \
-		echo "  $(WHICH_DB) is the store dev serves. A worktree writing to it would put this"; \
-		echo "  branch's schema and corpus into the instance everyone reviews on, and no port"; \
-		echo "  changes that."; \
+		echo "✗ this is a worktree, and staging is one shared database."; \
+		echo "  $(STAGING_STACK) on $(STAGING_PORT) serves the store everyone reviews on. A worktree"; \
+		echo "  writing to it would put this branch's schema and corpus there, and no port changes that."; \
 		echo ""; \
-		echo "  Use this worktree's own local stack instead:  make up"; \
+		echo "  Use this worktree's own dev stack instead:  make up"; \
 		exit 1; \
 	fi
 	@if [ -z "$(DEV_ANYWAY)" ]; then \
-		$(call MERGED_CHECK,the managed-store instance on $(PORT),up-remote) \
+		$(call MERGED_CHECK,$(STAGING_STACK) on $(STAGING_PORT),up-remote) \
 	fi
 
 up: dev-guard migrations-check
-	docker compose up --build -d
+	@if [ -n "$(REBUILD)" ]; then $(DEV) build --no-cache productos; fi
+	$(DEV) up -d
 	@printf "waiting for the instance"
 	@for i in $$(seq 1 60); do \
 		if curl -fsS -m 2 http://localhost:$(PORT)/health >/dev/null 2>&1; then \
@@ -278,7 +319,7 @@ up: dev-guard migrations-check
 # nothing about this stack is durable, so nothing about it needs backing up.
 # `make backup` and `make restore` are for the compose Postgres only and will not
 # find a container here — the managed service's own snapshots are the answer.
-up-remote: remote-guard migrations-check
+up-remote: staging-guard migrations-check
 	@test -f .env || { echo "no .env — cp .env.example .env and set DATABASE_URL"; exit 1; }
 	docker compose -f docker-compose.remote.yml up --build -d
 	@printf "waiting for the instance"
@@ -316,14 +357,14 @@ remote-doctor: build
 # you have stood a second one up beside it with a local Postgres, which looks like it worked.
 #
 # So they exist by name, and the help says which stack each belongs to.
-rebuild-remote: remote-guard build
+rebuild-remote: staging-guard build
 	@test -f .env || { echo "no .env here — DATABASE_URL lives beside the compose file you started from"; exit 1; }
 	docker compose -f docker-compose.remote.yml up --build -d
 	@sleep 2
 	@docker compose -f docker-compose.remote.yml logs --tail 15 productos
 
 # ⛔ Exercises the migration ledger against the real store: a second boot must skip what it applied.
-restart-remote: remote-guard
+restart-remote: staging-guard
 	@test -f .env || { echo "no .env here — DATABASE_URL lives beside the compose file you started from"; exit 1; }
 	docker compose -f docker-compose.remote.yml restart productos
 	@sleep 3
@@ -336,7 +377,7 @@ logs-remote:
 	docker compose -f docker-compose.remote.yml logs -f productos
 
 down:
-	docker compose down
+	$(DEV) down
 
 # ⛔ Named so nobody reaches for it by accident. `down` keeps the data; this does not.
 # ⛔ THIS STACK ONLY, WHICH IS WHAT A PROJECT PER WORKTREE BOUGHT. The volume is named after the
@@ -349,18 +390,21 @@ nuke:
 	@echo "✓ $(PRODUCTOS_STACK) and its volume are gone"
 
 logs:
-	docker compose logs -f productos
+	$(DEV) logs -f productos
 
 # Rebuild the image from current source. ⛔ Use this after editing src/ — the image
 # carries a BUILT dist/, so a source change is invisible until the image is rebuilt.
-rebuild: dev-guard build
-	docker compose up --build -d productos
+# ⛔ KEPT, AND NARROWED TO WHAT IT IS NOW FOR: a dependency change. A source change needs nothing
+# — the watcher has already picked it up. `make up REBUILD=1` is the same thing on the way up.
+rebuild: dev-guard
+	$(DEV) build --no-cache productos
+	$(DEV) up -d productos
 	@sleep 2
 	@docker compose logs --tail 15 productos
 
 # ⛔ Exercises the migration ledger: a second boot must skip what it already applied.
 restart: dev-guard
-	docker compose restart productos
+	$(DEV) restart productos
 	@sleep 3
 	@docker compose logs --tail 10 productos
 

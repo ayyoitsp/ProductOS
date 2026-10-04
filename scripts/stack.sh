@@ -29,18 +29,34 @@
 # printed "?" for the checkouts you actually want to compare would be worth nothing.
 set -eu
 
+# ⛔ STAGING'S NAMES LIVE HERE TOO, SO "IS THIS STAGING?" HAS ONE ANSWER.
+#
+# `dev-guard` and `staging-guard` both need to know what staging is called and which port it holds,
+# and a second copy of `4100` in the Makefile is a second thing to change. Printed on request
+# rather than computed into the dev answer — nothing below can return these.
+STAGING_STACK=productos-staging
+STAGING_PORT=4100
+
 dir=${1:-.}
 top=$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null) || top=""
 main=$(git -C "$dir" worktree list 2>/dev/null | head -1 | awk '{ print $1 }')
 
-if [ -z "$top" ] || [ -z "$main" ] || [ "$top" = "$main" ]; then
-  stack=productos
-  port=4100
-  pg=5432
-  name=""
+# ⛔ EVERY CHECKOUT GETS A DEV STACK, AND THE MAIN ONE IS CALLED `main` RATHER THAN NOTHING.
+#
+# The main checkout used to take the plain `productos` / 4100 / 5432. Now that 4100 is staging it
+# takes `productos-dev-main` on a derived port like everybody else, and the arithmetic below is the
+# only thing that ever answers — so there is no branch of this script that can return 4100.
+if [ -z "$top" ] || [ -z "$main" ]; then
+  # Not a git checkout at all: give it the main checkout's answer rather than staging's.
+  name=main
+  slug=main
 else
-  name=$(basename "$top")
+  if [ "$top" = "$main" ]; then name=main; else name=$(basename "$top"); fi
   slug=$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g' | cut -c1-40)
+fi
+
+{
+  : "$slug"
   # ⛔ A STABLE HASH, AND cksum IS IN POSIX. Ports land in 4200-4288 and 5500-5588, so dev's 4100
   #    and 5432 are unreachable from here by construction rather than by a check somebody runs.
   #
@@ -53,15 +69,17 @@ else
   #    port is reported by Docker as "port is already allocated" — which names the port and not the
   #    reason. A gap costs nothing; the same hour of confusion twice costs more.
   n=$(printf '%s' "$slug" | cksum | awk '{ print $1 % 89 }')
-  stack="productos-$slug"
+  stack="productos-dev-$slug"
   port=$((4200 + n))
   pg=$((5500 + n))
-fi
+}
 
 case ${2:-} in
+  staging-stack) echo "$STAGING_STACK" ;;
+  staging-port)  echo "$STAGING_PORT" ;;
   stack) echo "$stack" ;;
   port)  echo "$port" ;;
   pg)    echo "$pg" ;;
   "")    echo "PRODUCTOS_STACK=$stack PORT=$port PG_PORT=$pg WORKTREE=$name" ;;
-  *)     echo "unknown field: $2 (stack | port | pg)" >&2; exit 2 ;;
+  *)     echo "unknown field: $2 (stack | port | pg | staging-stack | staging-port)" >&2; exit 2 ;;
 esac

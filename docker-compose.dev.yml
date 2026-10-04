@@ -1,0 +1,61 @@
+# The dev stack: your checkout, running in a container, without a build in the loop.
+#
+#   make up        — brings this up (postgres + the watcher), per worktree, on its own ports
+#   make up-built  — the same stack with the production image, to check what actually ships
+#
+# ⛔ AN OVERLAY, NOT A WHOLE FILE. `docker-compose.yml` already carries the two services, the
+# healthcheck, the per-stack project name and the derived ports; restating any of that here would
+# be two places to change the day a port moves. Compose merges this on top:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+#
+# ⛔ AND IT IS AN OVERLAY RATHER THAN A `profile` BECAUSE THE TARGET CHANGES. `build.target` is not
+# something a profile can switch, and the whole point here is building `dev` instead of `runtime`.
+services:
+  productos:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      # ⛔ The dependency-only stage. It contains no source — see the Dockerfile.
+      target: dev
+
+    # ⛔ ONE IMAGE FOR EVERY STACK ON THE MACHINE, AND THE UNPREFIXED TAG IS HOW.
+    #
+    # Compose would otherwise name the image after the project, so each worktree would build and
+    # store its own copy of an identical 435 MB of node_modules. Safe precisely because the image
+    # is a pure function of the lockfile: it holds no stack's code, so there is nothing in it for
+    # two stacks to disagree about. Lifted from bilrost-workers, where one image serves four
+    # stacks for the same reason.
+    image: productos-dev:local
+
+    # ⛔ THE SOURCE IS MOUNTED, WHICH IS THE ENTIRE POINT. A code change is picked up by `tsx
+    # watch` in about a second. Before this, every change to src/ meant `docker compose up
+    # --build`, which meant shipping a 1.2 GB context and re-running tsc inside the image.
+    #
+    # Read-only: the container has no business writing your checkout, and a container that cannot
+    # is one that cannot surprise you.
+    volumes:
+      - ./src:/app/src:ro
+      - ./tsconfig.json:/app/tsconfig.json:ro
+      # ⛔ Mounted, so a migration you generate on the host is live without a rebuild. The runtime
+      #    image copies these in instead; here they are yours as you write them.
+      - ./drizzle:/app/drizzle:ro
+      # ⛔ AN ANONYMOUS VOLUME OVER node_modules, OR THE HOST'S COPY SHADOWS THE IMAGE'S.
+      #
+      # Without it, a bind mount of the project root would hide the modules installed from the
+      # lockfile at build time and the container would start against whatever the host happens to
+      # have — including nothing. It persists across restarts, so it goes stale when the lockfile
+      # changes: that is what `make up REBUILD=1` is for, and the only question this design asks
+      # you to keep answering is "did I change dependencies?"
+      - /app/node_modules
+
+    environment:
+      NODE_ENV: development
+      # ⛔ One line per query, on in dev only. It would put a customer's corpus in a log, which is
+      #    why the managed-store stack leaves it unset.
+      PRODUCTOS_DB_DEBUG: ${PRODUCTOS_DB_DEBUG:-}
+
+    # ⛔ Dev containers do not resurrect themselves. bilrost-workers has stacks reading "Up 40
+    #    hours" partly because of `restart: unless-stopped`, and a container that comes back after
+    #    a reboot makes "is my change live?" a harder question than it should be.
+    restart: "no"

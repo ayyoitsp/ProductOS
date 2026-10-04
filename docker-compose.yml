@@ -25,7 +25,18 @@
 # worktree gets its own project, its own volume and its own ports — set by
 # `scripts/stack.sh`, which refuses to hand a worktree this name or this port.
 # Unset is the main checkout, which is the old behaviour exactly.
-name: ${PRODUCTOS_STACK:-productos}
+# ⛔ REQUIRED, NOT DEFAULTED — BECAUSE THE DEFAULT WAS STAGING.
+#
+# This read `${PRODUCTOS_STACK:-productos}`, and `productos` on 4100 is now staging. So a bare
+# `docker compose up` in this checkout — with none of the Makefile's exports in the environment —
+# silently claimed staging's project name and staging's port. It happened twice while building
+# this: once from a worktree whose branch lacked `scripts/stack.sh`, and once from a plain shell,
+# where it got as far as `Bind for 0.0.0.0:4100 failed: port is already allocated`. A clash is the
+# cheap version; the expensive one is a dev container answering on the URL a corpus is reviewed on.
+#
+# A guard that enumerates the ways round a bad default is strictly worse than not having one. So
+# compose refuses, and names the command that sets it.
+name: ${PRODUCTOS_STACK:?set by make — use `make up`, not a bare docker compose, so the stack and ports come from scripts/stack.sh}
 
 services:
   postgres:
@@ -38,7 +49,7 @@ services:
     #    shared database — it is the second `up` failing on "port is already allocated", which reads
     #    as Docker being broken rather than as two stacks wanting the same port.
     ports:
-      - "${PG_PORT:-5432}:5432"
+      - "${PG_PORT:?set by make — use `make up`}:5432"
     volumes:
       - productos_data:/var/lib/postgresql/data
     # ⛔ The instance refuses to start without a reachable store, so waiting on this is not
@@ -54,16 +65,28 @@ services:
       context: .
       dockerfile: Dockerfile
     environment:
-      # ⛔ An external store wins if one is named. Set DATABASE_URL in `.env` (which
-      #    compose reads automatically) to point at Neon or any managed Postgres and
-      #    the container below stops being the store — see docker-compose.remote.yml
-      #    for running the app WITHOUT a local Postgres at all.
-      DATABASE_URL: ${DATABASE_URL:-postgres://productos:productos@postgres:5432/productos}
+      # ⛔ THE LOCAL STACK IS LOCAL. NO ENV OVERRIDE, AND THAT IS A CORRECTION.
+      #
+      # This was `${DATABASE_URL:-postgres://…@postgres:5432/productos}`, on the reasoning that an
+      # external store should win if one is named. Compose reads `.env` automatically, and `.env`
+      # here names Neon — so `make up` started a local Postgres that nothing used and pointed the
+      # app at the SHARED store. From any worktree. `remote-guard` refuses `up-remote` from a
+      # worktree because "the managed store is one shared database… There is no port that makes
+      # that safe", and this was the same door standing open two files away.
+      #
+      # Found by printing what compose actually resolves, not by reading it: the dev stack's
+      # DATABASE_URL came out as the Neon host.
+      #
+      # Peter, asked directly whether a dev stack may ever point at staging's store: never — own
+      # Postgres always. So the decision now lives in the file rather than in a guard that has to
+      # enumerate the ways round it. An external store is `docker-compose.remote.yml`'s whole job
+      # and its only job.
+      DATABASE_URL: postgres://productos:productos@postgres:5432/productos
       PORT: "4100"
       PRODUCTOS_SINGLE_ACCOUNT: ${PRODUCTOS_SINGLE_ACCOUNT:-me@localhost}
       PRODUCTOS_AUTH: ${PRODUCTOS_AUTH:-}
     ports:
-      - "${PORT:-4100}:4100"
+      - "${PORT:?set by make — use `make up`}:4100"
     depends_on:
       postgres:
         condition: service_healthy

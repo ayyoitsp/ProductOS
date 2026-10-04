@@ -1,0 +1,8 @@
+id: "0087"
+said: let's swarm some agents on getting a dev stack set up similar to Bilrost workers has. Full dockerized container of images we need. Treat 4100 as staging for now
+at: 2026-10-03
+kind: operations
+reaches:
+  operate: ""
+  pin: ""
+waived: {}

@@ -1,0 +1,21 @@
+# ⛔ AN ALLOWLIST, NOT A DENYLIST, AND THAT IS THE WHOLE POINT.
+#
+# There was no .dockerignore at all, so every build shipped a 1.2 GB context: 159 MB of
+# node_modules the image reinstalls from the lockfile anyway, 39 MB of .git, the private
+# planning/ notes, the gitignored corpora — and backups/, which holds full dumps of a real
+# client's product truth. A denylist would have had to name each of those, and the next large
+# directory somebody adds would walk straight back in.
+#
+# So: ignore everything, then name the six things the Dockerfile actually COPYs. A new file is
+# excluded until somebody says otherwise, which is the right default for a build context that has
+# had customer data sitting in it.
+*
+
+!package.json
+!package-lock.json
+!tsconfig.json
+!src
+!bin
+# ⛔ The migrations are part of the image. `migrationsDir()` walks up from dist/ to find them, and
+#    an instance that cannot is indistinguishable from one looking at an empty database.
+!drizzle

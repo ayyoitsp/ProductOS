@@ -56,6 +56,35 @@ const tree = (entries) => {
 };
 const kinds = (found) => found.map((f) => f.kind).sort();
 
+/**
+ * ⛔ TEXT ASSERTIONS MUST NOT READ COMMENTS, AND BOTH OF THESE EXIST BECAUSE THEY DID.
+ *
+ * `doesNotMatch(compose, /\$\{PRODUCTOS_STACK:-/)` fired against a comment in `docker-compose.yml`
+ * that QUOTES the old defaulted form while explaining why it is gone — so the assertion failed on
+ * the documentation of the fix. And slicing a Makefile target "up to the next target" swallowed the
+ * following target's recipe, so an assertion about `dev-guard` was reading `staging-guard`.
+ *
+ * So: `effective` drops comment lines, and `recipe` returns only the tab-indented lines of one
+ * target. A comment can then say anything it needs to without breaking a test.
+ */
+const effective = (text) =>
+  text.split("\n").filter((l) => !/^\s*#/.test(l)).join("\n");
+
+const recipe = (mk, name) => {
+  const i = mk.indexOf(`\n${name}:`);
+  assert.ok(i >= 0, `there is no ${name} target`);
+  const lines = mk.slice(i + 1).split("\n").slice(1);
+  const out = [];
+  for (const l of lines) {
+    if (l.startsWith("\t")) out.push(l);
+    else if (out.length) break;
+    else if (l.trim() === "" || l.startsWith("#")) continue;
+    else break;
+  }
+  assert.ok(out.length, `${name} has no recipe — it is a name that always succeeds`);
+  return out.join("\n");
+};
+
 test("this repo's own migrations are numbered cleanly", () => {
   /** ⛔ The one assertion that is about the committed tree rather than a fixture. */
   assert.deepEqual(migrationCollisions(migrationsDir()), []);
@@ -183,68 +212,101 @@ const stack = (dir) => {
   return Object.fromEntries(out.split(" ").map((kv) => kv.split("=")));
 };
 
-test("the main checkout is dev, and a worktree can never be", () => {
+/**
+ * ⛔ 4100 IS STAGING, AND NO CHECKOUT MAY DERIVE IT — INCLUDING THE MAIN ONE.
+ *
+ * This asserted the opposite: that the main checkout resolves to `productos` on 4100 and only a
+ * worktree gets its own stack. That was right while 4100 meant "dev serves what is merged". Peter:
+ * *"Treat 4100 as staging for now"* — which changes the layout rather than the vocabulary, because
+ * staging belongs to a deployed instance and not to anybody's checkout.
+ *
+ * So every checkout, main included, now gets `productos-dev-<slug>` on a derived port, and there is
+ * no branch of `scripts/stack.sh` that can answer 4100. Found while wiring `make up`: from the main
+ * checkout it wanted 4100, which the staging container was holding.
+ */
+test("no checkout resolves to staging's stack or either of its ports", () => {
+  const staging = {
+    stack: execFileSync("./scripts/stack.sh", [".", "staging-stack"], { encoding: "utf-8" }).trim(),
+    port: execFileSync("./scripts/stack.sh", [".", "staging-port"], { encoding: "utf-8" }).trim(),
+  };
+  assert.equal(staging.stack, "productos-staging");
+  assert.equal(staging.port, "4100");
+
   /**
-   * ⛔ THE MAIN CHECKOUT BY NAME, NEVER `.` — THIS TEST HAS TO PASS FROM A WORKTREE.
-   *
-   * It asked `stack(".")` and asserted dev, which holds only when `npm test` is run from the main
-   * checkout. From a worktree `.` correctly resolves to that worktree's own stack, so the suite
-   * failed on the exact assertion the change was right about — and a worktree is where this
-   * project tells people to work, so it failed for everyone doing the sanctioned thing.
-   *
-   * `git worktree list` puts the main working tree first; everything after it is a worktree.
+   * ⛔ EVERY WORKTREE GIT KNOWS ABOUT, not a fixture — the thing asserted is that no real checkout
+   * on this machine can reach staging.
    */
   const checkouts = execFileSync("git", ["worktree", "list"], { encoding: "utf-8" })
     .trim()
     .split("\n")
     .map((l) => l.split(" ")[0]);
-  const here = stack(checkouts[0]);
-  assert.equal(here.PRODUCTOS_STACK, "productos");
-  assert.equal(here.PORT, "4100");
-  assert.equal(here.PG_PORT, "5432");
+  assert.ok(checkouts.length >= 1);
 
-  /**
-   * ⛔ EVERY WORKTREE GIT KNOWS ABOUT, not a fixture — the thing being asserted is that no real
-   * checkout on this machine resolves to dev.
-   */
-  const worktrees = checkouts.slice(1);
-  const ports = new Set([here.PORT]);
-  for (const w of worktrees) {
+  const ports = new Set();
+  const pgPorts = new Set();
+  for (const w of checkouts) {
     const s = stack(w);
-    assert.notEqual(s.PRODUCTOS_STACK, "productos", `${w} resolved to dev's stack`);
-    assert.notEqual(s.PORT, "4100", `${w} resolved to dev's port`);
-    assert.notEqual(s.PG_PORT, "5432", `${w} resolved to dev's postgres port`);
-    /**
-     * ⛔ AND NOT 41xx AT ALL. The first cut of the range started at 4101, where a one-off
-     * `productos-style-preview` container was sitting — so the first worktree to hash to zero would
-     * have failed to bind. That container is gone now, and the floor stays: 41xx is dev's family,
-     * one-off ProductOS containers get put next to 4100 because that is the number people remember,
-     * and the collision arrives as "port is already allocated" with nothing naming the reason.
-     */
-    assert.ok(Number(s.PORT) >= 4200, `${w} is on ${s.PORT}, inside the 41xx family already in use`);
+    assert.notEqual(s.PRODUCTOS_STACK, staging.stack, `${w} resolved to staging's project`);
+    assert.notEqual(s.PORT, staging.port, `${w} resolved to staging's port`);
+    assert.notEqual(s.PG_PORT, "5432", `${w} resolved to the default postgres port`);
+    assert.match(s.PRODUCTOS_STACK, /^productos-dev-/, `${w} is not named as a dev stack`);
+    /** ⛔ 42xx, not 41xx — 41xx is where one-off ProductOS containers get parked next to staging. */
+    assert.ok(Number(s.PORT) >= 4200, `${w} is on ${s.PORT}, inside the 41xx family`);
+    assert.ok(Number(s.PG_PORT) >= 5500, `${w} has postgres on ${s.PG_PORT}`);
     assert.ok(!ports.has(s.PORT), `${w} wants ${s.PORT}, which another checkout already has`);
+    assert.ok(!pgPorts.has(s.PG_PORT), `${w} wants postgres ${s.PG_PORT}, already taken`);
     ports.add(s.PORT);
+    pgPorts.add(s.PG_PORT);
   }
 
-  /**
-   * ⛔ THE SAME ANSWER FROM ANOTHER DIRECTORY, OR `make stacks` WOULD BE FICTION — it asks about
-   * checkouts it is not standing in. Driven from a cwd elsewhere with the script named absolutely,
-   * because a worktree on an older branch does not have the script, which is the whole reason it
-   * takes a path.
-   */
-  if (worktrees.length) {
-    const abs = path.resolve("scripts/stack.sh");
-    const elsewhere = execFileSync(abs, [worktrees[0]], { cwd: os.tmpdir(), encoding: "utf-8" }).trim();
-    assert.equal(elsewhere, execFileSync(abs, [worktrees[0]], { encoding: "utf-8" }).trim());
-    assert.ok(!fs.existsSync(path.join(worktrees[0], "scripts/stack.sh")) || true);
-  }
+  /** ⛔ The same answer from another directory, or `make stacks` would be fiction. */
+  const abs = path.resolve("scripts/stack.sh");
+  assert.equal(
+    execFileSync(abs, [checkouts[0]], { cwd: os.tmpdir(), encoding: "utf-8" }).trim(),
+    execFileSync(abs, [checkouts[0]], { encoding: "utf-8" }).trim(),
+  );
 });
 
-test("the stack and both ports are variables, defaulting to dev", () => {
-  const compose = fs.readFileSync("docker-compose.yml", "utf-8");
-  assert.match(compose, /^name: \$\{PRODUCTOS_STACK:-productos\}$/m, "the project name is not per-stack");
-  assert.match(compose, /"\$\{PORT:-4100\}:4100"/, "the app port is fixed");
-  assert.match(compose, /"\$\{PG_PORT:-5432\}:5432"/, "the store port is fixed — a second stack cannot start");
+/**
+ * ⛔ THE STACK IDENTITY IS REQUIRED, NOT DEFAULTED, BECAUSE THE DEFAULT WAS STAGING.
+ *
+ * `docker-compose.yml` read `${PRODUCTOS_STACK:-productos}` and `${PORT:-4100}`. With none of the
+ * Makefile's exports in the environment, a bare `docker compose up` in this checkout therefore
+ * claimed staging's project name and staging's port. It happened twice while this was being built:
+ * once from a worktree whose branch lacked `scripts/stack.sh`, and once from a plain shell, which
+ * got as far as `Bind for 0.0.0.0:4100 failed: port is already allocated`.
+ *
+ * A guard that enumerates the ways round a bad default is strictly worse than not having the bad
+ * default. So compose refuses and names the command that sets it.
+ */
+test("compose refuses to run without being told which stack it is", () => {
+  const compose = effective(fs.readFileSync("docker-compose.yml", "utf-8"));
+  for (const [v, why] of [
+    ["PRODUCTOS_STACK", "the project name"],
+    ["PORT", "the app port"],
+    ["PG_PORT", "the store port"],
+  ]) {
+    assert.match(compose, new RegExp(`\\$\\{${v}:\\?`), `${why} is defaulted rather than required`);
+    assert.doesNotMatch(compose, new RegExp(`\\$\\{${v}:-`), `${why} still has a silent default`);
+  }
+  /** ⛔ And no dev stack may reach an external store: the local file names its own Postgres flatly. */
+  assert.match(compose, /DATABASE_URL: postgres:\/\/productos:productos@postgres:5432\/productos/,
+    "the local stack can still inherit DATABASE_URL from .env, which is how `make up` reached Neon");
+  assert.doesNotMatch(compose, /DATABASE_URL: \$\{DATABASE_URL/,
+    "an external store can still win for the dev stack");
+
+  /** The real proof, not the text: compose itself refuses with the variable named. */
+  let refused = "";
+  try {
+    execFileSync("docker", ["compose", "-f", "docker-compose.yml", "config"], {
+      encoding: "utf-8",
+      env: { ...process.env, PRODUCTOS_STACK: "", PORT: "", PG_PORT: "" },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+  } catch (e) {
+    refused = `${e.stderr ?? ""}${e.stdout ?? ""}`;
+  }
+  assert.match(refused, /PRODUCTOS_STACK/, "compose did not refuse an unset stack identity");
 });
 
 test("nothing that starts a container skips the dev guard", () => {
@@ -259,10 +321,16 @@ test("nothing that starts a container skips the dev guard", () => {
    * anybody uses, and every test here passed.
    */
   for (const t of ["up-remote", "rebuild-remote", "restart-remote"]) {
-    assert.match(mk, new RegExp(`^${t}:[^\\n]*\\bremote-guard\\b`, "m"), `${t} can reach the shared store without the guard`);
+    assert.match(mk, new RegExp(`^${t}:[^\\n]*\\bstaging-guard\\b`, "m"), `${t} can reach the shared store without the guard`);
   }
-  const rg = mk.slice(mk.indexOf("\nremote-guard:"));
-  const rbody = rg.slice(0, rg.indexOf("\nup:"));
+  /**
+   * ⛔ THE TARGET MUST HAVE A RECIPE, NOT JUST A NAME. A careless edit removed `staging-guard`'s
+   * body while three targets still named it as a prerequisite, and make answers "Nothing to be
+   * done for `staging-guard'" — which reads exactly like a guard that passed. Staging was
+   * unguarded and every text-matching assertion here still held.
+   */
+  assert.match(mk, /^staging-guard:\n\t/m, "staging-guard has no recipe — it is a name that always succeeds");
+  const rbody = recipe(mk, "staging-guard");
   /** ⛔ A worktree may not run it at all — one shared database, so no port makes it safe. */
   assert.match(rbody, /THIS_WT.*!=.*MAIN_WT|"\$\(THIS_WT\)" != "\$\(MAIN_WT\)"/s, "a worktree can point at the shared store");
   assert.match(rbody, /MERGED_CHECK/, "nothing checks that the managed instance serves what is merged");
@@ -272,16 +340,37 @@ test("nothing that starts a container skips the dev guard", () => {
    * default, and the default is dev. A throwaway worktree did exactly that and was stopped only by
    * `Bind for 0.0.0.0:4100 failed`.
    */
-  const guard = mk.slice(mk.indexOf("\ndev-guard:"));
-  const body = guard.slice(0, guard.indexOf("\nup:"));
-  assert.match(body, /MAIN_WT/, "the guard does not ask git which worktree is the main one");
-  assert.match(body, /THIS_WT/);
+  const body = recipe(mk, "dev-guard");
+  /**
+   * ⛔ dev-guard COMPARES AGAINST STAGING'S IDENTITY, NOT AGAINST WHICH WORKTREE THIS IS.
+   *
+   * It used to ask git whether this was the main checkout, because back then the main checkout was
+   * allowed to own 4100 and a worktree was not. With 4100 belonging to staging, the question is no
+   * longer "who am I" but "did I somehow resolve to staging" — which is true of the main checkout
+   * too, and was, twice. Asking git would now pass exactly the case that went wrong.
+   *
+   * The worktree question still exists, in `staging-guard`, where it is the right question:
+   * asserted below.
+   */
+  assert.match(body, /STAGING_STACK/, "dev-guard does not compare against staging's project name");
+  assert.match(body, /STAGING_PORT/, "dev-guard does not compare against staging's port");
   /**
    * ⛔ THE MERGE CHECK IS ONE COPY SHARED BY BOTH GUARDS, so this asserts the call here and the
    * question itself in the define — two stacks both landing on 4100 is two places to forget.
    */
-  assert.match(body, /MERGED_CHECK/, "dev-guard does not ask whether HEAD is merged");
+  /**
+   * ⛔ dev-guard NO LONGER ASKS WHETHER HEAD IS MERGED, AND THAT IS THE POINT OF A DEV STACK.
+   * It used to, because the stack it guarded WAS the instance on 4100. Now every checkout has its
+   * own stack on its own port, so running an unmerged branch there is the entire reason it exists;
+   * refusing it would have made the thing being built useless. The merged question belongs to
+   * staging, where it is about a deployed instance rather than a checkout.
+   */
+  assert.doesNotMatch(body, /MERGED_CHECK/, "dev-guard refuses an unmerged branch, which is what a dev stack is for");
+  assert.match(body, /STAGING_STACK/, "dev-guard does not compare against staging's identity");
   assert.match(mk, /^define MERGED_CHECK$/m, "the merge check is not shared");
+  /** ⛔ The worktree question, now staging's alone. */
+  assert.match(rbody, /THIS_WT/, "staging-guard does not ask git which checkout this is");
+  assert.match(rbody, /MAIN_WT/);
   assert.match(mk, /merge-base --is-ancestor HEAD origin\/main/, "nothing checks that dev serves what is merged");
   assert.match(mk, /DEV_ANYWAY/, "there is no way to override it on purpose");
   assert.match(mk, /^up: dev-guard migrations-check$/m, "up does not check the numbering before starting");
