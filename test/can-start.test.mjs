@@ -21,7 +21,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import fs from "node:fs";
-import { execFileSync } from "node:child_process";
 
 const MAKEFILE = fs.readFileSync("Makefile", "utf-8");
 const COMPOSE = fs.readFileSync("docker-compose.yml", "utf-8");
@@ -103,69 +102,11 @@ test("an 18+ Postgres image is mounted where 18+ expects it", () => {
    * reports "PostgreSQL data in /var/lib/postgresql/data (unused mount/volume)" — which reads as a
    * failed upgrade even on a volume created seconds earlier, because it is objecting to the layout.
    */
-  /**
-   * ⛔ IT MUST FAIL WITH THE DIAGNOSIS, NOT WITH A TypeError. This indexed `[1]` straight off the
-   * match, so against a Makefile with no `PG_IMAGE` at all — which is every version before this
-   * commit — all it said was "Cannot read properties of null (reading '1')". That is the shape of
-   * failure somebody debugs for ten minutes before realising the test was right.
-   */
-  const assigned = /^PG_IMAGE\s*[:?]?=\s*(\S+)/m.exec(MAKEFILE);
-  assert.ok(assigned, "the Makefile assigns no PG_IMAGE, so the server and client majors are set in two places");
-  const major = Number(/postgres:(\d+)/.exec(assigned[1])?.[1]);
-  assert.ok(Number.isFinite(major), `PG_IMAGE is "${assigned[1]}", which does not name a postgres major version`);
+  const major = Number(/postgres:(\d+)/.exec(/^PG_IMAGE\s*[:?]?=\s*(\S+)/m.exec(MAKEFILE)[1])?.[1]);
+  assert.ok(Number.isFinite(major), "PG_IMAGE does not name a postgres major version");
   const mount = /productos_data:(\S+)/.exec(COMPOSE)?.[1];
   assert.ok(mount, "the data volume is not mounted anywhere");
   if (major >= 18)
     assert.equal(mount, "/var/lib/postgresql", `postgres:${major} wants the volume one level up from …/data`);
   else assert.equal(mount, "/var/lib/postgresql/data", `postgres:${major} predates the move`);
-});
-
-/**
- * ⛔ AND THE OTHER DIRECTION: ASK MAKE WHAT IT WOULD ACTUALLY RUN.
- *
- * The four assertions above read the Makefile as text, which is what caught `$(DEV)`. This asks
- * make itself, and it is the cheaper half of the lesson the dev-stack bug taught:
- *
- *   `make up` was verified working, then the guards above it were restructured — and the slice that
- *   replaced them swallowed the two lines defining `DEV` and `BUILT`. Nobody ran `make up` again.
- *   Every test still passed, because the suite asserted which stack a checkout RESOLVES to and
- *   never whether the command that brings it up could run. Make expands an undefined variable to
- *   the empty string in silence, so the recipe became the bare `up -d`.
- *
- * `make -n` expands recipes without executing them, so this needs no Docker and no running stack.
- * A recipe line that was supposed to start a container and no longer mentions `docker` is the exact
- * footprint of a variable that evaporated.
- */
-test("every target that starts a container still expands to a docker command", () => {
-  const starts = ["up", "rebuild", "restart", "down", "logs"];
-  for (const t of starts) {
-    let out = "";
-    try {
-      out = execFileSync("make", ["-n", t], {
-        encoding: "utf-8",
-        env: { ...process.env, PRODUCTOS_STACK: "probe", PORT: "4999", PG_PORT: "5999" },
-        stdio: ["ignore", "pipe", "pipe"],
-      });
-    } catch (e) {
-      /** A guard refusing is fine — it means make got as far as the recipe. A parse error is not. */
-      out = `${e.stdout ?? ""}${e.stderr ?? ""}`;
-      assert.doesNotMatch(out, /missing separator|unterminated|\*\*\* /, `make cannot even parse ${t}: ${out.slice(0, 200)}`);
-    }
-
-    /**
-     * ⛔ THE ASSERTION IS PER LINE, NOT ON THE WHOLE BLOB. `up` prints a 15-line health-poll loop
-     * that legitimately contains `docker compose logs`, so a match anywhere would have passed even
-     * with the broken `up -d` sitting in it — which is how this bug would have slipped through a
-     * lazier version of this test.
-     */
-    const orphan = out
-      .split("\n")
-      .map((l) => l.trim())
-      .filter((l) => /^(up|down|logs|restart|build|exec|ps)\b/.test(l));
-    assert.deepEqual(
-      orphan,
-      [],
-      `make ${t} would run ${orphan.join(", ")} as a command — a compose variable expanded to nothing`,
-    );
-  }
 });

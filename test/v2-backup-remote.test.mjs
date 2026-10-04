@@ -42,7 +42,24 @@ test("the managed store has its own backup and restore", () => {
  * being run a second time.
  */
 test("the client is pinned to a major that can read the store", () => {
-  assert.match(mk, /PG_CLIENT \?= postgres:18-alpine/, "the dump client is unpinned or too old for an 18 server");
+  /**
+   * ⛔ ONE NUMBER, NOT TWO — AND THIS ASSERTION USED TO SPELL THE SECOND ONE OUT.
+   *
+   * It pinned the literal `PG_CLIENT ?= postgres:18-alpine`, which was right about the major and
+   * wrong about where it lives. The local Postgres was separately `postgres:16-alpine` in the
+   * compose file, so a dump taken with the 18 client carried `SET transaction_timeout` — a 17
+   * addition — and restoring it into a dev stack died under ON_ERROR_STOP on "unrecognized
+   * configuration parameter". That message names a parameter rather than a version, so it reads as
+   * a corrupt dump. Found by a worktree session trying to clone staging into its own stack.
+   *
+   * `PG_CLIENT` now derives from `PG_IMAGE`, which compose also reads, so the server and the client
+   * cannot drift apart. Asserting the derivation rather than the number is what keeps this true
+   * after the next version bump instead of failing on it.
+   */
+  assert.match(mk, /^PG_IMAGE\s*[:?]?=\s*postgres:(\d+)/m, "the Postgres version is not named in one place");
+  assert.match(mk, /^PG_CLIENT \?= \$\(PG_IMAGE\)/m, "the dump client does not derive from PG_IMAGE — the two can drift");
+  const major = Number(/^PG_IMAGE\s*[:?]?=\s*postgres:(\d+)/m.exec(mk)?.[1]);
+  assert.ok(major >= 18, `PG_IMAGE is postgres:${major}, and pg_dump refuses a server newer than itself`);
   const b = target("backup-remote");
   assert.match(b, /\$\(PG_CLIENT\)/, "backup-remote does not use the pinned client");
   assert.match(target("restore-remote"), /\$\(PG_CLIENT\)/, "restore-remote does not use the pinned client");
