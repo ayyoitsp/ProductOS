@@ -14,7 +14,19 @@
 # directory, removed when the request ends and swept at boot if a hard kill
 # skipped that. So with an external store, nothing about this stack is durable
 # and nothing about it needs backing up — that moves to whoever runs the Postgres.
-name: productos-remote
+# ⛔ `productos-staging`, AND THE RENAME IS NOT COSMETIC.
+#
+# Peter: *"Treat 4100 as staging for now"*. This was `productos-remote`, which describes where its
+# STORE lives rather than what the instance IS — and `scripts/stack.sh` now publishes staging's
+# identity so both guards can compare against it. Those two disagreed for exactly one commit:
+# the guards tested `productos-staging` while the running project was `productos-remote`, so the
+# comparison could never fire. A guard measuring a name nothing has is worse than no guard, because
+# it reports a pass.
+#
+# ⛔ Still a FIXED name, unlike the dev stack's. There is one staging instance on purpose; a second
+# one would be a second thing people review on, which is the problem this whole arrangement exists
+# to prevent.
+name: productos-staging
 
 services:
   productos:
@@ -39,4 +51,7 @@ services:
       #    until there is one. Verdicts written while it is set are not provably human.
       PRODUCTOS_AUTH: ${PRODUCTOS_AUTH:-}
     ports:
-      - "4100:4100"
+      # ⛔ Overridable but defaulted, which is the opposite of the dev stack's `:?` — and deliberately
+      #    so. A dev stack has no business guessing an identity; staging has exactly one, and 4100 is
+      #    it. The variable exists so a machine already using 4100 for something else can move it.
+      - "${STAGING_PORT:-4100}:4100"
