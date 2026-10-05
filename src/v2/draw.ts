@@ -83,9 +83,41 @@ const text = (s: string): string =>
     .replace(/>/g, "&gt;");
 
 /** The string parts of a className, whatever shape it is written in. */
+/**
+ * The expression a locally-declared helper returns, for `className={helper(x)}`.
+ *
+ * ⛔ ONLY THE SINGLE-EXPRESSION SHAPE — `const f = (…) => <expr>` and a function whose body is one
+ * `return`. That is how a class helper is written; anything with branching or statements is a
+ * program, and guessing which path it takes would be inventing styling rather than reading it.
+ */
+function bodyOfLocal(name: ts.Identifier): ts.Expression | undefined {
+  const sf = name.getSourceFile();
+  let found: ts.Expression | undefined;
+  const visit = (n: ts.Node): void => {
+    if (found) return;
+    if (ts.isVariableDeclaration(n) && ts.isIdentifier(n.name) && n.name.text === name.text && n.initializer) {
+      const init = n.initializer;
+      if (ts.isArrowFunction(init)) found = ts.isBlock(init.body) ? returnedExpression(init.body) : init.body;
+      else if (ts.isFunctionExpression(init)) found = returnedExpression(init.body);
+    } else if (ts.isFunctionDeclaration(n) && n.name?.text === name.text && n.body) {
+      found = returnedExpression(n.body);
+    }
+    if (!found) ts.forEachChild(n, visit);
+  };
+  ts.forEachChild(sf, visit);
+  return found;
+}
+
+/** The expression of a block's only `return`, where there is exactly one. */
+function returnedExpression(block: ts.Block): ts.Expression | undefined {
+  const returns = block.statements.filter(ts.isReturnStatement);
+  return returns.length === 1 ? returns[0]!.expression : undefined;
+}
+
 function classOf(node: ts.JsxAttributeValue | undefined): string {
   if (!node) return "";
   const out: string[] = [];
+  const seen = new Set<ts.Node>();
   const walk = (n: ts.Node): void => {
     if (ts.isStringLiteral(n) || ts.isNoSubstitutionTemplateLiteral(n)) out.push(n.text);
     else if (ts.isTemplateExpression(n)) {
@@ -121,8 +153,31 @@ function classOf(node: ts.JsxAttributeValue | undefined): string {
      * picks the literals out of all of them.
      */
     else if (ts.isCallExpression(n)) {
-      walk(n.expression);
-      for (const a of n.arguments) walk(a);
+      /**
+       * ⛔ BUT A LOCAL HELPER'S ARGUMENT IS NOT A CLASS — IT IS WHAT THE HELPER IS ASKED ABOUT.
+       *
+       * Harvesting arguments is right for `clsx('flex','p-4')`, where they ARE the class list. It
+       * is wrong for a helper the file defines itself: `className={inputClass('projectName')}`
+       * emitted `class="projectName"` — a field name wearing a class attribute, which styles
+       * nothing and is a worse answer than no class at all, because it looks like one.
+       *
+       * The cost was every input on the screen. `inputClass` returns
+       * `w-full px-3 py-2 border rounded-md focus:ring-2 …`, so six fields that should carry full
+       * width, padding, a border and a focus ring rendered as browser-default boxes — the single
+       * biggest reason a drawing of this form did not look like the form. Peter: *"the 'creating a
+       * deal' screenshots look nothing like our UX"*.
+       *
+       * So where the callee is declared in this same file, its BODY is walked instead of its
+       * arguments. `seen` guards a helper that calls itself.
+       */
+      const local = ts.isIdentifier(n.expression) ? bodyOfLocal(n.expression) : undefined;
+      if (local && !seen.has(local)) {
+        seen.add(local);
+        walk(local);
+      } else {
+        walk(n.expression);
+        for (const a of n.arguments) walk(a);
+      }
     } else if (ts.isPropertyAccessExpression(n)) walk(n.expression);
     else if (ts.isArrayLiteralExpression(n)) for (const el of n.elements) walk(el);
   };
@@ -553,7 +608,22 @@ function emit(node: ts.Node, ctx: Ctx): string {
        * negation — stripping it would make every empty state look like content, which is the
        * opposite mistake and the one this file fixed first.
        */
-      if (GUARD.test(asserted(c)) || DOING.test(asserted(c)) || EMPTY.test(c) || OPEN.test(asserted(c))) {
+      /**
+       * ⛔ A FACT ABOUT THE CODE BEATS A GUESS ABOUT THE NAME.
+       *
+       * Everything above this line decides whether `{x && …}` is a state by matching `x` against a
+       * list of words — `isOpen`, `showFoo`, `editing`. The sidebar's account menu is `const [open,
+       * setOpen] = useState(false)`, and a bare `open` is on none of those lists, so every drawing
+       * that included the shell showed the account dropdown hanging open with ORGANIZATION and Sign
+       * out in it. Peter: *"the 'creating a deal' screenshots look nothing like our UX"*. Same cause
+       * as the three modal scrims stacked on one screen, each at 50% black, compounding to 87%.
+       *
+       * A declaration says what the screen looks like before anybody touches it, and it says so
+       * exactly. Kept ALONGSIDE the word lists rather than replacing them, because those also catch
+       * guards on props and on values this cannot see a declaration for.
+       */
+      const closedAtFirst = ts.isIdentifier(e.left) && falseAtFirst(e.left).has(e.left.text);
+      if (closedAtFirst || GUARD.test(asserted(c)) || DOING.test(asserted(c)) || EMPTY.test(c) || OPEN.test(asserted(c))) {
         /** Preferred: this IS the state being drawn, so show what it shows. */
         if (ctx.prefer && c.replace(/\s+/g, " ") === ctx.prefer) return emit(e.right, ctx);
         ctx.states.push(`when ${c.replace(/\s+/g, " ").slice(0, 50)}: ${e.right.getText().replace(/\s+/g, " ").slice(0, 60)}`);
@@ -975,6 +1045,71 @@ export interface DrawOptions {
   parts?: WireablePart[];
   /** Values for expressions, so a placeholder can be a real-looking figure where the author gave one. */
   sample?: Record<string, string>;
+  /**
+   * ⛔ SET WHILE DRAWING A LAYOUT, SO THE COMPOSITION DOES NOT RECURSE. A layout is drawn by the
+   * same walk as a page; without this it would look for its own layouts and find itself.
+   */
+  inLayout?: boolean;
+}
+
+/**
+ * ⛔ A SCREEN IS A ROUTE, AND A ROUTE IS ITS LAYOUTS PLUS ITS PAGE.
+ *
+ * Peter, looking at a drawing: *"the 'creating a deal' screenshots look nothing like our UX"*. The
+ * content was faithful; what was missing was everything around it. Every page in the application
+ * this was built against sits inside `AppLayout` — *"the app shell (sidebar + padded main column)"*
+ * — and not one drawing in the corpus had a sidebar, because this walked a page component and had
+ * no concept of a layout at all.
+ *
+ * That is not a small omission on one screen. It is every screen, missing the one piece of chrome
+ * a person sees on all of them, so a reviewer comparing a drawing against the product they use is
+ * comparing against something nobody has ever seen.
+ *
+ * ⛔ THE SLOT ALREADY EXISTED AND NOTHING FILLED IT. `emit` has emitted `<!--children-->` for
+ * `{children}` since the inlining code needed it for primitives like `Td`. A layout is a component
+ * whose children are the page, so composing them is the same substitution one level up.
+ *
+ * ⛔ THE ROOT `app/layout.tsx` IS SKIPPED, DELIBERATELY. It renders `<html>` and `<body>`, which
+ * cannot nest inside the element a mock lives in, and what it carries that matters — next/font's
+ * family variables — is hoisted to the document by `liftFaces` instead.
+ *
+ * Returns nearest-first. Empty for a product that is not laid out this way, so nothing changes for
+ * one that is not.
+ */
+/**
+ * Identifiers a file declares as `useState(false)` — what the screen shows before anybody touches it.
+ *
+ * ⛔ CACHED PER FILE, because `emit` re-reads a file once per component it inlines and this would
+ * otherwise re-scan the same source thirty-eight times on one screen.
+ */
+const CLOSED_AT_FIRST = new Map<string, Set<string>>();
+function falseAtFirst(node: ts.Node): Set<string> {
+  const sf = node.getSourceFile();
+  let have = CLOSED_AT_FIRST.get(sf.fileName);
+  if (!have) {
+    have = new Set<string>();
+    for (const m of sf
+      .getFullText()
+      .matchAll(/const\s*\[\s*([A-Za-z_$][\w$]*)\s*,\s*set[A-Za-z_$][\w$]*\s*\]\s*=\s*useState\s*(?:<[^>]*>)?\s*\(\s*false\s*\)/g))
+      have.add(m[1]!);
+    CLOSED_AT_FIRST.set(sf.fileName, have);
+  }
+  return have;
+}
+
+export function layoutsAround(routeFile: string): string[] {
+  const out: string[] = [];
+  let dir = path.dirname(path.resolve(routeFile));
+  for (let up = 0; up < 12; up++) {
+    const atAppRoot = path.basename(dir) === "app";
+    const layout = path.join(dir, "layout.tsx");
+    if (!atAppRoot && fs.existsSync(layout) && path.resolve(layout) !== path.resolve(routeFile)) out.push(layout);
+    if (atAppRoot) break;
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return out;
 }
 
 /**
@@ -1524,7 +1659,34 @@ export function drawFromRoute(routeFile: string, opts: DrawOptions = {}): DrawRe
   }
   drawnStates.length = 0;
   drawnStates.push(...best.values());
-  const wired = opts.parts?.length ? wireParts(plain, opts.parts) : { html: plain, matched: new Set<string>() };
+  /**
+   * ⛔ THE PAGE GOES INSIDE ITS LAYOUTS, AND THE PARTS ARE WIRED AFTER.
+   *
+   * Nearest layout first, each one's `<!--children-->` taking what has been built so far — so the
+   * outermost ends up outermost, which is the order a browser nests them in. Wiring happens on the
+   * composed markup rather than on the page alone, because a part's label can legitimately live in
+   * the chrome: a screen whose only "New Deal" button is in the shell would otherwise report its
+   * own control as undrawn.
+   *
+   * ⛔ A LAYOUT THAT DRAWS NOTHING IS SKIPPED RATHER THAN WRAPPED. Several layouts are nothing but
+   * providers, and an empty wrapper around the page would push it inside a div for no reason and
+   * lose `<!--children-->` in the process.
+   */
+  let composed = plain;
+  if (!opts.inLayout) {
+    for (const layout of layoutsAround(routeFile)) {
+      let shell: DrawResult;
+      try {
+        shell = drawFromRoute(layout, { ...opts, parts: undefined, inLayout: true });
+      } catch {
+        continue;
+      }
+      if (!shell.html.includes("<!--children-->")) continue;
+      composed = shell.html.replace("<!--children-->", composed);
+      for (const f of shell.from) ctx.from.add(f);
+    }
+  }
+  const wired = opts.parts?.length ? wireParts(composed, opts.parts) : { html: composed, matched: new Set<string>() };
   /**
    * ⛔ A PART THE DRAWING DOES NOT SHOW IS REPORTED, NEVER DROPPED. Silently omitting it makes the
    * drawing look complete while a control the corpus claims exists is nowhere on it.
