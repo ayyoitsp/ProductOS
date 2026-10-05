@@ -131,3 +131,58 @@ test("a local class helper is resolved; a class-list call still has its argument
   assert.match(out.html, /gap-2/);
   fs.rmSync(root, { recursive: true, force: true });
 });
+
+test("a conditional class draws the resting arm, not both", () => {
+  /**
+   * ⛔ THIS TOOK BOTH ARMS DELIBERATELY, and it was wrong once the shell arrived. A nav item is
+   * `active ? 'bg-brand text-white' : 'text-gray-600'`; with both, every item in the sidebar
+   * carried the selected background at once — a nav where everything is the current page, which is
+   * a screen that cannot exist. The false arm is what the element looks like before anything
+   * happens to it, which is the same rule as reading `useState(false)`.
+   */
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "productos-cond-"));
+  const file = path.join(root, "Nav.tsx");
+  fs.writeFileSync(
+    file,
+    `export default function Nav(){
+       return (<a className={active ? 'bg-brand text-white' : 'text-gray-600'}>Deals</a>)
+     }`
+  );
+  const out = drawFromRoute(file, {});
+  assert.match(out.html, /text-gray-600/, "the resting arm was dropped");
+  assert.doesNotMatch(out.html, /bg-brand/, "the selected arm was drawn onto an item at rest");
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test("a component handed a prop that is false at rest renders nothing at rest", () => {
+  /**
+   * ⛔ NEITHER HALF IS VISIBLE ALONE. The call site renders `<Modal isOpen={x} />` unconditionally,
+   * and the component guards on a prop the drawer had no value for — so a modal body was drawn
+   * into the sidebar, and therefore into every screen that has one. The fix asks the component's
+   * own source what it does when the prop is false rather than guessing from the prop's name.
+   */
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "productos-modal-"));
+  const put = (rel, body) => {
+    fs.mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
+    fs.writeFileSync(path.join(root, rel), body);
+  };
+  put(
+    "components/Picker.tsx",
+    `export default function Picker({ isOpen }){
+       if (!isOpen) return null
+       return (<div className="modal">Please select the deal</div>)
+     }`
+  );
+  put(
+    "Shell.tsx",
+    `import Picker from './components/Picker'
+     export default function Shell(){
+       const [pickerOpen, setPickerOpen] = useState(false)
+       return (<div className="rail"><span>Nav</span><Picker isOpen={pickerOpen} /></div>)
+     }`
+  );
+  const out = drawFromRoute(path.join(root, "Shell.tsx"), { componentsDir: path.join(root, "components") });
+  assert.match(out.html, /<span>Nav<\/span>/, "the shell itself was lost");
+  assert.doesNotMatch(out.html, /Please select the deal/, "a modal that is closed at rest was drawn open");
+  fs.rmSync(root, { recursive: true, force: true });
+});

@@ -114,7 +114,7 @@ function returnedExpression(block: ts.Block): ts.Expression | undefined {
   return returns.length === 1 ? returns[0]!.expression : undefined;
 }
 
-function classOf(node: ts.JsxAttributeValue | undefined): string {
+function classOf(node: ts.JsxAttributeValue | undefined, preferTrue = false): string {
   if (!node) return "";
   const out: string[] = [];
   const seen = new Set<ts.Node>();
@@ -123,18 +123,28 @@ function classOf(node: ts.JsxAttributeValue | undefined): string {
     else if (ts.isTemplateExpression(n)) {
       out.push(n.head.text);
       for (const sp of n.templateSpans) {
-        /**
-         * ⛔ BOTH BRANCHES OF A CONDITIONAL CLASS, and that is deliberate. A tab is
-         * `active ? 'border-blue-600' : 'border-transparent'`; taking one arm silently draws one
-         * state and calls it the screen. Taking both over-styles a little and shows what the
-         * element can look like, which a reviewer can see and correct.
-         */
         walk(sp.expression);
         out.push(sp.literal.text);
       }
     } else if (ts.isConditionalExpression(n)) {
-      walk(n.whenTrue);
-      walk(n.whenFalse);
+      /**
+       * ⛔ THE RESTING ARM, NOT BOTH — AND THIS IS A CORRECTION TO A DELIBERATE CHOICE.
+       *
+       * This took both, reasoning that a tab is `active ? 'border-blue-600' : 'border-transparent'`
+       * and "taking one arm silently draws one state and calls it the screen". That is true, and
+       * taking both was still worse, which only became visible once drawings included the app
+       * shell: every item in the sidebar carried the selected background AND the unselected one, so
+       * all of them looked selected at once. A nav where everything is the current page is not
+       * "over-styled a little" — it is a screen that cannot exist.
+       *
+       * The false arm is what the element looks like before anything happens to it, which is the
+       * same principle as reading `useState(false)` rather than guessing from a name: a drawing
+       * shows the screen at rest, and every other appearance is offered as a state.
+       *
+       * ⛔ EXCEPT WHEN THIS PASS IS DRAWING THAT STATE, where the true arm IS the screen. `prefer`
+       * is how the caller says which one it is asking for.
+       */
+      walk(preferTrue ? n.whenTrue : n.whenFalse);
     } else if (ts.isBinaryExpression(n)) {
       walk(n.left);
       walk(n.right);
@@ -813,6 +823,8 @@ function emit(node: ts.Node, ctx: Ctx): string {
         if (fork) ctx.forks.push(fork);
         /** Bind what the call site passes, so the primitive renders the application's own words. */
         const bound = new Map<string, string>();
+        /** Props the call site passes as false at rest — see the modal case below. */
+        const falsy = new Set<string>();
         for (const a of open.attributes.properties) {
           if (!ts.isJsxAttribute(a) || !a.initializer) continue;
           const name = a.name.getText();
@@ -832,12 +844,31 @@ function emit(node: ts.Node, ctx: Ctx): string {
              * even after locals were resolvable, because it was resolved in the wrong file. Bound at
              * the call site, which is the only place it is in scope.
              */
+            /**
+             * ⛔ A PROP THAT IS FALSE AT REST MAKES THE WHOLE COMPONENT NOTHING AT REST.
+             *
+             * `<ProjectSelectionModal isOpen={isProjectSelectionModalOpen} />` where that is
+             * `useState(false)`, and the modal opens `if (!isOpen) return null`. Neither half is
+             * visible on its own: the call site renders the element unconditionally, and the
+             * component's guard is on a prop this had no value for. So the sidebar drew a modal
+             * body — "Please select the deal for which you…" — into every screen that has a
+             * sidebar, which is now every screen.
+             */
+            else if (ts.isIdentifier(v) && falseAtFirst(v).has(v.text)) falsy.add(name);
+            else if (v.kind === ts.SyntaxKind.FalseKeyword) falsy.add(name);
             else if (ts.isIdentifier(v) && ctx.sameFile) {
               const local = localJsx(ctx.sameFile, v.text);
               if (local) bound.set(name, emit(local, { ...ctx, depth: ctx.depth + 1 }));
             }
           }
         }
+        /**
+         * ⛔ ASKED OF THE COMPONENT'S OWN SOURCE, not inferred from the prop's name. `isOpen`,
+         * `open`, `visible` and `show` are all written, and a list of them would miss the next one;
+         * a file that says `if (!x) return null` has said what it does when x is false.
+         */
+        if ([...falsy].some((p) => new RegExp(`if\\s*\\(\\s*!\\s*${p}\\s*\\)\\s*return\\s+null`).test(sourceOf(file))))
+          return "";
         const sub: Ctx = { ...ctx, depth: ctx.depth + 1, props: bound, sameFile: file };
         const body = emit(inner, sub);
         // `{children}` inside the primitive is where this element's own children belong.
@@ -1082,6 +1113,21 @@ export interface DrawOptions {
  * ⛔ CACHED PER FILE, because `emit` re-reads a file once per component it inlines and this would
  * otherwise re-scan the same source thirty-eight times on one screen.
  */
+/** A file's text, read once. ⛔ `emit` revisits the same component many times on one screen. */
+const SOURCE = new Map<string, string>();
+function sourceOf(file: string): string {
+  let have = SOURCE.get(file);
+  if (have === undefined) {
+    try {
+      have = fs.readFileSync(file, "utf-8");
+    } catch {
+      have = "";
+    }
+    SOURCE.set(file, have);
+  }
+  return have;
+}
+
 const CLOSED_AT_FIRST = new Map<string, Set<string>>();
 function falseAtFirst(node: ts.Node): Set<string> {
   const sf = node.getSourceFile();
