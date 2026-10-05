@@ -31,7 +31,7 @@ export interface AppStyle {
    * somebody edited — and the second is what a person needs in order to decide whether to re-take
    * it.
    */
-  sources: Array<{ path: string; sha: string; bytes: number }>;
+  sources: Array<{ path: string; sha: string; bytes: number; built_at?: string }>;
   /** Named in config and not found — a typo here is byte-identical to an unstyled mock. */
   missing: string[];
   mockClass?: string;
@@ -112,7 +112,13 @@ export function appStyleFor(dir: string): AppStyle {
       }
       from.push(hit);
       const raw = fs.readFileSync(file, "utf-8");
-      sources.push({ path: hit, sha: createHash("sha256").update(raw).digest("hex").slice(0, 16), bytes: raw.length });
+      sources.push({
+        path: hit,
+        sha: createHash("sha256").update(raw).digest("hex").slice(0, 16),
+        bytes: raw.length,
+        /** When this file was last written — for a build output, when the application was built. */
+        built_at: new Date(fs.statSync(file).mtimeMs).toISOString().slice(0, 10),
+      });
       css += `\n/* ${hit} */\n${inlineAssets(dropImports(raw), path.dirname(file), budget)}`;
     }
   }

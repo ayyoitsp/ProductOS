@@ -1,0 +1,14 @@
+id: "0094"
+said: review every rendereed screen
+at: 2026-10-05
+kind: derivation
+reaches:
+  model: built_at
+  check: style-behind-the-code
+  pin: a stylesheet built before the code it styles is reported
+waived:
+  derive: "⛔ Waived knowingly, on a layer `productos learn` says this project argues past more than any other — so the reason has to hold. There is no state derived here and no product fact computed: two ISO dates are compared, one read off a file's mtime at snapshot time and one off the newest component's mtime. The derive layer's files are the ones that turn product truth into further product truth (grid, settle, acts, connects); the newest file on a disk is not product truth and has no business being modelled as such. Putting `newestSourceDay` in one of them to satisfy this check would be indirection invented for the check, which is the failure mode the layer exists to catch, inverted."
+  generate: Nothing is generated differently. The stylesheet is the user's build output; ProductOS neither compiles it nor may rebuild somebody's application. The whole change is noticing and saying so.
+  surface: It surfaces where every other corpus finding surfaces, through `v2 check` — the surface for things an author must act on. A second home for it would be a second copy.
+  instruct: No author writes this field or decides anything about it; it is read off the file's own mtime. An instruction would be telling somebody to do what the tool now does for them.
+closed: 2026-10-05

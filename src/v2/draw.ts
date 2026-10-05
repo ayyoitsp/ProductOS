@@ -1725,7 +1725,18 @@ function labelFor(cond: string): string {
    * written right there in the expression — it is the product's own word for what there is one of.
    */
   if (/^\s*(?:[\w$]+\.)*[\w$]+(?:\.length)?\s*===?\s*1\s*$/.test(read.trim())) return "Just one";
-  const some = /^\s*(?:[\w$]+\.)*([\w$]+)\.length\s*>\s*0\s*$/.exec(read.trim());
+  /**
+   * ⛔ A PREDICATE IS NAMED BY WHAT IT ASKS. `isUnclassified(table, row)` put a function call with
+   * its arguments on a tab — the reviewer reads the call instead of the state it picks out. The
+   * verb `is` is scaffolding; what follows it is the product's own word for the condition.
+   */
+  const asks = /^\s*(?:[\w$]+\.)*is([A-Z][\w$]*)\s*\(/.exec(read.trim());
+  if (asks) {
+    const w = asks[1]!.replace(/([a-z0-9])([A-Z])/g, "$1 $2").toLowerCase();
+    return w.charAt(0).toUpperCase() + w.slice(1);
+  }
+  /** ⛔ And "more than none" is the same state whether or not a `.length` is written out. */
+  const some = /^\s*(?:[\w$]+\.)*([\w$]+)(?:\.length)?\s*>\s*0\s*$/.exec(read.trim());
   if (some) {
     const w = some[1]!.replace(/([a-z0-9])([A-Z])/g, "$1 $2").toLowerCase();
     return `With ${w}`;
