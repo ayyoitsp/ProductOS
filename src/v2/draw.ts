@@ -865,9 +865,16 @@ function emit(node: ts.Node, ctx: Ctx): string {
       return `<span class="productos-sample" title="${text(hint)} — sample">${text(made)}</span>`;
     }
     if (ctx.inRow) {
-      /** Nothing plausible to put here: the shape is all that is left to show. */
+      /**
+       * Nothing plausible to put here, so the field names itself rather than drawing a blank bar.
+       * "Northgate Apartments <blank> <blank>% name match" told a reviewer nothing about what the
+       * two missing numbers were; "folder path" and "match score" tell them exactly.
+       */
       ctx.unresolved.push(hint);
-      return `<span class="productos-value" title="${text(hint)}"></span>`;
+      const named = slotName(hint);
+      return named
+        ? `<span class="productos-slot" title="${text(hint)}">${text(named)}</span>`
+        : `<span class="productos-value" title="${text(hint)}"></span>`;
     }
     ctx.unresolved.push(hint);
     /**
@@ -880,6 +887,8 @@ function emit(node: ts.Node, ctx: Ctx): string {
      * screen would show, and stays marked, because omitting it silently produces the thin drawing.
      */
     if (ts.isIdentifier(e)) return "";
+    const named = slotName(hint);
+    if (named) return `<span class="productos-slot" title="${text(hint)}">${text(named)}</span>`;
     return `<span class="productos-unknown" title="${text(hint)}">&hellip;</span>`;
   }
   if (!ts.isJsxElement(n) && !ts.isJsxSelfClosingElement(n)) return "";
@@ -1512,6 +1521,56 @@ export interface DrawnState {
  * ⛔ Named from the code, never invented. Where the condition does not say plainly what it is, the
  * condition itself is the label — an honest "when total === 0" beats a confident wrong word.
  */
+/**
+ * The product's own word for a value the drawing cannot read, or "" if there isn't one.
+ *
+ * ⛔ A NAMED SLOT IS NOT A SAMPLE, AND THAT IS WHY THIS IS ALLOWED WHERE SAMPLING IS NOT.
+ *
+ * Peter: *"what are those orange striped ...s??????? why is there blocked out text in the examples
+ * on set up deal folder? Northgate apparements <blank> <blank>% name match????"* — a hatched
+ * ellipsis and two empty bars. They were honest and they read as redaction: a reviewer cannot tell
+ * a value the drawing could not resolve from one the product deliberately hides.
+ *
+ * Writing "project name" there claims nothing about what the value IS, which is the whole objection
+ * to sampling outside a row — "Page of $12,400,000" is legible and wrong. This is legible and true:
+ * the screen really does put the project's name in that sentence, and the sentence becomes readable
+ * as the sentence it is.
+ *
+ * ⛔ ONLY A PLAIN PATH. `projectHints.projectName` names a field; a template literal, a call, a
+ * ternary do not — there is no single word they are the name of, and inventing one would be a guess
+ * wearing a label's clothes. Those keep the ellipsis.
+ */
+function slotName(hint: string): string {
+  const path = hint.trim();
+  if (!/^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*$/.test(path)) return "";
+  const parts = path.split(".");
+  const words = (seg: string) =>
+    seg
+      .replace(/^(?:get|is|has|the)(?=[A-Z])/, "")
+      .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+      .replace(/[_-]+/g, " ")
+      .trim()
+      .toLowerCase();
+  let last = words(parts[parts.length - 1]!);
+  /**
+   * ⛔ ONE WORD IS OFTEN NOT ENOUGH OF A NAME. `project.name` reduces to "name", and "the cloud
+   * storage folder for name" is worse than the ellipsis was. Where the field's own word is a
+   * generic one, the thing holding it supplies the rest.
+   */
+  /**
+   * ⛔ A COUNT IS A NUMBER, AND NAMING IT AFTER THE FIELD READS AS A WORD IN THE SENTENCE.
+   * `matches.length` resolved to "length", so the heading read "length Matching Folders Found".
+   * "n" is the conventional mark for a count nobody has yet, and it sits in the sentence as the
+   * number it stands for.
+   */
+  if (/^(length|size)$/.test(last)) return "n";
+  if (parts.length > 1 && /^(name|title|label|value|text|count|total|id|type|status|date)$/.test(last)) {
+    const owner = words(parts[parts.length - 2]!);
+    if (owner && owner !== last) last = `${owner} ${last}`;
+  }
+  return last;
+}
+
 function labelFor(cond: string): string {
   /**
    * ⛔ WHAT THE CONDITION ASSERTS, NOT WHICH WORDS IT CONTAINS.

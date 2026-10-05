@@ -251,3 +251,34 @@ test("a name is an icon in the file that imported it, not everywhere", () => {
   assert.match(out.html, /Deals/, "a routing component was drawn as an icon and ate its label");
   fs.rmSync(root, { recursive: true, force: true });
 });
+
+test("a value the drawing cannot read says what it is", () => {
+  /**
+   * ⛔ A NAMED SLOT IS NOT A SAMPLE. Peter: *"what are those orange striped ...s??????? why is
+   * there blocked out text in the exmaples on set up deal folder? Northgate apparements <blank>
+   * <blank>% name match????"* — a hatched ellipsis mid-sentence and two empty bars in a row. They
+   * were honest and they read as redaction.
+   *
+   * Writing "project name" claims nothing about what the value IS, which is the objection to
+   * sampling outside a list row; it names the slot the product fills, which is true and legible.
+   * Only a plain path gets one — a template literal or a call has no single word it is the name
+   * of, and those keep the ellipsis rather than inventing one.
+   */
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "productos-slot-"));
+  fs.writeFileSync(
+    path.join(root, "Page.tsx"),
+    `export default function P(){ return (<div>
+       <p>Configure the folder for {projectHints.projectName}</p>
+       <h2>{matches.length} Matching Folders Found</h2>
+       <p>{listOf(everything, SETTINGS)}</p>
+     </div>) }`
+  );
+  const out = drawFromRoute(path.join(root, "Page.tsx"), {});
+  assert.match(out.html, /project name/, "a field the drawing cannot read stayed blocked out");
+  assert.doesNotMatch(out.html, /productos-unknown[^>]*projectHints/, "a nameable field still wears the warning stripes");
+  /** ⛔ A count reads as a count: "length Matching Folders Found" was the field name in the sentence. */
+  assert.match(out.html, /class="productos-slot"[^>]*>n</, "a count was named after its field instead of standing in as a number");
+  /** ⛔ And an expression with no name of its own is still marked rather than guessed at. */
+  assert.match(out.html, /productos-unknown/, "an unnameable expression was given a name anyway");
+  fs.rmSync(root, { recursive: true, force: true });
+});

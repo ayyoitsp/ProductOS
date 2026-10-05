@@ -26,7 +26,7 @@ import {
 import { readinessHeadline, acceptanceCount, type FeatureReadiness } from "../core/readiness.js";
 import { derivedVerification, DerivedVerification } from "../core/derived-state.js";
 import { buildAreaFlowGraph, renderMermaid } from "../core/flowchart.js";
-import { scopeToShadow, liftFaces } from "../v2/appcss.js";
+import { scopeToShadow, liftFaces, PANE_FIT } from "../v2/appcss.js";
 import { auditArea, auditFeature, type AuditFinding } from "../core/audit.js";
 
 const SHELL_CSS = `
@@ -698,10 +698,25 @@ const APP_JS = `
     }
     return;
   }
+  /**
+   * The stylesheet's own text, NOT its HTML serialisation.
+   *
+   * innerHTML escapes ampersand, less-than and greater-than on the way out, so every CSS rule with
+   * a child combinator came back with "&gt;" where the combinator was — an unparseable selector,
+   * silently dropped by the CSS parser. 828 rules reached the mock and NOT ONE of them contained a
+   * child combinator: all of space-y, divide, and every nested layout rule the application has.
+   * Vertical rhythm on every screen in every corpus was missing, which reads as "the drawing is
+   * wrong" rather than "the stylesheet lost a third of itself on the way in".
+   *
+   * Found while chasing empty space above a heading, which was the same bug wearing a smaller hat:
+   * the rule written to collapse that space also had a child combinator in it, so it too never
+   * arrived, and the fix looked like it had simply done nothing.
+   */
+  const cssText = tpl.content ? tpl.content.textContent : tpl.textContent;
   let sheet = null;
   try {
     sheet = new CSSStyleSheet();
-    sheet.replaceSync(tpl.innerHTML);
+    sheet.replaceSync(cssText);
   } catch (err) { sheet = null; }
   const scheme = tpl.getAttribute('data-theme');
   const wrap = tpl.getAttribute('data-mock-class') || 'productos-mock';
@@ -712,7 +727,7 @@ const APP_JS = `
     if (scheme) h.setAttribute('data-theme', scheme);
     const root = h.attachShadow({ mode: 'open' });
     if (sheet) root.adoptedStyleSheets = [sheet];
-    else { const st = document.createElement('style'); st.textContent = tpl.innerHTML; root.appendChild(st); }
+    else { const st = document.createElement('style'); st.textContent = cssText; root.appendChild(st); }
     const box = document.createElement('div');
     box.className = wrap;
     box.appendChild(t.content.cloneNode(true));
@@ -990,7 +1005,7 @@ export function renderShell(
     ? (lifted.faces ? `<style id="app-faces">${safe(lifted.faces)}</style>` : "") +
       `<template id="app-css"${options.theme ? ` data-theme="${escape(options.theme)}"` : ""}${
         options.mockClass ? ` data-mock-class="${escape(options.mockClass)}"` : ""
-      }>${safe(scopeToShadow(lifted.rest, options.mockClass || "productos-mock"))}</template>`
+      }>${safe(scopeToShadow(lifted.rest, options.mockClass || "productos-mock") + PANE_FIT)}</template>`
     : "";
   return `<!doctype html>
 <html lang="en">

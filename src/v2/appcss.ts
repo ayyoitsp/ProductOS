@@ -312,6 +312,46 @@ export function scopeToShadow(css: string, mockClass = "productos-mock"): string
   return out + prelude;
 }
 
+/**
+ * ⛔ A DRAWING IS SHOWN IN A PANE, AND A PAGE WRITTEN FOR A VIEWPORT WASTES MOST OF IT.
+ *
+ * Peter: *"there's so much empty space above 'new multifamily deal' - why????? can we please just
+ * get rid of all this wasted space? WE DON'T HAVE THAT MUCH SCREEN REAL ESTATE to begin with!"*
+ *
+ * A page's outermost wrapper is written to own the window — `min-h-screen` so the background
+ * reaches the bottom of a tall display, `p-6` and `pt-12` so the content is not jammed against the
+ * chrome above it. Carried verbatim into a 450px pane, `min-height: 100vh` makes the drawing twice
+ * the height of its own frame with everything in the top third, and seventy-two pixels of page
+ * padding eat the first sixth of what is left. The screen under review gets a third of the box it
+ * was given, and the reviewer scrolls past emptiness to reach it.
+ *
+ * ⛔ THE RULES ARE THE PAGE'S FRAME, NOT THE SCREEN'S LAYOUT. Only the mock's own root and the one
+ * element it wraps are touched, and only their viewport sizing and outer padding. Spacing BETWEEN
+ * things — every gap, stack and grid the screen is actually composed of — is the product's design
+ * and is left exactly as written. Last, so it wins on order without `!important` on anything but
+ * the viewport heights, which Tailwind sets from a utility class of equal weight.
+ */
+export const PANE_FIT = `
+/* productos: a drawing is shown in a pane, not a viewport */
+:host { display: block; }
+/*
+ * ⛔ ANY DEPTH, BECAUSE THE DRAWING IS NOT THE SHADOW ROOT'S FIRST CHILD. The renderer wraps it in
+ * the product's own mock container, so a child combinator off :host matches that wrapper and never
+ * the page. Written as \`:host > .min-h-screen\` first, which selected nothing at all and looked
+ * exactly like the rule having no effect.
+ */
+:host .min-h-screen, :host .h-screen {
+  min-height: 0 !important;
+  height: auto !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+}
+/* The centred column inside it carries the page's own top padding — pt-12 here, 48px of nothing. */
+:host .min-h-screen > *, :host .h-screen > * {
+  padding-top: 0 !important;
+}
+`;
+
 /** Split on top-level commas — a comma inside `:is(a, b)` or `[x=","]` does not separate selectors. */
 function splitTop(list: string): string[] {
   const parts: string[] = [];
