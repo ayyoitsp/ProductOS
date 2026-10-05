@@ -437,12 +437,20 @@ test("a state is named in the product's words, never in the code's", () => {
     `export default function P() {
        if (folderFailure) return <div className="ff">The folder could not be set up</div>
        if (state.isCreating) return <div className="cr">Creating your deal</div>
+       if (state.creationError) return <div className="ce">That did not work</div>
        return <div className="main"><h1>New Multifamily Deal</h1><p>Start with the property.</p></div>
      }`
   );
   const labels = drawFromRoute(route).drawnStates.map((st) => st.label);
   assert.ok(labels.includes("Creating"), `a busy flag must name the moment: ${JSON.stringify(labels)}`);
   assert.ok(labels.includes("Folder failure"), `a bare flag names itself: ${JSON.stringify(labels)}`);
+  /**
+   * ⛔ AND SO DOES ONE REACHED THROUGH THE OBJECT HOLDING IT. `state.creationError` read as
+   * "when state.creationError" — the prefix is the code's bookkeeping, the last segment is the
+   * product's word. Widening the Error test to catch it instead flattened "Folder failure" above
+   * into "Error", which is why both are asserted here together.
+   */
+  assert.ok(labels.includes("Creation error"), `a flag on an object names itself too: ${JSON.stringify(labels)}`);
   for (const l of labels) assert.doesNotMatch(l, /^when /, `"${l}" shows the reviewer code they are not reading`);
   fs.rmSync(dir, { recursive: true, force: true });
 });

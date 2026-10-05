@@ -50,33 +50,41 @@ function app() {
   return { root, put };
 }
 
-test("a screen is drawn inside the layouts its route sits in", () => {
+test("a drawing is the screen's own content, not the application around it", () => {
+  /**
+   * ⛔ THIS ASSERTED THE OPPOSITE, AND THE REVERSAL IS THE POINT.
+   *
+   * Composing each route's layouts around its page was built to answer "the screenshots look
+   * nothing like our UX" — and the missing shell genuinely was one reason. Seeing it, Peter:
+   * *"i don't think we need to show the full menu in every page, we should just show the relevant
+   * inline page"*. The shell is identical on every screen, so after the first it carries no
+   * information, takes room from the part under review, and drags its own unresolved icons in.
+   *
+   * ⛔ `layoutsAround` IS KEPT AND TESTED BELOW. Knowing which shell a screen sits in is worth
+   * having; drawing it on all seventeen is not.
+   */
   const { root } = app();
   const page = path.join(root, "app/(app)/deals/page.tsx");
-
-  /** ⛔ The group layout, not the root one: `app/layout.tsx` renders html/body and cannot nest. */
-  const around = layoutsAround(page);
-  assert.deepEqual(
-    around.map((f) => path.relative(root, f)),
-    ["app/(app)/layout.tsx"],
-    "the layout chain is wrong — the root layout must be skipped and the group layout found"
-  );
-
   const out = drawFromRoute(page, {});
-  assert.match(out.html, /<nav class="w-64 border-r">Nav<\/nav>/, "the drawing has no app chrome");
   assert.match(out.html, /<h1 class="type-display">Deals<\/h1>/, "the page's own content was lost");
-  /** The page goes INSIDE the shell, which is the whole point of composing them. */
-  assert.ok(
-    out.html.indexOf("w-64 border-r") < out.html.indexOf("type-display"),
-    "the page was placed before its chrome rather than inside it"
-  );
-  assert.doesNotMatch(out.html, /<html|<body/, "the root layout's html/body reached a drawing");
-  assert.doesNotMatch(out.html, /<!--children-->/, "the slot was left unfilled");
+  assert.doesNotMatch(out.html, /w-64 border-r/, "the application's nav was drawn around the screen");
+  assert.doesNotMatch(out.html, /<html|<body/, "a layout reached the drawing");
   fs.rmSync(root, { recursive: true, force: true });
 });
 
-test("a product with no layouts draws exactly as it did", () => {
-  /** ⛔ The composition must be invisible to a product that is not laid out this way. */
+test("which shell a screen sits in is still answerable", () => {
+  /** ⛔ The root `app/layout.tsx` is never one of them: it renders html/body and cannot nest. */
+  const { root } = app();
+  const page = path.join(root, "app/(app)/deals/page.tsx");
+  assert.deepEqual(
+    layoutsAround(page).map((f) => path.relative(root, f)),
+    ["app/(app)/layout.tsx"],
+    "the layout chain is wrong — the root layout must be skipped and the group layout found"
+  );
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test("a product with no layouts has no chain to report", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "productos-flat-"));
   const file = path.join(root, "Screen.tsx");
   fs.writeFileSync(file, 'export default function S(){ return (<div className="p-6">Hi</div>) }');

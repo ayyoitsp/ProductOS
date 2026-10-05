@@ -1541,8 +1541,27 @@ function labelFor(cond: string): string {
   /**
    * ⛔ A BARE FLAG NAMES ITSELF. `folderFailure` is one word the product already uses, and
    * "when folderFailure" is that word with an apology in front of it.
+   *
+   * ⛔ AND WHERE IT HANGS OFF SOMETHING, THE LAST SEGMENT IS THE WORD. This stopped at a plain
+   * identifier, so `state.creationError` — the same kind of flag, reached through the object
+   * holding it — fell all the way through to `when state.creationError`. The prefix is the code's
+   * bookkeeping about where the flag lives; `creationError` is the product's word for the moment.
+   * Widening the Error test above instead was tried and was wrong: it caught `folderFailure` too
+   * and flattened a specific name into the generic one.
    */
-  const bare = /^!?\s*([A-Za-z_$][\w$]*)\s*$/.exec(read.trim());
+  /**
+   * ⛔ A COUNT IS A MOMENT TOO, AND `=== 0` ALREADY HAD A NAME. "Empty" is at the top of this
+   * function; one-of and some-of fell through to `when total === 1` and `when rows.length > 0`,
+   * which is the same tab showing the same reviewer the same code. The thing being counted is
+   * written right there in the expression — it is the product's own word for what there is one of.
+   */
+  if (/^\s*(?:[\w$]+\.)*[\w$]+(?:\.length)?\s*===?\s*1\s*$/.test(read.trim())) return "Just one";
+  const some = /^\s*(?:[\w$]+\.)*([\w$]+)\.length\s*>\s*0\s*$/.exec(read.trim());
+  if (some) {
+    const w = some[1]!.replace(/([a-z0-9])([A-Z])/g, "$1 $2").toLowerCase();
+    return `With ${w}`;
+  }
+  const bare = /^!?\s*(?:[A-Za-z_$][\w$]*\.)*([A-Za-z_$][\w$]*)\s*$/.exec(read.trim());
   if (bare) {
     const w = bare[1]!.replace(/^(is|has|should)(?=[A-Z])/, "").replace(/([a-z0-9])([A-Z])/g, "$1 $2").trim();
     return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
@@ -1975,21 +1994,23 @@ export function drawFromRoute(routeFile: string, opts: DrawOptions = {}): DrawRe
    * providers, and an empty wrapper around the page would push it inside a div for no reason and
    * lose `<!--children-->` in the process.
    */
-  let composed = plain;
-  if (!opts.inLayout) {
-    for (const layout of layoutsAround(routeFile)) {
-      let shell: DrawResult;
-      try {
-        shell = drawFromRoute(layout, { ...opts, parts: undefined, inLayout: true });
-      } catch {
-        continue;
-      }
-      if (!shell.html.includes("<!--children-->")) continue;
-      composed = shell.html.replace("<!--children-->", composed);
-      for (const f of shell.from) ctx.from.add(f);
-    }
-  }
-  const wired = opts.parts?.length ? wireParts(composed, opts.parts) : { html: composed, matched: new Set<string>() };
+  /**
+   * ⛔ THE SCREEN'S OWN CONTENT, NOT THE APPLICATION AROUND IT.
+   *
+   * This composed each route's layouts around its page, so every drawing carried the sidebar. It
+   * was built to answer *"the 'creating a deal' screenshots look nothing like our UX"*, and it did
+   * — the missing shell was one real reason. Peter, having seen it: *"i don't think we need to show
+   * the full menu in every page, we should just show the relevant inline page"*, and he is right.
+   * The shell is identical on all seventeen screens, so it carries no information after the first
+   * and takes room from the part under review; and it drags its own unresolved icons into every
+   * drawing. A reviewer asking whether THIS screen promises the right things is not helped by the
+   * nav beside it.
+   *
+   * ⛔ `layoutsAround` STAYS, AND IS NOT DEAD. It is how a drawing can say which shell a screen sits
+   * in without drawing it, and the composition is three lines away if a surface ever wants one.
+   * What was wrong was doing it to every drawing by default.
+   */
+  const wired = opts.parts?.length ? wireParts(plain, opts.parts) : { html: plain, matched: new Set<string>() };
   /**
    * ⛔ A PART THE DRAWING DOES NOT SHOW IS REPORTED, NEVER DROPPED. Silently omitting it makes the
    * drawing look complete while a control the corpus claims exists is nowhere on it.
