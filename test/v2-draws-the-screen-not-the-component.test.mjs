@@ -282,3 +282,57 @@ test("a value the drawing cannot read says what it is", () => {
   assert.match(out.html, /productos-unknown/, "an unnameable expression was given a name anyway");
   fs.rmSync(root, { recursive: true, force: true });
 });
+
+test("a table cell takes its sample from the column it sits in", () => {
+  /**
+   * ⛔ THE EXPRESSION OFTEN SAYS NOTHING, AND THE HEADER ALWAYS DOES. The deals list renders every
+   * column through one cell component, so the STAGE column's expression is `displayLabel` — which
+   * matched the name rule and printed a deal name under a header reading STAGE, three rows of it,
+   * beside a DEAL column saying the same thing. CREATED is a `new Date(...)` call, which is
+   * structure rather than a field, so it drew as an empty grey bar.
+   *
+   * Peter: *"we should populate template values with ones that make sense!"*
+   */
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "productos-col-"));
+  fs.writeFileSync(
+    path.join(root, "Page.tsx"),
+    `export default function P(){ return (<table>
+       <thead><tr><th>Deal</th><th>Stage</th><th>Created</th></tr></thead>
+       <tbody>{deals.map((deal) => (<tr>
+         <td>{deal.name}</td>
+         <td><span className="badge">{displayLabel}</span></td>
+         <td>{new Date(deal.createdAt).toLocaleDateString('en-GB')}</td>
+       </tr>))}</tbody>
+     </table>) }`
+  );
+  const out = drawFromRoute(path.join(root, "Page.tsx"), {});
+  assert.match(out.html, /Underwriting|Screening|Term sheet/, "the stage column did not read as a stage");
+  /** ⛔ Even wrapped in a badge: the cell is searched, not required to BE the marker. */
+  assert.doesNotMatch(out.html, /badge[^>]*>\s*<span class="productos-sample"[^>]*>Northgate/, "a deal name is still filed under Stage");
+  assert.match(out.html, /2026/, "a date column drew as an empty bar");
+  /** ⛔ A column whose expression names a real field keeps it — the heading is the fallback. */
+  assert.match(out.html, /Northgate Apartments/, "the deal column lost the name its own field gave it");
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test("a value standing in a sentence is content, not a slot for a caller", () => {
+  /**
+   * ⛔ `Page {page} of {pageCount}` DREW AS "Page  of  ". A bare identifier that is all an element
+   * contains really is usually a slot — `actions`, `title`, `rightIcon` — and marking those put
+   * twenty hatched ellipses on a screen whose real text was four words. But nobody writes "Page "
+   * and " of " around a slot, and the pager read like a broken string.
+   */
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "productos-sentence-"));
+  fs.writeFileSync(
+    path.join(root, "Page.tsx"),
+    `export default function P(){ return (<div>
+       <span>Page {page} of {pageCount}</span>
+       <section>{children}</section>
+     </div>) }`
+  );
+  const out = drawFromRoute(path.join(root, "Page.tsx"), {});
+  assert.match(out.html, /Page\s*<span[^>]*>n<\/span>\s*of\s*<span[^>]*>n<\/span>/, "the pager lost its numbers");
+  /** ⛔ And a lone child is still read as a slot, which is what kept those screens clean. */
+  assert.doesNotMatch(out.html, /<section>\s*<span class="productos-(slot|unknown)"/, "a caller's slot was marked as missing content");
+  fs.rmSync(root, { recursive: true, force: true });
+});

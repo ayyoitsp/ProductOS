@@ -101,3 +101,19 @@ test("a product with no icon package installed is not an error", () => {
   assert.equal(lucideSvg("Folder", page), undefined, "a product that uses no icon package must still draw");
   fs.rmSync(root, { recursive: true, force: true });
 });
+
+test("an icon carries its own size, or it fills whatever holds it", () => {
+  /**
+   * ⛔ THE PAGER BUG. An inline <svg> with a viewBox and no intrinsic size resolves to the CSS
+   * default — 100% of its container — so the deals-list chevrons drew about sixty pixels tall and
+   * threw "Previous page" and "Next page" halfway across the control. Peter: *"the pagers are
+   * hugely wrong"*. The package sets width and height on every icon for exactly this reason.
+   */
+  const { root, page } = app();
+  const bare = lucideSvg("Folder", page);
+  assert.match(bare, /width="24"/, "an unclassed icon has no size and will fill its container");
+  assert.match(bare, /height="24"/, "an unclassed icon has no size and will fill its container");
+  /** ⛔ And a class still wins, because a CSS declaration outranks a presentation attribute. */
+  assert.match(lucideSvg("Folder", page, "h-4 w-4"), /class="h-4 w-4"/, "the call site lost its sizing");
+  fs.rmSync(root, { recursive: true, force: true });
+});

@@ -145,8 +145,17 @@ export function lucideSvg(name: string, fromFile: string, cls = ""): string | un
   }
   if (!kids) return undefined;
   const klass = cls.trim() ? ` class="${cls.trim()}"` : "";
+  /**
+   * ⛔ width AND height, OR AN UNCLASSED ICON EATS THE SCREEN.
+   *
+   * An inline <svg> with a viewBox and no intrinsic size resolves to the CSS default — 100% of its
+   * container — so the pager's two chevrons rendered about sixty pixels tall and shoved "Previous
+   * page" and "Next page" halfway across the control. Peter: *"the pagers are hugely wrong"*. The
+   * package sets these two attributes on every icon for exactly this reason, and a class from the
+   * call site still beats them, because a CSS declaration outranks a presentation attribute.
+   */
   return (
-    `<svg${klass} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" ` +
+    `<svg${klass} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" ` +
     `stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ` +
     `role="img" aria-label="${name}">${kids}</svg>`
   );

@@ -886,7 +886,19 @@ function emit(node: ts.Node, ctx: Ctx): string {
      * An expression with structure — a call, a member access, `deals.map(...)` — IS content the
      * screen would show, and stays marked, because omitting it silently produces the thin drawing.
      */
-    if (ts.isIdentifier(e)) return "";
+    /**
+     * ⛔ …UNLESS IT IS STANDING IN A SENTENCE, WHERE IT IS PLAINLY CONTENT.
+     *
+     * `Page {page} of {pageCount}` drew as "Page  of  " — the pager lost both its numbers and read
+     * like a broken string. The rule below is right about a bare identifier being a slot when it is
+     * ALL an element contains; it is wrong the moment there are words either side of it, because
+     * nobody writes "Page " and " of " around a slot for a caller to fill.
+     */
+    const amongWords =
+      n.parent &&
+      ts.isJsxElement(n.parent) &&
+      n.parent.children.some((c) => ts.isJsxText(c) && /[A-Za-z0-9]/.test(c.text));
+    if (ts.isIdentifier(e) && !amongWords) return "";
     const named = slotName(hint);
     if (named) return `<span class="productos-slot" title="${text(hint)}">${text(named)}</span>`;
     return `<span class="productos-unknown" title="${text(hint)}">&hellip;</span>`;
@@ -1184,6 +1196,13 @@ function emit(node: ts.Node, ctx: Ctx): string {
    */
   if (/^(button|a)$/.test(tag) && !/>[^<]*[A-Za-z0-9][^<]*</.test(`>${children}<`)) {
     const said = /aria-label="([^"]+)"/.exec(attr)?.[1] ?? /title="([^"]+)"/.exec(attr)?.[1];
+    /**
+     * ⛔ ONLY WHERE THE GLYPH IS STILL UNKNOWN. This existed because an icon-only button drew as an
+     * empty box, so its name was the only thing identifying it. Now that icons draw as themselves,
+     * spelling the name out as well put "Previous page" and "Next page" in the middle of a pager
+     * that the real product renders as two chevrons and nothing else.
+     */
+    if (/<svg/.test(children)) return `<${tag}${attr}>${children}</${tag}>`;
     const icon = /class="productos-icon"[^>]*aria-label="([^"]+)"/.exec(children)?.[1];
     const named = said ?? icon;
     if (named)
@@ -1507,6 +1526,69 @@ export function sampleValue(hint: string, row: number): string | undefined {
   return undefined;
 }
 
+/**
+ * Fill a table's blank cells from the column they sit in.
+ *
+ * ⛔ A CELL KNOWS WHAT IT HOLDS ONLY FROM ITS HEADER, AND THE EXPRESSION OFTEN SAYS NOTHING.
+ *
+ * The deals list renders every column through one cell component, so the STAGE column's expression
+ * is `displayLabel` — which matched the name rule and printed "Northgate Apartments" under a header
+ * reading STAGE, three times, next to a DEAL column saying the same thing. The CREATED column is
+ * `new Date(deal.createdAt).toLocaleDateString(…)`, which is structure rather than a field, so it
+ * drew as an empty grey bar. Peter: *"we should populate template values with ones that make
+ * sense!"* The header is the product's own word for that column, and it is right there.
+ *
+ * ⛔ IT ONLY FILLS AND ONLY CORRECTS THE ANONYMOUS. A blank bar becomes a sample; a sample drawn
+ * from a field whose name says nothing about its contents — `displayLabel`, `value`, `cell` — is
+ * re-read from the header. A cell whose expression names a real field keeps what that field gave
+ * it, because the expression is better evidence than the heading when it actually says something.
+ */
+const ANONYMOUS = /^(displayLabel|label|value|cell|content|text|display|formatted|raw|item)$/i;
+
+export function sampleByColumn(html: string): string {
+  return html.replace(/<table\b[^>]*>[\s\S]*?<\/table>/g, (table) => {
+    const headers = [...table.matchAll(/<th\b[^>]*>([\s\S]*?)<\/th>/g)].map((m) =>
+      m[1].replace(/<[^>]*>/g, " ").replace(/&[a-z]+;/g, " ").trim()
+    );
+    if (!headers.length) return table;
+    let row = -1;
+    return table.replace(/<tr\b[^>]*>[\s\S]*?<\/tr>/g, (tr) => {
+      if (/<th\b/.test(tr)) return tr;
+      row++;
+      let col = -1;
+      const here = row;
+      return tr.replace(/<td\b[^>]*>([\s\S]*?)<\/td>/g, (td, inner) => {
+        col++;
+        const head = headers[col];
+        if (!head) return td;
+        const made = sampleValue(head, here);
+        if (made === undefined) return td;
+        /**
+         * ⛔ ANYWHERE IN THE CELL, NOT THE WHOLE OF IT. This first demanded the placeholder be the
+         * cell's only content, and the deals list wraps its stage in a badge — so the one cell this
+         * was written for was the one it could not reach. Markers hold plain text, so the patterns
+         * stay anchored on "<" and cannot backtrack.
+         */
+        const blank = /<span class="productos-value"([^>]*)><\/span>/.exec(inner);
+        if (blank) {
+          return td.replace(blank[0], `<span class="productos-sample"${blank[1]}>${text(made)}</span>`);
+        }
+        /** A sample from a field that names nothing: the heading is the better word. */
+        const anon = /<span class="productos-sample" title="([^"]*)">([^<]*)<\/span>/.exec(inner);
+        if (anon) {
+          const title = anon[1].replace(/ \u2014 sample$/, "");
+          const field = (title.split(/[.?[\]'"()]+/).filter(Boolean).pop() ?? "").trim();
+          if (ANONYMOUS.test(field) && anon[2] !== made) {
+            return td.replace(anon[0], anon[0].replace(`>${anon[2]}</span>`, `>${text(made)}</span>`));
+          }
+        }
+        return td;
+      });
+    });
+  });
+}
+
+
 export interface DrawnState {
   /** The condition in the code that produces it, kept verbatim so it can be checked. */
   when: string;
@@ -1541,7 +1623,12 @@ export interface DrawnState {
  * wearing a label's clothes. Those keep the ellipsis.
  */
 function slotName(hint: string): string {
-  const path = hint.trim();
+  /**
+   * ⛔ `total.toLocaleString()` IS THE FIELD `total`, FORMATTED. A no-argument method on the end is
+   * how a number is written out, not a different thing being shown — and refusing it put a hatched
+   * ellipsis in front of the word "deals" on the deals list, where the product says "1,284 deals".
+   */
+  const path = hint.trim().replace(/\.(?:to[A-Z]\w*|trim|valueOf)\(\s*\)$/, "");
   if (!/^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*$/.test(path)) return "";
   const parts = path.split(".");
   const words = (seg: string) =>
@@ -1563,7 +1650,13 @@ function slotName(hint: string): string {
    * "n" is the conventional mark for a count nobody has yet, and it sits in the sentence as the
    * number it stands for.
    */
-  if (/^(length|size)$/.test(last)) return "n";
+  /**
+   * ⛔ A NUMBER READS AS A NUMBER. Naming the field put the field's words in the sentence instead
+   * of the figure they stand for: `Page {page} of {pageCount}` drew as "Page page of total pages".
+   * "n" is the conventional mark for a count nobody has yet and sits in the line as the number it
+   * replaces — "Page n of n", "n deals". Only counting words; a score, a rate, a name keeps its own.
+   */
+  if (/\b(page|pages|count|total|number|num|index|qty|quantity|offset|limit|size|length)\b/.test(last)) return "n";
   if (parts.length > 1 && /^(name|title|label|value|text|count|total|id|type|status|date)$/.test(last)) {
     const owner = words(parts[parts.length - 2]!);
     if (owner && owner !== last) last = `${owner} ${last}`;
@@ -1636,6 +1729,16 @@ function labelFor(cond: string): string {
   if (some) {
     const w = some[1]!.replace(/([a-z0-9])([A-Z])/g, "$1 $2").toLowerCase();
     return `With ${w}`;
+  }
+  /**
+   * ⛔ "PRESENT" IS A STATE, AND `!= null` IS HOW THE PRODUCT SPELLS IT. The chip read
+   * "when deal.loanAmount != null" — the expression, in front of a reviewer, instead of the moment
+   * it picks out. The Not-found rule above is its mirror and was already named.
+   */
+  const present = /^\s*(?:[\w$]+\.)*([\w$]+)\s*!==?\s*(?:null|undefined)\s*$/.exec(read.trim());
+  if (present) {
+    const w = present[1]!.replace(/([a-z0-9])([A-Z])/g, "$1 $2").toLowerCase();
+    return `Has ${w}`;
   }
   const bare = /^!?\s*(?:[A-Za-z_$][\w$]*\.)*([A-Za-z_$][\w$]*)\s*$/.exec(read.trim());
   if (bare) {
@@ -2002,7 +2105,12 @@ export function drawFromRoute(routeFile: string, opts: DrawOptions = {}): DrawRe
   const routeFork = jsx ? forkOf(routeGuards, jsx, path.basename(routeFile)) : undefined;
   if (routeFork) ctx.forks.push(routeFork);
   if (!jsx) return { html: "", from: [...ctx.from], unresolved: ["the route exports no component this can read"], undrawn: [], states: [], forks: [], drawnStates: [], text: "" };
-  const plain = emit(jsx, ctx);
+  /**
+   * ⛔ AFTER THE WHOLE SCREEN EXISTS, because a cell cannot see its own column while it is drawn.
+   * The headers and the rows are emitted by the same recursion from opposite ends of the table;
+   * this is the first moment both are in one string.
+   */
+  const plain = sampleByColumn(emit(jsx, ctx));
 
   /**
    * ⛔ EVERY STATE THIS SCREEN HAS, DRAWN — not listed.
