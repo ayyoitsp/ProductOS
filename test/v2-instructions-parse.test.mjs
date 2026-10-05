@@ -25,6 +25,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import fs from "node:fs";
 import path from "node:path";
+import yaml from "yaml";
 
 const DOCS = [
   ...fs.readdirSync("agents").filter((f) => f.endsWith(".md")).map((f) => path.join("agents", f)),
@@ -115,4 +116,113 @@ test("no authoring document teaches a field the schema does not have", () => {
   const doc = fs.readFileSync("agents/productos-scoper.md", "utf-8");
   assert.match(doc, /There is no `walked:` field/,
     "the scoper is no longer told that walked: was removed — so the next session has nothing stopping it writing one");
+});
+
+/**
+ * ⛔ A MARKED EXAMPLE IS PARSED AGAINST THE SHAPE IT CLAIMS TO BE, NOT CHECKED FOR KNOWN FIELD NAMES.
+ *
+ * The general assertion above compares every key in every example against a flat union of all field
+ * names in the schema. That can never catch the defect that actually happened: a field valid on some
+ * OTHER object, written on this one. `Reading.basis` was documented with `what:` — and `what` is a
+ * real field elsewhere in the schema, so the union said nothing.
+ *
+ * The documented example failed three ways at once, all of them fatal because `Reading` is
+ * `.strict()`: no `id`, no `basis.ref`, and `basis.what` unrecognized. So every reading anybody
+ * wrote from these instructions was refused by the loader, `readings/` stayed empty in every corpus
+ * — including the one being reviewed — and the natural conclusion was that the concept did not work
+ * rather than that the instruction was wrong.
+ *
+ * ⛔ THIS BLOCKED SOMETHING MUCH LARGER. `Reading` is the unit of support: the thing a confidence
+ * scale counts. PT-0002 asks "what is a unit of support?" and the schema had already answered —
+ * `bears_on` + `observes` + `basis` — but nothing could be authored, so any scale built on it would
+ * have computed "no support" for every statement in the corpus.
+ *
+ * Only examples that name their file are parsed. That is three of them today, and the count is
+ * asserted so this cannot quietly become zero while still passing.
+ */
+const SHAPES = {
+  "readings/": "Reading",
+  "verdicts/": "Verdict",
+  "notes/": "Note",
+  "steers/": "Steer",
+  "access/": "Access",
+  "rules/": "Rule",
+};
+
+test("every example that names its file parses against the shape that file holds", async () => {
+  const schemaModule = await import("../dist/v2/schema.js");
+  const checked = [];
+
+  for (const { file, text } of blocks()) {
+    const marker = /^#\s*([a-z-]+\/)/.exec(text.trim());
+    if (!marker) continue;
+    const shapeName = SHAPES[marker[1]];
+    if (!shapeName) continue;
+    const shape = schemaModule[shapeName];
+    assert.ok(shape, `${file} names ${marker[1]} and there is no exported ${shapeName} to check it against`);
+
+    const body = text.replace(/^#[^\n]*\n/, "");
+    let parsed;
+    try {
+      parsed = yaml.parse(body);
+    } catch (e) {
+      assert.fail(`${file}: the ${shapeName} example is not valid YAML — ${e.message}`);
+    }
+
+    const r = shape.safeParse(parsed);
+    assert.ok(
+      r.success,
+      `${file}: the documented ${shapeName} example does not parse —\n    ` +
+        (r.error?.issues ?? []).map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`).join("\n    "),
+    );
+    checked.push(shapeName);
+  }
+
+  /**
+   * ⛔ THE COUNT IS ASSERTED, OR THIS PASSES BY CHECKING NOTHING. A renamed marker, a reformatted
+   * fence, or somebody dropping the `# readings/…` comment would silently empty this loop — and a
+   * test that checks zero examples reports a pass. That is the failure mode of the assertion above,
+   * which gathers fifteen findings and asserts one.
+   */
+  assert.ok(checked.length >= 1, "no marked examples were found — the marker convention has drifted");
+  assert.ok(checked.includes("Reading"), "the Reading example is no longer marked, so nothing parses it");
+});
+
+/**
+ * ⛔ A CHECK THAT COLLECTS FINDINGS AND ASSERTS ONE OF THEM REPORTS A PASS.
+ *
+ * The assertion above builds `bad` — every key taught in an authoring document that the schema does
+ * not have — and then asserts only on `walked`. The other findings are gathered and dropped. At the
+ * time of writing that set held fifteen entries and the suite was green.
+ *
+ * Thirteen of the fifteen turned out to be collection failures rather than doc bugs: the matcher
+ * only recognises a field declared as `name: z.…`, so anything declared through a shared sub-schema
+ * (`set_outside`, `candidates`, `standing`) or living in another schema file (`components_dir`,
+ * `design_system`) reads as unknown. So widening `known` would make that check MORE permissive, not
+ * less — which is why the shape-parsing above is the one that can actually catch a wrong field.
+ *
+ * This asserts the honest version: the collected set may not GROW. A new unknown key is either a
+ * real doc bug or a new hole in collection, and both are worth a look before the number moves.
+ */
+test("the set of keys the schema cannot explain does not grow unnoticed", () => {
+  const known = new Set([...schema.matchAll(/^\s*([a-z_]+):\s*z\./gm)].map((m) => m[1]));
+  const vocabulary = new Set(["given", "when", "then", "kind", "says", "because", "by", "at", "id", "title", "label", "role", "means", "name", "told", "to", "from", "of", "it"]);
+  const unexplained = new Set();
+  for (const { text } of blocks())
+    for (const line of text.split("\n")) {
+      const m = /^\s{2,}([a-z][a-z_]{2,})::?\s/.exec(line.replace(/::/, ":")) ?? /^\s{2,}([a-z][a-z_]{2,}):\s*\S/.exec(line);
+      if (!m) continue;
+      if (!known.has(m[1]) && !vocabulary.has(m[1])) unexplained.add(m[1]);
+    }
+
+  /**
+   * ⛔ `what` IS GONE FROM THIS SET, AND THAT IS THE POINT OF RECORDING THE NUMBER. It was the only
+   * real doc bug among the fifteen, and it sat in a set nothing asserted on.
+   */
+  assert.ok(!unexplained.has("what"), "`what:` is being taught again — it is not a field on Reading, and .strict() rejects it");
+  assert.ok(
+    unexplained.size <= 14,
+    `the authoring documents now teach ${unexplained.size} keys the schema cannot explain, up from 14:\n    ` +
+      [...unexplained].join(", "),
+  );
 });

@@ -668,16 +668,32 @@ with nothing on the other side blocks a sentence nobody can find.
 
 ```yaml
 # readings/<something>.yaml
+id: analysts-retype-sponsor
 observes: analysts re-type the sponsor name rather than search for it
 bears_on: deal-list#see-the-list            # the scope or exchange it speaks to
 basis:
-  kind: trial                               # trial | interview | support | telemetry | log | test | inspection
-  what: eleven sessions watched in September
+  kind: trial                               # code | test-run | screen | inspection | trial | interview | support | telemetry | log
+  ref: eleven sessions watched, September 2026   # where this was observed, specifically
+  at: 2026-09-30
 ```
 
 A reading is evidence, not a claim: it is shown beside a question so whoever answers is answering
-against something. ⛔ **These instructions never named it either, so `readings/` stays empty in every
-corpus and the "what has actually been observed" half of every question is blank.**
+against something.
+
+⛔ **AND THIS EXAMPLE DID NOT PARSE, WHICH IS WHY `readings/` IS EMPTY — NOT BECAUSE NOBODY WAS
+TOLD.** It was documented without `id`, with `what:` where the schema has `ref:`, and with a `kind`
+list offering four values the enum did not have. `Reading` is `.strict()`, so every one of those is
+a rejection: an author following this wrote a file the loader refused, and the natural reading of
+that is "this concept does not work" rather than "the instruction is wrong".
+
+Proven by parsing the example that used to be here against `Reading` — three errors at once:
+`id` required, `basis.ref` required, `basis` has an unrecognized key `what`. The enum now carries
+the four kinds this document was already offering.
+
+⛔ **`ref` is a pointer, and it is the load-bearing half.** A reading whose basis names no source is
+an assertion wearing evidence's clothes. The entire value is that whoever answers the question can
+go and look — a `file:line` for code, a session set for a trial, a ticket for support, a dashboard
+for telemetry.
 
 ### ⛔ An exchange, with every key
 

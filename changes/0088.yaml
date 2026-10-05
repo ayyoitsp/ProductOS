@@ -1,0 +1,13 @@
+id: "0088"
+said: ok, let's review where we are with human validation vs confidence scale. should be a ticket - where are we there? I think this is essential to getting things going. still too much review surface. when the feature is initially spec'd, or when UX is changed with explicit instructions, and there is confirmation, it should feed into everything that hasn't been confirmed (or confirmed) to make sure there are no discrepancies, and confidence is updated
+at: 2026-10-05
+kind: concept
+reaches:
+  model: ""
+  derive: ""
+  generate: ""
+  surface: ""
+  check: ""
+  instruct: ""
+  pin: ""
+waived: {}
