@@ -198,6 +198,16 @@ function classOf(node: ts.JsxAttributeValue | undefined, preferTrue = false): st
 interface Ctx {
   /** Component name → its source file, for inlining one level at a time. */
   resolve: (name: string) => string | undefined;
+  /**
+   * Props the call site passed as false — a `useState(false)` identifier, or the literal.
+   *
+   * ⛔ SEPARATE FROM `props`, WHICH HOLDS RENDERED TEXT. "False" is not a string a component shows;
+   * it is a fact about which branch the screen takes, and the two were never the same kind of
+   * thing.
+   */
+  falsy: Set<string>;
+  /** The element of a resolved list this pass is drawing, and the name the callback gave it. */
+  item?: { name: string; fields: Map<string, string> };
   depth: number;
   from: Set<string>;
   unresolved: string[];
@@ -536,8 +546,15 @@ function emit(node: ts.Node, ctx: Ctx): string {
      * `isCreating ? 'Creating…' : 'Continue'` was picked by span, and the button on the happy path
      * read "Creating…", which is the screen mid-submit rather than the screen you meet.
      */
+    /**
+     * ⛔ AND A WORD BOUNDARY IS THE WRONG EDGE FOR A camelCase SUFFIX. `\berror\b` does not match
+     * inside `creationError`, so `{state.creationError && <banner/>}` drew a pink failure banner on
+     * the create-a-deal form at rest — with nothing failing, and its message an ellipsis. Same for
+     * `uploadError`, `saveError` and every other `somethingError` a real component names. A flag
+     * ending in Error is an error flag whatever it is prefixed with.
+     */
     const GUARD =
-      /\b(isLoading|loading|isPending|pending|isFetching|busy|skeleton|isError|error|isCreating|creating|isSaving|saving|isSubmitting|submitting|isUploading|uploading|isDeleting|deleting|isMutating)\b/i;
+      /\b(isLoading|loading|isPending|pending|isFetching|busy|skeleton|isError|error|isCreating|creating|isSaving|saving|isSubmitting|submitting|isUploading|uploading|isDeleting|deleting|isMutating)\b|\w+(Error|Errors|Failure|Failed)\b/i;
     /**
      * ⛔ `isSomethingIng` IS A BUSY FLAG, WHICHEVER VERB IT IS — and the list above can never be
      * finished by adding words to it. `folderSetup.isMatching` is not in it, so the folder step
@@ -557,7 +574,19 @@ function emit(node: ts.Node, ctx: Ctx): string {
       const span = (n: ts.Node): number => n.getEnd() - n.getStart();
       let chosen: ts.Node;
       let skipped: ts.Node;
+      /**
+       * ⛔ A PROP THE CALLER PASSED AS FALSE DECIDES THIS, AND IT IS NOT A GUESS.
+       *
+       * `AppProvider` is `{withAppLayout ? <AppLayout>{children}</AppLayout> : children}`, and the
+       * `(standalone)` route group passes `withAppLayout={false}` — that is how an Excel add-in
+       * pane says it has no sidebar. Without reading it, the longer branch won on span and the
+       * add-in got wrapped in the whole web application's chrome: a task pane inside Excel, drawn
+       * with a nav rail beside it. Its drawing went from 17 unresolved placeholders to 48, all of
+       * them belonging to a shell it does not have.
+       */
+      const falseProp = ts.isIdentifier(cond) && ctx.falsy.has(cond.text);
       if (ctx.prefer && c.replace(/\s+/g, " ") === ctx.prefer) { chosen = a; skipped = b; }
+      else if (falseProp) { chosen = b; skipped = a; }
       else if (GUARD.test(said) || DOING.test(said) || EMPTY.test(said) || OPEN.test(said)) { chosen = b; skipped = a; }
       else if (span(a) >= span(b)) { chosen = a; skipped = b; }
       else { chosen = b; skipped = a; }
@@ -660,6 +689,35 @@ function emit(node: ts.Node, ctx: Ctx): string {
       return left || emit(ts.factory.createJsxExpression(undefined, e.right), ctx);
     }
     /**
+     * ⛔ `??` IS THE SAME SHAPE AND WAS NOT HANDLED, which is most of the hatched ellipses on a page.
+     *
+     * `organization?.name ?? 'Personal account'` carries its own answer: the author wrote what the
+     * screen says when the value is absent, and absent is exactly the state a drawing is in. It
+     * rendered as `…` with the whole expression in a tooltip — 472 of those across thirteen
+     * screens, each one crowding out text that is real.
+     *
+     * ⛔ READING, NOT GUESSING. The literal is in the source; nothing is invented by showing it.
+     */
+    if (ts.isBinaryExpression(e) && e.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken) {
+      const left = emit(ts.factory.createJsxExpression(undefined, e.left), ctx);
+      return left || emit(ts.factory.createJsxExpression(undefined, e.right), ctx);
+    }
+    /**
+     * ⛔ A TEMPLATE LITERAL IS MOSTLY WORDS. `` `Selected Files (${files.length})` `` is three
+     * characters of unknown and twelve of product copy, and the whole thing was being thrown away
+     * for the three. The static halves are the author's words; each hole is resolved on its own, so
+     * a count stays a marked sample and the sentence around it survives.
+     */
+    if (ts.isTemplateExpression(e)) {
+      let out = text(e.head.text);
+      for (const sp of e.templateSpans) {
+        out += emit(ts.factory.createJsxExpression(undefined, sp.expression), ctx);
+        out += text(sp.literal.text);
+      }
+      return out;
+    }
+    if (ts.isNoSubstitutionTemplateLiteral(e)) return text(e.text);
+    /**
      * ⛔ A LIST DRAWS AS A LIST. Peter: *"nothing renders right for 'deal list'. all screenshots are
      * the same - not a single deal added to the list, just the empty list state..."*
      *
@@ -679,6 +737,32 @@ function emit(node: ts.Node, ctx: Ctx): string {
         const body = ts.isBlock(cb.body) ? returnedFrom(cb.body) : cb.body;
         const inner = body && ts.isParenthesizedExpression(body) ? body.expression : body;
         if (inner && (ts.isJsxElement(inner) || ts.isJsxSelfClosingElement(inner) || ts.isJsxFragment(inner))) {
+          /**
+           * ⛔ WHERE THE LIST IS WRITTEN DOWN, DRAW THE LIST — NOT THREE OF ANYTHING.
+           *
+           * A navigation is `mainMenuItems.map(item => <a>{item.label}</a>)` over an array of
+           * object literals in a config module: Dashboard, Monitor, Deals, CRE Deals, Borrowers.
+           * Those are not unknown values, they are the product's own words, sitting in the
+           * repository. Drawn as three blank rows, the sidebar on every screen was a column of
+           * grey bars — Peter has already said what that is worth: *"ok, wtf, how are grey bars
+           * useful?"*
+           *
+           * ⛔ STILL INVENTING NOTHING. This reads literals and stops: an array it cannot resolve
+           * falls through to the three-row shape exactly as before, and a field whose value is an
+           * expression stays a marked sample. The rule is unchanged — never guess a figure — and a
+           * figure written in the source was never a guess.
+           */
+          const param = cb.parameters[0];
+          const items = ts.isIdentifier(e.expression.expression)
+            ? literalItems(e.expression.expression, ctx.sameFile)
+            : undefined;
+          if (items?.length && param && ts.isIdentifier(param.name)) {
+            const name = param.name.text;
+            return items
+              .slice(0, 8)
+              .map((fields) => emit(inner, { ...ctx, inRow: true, item: { name, fields } }))
+              .join("");
+          }
           /** Three: enough to read as a list, few enough that a tile is not all one screen. */
           return [0, 1, 2].map((i) => emit(inner, { ...ctx, inRow: true, row: i })).join("");
         }
@@ -731,6 +815,17 @@ function emit(node: ts.Node, ctx: Ctx): string {
     if (ts.isIdentifier(e) && e.text === "children" && !ctx.props.has("children")) return "<!--children-->";
     // A prop bound at the call site: the value the application actually passes.
     if (ts.isIdentifier(e) && ctx.props.has(e.text)) return ctx.props.get(e.text)!;
+    /**
+     * ⛔ `{item.label}` WHERE THE LIST WAS RESOLVED — the product's own word, not a bar.
+     *
+     * Only when this pass is drawing a known element, and only for a field whose value is a literal
+     * in the source. Anything else falls through to the sampling below and stays marked, so a
+     * resolved list cannot quietly start inventing the fields it could not read.
+     */
+    if (ts.isPropertyAccessExpression(e) && ctx.item && ts.isIdentifier(e.expression) && e.expression.text === ctx.item.name) {
+      const had = ctx.item.fields.get(e.name.text);
+      if (had !== undefined) return text(had);
+    }
     const s = ctx.sample(hint);
     if (s !== undefined) return text(s);
     /**
@@ -869,7 +964,7 @@ function emit(node: ts.Node, ctx: Ctx): string {
          */
         if ([...falsy].some((p) => new RegExp(`if\\s*\\(\\s*!\\s*${p}\\s*\\)\\s*return\\s+null`).test(sourceOf(file))))
           return "";
-        const sub: Ctx = { ...ctx, depth: ctx.depth + 1, props: bound, sameFile: file };
+        const sub: Ctx = { ...ctx, depth: ctx.depth + 1, props: bound, falsy, sameFile: file };
         const body = emit(inner, sub);
         // `{children}` inside the primitive is where this element's own children belong.
         if (body.includes("<!--children-->")) return body.replace("<!--children-->", children);
@@ -970,7 +1065,18 @@ function emit(node: ts.Node, ctx: Ctx): string {
       ctx.unresolved.push(`<${tag}> (drawn as <${asTable}>)`);
       return `<${asTable}>${children}</${asTable}>`;
     }
-    if (ctx.icons.has(tag)) {
+    /**
+     * ⛔ AN ICON IN THE FILE THAT IMPORTED IT, NOT EVERYWHERE ON THE SCREEN.
+     *
+     * Icon names were collected from the route and every indexed file into one set, so a name any
+     * file imported from lucide became an icon in all of them. lucide exports `Link`; so does
+     * `next/link`, and every `<Link>` in the application — the element wrapping each nav label —
+     * was drawn as an icon glyph, swallowing its children. That is why the sidebar had the right
+     * number of rows and no words in them.
+     *
+     * The import is in the file. Ask the file.
+     */
+    if (iconHere(ctx.sameFile, tag) || (!ctx.sameFile && ctx.icons.has(tag))) {
       ctx.unresolved.push(`<${tag}> (icon)`);
       return `<span class="productos-icon" role="img" aria-label="${text(tag)}"></span>`;
     }
@@ -1126,6 +1232,156 @@ function sourceOf(file: string): string {
     SOURCE.set(file, have);
   }
   return have;
+}
+
+
+/**
+ * The object literals of an array a name refers to, following locals and one import.
+ *
+ * ⛔ IT FOLLOWS DERIVATIONS, because a nav is never used raw. `filteredMenuItems` is
+ * `menuItemsWithIcons.filter(...)`, which is `mainMenuItems.map(...)`, which is the import. Stopping
+ * at the first name would resolve nothing in a real component; each `.map`/`.filter`/`.slice` step
+ * narrows or decorates the same list, and the labels survive all of them.
+ *
+ * ⛔ ONE IMPORT DEEP AND LITERALS ONLY. This is a reader, not an evaluator: a value that is not a
+ * string or number in the source is left out, and the caller falls back to drawing the shape.
+ */
+function literalItems(name: ts.Identifier, fromFile?: string, depth = 0): Array<Map<string, string>> | undefined {
+  if (depth > 4) return undefined;
+  const sf = name.getSourceFile();
+  let decl: ts.Expression | undefined;
+  const visit = (n: ts.Node): void => {
+    if (decl) return;
+    if (ts.isVariableDeclaration(n) && ts.isIdentifier(n.name) && n.name.text === name.text && n.initializer)
+      decl = n.initializer;
+    else ts.forEachChild(n, visit);
+  };
+  ts.forEachChild(sf, visit);
+
+  /** `X.filter(...)` / `X.map(...)` / `X.slice(...)` — the same list, one step on. */
+  if (
+    decl &&
+    ts.isCallExpression(decl) &&
+    ts.isPropertyAccessExpression(decl.expression) &&
+    /^(filter|map|slice|concat|sort|reverse)$/.test(decl.expression.name.text) &&
+    ts.isIdentifier(decl.expression.expression)
+  )
+    return literalItems(decl.expression.expression, fromFile, depth + 1);
+
+  /**
+   * ⛔ AND A PLAIN CALL OVER THE LIST, which is how a real filter is written. The nav is
+   * `filterByPermissions(menuItemsWithIcons)` — not a method chain, so following only `.filter`
+   * resolved nothing and the sidebar stayed a column of grey bars. A function handed one array and
+   * returning a list gives back some of that array; which ones depends on who is looking, and the
+   * drawing shows the list the product has rather than one person's view of it.
+   */
+  if (decl && ts.isCallExpression(decl) && decl.arguments.length === 1 && ts.isIdentifier(decl.arguments[0]!))
+    return literalItems(decl.arguments[0] as ts.Identifier, fromFile, depth + 1);
+
+  if (!decl) {
+    /** Not declared here: follow the import that brought the name in. */
+    const spec = importSpecifierFor(sf, name.text);
+    if (!spec || !fromFile) return undefined;
+    const target = resolveModule(spec, fromFile);
+    if (!target) return undefined;
+    const src = ts.createSourceFile(target, sourceOf(target), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    let found: Array<Map<string, string>> | undefined;
+    const look = (n: ts.Node): void => {
+      if (found) return;
+      if (ts.isVariableDeclaration(n) && ts.isIdentifier(n.name) && n.name.text === name.text && n.initializer)
+        found = itemsOf(n.initializer);
+      else ts.forEachChild(n, look);
+    };
+    ts.forEachChild(src, look);
+    return found;
+  }
+  return itemsOf(decl);
+}
+
+/** An array literal's object literals, as plain string fields. */
+function itemsOf(e: ts.Expression): Array<Map<string, string>> | undefined {
+  if (!ts.isArrayLiteralExpression(e)) return undefined;
+  const out: Array<Map<string, string>> = [];
+  for (const el of e.elements) {
+    if (!ts.isObjectLiteralExpression(el)) continue;
+    const fields = new Map<string, string>();
+    for (const pr of el.properties) {
+      if (!ts.isPropertyAssignment(pr) || !pr.name) continue;
+      const key = ts.isIdentifier(pr.name) || ts.isStringLiteral(pr.name) ? pr.name.text : undefined;
+      if (!key) continue;
+      const v = pr.initializer;
+      if (ts.isStringLiteral(v) || ts.isNoSubstitutionTemplateLiteral(v)) fields.set(key, v.text);
+      else if (ts.isNumericLiteral(v)) fields.set(key, v.text);
+    }
+    if (fields.size) out.push(fields);
+  }
+  return out.length ? out : undefined;
+}
+
+/** The module specifier a name was imported from, if it was. */
+function importSpecifierFor(sf: ts.SourceFile, name: string): string | undefined {
+  for (const st of sf.statements) {
+    if (!ts.isImportDeclaration(st) || !ts.isStringLiteral(st.moduleSpecifier)) continue;
+    const named = st.importClause?.namedBindings;
+    if (named && ts.isNamedImports(named) && named.elements.some((el) => el.name.text === name))
+      return st.moduleSpecifier.text;
+    if (st.importClause?.name?.text === name) return st.moduleSpecifier.text;
+  }
+  return undefined;
+}
+
+/**
+ * A module specifier as a file on disk.
+ *
+ * ⛔ `@/` IS THE CONVENTION AND IT IS NOT GUESSWORK TO FOLLOW IT — but the root it points at is,
+ * so it is found by walking up from the importing file to the directory the alias names rather
+ * than by assuming a layout.
+ */
+function resolveModule(spec: string, fromFile: string): string | undefined {
+  const tryFile = (base: string): string | undefined => {
+    for (const ext of [".ts", ".tsx", "/index.ts", "/index.tsx"]) {
+      const full = base.endsWith(ext) ? base : base + ext;
+      if (fs.existsSync(full) && fs.statSync(full).isFile()) return full;
+    }
+    return undefined;
+  };
+  if (spec.startsWith(".")) return tryFile(path.resolve(path.dirname(fromFile), spec));
+  const m = /^@\/(.+)$/.exec(spec);
+  if (!m) return undefined;
+  let dir = path.dirname(path.resolve(fromFile));
+  for (let up = 0; up < 10; up++) {
+    const hit = tryFile(path.join(dir, m[1]!));
+    if (hit) return hit;
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return undefined;
+}
+
+
+/**
+ * Whether this file imports `name` from an icon package.
+ *
+ * ⛔ A NAME CAN BE BOTH, and which one it is depends on who imported it. Cached per file because
+ * `emit` re-enters the same component many times on one screen.
+ */
+const ICONS_BY_FILE = new Map<string, Set<string>>();
+function iconHere(file: string | undefined, name: string): boolean {
+  if (!file) return false;
+  let have = ICONS_BY_FILE.get(file);
+  if (!have) {
+    have = new Set<string>();
+    for (const m of sourceOf(file).matchAll(/import\s*\{([^}]*)\}\s*from\s*["']([^"']+)["']/g)) {
+      if (!/lucide|heroicons|react-icons|@tabler\/icons|phosphor|@radix-ui\/react-icons/i.test(m[2] ?? "")) continue;
+      for (const raw of (m[1] ?? "").split(",")) {
+        const n = raw.split(" as ").pop()!.trim();
+        if (n) have.add(n);
+      }
+    }
+    ICONS_BY_FILE.set(file, have);
+  }
+  return have.has(name);
 }
 
 const CLOSED_AT_FIRST = new Map<string, Set<string>>();
@@ -1626,6 +1882,7 @@ export function drawFromRoute(routeFile: string, opts: DrawOptions = {}): DrawRe
     conditions: [],
     forks: [],
     props: new Map(),
+    falsy: new Set(),
     sample: (hint) => {
       const s = opts.sample ?? {};
       for (const [k, v] of Object.entries(s)) if (hint.includes(k)) return v;

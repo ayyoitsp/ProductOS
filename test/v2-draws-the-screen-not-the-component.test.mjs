@@ -186,3 +186,60 @@ test("a component handed a prop that is false at rest renders nothing at rest", 
   assert.doesNotMatch(out.html, /Please select the deal/, "a modal that is closed at rest was drawn open");
   fs.rmSync(root, { recursive: true, force: true });
 });
+
+test("a list written down in the source draws as that list", () => {
+  /**
+   * ⛔ Peter, on an earlier version of this: *"ok, wtf, how are grey bars useful?"* A navigation is
+   * `menuItems.map(item => <a>{item.label}</a>)` over object literals in a config module. Those are
+   * the product's own words, sitting in the repository — drawn as three blank rows, the sidebar on
+   * every screen was a column of grey bars.
+   *
+   * ⛔ IT STILL INVENTS NOTHING: literals only, and an array it cannot resolve falls back to the
+   * three-row shape exactly as before.
+   */
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "productos-list-"));
+  const put = (rel, body) => {
+    fs.mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
+    fs.writeFileSync(path.join(root, rel), body);
+  };
+  put("config/menu.ts", `export const menuItems = [{ label: 'Deals', path: '/deals' }, { label: 'Borrowers', path: '/b' }]`);
+  put(
+    "Nav.tsx",
+    `import { menuItems } from './config/menu'
+     export default function Nav(){
+       const visible = onlyAllowed(menuItems)
+       return (<nav>{visible.map((item) => (<a>{item.label}</a>))}</nav>)
+     }`
+  );
+  const out = drawFromRoute(path.join(root, "Nav.tsx"), {});
+  assert.match(out.html, /Deals/, "a label written in the source was drawn as a blank bar");
+  assert.match(out.html, /Borrowers/, "only the first item was drawn");
+  /** ⛔ Through a plain call — `onlyAllowed(menuItems)` — which is how a real permission filter reads. */
+  assert.doesNotMatch(out.html, /productos-value[^>]*item\.label/, "the label fell through to a placeholder");
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test("a name is an icon in the file that imported it, not everywhere", () => {
+  /**
+   * ⛔ lucide EXPORTS `Link`, AND SO DOES `next/link`. Icon names were collected from every file
+   * into one set, so every `<Link>` in the application — the element wrapping each nav label — was
+   * drawn as an icon glyph and swallowed its children. The sidebar had the right number of rows and
+   * no words in any of them, which is a very convincing way to look broken.
+   */
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "productos-icon-"));
+  const put = (rel, body) => {
+    fs.mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
+    fs.writeFileSync(path.join(root, rel), body);
+  };
+  /** Another file in the index imports Link from an icon package. */
+  put("components/Toolbar.tsx", `import { Link } from 'lucide-react'
+     export default function Toolbar(){ return (<div><Link /></div>) }`);
+  put(
+    "Page.tsx",
+    `import Link from 'next/link'
+     export default function Page(){ return (<nav><Link href="/d">Deals</Link></nav>) }`
+  );
+  const out = drawFromRoute(path.join(root, "Page.tsx"), { componentsDir: path.join(root, "components") });
+  assert.match(out.html, /Deals/, "a routing component was drawn as an icon and ate its label");
+  fs.rmSync(root, { recursive: true, force: true });
+});
