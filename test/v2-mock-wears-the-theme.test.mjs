@@ -525,3 +525,26 @@ test("two font rules written back to back are both seen", () => {
   const { faces } = liftFaces(adjacent);
   assert.match(faces, /--font-brand/, "the second of two adjacent rules was swallowed by the first");
 });
+
+test("a registered property is hoisted, because a shadow root does not hold one", () => {
+  /**
+   * ⛔ THE BUG THAT MADE EVERY BORDERED BOX DISAPPEAR, AND THE THIRD OF ITS SHAPE.
+   *
+   * `@property` initial-values are held by the document, not by a shadow root — same as `@font-face`
+   * above. Tailwind v4 writes its border utility as `border-style: var(--tw-border-style)` against a
+   * registered property whose initial-value is `solid`. Unhoisted, that var resolved to nothing
+   * inside the mock, `border-style` computed as `none`, and a 1px border of no style drew NOTHING:
+   * every input, card and secondary button on every screen rendered as a bare underline or a flat
+   * panel. The markup had the right classes the whole time, which is what made it look like the
+   * drawing was wrong rather than the stylesheet.
+   *
+   * Peter, looking at it next to the real application: *"this looks nothing like our UX"*.
+   */
+  const css = `@property --tw-border-style{syntax:"*";inherits:false;initial-value:solid}` +
+    `.border{border-style:var(--tw-border-style);border-width:1px}`;
+  const { faces, rest } = liftFaces(css);
+  assert.match(faces, /@property --tw-border-style/, "the registered property stayed inside the shadow root, where it does nothing");
+  assert.match(faces, /initial-value:\s*solid/, "the initial value is the whole point of hoisting it");
+  assert.doesNotMatch(rest, /@property/, "it was copied rather than moved, so it is declared twice");
+  assert.match(rest, /\.border\{/, "the utility that reads it was lost with it");
+});

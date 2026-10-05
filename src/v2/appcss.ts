@@ -505,10 +505,29 @@ export function asOptions(s: Style | undefined): { appCss?: string; mockClass?: 
  */
 export function liftFaces(css: string): { faces: string; rest: string } {
   const faces: string[] = [];
-  const rest = css.replace(/@font-face\s*\{[^}]*\}/g, (block) => {
-    faces.push(block);
-    return "";
-  });
+  const rest = css
+    .replace(/@font-face\s*\{[^}]*\}/g, (block) => {
+      faces.push(block);
+      return "";
+    })
+    /**
+     * ⛔ `@property` IS DOCUMENT-SCOPED TOO, AND IT IS WHY EVERY BORDERED BOX WAS INVISIBLE.
+     *
+     * A registered custom property's `initial-value` is held by the document, not by a shadow root,
+     * so inside a mock `var(--tw-border-style)` resolved to nothing. Tailwind v4 writes the border
+     * utility as `border-style: var(--tw-border-style); border-width: 1px` — an unresolved style
+     * computes as `none`, so a 1px border of no style drew nothing at all. Every input, card and
+     * secondary button on every screen rendered as a bare underline or a flat panel, which is a
+     * very convincing way to look like somebody else's product.
+     *
+     * ⛔ EXACTLY THE `@font-face` BUG AGAIN, and the third time this shape has bitten: the at-rules
+     * a shadow root ignores have to be hoisted to the document. Peter: *"this looks nothing like
+     * our UX"* — the markup was right and had been right the whole time; the border was not drawn.
+     */
+    .replace(/@property\s+--[-\w]+\s*\{[^}]*\}/g, (block) => {
+      faces.push(block);
+      return "";
+    });
   /**
    * ⛔ NARROW ON PURPOSE: ONE CLASS, AND EVERY DECLARATION A `--font-` CUSTOM PROPERTY. Anything
    * looser starts hoisting a product's own classes onto the host, which restyles a mock by a rule
