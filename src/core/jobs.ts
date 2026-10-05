@@ -272,6 +272,8 @@ export const AREAS: Area[] = [
       "src/v2/routes.ts",
       "src/v2/propose.ts",
       "src/v2/appcss.ts",
+      /** ⛔ Glyphs read out of the product's own icon package — a generator source, same as draw. */
+      "src/v2/icons.ts",
       "src/core/agents-doc.ts",
       /** ⛔ The design system index: a generator source like `draw`, reading a product's own vocabulary. */
       "src/v2/design.ts",

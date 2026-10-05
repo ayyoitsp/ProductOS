@@ -22,6 +22,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import ts from "typescript";
+import { lucideSvg } from "./icons.js";
 import { wireParts, type WireablePart } from "./wire.js";
 
 export interface DrawResult {
@@ -1077,6 +1078,22 @@ function emit(node: ts.Node, ctx: Ctx): string {
      * The import is in the file. Ask the file.
      */
     if (iconHere(ctx.sameFile, tag) || (!ctx.sameFile && ctx.icons.has(tag))) {
+      /**
+       * ⛔ THE REAL GLYPH IF THE APPLICATION HAS ONE, AND A GREY SQUARE ONLY IF IT DOES NOT.
+       *
+       * A marker span for every icon drew the sidebar as a column of bars and put a flat box beside
+       * every row of every folder picker. The shape is not a guess: it is read out of the icon
+       * package this application depends on, at the version installed beside it. A name that
+       * resolves to no icon file keeps the square and stays recorded as unresolved, because the
+       * drawing genuinely does not know what that one looks like.
+       */
+      const sized = classOf(
+        open.attributes.properties.find(
+          (a): a is ts.JsxAttribute => ts.isJsxAttribute(a) && a.name.getText() === "className"
+        )?.initializer
+      );
+      const glyph = ctx.sameFile ? lucideSvg(tag, ctx.sameFile, sized) : undefined;
+      if (glyph) return glyph;
       ctx.unresolved.push(`<${tag}> (icon)`);
       return `<span class="productos-icon" role="img" aria-label="${text(tag)}"></span>`;
     }
