@@ -410,3 +410,30 @@ test("the same pointer at two grains is one source, not two", () => {
   assert.equal(slot.sources, 1, "one code path counted twice because it was cited at two grains");
   assert.equal(slot.strength, "one-source");
 });
+
+/* ───────────────────────── coverage, reported every time ───────────────────────── */
+
+test("check reports how much of a corpus rests on anything", async () => {
+  /**
+   * ⛔ THE FORCING FUNCTION, BECAUSE PROSE DID NOT WORK. The scoper is now told to record what it
+   * read, and `CLAUDE.md` opens on the observation that an instruction with a ⛔ on it was violated
+   * four times and only a failing build stopped it. The number is in front of whoever runs `check`,
+   * so a corpus where nothing has been written down cannot look like one where everything has.
+   *
+   * ⛔ A NOTE, NOT A REFUSAL. Zero support is the honest state of a corpus nobody has analysed, and
+   * refusing it would make the first scope of a new product unreviewable — precisely when a reviewer
+   * most needs the page.
+   */
+  const { checkCorpus } = await import("../dist/v2/check.js");
+  const { dir } = seeded();
+  const findings = checkCorpus(dir).findings ?? checkCorpus(dir);
+  const list = Array.isArray(findings) ? findings : [];
+  const cov = list.find((f) => /behaviours-with-nothing-behind-them|nothing-in-this-corpus-rests-on-anything/.test(f.kind));
+  assert.ok(cov, `no coverage finding. kinds: ${list.map((f) => f.kind).slice(0, 12).join(", ")}`);
+  assert.equal(cov.severity, "note", "the coverage finding refuses a corpus nobody has analysed yet");
+  /** The seed has two readings, so it is the partial form with a count, not the all-or-nothing one. */
+  assert.match(cov.where, /^\d+ of \d+$/, `expected "N of M", got "${cov.where}"`);
+  const [unsupported, total] = cov.where.split(" of ").map(Number);
+  assert.ok(unsupported > 0 && unsupported < total, `${unsupported} of ${total} is not a partial state`);
+  fs.rmSync(dir, { recursive: true, force: true });
+});

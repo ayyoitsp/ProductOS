@@ -25,7 +25,7 @@ import {
   selectsFor,
   type Corpus,
 } from "./load.js";
-import { containerOf } from "./confidence.js";
+import { confidenceOf, containerOf } from "./confidence.js";
 import { stampFor, staleReason, coveredBy } from "./stamp.js";
 import { resolveRef } from "./ref.js";
 import { descendants } from "./settle.js";
@@ -3033,6 +3033,44 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
       what: `bears on ${confirmedHere}, which is confirmed, and carries no basis.at`,
       fix: "put the date it was observed in `basis.at` — without it nothing can tell whether this landed before or after somebody agreed, and the statement will never read as `confirmed · newer evidence`",
     });
+  }
+
+  /**
+   * ⛔ HOW MUCH OF THIS CORPUS RESTS ON ANYTHING — REPORTED EVERY TIME, BECAUSE PROSE DID NOT WORK.
+   *
+   * The confidence scale counts readings. The authoring instructions now tell a scoper to record
+   * what it read, and `CLAUDE.md` opens on the observation that an instruction with a ⛔ on it was
+   * violated four times and only a failing build stopped it. This is the forcing function: the
+   * number is in front of whoever runs `check`, so a corpus where nothing has been written down
+   * cannot look the same as one where everything has.
+   *
+   * ⛔ A NOTE, NOT A REFUSAL, AND THAT IS DELIBERATE. Zero support is the honest state of a corpus
+   * nobody has analysed yet, and refusing it would make the first scope of a new product unreviewable
+   * — which is precisely when a reviewer most needs the page. It says what is missing and lets them
+   * decide whether that matters yet.
+   */
+  {
+    const everySlot = corpus.scopes.flatMap(({ scope }) =>
+      scope.exchanges.flatMap((ex) => SLOTS.map((slot) => `${scope.id}#${ex.id}#${slot}`)),
+    );
+    const stated = everySlot.filter((ref) => slotRefs.has(ref));
+    const unsupported = stated.filter((ref) => confidenceOf(corpus, ref).strength === "none");
+    if (stated.length && unsupported.length === stated.length)
+      add({
+        severity: "note",
+        kind: "nothing-in-this-corpus-rests-on-anything",
+        where: corpus.scopes.map((s) => s.scope.id).slice(0, 3).join(", "),
+        what: `all ${stated.length} stated behaviours have no reading behind them, so every one reads as unsupported`,
+        fix: "record what each was read from — `readings/` with a `bears_on`, an `observes` and a `basis.ref`; one per exchange covers its nine slots",
+      });
+    else if (unsupported.length)
+      add({
+        severity: "note",
+        kind: "behaviours-with-nothing-behind-them",
+        where: `${unsupported.length} of ${stated.length}`,
+        what: unsupported.slice(0, 5).join(", ") + (unsupported.length > 5 ? `, +${unsupported.length - 5} more` : ""),
+        fix: "a statement with no reading behind it is one only a person's answer can ever settle — record what it was read from, or confirm it",
+      });
   }
 
   // ---- shape: the thing no single page can show ----

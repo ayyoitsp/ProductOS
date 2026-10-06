@@ -15,6 +15,8 @@ flowchart LR
     direction TB
     surveyor["surveyor<br/><i>What does this product consist of — which areas, and which features in each?</i>"]
     scoper["scoper<br/><i>What does this one feature promise, and where does somebody meet it?</i><br/>· per feature ·"]
+    machinist["machinist<br/><i>What does this product do that nobody presses, and what sets it off?</i><br/>· per feature ·"]
+    instrumenter["instrumenter<br/><i>What does this product record, and which question does each recording answer?</i><br/>· per feature ·"]
     designer["designer<br/><i>What should this screen look like, where no code renders it?</i><br/>· per screen no component renders ·"]
     evidencer["evidencer<br/><i>What already demonstrates each of these claims?</i>"]
   end
@@ -59,7 +61,7 @@ flowchart LR
 |---|---|
 | **product** | `surveyor` ·writes· · `scoper` ·writes· · `newcomer` · `completeness` · `coherence` |
 | **design** | `designer` ·writes· · `rendered` · `design-critique` |
-| **engineering** | `truthfulness` · `architecture` · `buildability` |
+| **engineering** | `machinist` ·writes· · `instrumenter` ·writes· · `truthfulness` · `architecture` · `buildability` |
 | **quality** | `evidencer` ·writes· · `coverage` · `hand-authored` · `test-design` |
 | **the framework itself** | `consistency` · `can-the-model-say-it` |
 
@@ -74,6 +76,8 @@ Same reason `CASCADE` is a table: a routing decided from memory is decided diffe
 flowchart TD
   scope_a_feature(["scope a feature<br/><i>Turn one in-flight feature into product truth</i>"])
   scope_a_feature --> scope_a_feature_scoper["scoper"]
+  scope_a_feature --> scope_a_feature_machinist["machinist"]
+  scope_a_feature --> scope_a_feature_instrumenter["instrumenter"]
   scope_a_feature --> scope_a_feature_designer["designer ×N"]
   scope_a_feature --> scope_a_feature_completeness["completeness"]
   scope_a_feature --> scope_a_feature_design-critique["design-critique ×N"]
@@ -81,6 +85,8 @@ flowchart TD
   scan_a_codebase(["scan a codebase<br/><i>Turn a whole codebase into a first corpus</i>"])
   scan_a_codebase --> scan_a_codebase_surveyor["surveyor"]
   scan_a_codebase --> scan_a_codebase_scoper["scoper ×N"]
+  scan_a_codebase --> scan_a_codebase_machinist["machinist ×N"]
+  scan_a_codebase --> scan_a_codebase_instrumenter["instrumenter ×N"]
   scan_a_codebase --> scan_a_codebase_designer["designer ×N"]
   scan_a_codebase --> scan_a_codebase_evidencer["evidencer"]
   scan_a_codebase --> scan_a_codebase_completeness["completeness ×N"]
@@ -125,6 +131,8 @@ Turn one in-flight feature into product truth.
 
 **Spawns, in order:**
 - `scoper` *(product · writes)* — the feature written in a context holding nothing but that feature
+- `machinist` *(engineering · writes)* — the half of this feature nobody presses — what runs by itself, and what sets it off
+- `instrumenter` *(engineering · writes)* — what has to be recorded for any of this feature's measures to be knowable
 - `designer` *(design · writes)* — one per unit, in parallel — screens the product should have and nothing renders yet
 - `completeness` *(product · judges, writes nothing)* — whether somebody can get from the start of this feature to the end of it
 - `design-critique` *(design · judges, writes nothing)* — one per unit, in parallel — whether these are the right screens for the job, not just complete ones
@@ -142,6 +150,8 @@ Turn a whole codebase into a first corpus.
 **Spawns, in order:**
 - `surveyor` *(product · writes)* — decide what the product consists of once, before anything describes a feature
 - `scoper` *(product · writes)* — one per unit, in parallel — every feature written in its own context, reading only its own code
+- `machinist` *(engineering · writes)* — one per unit, in parallel — every feature's machinery, written by somebody whose question is what runs without a person
+- `instrumenter` *(engineering · writes)* — one per unit, in parallel — what the product already records, and which measure each recording answers
 - `designer` *(design · writes)* — one per unit, in parallel — a picture for every screen no component renders — a screen with none cannot be reviewed
 - `evidencer` *(quality · writes)* — what the repository already demonstrates, found by somebody who did not write the claims
 - `completeness` *(product · judges, writes nothing)* — one per unit, in parallel — every feature walked end to end, because a first corpus is where paths fail to join
@@ -255,7 +265,9 @@ Held three ways rather than one: no author declares `ask-the-human`, so no host 
 | author | asks | per | writes |
 |---|---|---|---|
 | **surveyor** | What does this product consist of — which areas, and which features in each? | runs once | the areas, as scopes; each feature as a scope inside its area, with a title and nothing else |
-| **scoper** | What does this one feature promise, and where does somebody meet it? | feature | the happy path — what the feature is FOR, first; views and their parts; exchanges, and what each slot says; criteria — what would show a sentence holding; `question:` on anything it cannot resolve, with no claim beside it |
+| **scoper** | What does this one feature promise, and where does somebody meet it? | feature | the happy path — what the feature is FOR, first; views and their parts; person-asked exchanges, and what each slot says; criteria — what would show a sentence holding; `why`, `risks` and `measures` — why this is worth building, what could go wrong, and how anybody would know it worked; `terms` — what each word means in this feature; `question:` on anything it cannot resolve, with no claim beside it |
+| **machinist** | What does this product do that nobody presses, and what sets it off? | feature | system- and integrator-asked exchanges, and what each slot says; `when.triggered_by` — what sets it off, in product language; `when.follows` — the ask this one comes after, where something in the product sets it off; `depends_on` — what this rests on and does not itself behaviour; `question:` on anything it cannot resolve, with no claim beside it |
+| **instrumenter** | What does this product record, and which question does each recording answer? | feature | instruments — what gets recorded, in the product's own terms; `feeds` — which measure each recording answers, which is what stops either end being decorative |
 | **designer** | What should this screen look like, where no code renders it? | screen no component renders | a drawing for a screen no component renders, stamped with what it was designed from |
 | **evidencer** | What already demonstrates each of these claims? | runs once | evidence against criteria, each naming what it is and where it came from |
 
@@ -299,8 +311,10 @@ Held three ways rather than one: no author declares `ask-the-human`, so no host 
 **Writes:**
 - the happy path — what the feature is FOR, first
 - views and their parts
-- exchanges, and what each slot says
+- person-asked exchanges, and what each slot says
 - criteria — what would show a sentence holding
+- `why`, `risks` and `measures` — why this is worth building, what could go wrong, and how anybody would know it worked
+- `terms` — what each word means in this feature
 - `question:` on anything it cannot resolve, with no claim beside it
 
 **⛔ Never:**
@@ -310,6 +324,57 @@ Held three ways rather than one: no author declares `ask-the-human`, so no host 
 - stamp anything walked, validated or accepted
 
 **Needs:** read-files · search-files · run-commands · write-corpus  ·  **Prompt:** `agents/productos-scoper.md`
+
+### `machinist`
+
+**Asks:** What does this product do that nobody presses, and what sets it off?
+
+**Exists because:** Measured on this repo: `integrator` appeared in no authoring prompt at all, and `triggered_by` — required on every machinery ask — appeared once. A builder cannot tell a nightly job from a backfill from something another part of the product calls, and those are three different programs.
+
+**Spawned:** once per feature
+
+**Reads, in this order:**
+- its own scope's machinery, and the code that runs it
+- what the product already calls these things — a trigger is named in product language, never as a schedule expression
+- what the scope rests on, so `depends_on` is the real list rather than the obvious one
+
+**Writes:**
+- system- and integrator-asked exchanges, and what each slot says
+- `when.triggered_by` — what sets it off, in product language
+- `when.follows` — the ask this one comes after, where something in the product sets it off
+- `depends_on` — what this rests on and does not itself behaviour
+- `question:` on anything it cannot resolve, with no claim beside it
+
+**⛔ Never:**
+- write a person-asked exchange — that is the scoper's, and a machinery author reaching for one produces a screen nobody designed
+- name infrastructure: a queue, a cron expression, a table or a topic is how it is built, not what the product does
+- invent a trigger from the code's scheduling — if nothing says what sets it off, that is a `question:`, because a guessed trigger reads exactly like a decided one
+- stamp anything walked, validated or accepted
+
+**Needs:** read-files · search-files · run-commands · write-corpus  ·  **Prompt:** `agents/productos-machinist.md`
+
+### `instrumenter`
+
+**Asks:** What does this product record, and which question does each recording answer?
+
+**Exists because:** `Instrument.feeds` is the load-bearing field of a pair the schema already warns about — a measure nothing feeds cannot be known, and an instrument feeding nothing is telemetry somebody maintains for nobody. Both were named once across every authoring prompt, so both ends of the link were written by nobody.
+
+**Spawned:** once per feature
+
+**Reads, in this order:**
+- the measures on this scope — what somebody decided would show it worked
+- what the product already records, in the code that records it
+
+**Writes:**
+- instruments — what gets recorded, in the product's own terms
+- `feeds` — which measure each recording answers, which is what stops either end being decorative
+
+**⛔ Never:**
+- write a measure — what counts as having worked is product's call, and an instrument that invents its own measure is a number marking its own homework
+- name a column, a table or an event schema — the schema asks for product terms, and a field name here is a leak of the substrate
+- stamp anything walked, validated or accepted
+
+**Needs:** read-files · search-files · run-commands · write-corpus  ·  **Prompt:** `agents/productos-instrumenter.md`
 
 ### `designer`
 

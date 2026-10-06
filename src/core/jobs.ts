@@ -982,8 +982,23 @@ export const AUTHORS: Author[] = [
     writes: [
       "the happy path — what the feature is FOR, first",
       "views and their parts",
-      "exchanges, and what each slot says",
+      /**
+       * ⛔ PERSON-ASKED ONLY, AND IT USED TO SAY "exchanges". Its question is "where does somebody
+       * MEET it", which has no answer for an ask nobody presses — so the half of the model with no
+       * screen was owned by the one role structurally unable to frame it. Measured: `integrator`
+       * appeared nowhere in its prompt and `triggered_by` once, against fourteen for `why`.
+       */
+      "person-asked exchanges, and what each slot says",
       "criteria — what would show a sentence holding",
+      /**
+       * ⛔ DECLARED, BECAUSE THIS LIST IS WHAT STOPS TWO AUTHORS OWNING ONE FIELD — and it named
+       * none of these while the prompt covered all of them: `why` fourteen times, `measures` three,
+       * `risks` twice, `terms` throughout. An under-claimed `writes` is worse than a wrong one,
+       * because the next role added can take a field nobody appears to hold. The instrumenter is
+       * forbidden from writing a measure, and that prohibition means nothing until somebody owns it.
+       */
+      "`why`, `risks` and `measures` — why this is worth building, what could go wrong, and how anybody would know it worked",
+      "`terms` — what each word means in this feature",
       "`question:` on anything it cannot resolve, with no claim beside it",
     ],
     never: [
@@ -996,6 +1011,92 @@ export const AUTHORS: Author[] = [
     each: "feature",
     authors: true,
     prompt: "agents/productos-scoper.md",
+  },
+  /**
+   * ⛔ ENGINEERING HAD NO AUTHOR AT ALL, AND HALF THE MODEL WAS NOBODY'S.
+   *
+   * Peter: *"let's add some engineering authors! they should be authoring the capabilities
+   * anyways"*.
+   *
+   * `asked_by` has three values and the corpus only ever had an author for one of them. A
+   * person-asked exchange is required to name the view it arrives at; a system- or
+   * integrator-asked one is required to name what sets it off — and the only role writing
+   * exchanges asks "where does somebody meet it", which that half has no answer to. So the
+   * machinery got written by the role that could not frame it, or not written at all.
+   *
+   * Before this, engineering existed in the registry only as judges — `truthfulness`,
+   * `architecture`, `buildability` — three roles reviewing work that no engineering role wrote.
+   */
+  {
+    name: "machinist",
+    discipline: "engineering",
+    asks: "What does this product do that nobody presses, and what sets it off?",
+    because:
+      "Measured on this repo: `integrator` appeared in no authoring prompt at all, and " +
+      "`triggered_by` — required on every machinery ask — appeared once. A builder cannot tell a " +
+      "nightly job from a backfill from something another part of the product calls, and those are " +
+      "three different programs.",
+    reads: [
+      "its own scope's machinery, and the code that runs it",
+      "what the product already calls these things — a trigger is named in product language, never as a schedule expression",
+      "what the scope rests on, so `depends_on` is the real list rather than the obvious one",
+    ],
+    writes: [
+      "system- and integrator-asked exchanges, and what each slot says",
+      "`when.triggered_by` — what sets it off, in product language",
+      "`when.follows` — the ask this one comes after, where something in the product sets it off",
+      /**
+       * ⛔ IT OWNS `depends_on`, AND NOTHING DID. The schema says this field is "the only thing
+       * carrying the structure the deleted capability tree used to hold, so a builder needs it" —
+       * and it was named once across every authoring prompt. What a thing rests on is the same
+       * question as what runs underneath it, which is why it is here and not a role of its own.
+       */
+      "`depends_on` — what this rests on and does not itself behaviour",
+      "`question:` on anything it cannot resolve, with no claim beside it",
+    ],
+    never: [
+      "write a person-asked exchange — that is the scoper's, and a machinery author reaching for one produces a screen nobody designed",
+      "name infrastructure: a queue, a cron expression, a table or a topic is how it is built, not what the product does",
+      "invent a trigger from the code's scheduling — if nothing says what sets it off, that is a `question:`, because a guessed trigger reads exactly like a decided one",
+      "stamp anything walked, validated or accepted",
+    ],
+    needs: ["read-files", "search-files", "run-commands", "write-corpus"],
+    each: "feature",
+    authors: true,
+    prompt: "agents/productos-machinist.md",
+  },
+  {
+    name: "instrumenter",
+    discipline: "engineering",
+    asks: "What does this product record, and which question does each recording answer?",
+    because:
+      "`Instrument.feeds` is the load-bearing field of a pair the schema already warns about — a " +
+      "measure nothing feeds cannot be known, and an instrument feeding nothing is telemetry " +
+      "somebody maintains for nobody. Both were named once across every authoring prompt, so both " +
+      "ends of the link were written by nobody.",
+    reads: [
+      "the measures on this scope — what somebody decided would show it worked",
+      "what the product already records, in the code that records it",
+    ],
+    writes: [
+      "instruments — what gets recorded, in the product's own terms",
+      "`feeds` — which measure each recording answers, which is what stops either end being decorative",
+    ],
+    never: [
+      /**
+       * ⛔ THE SEAM WITH PRODUCT, AND IT IS THE REASON THIS IS NOT THE SCOPER'S JOB. What counts as
+       * having worked is somebody's decision about the product; what gets recorded to answer it is
+       * an engineering one. One role holding both ends up recording what is easy and calling that
+       * the measure.
+       */
+      "write a measure — what counts as having worked is product's call, and an instrument that invents its own measure is a number marking its own homework",
+      "name a column, a table or an event schema — the schema asks for product terms, and a field name here is a leak of the substrate",
+      "stamp anything walked, validated or accepted",
+    ],
+    needs: ["read-files", "search-files", "run-commands", "write-corpus"],
+    each: "feature",
+    authors: true,
+    prompt: "agents/productos-instrumenter.md",
   },
   {
     name: "designer",
@@ -1335,6 +1436,20 @@ export const SHIMS: Shim[] = [
     at: "specification",
     steps: [
       { role: "scoper", why: "the feature written in a context holding nothing but that feature" },
+      /**
+       * ⛔ ENGINEERING AUTHORS RUN HERE; ENGINEERING JUDGES STILL WAIT. The comment below says this
+       * pass is product and design only, on the strength of *"nail down human truth before we need
+       * to involve engineers/qa"* — and that rule is about a READ of a draft, which comes back
+       * phrased as fact and sends a session building toward a shape nobody validated.
+       *
+       * Writing is the opposite act. "The day a standing allowance falls due" is human truth in the
+       * product's own words, and it is a sentence somebody has to AGREE to — so it has to exist
+       * before the agreeing, or the machinery half is the one part of the product nobody ever
+       * validated. Held apart by which registry a role is in, not by intention: `buildability` and
+       * `test-design` are judges and still cannot run until somebody has signed off.
+       */
+      { role: "machinist", why: "the half of this feature nobody presses — what runs by itself, and what sets it off" },
+      { role: "instrumenter", why: "what has to be recorded for any of this feature's measures to be knowable" },
       { role: "designer", fan: true, why: "screens the product should have and nothing renders yet" },
       /**
        * ⛔ PRODUCT AND DESIGN ONLY, AND IT STOPS. Peter: *"we need to a rough scope, nail down human
@@ -1366,6 +1481,12 @@ export const SHIMS: Shim[] = [
     steps: [
       { role: "surveyor", why: "decide what the product consists of once, before anything describes a feature" },
       { role: "scoper", fan: true, why: "every feature written in its own context, reading only its own code" },
+      /**
+       * ⛔ FANNED, LIKE THE SCOPER. A codebase's machinery is spread across it — schedulers, hooks,
+       * webhooks, consumers — and one session reading all of it writes the shape it wrote last.
+       */
+      { role: "machinist", fan: true, why: "every feature's machinery, written by somebody whose question is what runs without a person" },
+      { role: "instrumenter", fan: true, why: "what the product already records, and which measure each recording answers" },
       { role: "designer", fan: true, why: "a picture for every screen no component renders — a screen with none cannot be reviewed" },
       { role: "evidencer", why: "what the repository already demonstrates, found by somebody who did not write the claims" },
       { role: "completeness", fan: true, why: "every feature walked end to end, because a first corpus is where paths fail to join" },
