@@ -81,8 +81,19 @@ test("a confirmed statement wears the pill, and nothing else does", () => {
 });
 
 test("the statement resting on the same evidence says so, in text, on the page", () => {
-  /** The chip. */
-  assert.match(html, /class="chip support strong">strongly supported · 2</, "the strength chip is missing or mislabelled");
+  /**
+   * The chip. ⛔ MATCHED ON CLASS AND TEXT, NOT ON ATTRIBUTE ORDER — this asserted
+   * `class="chip support strong">strongly supported` with the `>` adjacent, and broke the day a
+   * `title` was added between them. The markup is not the claim; the class and the words are.
+   */
+  const chips = [...html.matchAll(/<span class="chip ([^"]*)"[^>]*>([^<]*)<\/span>/g)].map((m) => ({
+    classes: m[1],
+    text: m[2],
+  }));
+  const strong = chips.find((c) => /support/.test(c.classes) && /strongly supported/.test(c.text));
+  assert.ok(strong, `no strongly-supported chip rendered. chips: ${chips.map((c) => c.text).join(" | ")}`);
+  assert.match(strong.classes, /\bstrong\b/, "the top tier does not carry the strong class");
+  assert.match(strong.text, /· 2$/, "the source count is missing from the chip");
 
   /**
    * ⛔ THE REASON IS MARKUP, NOT A `title`. A tooltip cannot be scanned down a column, does not

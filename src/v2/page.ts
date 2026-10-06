@@ -23,7 +23,7 @@ import { inEffect, declined as declinedSteers } from "./steers.js";
 import { SLOTS, SLOT_ASKS_SHORT, statements, saysText, type SlotName, type Scope, type Steer, type View, type Part, type Says } from "./schema.js";
 import { gridFor, gateFor, actsFor, ruleHomes, stageOf, reachOf, type Grid, type Cell } from "./grid.js";
 import { stampFor, decidedFor } from "./stamp.js";
-import { confidenceOf, whyConfident } from "./confidence.js";
+import { confidenceOf, whyConfident, discrepancyFor } from "./confidence.js";
 import { wireParts } from "./wire.js";
 import { questionsFor, descendants, type Question } from "./settle.js";
 import { decisionsOn, decisionsUnder, howItWasDecided, type Decision } from "./record.js";
@@ -1553,7 +1553,15 @@ function confidenceParts(corpus: Corpus, ref: string): { chips: string; why: str
    * ⛔ THE CONFIRMED CHIP IS LEFT ALONE. It is the only pill with a colour, and every chip below is
    * square — so the zones are told apart by shape before a word is read.
    */
-  const stampChip = c.confirmed
+  /**
+   * ⛔ A CONFIRMATION WITH NEWER EVIDENCE IS NOT A CLEAN CONFIRMATION, and the chip has to say so.
+   * It is the one row a reader would otherwise skip: the surface at its most confident over the
+   * truth at its least settled.
+   */
+  const late = c.confirmed ? discrepancyFor(corpus, ref) : null;
+  const stampChip = late
+    ? `<span class="chip warn" title="by ${esc(late.confirmed.by)} on ${esc(late.confirmed.at)}">confirmed · newer evidence</span>`
+    : c.confirmed
     ? `<span class="chip ok" title="by ${esc(c.confirmed.by)} on ${esc(c.confirmed.at)}">confirmed</span>`
     : c.stale
       ? `<span class="chip warn">changed since</span>`
@@ -1568,14 +1576,17 @@ function confidenceParts(corpus: Corpus, ref: string): { chips: string; why: str
     c.confirmed || c.strength === "none"
       ? ""
       : `<span class="chip support${c.strength === "strongly-supported" ? " strong" : ""}${
+          /** ⛔ Dotted when nothing was read about this sentence itself — borrowed or about the exchange. */
           c.support.length === 0 ? " inherited" : ""
-        }">${esc(c.strength.replace(/-/g, " "))}${c.sources ? ` · ${c.sources}` : ""}</span>`;
+        }" title="${esc(
+          c.support.length ? `${c.support.length} read about this` : "nothing read about this statement itself",
+        )}">${esc(c.strength.replace(/-/g, " "))}${c.sources ? ` · ${c.sources}` : ""}</span>`;
 
   /**
    * Shown when there is something to say beyond "nobody confirmed it and nothing was read" — which
    * is most of a young corpus, and a reason repeated on three hundred rows is noise.
    */
-  const worthSaying = c.support.length > 0 || c.inherited.length > 0 || !!c.stale;
+  const worthSaying = c.support.length > 0 || c.contained.length > 0 || c.inherited.length > 0 || !!c.stale || !!late;
   const why = worthSaying
     ? `<ul class="why">${whyConfident(corpus, ref)
         .map(

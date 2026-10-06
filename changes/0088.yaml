@@ -3,11 +3,12 @@ said: ok, let's review where we are with human validation vs confidence scale. s
 at: 2026-10-05
 kind: concept
 reaches:
-  model: ""
-  derive: ""
-  generate: ""
-  surface: ""
-  check: ""
-  instruct: ""
-  pin: ""
+  model: Reading
+  derive: confidenceOf
+  generate: writeDrawnReading
+  surface: chip support
+  check: evidence-that-cannot-be-dated
+  instruct: the confidence scale counts
+  pin: no amount of support reaches confirmed
 waived: {}
+closed: 2026-10-06

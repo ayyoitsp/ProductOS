@@ -160,6 +160,30 @@ You are the **orchestrator**, and you are the session — not a subagent. That i
 ⛔ **Every author writes and none may settle.** An author may propose, populate, draw and regenerate; it may never produce a verdict, answer an open question, or mark anything validated. None of them can put a question to a person — deliberately, because consent obtained inside a subagent has no record of how it was obtained. What an author cannot resolve comes back to you as a question, and you put it to the person yourself.
 <!-- /productos:preset -->
 
+## ⛔ How confident the corpus is, and the line that cannot move
+
+Every statement has two separate facts, and they must never be read as one scale:
+
+- **confirmed** — a person's act. `accept` or `rule`, with a `by` and a `via`.
+- **strength** — `none · one source · corroborated · strongly supported`, derived from the readings
+  bearing on it. The top of this is BELOW the line; no amount of it ever becomes confirmed.
+
+`productos v2 decide <scope>` now asks **least-supported first**: a statement nothing backs is where
+a person's answer is the only thing that will settle it, and one three sources already agree about
+can be shown with its evidence and skimmed. ⛔ It is an order, never a filter — nothing is hidden on
+the strength of inference.
+
+⛔ **A confirmation propagates, and the page says from where.** Confirming a happy path settles that
+its screens are on it (`derived`); confirming a statement raises one resting on the same pointer
+(`shared-support`), and that one renders dotted with a line naming whose confirmation it borrowed.
+Peter chose this knowingly — *"the reason why it has confidence needs to be visible as well"* — so
+if you surface strength anywhere, surface why beside it.
+
+⛔ **And a confirmation can be overtaken.** A reading dated after an acceptance means somebody agreed
+and then something was observed; the page says `confirmed · newer evidence`. That is a question for
+the person, not a finding an author can fix.
+
+
 ## What this is, and what it is not
 
 ⛔ **There is one skill, and this is it.** There used to be eight, and they were carrying three

@@ -244,3 +244,42 @@ export function writeLeadsTo(root: string, from: string, to: string): boolean {
   }
   return false;
 }
+
+/**
+ * Record the drawing as a reading. ⛔ IF IT CAN BE GENERATED, GENERATE IT.
+ *
+ * `Provenance` is already a `Reading.basis` in all but name: the component that was read and the
+ * commit it was at. A screen drawn from a component is an OBSERVATION about the built product —
+ * "this is what it renders, as of this commit" — with an exact pointer somebody can go and check.
+ * Leaving it to be hand-typed is the trap `CLAUDE.md` opens on, and it is why `readings/` sat empty
+ * in every corpus while the one unit of support the confidence scale counts had to be written by
+ * hand nine times per exchange.
+ *
+ * ⛔ WHAT IT OBSERVES IS CAREFULLY NARROW. It says the screen is rendered by that component, and
+ * nothing about whether the behaviour is right — which is exactly what a `kind: screen` basis means
+ * and what a reviewer needs it to mean. A generator that wrote "this behaviour is correct" would be
+ * software asserting truth, which is the boundary this project holds everywhere else.
+ *
+ * ⛔ AND IT NEVER CONFIRMS ANYTHING. It is support, below the line, and the line is crossed only by
+ * a person's act. One generated source is a reason to ask a shorter question, never not to ask.
+ */
+export function writeDrawnReading(root: string, scopeId: string, viewId: string, prov: Provenance): string {
+  const dir = path.join(root, "readings");
+  fs.mkdirSync(dir, { recursive: true });
+  const id = `drawn-${scopeId}-${viewId}`;
+  const file = path.join(dir, `${id}.yaml`);
+  /** ⛔ `at` is the commit, not a date — so the discrepancy check cannot compare it. Said, not guessed. */
+  const lines = [
+    "readings:",
+    `  - id: ${id}`,
+    `    bears_on: ${scopeId}#${viewId}`,
+    `    observes: this screen is rendered by ${prov.from}${prov.at ? ` at ${prov.at}` : ""}, and the drawing beside it was generated from that component`,
+    "    basis:",
+    "      kind: screen",
+    `      ref: ${JSON.stringify(prov.from)}`,
+    ...(prov.at ? [`      quote: ${JSON.stringify(`at commit ${prov.at}`)}`] : []),
+    "",
+  ];
+  fs.writeFileSync(file, lines.join("\n"));
+  return file;
+}

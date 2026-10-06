@@ -31,7 +31,7 @@ import { AGENTS, AUTHORS, CASCADE, KINDS, SHIMS, SKILL, byDiscipline } from "../
 const plain = (x: unknown): string => String(x ?? "").replace(/\s+/g, " ").trim();
 import { agentsDoc, withPreset } from "../../core/agents-doc.js";
 import { readChanges, writeChange, nextId, verify, missing } from "../../core/change.js";
-import { writeSketchHtml } from "../../v2/draw-write.js";
+import { writeDrawnReading, writeSketchHtml } from "../../v2/draw-write.js";
 import { whatMoved, repoOf } from "../../v2/moved.js";
 import { HOW } from "../../v2/record.js";
 import { renderScopePage, standalone } from "../../v2/page.js";
@@ -2023,12 +2023,13 @@ export function v2Command(): Command {
        */
       const origin = repoOf(route);
       if (!origin) console.log(pc.yellow("!"), "the component is not in a git repository, so nothing records where this came from");
+      const prov = origin ? { from: path.relative(origin.root, route), at: origin.head } : undefined;
       const written = writeSketchHtml(
         into,
         scopeId,
         viewId,
         drawn.html,
-        origin ? { from: path.relative(origin.root, route), at: origin.head } : undefined,
+        prov,
         drawn.text,
         drawn.drawnStates.map((st) => ({ when: st.when, label: st.label, html: st.html }))
       );
@@ -2037,6 +2038,16 @@ export function v2Command(): Command {
         process.exit(1);
       }
       console.log(pc.dim(`  written into ${path.relative(process.cwd(), written)}`));
+      /**
+       * ⛔ THE DRAWING IS ALSO A READING, AND NOTHING WAS RECORDING IT. The component path and the
+       * commit were already known here and went only into the drawing's provenance — so the one unit
+       * of support the confidence scale counts had to be hand-written, which is a large part of why
+       * `readings/` was empty in every corpus. If it can be generated, generate it.
+       */
+      if (prov) {
+        const recorded = writeDrawnReading(into, scopeId, viewId, prov);
+        console.log(pc.dim(`  recorded as a reading in ${path.relative(process.cwd(), recorded)}`));
+      }
       console.log(pc.dim("  re-run this after the component changes — the drawing is output, not a document"));
     });
 

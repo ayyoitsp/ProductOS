@@ -80,6 +80,18 @@ export interface Confidence {
   /** Readings bearing directly on this ref. */
   support: SupportUnit[];
   /**
+   * Readings bearing on the exchange this slot belongs to.
+   *
+   * ⛔ KEPT SEPARATE FROM `support`, AND COUNTED ANYWAY. They are real evidence a reviewer can go
+   * and look at, so they move the tier; they are not about this sentence specifically, so the page
+   * has to be able to say which is which. Folding them together would make a slot with nothing
+   * written about it indistinguishable from one that was examined.
+   *
+   * Without this, support has to be authored nine times per exchange — once per slot — which is the
+   * single largest cost in making the scale usable on a real corpus.
+   */
+  contained: SupportUnit[];
+  /**
    * ⛔ INDEPENDENT BASES, NOT READINGS. Two readings citing the same `basis.ref` are one source, and
    * the difference is the whole meaning of the word corroborated: four observations of one code path
    * is one thing known four ways of saying it.
@@ -87,6 +99,20 @@ export interface Confidence {
   sources: number;
   strength: Strength;
   inherited: Inherited[];
+}
+
+/**
+ * The ref one level up. `money#see-a-balance#answer` → `money#see-a-balance`, and an exchange → null.
+ *
+ * ⛔ ONE LEVEL, AND NOT UP TO THE SCOPE. A reading about an exchange is about all nine of its slots:
+ * "the history is read straight off the ledger rows" is evidence about what the answer is, what it
+ * refuses, and what happens on a repeat. A reading about a SCOPE is not evidence about every
+ * statement in it — treating it that way would make one observation support thirty claims, and the
+ * scale would read strongest in exactly the corpora where least had been looked at.
+ */
+export function containerOf(ref: string): string | null {
+  const parts = ref.split("#");
+  return parts.length >= 3 ? parts.slice(0, -1).join("#") : null;
 }
 
 /** Readings bearing directly on a ref. */
@@ -172,7 +198,10 @@ export function inheritedFor(corpus: Corpus, ref: string): Inherited[] {
   }
 
   /** shared-support: this ref and a confirmed one rest on the same pointer. */
-  const mine = new Set(supportFor(corpus, ref).map((s) => s.ref));
+  const container = containerOf(ref);
+  const mine = new Set(
+    [...supportFor(corpus, ref), ...(container ? supportFor(corpus, container) : [])].map((s) => s.ref),
+  );
   if (mine.size) {
     for (const [cref] of confirmed) {
       for (const s of supportFor(corpus, cref)) {
@@ -197,13 +226,17 @@ export function inheritedFor(corpus: Corpus, ref: string): Inherited[] {
 export function confidenceOf(corpus: Corpus, ref: string): Confidence {
   const stamp = stampFor(corpus, ref);
   const support = supportFor(corpus, ref);
+  const container = containerOf(ref);
+  const contained = container ? supportFor(corpus, container) : [];
   const inherited = inheritedFor(corpus, ref);
-  const sources = sourcesOf(support);
+  /** ⛔ Counted across both, still by pointer — the same code path cited at two grains is one source. */
+  const sources = sourcesOf([...support, ...contained]);
   return {
     ref,
     confirmed: stamp.state === "accepted" ? { by: stamp.by, at: stamp.at } : null,
     stale: stamp.state === "never" || stamp.state === "accepted" ? null : stamp.state,
     support,
+    contained,
     sources,
     strength: strengthOf(sources, inherited.length),
     inherited,
@@ -223,7 +256,20 @@ export function whyConfident(corpus: Corpus, ref: string): string[] {
   const c = confidenceOf(corpus, ref);
   const lines: string[] = [];
 
-  if (c.confirmed) lines.push(`${c.confirmed.by} confirmed this on ${c.confirmed.at}.`);
+  if (c.confirmed) {
+    lines.push(`${c.confirmed.by} confirmed this on ${c.confirmed.at}.`);
+    /**
+     * ⛔ SAID ON THE CONFIRMED STATEMENT ITSELF, because that is the row a reader would otherwise
+     * skip. A green stamp over a statement that something was observed about afterwards is the one
+     * place in a corpus where the surface is most confident and the truth is least settled.
+     */
+    const d = discrepancyFor(corpus, ref);
+    if (d)
+      lines.push(
+        `⛔ ${d.since.length} observation${d.since.length === 1 ? "" : "s"} recorded since — ` +
+          `${d.since.map((s) => `${s.kind} at ${s.ref}`).join(", ")} — and nobody has looked again.`,
+      );
+  }
   else if (c.stale)
     lines.push(
       `Confirmed once, and the ${c.stale === "both-changed" ? "sentence and its criteria have" : c.stale === "claim-changed" ? "sentence has" : "criteria have"} changed since — so it is not confirmed now.`,
@@ -232,6 +278,9 @@ export function whyConfident(corpus: Corpus, ref: string): string[] {
 
   for (const s of c.support) lines.push(`Read from ${s.kind} at ${s.ref}: ${s.observes}`);
   if (!c.support.length) lines.push("Nothing has been observed about it directly.");
+  /** ⛔ Said as being about the exchange, or it reads as having been written about this sentence. */
+  for (const s of c.contained)
+    lines.push(`About the whole exchange, from ${s.kind} at ${s.ref}: ${s.observes}`);
 
   /**
    * ⛔ Named, every time, or the strength is a number with no argument behind it.
@@ -265,7 +314,7 @@ export function whyConfident(corpus: Corpus, ref: string): string[] {
    * to the condition, not to the route: borrowed strength on something nobody examined is the case
    * Peter accepted knowingly, and it has to say so however it was borrowed.
    */
-  if (c.inherited.length && c.support.length === 0)
+  if (c.inherited.length && c.support.length === 0 && c.contained.length === 0)
     lines.push("⛔ Nobody has read this statement itself — all of its support is borrowed.");
 
   if (c.strength === "strongly-supported" || c.strength === "corroborated")
@@ -273,3 +322,61 @@ export function whyConfident(corpus: Corpus, ref: string): string[] {
 
   return lines;
 }
+
+/**
+ * Evidence that arrived after somebody agreed, and which nobody has looked at since.
+ *
+ * ⛔ THE HALF PETER ASKED FOR THAT CONFIRMATION ALONE DOES NOT GIVE: *"it should feed into
+ * everything that hasn't been confirmed (or confirmed) to make sure there are no discrepancies"*.
+ * A confirmation is a judgement about a statement AT A MOMENT. Evidence recorded after it is the
+ * one thing that can make that judgement wrong without anybody touching the sentence — and today
+ * the stamp stays green, because `stampFor` only notices the claim and its criteria moving.
+ *
+ * ⛔ BY DATE, NOT BY PROSE. This project has already paid for word-counting: the over-assertion gate
+ * showed what matching sentences costs, and `check` says so where it refuses to do it. A reading
+ * dated after a verdict is an exact, checkable fact. Whether it actually contradicts the statement
+ * is a question for a person — which is the point: this produces a QUESTION, never a verdict about
+ * the corpus.
+ *
+ * ⛔ AND IT IS NOT A FINDING ABOUT THE CORPUS. An author cannot fix it by editing anything. The only
+ * thing that resolves it is somebody looking again, so it belongs in the queue beside an open slot
+ * rather than in a list of defects.
+ */
+export interface Discrepancy {
+  ref: string;
+  /** Who agreed, and when. */
+  confirmed: { by: string; at: string };
+  /** The readings that landed afterwards. */
+  since: SupportUnit[];
+}
+
+/** Dates as the corpus writes them: `2026-10-05`. ⛔ Compared as strings, which is why that shape matters. */
+const after = (a?: string, b?: string): boolean => !!a && !!b && a > b;
+
+/** One ref: is there evidence newer than the agreement? */
+export function discrepancyFor(corpus: Corpus, ref: string): Discrepancy | null {
+  const stamp = stampFor(corpus, ref);
+  if (stamp.state !== "accepted") return null;
+  /**
+   * ⛔ Both grains, because containment means a reading about the exchange is evidence about this
+   * statement — and the same reading arriving late is the same problem at either grain.
+   */
+  const container = containerOf(ref);
+  const all = [...supportFor(corpus, ref), ...(container ? supportFor(corpus, container) : [])];
+  const since = all.filter((s) => after(s.at, stamp.at));
+  return since.length ? { ref, confirmed: { by: stamp.by, at: stamp.at }, since } : null;
+}
+
+/** Every confirmed statement with evidence newer than the agreement. */
+export function discrepanciesIn(corpus: Corpus): Discrepancy[] {
+  const out: Discrepancy[] = [];
+  for (const [ref] of confirmedRefs(corpus)) {
+    const d = discrepancyFor(corpus, ref);
+    if (d) out.push(d);
+  }
+  return out;
+}
+
+/** ⛔ Readings with no date cannot be compared, and silently counting them as old would be the bug. */
+export const undatedSupport = (corpus: Corpus, ref: string): SupportUnit[] =>
+  supportFor(corpus, ref).filter((s) => !s.at);

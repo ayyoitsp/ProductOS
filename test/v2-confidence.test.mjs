@@ -21,6 +21,7 @@ import {
   sourcesOf,
   supportFor,
   inheritedFor,
+  containerOf,
 } from "../dist/v2/confidence.js";
 
 /**
@@ -351,4 +352,61 @@ test("the borrowed warning appears exactly when every source is borrowed", () =>
    */
   assert.equal(conf.strength, "one-source");
   assert.match(why, /Nothing has been observed about it directly/);
+});
+
+/* ───────────────────────── containment ───────────────────────── */
+
+test("a reading about an exchange is support for its slots, and says it is about the exchange", () => {
+  /**
+   * ⛔ THE LARGEST COST IN MAKING THIS USABLE ON A REAL CORPUS. The page reviews at slot grain —
+   * `money#see-a-balance#answer` — so without containment a reading has to be authored nine times
+   * per exchange to be seen, once for each slot. "The history is read straight off the ledger rows"
+   * is evidence about what the answer is, what it refuses, and what a repeat does; writing it nine
+   * times is the hand-authoring this project keeps failing at, with extra steps.
+   */
+  const { corpus: base } = seeded();
+  const c = withReadings(base, [reading("ex", "money#see-a-balance", "src/money/balance.ts:40")]);
+
+  const slot = confidenceOf(c, "money#see-a-balance#answer");
+  assert.deepEqual(slot.support, [], "the reading was counted as being about the slot itself");
+  assert.equal(slot.contained.length, 1, "the exchange's reading did not reach its slot");
+  assert.equal(slot.sources, 1, "a contained reading is real evidence and must move the tier");
+  assert.equal(slot.strength, "one-source");
+
+  /** ⛔ And the page is told which it is, or it reads as having been written about this sentence. */
+  const why = whyConfident(c, "money#see-a-balance#answer").join("\n");
+  assert.match(why, /Nothing has been observed about it directly/);
+  assert.match(why, /About the whole exchange, from code at src\/money\/balance\.ts:40/);
+});
+
+test("⛔ containment is one level, and a scope-wide reading supports no statement", () => {
+  /**
+   * A reading about a SCOPE is not evidence about every statement in it. Letting it count would
+   * make one observation support thirty claims, and the scale would read strongest in exactly the
+   * corpora where least had been looked at — which is the failure mode this whole file is arranged
+   * against, arriving through generosity rather than through a decision.
+   */
+  const { corpus: base } = seeded();
+  const c = withReadings(base, [reading("sc", "money", "src/money/all.ts:1")]);
+  const slot = confidenceOf(c, "money#see-a-balance#answer");
+  assert.deepEqual(slot.contained, [], "a scope-wide reading reached a slot");
+  assert.equal(slot.strength, "none");
+  /** The exchange one level down from the scope gets nothing either. */
+  assert.deepEqual(confidenceOf(c, "money#see-a-balance").contained, []);
+  assert.equal(containerOf("money#see-a-balance"), null, "an exchange has no container for this purpose");
+  assert.equal(containerOf("money#see-a-balance#answer"), "money#see-a-balance");
+  assert.equal(containerOf("money"), null);
+});
+
+test("the same pointer at two grains is one source, not two", () => {
+  const { corpus: base } = seeded();
+  const c = withReadings(base, [
+    reading("ex", "money#see-a-balance", "src/money/balance.ts:40"),
+    reading("sl", "money#see-a-balance#answer", "src/money/balance.ts:40"),
+  ]);
+  const slot = confidenceOf(c, "money#see-a-balance#answer");
+  assert.equal(slot.support.length, 1);
+  assert.equal(slot.contained.length, 1);
+  assert.equal(slot.sources, 1, "one code path counted twice because it was cited at two grains");
+  assert.equal(slot.strength, "one-source");
 });
