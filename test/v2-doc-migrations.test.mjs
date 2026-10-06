@@ -28,6 +28,8 @@ import {
   migrateAllDocuments,
 } from "../dist/v2/store/doc-migrations.js";
 import { documents } from "../dist/v2/store/schema.js";
+import fsSync from "node:fs";
+import path from "node:path";
 
 /** A truth file with `walked` on two views, as the corpora written before the removal have it. */
 const WITH_WALKED = `---
@@ -194,4 +196,50 @@ test("the rule only touches truth documents", async () => {
   const note = 'notes:\n  - id: n1\n    says: "walked: true was removed"\n';
   assert.equal(rule.apply("notes/notes.yaml", note), null, "it reached outside truth/");
   assert.equal(rule.apply("truth/x.md", "---\nid: x\n---\n"), null, "it rewrote a document with no walked");
+});
+
+test("⛔ importing brings a corpus forward, so it is judgeable without a restart", async () => {
+  /**
+   * `migrateDocuments` says in its own header that "projects arrive by import at any time", which
+   * is exactly why the ledger is keyed per project — and nothing called it from the import path.
+   * So a corpus carrying a key the schema has dropped went into the store unparseable and STAYED
+   * unparseable until somebody restarted the instance.
+   *
+   * ⛔ And that is not a corpus that is merely imperfect. `check` answers `cannot-judge-this-corpus`
+   * and refuses the whole thing, so every other finding is withheld too.
+   *
+   * Driven on a dev stack before this was wired: `hosted import` reported `1 scopes` and warned
+   * about two documents; `make restart` silently fixed both. Afterwards the same import reports
+   * `3 scopes` and says which documents it brought forward.
+   */
+  const { db, store } = await project("imported");
+  await store.put("truth/money.md", WITH_WALKED);
+
+  assert.notDeepEqual((await loadFromStore(store)).broken, [], "the fixture is supposed to be broken");
+
+  const applied = await migrateDocuments(db, store);
+  assert.deepEqual(
+    applied.flatMap((a) => a.documents),
+    ["truth/money.md"],
+    "the import path has to say which documents it moved — a silent rewrite of truth is what CLAUDE.md forbids"
+  );
+  assert.deepEqual((await loadFromStore(store)).broken, [], "still unjudgeable after import");
+});
+
+test("the import path calls it, and before it reports on what it imported", () => {
+  /**
+   * ⛔ READ OFF THE SOURCE, because the CLI runs as a subprocess and cannot reach a PGlite store
+   * held in this process. What is asserted is the ordering that makes the warning truthful: a
+   * corpus is brought forward BEFORE it is loaded and reported on, or `import` warns about
+   * documents it was about to fix.
+   */
+  const src = fsSync.readFileSync(path.join(process.cwd(), "src/cli/commands/hosted.ts"), "utf-8");
+  const block = src.slice(src.indexOf('.command("import <dir>")'));
+  const end = block.indexOf('.command("style');
+  const action = block.slice(0, end > 0 ? end : block.length);
+
+  const migrate = action.indexOf("migrateDocuments(");
+  const load = action.indexOf("loadFromStore(");
+  assert.ok(migrate > 0, "import never brings the corpus forward — it will warn about what a migration would fix");
+  assert.ok(load > 0 && migrate < load, "it loads before it migrates, so what it reports is the state it was about to leave behind");
 });
