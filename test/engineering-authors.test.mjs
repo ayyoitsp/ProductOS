@@ -16,7 +16,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import fs from "node:fs";
 import path from "node:path";
-import { AUTHORS, AGENTS, ROUTES } from "../dist/core/jobs.js";
+import { AUTHORS, AGENTS, SHIMS as ROUTES } from "../dist/core/jobs.js";
 
 const author = (name) => AUTHORS.find((a) => a.name === name);
 const prompt = (name) => fs.readFileSync(path.join(process.cwd(), author(name).prompt), "utf-8");
