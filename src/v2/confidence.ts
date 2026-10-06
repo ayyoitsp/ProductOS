@@ -74,7 +74,7 @@ export interface Confidence {
    * ⛔ A SEPARATE FIELD OF A DIFFERENT TYPE. Not `strength: "confirmed"`. Nothing in this module can
    * set it; it is `stampFor`'s answer, and `stampFor` is the one place that refuses an agent.
    */
-  confirmed: { by: string; at: string } | null;
+  confirmed: { by: string; at: string; through?: string } | null;
   /** Confirmed once, and the sentence has moved since. ⛔ Not confirmed, and not nothing either. */
   stale: null | "claim-changed" | "criteria-changed" | "both-changed";
   /** Readings bearing directly on this ref. */
@@ -233,7 +233,10 @@ export function confidenceOf(corpus: Corpus, ref: string): Confidence {
   const sources = sourcesOf([...support, ...contained]);
   return {
     ref,
-    confirmed: stamp.state === "accepted" ? { by: stamp.by, at: stamp.at } : null,
+    confirmed:
+      stamp.state === "accepted"
+        ? { by: stamp.by, at: stamp.at, ...(stamp.through ? { through: stamp.through } : {}) }
+        : null,
     stale: stamp.state === "never" || stamp.state === "accepted" ? null : stamp.state,
     support,
     contained,
@@ -257,7 +260,17 @@ export function whyConfident(corpus: Corpus, ref: string): string[] {
   const lines: string[] = [];
 
   if (c.confirmed) {
-    lines.push(`${c.confirmed.by} confirmed this on ${c.confirmed.at}.`);
+    /**
+     * ⛔ SAID AS BEING THROUGH THE RULE, NOT AS A DIRECT ACCEPTANCE. Nobody stamped this slot; they
+     * stamped the rule whose sentence fills it. A page showing a plain "confirmed" here would be
+     * claiming a judgement about this exchange that nobody made — the words are agreed, the choice
+     * to let that rule govern HERE is the selector's, and a reader is entitled to know which.
+     */
+    lines.push(
+      c.confirmed.through
+        ? `${c.confirmed.by} confirmed the rule ${c.confirmed.through} on ${c.confirmed.at}, and it supplies every word of this.`
+        : `${c.confirmed.by} confirmed this on ${c.confirmed.at}.`,
+    );
     /**
      * ⛔ SAID ON THE CONFIRMED STATEMENT ITSELF, because that is the row a reader would otherwise
      * skip. A green stamp over a statement that something was observed about afterwards is the one

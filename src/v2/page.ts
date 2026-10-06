@@ -1561,6 +1561,8 @@ function confidenceParts(corpus: Corpus, ref: string): { chips: string; why: str
   const late = c.confirmed ? discrepancyFor(corpus, ref) : null;
   const stampChip = late
     ? `<span class="chip warn" title="by ${esc(late.confirmed.by)} on ${esc(late.confirmed.at)}">confirmed · newer evidence</span>`
+    : c.confirmed?.through
+    ? `<span class="chip ok" title="${esc(c.confirmed.by)} confirmed the rule ${esc(c.confirmed.through)} on ${esc(c.confirmed.at)}">confirmed · by rule</span>`
     : c.confirmed
     ? `<span class="chip ok" title="by ${esc(c.confirmed.by)} on ${esc(c.confirmed.at)}">confirmed</span>`
     : c.stale
