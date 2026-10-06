@@ -1539,22 +1539,41 @@ function returnedFrom(block: ts.Block): ts.Node | undefined {
  * person can read and judge — whether the columns are right, whether a long sponsor name breaks the
  * layout — not a screen that lies convincingly.
  */
+/**
+ * ⛔ THE VALUES ARE DOMAIN-NEUTRAL ON PURPOSE, AND THEY DID NOT USED TO BE.
+ *
+ * This table held one product's vocabulary: "Northgate Apartments", "Cedar Ridge Capital",
+ * "1420 Northgate Blvd", "$12,400,000", "Underwriting", "Term sheet". Those are commercial real
+ * estate, sitting in the generator, so EVERY product drawn by ProductOS got them — a to-do app with
+ * a column called Name would be handed an apartment complex, and a reviewer would have no way to
+ * tell a sample from a claim about their own product.
+ *
+ * Peter, on being shown it: *"let's just update draw.ts to have sanitized values"*.
+ *
+ * ⛔ THE PATTERNS ARE NOT THE SAME THING AS THE VALUES. A matcher is recognition — knowing that a
+ * field called `dscr` or `loanAmount` holds money costs nothing to a product that has no such field
+ * and helps every product that does. What leaks is the WORDS PUT ON SOMEBODY'S SCREEN, and those
+ * are now things no product owns: a company, a street, a town, a sum, a state of progress.
+ *
+ * ⛔ AND THIS IS STILL THE WRONG HOME FOR IT. Per-project vocabulary belongs in a steer or in the
+ * corpus's own config, where a product can say what ITS rows look like. This makes the default
+ * harmless; it does not make it right. Deliberately left for that change rather than smuggled in
+ * here, because where it lives is a design decision and not a cleanup.
+ */
 const SAMPLES: Array<[RegExp, string[]]> = [
-  [/(sponsor|borrower|owner|company|firm|lender|organi[sz]ation)/i, ["Cedar Ridge Capital", "Northgate Holdings", "Harbor Point Partners"]],
-  [/(address|street|line1)/i, ["1420 Northgate Blvd", "88 Harbor Point Rd", "7 Cedar Ridge Way"]],
-  [/(city|location|market|region|place)/i, ["Sacramento, CA", "Tacoma, WA", "Mesa, AZ"]],
+  [/(sponsor|borrower|owner|company|firm|lender|organi[sz]ation)/i, ["Acme Holdings", "Beacon Partners", "Clearwater Group"]],
+  [/(address|street|line1)/i, ["12 Market Street", "88 Harbour Road", "7 Orchard Way"]],
+  [/(city|location|market|region|place)/i, ["Springfield", "Riverton", "Fairview"]],
   [/\bstate\b/i, ["CA", "WA", "AZ"]],
   /** ⛔ `total` is a COUNT far more often than a sum — it put money in a pager. Money says money. */
-  /** ⛔ `usd(...)` NAMES ITS OWN UNITS. A money formatter is the plainest statement of what a cell
-   *     holds that a codebase contains, and reading only the field left those columns blank. */
-  [/(loanamount|amount|balance|price|proceeds|\bsum\b|\bcost\b|\busd\b|currency|money|dollars)/i, ["$12,400,000", "$8,150,000", "$21,900,000"]],
+  [/(loanamount|amount|balance|price|proceeds|\bsum\b|\bcost\b|\busd\b|currency|money|dollars)/i, ["$12,400.00", "$8,150.00", "$21,900.00"]],
   [/(rate|yield|ltv|dscr|percent|\bpct\b|\bshare\b|spread|coupon)/i, ["6.25%", "5.80%", "6.05%"]],
   [/(units|count|rooms|beds|quantity|docs|documents|total|pages?)/i, ["184", "76", "312"]],
   [/(date|created|updated|modified|\bat\b|when|asof)/i, ["4 Mar 2026", "18 Feb 2026", "27 Jan 2026"]],
-  [/(stage|status|state|phase|step)/i, ["Underwriting", "Screening", "Term sheet"]],
+  [/(stage|status|state|phase|step)/i, ["In review", "Draft", "Approved"]],
   [/(email|mail)/i, ["a.nguyen@example.com", "j.ruiz@example.com", "m.patel@example.com"]],
   [/(user|author|by|analyst|officer|person|member)/i, ["A. Nguyen", "J. Ruiz", "M. Patel"]],
-  [/(title|name|label|deal|project|property|asset)/i, ["Northgate Apartments", "Cedar Ridge", "Harbor Point"]],
+  [/(title|name|label|deal|project|property|asset)/i, ["Blue Harbour", "Fairview Court", "Northwind"]],
 ];
 
 export function sampleValue(hint: string, row: number): string | undefined {

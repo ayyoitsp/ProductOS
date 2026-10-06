@@ -306,12 +306,12 @@ test("a table cell takes its sample from the column it sits in", () => {
      </table>) }`
   );
   const out = drawFromRoute(path.join(root, "Page.tsx"), {});
-  assert.match(out.html, /Underwriting|Screening|Term sheet/, "the stage column did not read as a stage");
+  assert.match(out.html, /In review|Draft|Approved/, "the stage column did not read as a stage");
   /** ⛔ Even wrapped in a badge: the cell is searched, not required to BE the marker. */
-  assert.doesNotMatch(out.html, /badge[^>]*>\s*<span class="productos-sample"[^>]*>Northgate/, "a deal name is still filed under Stage");
+  assert.doesNotMatch(out.html, /badge[^>]*>\s*<span class="productos-sample"[^>]*>Blue Harbour/, "a name is still filed under Stage");
   assert.match(out.html, /2026/, "a date column drew as an empty bar");
   /** ⛔ A column whose expression names a real field keeps it — the heading is the fallback. */
-  assert.match(out.html, /Northgate Apartments/, "the deal column lost the name its own field gave it");
+  assert.match(out.html, /Blue Harbour/, "the name column lost the value its own field gave it");
   fs.rmSync(root, { recursive: true, force: true });
 });
 

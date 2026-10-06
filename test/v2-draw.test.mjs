@@ -277,7 +277,7 @@ test("a local render helper is the body of the screen, and each of its arms is a
 
 /**
  * ⛔ WHAT A FIELD HOLDS IS NAMED BY ITS LAST SEGMENT. `step.number` matched the stage rule on the
- * word "step" and put "Underwriting" inside an eight-pixel circle — three progress dots reading
+ * word "step" and put a stage name inside an eight-pixel circle — three progress dots reading
  * "erwr", "reen" and "ern hee". Legible and wrong is worse than blank.
  */
 test("a counter samples as a number, whatever it hangs off", () => {
@@ -285,8 +285,8 @@ test("a counter samples as a number, whatever it hangs off", () => {
   assert.equal(sampleValue("step.number", 1), "2");
   assert.equal(sampleValue("row.index", 2), "3");
   /** And the thing it belongs to still reads as itself. */
-  assert.equal(sampleValue("step.label", 0), "Underwriting");
-  assert.equal(sampleValue("deal.stage", 1), "Screening");
+  assert.equal(sampleValue("step.label", 0), "In review");
+  assert.equal(sampleValue("deal.stage", 1), "Draft");
 });
 
 /**
