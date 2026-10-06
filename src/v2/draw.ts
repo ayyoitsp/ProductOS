@@ -859,6 +859,24 @@ function emit(node: ts.Node, ctx: Ctx): string {
      * worse than one that is blank. A list's cells are what a reviewer judges; the chrome around it
      * holds counts and labels that nobody is reading for plausibility.
      */
+    /**
+     * ⛔ `null` IS NOTHING, AND NOTHING IS NOT A WORD. A ternary's empty arm — `{error ? <p/> : null}`
+     * — reached the slot namer, which read it as a plain path and wrote the word "null" onto the
+     * screen, beside the Sign in button on the Excel pane. A literal renders as what React renders
+     * it as: null, undefined and the booleans render as nothing at all.
+     *
+     * ⛔ BEFORE THE ROW BRANCH, NOT AFTER IT. Written below, it never ran for the case that
+     * produced it: inside a mapped row the sampler and the row's own slot naming both answer
+     * first, and the word "null" was printed six times on one screen with the guard sitting
+     * twenty lines further down.
+     */
+    if (
+      e.kind === ts.SyntaxKind.NullKeyword ||
+      e.kind === ts.SyntaxKind.TrueKeyword ||
+      e.kind === ts.SyntaxKind.FalseKeyword ||
+      (ts.isIdentifier(e) && e.text === "undefined")
+    )
+      return "";
     const made = ctx.inRow ? sampleValue(hint, ctx.row ?? 0) : undefined;
     if (made !== undefined) {
       ctx.unresolved.push(hint);
@@ -1177,6 +1195,28 @@ function emit(node: ts.Node, ctx: Ctx): string {
     }
   }
   const attr = attrs.length ? ` ${attrs.join(" ")}` : "";
+  /**
+   * ⛔ A FULL-VIEWPORT OVERLAY IS A STATE, NOT THE RESTING SCREEN.
+   *
+   * `map-the-statement` rendered a `fixed inset-0` modal container with a `bg-black/50` scrim
+   * across the whole drawing — so every card on the screen under review was behind a half-black
+   * sheet and the page read as broken. The scrim was invisible to every probe that asked for a grey
+   * background, because it is painted by the LAST element in the DOM over elements that are all
+   * correctly transparent.
+   *
+   * The `DIALOG` rule above catches a modal named like one and handed an `open` prop. This catches
+   * the hand-rolled kind, which is the same thing written as markup: nothing is `fixed inset-0`
+   * except something meant to cover the window, and a drawing of one screen is not the window.
+   *
+   * ⛔ IT IS RECORDED, NOT DISCARDED. The overlay keeps its own appearance — the states this pushes
+   * are what the chips above a drawing are made of, so the modal is still reviewable, on its own,
+   * instead of on top of something else.
+   */
+  const cls = attrs.find((a) => a.startsWith('class="'))?.slice(7, -1) ?? "";
+  if (/\bfixed\b/.test(cls) && /\binset-0\b/.test(cls)) {
+    ctx.states.push(`an overlay covers the screen: <${tag} class="${cls}">`);
+    return "";
+  }
   if (VOID.has(tag)) return `<${tag}${attr} />`;
   /**
    * ⛔ A CONTROL WITH NO WORDS ON IT IS UNREVIEWABLE, WHATEVER MADE IT EMPTY.
