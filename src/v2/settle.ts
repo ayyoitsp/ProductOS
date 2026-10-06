@@ -32,6 +32,8 @@ import { loadCorpus, resolveRules, selectsFor, lineageOf, type Corpus } from "./
 import { resolveRef } from "./ref.js";
 import { removals, refuseBecause } from "./write.js";
 
+import { confidenceOf, type Strength } from "./confidence.js";
+
 export interface Question {
   ref: string;
   scope: string;
@@ -121,7 +123,37 @@ export function questionsFor(corpus: Corpus, scopeId: string): Question[] {
    * surface did not know about.
    */
   const fromRules = openRuleQuestions(corpus, under);
-  return [...fromRules, ...fromSlots];
+  return orderByAttention(corpus, [...fromRules, ...fromSlots]);
+}
+
+/**
+ * The queue, worst use of somebody's attention last. ⛔ ORDERED, BECAUSE IT WAS NOT.
+ *
+ * Peter: *"still too much review surface."* Part of that is how many questions there are and part is
+ * that they arrived in corpus order — so a statement four independent sources already agree about
+ * competed for attention equally with one nothing supports. Both are "open"; they are not equally
+ * worth a person's time.
+ *
+ * Least-supported first. A question with nothing behind it is the one where a human's answer is the
+ * only thing that will ever settle it; a question with three sources agreeing can be shown with its
+ * evidence and skimmed. ⛔ And it is an ORDER, never a filter: nothing is hidden on the strength of
+ * inference, which would be the scale deciding what a person is allowed to be asked.
+ *
+ * ⛔ STABLE, so two runs over one corpus produce the same list. An unstable queue makes "have I seen
+ * this" unanswerable, and a reviewer who cannot trust the order stops using it.
+ */
+const ATTENTION: Record<Strength, number> = {
+  none: 0,
+  "one-source": 1,
+  corroborated: 2,
+  "strongly-supported": 3,
+};
+
+export function orderByAttention(corpus: Corpus, questions: Question[]): Question[] {
+  return questions
+    .map((q, i) => ({ q, i, rank: ATTENTION[confidenceOf(corpus, q.ref).strength] }))
+    .sort((a, b) => a.rank - b.rank || a.i - b.i)
+    .map((x) => x.q);
 }
 
 /** Open rules whose selector reaches any exchange in these scopes. */

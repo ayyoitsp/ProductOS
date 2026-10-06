@@ -227,6 +227,13 @@ export const AREAS: Area[] = [
     files: [
       "src/v2/grid.ts",
       "src/v2/stamp.ts",
+      /**
+       * ⛔ A DERIVATION, NOT A MODEL CONCEPT, AND THE DISTINCTION IS LOAD-BEARING. How
+       * well-supported a statement is comes from counting readings and asking `stampFor`; a stored
+       * confidence is a number that was true when it was written and unfalsifiable afterwards.
+       * Owned here with `stageOf` and `reachOf` for the same reason.
+       */
+      "src/v2/confidence.ts",
       "src/v2/settle.ts",
       "src/v2/acts.ts",
       "src/v2/record.ts",

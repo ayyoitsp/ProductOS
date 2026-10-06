@@ -2040,15 +2040,39 @@ export const Reading = z.object({
      * observation the corpus actually rests on, and `readings/` stayed empty — which read
      * as the concept being unnecessary rather than as it being unusable.
      */
-    kind: z.enum(["code", "test-run", "screen", "series", "trial", "interview", "support"]),
+    /**
+     * ⛔ `series` REMOVED FOR REAL THIS TIME. The comment eight lines below has said it was removed
+     * since it was written, and the enum went on offering it — so the one field a reader was warned
+     * about was the one still available. Nothing reads it; it held a metric over time, which belongs
+     * to the operational half of the roadmap that does not exist.
+     *
+     * ⛔ `telemetry` · `log` · `inspection` ADDED, because the scoper's instructions already offered
+     * them. An author following the documented list wrote a kind the loader rejects, which is worse
+     * than an author with too few options: they have no reason to doubt the instruction. They are
+     * also genuinely distinct from what was here — `log` is what the product recorded, `telemetry`
+     * is what it recorded in aggregate, and `inspection` is somebody looking at the running product
+     * rather than at its code.
+     */
+    kind: z.enum([
+      "code", "test-run", "screen", "inspection",
+      "trial", "interview", "support",
+      "telemetry", "log",
+    ]),
+    /**
+     * Where this was observed, specifically. A `file:line` for code, a session set for a trial, a
+     * ticket for support, a dashboard for telemetry.
+     *
+     * ⛔ REQUIRED, AND THE INSTRUCTIONS CALLED IT `what`. A reading whose basis names no source is
+     * an assertion wearing evidence's clothes — the whole point is that whoever answers a question
+     * can go and look. The scoper documented `what:` instead, which `.strict()` rejects, so every
+     * reading written from the instructions failed to load and `readings/` stayed empty in every
+     * corpus. Proven by parsing the documented example: three errors, this among them.
+     */
     ref: z.string().min(3),
     quote: z.string().optional(),
     at: dateish.optional(),
     by: z.string().optional(),
   }).strict(),
-  /* ⛔ `series` REMOVED. It was declared, read by nothing, and the only thing it could have
-   * held — a metric over time — belongs to the operational half of the roadmap that does not
-   * exist yet. A field waiting for a feature is a field authors fill in wrong. */
 }).strict();
 export type Reading = z.infer<typeof Reading>;
 

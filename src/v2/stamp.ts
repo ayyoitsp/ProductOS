@@ -430,7 +430,8 @@ export function coveredBy(corpus: Corpus, target: string): Covered | null {
 }
 
 export type StampState =
-  | { state: "accepted"; by: string; at: string }
+  /** ⛔ `through` names the RULE whose confirmation covers this ref — see `acceptedThroughRule`. */
+  | { state: "accepted"; by: string; at: string; through?: string }
   | { state: "claim-changed"; by: string; at: string }
   | { state: "criteria-changed"; by: string; at: string }
   | { state: "both-changed"; by: string; at: string }
@@ -443,6 +444,48 @@ export type StampState =
  * implementations of one question is three chances to disagree, and the packet's disagreed
  * with reality by printing "accepted separately" for rules with no verdict at all.
  */
+/**
+ * A slot whose sentence comes ENTIRELY from a rule somebody has already confirmed.
+ *
+ * ⛔ PETER, ASKED WHETHER A CONFIRMED RULE SHOULD REACH THE EXCHANGES IT GOVERNS: *"Isn't this
+ * exactly what it should do?"* — and he is right. It was not a judgement call, it was a gap.
+ *
+ * `only-a-parent-moves-money` accepted, and `money#record-earning#may` read `never` — while the
+ * entire content of that slot IS the rule's sentence, placed there by the rule's own selector. So a
+ * reviewer was asked to confirm one sentence again, once per exchange the rule reaches. That is
+ * review surface with nothing behind it: the sentence a person agreed to and the sentence they are
+ * being asked about are the same string.
+ *
+ * ⛔ ONLY WHERE THE SLOT STATES NOTHING OF ITS OWN. `resolveRules` separates `inherited` — the slot
+ * says nothing and the rule supplies it — from `constrained`, where the slot has its own sentence
+ * and a rule adds a requirement on top. A constrained slot carries words nobody has agreed to, so
+ * it keeps asking. Reading those two as one would hand a rule's authority to a local sentence it
+ * never covered.
+ *
+ * ⛔ AND `excepts` ALREADY HANDLES THE WAY OUT. An exchange that opts out of a rule at a slot is not
+ * in `inherited` at all, so it inherits nothing — the mechanism for "this rule does not apply here"
+ * exists, costs a reason, and renders struck through.
+ *
+ * ⛔ THIS IS NOT INFERENCE AND MUST NOT BE READ AS THE SCALE REACHING THE LINE. No amount of support
+ * produces a confirmation; this is one confirmation being recognised at every ref where its sentence
+ * actually stands. `through` says which rule, so no surface can show it as a direct acceptance.
+ */
+function acceptedThroughRule(corpus: Corpus, target: string): StampState | null {
+  if (target.split("#").length !== 3) return null;
+  const { inherited } = resolveRules(corpus);
+  const rule = inherited.get(target);
+  if (!rule) return null;
+  /** ⛔ Direct lookup, not `stampFor` — a rule cannot be inherited from a rule, so there is no recursion. */
+  const accepts = corpus.verdicts.filter((v) => v.kind === "accept" && v.target === rule.id && v.via !== "agent");
+  if (!accepts.length) return null;
+  const latest = accepts[accepts.length - 1]!;
+  const now = coveredBy(corpus, rule.id);
+  if (!now) return null;
+  /** ⛔ A reworded rule stops reaching, exactly as a reworded claim stops counting where it was stamped. */
+  if (latest.covers_slots !== now.slots || latest.covers_criteria !== now.criteria) return null;
+  return { state: "accepted", by: latest.by, at: latest.at, through: rule.id };
+}
+
 export function stampFor(corpus: Corpus, target: string): StampState {
   /**
    * ⛔ AN AGENT'S RECORD IS NOT AN ACCEPTANCE, AND THIS IS THE ONE PLACE THAT MATTERS.
@@ -458,7 +501,8 @@ export function stampFor(corpus: Corpus, target: string): StampState {
    * default nobody can see is a default nobody will ever override.
    */
   const accepts = corpus.verdicts.filter((v) => v.kind === "accept" && v.target === target && v.via !== "agent");
-  if (!accepts.length) return { state: "never" };
+  /** ⛔ Nobody stamped this ref — but a confirmed rule may already supply every word of it. */
+  if (!accepts.length) return acceptedThroughRule(corpus, target) ?? { state: "never" };
   const latest = accepts[accepts.length - 1]!;
   const now = coveredBy(corpus, target);
   if (!now) return { state: "never" };

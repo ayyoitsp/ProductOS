@@ -1,9 +1,11 @@
 id: "0089"
-said: this looks nothing like our UX
-at: 2026-10-05
-kind: generator
+said: should a confirmed rule reach the exchanges it governs? Same question, different axis..... not sure I understand this?  Isn't this eactly what it should do?
+at: 2026-10-06
+kind: derivation
 reaches:
-  generate: "@property` IS DOCUMENT-SCOPED TOO, AND IT IS WHY EVERY BORDERED BOX WAS INVISIBLE"
-  pin: a registered property is hoisted, because a shadow root does not hold one
+  derive: acceptedThroughRule
+  surface: confirmed · by rule
+  check: evidence-that-cannot-be-dated
+  pin: one confirmation of a rule settles every slot it supplies entirely
 waived: {}
-closed: 2026-10-05
+closed: 2026-10-06

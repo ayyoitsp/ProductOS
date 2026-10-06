@@ -25,6 +25,7 @@ import { storeFor, isRefusal, type Db } from "../../v2/store/access.js";
 import { accountFor, issueToken, revokeToken, singleAccount } from "../../v2/store/identity.js";
 import { createProject, projectBySlug } from "../../v2/store/instance.js";
 import { exportToDisk, importFromDisk, loadFromStore } from "../../v2/store/corpus.js";
+import { migrateDocuments } from "../../v2/store/doc-migrations.js";
 import { migrateStore, openStore, rowsOf } from "../../v2/store/server.js";
 import { projects, tokens } from "../../v2/store/schema.js";
 import { eq, sql } from "drizzle-orm";
@@ -339,8 +340,29 @@ ${pc.dim("⛔ Needs DATABASE_URL, not a token: creating the first credential can
             if (!fs.existsSync(dir)) throw new Error(`no directory at ${path.resolve(dir)}`);
             const store = await reach(d, opts.into);
             const { imported } = await importFromDisk(store, dir);
+            /**
+             * ⛔ AND BROUGHT FORWARD BEFORE IT IS REPORTED ON — because the thing this verb warns
+             * about is usually the thing a migration already knows how to fix.
+             *
+             * `migrateDocuments` says in its own header that "projects arrive by import at any
+             * time", which is exactly why it is keyed per project. Nothing called it here, so an
+             * imported corpus carrying a key the schema has dropped stayed unparseable until
+             * somebody restarted the instance — and `check` does not report that as imperfect, it
+             * reports `cannot-judge-this-corpus` and refuses the whole thing. Driven, on a dev
+             * stack: import warned about two documents, and a restart silently fixed both.
+             *
+             * ⛔ The ledger is what makes this safe to run here as well as at boot: it is keyed by
+             * project and migration, so this is a no-op on everything already brought forward.
+             */
+            const brought = await migrateDocuments(d, store);
             const corpus = await loadFromStore(store);
             console.log(pc.green("✓"), `${imported.length} documents into ${opts.into}`);
+            for (const a of brought)
+              if (a.documents.length)
+                console.log(
+                  " ",
+                  pc.dim(`${a.migration} brought ${a.documents.length} document(s) forward: ${a.documents.join(", ")}`),
+                );
             console.log(
               " ",
               `${corpus.scopes.length} scopes · ${corpus.rules.length} rules · ${corpus.verdicts.length} verdicts`,

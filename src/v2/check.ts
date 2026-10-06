@@ -25,6 +25,7 @@ import {
   selectsFor,
   type Corpus,
 } from "./load.js";
+import { containerOf } from "./confidence.js";
 import { stampFor, staleReason, coveredBy } from "./stamp.js";
 import { resolveRef } from "./ref.js";
 import { descendants } from "./settle.js";
@@ -3006,6 +3007,32 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
         fix:
           "name what was read as <scope> or <scope>#<exchange> — an observation about nothing cannot be weighed against the truth it was meant to test",
       });
+  }
+
+  /**
+   * ⛔ EVIDENCE NOBODY CAN DATE, ON A STATEMENT SOMEBODY AGREED TO.
+   *
+   * A confirmation is a judgement at a moment, and the one thing that can make it wrong without the
+   * sentence changing is an observation recorded afterwards — which `discrepancyFor` detects by
+   * comparing `basis.at` against the verdict's date. An undated reading is invisible to that check
+   * forever, and undated is exactly what a hurried author writes.
+   *
+   * ⛔ ONLY WHERE IT COSTS SOMETHING. An undated reading on an unconfirmed statement is fine: there
+   * is no judgement for it to overtake. Reporting every one would make the common case noise and
+   * teach a reader to skip the finding, which is how the useful instance gets missed.
+   */
+  for (const r of corpus.readings) {
+    if (!r.bears_on || r.basis.at) continue;
+    const reaches = [r.bears_on, ...[...slotRefs].filter((ref) => containerOf(ref) === r.bears_on)];
+    const confirmedHere = reaches.find((ref) => stampFor(corpus, ref).state === "accepted");
+    if (!confirmedHere) continue;
+    add({
+      severity: "note",
+      kind: "evidence-that-cannot-be-dated",
+      where: r.id,
+      what: `bears on ${confirmedHere}, which is confirmed, and carries no basis.at`,
+      fix: "put the date it was observed in `basis.at` — without it nothing can tell whether this landed before or after somebody agreed, and the statement will never read as `confirmed · newer evidence`",
+    });
   }
 
   // ---- shape: the thing no single page can show ----

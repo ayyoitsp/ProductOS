@@ -1,9 +1,14 @@
 id: "0088"
-said: i don't think we need to show the full menu in every page, we should just show the relevant inline page
+said: ok, let's review where we are with human validation vs confidence scale. should be a ticket - where are we there? I think this is essential to getting things going. still too much review surface. when the feature is initially spec'd, or when UX is changed with explicit instructions, and there is confirmation, it should feed into everything that hasn't been confirmed (or confirmed) to make sure there are no discrepancies, and confidence is updated
 at: 2026-10-05
-kind: generator
+kind: concept
 reaches:
-  generate: THE SCREEN'S OWN CONTENT, NOT THE APPLICATION AROUND IT
-  pin: a drawing is the screen's own content, not the application around it
+  model: Reading
+  derive: confidenceOf
+  generate: writeDrawnReading
+  surface: chip support
+  check: evidence-that-cannot-be-dated
+  instruct: the confidence scale counts
+  pin: no amount of support reaches confirmed
 waived: {}
-closed: 2026-10-05
+closed: 2026-10-06
