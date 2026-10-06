@@ -25,7 +25,7 @@ import { test } from "node:test";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { drawFromRoute, layoutsAround } from "../dist/v2/draw.js";
+import { drawFromRoute, layoutsAround, sampleValue } from "../dist/v2/draw.js";
 
 /** A Next-shaped app: a root layout, a group layout with chrome, and a page inside it. */
 function app() {
@@ -335,4 +335,61 @@ test("a value standing in a sentence is content, not a slot for a caller", () =>
   /** ⛔ And a lone child is still read as a slot, which is what kept those screens clean. */
   assert.doesNotMatch(out.html, /<section>\s*<span class="productos-(slot|unknown)"/, "a caller's slot was marked as missing content");
   fs.rmSync(root, { recursive: true, force: true });
+});
+
+test("a prop is threaded through every wrapper that passes it on", () => {
+  /**
+   * ⛔ IT STOPPED AT ONE LEVEL, WHICH IS ONE LEVEL SHORT OF EVERY DESIGN SYSTEM.
+   *
+   * A value reached a component and then could not get into the component THAT one renders.
+   * `<AddressAutocomplete placeholder="Start typing an address…" />` renders
+   * `<TextField placeholder={placeholder} />`, so the words were resolved at the call site, carried
+   * one layer, and dropped on the threshold of the layer that displays them. The Property Address
+   * field drew as an empty unlabelled box on the new-deal screen while the text sat two files away,
+   * already resolved.
+   *
+   * Peter, on being told this was a deeper feature rather than a fix: *"Why can't we fix it?"* It
+   * was one branch — ask whether the identifier is a prop THIS component was handed before asking
+   * whether it is a local.
+   */
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "productos-thread-"));
+  const put = (rel, body) => {
+    fs.mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
+    fs.writeFileSync(path.join(root, rel), body);
+  };
+  put("components/Field.tsx", `export function Field({ placeholder }){ return (<input placeholder={placeholder} />) }`);
+  put(
+    "components/Autocomplete.tsx",
+    `import { Field } from './Field'
+     export function Autocomplete({ placeholder }){ return (<div><Field placeholder={placeholder} /></div>) }`
+  );
+  put(
+    "Page.tsx",
+    `import { Autocomplete } from './components/Autocomplete'
+     export default function P(){ return (<form><Autocomplete placeholder="Start typing an address..." /></form>) }`
+  );
+  const out = drawFromRoute(path.join(root, "Page.tsx"), { componentsDir: path.join(root, "components") });
+  assert.match(
+    out.html,
+    /placeholder="Start typing an address\.\.\."/,
+    "the words were written at the call site and lost two components later"
+  );
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test("a cell drawn by a formatter reads the formatter and its arguments", () => {
+  /**
+   * ⛔ EIGHT HUNDRED EMPTY BARS DOWN THE MIDDLE OF THE BIGGEST TABLES. A cell written as
+   * `usd(cell.trailing, CENTS)` or `formatCell(lease.lease_start, 'date')` is a formatter and a
+   * field put together, and between them they say what the cell holds — the quoted argument most
+   * clearly of all, because the caller wrote the type out by hand. Only single-argument calls were
+   * read, and only the field inside them.
+   *
+   * ⛔ The hints are truncated for display, so this must not depend on a closing parenthesis — the
+   * first attempt anchored on one and matched none of the calls it was written for.
+   */
+  assert.ok(sampleValue("formatCell(lease.lease_start, 'date'", 0), "a date column stayed blank");
+  assert.ok(sampleValue("usd(cell.trailing, CENTS)", 0).startsWith("$"), "a money formatter did not read as money");
+  /** ⛔ And something that names nothing a reader could use still draws a bar rather than a guess. */
+  assert.equal(sampleValue("qq(zz, ww)", 0), undefined, "an unreadable call was given a value anyway");
 });

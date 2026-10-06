@@ -991,6 +991,17 @@ function emit(node: ts.Node, ctx: Ctx): string {
              */
             else if (ts.isIdentifier(v) && falseAtFirst(v).has(v.text)) falsy.add(name);
             else if (v.kind === ts.SyntaxKind.FalseKeyword) falsy.add(name);
+            /**
+             * ⛔ A PROP THIS COMPONENT WAS HANDED, PASSED STRAIGHT ON. The binding stopped at one
+             * level: a value reached a component and then could not get into the component THAT one
+             * renders. Every wrapper in a design system is exactly this shape —
+             * `<AddressAutocomplete placeholder="Start typing an address…" />` renders
+             * `<TextField placeholder={placeholder} />` — so the text was resolved at the call site,
+             * carried one layer, and dropped on the threshold of the layer that displays it. The
+             * Property Address field drew as an empty unlabelled box on the new-deal screen while
+             * the words sat two files away, already resolved.
+             */
+            else if (ts.isIdentifier(v) && ctx.props.has(v.text)) bound.set(name, ctx.props.get(v.text)!);
             else if (ts.isIdentifier(v) && ctx.sameFile) {
               const local = localJsx(ctx.sameFile, v.text);
               if (local) bound.set(name, emit(local, { ...ctx, depth: ctx.depth + 1 }));
@@ -1534,8 +1545,10 @@ const SAMPLES: Array<[RegExp, string[]]> = [
   [/(city|location|market|region|place)/i, ["Sacramento, CA", "Tacoma, WA", "Mesa, AZ"]],
   [/\bstate\b/i, ["CA", "WA", "AZ"]],
   /** ⛔ `total` is a COUNT far more often than a sum — it put money in a pager. Money says money. */
-  [/(loanamount|amount|balance|price|proceeds|\bsum\b|\bcost\b)/i, ["$12,400,000", "$8,150,000", "$21,900,000"]],
-  [/(rate|yield|ltv|dscr|percent|spread|coupon)/i, ["6.25%", "5.80%", "6.05%"]],
+  /** ⛔ `usd(...)` NAMES ITS OWN UNITS. A money formatter is the plainest statement of what a cell
+   *     holds that a codebase contains, and reading only the field left those columns blank. */
+  [/(loanamount|amount|balance|price|proceeds|\bsum\b|\bcost\b|\busd\b|currency|money|dollars)/i, ["$12,400,000", "$8,150,000", "$21,900,000"]],
+  [/(rate|yield|ltv|dscr|percent|\bpct\b|\bshare\b|spread|coupon)/i, ["6.25%", "5.80%", "6.05%"]],
   [/(units|count|rooms|beds|quantity|docs|documents|total|pages?)/i, ["184", "76", "312"]],
   [/(date|created|updated|modified|\bat\b|when|asof)/i, ["4 Mar 2026", "18 Feb 2026", "27 Jan 2026"]],
   [/(stage|status|state|phase|step)/i, ["Underwriting", "Screening", "Term sheet"]],
@@ -1545,12 +1558,48 @@ const SAMPLES: Array<[RegExp, string[]]> = [
 ];
 
 export function sampleValue(hint: string, row: number): string | undefined {
-  /** Only a value-shaped expression. A call with arguments or a ternary is structure, not a field. */
+  /** Only a value-shaped expression. A ternary is structure, not a field. */
   if (!/^[A-Za-z_$][\w$.?\[\]'"()]*$/.test(hint.trim())) {
     /** …unless it is a formatter around one field, which is how most cells are written. */
     const m = /^[A-Za-z_$][\w$]*\(\s*([A-Za-z_$][\w$.]*)\s*\)$/.exec(hint.trim());
-    if (!m) return undefined;
-    hint = m[1]!;
+    if (m) hint = m[1]!;
+    else {
+      /**
+       * ⛔ A CALL WITH SEVERAL ARGUMENTS IS STILL SHOWING ONE VALUE, and refusing to look inside it
+       * left eight hundred empty grey bars down the middle of the biggest tables in the corpus —
+       * `usd(cell.trailing, CENTS)`, `Math.round(month.share * 100)`,
+       * `formatCell(line.row[i], column.type, locale)`. Each is a formatter and a field, written
+       * together; between the two of them they say what the cell holds.
+       *
+       * The function's own name is tried first, because `usd` states the units outright and a field
+       * called `trailing` does not. Then each argument that is shaped like a field. Anything that
+       * matches nothing still draws a bar — this widens what can be read, it does not invent.
+       */
+      /**
+       * ⛔ THE CLOSING PAREN IS OFTEN NOT THERE. These hints are truncated for display, so anchoring
+       * on `)` matched none of the calls this was written for: four hundred bars whose titles read
+       * `formatCell(lease.lease_start, 'date'` with the end cut off. Anchored on the opening paren
+       * only, which is the part that cannot go missing.
+       */
+      const call = /^([A-Za-z_$][\w$.]*)\s*\(([\s\S]*)$/.exec(hint.trim());
+      if (!call) return undefined;
+      const fn = call[1]!.split(".").pop()!;
+      for (const [re, values] of SAMPLES) if (re.test(fn)) return values[row % values.length];
+      /**
+       * ⛔ AND A QUOTED ARGUMENT IS USUALLY THE ANSWER. `formatCell(lease.lease_start, 'date')` says
+       * what kind of thing it is formatting in the clearest words available — the caller wrote the
+       * type out by hand. Reading only the field name missed every one of them.
+       *
+       * Each name-shaped token in the arguments, in the order written, first match wins. Nothing
+       * that matches no rule produces anything: a bar is still the answer where the code says
+       * nothing a reader could use.
+       */
+      for (const token of call[2]!.match(/[A-Za-z_$][\w$.]*/g) ?? []) {
+        const tail = token.split(".").filter(Boolean).pop() ?? "";
+        for (const [re, values] of SAMPLES) if (re.test(tail)) return values[row % values.length];
+      }
+      return undefined;
+    }
   }
   /**
    * ⛔ WHAT A FIELD HOLDS IS NAMED BY ITS LAST SEGMENT; THE PREFIX NAMES WHAT IT BELONGS TO.

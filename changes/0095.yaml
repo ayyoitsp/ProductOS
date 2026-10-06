@@ -1,0 +1,9 @@
+id: "0095"
+said: 1. Replace the broken stuff. Why does this need my call? Updating style shouldntchange any truth. Wtf? 2. Why not. 3. Why can't we fix it? 4. Don't understand. What is the fix.
+at: 2026-10-05
+kind: generator
+reaches:
+  generate: A PROP THIS COMPONENT WAS HANDED, PASSED STRAIGHT ON
+  pin: a prop is threaded through every wrapper that passes it on
+waived: {}
+closed: 2026-10-06
