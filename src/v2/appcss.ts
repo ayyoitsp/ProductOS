@@ -31,7 +31,7 @@ export interface AppStyle {
    * somebody edited — and the second is what a person needs in order to decide whether to re-take
    * it.
    */
-  sources: Array<{ path: string; sha: string; bytes: number }>;
+  sources: Array<{ path: string; sha: string; bytes: number; built_at?: string }>;
   /** Named in config and not found — a typo here is byte-identical to an unstyled mock. */
   missing: string[];
   mockClass?: string;
@@ -112,7 +112,13 @@ export function appStyleFor(dir: string): AppStyle {
       }
       from.push(hit);
       const raw = fs.readFileSync(file, "utf-8");
-      sources.push({ path: hit, sha: createHash("sha256").update(raw).digest("hex").slice(0, 16), bytes: raw.length });
+      sources.push({
+        path: hit,
+        sha: createHash("sha256").update(raw).digest("hex").slice(0, 16),
+        bytes: raw.length,
+        /** When this file was last written — for a build output, when the application was built. */
+        built_at: new Date(fs.statSync(file).mtimeMs).toISOString().slice(0, 10),
+      });
       css += `\n/* ${hit} */\n${inlineAssets(dropImports(raw), path.dirname(file), budget)}`;
     }
   }
@@ -312,6 +318,46 @@ export function scopeToShadow(css: string, mockClass = "productos-mock"): string
   return out + prelude;
 }
 
+/**
+ * ⛔ A DRAWING IS SHOWN IN A PANE, AND A PAGE WRITTEN FOR A VIEWPORT WASTES MOST OF IT.
+ *
+ * Peter: *"there's so much empty space above 'new multifamily deal' - why????? can we please just
+ * get rid of all this wasted space? WE DON'T HAVE THAT MUCH SCREEN REAL ESTATE to begin with!"*
+ *
+ * A page's outermost wrapper is written to own the window — `min-h-screen` so the background
+ * reaches the bottom of a tall display, `p-6` and `pt-12` so the content is not jammed against the
+ * chrome above it. Carried verbatim into a 450px pane, `min-height: 100vh` makes the drawing twice
+ * the height of its own frame with everything in the top third, and seventy-two pixels of page
+ * padding eat the first sixth of what is left. The screen under review gets a third of the box it
+ * was given, and the reviewer scrolls past emptiness to reach it.
+ *
+ * ⛔ THE RULES ARE THE PAGE'S FRAME, NOT THE SCREEN'S LAYOUT. Only the mock's own root and the one
+ * element it wraps are touched, and only their viewport sizing and outer padding. Spacing BETWEEN
+ * things — every gap, stack and grid the screen is actually composed of — is the product's design
+ * and is left exactly as written. Last, so it wins on order without `!important` on anything but
+ * the viewport heights, which Tailwind sets from a utility class of equal weight.
+ */
+export const PANE_FIT = `
+/* productos: a drawing is shown in a pane, not a viewport */
+:host { display: block; }
+/*
+ * ⛔ ANY DEPTH, BECAUSE THE DRAWING IS NOT THE SHADOW ROOT'S FIRST CHILD. The renderer wraps it in
+ * the product's own mock container, so a child combinator off :host matches that wrapper and never
+ * the page. Written as \`:host > .min-h-screen\` first, which selected nothing at all and looked
+ * exactly like the rule having no effect.
+ */
+:host .min-h-screen, :host .h-screen {
+  min-height: 0 !important;
+  height: auto !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+}
+/* The centred column inside it carries the page's own top padding — pt-12 here, 48px of nothing. */
+:host .min-h-screen > *, :host .h-screen > * {
+  padding-top: 0 !important;
+}
+`;
+
 /** Split on top-level commas — a comma inside `:is(a, b)` or `[x=","]` does not separate selectors. */
 function splitTop(list: string): string[] {
   const parts: string[] = [];
@@ -479,6 +525,81 @@ export function styleOf(corpus: Corpus): { appCss?: string; mockClass?: string; 
 export function asOptions(s: Style | undefined): { appCss?: string; mockClass?: string; theme?: string } {
   if (!s?.css) return {};
   return { appCss: s.css, mockClass: s.mock_class, theme: s.theme };
+}
+
+/**
+ * ⛔ A FACE CANNOT BE REGISTERED FROM INSIDE A SHADOW ROOT, AND NOTHING SAYS SO.
+ *
+ * `@font-face` is document-scoped. Put it in a stylesheet a shadow root adopts and it is simply
+ * ignored — no error, no warning, and `document.fonts.size` stays at 0. The mock then renders in
+ * the fallback the family list names, which for a serif display face is Georgia: close enough to
+ * look like a deliberate choice, and wrong.
+ *
+ * This was measured rather than reasoned about, and it had been shipped: 28 `@font-face` rules
+ * carried into the page with every byte of their woff2 inlined, zero faces loaded, every title set
+ * in Georgia. The bytes were there the whole time; only their declaration was in the one place a
+ * declaration does not count.
+ *
+ * So the faces are lifted out and emitted at document level, and everything else stays scoped.
+ *
+ * ⛔ AND THE VARIABLE BINDINGS COME WITH THEM. next/font declares the family on a generated class —
+ * `.bona_nova_58b71085-module__Rh9Lnq__variable { --font-bona-nova: "Bona Nova", … }` — which the
+ * application puts on `<html>`. A mock host does not carry that class, so the variable is unset and
+ * `--font-display: var(--font-bona-nova, Georgia)` falls through to Georgia even once the face
+ * loads. A rule that is one class and declares nothing but `--font-*` IS that binding, so it is
+ * also applied to the host, which is a mock's equivalent of `<html>`.
+ */
+export function liftFaces(css: string): { faces: string; rest: string } {
+  const faces: string[] = [];
+  const rest = css
+    .replace(/@font-face\s*\{[^}]*\}/g, (block) => {
+      faces.push(block);
+      return "";
+    })
+    /**
+     * ⛔ `@property` IS DOCUMENT-SCOPED TOO, AND IT IS WHY EVERY BORDERED BOX WAS INVISIBLE.
+     *
+     * A registered custom property's `initial-value` is held by the document, not by a shadow root,
+     * so inside a mock `var(--tw-border-style)` resolved to nothing. Tailwind v4 writes the border
+     * utility as `border-style: var(--tw-border-style); border-width: 1px` — an unresolved style
+     * computes as `none`, so a 1px border of no style drew nothing at all. Every input, card and
+     * secondary button on every screen rendered as a bare underline or a flat panel, which is a
+     * very convincing way to look like somebody else's product.
+     *
+     * ⛔ EXACTLY THE `@font-face` BUG AGAIN, and the third time this shape has bitten: the at-rules
+     * a shadow root ignores have to be hoisted to the document. Peter: *"this looks nothing like
+     * our UX"* — the markup was right and had been right the whole time; the border was not drawn.
+     */
+    .replace(/@property\s+--[-\w]+\s*\{[^}]*\}/g, (block) => {
+      faces.push(block);
+      return "";
+    });
+  /**
+   * ⛔ NARROW ON PURPOSE: ONE CLASS, AND EVERY DECLARATION A `--font-` CUSTOM PROPERTY. Anything
+   * looser starts hoisting a product's own classes onto the host, which restyles a mock by a rule
+   * that was never about it. The failure mode of being too narrow is a font variable that stays
+   * unset, which is what was already happening.
+   */
+  /**
+   * ⛔ A LOOKBEHIND, BECAUSE THE RULE BEFORE IT EATS THE DELIMITER.
+   *
+   * This asked for `(^|[}\s])` before the class and the binding was never found — next/font emits
+   * the two rules back to back: `.x__className{font-family:Bona Nova,…}.x__variable{--font-bona-
+   * nova:…}`. The first matches this same pattern and CONSUMES its own closing brace, so the scan
+   * resumes with the second rule's dot at position zero of what is left, with no delimiter in front
+   * of it and no `^` either. Matching the rule in isolation worked, which is what made it look like
+   * the body test was wrong.
+   *
+   * Same shape as the comment-stripping bug in `scopeToShadow`: a scan that consumes what the next
+   * match needs. Zero-width here, so adjacent rules cannot hide each other.
+   */
+  for (const m of css.matchAll(/(?<=^|[};\s])(\.[-\w]+)\s*\{([^}]*)\}/g)) {
+    const body = m[2].trim();
+    if (!body) continue;
+    const decls = body.split(";").map((d) => d.trim()).filter(Boolean);
+    if (decls.every((d) => /^--font-[-\w]*\s*:/.test(d))) faces.push(`:host, :root { ${decls.join("; ")} }`);
+  }
+  return { faces: faces.join("\n"), rest };
 }
 
 /**

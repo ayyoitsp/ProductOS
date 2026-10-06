@@ -2700,7 +2700,27 @@ export const Style = z
      * case and is not a defect.
      */
     sources: z
-      .array(z.object({ path: z.string(), sha: z.string(), bytes: z.number() }).strict())
+      .array(
+        z
+          .object({
+            path: z.string(),
+            sha: z.string(),
+            bytes: z.number(),
+            /**
+             * ⛔ WHEN THE FILE WAS WRITTEN, WHICH FOR A BUILD OUTPUT IS WHEN THE APP WAS LAST BUILT.
+             *
+             * A digest says the bytes changed. It cannot say the bytes are OLDER THAN THE CODE they
+             * were compiled from, and a utility-first stylesheet only contains the classes that
+             * existed at build time. The bilrost build was from 24 July and the components had moved
+             * on for two months: `-left-5` was written after it, so there was no `.-left-5` rule,
+             * so a positioned ribbon fell back to `left: auto` and painted down the middle of the
+             * deal workspace. Nothing anywhere said the stylesheet was two months behind — the class
+             * was simply absent, and the drawing looked wrong for no stated reason.
+             */
+            built_at: z.string().optional(),
+          })
+          .strict()
+      )
       .default([]),
     /** When it was taken. A drawing carries the commit it came from; this carries the day. */
     taken_at: z.string().optional(),

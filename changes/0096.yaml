@@ -1,0 +1,9 @@
+id: "0096"
+said: Let's fix the structural Gap
+at: 2026-10-05
+kind: instruction
+reaches:
+  instruct: A drawing is only right if it RENDERS right
+  pin: a rule with a child combinator survives into the mock
+waived: {}
+closed: 2026-10-06

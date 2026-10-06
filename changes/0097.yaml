@@ -1,0 +1,9 @@
+id: "0097"
+said: let's just update draw.ts to have sanitized values - and create the PR, let's do the steer part after.  want to get this merged to main and deployed to 4100
+at: 2026-10-06
+kind: generator
+reaches:
+  generate: THE VALUES ARE DOMAIN-NEUTRAL ON PURPOSE, AND THEY DID NOT USED TO BE
+  pin: a counter samples as a number, whatever it hangs off
+waived: {}
+closed: 2026-10-06

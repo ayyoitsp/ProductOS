@@ -2394,6 +2394,34 @@ function takeStyle(into: string, wear?: string | null): void {
     console.log(pc.dim(`      …and ${style.unreachable.length - 3} more`));
 }
 
+/**
+ * The file a view says it was drawn from, found where THIS checkout keeps it.
+ *
+ * ⛔ A RECORDED ROUTE OUTLIVES THE TREE IT WAS RECORDED IN, AND HAS TO.
+ *
+ * One screen in the bilrost corpus carried
+ * `../../../../../../private/tmp/…/scratchpad/dev-tree/frontend/app/components/fannie-sizer/RentRollPresentation.tsx`
+ * — written by a session that drew from a temporary copy of the repository. The file it names is
+ * real and still in the repo; the path to it died with that directory. So the sweep could not
+ * resolve it, fell through to matching on labels, failed that too, and left the screen frozen at
+ * whatever had been drawn months earlier: 117 hatched placeholders, no icons, none of the fixes
+ * since. It was the single worst screen in the corpus and nothing could reach it.
+ *
+ * Longest suffix that exists wins, so `frontend/app/components/…/X.tsx` is found whatever absolute
+ * prefix was in front of it. Tried from the longest end, so a short tail like `page.tsx` can only
+ * match after every longer and more specific one has failed.
+ */
+function routeHere(repoRoot: string, recorded: string): string | undefined {
+  const direct = path.resolve(repoRoot, recorded);
+  if (fs.existsSync(direct)) return direct;
+  const parts = recorded.split(/[\\/]+/).filter((p) => p && p !== "." && p !== "..");
+  for (let i = 0; i < parts.length - 1; i++) {
+    const candidate = path.resolve(repoRoot, parts.slice(i).join("/"));
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  return undefined;
+}
+
 function drawEverything(into: string, dryRun: boolean): void {
   /**
    * ⛔ BOTH TREES, OR THE ONE NOBODY SWEEPS QUIETLY ROTS. A repo can hold an Exchange corpus under
@@ -2445,8 +2473,9 @@ function drawEverything(into: string, dryRun: boolean): void {
     /** Already knows where it comes from: redraw it, so a sweep keeps the corpus current. */
     let route: string | undefined;
     let evidence = "";
-    if (view.drawn_from && fs.existsSync(path.resolve(repoRoot, view.drawn_from))) {
-      route = path.resolve(repoRoot, view.drawn_from);
+    const remembered = view.drawn_from ? routeHere(repoRoot, view.drawn_from) : undefined;
+    if (remembered) {
+      route = remembered;
     } else {
       /**
        * ⛔ SEARCHED WIDER THAN `components_dir`. The screen that proved this resolver — the deals

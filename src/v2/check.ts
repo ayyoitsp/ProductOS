@@ -77,6 +77,51 @@ function tokens(s?: string): string[] {
   return (s ?? "").split(/[^A-Za-z0-9.,%$£€-]+/).filter(Boolean);
 }
 
+
+/**
+ * The day the most recently edited component source was written, or undefined if none is reachable.
+ *
+ * ⛔ A SAMPLE, NOT A WALK. A frontend tree is tens of thousands of files and this runs on every
+ * check; the newest file in the directories a product keeps its screens in is enough to answer "has
+ * the code moved on since the build", which is the only question being asked.
+ */
+function newestSourceDay(root: string): string | undefined {
+  /**
+   * ⛔ FROM THE CORPUS *AND* FROM ITS PARENT. A corpus sits at `<repo>/v2`, so the application is a
+   * sibling of the corpus rather than a child of it — resolved only from the corpus directory this
+   * found nothing, reported nothing, and the check silently never fired.
+   */
+  const bases = [root, path.dirname(root)];
+  const roots = bases
+    .flatMap((b) => ["frontend/app", "app", "src", "frontend/src"].map((r) => path.resolve(b, r)))
+    .filter((r) => fs.existsSync(r));
+  let newest = 0;
+  const walk = (dir: string, depth: number): void => {
+    if (depth > 4) return;
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      if (e.name === "node_modules" || e.name.startsWith(".")) continue;
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) walk(full, depth + 1);
+      else if (/\.(tsx|jsx|ts|css)$/.test(e.name)) {
+        try {
+          const m = fs.statSync(full).mtimeMs;
+          if (m > newest) newest = m;
+        } catch {
+          /* unreadable is not newer */
+        }
+      }
+    }
+  };
+  for (const r of roots) walk(r, 0);
+  return newest ? new Date(newest).toISOString().slice(0, 10) : undefined;
+}
+
 export function overAsserted(
   then: string,
   allowed: Set<string>,
@@ -242,6 +287,35 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
         } — ${moved.slice(0, 3).join(", ")}${moved.length > 3 ? `, and ${moved.length - 3} more` : ""}.`,
         fix: "Take it again. Every drawing is currently of a product that has moved on, and nothing about the page says so.",
       });
+  /**
+   * ⛔ A BUILT STYLESHEET CAN BE OLDER THAN THE CODE IT WAS BUILT FROM, AND THEN IT IS INCOMPLETE.
+   *
+   * A utility-first stylesheet contains exactly the classes that existed when it was compiled. The
+   * bilrost build was from 24 July; the components had two further months of classes in them. So
+   * `-left-5` had no rule, a positioned ribbon fell back to `left: auto`, and it painted straight
+   * down the middle of the deal workspace. Every digest matched — the FILES had not changed, the
+   * build had simply stopped keeping up with them — and nothing anywhere said so, which is the
+   * worst version of this: a drawing that looks wrong for no stated reason, on a screen nobody can
+   * explain.
+   *
+   * Only a build output is judged this way. A hand-written stylesheet IS source and is never behind.
+   */
+  if (corpus.style?.sources?.length) {
+    const built = corpus.style.sources.filter((s) => /[\\/](\.next|dist|build|out)[\\/]/.test(s.path) && s.built_at);
+    if (built.length) {
+      const oldest = built.reduce((a, b) => (a.built_at! < b.built_at! ? a : b));
+      const newestCode = newestSourceDay(root);
+      if (newestCode && oldest.built_at! < newestCode) {
+        add({
+          severity: "note",
+          kind: "style-behind-the-code",
+          where: "style.yaml",
+          what: `The stylesheet was built on ${oldest.built_at} and this product's components were written as recently as ${newestCode}. A utility stylesheet only holds the classes that existed when it was compiled, so every class written since is absent and silently does nothing.`,
+          fix: "Build the application, then take the style again. Until then a drawing can be missing layout nobody can account for.",
+        });
+      }
+    }
+  }
     for (const u of corpus.style.unreachable.slice(0, 1))
       add({
         severity: "note",

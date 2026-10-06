@@ -1,0 +1,9 @@
+id: "0091"
+said: there's so much empty space above 'new multifamily deal' - why????? can we please just get rid of all this wasted space? WE DON'T HAVE THAT MUCH SCREEN REAL ESTATE to begin with!
+at: 2026-10-05
+kind: generator
+reaches:
+  generate: A DRAWING IS SHOWN IN A PANE, AND A PAGE WRITTEN FOR A VIEWPORT WASTES MOST OF IT
+  pin: reads the carried stylesheet as text, not as HTML
+waived: {}
+closed: 2026-10-05

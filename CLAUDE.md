@@ -310,9 +310,36 @@ resolves to nothing.
 
 ## Verify by running, not by reasoning
 
-For renderer changes, load the page and assert on the DOM. Playwright is available at
-`frontend/node_modules/.pnpm/playwright-core@*/` in the bilrost checkout. A rendering
-claim that was never rendered is a guess.
+A rendering claim that was never rendered is a guess. **For renderer changes, there is a
+test harness that renders in a real browser** — `test/support/chrome.mjs`, used by
+`test/v2-the-mock-in-a-real-browser.test.mjs`:
+
+```bash
+npm test                              # includes them wherever Chrome is installed
+PRODUCTOS_REQUIRE_BROWSER=1 npm test  # absence of a browser becomes a failure, not a skip
+PRODUCTOS_TEST_BROWSER=/path/to/chrome npm test
+```
+
+It drives the Chrome already on the machine over the DevTools protocol — no dependency, no
+downloaded browser, no postinstall. It asserts **computed style**, never markup.
+
+⛔ **Markup assertions would have passed on every bug this exists for.** Three defects in one
+session lived entirely inside a browser and all three were found by hand, late, after Peter
+said the drawings looked nothing like his product:
+
+| what broke | why nothing saw it |
+| --- | --- |
+| the stylesheet was read with `innerHTML`, which HTML-escapes | every rule with a child combinator came back unparseable and was dropped in silence — 828 rules reached the mock and not one had a `>` in it |
+| `@property` is document-scoped, not shadow-scoped | `border-style: var(--tw-border-style)` resolved to nothing, so every bordered box drew as a bare underline |
+| a page written to own a viewport | kept `min-height: 100vh` and 72px of page padding inside a 450px pane |
+
+⛔ **And a DOM emulator is worse than nothing here.** jsdom and friends do not resolve a
+cascade, do not implement `adoptedStyleSheets` and do not register `@property`. They would
+have passed on all three — a green test asserting the opposite of the truth.
+
+⛔ **A test that cannot fail is not evidence.** Each of those three was verified by putting the
+defect back and watching the test go red. Do that for any new one: a renderer test that has
+never failed has not been shown to test anything.
 
 ---
 

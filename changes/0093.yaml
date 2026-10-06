@@ -1,0 +1,9 @@
+id: "0093"
+said: http://localhost:4265/p/prj-bks5f4m325/v2?f=5&r=11#at-deal-list is wrong.  the pagers are hugely wrong, the ... placeholders are there as well.  and we shouold populate template values with ones that make sense! stop making me ask for every single page - review every rendereed screen.  stop wasting my time
+at: 2026-10-05
+kind: generator
+reaches:
+  generate: A CELL KNOWS WHAT IT HOLDS ONLY FROM ITS HEADER, AND THE EXPRESSION OFTEN SAYS NOTHING
+  pin: a table cell takes its sample from the column it sits in
+waived: {}
+closed: 2026-10-05

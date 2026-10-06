@@ -22,6 +22,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import ts from "typescript";
+import { lucideSvg } from "./icons.js";
 import { wireParts, type WireablePart } from "./wire.js";
 
 export interface DrawResult {
@@ -83,26 +84,68 @@ const text = (s: string): string =>
     .replace(/>/g, "&gt;");
 
 /** The string parts of a className, whatever shape it is written in. */
-function classOf(node: ts.JsxAttributeValue | undefined): string {
+/**
+ * The expression a locally-declared helper returns, for `className={helper(x)}`.
+ *
+ * ⛔ ONLY THE SINGLE-EXPRESSION SHAPE — `const f = (…) => <expr>` and a function whose body is one
+ * `return`. That is how a class helper is written; anything with branching or statements is a
+ * program, and guessing which path it takes would be inventing styling rather than reading it.
+ */
+function bodyOfLocal(name: ts.Identifier): ts.Expression | undefined {
+  const sf = name.getSourceFile();
+  let found: ts.Expression | undefined;
+  const visit = (n: ts.Node): void => {
+    if (found) return;
+    if (ts.isVariableDeclaration(n) && ts.isIdentifier(n.name) && n.name.text === name.text && n.initializer) {
+      const init = n.initializer;
+      if (ts.isArrowFunction(init)) found = ts.isBlock(init.body) ? returnedExpression(init.body) : init.body;
+      else if (ts.isFunctionExpression(init)) found = returnedExpression(init.body);
+    } else if (ts.isFunctionDeclaration(n) && n.name?.text === name.text && n.body) {
+      found = returnedExpression(n.body);
+    }
+    if (!found) ts.forEachChild(n, visit);
+  };
+  ts.forEachChild(sf, visit);
+  return found;
+}
+
+/** The expression of a block's only `return`, where there is exactly one. */
+function returnedExpression(block: ts.Block): ts.Expression | undefined {
+  const returns = block.statements.filter(ts.isReturnStatement);
+  return returns.length === 1 ? returns[0]!.expression : undefined;
+}
+
+function classOf(node: ts.JsxAttributeValue | undefined, preferTrue = false): string {
   if (!node) return "";
   const out: string[] = [];
+  const seen = new Set<ts.Node>();
   const walk = (n: ts.Node): void => {
     if (ts.isStringLiteral(n) || ts.isNoSubstitutionTemplateLiteral(n)) out.push(n.text);
     else if (ts.isTemplateExpression(n)) {
       out.push(n.head.text);
       for (const sp of n.templateSpans) {
-        /**
-         * ⛔ BOTH BRANCHES OF A CONDITIONAL CLASS, and that is deliberate. A tab is
-         * `active ? 'border-blue-600' : 'border-transparent'`; taking one arm silently draws one
-         * state and calls it the screen. Taking both over-styles a little and shows what the
-         * element can look like, which a reviewer can see and correct.
-         */
         walk(sp.expression);
         out.push(sp.literal.text);
       }
     } else if (ts.isConditionalExpression(n)) {
-      walk(n.whenTrue);
-      walk(n.whenFalse);
+      /**
+       * ⛔ THE RESTING ARM, NOT BOTH — AND THIS IS A CORRECTION TO A DELIBERATE CHOICE.
+       *
+       * This took both, reasoning that a tab is `active ? 'border-blue-600' : 'border-transparent'`
+       * and "taking one arm silently draws one state and calls it the screen". That is true, and
+       * taking both was still worse, which only became visible once drawings included the app
+       * shell: every item in the sidebar carried the selected background AND the unselected one, so
+       * all of them looked selected at once. A nav where everything is the current page is not
+       * "over-styled a little" — it is a screen that cannot exist.
+       *
+       * The false arm is what the element looks like before anything happens to it, which is the
+       * same principle as reading `useState(false)` rather than guessing from a name: a drawing
+       * shows the screen at rest, and every other appearance is offered as a state.
+       *
+       * ⛔ EXCEPT WHEN THIS PASS IS DRAWING THAT STATE, where the true arm IS the screen. `prefer`
+       * is how the caller says which one it is asking for.
+       */
+      walk(preferTrue ? n.whenTrue : n.whenFalse);
     } else if (ts.isBinaryExpression(n)) {
       walk(n.left);
       walk(n.right);
@@ -121,8 +164,31 @@ function classOf(node: ts.JsxAttributeValue | undefined): string {
      * picks the literals out of all of them.
      */
     else if (ts.isCallExpression(n)) {
-      walk(n.expression);
-      for (const a of n.arguments) walk(a);
+      /**
+       * ⛔ BUT A LOCAL HELPER'S ARGUMENT IS NOT A CLASS — IT IS WHAT THE HELPER IS ASKED ABOUT.
+       *
+       * Harvesting arguments is right for `clsx('flex','p-4')`, where they ARE the class list. It
+       * is wrong for a helper the file defines itself: `className={inputClass('projectName')}`
+       * emitted `class="projectName"` — a field name wearing a class attribute, which styles
+       * nothing and is a worse answer than no class at all, because it looks like one.
+       *
+       * The cost was every input on the screen. `inputClass` returns
+       * `w-full px-3 py-2 border rounded-md focus:ring-2 …`, so six fields that should carry full
+       * width, padding, a border and a focus ring rendered as browser-default boxes — the single
+       * biggest reason a drawing of this form did not look like the form. Peter: *"the 'creating a
+       * deal' screenshots look nothing like our UX"*.
+       *
+       * So where the callee is declared in this same file, its BODY is walked instead of its
+       * arguments. `seen` guards a helper that calls itself.
+       */
+      const local = ts.isIdentifier(n.expression) ? bodyOfLocal(n.expression) : undefined;
+      if (local && !seen.has(local)) {
+        seen.add(local);
+        walk(local);
+      } else {
+        walk(n.expression);
+        for (const a of n.arguments) walk(a);
+      }
     } else if (ts.isPropertyAccessExpression(n)) walk(n.expression);
     else if (ts.isArrayLiteralExpression(n)) for (const el of n.elements) walk(el);
   };
@@ -133,6 +199,16 @@ function classOf(node: ts.JsxAttributeValue | undefined): string {
 interface Ctx {
   /** Component name → its source file, for inlining one level at a time. */
   resolve: (name: string) => string | undefined;
+  /**
+   * Props the call site passed as false — a `useState(false)` identifier, or the literal.
+   *
+   * ⛔ SEPARATE FROM `props`, WHICH HOLDS RENDERED TEXT. "False" is not a string a component shows;
+   * it is a fact about which branch the screen takes, and the two were never the same kind of
+   * thing.
+   */
+  falsy: Set<string>;
+  /** The element of a resolved list this pass is drawing, and the name the callback gave it. */
+  item?: { name: string; fields: Map<string, string> };
   depth: number;
   from: Set<string>;
   unresolved: string[];
@@ -471,8 +547,15 @@ function emit(node: ts.Node, ctx: Ctx): string {
      * `isCreating ? 'Creating…' : 'Continue'` was picked by span, and the button on the happy path
      * read "Creating…", which is the screen mid-submit rather than the screen you meet.
      */
+    /**
+     * ⛔ AND A WORD BOUNDARY IS THE WRONG EDGE FOR A camelCase SUFFIX. `\berror\b` does not match
+     * inside `creationError`, so `{state.creationError && <banner/>}` drew a pink failure banner on
+     * the create-a-deal form at rest — with nothing failing, and its message an ellipsis. Same for
+     * `uploadError`, `saveError` and every other `somethingError` a real component names. A flag
+     * ending in Error is an error flag whatever it is prefixed with.
+     */
     const GUARD =
-      /\b(isLoading|loading|isPending|pending|isFetching|busy|skeleton|isError|error|isCreating|creating|isSaving|saving|isSubmitting|submitting|isUploading|uploading|isDeleting|deleting|isMutating)\b/i;
+      /\b(isLoading|loading|isPending|pending|isFetching|busy|skeleton|isError|error|isCreating|creating|isSaving|saving|isSubmitting|submitting|isUploading|uploading|isDeleting|deleting|isMutating)\b|\w+(Error|Errors|Failure|Failed)\b/i;
     /**
      * ⛔ `isSomethingIng` IS A BUSY FLAG, WHICHEVER VERB IT IS — and the list above can never be
      * finished by adding words to it. `folderSetup.isMatching` is not in it, so the folder step
@@ -492,7 +575,19 @@ function emit(node: ts.Node, ctx: Ctx): string {
       const span = (n: ts.Node): number => n.getEnd() - n.getStart();
       let chosen: ts.Node;
       let skipped: ts.Node;
+      /**
+       * ⛔ A PROP THE CALLER PASSED AS FALSE DECIDES THIS, AND IT IS NOT A GUESS.
+       *
+       * `AppProvider` is `{withAppLayout ? <AppLayout>{children}</AppLayout> : children}`, and the
+       * `(standalone)` route group passes `withAppLayout={false}` — that is how an Excel add-in
+       * pane says it has no sidebar. Without reading it, the longer branch won on span and the
+       * add-in got wrapped in the whole web application's chrome: a task pane inside Excel, drawn
+       * with a nav rail beside it. Its drawing went from 17 unresolved placeholders to 48, all of
+       * them belonging to a shell it does not have.
+       */
+      const falseProp = ts.isIdentifier(cond) && ctx.falsy.has(cond.text);
       if (ctx.prefer && c.replace(/\s+/g, " ") === ctx.prefer) { chosen = a; skipped = b; }
+      else if (falseProp) { chosen = b; skipped = a; }
       else if (GUARD.test(said) || DOING.test(said) || EMPTY.test(said) || OPEN.test(said)) { chosen = b; skipped = a; }
       else if (span(a) >= span(b)) { chosen = a; skipped = b; }
       else { chosen = b; skipped = a; }
@@ -553,7 +648,22 @@ function emit(node: ts.Node, ctx: Ctx): string {
        * negation — stripping it would make every empty state look like content, which is the
        * opposite mistake and the one this file fixed first.
        */
-      if (GUARD.test(asserted(c)) || DOING.test(asserted(c)) || EMPTY.test(c) || OPEN.test(asserted(c))) {
+      /**
+       * ⛔ A FACT ABOUT THE CODE BEATS A GUESS ABOUT THE NAME.
+       *
+       * Everything above this line decides whether `{x && …}` is a state by matching `x` against a
+       * list of words — `isOpen`, `showFoo`, `editing`. The sidebar's account menu is `const [open,
+       * setOpen] = useState(false)`, and a bare `open` is on none of those lists, so every drawing
+       * that included the shell showed the account dropdown hanging open with ORGANIZATION and Sign
+       * out in it. Peter: *"the 'creating a deal' screenshots look nothing like our UX"*. Same cause
+       * as the three modal scrims stacked on one screen, each at 50% black, compounding to 87%.
+       *
+       * A declaration says what the screen looks like before anybody touches it, and it says so
+       * exactly. Kept ALONGSIDE the word lists rather than replacing them, because those also catch
+       * guards on props and on values this cannot see a declaration for.
+       */
+      const closedAtFirst = ts.isIdentifier(e.left) && falseAtFirst(e.left).has(e.left.text);
+      if (closedAtFirst || GUARD.test(asserted(c)) || DOING.test(asserted(c)) || EMPTY.test(c) || OPEN.test(asserted(c))) {
         /** Preferred: this IS the state being drawn, so show what it shows. */
         if (ctx.prefer && c.replace(/\s+/g, " ") === ctx.prefer) return emit(e.right, ctx);
         ctx.states.push(`when ${c.replace(/\s+/g, " ").slice(0, 50)}: ${e.right.getText().replace(/\s+/g, " ").slice(0, 60)}`);
@@ -580,6 +690,35 @@ function emit(node: ts.Node, ctx: Ctx): string {
       return left || emit(ts.factory.createJsxExpression(undefined, e.right), ctx);
     }
     /**
+     * ⛔ `??` IS THE SAME SHAPE AND WAS NOT HANDLED, which is most of the hatched ellipses on a page.
+     *
+     * `organization?.name ?? 'Personal account'` carries its own answer: the author wrote what the
+     * screen says when the value is absent, and absent is exactly the state a drawing is in. It
+     * rendered as `…` with the whole expression in a tooltip — 472 of those across thirteen
+     * screens, each one crowding out text that is real.
+     *
+     * ⛔ READING, NOT GUESSING. The literal is in the source; nothing is invented by showing it.
+     */
+    if (ts.isBinaryExpression(e) && e.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken) {
+      const left = emit(ts.factory.createJsxExpression(undefined, e.left), ctx);
+      return left || emit(ts.factory.createJsxExpression(undefined, e.right), ctx);
+    }
+    /**
+     * ⛔ A TEMPLATE LITERAL IS MOSTLY WORDS. `` `Selected Files (${files.length})` `` is three
+     * characters of unknown and twelve of product copy, and the whole thing was being thrown away
+     * for the three. The static halves are the author's words; each hole is resolved on its own, so
+     * a count stays a marked sample and the sentence around it survives.
+     */
+    if (ts.isTemplateExpression(e)) {
+      let out = text(e.head.text);
+      for (const sp of e.templateSpans) {
+        out += emit(ts.factory.createJsxExpression(undefined, sp.expression), ctx);
+        out += text(sp.literal.text);
+      }
+      return out;
+    }
+    if (ts.isNoSubstitutionTemplateLiteral(e)) return text(e.text);
+    /**
      * ⛔ A LIST DRAWS AS A LIST. Peter: *"nothing renders right for 'deal list'. all screenshots are
      * the same - not a single deal added to the list, just the empty list state..."*
      *
@@ -599,6 +738,32 @@ function emit(node: ts.Node, ctx: Ctx): string {
         const body = ts.isBlock(cb.body) ? returnedFrom(cb.body) : cb.body;
         const inner = body && ts.isParenthesizedExpression(body) ? body.expression : body;
         if (inner && (ts.isJsxElement(inner) || ts.isJsxSelfClosingElement(inner) || ts.isJsxFragment(inner))) {
+          /**
+           * ⛔ WHERE THE LIST IS WRITTEN DOWN, DRAW THE LIST — NOT THREE OF ANYTHING.
+           *
+           * A navigation is `mainMenuItems.map(item => <a>{item.label}</a>)` over an array of
+           * object literals in a config module: Dashboard, Monitor, Deals, CRE Deals, Borrowers.
+           * Those are not unknown values, they are the product's own words, sitting in the
+           * repository. Drawn as three blank rows, the sidebar on every screen was a column of
+           * grey bars — Peter has already said what that is worth: *"ok, wtf, how are grey bars
+           * useful?"*
+           *
+           * ⛔ STILL INVENTING NOTHING. This reads literals and stops: an array it cannot resolve
+           * falls through to the three-row shape exactly as before, and a field whose value is an
+           * expression stays a marked sample. The rule is unchanged — never guess a figure — and a
+           * figure written in the source was never a guess.
+           */
+          const param = cb.parameters[0];
+          const items = ts.isIdentifier(e.expression.expression)
+            ? literalItems(e.expression.expression, ctx.sameFile)
+            : undefined;
+          if (items?.length && param && ts.isIdentifier(param.name)) {
+            const name = param.name.text;
+            return items
+              .slice(0, 8)
+              .map((fields) => emit(inner, { ...ctx, inRow: true, item: { name, fields } }))
+              .join("");
+          }
           /** Three: enough to read as a list, few enough that a tile is not all one screen. */
           return [0, 1, 2].map((i) => emit(inner, { ...ctx, inRow: true, row: i })).join("");
         }
@@ -651,6 +816,17 @@ function emit(node: ts.Node, ctx: Ctx): string {
     if (ts.isIdentifier(e) && e.text === "children" && !ctx.props.has("children")) return "<!--children-->";
     // A prop bound at the call site: the value the application actually passes.
     if (ts.isIdentifier(e) && ctx.props.has(e.text)) return ctx.props.get(e.text)!;
+    /**
+     * ⛔ `{item.label}` WHERE THE LIST WAS RESOLVED — the product's own word, not a bar.
+     *
+     * Only when this pass is drawing a known element, and only for a field whose value is a literal
+     * in the source. Anything else falls through to the sampling below and stays marked, so a
+     * resolved list cannot quietly start inventing the fields it could not read.
+     */
+    if (ts.isPropertyAccessExpression(e) && ctx.item && ts.isIdentifier(e.expression) && e.expression.text === ctx.item.name) {
+      const had = ctx.item.fields.get(e.name.text);
+      if (had !== undefined) return text(had);
+    }
     const s = ctx.sample(hint);
     if (s !== undefined) return text(s);
     /**
@@ -683,15 +859,40 @@ function emit(node: ts.Node, ctx: Ctx): string {
      * worse than one that is blank. A list's cells are what a reviewer judges; the chrome around it
      * holds counts and labels that nobody is reading for plausibility.
      */
+    /**
+     * ⛔ `null` IS NOTHING, AND NOTHING IS NOT A WORD. A ternary's empty arm — `{error ? <p/> : null}`
+     * — reached the slot namer, which read it as a plain path and wrote the word "null" onto the
+     * screen, beside the Sign in button on the Excel pane. A literal renders as what React renders
+     * it as: null, undefined and the booleans render as nothing at all.
+     *
+     * ⛔ BEFORE THE ROW BRANCH, NOT AFTER IT. Written below, it never ran for the case that
+     * produced it: inside a mapped row the sampler and the row's own slot naming both answer
+     * first, and the word "null" was printed six times on one screen with the guard sitting
+     * twenty lines further down.
+     */
+    if (
+      e.kind === ts.SyntaxKind.NullKeyword ||
+      e.kind === ts.SyntaxKind.TrueKeyword ||
+      e.kind === ts.SyntaxKind.FalseKeyword ||
+      (ts.isIdentifier(e) && e.text === "undefined")
+    )
+      return "";
     const made = ctx.inRow ? sampleValue(hint, ctx.row ?? 0) : undefined;
     if (made !== undefined) {
       ctx.unresolved.push(hint);
       return `<span class="productos-sample" title="${text(hint)} — sample">${text(made)}</span>`;
     }
     if (ctx.inRow) {
-      /** Nothing plausible to put here: the shape is all that is left to show. */
+      /**
+       * Nothing plausible to put here, so the field names itself rather than drawing a blank bar.
+       * "Northgate Apartments <blank> <blank>% name match" told a reviewer nothing about what the
+       * two missing numbers were; "folder path" and "match score" tell them exactly.
+       */
       ctx.unresolved.push(hint);
-      return `<span class="productos-value" title="${text(hint)}"></span>`;
+      const named = slotName(hint);
+      return named
+        ? `<span class="productos-slot" title="${text(hint)}">${text(named)}</span>`
+        : `<span class="productos-value" title="${text(hint)}"></span>`;
     }
     ctx.unresolved.push(hint);
     /**
@@ -703,7 +904,21 @@ function emit(node: ts.Node, ctx: Ctx): string {
      * An expression with structure — a call, a member access, `deals.map(...)` — IS content the
      * screen would show, and stays marked, because omitting it silently produces the thin drawing.
      */
-    if (ts.isIdentifier(e)) return "";
+    /**
+     * ⛔ …UNLESS IT IS STANDING IN A SENTENCE, WHERE IT IS PLAINLY CONTENT.
+     *
+     * `Page {page} of {pageCount}` drew as "Page  of  " — the pager lost both its numbers and read
+     * like a broken string. The rule below is right about a bare identifier being a slot when it is
+     * ALL an element contains; it is wrong the moment there are words either side of it, because
+     * nobody writes "Page " and " of " around a slot for a caller to fill.
+     */
+    const amongWords =
+      n.parent &&
+      ts.isJsxElement(n.parent) &&
+      n.parent.children.some((c) => ts.isJsxText(c) && /[A-Za-z0-9]/.test(c.text));
+    if (ts.isIdentifier(e) && !amongWords) return "";
+    const named = slotName(hint);
+    if (named) return `<span class="productos-slot" title="${text(hint)}">${text(named)}</span>`;
     return `<span class="productos-unknown" title="${text(hint)}">&hellip;</span>`;
   }
   if (!ts.isJsxElement(n) && !ts.isJsxSelfClosingElement(n)) return "";
@@ -743,6 +958,8 @@ function emit(node: ts.Node, ctx: Ctx): string {
         if (fork) ctx.forks.push(fork);
         /** Bind what the call site passes, so the primitive renders the application's own words. */
         const bound = new Map<string, string>();
+        /** Props the call site passes as false at rest — see the modal case below. */
+        const falsy = new Set<string>();
         for (const a of open.attributes.properties) {
           if (!ts.isJsxAttribute(a) || !a.initializer) continue;
           const name = a.name.getText();
@@ -762,13 +979,43 @@ function emit(node: ts.Node, ctx: Ctx): string {
              * even after locals were resolvable, because it was resolved in the wrong file. Bound at
              * the call site, which is the only place it is in scope.
              */
+            /**
+             * ⛔ A PROP THAT IS FALSE AT REST MAKES THE WHOLE COMPONENT NOTHING AT REST.
+             *
+             * `<ProjectSelectionModal isOpen={isProjectSelectionModalOpen} />` where that is
+             * `useState(false)`, and the modal opens `if (!isOpen) return null`. Neither half is
+             * visible on its own: the call site renders the element unconditionally, and the
+             * component's guard is on a prop this had no value for. So the sidebar drew a modal
+             * body — "Please select the deal for which you…" — into every screen that has a
+             * sidebar, which is now every screen.
+             */
+            else if (ts.isIdentifier(v) && falseAtFirst(v).has(v.text)) falsy.add(name);
+            else if (v.kind === ts.SyntaxKind.FalseKeyword) falsy.add(name);
+            /**
+             * ⛔ A PROP THIS COMPONENT WAS HANDED, PASSED STRAIGHT ON. The binding stopped at one
+             * level: a value reached a component and then could not get into the component THAT one
+             * renders. Every wrapper in a design system is exactly this shape —
+             * `<AddressAutocomplete placeholder="Start typing an address…" />` renders
+             * `<TextField placeholder={placeholder} />` — so the text was resolved at the call site,
+             * carried one layer, and dropped on the threshold of the layer that displays it. The
+             * Property Address field drew as an empty unlabelled box on the new-deal screen while
+             * the words sat two files away, already resolved.
+             */
+            else if (ts.isIdentifier(v) && ctx.props.has(v.text)) bound.set(name, ctx.props.get(v.text)!);
             else if (ts.isIdentifier(v) && ctx.sameFile) {
               const local = localJsx(ctx.sameFile, v.text);
               if (local) bound.set(name, emit(local, { ...ctx, depth: ctx.depth + 1 }));
             }
           }
         }
-        const sub: Ctx = { ...ctx, depth: ctx.depth + 1, props: bound, sameFile: file };
+        /**
+         * ⛔ ASKED OF THE COMPONENT'S OWN SOURCE, not inferred from the prop's name. `isOpen`,
+         * `open`, `visible` and `show` are all written, and a list of them would miss the next one;
+         * a file that says `if (!x) return null` has said what it does when x is false.
+         */
+        if ([...falsy].some((p) => new RegExp(`if\\s*\\(\\s*!\\s*${p}\\s*\\)\\s*return\\s+null`).test(sourceOf(file))))
+          return "";
+        const sub: Ctx = { ...ctx, depth: ctx.depth + 1, props: bound, falsy, sameFile: file };
         const body = emit(inner, sub);
         // `{children}` inside the primitive is where this element's own children belong.
         if (body.includes("<!--children-->")) return body.replace("<!--children-->", children);
@@ -869,7 +1116,34 @@ function emit(node: ts.Node, ctx: Ctx): string {
       ctx.unresolved.push(`<${tag}> (drawn as <${asTable}>)`);
       return `<${asTable}>${children}</${asTable}>`;
     }
-    if (ctx.icons.has(tag)) {
+    /**
+     * ⛔ AN ICON IN THE FILE THAT IMPORTED IT, NOT EVERYWHERE ON THE SCREEN.
+     *
+     * Icon names were collected from the route and every indexed file into one set, so a name any
+     * file imported from lucide became an icon in all of them. lucide exports `Link`; so does
+     * `next/link`, and every `<Link>` in the application — the element wrapping each nav label —
+     * was drawn as an icon glyph, swallowing its children. That is why the sidebar had the right
+     * number of rows and no words in them.
+     *
+     * The import is in the file. Ask the file.
+     */
+    if (iconHere(ctx.sameFile, tag) || (!ctx.sameFile && ctx.icons.has(tag))) {
+      /**
+       * ⛔ THE REAL GLYPH IF THE APPLICATION HAS ONE, AND A GREY SQUARE ONLY IF IT DOES NOT.
+       *
+       * A marker span for every icon drew the sidebar as a column of bars and put a flat box beside
+       * every row of every folder picker. The shape is not a guess: it is read out of the icon
+       * package this application depends on, at the version installed beside it. A name that
+       * resolves to no icon file keeps the square and stays recorded as unresolved, because the
+       * drawing genuinely does not know what that one looks like.
+       */
+      const sized = classOf(
+        open.attributes.properties.find(
+          (a): a is ts.JsxAttribute => ts.isJsxAttribute(a) && a.name.getText() === "className"
+        )?.initializer
+      );
+      const glyph = ctx.sameFile ? lucideSvg(tag, ctx.sameFile, sized) : undefined;
+      if (glyph) return glyph;
       ctx.unresolved.push(`<${tag}> (icon)`);
       return `<span class="productos-icon" role="img" aria-label="${text(tag)}"></span>`;
     }
@@ -932,6 +1206,28 @@ function emit(node: ts.Node, ctx: Ctx): string {
     }
   }
   const attr = attrs.length ? ` ${attrs.join(" ")}` : "";
+  /**
+   * ⛔ A FULL-VIEWPORT OVERLAY IS A STATE, NOT THE RESTING SCREEN.
+   *
+   * `map-the-statement` rendered a `fixed inset-0` modal container with a `bg-black/50` scrim
+   * across the whole drawing — so every card on the screen under review was behind a half-black
+   * sheet and the page read as broken. The scrim was invisible to every probe that asked for a grey
+   * background, because it is painted by the LAST element in the DOM over elements that are all
+   * correctly transparent.
+   *
+   * The `DIALOG` rule above catches a modal named like one and handed an `open` prop. This catches
+   * the hand-rolled kind, which is the same thing written as markup: nothing is `fixed inset-0`
+   * except something meant to cover the window, and a drawing of one screen is not the window.
+   *
+   * ⛔ IT IS RECORDED, NOT DISCARDED. The overlay keeps its own appearance — the states this pushes
+   * are what the chips above a drawing are made of, so the modal is still reviewable, on its own,
+   * instead of on top of something else.
+   */
+  const cls = attrs.find((a) => a.startsWith('class="'))?.slice(7, -1) ?? "";
+  if (/\bfixed\b/.test(cls) && /\binset-0\b/.test(cls)) {
+    ctx.states.push(`an overlay covers the screen: <${tag} class="${cls}">`);
+    return "";
+  }
   if (VOID.has(tag)) return `<${tag}${attr} />`;
   /**
    * ⛔ A CONTROL WITH NO WORDS ON IT IS UNREVIEWABLE, WHATEVER MADE IT EMPTY.
@@ -951,6 +1247,13 @@ function emit(node: ts.Node, ctx: Ctx): string {
    */
   if (/^(button|a)$/.test(tag) && !/>[^<]*[A-Za-z0-9][^<]*</.test(`>${children}<`)) {
     const said = /aria-label="([^"]+)"/.exec(attr)?.[1] ?? /title="([^"]+)"/.exec(attr)?.[1];
+    /**
+     * ⛔ ONLY WHERE THE GLYPH IS STILL UNKNOWN. This existed because an icon-only button drew as an
+     * empty box, so its name was the only thing identifying it. Now that icons draw as themselves,
+     * spelling the name out as well put "Previous page" and "Next page" in the middle of a pager
+     * that the real product renders as two chevrons and nothing else.
+     */
+    if (/<svg/.test(children)) return `<${tag}${attr}>${children}</${tag}>`;
     const icon = /class="productos-icon"[^>]*aria-label="([^"]+)"/.exec(children)?.[1];
     const named = said ?? icon;
     if (named)
@@ -975,6 +1278,236 @@ export interface DrawOptions {
   parts?: WireablePart[];
   /** Values for expressions, so a placeholder can be a real-looking figure where the author gave one. */
   sample?: Record<string, string>;
+  /**
+   * ⛔ SET WHILE DRAWING A LAYOUT, SO THE COMPOSITION DOES NOT RECURSE. A layout is drawn by the
+   * same walk as a page; without this it would look for its own layouts and find itself.
+   */
+  inLayout?: boolean;
+}
+
+/**
+ * ⛔ A SCREEN IS A ROUTE, AND A ROUTE IS ITS LAYOUTS PLUS ITS PAGE.
+ *
+ * Peter, looking at a drawing: *"the 'creating a deal' screenshots look nothing like our UX"*. The
+ * content was faithful; what was missing was everything around it. Every page in the application
+ * this was built against sits inside `AppLayout` — *"the app shell (sidebar + padded main column)"*
+ * — and not one drawing in the corpus had a sidebar, because this walked a page component and had
+ * no concept of a layout at all.
+ *
+ * That is not a small omission on one screen. It is every screen, missing the one piece of chrome
+ * a person sees on all of them, so a reviewer comparing a drawing against the product they use is
+ * comparing against something nobody has ever seen.
+ *
+ * ⛔ THE SLOT ALREADY EXISTED AND NOTHING FILLED IT. `emit` has emitted `<!--children-->` for
+ * `{children}` since the inlining code needed it for primitives like `Td`. A layout is a component
+ * whose children are the page, so composing them is the same substitution one level up.
+ *
+ * ⛔ THE ROOT `app/layout.tsx` IS SKIPPED, DELIBERATELY. It renders `<html>` and `<body>`, which
+ * cannot nest inside the element a mock lives in, and what it carries that matters — next/font's
+ * family variables — is hoisted to the document by `liftFaces` instead.
+ *
+ * Returns nearest-first. Empty for a product that is not laid out this way, so nothing changes for
+ * one that is not.
+ */
+/**
+ * Identifiers a file declares as `useState(false)` — what the screen shows before anybody touches it.
+ *
+ * ⛔ CACHED PER FILE, because `emit` re-reads a file once per component it inlines and this would
+ * otherwise re-scan the same source thirty-eight times on one screen.
+ */
+/** A file's text, read once. ⛔ `emit` revisits the same component many times on one screen. */
+const SOURCE = new Map<string, string>();
+function sourceOf(file: string): string {
+  let have = SOURCE.get(file);
+  if (have === undefined) {
+    try {
+      have = fs.readFileSync(file, "utf-8");
+    } catch {
+      have = "";
+    }
+    SOURCE.set(file, have);
+  }
+  return have;
+}
+
+
+/**
+ * The object literals of an array a name refers to, following locals and one import.
+ *
+ * ⛔ IT FOLLOWS DERIVATIONS, because a nav is never used raw. `filteredMenuItems` is
+ * `menuItemsWithIcons.filter(...)`, which is `mainMenuItems.map(...)`, which is the import. Stopping
+ * at the first name would resolve nothing in a real component; each `.map`/`.filter`/`.slice` step
+ * narrows or decorates the same list, and the labels survive all of them.
+ *
+ * ⛔ ONE IMPORT DEEP AND LITERALS ONLY. This is a reader, not an evaluator: a value that is not a
+ * string or number in the source is left out, and the caller falls back to drawing the shape.
+ */
+function literalItems(name: ts.Identifier, fromFile?: string, depth = 0): Array<Map<string, string>> | undefined {
+  if (depth > 4) return undefined;
+  const sf = name.getSourceFile();
+  let decl: ts.Expression | undefined;
+  const visit = (n: ts.Node): void => {
+    if (decl) return;
+    if (ts.isVariableDeclaration(n) && ts.isIdentifier(n.name) && n.name.text === name.text && n.initializer)
+      decl = n.initializer;
+    else ts.forEachChild(n, visit);
+  };
+  ts.forEachChild(sf, visit);
+
+  /** `X.filter(...)` / `X.map(...)` / `X.slice(...)` — the same list, one step on. */
+  if (
+    decl &&
+    ts.isCallExpression(decl) &&
+    ts.isPropertyAccessExpression(decl.expression) &&
+    /^(filter|map|slice|concat|sort|reverse)$/.test(decl.expression.name.text) &&
+    ts.isIdentifier(decl.expression.expression)
+  )
+    return literalItems(decl.expression.expression, fromFile, depth + 1);
+
+  /**
+   * ⛔ AND A PLAIN CALL OVER THE LIST, which is how a real filter is written. The nav is
+   * `filterByPermissions(menuItemsWithIcons)` — not a method chain, so following only `.filter`
+   * resolved nothing and the sidebar stayed a column of grey bars. A function handed one array and
+   * returning a list gives back some of that array; which ones depends on who is looking, and the
+   * drawing shows the list the product has rather than one person's view of it.
+   */
+  if (decl && ts.isCallExpression(decl) && decl.arguments.length === 1 && ts.isIdentifier(decl.arguments[0]!))
+    return literalItems(decl.arguments[0] as ts.Identifier, fromFile, depth + 1);
+
+  if (!decl) {
+    /** Not declared here: follow the import that brought the name in. */
+    const spec = importSpecifierFor(sf, name.text);
+    if (!spec || !fromFile) return undefined;
+    const target = resolveModule(spec, fromFile);
+    if (!target) return undefined;
+    const src = ts.createSourceFile(target, sourceOf(target), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    let found: Array<Map<string, string>> | undefined;
+    const look = (n: ts.Node): void => {
+      if (found) return;
+      if (ts.isVariableDeclaration(n) && ts.isIdentifier(n.name) && n.name.text === name.text && n.initializer)
+        found = itemsOf(n.initializer);
+      else ts.forEachChild(n, look);
+    };
+    ts.forEachChild(src, look);
+    return found;
+  }
+  return itemsOf(decl);
+}
+
+/** An array literal's object literals, as plain string fields. */
+function itemsOf(e: ts.Expression): Array<Map<string, string>> | undefined {
+  if (!ts.isArrayLiteralExpression(e)) return undefined;
+  const out: Array<Map<string, string>> = [];
+  for (const el of e.elements) {
+    if (!ts.isObjectLiteralExpression(el)) continue;
+    const fields = new Map<string, string>();
+    for (const pr of el.properties) {
+      if (!ts.isPropertyAssignment(pr) || !pr.name) continue;
+      const key = ts.isIdentifier(pr.name) || ts.isStringLiteral(pr.name) ? pr.name.text : undefined;
+      if (!key) continue;
+      const v = pr.initializer;
+      if (ts.isStringLiteral(v) || ts.isNoSubstitutionTemplateLiteral(v)) fields.set(key, v.text);
+      else if (ts.isNumericLiteral(v)) fields.set(key, v.text);
+    }
+    if (fields.size) out.push(fields);
+  }
+  return out.length ? out : undefined;
+}
+
+/** The module specifier a name was imported from, if it was. */
+function importSpecifierFor(sf: ts.SourceFile, name: string): string | undefined {
+  for (const st of sf.statements) {
+    if (!ts.isImportDeclaration(st) || !ts.isStringLiteral(st.moduleSpecifier)) continue;
+    const named = st.importClause?.namedBindings;
+    if (named && ts.isNamedImports(named) && named.elements.some((el) => el.name.text === name))
+      return st.moduleSpecifier.text;
+    if (st.importClause?.name?.text === name) return st.moduleSpecifier.text;
+  }
+  return undefined;
+}
+
+/**
+ * A module specifier as a file on disk.
+ *
+ * ⛔ `@/` IS THE CONVENTION AND IT IS NOT GUESSWORK TO FOLLOW IT — but the root it points at is,
+ * so it is found by walking up from the importing file to the directory the alias names rather
+ * than by assuming a layout.
+ */
+function resolveModule(spec: string, fromFile: string): string | undefined {
+  const tryFile = (base: string): string | undefined => {
+    for (const ext of [".ts", ".tsx", "/index.ts", "/index.tsx"]) {
+      const full = base.endsWith(ext) ? base : base + ext;
+      if (fs.existsSync(full) && fs.statSync(full).isFile()) return full;
+    }
+    return undefined;
+  };
+  if (spec.startsWith(".")) return tryFile(path.resolve(path.dirname(fromFile), spec));
+  const m = /^@\/(.+)$/.exec(spec);
+  if (!m) return undefined;
+  let dir = path.dirname(path.resolve(fromFile));
+  for (let up = 0; up < 10; up++) {
+    const hit = tryFile(path.join(dir, m[1]!));
+    if (hit) return hit;
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return undefined;
+}
+
+
+/**
+ * Whether this file imports `name` from an icon package.
+ *
+ * ⛔ A NAME CAN BE BOTH, and which one it is depends on who imported it. Cached per file because
+ * `emit` re-enters the same component many times on one screen.
+ */
+const ICONS_BY_FILE = new Map<string, Set<string>>();
+function iconHere(file: string | undefined, name: string): boolean {
+  if (!file) return false;
+  let have = ICONS_BY_FILE.get(file);
+  if (!have) {
+    have = new Set<string>();
+    for (const m of sourceOf(file).matchAll(/import\s*\{([^}]*)\}\s*from\s*["']([^"']+)["']/g)) {
+      if (!/lucide|heroicons|react-icons|@tabler\/icons|phosphor|@radix-ui\/react-icons/i.test(m[2] ?? "")) continue;
+      for (const raw of (m[1] ?? "").split(",")) {
+        const n = raw.split(" as ").pop()!.trim();
+        if (n) have.add(n);
+      }
+    }
+    ICONS_BY_FILE.set(file, have);
+  }
+  return have.has(name);
+}
+
+const CLOSED_AT_FIRST = new Map<string, Set<string>>();
+function falseAtFirst(node: ts.Node): Set<string> {
+  const sf = node.getSourceFile();
+  let have = CLOSED_AT_FIRST.get(sf.fileName);
+  if (!have) {
+    have = new Set<string>();
+    for (const m of sf
+      .getFullText()
+      .matchAll(/const\s*\[\s*([A-Za-z_$][\w$]*)\s*,\s*set[A-Za-z_$][\w$]*\s*\]\s*=\s*useState\s*(?:<[^>]*>)?\s*\(\s*false\s*\)/g))
+      have.add(m[1]!);
+    CLOSED_AT_FIRST.set(sf.fileName, have);
+  }
+  return have;
+}
+
+export function layoutsAround(routeFile: string): string[] {
+  const out: string[] = [];
+  let dir = path.dirname(path.resolve(routeFile));
+  for (let up = 0; up < 12; up++) {
+    const atAppRoot = path.basename(dir) === "app";
+    const layout = path.join(dir, "layout.tsx");
+    if (!atAppRoot && fs.existsSync(layout) && path.resolve(layout) !== path.resolve(routeFile)) out.push(layout);
+    if (atAppRoot) break;
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return out;
 }
 
 /**
@@ -1006,29 +1539,86 @@ function returnedFrom(block: ts.Block): ts.Node | undefined {
  * person can read and judge — whether the columns are right, whether a long sponsor name breaks the
  * layout — not a screen that lies convincingly.
  */
+/**
+ * ⛔ THE VALUES ARE DOMAIN-NEUTRAL ON PURPOSE, AND THEY DID NOT USED TO BE.
+ *
+ * This table held one product's vocabulary: "Northgate Apartments", "Cedar Ridge Capital",
+ * "1420 Northgate Blvd", "$12,400,000", "Underwriting", "Term sheet". Those are commercial real
+ * estate, sitting in the generator, so EVERY product drawn by ProductOS got them — a to-do app with
+ * a column called Name would be handed an apartment complex, and a reviewer would have no way to
+ * tell a sample from a claim about their own product.
+ *
+ * Peter, on being shown it: *"let's just update draw.ts to have sanitized values"*.
+ *
+ * ⛔ THE PATTERNS ARE NOT THE SAME THING AS THE VALUES. A matcher is recognition — knowing that a
+ * field called `dscr` or `loanAmount` holds money costs nothing to a product that has no such field
+ * and helps every product that does. What leaks is the WORDS PUT ON SOMEBODY'S SCREEN, and those
+ * are now things no product owns: a company, a street, a town, a sum, a state of progress.
+ *
+ * ⛔ AND THIS IS STILL THE WRONG HOME FOR IT. Per-project vocabulary belongs in a steer or in the
+ * corpus's own config, where a product can say what ITS rows look like. This makes the default
+ * harmless; it does not make it right. Deliberately left for that change rather than smuggled in
+ * here, because where it lives is a design decision and not a cleanup.
+ */
 const SAMPLES: Array<[RegExp, string[]]> = [
-  [/(sponsor|borrower|owner|company|firm|lender|organi[sz]ation)/i, ["Cedar Ridge Capital", "Northgate Holdings", "Harbor Point Partners"]],
-  [/(address|street|line1)/i, ["1420 Northgate Blvd", "88 Harbor Point Rd", "7 Cedar Ridge Way"]],
-  [/(city|location|market|region|place)/i, ["Sacramento, CA", "Tacoma, WA", "Mesa, AZ"]],
+  [/(sponsor|borrower|owner|company|firm|lender|organi[sz]ation)/i, ["Acme Holdings", "Beacon Partners", "Clearwater Group"]],
+  [/(address|street|line1)/i, ["12 Market Street", "88 Harbour Road", "7 Orchard Way"]],
+  [/(city|location|market|region|place)/i, ["Springfield", "Riverton", "Fairview"]],
   [/\bstate\b/i, ["CA", "WA", "AZ"]],
   /** ⛔ `total` is a COUNT far more often than a sum — it put money in a pager. Money says money. */
-  [/(loanamount|amount|balance|price|proceeds|\bsum\b|\bcost\b)/i, ["$12,400,000", "$8,150,000", "$21,900,000"]],
-  [/(rate|yield|ltv|dscr|percent|spread|coupon)/i, ["6.25%", "5.80%", "6.05%"]],
+  [/(loanamount|amount|balance|price|proceeds|\bsum\b|\bcost\b|\busd\b|currency|money|dollars)/i, ["$12,400.00", "$8,150.00", "$21,900.00"]],
+  [/(rate|yield|ltv|dscr|percent|\bpct\b|\bshare\b|spread|coupon)/i, ["6.25%", "5.80%", "6.05%"]],
   [/(units|count|rooms|beds|quantity|docs|documents|total|pages?)/i, ["184", "76", "312"]],
   [/(date|created|updated|modified|\bat\b|when|asof)/i, ["4 Mar 2026", "18 Feb 2026", "27 Jan 2026"]],
-  [/(stage|status|state|phase|step)/i, ["Underwriting", "Screening", "Term sheet"]],
+  [/(stage|status|state|phase|step)/i, ["In review", "Draft", "Approved"]],
   [/(email|mail)/i, ["a.nguyen@example.com", "j.ruiz@example.com", "m.patel@example.com"]],
   [/(user|author|by|analyst|officer|person|member)/i, ["A. Nguyen", "J. Ruiz", "M. Patel"]],
-  [/(title|name|label|deal|project|property|asset)/i, ["Northgate Apartments", "Cedar Ridge", "Harbor Point"]],
+  [/(title|name|label|deal|project|property|asset)/i, ["Blue Harbour", "Fairview Court", "Northwind"]],
 ];
 
 export function sampleValue(hint: string, row: number): string | undefined {
-  /** Only a value-shaped expression. A call with arguments or a ternary is structure, not a field. */
+  /** Only a value-shaped expression. A ternary is structure, not a field. */
   if (!/^[A-Za-z_$][\w$.?\[\]'"()]*$/.test(hint.trim())) {
     /** …unless it is a formatter around one field, which is how most cells are written. */
     const m = /^[A-Za-z_$][\w$]*\(\s*([A-Za-z_$][\w$.]*)\s*\)$/.exec(hint.trim());
-    if (!m) return undefined;
-    hint = m[1]!;
+    if (m) hint = m[1]!;
+    else {
+      /**
+       * ⛔ A CALL WITH SEVERAL ARGUMENTS IS STILL SHOWING ONE VALUE, and refusing to look inside it
+       * left eight hundred empty grey bars down the middle of the biggest tables in the corpus —
+       * `usd(cell.trailing, CENTS)`, `Math.round(month.share * 100)`,
+       * `formatCell(line.row[i], column.type, locale)`. Each is a formatter and a field, written
+       * together; between the two of them they say what the cell holds.
+       *
+       * The function's own name is tried first, because `usd` states the units outright and a field
+       * called `trailing` does not. Then each argument that is shaped like a field. Anything that
+       * matches nothing still draws a bar — this widens what can be read, it does not invent.
+       */
+      /**
+       * ⛔ THE CLOSING PAREN IS OFTEN NOT THERE. These hints are truncated for display, so anchoring
+       * on `)` matched none of the calls this was written for: four hundred bars whose titles read
+       * `formatCell(lease.lease_start, 'date'` with the end cut off. Anchored on the opening paren
+       * only, which is the part that cannot go missing.
+       */
+      const call = /^([A-Za-z_$][\w$.]*)\s*\(([\s\S]*)$/.exec(hint.trim());
+      if (!call) return undefined;
+      const fn = call[1]!.split(".").pop()!;
+      for (const [re, values] of SAMPLES) if (re.test(fn)) return values[row % values.length];
+      /**
+       * ⛔ AND A QUOTED ARGUMENT IS USUALLY THE ANSWER. `formatCell(lease.lease_start, 'date')` says
+       * what kind of thing it is formatting in the clearest words available — the caller wrote the
+       * type out by hand. Reading only the field name missed every one of them.
+       *
+       * Each name-shaped token in the arguments, in the order written, first match wins. Nothing
+       * that matches no rule produces anything: a bar is still the answer where the code says
+       * nothing a reader could use.
+       */
+      for (const token of call[2]!.match(/[A-Za-z_$][\w$.]*/g) ?? []) {
+        const tail = token.split(".").filter(Boolean).pop() ?? "";
+        for (const [re, values] of SAMPLES) if (re.test(tail)) return values[row % values.length];
+      }
+      return undefined;
+    }
   }
   /**
    * ⛔ WHAT A FIELD HOLDS IS NAMED BY ITS LAST SEGMENT; THE PREFIX NAMES WHAT IT BELONGS TO.
@@ -1044,6 +1634,69 @@ export function sampleValue(hint: string, row: number): string | undefined {
   return undefined;
 }
 
+/**
+ * Fill a table's blank cells from the column they sit in.
+ *
+ * ⛔ A CELL KNOWS WHAT IT HOLDS ONLY FROM ITS HEADER, AND THE EXPRESSION OFTEN SAYS NOTHING.
+ *
+ * The deals list renders every column through one cell component, so the STAGE column's expression
+ * is `displayLabel` — which matched the name rule and printed "Northgate Apartments" under a header
+ * reading STAGE, three times, next to a DEAL column saying the same thing. The CREATED column is
+ * `new Date(deal.createdAt).toLocaleDateString(…)`, which is structure rather than a field, so it
+ * drew as an empty grey bar. Peter: *"we should populate template values with ones that make
+ * sense!"* The header is the product's own word for that column, and it is right there.
+ *
+ * ⛔ IT ONLY FILLS AND ONLY CORRECTS THE ANONYMOUS. A blank bar becomes a sample; a sample drawn
+ * from a field whose name says nothing about its contents — `displayLabel`, `value`, `cell` — is
+ * re-read from the header. A cell whose expression names a real field keeps what that field gave
+ * it, because the expression is better evidence than the heading when it actually says something.
+ */
+const ANONYMOUS = /^(displayLabel|label|value|cell|content|text|display|formatted|raw|item)$/i;
+
+export function sampleByColumn(html: string): string {
+  return html.replace(/<table\b[^>]*>[\s\S]*?<\/table>/g, (table) => {
+    const headers = [...table.matchAll(/<th\b[^>]*>([\s\S]*?)<\/th>/g)].map((m) =>
+      m[1].replace(/<[^>]*>/g, " ").replace(/&[a-z]+;/g, " ").trim()
+    );
+    if (!headers.length) return table;
+    let row = -1;
+    return table.replace(/<tr\b[^>]*>[\s\S]*?<\/tr>/g, (tr) => {
+      if (/<th\b/.test(tr)) return tr;
+      row++;
+      let col = -1;
+      const here = row;
+      return tr.replace(/<td\b[^>]*>([\s\S]*?)<\/td>/g, (td, inner) => {
+        col++;
+        const head = headers[col];
+        if (!head) return td;
+        const made = sampleValue(head, here);
+        if (made === undefined) return td;
+        /**
+         * ⛔ ANYWHERE IN THE CELL, NOT THE WHOLE OF IT. This first demanded the placeholder be the
+         * cell's only content, and the deals list wraps its stage in a badge — so the one cell this
+         * was written for was the one it could not reach. Markers hold plain text, so the patterns
+         * stay anchored on "<" and cannot backtrack.
+         */
+        const blank = /<span class="productos-value"([^>]*)><\/span>/.exec(inner);
+        if (blank) {
+          return td.replace(blank[0], `<span class="productos-sample"${blank[1]}>${text(made)}</span>`);
+        }
+        /** A sample from a field that names nothing: the heading is the better word. */
+        const anon = /<span class="productos-sample" title="([^"]*)">([^<]*)<\/span>/.exec(inner);
+        if (anon) {
+          const title = anon[1].replace(/ \u2014 sample$/, "");
+          const field = (title.split(/[.?[\]'"()]+/).filter(Boolean).pop() ?? "").trim();
+          if (ANONYMOUS.test(field) && anon[2] !== made) {
+            return td.replace(anon[0], anon[0].replace(`>${anon[2]}</span>`, `>${text(made)}</span>`));
+          }
+        }
+        return td;
+      });
+    });
+  });
+}
+
+
 export interface DrawnState {
   /** The condition in the code that produces it, kept verbatim so it can be checked. */
   when: string;
@@ -1058,6 +1711,67 @@ export interface DrawnState {
  * ⛔ Named from the code, never invented. Where the condition does not say plainly what it is, the
  * condition itself is the label — an honest "when total === 0" beats a confident wrong word.
  */
+/**
+ * The product's own word for a value the drawing cannot read, or "" if there isn't one.
+ *
+ * ⛔ A NAMED SLOT IS NOT A SAMPLE, AND THAT IS WHY THIS IS ALLOWED WHERE SAMPLING IS NOT.
+ *
+ * Peter: *"what are those orange striped ...s??????? why is there blocked out text in the examples
+ * on set up deal folder? Northgate apparements <blank> <blank>% name match????"* — a hatched
+ * ellipsis and two empty bars. They were honest and they read as redaction: a reviewer cannot tell
+ * a value the drawing could not resolve from one the product deliberately hides.
+ *
+ * Writing "project name" there claims nothing about what the value IS, which is the whole objection
+ * to sampling outside a row — "Page of $12,400,000" is legible and wrong. This is legible and true:
+ * the screen really does put the project's name in that sentence, and the sentence becomes readable
+ * as the sentence it is.
+ *
+ * ⛔ ONLY A PLAIN PATH. `projectHints.projectName` names a field; a template literal, a call, a
+ * ternary do not — there is no single word they are the name of, and inventing one would be a guess
+ * wearing a label's clothes. Those keep the ellipsis.
+ */
+function slotName(hint: string): string {
+  /**
+   * ⛔ `total.toLocaleString()` IS THE FIELD `total`, FORMATTED. A no-argument method on the end is
+   * how a number is written out, not a different thing being shown — and refusing it put a hatched
+   * ellipsis in front of the word "deals" on the deals list, where the product says "1,284 deals".
+   */
+  const path = hint.trim().replace(/\.(?:to[A-Z]\w*|trim|valueOf)\(\s*\)$/, "");
+  if (!/^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*$/.test(path)) return "";
+  const parts = path.split(".");
+  const words = (seg: string) =>
+    seg
+      .replace(/^(?:get|is|has|the)(?=[A-Z])/, "")
+      .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+      .replace(/[_-]+/g, " ")
+      .trim()
+      .toLowerCase();
+  let last = words(parts[parts.length - 1]!);
+  /**
+   * ⛔ ONE WORD IS OFTEN NOT ENOUGH OF A NAME. `project.name` reduces to "name", and "the cloud
+   * storage folder for name" is worse than the ellipsis was. Where the field's own word is a
+   * generic one, the thing holding it supplies the rest.
+   */
+  /**
+   * ⛔ A COUNT IS A NUMBER, AND NAMING IT AFTER THE FIELD READS AS A WORD IN THE SENTENCE.
+   * `matches.length` resolved to "length", so the heading read "length Matching Folders Found".
+   * "n" is the conventional mark for a count nobody has yet, and it sits in the sentence as the
+   * number it stands for.
+   */
+  /**
+   * ⛔ A NUMBER READS AS A NUMBER. Naming the field put the field's words in the sentence instead
+   * of the figure they stand for: `Page {page} of {pageCount}` drew as "Page page of total pages".
+   * "n" is the conventional mark for a count nobody has yet and sits in the line as the number it
+   * replaces — "Page n of n", "n deals". Only counting words; a score, a rate, a name keeps its own.
+   */
+  if (/\b(page|pages|count|total|number|num|index|qty|quantity|offset|limit|size|length)\b/.test(last)) return "n";
+  if (parts.length > 1 && /^(name|title|label|value|text|count|total|id|type|status|date)$/.test(last)) {
+    const owner = words(parts[parts.length - 2]!);
+    if (owner && owner !== last) last = `${owner} ${last}`;
+  }
+  return last;
+}
+
 function labelFor(cond: string): string {
   /**
    * ⛔ WHAT THE CONDITION ASSERTS, NOT WHICH WORDS IT CONTAINS.
@@ -1104,8 +1818,48 @@ function labelFor(cond: string): string {
   /**
    * ⛔ A BARE FLAG NAMES ITSELF. `folderFailure` is one word the product already uses, and
    * "when folderFailure" is that word with an apology in front of it.
+   *
+   * ⛔ AND WHERE IT HANGS OFF SOMETHING, THE LAST SEGMENT IS THE WORD. This stopped at a plain
+   * identifier, so `state.creationError` — the same kind of flag, reached through the object
+   * holding it — fell all the way through to `when state.creationError`. The prefix is the code's
+   * bookkeeping about where the flag lives; `creationError` is the product's word for the moment.
+   * Widening the Error test above instead was tried and was wrong: it caught `folderFailure` too
+   * and flattened a specific name into the generic one.
    */
-  const bare = /^!?\s*([A-Za-z_$][\w$]*)\s*$/.exec(read.trim());
+  /**
+   * ⛔ A COUNT IS A MOMENT TOO, AND `=== 0` ALREADY HAD A NAME. "Empty" is at the top of this
+   * function; one-of and some-of fell through to `when total === 1` and `when rows.length > 0`,
+   * which is the same tab showing the same reviewer the same code. The thing being counted is
+   * written right there in the expression — it is the product's own word for what there is one of.
+   */
+  if (/^\s*(?:[\w$]+\.)*[\w$]+(?:\.length)?\s*===?\s*1\s*$/.test(read.trim())) return "Just one";
+  /**
+   * ⛔ A PREDICATE IS NAMED BY WHAT IT ASKS. `isUnclassified(table, row)` put a function call with
+   * its arguments on a tab — the reviewer reads the call instead of the state it picks out. The
+   * verb `is` is scaffolding; what follows it is the product's own word for the condition.
+   */
+  const asks = /^\s*(?:[\w$]+\.)*is([A-Z][\w$]*)\s*\(/.exec(read.trim());
+  if (asks) {
+    const w = asks[1]!.replace(/([a-z0-9])([A-Z])/g, "$1 $2").toLowerCase();
+    return w.charAt(0).toUpperCase() + w.slice(1);
+  }
+  /** ⛔ And "more than none" is the same state whether or not a `.length` is written out. */
+  const some = /^\s*(?:[\w$]+\.)*([\w$]+)(?:\.length)?\s*>\s*0\s*$/.exec(read.trim());
+  if (some) {
+    const w = some[1]!.replace(/([a-z0-9])([A-Z])/g, "$1 $2").toLowerCase();
+    return `With ${w}`;
+  }
+  /**
+   * ⛔ "PRESENT" IS A STATE, AND `!= null` IS HOW THE PRODUCT SPELLS IT. The chip read
+   * "when deal.loanAmount != null" — the expression, in front of a reviewer, instead of the moment
+   * it picks out. The Not-found rule above is its mirror and was already named.
+   */
+  const present = /^\s*(?:[\w$]+\.)*([\w$]+)\s*!==?\s*(?:null|undefined)\s*$/.exec(read.trim());
+  if (present) {
+    const w = present[1]!.replace(/([a-z0-9])([A-Z])/g, "$1 $2").toLowerCase();
+    return `Has ${w}`;
+  }
+  const bare = /^!?\s*(?:[A-Za-z_$][\w$]*\.)*([A-Za-z_$][\w$]*)\s*$/.exec(read.trim());
   if (bare) {
     const w = bare[1]!.replace(/^(is|has|should)(?=[A-Z])/, "").replace(/([a-z0-9])([A-Z])/g, "$1 $2").trim();
     return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
@@ -1445,6 +2199,7 @@ export function drawFromRoute(routeFile: string, opts: DrawOptions = {}): DrawRe
     conditions: [],
     forks: [],
     props: new Map(),
+    falsy: new Set(),
     sample: (hint) => {
       const s = opts.sample ?? {};
       for (const [k, v] of Object.entries(s)) if (hint.includes(k)) return v;
@@ -1469,7 +2224,12 @@ export function drawFromRoute(routeFile: string, opts: DrawOptions = {}): DrawRe
   const routeFork = jsx ? forkOf(routeGuards, jsx, path.basename(routeFile)) : undefined;
   if (routeFork) ctx.forks.push(routeFork);
   if (!jsx) return { html: "", from: [...ctx.from], unresolved: ["the route exports no component this can read"], undrawn: [], states: [], forks: [], drawnStates: [], text: "" };
-  const plain = emit(jsx, ctx);
+  /**
+   * ⛔ AFTER THE WHOLE SCREEN EXISTS, because a cell cannot see its own column while it is drawn.
+   * The headers and the rows are emitted by the same recursion from opposite ends of the table;
+   * this is the first moment both are in one string.
+   */
+  const plain = sampleByColumn(emit(jsx, ctx));
 
   /**
    * ⛔ EVERY STATE THIS SCREEN HAS, DRAWN — not listed.
@@ -1524,6 +2284,35 @@ export function drawFromRoute(routeFile: string, opts: DrawOptions = {}): DrawRe
   }
   drawnStates.length = 0;
   drawnStates.push(...best.values());
+  /**
+   * ⛔ THE PAGE GOES INSIDE ITS LAYOUTS, AND THE PARTS ARE WIRED AFTER.
+   *
+   * Nearest layout first, each one's `<!--children-->` taking what has been built so far — so the
+   * outermost ends up outermost, which is the order a browser nests them in. Wiring happens on the
+   * composed markup rather than on the page alone, because a part's label can legitimately live in
+   * the chrome: a screen whose only "New Deal" button is in the shell would otherwise report its
+   * own control as undrawn.
+   *
+   * ⛔ A LAYOUT THAT DRAWS NOTHING IS SKIPPED RATHER THAN WRAPPED. Several layouts are nothing but
+   * providers, and an empty wrapper around the page would push it inside a div for no reason and
+   * lose `<!--children-->` in the process.
+   */
+  /**
+   * ⛔ THE SCREEN'S OWN CONTENT, NOT THE APPLICATION AROUND IT.
+   *
+   * This composed each route's layouts around its page, so every drawing carried the sidebar. It
+   * was built to answer *"the 'creating a deal' screenshots look nothing like our UX"*, and it did
+   * — the missing shell was one real reason. Peter, having seen it: *"i don't think we need to show
+   * the full menu in every page, we should just show the relevant inline page"*, and he is right.
+   * The shell is identical on all seventeen screens, so it carries no information after the first
+   * and takes room from the part under review; and it drags its own unresolved icons into every
+   * drawing. A reviewer asking whether THIS screen promises the right things is not helped by the
+   * nav beside it.
+   *
+   * ⛔ `layoutsAround` STAYS, AND IS NOT DEAD. It is how a drawing can say which shell a screen sits
+   * in without drawing it, and the composition is three lines away if a surface ever wants one.
+   * What was wrong was doing it to every drawing by default.
+   */
   const wired = opts.parts?.length ? wireParts(plain, opts.parts) : { html: plain, matched: new Set<string>() };
   /**
    * ⛔ A PART THE DRAWING DOES NOT SHOW IS REPORTED, NEVER DROPPED. Silently omitting it makes the

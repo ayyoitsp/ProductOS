@@ -20,7 +20,7 @@
  */
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { scopeToShadow, themesIn, appStyleFor, wearTheme, snapshotStyle, styleOf, styleDrift } from "../dist/v2/appcss.js";
+import { scopeToShadow, themesIn, appStyleFor, wearTheme, snapshotStyle, styleOf, styleDrift, liftFaces } from "../dist/v2/appcss.js";
 import YAML from "yaml";
 import { renderScopePage } from "../dist/v2/page.js";
 import { renderShell } from "../dist/ui/renderer.js";
@@ -471,4 +471,80 @@ test("the list of stylesheets is what gets read, not the single one", () => {
   assert.deepEqual(app.missing, ["styles/gone.css"], "a path that resolves to nothing was not reported");
   assert.deepEqual(app.themes, ["brand"], "the schemes in the stylesheets were not read");
   fs.rmSync(root, { recursive: true, force: true });
+});
+
+test("a face is declared where a face can be registered, and the family variable comes with it", () => {
+  /**
+   * ⛔ `@font-face` IS DOCUMENT-SCOPED, SO A SHADOW ROOT CANNOT REGISTER ONE.
+   *
+   * Put it in a stylesheet a shadow root adopts and it is ignored — no error, no warning,
+   * `document.fonts.size` stays at 0. The mock then renders in whatever the family list falls back
+   * to, which for a serif display face is Georgia: close enough to read as a deliberate choice.
+   *
+   * This shipped, and it was confirmed "working" from a screenshot — a serif title that was Georgia
+   * doing Bona Nova's job. Measured properly: 28 faces in the page, every woff2 byte inlined, zero
+   * of them loaded. So this asserts WHERE the rule is, which is what was wrong, rather than whether
+   * a face is present, which it always was.
+   */
+  const css = [
+    "@font-face { font-family: Brand; src: url(data:font/woff2;base64,d09GMg==) }",
+    '.app__variable { --font-brand: "Brand", "Brand Fallback" }',
+    "html[data-theme] { --font-display: var(--font-brand, Georgia), serif }",
+    ".card { color: red }",
+  ].join("\n");
+  const { faces, rest } = liftFaces(css);
+
+  assert.match(faces, /@font-face/, "the face was not lifted out");
+  assert.doesNotMatch(rest, /@font-face/, "a face was left where it can never register");
+  assert.match(rest, /\.card \{ color: red \}/, "lifting the faces took an ordinary rule with it");
+
+  /**
+   * ⛔ AND THE VARIABLE BINDING, OR THE FACE LOADS AND NOTHING ASKS FOR IT. next/font declares the
+   * family on a generated class it puts on `<html>`; a mock host does not carry that class, so
+   * `var(--font-brand, Georgia)` resolved to Georgia with the face sitting there loaded.
+   */
+  assert.match(faces, /:host, :root \{ --font-brand: "Brand", "Brand Fallback" \}/, "the family variable is unbound on the host");
+
+  // ⛔ A rule that merely USES a font variable is not a binding and must not be hoisted.
+  assert.doesNotMatch(faces, /\.card/, "an ordinary class was hoisted onto the host");
+  assert.doesNotMatch(faces, /--font-display/, "a rule that reads a font variable was mistaken for one that defines it");
+});
+
+test("two font rules written back to back are both seen", () => {
+  /**
+   * ⛔ THE BUG THE FIRST FIX HAD, AND IT IS THE SAME SHAPE AS THE COMMENT ONE IN `scopeToShadow`:
+   * a scan that consumes what the next match needs.
+   *
+   * next/font emits the pair adjacent and minified — `.x__className{font-family:…}.x__variable{
+   * --font-x:…}`. The matcher asked for `(^|[}\s])` before the class, so the FIRST rule matched,
+   * consumed its own closing brace, and the second began at a position with no delimiter in front
+   * of it. The binding was never found. Tested in isolation it matched perfectly, which is what
+   * made it look like the body test was at fault.
+   */
+  const adjacent = '.a__className{font-family:Brand,Brand Fallback;font-style:normal}.a__variable{--font-brand:"Brand"}';
+  const { faces } = liftFaces(adjacent);
+  assert.match(faces, /--font-brand/, "the second of two adjacent rules was swallowed by the first");
+});
+
+test("a registered property is hoisted, because a shadow root does not hold one", () => {
+  /**
+   * ⛔ THE BUG THAT MADE EVERY BORDERED BOX DISAPPEAR, AND THE THIRD OF ITS SHAPE.
+   *
+   * `@property` initial-values are held by the document, not by a shadow root — same as `@font-face`
+   * above. Tailwind v4 writes its border utility as `border-style: var(--tw-border-style)` against a
+   * registered property whose initial-value is `solid`. Unhoisted, that var resolved to nothing
+   * inside the mock, `border-style` computed as `none`, and a 1px border of no style drew NOTHING:
+   * every input, card and secondary button on every screen rendered as a bare underline or a flat
+   * panel. The markup had the right classes the whole time, which is what made it look like the
+   * drawing was wrong rather than the stylesheet.
+   *
+   * Peter, looking at it next to the real application: *"this looks nothing like our UX"*.
+   */
+  const css = `@property --tw-border-style{syntax:"*";inherits:false;initial-value:solid}` +
+    `.border{border-style:var(--tw-border-style);border-width:1px}`;
+  const { faces, rest } = liftFaces(css);
+  assert.match(faces, /@property --tw-border-style/, "the registered property stayed inside the shadow root, where it does nothing");
+  assert.match(faces, /initial-value:\s*solid/, "the initial value is the whole point of hoisting it");
+  assert.doesNotMatch(rest, /@property/, "it was copied rather than moved, so it is declared twice");
+  assert.match(rest, /\.border\{/, "the utility that reads it was lost with it");
 });

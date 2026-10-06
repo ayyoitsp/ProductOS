@@ -16,7 +16,7 @@
  * would be the MCP boundary broken by a longer path.
  */
 import { resolveRules, type Corpus } from "./load.js";
-import { scopeToShadow } from "./appcss.js";
+import { scopeToShadow, liftFaces, PANE_FIT } from "./appcss.js";
 import { promisesOf, screensOf, type ProtoPromise, type ProtoScreen } from "./prototype.js";
 import { inferConnections, landingsFor, finishesFor, stateShowing } from "./connects.js";
 import { inEffect, declined as declinedSteers } from "./steers.js";
@@ -551,6 +551,16 @@ const PT_STYLE = `<style>
   .productos-unknown:not(:has(*)) { display: inline-block; min-width: 1.5em; color: #92400e;
     background: repeating-linear-gradient(45deg, rgba(245,158,11,.18) 0 4px, transparent 4px 8px);
     outline: 1px dashed rgba(245,158,11,.6); }
+  /**
+   * ⛔ A NAMED SLOT READS AS PART OF THE SENTENCE, NOT AS DAMAGE TO IT.
+   *
+   * The hatched marker is for a value with no name — it has to be conspicuous because there is
+   * nothing else to go on. A slot that CAN say "project name" is carrying information, and dressing
+   * it in warning stripes made the drawing look corrupted: Peter read the hatching as blocked-out
+   * text and asked what had happened to it. Quiet, italic, underlined where it sits in the line.
+   */
+  .productos-slot { font-style: italic; opacity: .75;
+    text-decoration: underline dotted currentColor; text-underline-offset: 2px; }
   [data-component] { display: block; padding: .25rem .4rem; font-size: .75rem; }
   /**
    * ⛔ AN ICON READS AS AN ICON. The drawing does not know the glyph, but it knows the size and the
@@ -1108,13 +1118,23 @@ function renderScreens(scope: Scope, ctx: Ctx, scopeId: string, opts: PageOption
  */
 function appCssOnce(opts: PageOptions): string {
   if (!opts.appCss) return "";
-  const css = scopeToShadow(opts.appCss, opts.mockClass || "productos-mock");
+  /**
+   * ⛔ THE FACES GO IN THE DOCUMENT, EVERYTHING ELSE GOES IN THE SHADOW ROOTS. `@font-face` is
+   * document-scoped: inside an adopted stylesheet it is ignored silently, so every drawing rendered
+   * in a fallback while carrying the real woff2 bytes. See `liftFaces`.
+   */
+  const { faces, rest } = liftFaces(opts.appCss);
+  const css = scopeToShadow(rest, opts.mockClass || "productos-mock") + PANE_FIT;
+  const safe = (s: string): string => s.replace(/<\/(script|template)/gi, "<\\/$1");
   /**
    * The scheme rides on the template rather than being baked into each host, because hosts are made
    * in four places — two of them in script, after a tile is opened — and a theme that three of them
    * remembered to set is a page where some drawings are the product and some are not.
    */
-  return `<template id="app-css"${themeAttr(opts)}>${css.replace(/<\/(script|template)/gi, "<\\/$1")}</template>`;
+  return (
+    (faces ? `<style id="app-faces">${safe(faces)}</style>` : "") +
+    `<template id="app-css"${themeAttr(opts)}>${safe(css)}</template>`
+  );
 }
 
 /** `data-theme="…"`, or nothing at all where the product ships no scheme. */
@@ -4217,7 +4237,18 @@ const PROTOTYPE = `<script>
   (function adoptAppCss() {
     const tpl = document.getElementById("app-css");
     if (!tpl) return;
-    const css = tpl.innerHTML;
+    /**
+     * ⛔ THE TEMPLATE'S TEXT, NOT ITS HTML SERIALISATION.
+     *
+     * innerHTML escapes ampersand, less-than and greater-than on the way out, so every CSS rule
+     * with a child combinator came back with "&gt;" where the combinator was: an unparseable
+     * selector, dropped in silence by the CSS parser. 828 rules reached the mock and NOT ONE of
+     * them held a child combinator — all of space-y, divide, and every nested layout rule the
+     * application has. Vertical rhythm was missing on every screen of every corpus, which reads as
+     * the drawing being wrong rather than the stylesheet having lost a third of itself on the way
+     * in. The template holds raw CSS text; textContent is how you get raw CSS text back.
+     */
+    const css = tpl.content ? tpl.content.textContent : tpl.textContent;
     if (!css.trim()) return;
     let sheet = null;
     try {
@@ -4911,8 +4942,11 @@ const DRIVE = `<script>
   let sheet = null;
   (function () {
     const tpl = document.getElementById("app-css");
-    if (!tpl || !tpl.innerHTML.trim()) return;
-    try { sheet = new CSSStyleSheet(); sheet.replaceSync(tpl.innerHTML); } catch (e) { sheet = null; }
+    if (!tpl) return;
+    /** ⛔ textContent, not innerHTML — see adoptAppCss above; escaping drops every "&gt;" rule. */
+    const css = tpl.content ? tpl.content.textContent : tpl.textContent;
+    if (!css.trim()) return;
+    try { sheet = new CSSStyleSheet(); sheet.replaceSync(css); } catch (e) { sheet = null; }
   })();
 
   /**
@@ -4983,6 +5017,8 @@ const DRIVE = `<script>
       /* ⛔ Only a component with no layout of its own gets the placeholder box. One carrying the
          app's classes keeps them — forcing display:block on a flex child is how a toolbar became a
          column. */
+      /* ⛔ A named slot is part of the sentence; only a nameless one wears warning stripes. */
+      ".productos-slot{font-style:italic;opacity:.75;text-decoration:underline dotted currentColor;text-underline-offset:2px}" +
       "[data-component]:not([class*=' ']){display:inline-block;padding:.1rem .3rem;font-size:.75rem}"
     );
   } catch (e) { marks = null; }
@@ -5007,7 +5043,12 @@ const DRIVE = `<script>
     if ("adoptedStyleSheets" in root) root.adoptedStyleSheets = [sheet, marks, ...root.adoptedStyleSheets].filter(Boolean);
     else {
       const src = document.getElementById("app-css");
-      if (src) { const st = document.createElement("style"); st.textContent = src.innerHTML; root.appendChild(st); }
+      /** ⛔ textContent on the way out too — innerHTML here drops every child combinator, same bug. */
+      if (src) {
+        const st = document.createElement("style");
+        st.textContent = src.content ? src.content.textContent : src.textContent;
+        root.appendChild(st);
+      }
     }
     root.appendChild(tpl.content.cloneNode(true));
     return root;
