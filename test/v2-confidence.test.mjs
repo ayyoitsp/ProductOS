@@ -127,7 +127,7 @@ test("strength counts independent sources, not readings", () => {
   const c = confidenceOf(withReadings(corpus, sameSource), A);
   assert.equal(c.support.length, 3, "all three readings are still reported — they are each checkable");
   assert.equal(c.sources, 1, "three citations of one pointer counted as three sources");
-  assert.equal(c.strength, "one-reading");
+  assert.equal(c.strength, "one-source");
 
   const two = confidenceOf(withReadings(corpus, [reading("a", A, "src/a.ts:1"), reading("b", A, "src/b.ts:2")]), A);
   assert.equal(two.strength, "corroborated");
@@ -165,8 +165,17 @@ test("a confirmation raises a statement resting on the same evidence, and says w
   /** ⛔ AND THE REASON IS VISIBLE, which is the condition he attached to choosing this. */
   const why = whyConfident(c, B).join("\n");
   assert.match(why, new RegExp(`Rests on the same evidence as ${A}, which is confirmed: src/deal\\.ts:40`));
-  assert.match(why, /Nobody has read this statement itself/);
   assert.match(why, /Nobody has confirmed this/);
+  /**
+   * ⛔ AND NOT THE BORROWED WARNING, BECAUSE THIS STATEMENT HAS A READING OF ITS OWN.
+   *
+   * The first cut appended "Nobody has read this statement itself" to every shared-support line and
+   * this assertion demanded it — on a ref with its own reading, where it is simply false. Found by
+   * rendering the page and reading the sentence, not by checking that a sentence appeared. The
+   * warning is the whole point when it is true; crying it on a well-read statement is how a reader
+   * learns to skip the line.
+   */
+  assert.doesNotMatch(why, /Nobody has read this statement itself/);
 });
 
 test("⛔ inherited support alone stops below the top tier, however much of it there is", () => {
@@ -190,7 +199,7 @@ test("⛔ inherited support alone stops below the top tier, however much of it t
   assert.equal(t.confirmed, null);
   /** It has one source of its own, so it may reach the top — the cap below is the no-own-source case. */
   assert.equal(strengthOf(0, 6), "corroborated", "inherited support with nothing read directly reached the top tier");
-  assert.equal(strengthOf(0, 1), "one-reading");
+  assert.equal(strengthOf(0, 1), "one-source");
 });
 
 test("a confirmed happy path confirms that its screens are on it — derived, not inferred", () => {
@@ -316,4 +325,30 @@ test("a derived inheritance from a happy path does not leak across scopes", () =
   assert.deepEqual(inheritedFor(c, `tasks#${screen}`), [], `a confirmed path in money reached tasks#${screen}`);
   /** ⛔ And a bare view id inherits nothing at all, from anywhere. */
   assert.deepEqual(inheritedFor(c, screen), [], `the bare view id "${screen}" inherited from money's path`);
+});
+
+test("the borrowed warning appears exactly when every source is borrowed", () => {
+  /**
+   * ⛔ AND THE BRANCH IT WAS FIRST WRITTEN ON WAS UNREACHABLE. It hung off the shared-support line —
+   * but shared support requires a pointer in common, so a ref with no readings cannot inherit that
+   * way at all. The only inheritance available to an unread statement is `derived`, which is why the
+   * warning belongs to the CONDITION rather than the route.
+   */
+  const { corpus: base } = seeded();
+  const through = base.scopes.find((s) => s.scope.id === PATH_SCOPE).scope.happy_path.through;
+  const c = withVerdicts(base, [accepting(base, `${PATH_SCOPE}#happy-path`)]);
+  const ref = `${PATH_SCOPE}#${through[0]}`;
+
+  const conf = confidenceOf(c, ref);
+  assert.equal(conf.support.length, 0, "the fixture screen has readings of its own — pick one that does not");
+  assert.equal(conf.inherited.length, 1);
+  const why = whyConfident(c, ref).join("\n");
+  assert.match(why, /all of its support is borrowed/);
+
+  /**
+   * ⛔ `one-source`, NOT `one-reading`. This statement has no readings at all, and the tier was
+   * named for a reading — so the page rendered "one reading" over a thing nobody had written down.
+   */
+  assert.equal(conf.strength, "one-source");
+  assert.match(why, /Nothing has been observed about it directly/);
 });

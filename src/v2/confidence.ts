@@ -33,8 +33,14 @@ import { stampFor } from "./stamp.js";
  * accurate word — these distinguish the four cases somebody would actually act on differently.
  *
  * Every one of these is BELOW the line. `confirmed` is not here on purpose.
+ *
+ * ⛔ `one-source`, NOT `one-reading`, AND THE RENAME WAS A CORRECTION. A statement whose only
+ * support is DERIVED from a confirmed happy path has no readings at all, and the page rendered it
+ * as "one reading" — a tier name asserting a reading that does not exist. Found by rendering the
+ * page and reading the words rather than by checking that a chip appeared. A source may be borrowed;
+ * a reading is a thing somebody wrote down.
  */
-export type Strength = "none" | "one-reading" | "corroborated" | "strongly-supported";
+export type Strength = "none" | "one-source" | "corroborated" | "strongly-supported";
 
 /** One thing somebody can go and look at. */
 export interface SupportUnit {
@@ -107,8 +113,8 @@ export const sourcesOf = (support: SupportUnit[]): number => new Set(support.map
 export function strengthOf(ownSources: number, inherited: number): Strength {
   const total = ownSources + inherited;
   if (total === 0) return "none";
-  if (ownSources === 0) return total >= 2 ? "corroborated" : "one-reading";
-  if (total === 1) return "one-reading";
+  if (ownSources === 0) return total >= 2 ? "corroborated" : "one-source";
+  if (total === 1) return "one-source";
   if (total === 2) return "corroborated";
   return "strongly-supported";
 }
@@ -227,14 +233,40 @@ export function whyConfident(corpus: Corpus, ref: string): string[] {
   for (const s of c.support) lines.push(`Read from ${s.kind} at ${s.ref}: ${s.observes}`);
   if (!c.support.length) lines.push("Nothing has been observed about it directly.");
 
-  /** ⛔ Named, every time, or the strength is a number with no argument behind it. */
+  /**
+   * ⛔ Named, every time, or the strength is a number with no argument behind it.
+   *
+   * ⛔ AND THE WARNING IS CONDITIONAL, which the first cut got wrong on the page. It appended
+   * "Nobody has read this statement itself" to every shared-support line — including on a statement
+   * with two readings of its own, where it is simply false. Caught by rendering it and reading the
+   * sentence rather than by checking that a sentence appeared.
+   *
+   * The warning is the whole point when it IS true: borrowed strength on something nobody examined
+   * is the case Peter accepted knowingly, and it must say so. Crying it on a well-read statement is
+   * how a reader learns to skip the line.
+   */
   for (const i of c.inherited) {
     lines.push(
       i.how === "derived"
         ? `Follows from ${i.from}, which is confirmed — ${i.because}.`
-        : `Rests on the same evidence as ${i.from}, which is confirmed: ${i.because}. ⛔ Nobody has read this statement itself.`,
+        : `Rests on the same evidence as ${i.from}, which is confirmed: ${i.because}.`,
     );
   }
+  /**
+   * ⛔ ONCE, AT THE END, AND ONLY WHEN IT IS TRUE — AND THE FIRST CUT HAD IT ON THE WRONG BRANCH.
+   *
+   * It appended "Nobody has read this statement itself" to every shared-support line, which is
+   * false on a statement with readings of its own. Caught by rendering the page and READING the
+   * sentence, rather than by asserting that a sentence appeared.
+   *
+   * ⛔ And moving it revealed the branch was unreachable where it had been written. Shared support
+   * requires a pointer in common, so a ref with no readings cannot inherit that way at all — the
+   * only inheritance available to an unread statement is `derived`. The warning therefore belongs
+   * to the condition, not to the route: borrowed strength on something nobody examined is the case
+   * Peter accepted knowingly, and it has to say so however it was borrowed.
+   */
+  if (c.inherited.length && c.support.length === 0)
+    lines.push("⛔ Nobody has read this statement itself — all of its support is borrowed.");
 
   if (c.strength === "strongly-supported" || c.strength === "corroborated")
     lines.push(`${c.sources} independent source${c.sources === 1 ? "" : "s"}, so: ${c.strength}. ⛔ Still not confirmed.`);

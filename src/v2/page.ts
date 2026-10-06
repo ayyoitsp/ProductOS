@@ -23,6 +23,7 @@ import { inEffect, declined as declinedSteers } from "./steers.js";
 import { SLOTS, SLOT_ASKS_SHORT, statements, saysText, type SlotName, type Scope, type Steer, type View, type Part, type Says } from "./schema.js";
 import { gridFor, gateFor, actsFor, ruleHomes, stageOf, reachOf, type Grid, type Cell } from "./grid.js";
 import { stampFor, decidedFor } from "./stamp.js";
+import { confidenceOf, whyConfident } from "./confidence.js";
 import { wireParts } from "./wire.js";
 import { questionsFor, descendants, type Question } from "./settle.js";
 import { decisionsOn, decisionsUnder, howItWasDecided, type Decision } from "./record.js";
@@ -1533,6 +1534,60 @@ function renderBehaviours(
  * for the framing would be a fourth thing to trust, and the whole point of these cards being
  * addressable is that a risk is agreed to or dropped without touching its neighbours.
  */
+/**
+ * The chips and the reason for one ref. ⛔ ONE IMPLEMENTATION, BECAUSE THERE ARE TWO SITES.
+ *
+ * The card and the behaviour row each computed `stampFor` and wrote their own chip, and the two had
+ * already drifted once — the row's stale chip carried a `title` saying who agreed and the card's did
+ * not. A confidence chip duplicated the same way would be two answers to the question the model
+ * exists to settle, which is the defect `gateFor` diverging from `check` already cost this project.
+ *
+ * ⛔ AND THE REASON IS MARKUP, NOT A TOOLTIP. Peter: *"the reason why it has confidence needs to be
+ * visible as well"*. A `title` is not visible — it cannot be scanned down a column, it does not
+ * survive the screenshot this corpus is reviewed in, and on a touch screen it does not exist.
+ */
+function confidenceParts(corpus: Corpus, ref: string): { chips: string; why: string } {
+  const c = confidenceOf(corpus, ref);
+
+  /**
+   * ⛔ THE CONFIRMED CHIP IS LEFT ALONE. It is the only pill with a colour, and every chip below is
+   * square — so the zones are told apart by shape before a word is read.
+   */
+  const stampChip = c.confirmed
+    ? `<span class="chip ok" title="by ${esc(c.confirmed.by)} on ${esc(c.confirmed.at)}">confirmed</span>`
+    : c.stale
+      ? `<span class="chip warn">changed since</span>`
+      : `<span class="chip">not confirmed</span>`;
+
+  /**
+   * ⛔ NO STRENGTH CHIP ON A CONFIRMED STATEMENT. A person agreed to it; how many code paths also
+   * happen to agree is not what a reviewer needs from that row, and a second chip beside
+   * `confirmed` is the exact adjacency that makes the two zones look like one scale.
+   */
+  const strengthChip =
+    c.confirmed || c.strength === "none"
+      ? ""
+      : `<span class="chip support${c.strength === "strongly-supported" ? " strong" : ""}${
+          c.support.length === 0 ? " inherited" : ""
+        }">${esc(c.strength.replace(/-/g, " "))}${c.sources ? ` · ${c.sources}` : ""}</span>`;
+
+  /**
+   * Shown when there is something to say beyond "nobody confirmed it and nothing was read" — which
+   * is most of a young corpus, and a reason repeated on three hundred rows is noise.
+   */
+  const worthSaying = c.support.length > 0 || c.inherited.length > 0 || !!c.stale;
+  const why = worthSaying
+    ? `<ul class="why">${whyConfident(corpus, ref)
+        .map(
+          (line) =>
+            `<li${/Nobody has read this statement itself/.test(line) ? ' class="borrowed"' : ""}>${esc(line)}</li>`,
+        )
+        .join("")}</ul>`
+    : "";
+
+  return { chips: `${stampChip}${strengthChip}`, why };
+}
+
 function renderCard(
   corpus: Corpus,
   scopeId: string,
@@ -1559,13 +1614,8 @@ function renderCard(
             .join(", ")}</p>`
         : ""
     }
-    <p class="chips">${
-      ok
-        ? `<span class="chip ok" title="by ${esc(st.by)} on ${esc(st.at)}">confirmed</span>`
-        : st.state === "never"
-          ? `<span class="chip">not confirmed</span>`
-          : `<span class="chip warn">changed since</span>`
-    }</p>
+    <p class="chips">${confidenceParts(corpus, ref).chips}</p>
+    ${confidenceParts(corpus, ref).why}
     ${
       interactive
         ? `<footer class="beh-acts icons">${
@@ -1591,11 +1641,10 @@ function behRow(
    * The stale states read as NOT confirmed and say why — a chip saying confirmed over a sentence
    * nobody read is the failure those states exist to catch.
    */
-  const chip = ok
-    ? `<span class="chip ok" title="by ${esc(st.by)} on ${esc(st.at)}">confirmed</span>`
-    : st.state === "never"
-      ? `<span class="chip">not confirmed</span>`
-      : `<span class="chip warn" title="${esc(st.by)} agreed on ${esc(st.at)}, and it changed after">changed since</span>`;
+    /** ⛔ ONE IMPLEMENTATION FOR BOTH SITES — see `confidenceParts`. These two had already drifted:
+     *  the row's stale chip carried a title naming who agreed and the card's did not. */
+    const parts = confidenceParts(corpus, r.sref);
+    const chip = parts.chips;
   return `<tr class="beh" id="beh-${slug(r.sref)}" data-beh="${esc(r.sref)}" data-ref="${esc(r.sref)}" data-label="${esc(r.label)}">
       <td class="row-says"><span class="says-text">${r.says}</span>${
         /**
@@ -1619,7 +1668,18 @@ function behRow(
           : ""
       }</td>
     </tr>
-    <tr class="beh-detail" data-for="${esc(r.sref)}" hidden><td colspan="2">${r.detail}</td></tr>`;
+    <tr class="beh-detail" data-for="${esc(r.sref)}" hidden><td colspan="2">${r.detail}${
+      /**
+       * ⛔ THE REASON FOR THE CONFIDENCE, IN THE ROW THAT CARRIES THE CHIP. Peter: *"the reason why
+       * it has confidence needs to be visible as well"*.
+       *
+       * In the expanded detail rather than on the collapsed row, because he asked for the table to
+       * be tabular — *"collapse all the info, only on row tap does it expand"* — and three hundred
+       * rows each carrying three lines of provenance is the dense wall that request was about. The
+       * chip is the signal; this is the argument behind it, one tap away.
+       */
+      parts.why
+    }</td></tr>`;
 }
 
 
@@ -5744,6 +5804,43 @@ export const STYLE = `<style>
   .chip.ok { border-color: var(--ok); color: var(--ok); }
   .chip.warn { border-color: var(--warn); color: var(--warn); }
   .chip.type { border-style: dashed; }
+  /*
+   * SUPPORT IS NOT CONFIRMATION, AND THE EYE MUST NOT HAVE TO READ THE WORD TO KNOW.
+   *
+   * Peter chose that a confirmation may raise another statement's strength, on the condition that
+   * the two zones stay visibly distinct. A chip reading "corroborated" in the same shape and colour
+   * as "confirmed" would make that condition false while satisfying it in the markup.
+   *
+   * So: a square chip, never the pill. "confirmed" is the only pill carrying a colour, and nothing
+   * in the lower zone is ever the ok colour. Squared corners carry at a glance and in a screenshot,
+   * which is how this corpus is actually reviewed.
+   *
+   * No backticks in this comment, deliberately: this whole block is inside a template literal, and
+   * a backtick here ends the CSS and the build fails somewhere unrelated.
+   */
+  .chip.support { border-radius: 3px; border-color: var(--line); color: var(--dim);
+    background: color-mix(in oklab, var(--line) 18%, transparent); }
+  /*
+   * The strong tier is darker, not coloured. It must stay inside the lower zone's vocabulary - a
+   * colour here is how "strongly supported" starts reading like "confirmed".
+   *
+   * --fg was the first attempt and this page does not define it, so it resolved to nothing and the
+   * text painted as whatever it inherited. Caught by the test that walks every token painted with
+   * against every token defined, which is the only reason it was not a silently invisible chip.
+   */
+  .chip.support.strong { border-color: var(--ink); color: var(--ink); }
+  /* Borrowed, not earned - and it says so rather than looking stronger silently. */
+  .chip.support.inherited { border-style: dotted; }
+  /*
+   * Why it has the confidence it has. Peter: "the reason why it has confidence needs to be visible
+   * as well" - so it is text on the page, not a title attribute. A tooltip is not visible: it
+   * cannot be scanned down a column, it does not survive a screenshot, and on a touch screen it
+   * does not exist.
+   */
+  .why { margin: .3rem 0 0; padding-left: .7rem; border-left: 2px solid var(--line);
+    font-size: .78rem; color: var(--dim); }
+  .why li { list-style: none; margin: .12rem 0; }
+  .why li.borrowed { color: var(--warn); }
   .row-acts { display: flex; gap: .15rem; justify-content: flex-end; }
   /** ⛔ One gesture, one meaning: the footers use the same icons as a row. */
   footer.beh-acts.icons { display: flex; gap: .25rem; margin: .5rem 0 0; }
