@@ -690,6 +690,32 @@ Proven by parsing the example that used to be here against `Reading` — three e
 `id` required, `basis.ref` required, `basis` has an unrecognized key `what`. The enum now carries
 the four kinds this document was already offering.
 
+### ⛔ You read code to write this. Record what you read, or the scale is empty
+
+Every behaviour you write came from somewhere — a component, a test, a ticket, a sentence somebody
+said. **Write a reading for it, naming the file and line.** You already have the pointer in your
+hand when you write the sentence; a session later has no way to recover it.
+
+```yaml
+# readings/<slug>.yaml
+id: stage-comes-from-the-form
+bears_on: create-deal#create-a-deal          # the exchange, so all nine slots see it
+observes: the form posts a stage of `draft` and the API has no other accepted value
+basis:
+  kind: code
+  ref: "src/forms/MultifamilyProjectForm.tsx:84"
+  at: 2026-10-06
+```
+
+⛔ **This is the difference between a corpus the scale can describe and one where every statement
+reads `none`.** It is not extra work for its own sake: a statement with a pointer behind it is one a
+reviewer can skim with the evidence beside it, and a statement with nothing is one only a person's
+answer can ever settle. Which of those a reviewer is looking at is the whole value.
+
+⛔ **And it is not a claim.** A reading says what you SAW; the behaviour says what should be true.
+When the two disagree, that is the most valuable thing you can produce — write both and say so.
+Never adjust what you observed to agree with what you wrote.
+
 ### ⛔ A reading is what the confidence scale counts — so a missing one is a statement nobody can rank
 
 Every statement carries a strength derived from its readings, and it is shown on the page beside

@@ -160,8 +160,18 @@ test("the seed's queue stays small enough to work", () => {
    * says no component renders this screen yet, so no drift check can speak about it — the only way
    * to act on it is to build the product, which is not review work.
    */
+  /**
+   * ⛔ AND THE SUPPORT-COVERAGE FINDINGS ARE ONE SUMMARY LINE, NOT ONE DECISION PER STATEMENT.
+   *
+   * `behaviours-with-nothing-behind-them` reports "38 of 40" once for the whole corpus. Counting it
+   * as a decision owed took the seed from 14 to 15 against 14 reviewable things and failed this
+   * assertion — correctly, by its own logic, and wrongly about the thing: nobody owes a decision on
+   * a count. What they owe is either a reading or a confirmation on each statement, which this test
+   * already counts through the findings that name those statements individually.
+   */
   const INFORMATIONAL = new Set([
     "leans-on-an-example", "parked-by-a-person", "one-word-defined-twice", "nothing-to-compare-this-against",
+    "behaviours-with-nothing-behind-them", "nothing-in-this-corpus-rests-on-anything",
   ]);
   const questions = findings.filter((f) => f.severity === "note" && !INFORMATIONAL.has(f.kind));
   const exchanges = corpus.scopes.reduce((n, s) => n + s.scope.exchanges.length, 0);
