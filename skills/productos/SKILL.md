@@ -338,6 +338,29 @@ line of code kept working locally.
 So the snapshot is taken **where the repository is**, by `v2 style` or by `v2 generate`, which runs
 it first. Everything downstream — a hosted instance, a packet, a published page — reads the corpus.
 
+⛔ **A drawing is only right if it RENDERS right, and there is a test harness that renders in a
+real browser.** `test/support/chrome.mjs`, used by `test/v2-the-mock-in-a-real-browser.test.mjs`:
+
+```bash
+npm test                              # includes them wherever Chrome is installed
+PRODUCTOS_REQUIRE_BROWSER=1 npm test  # absence of a browser becomes a failure, not a skip
+```
+
+It drives the Chrome already on the machine over the DevTools protocol — no dependency, nothing
+downloaded — and it asserts **computed style, never markup**. Markup assertions would have passed
+on every bug it exists for: a stylesheet read with `innerHTML` came back with every child
+combinator HTML-escaped and 209 rules silently dropped; `@property` is document-scoped, so
+`border-style: var(--tw-border-style)` resolved to nothing and every bordered box drew as a bare
+underline; a page written to own a viewport kept `min-height: 100vh` inside a 450px pane. In all
+three the markup was correct, which is exactly why they survived.
+
+⛔ **Never reach for jsdom here.** It resolves no cascade, implements no `adoptedStyleSheets` and
+registers no `@property`. It would have passed on all three — a green test asserting the opposite
+of the truth is worse than no test.
+
+⛔ **And a test that has never failed has not been shown to test anything.** Put the defect back,
+watch it go red, then put it right. Each of the three above was verified that way.
+
 ⛔ **A copy with nothing watching it is a copy that goes quietly wrong.** The snapshot carries a
 digest of every file it read, so `--check` and `v2 check` can say the design system has moved; take
 it again when they do. Where there is no repository to compare against they say **so**, rather than
