@@ -24,6 +24,7 @@ import { idiomOf, proposeScreen } from "../../v2/propose.js";
 import { inEffect, readSteers, declined } from "../../v2/steers.js";
 import { indexDesignSystem } from "../../v2/design.js";
 import { inferConnections, type Connection } from "../../v2/connects.js";
+import { DOC_MIGRATIONS } from "../../v2/store/doc-migrations.js";
 import { writeLeadsTo } from "../../v2/draw-write.js";
 import { AGENTS, AUTHORS, CASCADE, KINDS, SHIMS, SKILL, byDiscipline } from "../../core/jobs.js";
 
@@ -1820,6 +1821,81 @@ export function v2Command(): Command {
      * initializing/onboarding"*. A graph read out of `router.push` can only join screens that exist;
      * the corpus describes the target, so it can join screens nobody has built.
      */
+    /**
+     * ⛔ A CORPUS ON DISK CAN BE BEHIND THE SCHEMA, AND NOTHING COULD BRING IT FORWARD.
+     *
+     * Document migrations existed and ran against the STORE — `hosted import` calls them, boot
+     * calls them — so a hosted corpus was always current. A corpus in a directory was not reachable
+     * by any of it, and every disk command reads files directly. When `walked` was removed from the
+     * schema, twelve files in a working corpus stopped parsing and `check` answered
+     * `cannot-judge-this-corpus`: not one finding, about anything, until somebody noticed the key.
+     *
+     * Same rules as the store: the list is append-only, each rule reports what it touched, and a
+     * file no rule matches is not rewritten.
+     */
+    /** ⛔ Not `migrate` — that verb is taken by the v1→Exchange conversion, which is a different act. */
+    .command("forward")
+    .description("Bring a corpus on disk forward to this build's schema")
+    .option("--at <dir>", "the corpus", ".")
+    .option("-n, --dry-run", "say what it would change and change nothing")
+    .action((o: { at?: string; dryRun?: boolean }) => {
+      /**
+       * ⛔ AN INSTANCE IS NOT A FOLDER, AND `path.resolve` WILL HAPPILY PRETEND IT IS. This rewrites
+       * files, so pointed at a URL it would have written a corpus into `./https:/…`. An instance
+       * brings its own documents forward at import and at boot; there is nothing here for it.
+       */
+      if (/^https?:\/\//i.test(o.at ?? "")) {
+        console.error(pc.red("✗"), `${o.at} is an instance, and this rewrites files on disk`);
+        console.error(" ", pc.dim("an instance brings its documents forward when a corpus is imported and when it boots"));
+        process.exit(1);
+      }
+      const root = path.resolve(o.at ?? ".");
+      const changed: Array<{ file: string; by: string }> = [];
+      const walkDir = (dir: string): string[] => {
+        const out: string[] = [];
+        for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+          if (e.name.startsWith(".")) continue;
+          const full = path.join(dir, e.name);
+          if (e.isDirectory()) out.push(...walkDir(full));
+          else if (/\.(md|ya?ml)$/.test(e.name)) out.push(full);
+        }
+        return out;
+      };
+      if (!fs.existsSync(root)) {
+        console.error(pc.red("✗"), `no corpus at ${root}`);
+        process.exit(1);
+      }
+      for (const file of walkDir(root)) {
+        /** The rules are written against store-relative paths — `truth/x.md` — so match that. */
+        const rel = path.relative(root, file).split(path.sep).join("/");
+        let source = fs.readFileSync(file, "utf-8");
+        for (const m of DOC_MIGRATIONS) {
+          const next = m.apply(rel, source);
+          if (next === null || next === source) continue;
+          source = next;
+          changed.push({ file: rel, by: m.id });
+        }
+        if (!o.dryRun && changed.some((c) => c.file === rel)) fs.writeFileSync(file, source);
+      }
+      if (!changed.length) {
+        console.log(pc.green("✓"), "already current — no document is behind this build's schema");
+        return;
+      }
+      console.log(
+        pc.green("✓"),
+        `${o.dryRun ? "would bring" : "brought"} ${new Set(changed.map((c) => c.file)).size} document(s) forward`
+      );
+      for (const m of new Set(changed.map((c) => c.by))) {
+        const files = changed.filter((c) => c.by === m).map((c) => c.file);
+        console.log(" ", pc.dim(`${m}: ${files.slice(0, 6).join(", ")}${files.length > 6 ? `, and ${files.length - 6} more` : ""}`));
+      }
+      if (o.dryRun) console.log(" ", pc.dim("nothing was written — drop -n to apply"));
+    });
+
+  /** ⛔ A NEW STATEMENT. `.command()` returns the CHILD, so chaining the next one onto it makes a
+   *     subcommand — `v2 forward connect` — and the test that catches it does so by noticing the
+   *     child re-declares an option its new parent owns. */
+  cmd
     .command("connect")
     .description("Work out what each control leads to, from what the corpus says about it")
     .option("--into <dir>", "the corpus", ".")

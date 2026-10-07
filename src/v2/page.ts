@@ -19,6 +19,7 @@ import { resolveRules, type Corpus } from "./load.js";
 import { scopeToShadow, liftFaces, PANE_FIT } from "./appcss.js";
 import { promisesOf, screensOf, type ProtoPromise, type ProtoScreen } from "./prototype.js";
 import { inferConnections, landingsFor, finishesFor, stateShowing } from "./connects.js";
+import { walkOf, type Walk } from "./walk.js";
 import { inEffect, declined as declinedSteers } from "./steers.js";
 import { SLOTS, SLOT_ASKS_SHORT, statements, saysText, type SlotName, type Scope, type Steer, type View, type Part, type Says } from "./schema.js";
 import { gridFor, gateFor, actsFor, ruleHomes, stageOf, reachOf, type Grid, type Cell } from "./grid.js";
@@ -2567,6 +2568,7 @@ function renderNav(
    */
   const rootId = corpus.scopes.find((x) => !x.scope.in)?.scope.id;
   const protoScreens = screensOf(corpus);
+  const theWalk = walkOf(corpus);
   const protoPromises = promisesOf(corpus);
   /**
    * ⛔ WHERE A CONTROL GOES, WORKED OUT FROM THE TRUTH AT RENDER TIME.
@@ -2587,6 +2589,13 @@ function renderNav(
      * screen in a column too narrow to judge.
      */
     { id: "prototype", label: "Prototype", toRead: protoScreens.length },
+    /**
+     * ⛔ BESIDE THE BOARD, NOT INSTEAD OF IT. They answer different questions: the board is "what
+     * is there", one glance, everything at once; the walk is "how does a person get through it",
+     * one screen at a time. Replacing the board with the walk would lose the only surface that
+     * shows a whole product's worth of screens together, which is what the board was built for.
+     */
+    { id: "walk", label: "Walk", toRead: theWalk.reachable.size },
     /**
      * ⛔ ITS OWN PLACE, AND DELIBERATELY NOT THE CHARTER. Peter, asked where a learned habit gets
      * reviewed: *"A settings surface on the page"*.
@@ -2733,6 +2742,7 @@ function renderNav(
  */
 export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptions = {}): string | null {
   const protoScreens = screensOf(corpus);
+  const theWalk = walkOf(corpus);
   const protoPromises = promisesOf(corpus);
   const entry = corpus.scopes.find((s) => s.scope.id === scopeId);
   if (!entry) return null;
@@ -2859,6 +2869,7 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
          * they belong to.
          */
         renderPrototype(protoScreens, protoPromises) +
+        renderWalk(theWalk) +
         renderSettings(corpus) +
         `<section class="view" id="view-overview" data-view="overview" data-ref="${esc(scopeId)}" data-label="Overview">
            <div class="sub-view" data-tabs="product" data-sub-view="queue" data-ref="queue" data-label="Queue">
@@ -5172,6 +5183,99 @@ const DRIVE = `<script>
     if (t) open(t.dataset.proto);
   });
 
+  /**
+   * ⛔ THE WALK LIVES IN HERE ON PURPOSE: it reuses hydrate() and the board's own templates rather
+   * than carrying a second copy of every screen. One corpus is 7 MB with one copy; two would be
+   * fourteen, to show one screen at a time.
+   */
+  (function walkSurface() {
+    const data = document.getElementById("walk-data");
+    const stage = document.getElementById("walk-stage");
+    if (!data || !stage) return;
+    const walk = JSON.parse(data.textContent || "{}");
+    const where = document.getElementById("walk-where");
+    const backBtn = document.getElementById("walk-back");
+    const groups = {
+      holds: document.getElementById("walk-holds"),
+      exits: document.getElementById("walk-exits"),
+      dangling: document.getElementById("walk-dangling"),
+    };
+    const trail = [];
+
+    function moveButton(ref, label, sub) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "wmove";
+      b.dataset.walkTo = ref || "";
+      if (!ref) b.disabled = true;
+      b.textContent = label;
+      if (sub) { const m = document.createElement("span"); m.className = "wmove-m"; m.textContent = sub; b.appendChild(m); }
+      return b;
+    }
+
+    function fill(group, items) {
+      const box = group.querySelector(".wmoves");
+      box.innerHTML = "";
+      for (const it of items) box.appendChild(moveButton(it.ref, it.label, it.sub));
+      group.hidden = items.length === 0;
+    }
+
+    function go(ref, remember) {
+      const step = walk.steps[ref];
+      if (!step) return;
+      if (remember !== false) { const cur = stage.dataset.at; if (cur && cur !== ref) trail.push(cur); }
+      stage.dataset.at = ref;
+      backBtn.hidden = trail.length === 0;
+
+      /** Where you are, in the product's own words — area, then feature, then screen. */
+      where.textContent = [step.area, step.scope, step.title].filter(Boolean).join("  \u25b8  ");
+
+      stage.innerHTML = "";
+      const src = board.querySelector('.proto-mock[data-mock="' + ref.replace(/"/g, '\\"') + '"] template');
+      if (src) {
+        const host = document.createElement("div");
+        host.className = "proto-mock";
+        const tpl = document.createElement("template");
+        tpl.innerHTML = src.innerHTML;
+        host.appendChild(tpl);
+        stage.appendChild(host);
+        hydrate(host);
+      } else {
+        /** ⛔ Said plainly. A blank stage reads as broken; "no picture" is a fact about the corpus. */
+        const p = document.createElement("p");
+        p.className = "wnone";
+        p.textContent = "No picture of this screen yet — nothing renders it and nothing has drawn it.";
+        stage.appendChild(p);
+      }
+
+      fill(groups.holds, (step.holds || []).map((r) => ({ ref: r, label: (walk.steps[r] || {}).title || r })));
+      fill(groups.exits, (step.exits || []).map((e) => ({ ref: e.to, label: e.label, sub: (walk.steps[e.to] || {}).title || e.to })));
+      /**
+       * ⛔ SHOWN, NOT HIDDEN, AND NOT PRESSABLE. These are controls that commit and that nothing
+       * says a destination for — the actionable gap in the truth. Drawn as dead buttons so a
+       * reviewer sees exactly how far the product is from being walkable end to end.
+       */
+      fill(groups.dangling, (step.dangling || []).map((d) => ({ ref: "", label: d.label, sub: "nothing says where this lands" })));
+    }
+
+    document.addEventListener("click", (ev) => {
+      const el = ev.target instanceof Element ? ev.target.closest("[data-walk-to]") : null;
+      if (!el || !el.dataset.walkTo) return;
+      ev.preventDefault();
+      go(el.dataset.walkTo, true);
+      const sec = document.getElementById("view-walk");
+      if (sec && sec.scrollIntoView) sec.scrollIntoView({ block: "start" });
+    });
+
+    backBtn.addEventListener("click", () => {
+      const prev = trail.pop();
+      if (prev) go(prev, false);
+      backBtn.hidden = trail.length === 0;
+    });
+
+    if (walk.entries && walk.entries.length) go(walk.entries[0], false);
+  })();
+
 })();
 </script>`;
 
@@ -6329,6 +6433,35 @@ export const STYLE = `<style>
   /* ── The prototype: the product as a board of real screens. ──────────────────────────── */
   /* ⛔ The width goes to the SCREENS. A surface whose job is being visual cannot spend it on nav. */
   .pboard { display: grid; grid-template-columns: repeat(auto-fill, minmax(22rem, 1fr)); gap: 1.1rem; margin-top: .8rem; }
+  /* The walk: one screen, where you are, and every way out of it. */
+  .wbar { display: flex; align-items: baseline; gap: .8rem; margin: .9rem 0 .5rem; }
+  .wwhere { font-size: .82rem; color: var(--dim); letter-spacing: .01em; }
+  .wback { font: inherit; font-size: .78rem; background: none; border: 1px solid var(--line); border-radius: 999px;
+    padding: .12rem .6rem; color: var(--dim); cursor: pointer; }
+  .wback:hover { color: var(--ink); border-color: var(--dim); }
+  /* ⛔ The stage takes the width. A surface for judging a screen cannot spend its room on navigation —
+     the same mistake the board was rebuilt to undo. */
+  .wrap-walk { display: grid; grid-template-columns: minmax(0, 1fr) 15rem; gap: 1.2rem; align-items: start; }
+  @media (max-width: 60rem) { .wrap-walk { grid-template-columns: minmax(0, 1fr); } }
+  .wstage { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--card); min-height: 18rem; }
+  .wnone { padding: 2rem; color: var(--dim); font-size: .85rem; text-align: center; }
+  .wside { display: flex; flex-direction: column; gap: 1rem; }
+  .wgroup h4 { margin: 0 0 .35rem; font-size: .7rem; text-transform: uppercase; letter-spacing: .07em; color: var(--dim); font-weight: 600; }
+  .wmoves { display: flex; flex-direction: column; gap: .3rem; }
+  .wmove { display: flex; flex-direction: column; align-items: flex-start; gap: .1rem; width: 100%; text-align: left;
+    font: inherit; font-size: .82rem; background: var(--card); border: 1px solid var(--line); border-radius: 8px;
+    padding: .4rem .55rem; cursor: pointer; color: var(--ink); }
+  .wmove:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  /* ⛔ A control the truth says nothing about is shown and is dead — see the handler's comment. */
+  .wmove:disabled { cursor: default; opacity: .6; border-style: dashed; }
+  .wmove-m { font-size: .7rem; color: var(--dim); }
+  .wdoors { margin-top: 1.1rem; padding-top: .8rem; border-top: 1px solid var(--line); }
+  .wdoors h4 { margin: 0 0 .4rem; font-size: .7rem; text-transform: uppercase; letter-spacing: .07em; color: var(--dim); font-weight: 600; }
+  .wdoor { font: inherit; font-size: .8rem; background: var(--card); border: 1px solid var(--line); border-radius: 999px;
+    padding: .25rem .7rem; margin: 0 .35rem .35rem 0; cursor: pointer; color: var(--ink); }
+  .wdoor:hover { border-color: var(--accent); color: var(--accent); }
+  .wdoor-m { color: var(--dim); font-size: .7rem; margin-left: .4rem; }
+  .wnote { margin-top: .9rem; font-size: .8rem; color: var(--warn); background: var(--warn-bg); border-radius: 8px; padding: .5rem .7rem; }
   .ptile { margin: 0; cursor: pointer; }
   /**
    * A drawing is a whole page of markup. Shown at its own size it is one screen per scroll, so each
@@ -6622,6 +6755,85 @@ function renderSettings(corpus: Corpus): string {
            </div>`
         : ""
     }
+  </section>`;
+}
+
+/**
+ * The whole product as one screen somebody can walk.
+ *
+ * ⛔ A BOARD SHOWS WHAT EXISTS; IT DOES NOT SHOW HOW ANY OF IT FITS TOGETHER.
+ *
+ * Peter: *"we should be able to know the true navigation, leverage screens within screens, like
+ * really a walkable single prototype that can link out to the different areas. so the goal here is
+ * to just have a SINGLE screen that can go through the whole product, based on the established
+ * truth"*.
+ *
+ * So: one stage, one screen on it, and every way out of that screen listed beside it — the screens
+ * it HOLDS and the screens its controls LEAD TO, which are different relations and are labelled
+ * differently. Where you are is a line of text, because a reader who cannot say which part of the
+ * product they are standing in is not walking it, they are clicking pictures.
+ *
+ * ⛔ IT CLONES FROM THE BOARD RATHER THAN CARRYING ITS OWN COPY. Every screen's markup is already
+ * on the page once; a second copy would have put this corpus over fourteen megabytes to show one
+ * screen at a time.
+ *
+ * ⛔ AND IT NAMES THE SCREENS WITH NO DOOR. A walk that silently skipped them would read as a
+ * complete product with part of itself missing, which is the opposite of what this is for.
+ */
+function renderWalk(walk: Walk): string {
+  if (!walk.steps.size) return "";
+
+  const data = {
+    steps: Object.fromEntries(
+      [...walk.steps.entries()].map(([ref, st]) => [
+        ref,
+        {
+          title: st.title,
+          scope: st.scopeTitle,
+          area: st.areaTitle ?? "",
+          holds: st.holds,
+          exits: st.exits,
+          dangling: st.danglingControls,
+          drawn: st.drawn,
+        },
+      ])
+    ),
+    entries: walk.entries,
+    unreachable: walk.unreachable,
+  };
+
+  const doors = walk.entries
+    .map(
+      (ref) =>
+        `<button type="button" class="wdoor" data-walk-to="${esc(ref)}">${line(
+          walk.steps.get(ref)!.title
+        )}<span class="wdoor-m">${line(walk.steps.get(ref)!.areaTitle ?? walk.steps.get(ref)!.scopeTitle)}</span></button>`
+    )
+    .join("");
+
+  const stranded = walk.unreachable.length
+    ? `<p class="wnote">⚠ ${walk.unreachable.length} screen${walk.unreachable.length === 1 ? " has" : "s have"} no way in — nothing holds ${
+        walk.unreachable.length === 1 ? "it" : "them"
+      } and no control leads there: ${walk.unreachable
+        .slice(0, 6)
+        .map((r) => line(walk.steps.get(r)?.title ?? r))
+        .join(", ")}${walk.unreachable.length > 6 ? `, and ${walk.unreachable.length - 6} more` : ""}</p>`
+    : "";
+
+  return `<section class="view" id="view-walk" data-view="walk" data-ref="walk" data-label="Walk">
+    <script type="application/json" id="walk-data">${JSON.stringify(data).replace(/</g, "\\u003c")}</script>
+    <p class="lede">The product as one thing, walked from what the truth says. <strong>Inside</strong> is a screen shown within this one; <strong>goes to</strong> is a control the truth says leads somewhere.</p>
+    <div class="wbar"><span class="wwhere" id="walk-where"></span><button type="button" class="wback" id="walk-back" hidden>◀ back</button></div>
+    <div class="wrap-walk">
+      <div class="wstage" id="walk-stage"></div>
+      <aside class="wside">
+        <div class="wgroup" id="walk-holds" hidden><h4>Inside this screen</h4><div class="wmoves"></div></div>
+        <div class="wgroup" id="walk-exits" hidden><h4>Goes to</h4><div class="wmoves"></div></div>
+        <div class="wgroup" id="walk-dangling" hidden><h4>Leads nowhere yet</h4><div class="wmoves"></div></div>
+      </aside>
+    </div>
+    <div class="wdoors"><h4>Start somewhere else</h4>${doors}</div>
+    ${stranded}
   </section>`;
 }
 
