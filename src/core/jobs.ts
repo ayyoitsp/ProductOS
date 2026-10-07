@@ -359,6 +359,17 @@ export const AREAS: Area[] = [
        */
       "src/v2/store/server.ts",
       "src/v2/store/instance.ts",
+      /**
+       * ⛔ THE PUSH CHANNEL IS A SURFACE, because what it fails at is a page that looks up to date.
+       *
+       * `/api/v2/live` is how a reader finds out somebody pressed something, and on a hosted
+       * instance it announced nothing: the watcher behind it tailed a file in the materialized
+       * corpus, which the request deletes on the way out. The connection opened, the heartbeat
+       * arrived, and the page was silently frozen. Filed beside `serve.ts` and `instance.ts` rather
+       * than with the store's plumbing, so a reviewer asked "does a press reach the person looking
+       * at it" is sent to the file that decides.
+       */
+      "src/v2/store/pushes.ts",
       "src/v2/store/mcp.ts",
       "src/v2/store/choose.ts",
       "src/cli/commands/hosted.ts",
