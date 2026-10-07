@@ -898,49 +898,62 @@ function emit(node: ts.Node, ctx: Ctx): string {
      */
     const HOLDS_AN_ELEMENT =
       /^(icon|children|actions|adornment|avatar|badge|prefix|suffix|trailing|leading|leftIcon|rightIcon|leftElement|rightElement|startIcon|endIcon|thumbnail|media|aside|footer|header|extra)$/i;
-    if (ts.isIdentifier(e) && HOLDS_AN_ELEMENT.test(e.text)) return "";
-    const made = ctx.inRow ? sampleValue(hint, ctx.row ?? 0) : undefined;
-    if (made !== undefined) {
-      ctx.unresolved.push(hint);
-      return `<span class="productos-sample" title="${text(hint)} — sample">${text(made)}</span>`;
-    }
-    if (ctx.inRow) {
-      /**
-       * Nothing plausible to put here, so the field names itself rather than drawing a blank bar.
-       * "Northgate Apartments <blank> <blank>% name match" told a reviewer nothing about what the
-       * two missing numbers were; "folder path" and "match score" tell them exactly.
-       */
-      ctx.unresolved.push(hint);
-      const named = slotName(hint);
-      return named
-        ? `<span class="productos-slot" title="${text(hint)}">${text(named)}</span>`
-        : `<span class="productos-value" title="${text(hint)}"></span>`;
-    }
-    ctx.unresolved.push(hint);
+    /** ⛔ However it is reached: `option.icon` is as much a hole as a bare `icon`. */
+    const lastWord = /^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*$/.test(hint.trim())
+      ? hint.trim().split(".").pop()!
+      : "";
+    if (lastWord && HOLDS_AN_ELEMENT.test(lastWord)) return "";
     /**
-     * ⛔ A SLOT IS NOT CONTENT. A bare identifier here is almost always a prop a caller would fill —
-     * `actions`, `title`, `label`, `rightIcon` — and marking each one put twenty hatched ellipses on
-     * a screen whose real text is four words. They are noise pretending to be information, and they
-     * crowd out the parts of the drawing that are real.
+     * ⛔ A SLOT IS NOT CONTENT, AND THIS IS DECIDED BEFORE ANYTHING IS INVENTED FOR IT.
      *
-     * An expression with structure — a call, a member access, `deals.map(...)` — IS content the
-     * screen would show, and stays marked, because omitting it silently produces the thin drawing.
-     */
-    /**
-     * ⛔ …UNLESS IT IS STANDING IN A SENTENCE, WHERE IT IS PLAINLY CONTENT.
+     * A bare identifier standing alone in an element is almost always a prop a caller fills —
+     * `actions`, `title`, `rightIcon`. Marking each one put twenty hatched ellipses on a screen
+     * whose real text was four words. An expression with structure — a call, a member access — IS
+     * content the screen would show and stays marked, because omitting it silently produces the
+     * thin drawing this whole file exists to stop.
      *
-     * `Page {page} of {pageCount}` drew as "Page  of  " — the pager lost both its numbers and read
-     * like a broken string. The rule below is right about a bare identifier being a slot when it is
-     * ALL an element contains; it is wrong the moment there are words either side of it, because
-     * nobody writes "Page " and " of " around a slot for a caller to fill.
+     * ⛔ …UNLESS IT IS STANDING IN A SENTENCE. `Page {page} of {pageCount}` drew as "Page  of  ":
+     * nobody writes "Page " and " of " around a hole for a caller.
      */
     const amongWords =
       n.parent &&
       ts.isJsxElement(n.parent) &&
       n.parent.children.some((c) => ts.isJsxText(c) && /[A-Za-z0-9]/.test(c.text));
-    if (ts.isIdentifier(e) && !amongWords) return "";
+    /**
+     * ⛔ EXCEPT IN A ROW, WHERE A LONE EXPRESSION IS THE CELL'S VALUE.
+     *
+     * `<td><span className="badge">{displayLabel}</span></td>` is a stage, not a hole for a caller:
+     * a table cell exists to hold exactly one value and the component that renders it names that
+     * value once. Moving this rule above the sampler — correct for the `{icon}` case — emptied
+     * every single-expression cell in the corpus, so the STAGE column went blank.
+     */
+    if (ts.isIdentifier(e) && !amongWords && !ctx.inRow) return "";
+
+    ctx.unresolved.push(hint);
+
+    /**
+     * ⛔ A VALUE WHEREVER ONE CAN BE MADE, NOT ONLY INSIDE A LIST ROW.
+     *
+     * The row restriction came from a real failure — sampling everywhere once put
+     * "Page of $12,400,000" in a pager, and legible-and-wrong is worse than blank. But it was the
+     * wrong fix for that defect: the cause was a MONEY rule matching the word `total`, and the
+     * counting rules answer that properly now. Keeping the restriction meant every sentence outside
+     * a row showed its own field names in italics — "folder path", "match score% name match" —
+     * which Peter read, correctly, as the same placeholder wearing different clothes.
+     */
+    const made = sampleValue(hint, ctx.row ?? 0);
+    if (made !== undefined)
+      return `<span class="productos-sample" title="${text(hint)} — sample">${text(made)}</span>`;
+
+    /**
+     * ⛔ THE FIELD'S OWN WORD IS THE LAST RESORT, AND A BLANK BAR IS BELOW THAT. Where no shape can
+     * be guessed, naming the field at least says what is missing — "match score" tells a reviewer
+     * more than an empty grey box ever did — and a cell in a row keeps the bar, because a row wants
+     * a shape more than it wants a word.
+     */
     const named = slotName(hint);
     if (named) return `<span class="productos-slot" title="${text(hint)}">${text(named)}</span>`;
+    if (ctx.inRow) return `<span class="productos-value" title="${text(hint)}"></span>`;
     return `<span class="productos-unknown" title="${text(hint)}">&hellip;</span>`;
   }
   if (!ts.isJsxElement(n) && !ts.isJsxSelfClosingElement(n)) return "";
@@ -1598,6 +1611,40 @@ const SAMPLES: Array<[RegExp, string[]]> = [
   [/(title|name|label|deal|project|property|asset)/i, ["Blue Harbour", "Fairview Court", "Northwind"]],
 ];
 
+/**
+ * ⛔ WHAT A FIELD OF THIS NAME PLAUSIBLY HOLDS — THE REST OF THE SUBSTITUTIONS.
+ *
+ * Peter, after three rounds of me fixing one placeholder at a time: *"why aren't you just looking
+ * at all variable substitution? are you just searching for 'n'? what the heck?"*
+ *
+ * He is right, and the inventory says how right: 2,243 placeholders across the corpus, 212 distinct
+ * field names. `SAMPLES` above covers the nouns a product's ROWS are made of — a sponsor, an
+ * address, a sum. It covered almost none of the words a product's PROSE is made of, and those are
+ * most of what is left: a message, a detail, a note, a reason, a category, a path, a score. Each
+ * was falling through to its own name in italics, which is the same half-measure the letter `n`
+ * was.
+ *
+ * ⛔ SHAPE, NOT MEANING. These say what KIND of thing a field holds, never what this product's
+ * particular one says. "Checked against the source" is a sentence any product could show in a
+ * detail line; it does not claim anything about CRE lending, and the drawing is still a drawing.
+ */
+const SHAPES: Array<[RegExp, string[]]> = [
+  /** Somewhere a file lives. */
+  [/(path|folder|directory|\bdir\b|filename)$/i, ["/Shared/Deals/Blue Harbour", "/Shared/Deals/Fairview Court", "/Shared/Deals/Northwind"]],
+  /** How well two things matched — a bare number, because the markup usually writes the % itself. */
+  [/(score|match|confidence|similarity|accuracy|certainty)$/i, ["95", "88", "72"]],
+  /** A sentence the product says about what it did or found. */
+  [/(message|detail|note|hint|reason|description|summary|explanation|submessage|caption|subtitle|blurb)$/i,
+    ["Checked against the source", "Taken from the uploaded file", "Waiting on the borrower"]],
+  /** A short label naming which kind of thing this is. */
+  [/(category|kind|\btype\b|subtype|\brule\b|basis|class|bucket|group|band|tier)$/i, ["Operating", "Capital", "Excluded"]],
+  /** Where something came from. */
+  [/(source|origin|provider|channel|via)$/i, ["Uploaded file", "The workbook", "Typed by hand"]],
+  /** A heading or a short line of text with no better word for it. */
+  [/(subject|title|heading|label|text|caption|\braw\b|identifier|structure|field|\bvalue\b|printed|target)$/i,
+    ["Operating statement", "Rent roll", "Sizing model"]],
+];
+
 export function sampleValue(hint: string, row: number): string | undefined {
   /** Only a value-shaped expression. A ternary is structure, not a field. */
   if (!/^[A-Za-z_$][\w$.?\[\]'"()]*$/.test(hint.trim())) {
@@ -1652,7 +1699,27 @@ export function sampleValue(hint: string, row: number): string | undefined {
    */
   const tail = hint.split(/[.?[\]'"()]+/).filter(Boolean).pop() ?? hint;
   if (/^(number|num|index|idx|order|position|pos|rank|seq|sequence)$/i.test(tail)) return String((row % 3) + 1);
+  /**
+   * ⛔ COUNTS FIRST, BECAUSE THE GENERIC COUNT SAMPLE CANNOT TELL A PAGER APART. `(units|count|…|
+   * pages?)` answers "184" for both halves of `Page {page} of {pageCount}`, and "Page 184 of 184"
+   * is a sentence no product says. `countOf` knows the two are different quantities.
+   */
+  /**
+   * ⛔ HUMANISED BEFORE IT IS TESTED. `\bcount\b` does not match inside `pageCount` — there is no
+   * word boundary between `e` and `C` — so the guard failed for exactly the field that named the
+   * problem, and the generic count sample answered "Page 1 of 184". Third time a word boundary has
+   * cost something today.
+   */
+  const counted = tail.replace(/([a-z0-9])([A-Z])/g, "$1 $2").toLowerCase();
+  if (/\b(page|pages|count|total|number|num|index|qty|quantity|offset|limit|size|length)\b/i.test(counted))
+    return countOf(counted);
   for (const [re, values] of SAMPLES) if (re.test(hint)) return values[row % values.length];
+  /**
+   * ⛔ THE SHAPE RULES ARE ASKED OF THE FIELD'S OWN WORD, NOT THE WHOLE PATH. `value.target` is a
+   * target, not a value; `row.combineRule` is a rule. Testing the whole string lets the object's
+   * name decide what its field holds, which is the bug the tail-reading above already exists for.
+   */
+  for (const [re, values] of SHAPES) if (re.test(tail)) return values[row % values.length];
   return undefined;
 }
 

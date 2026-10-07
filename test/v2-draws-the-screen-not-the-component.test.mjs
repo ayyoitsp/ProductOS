@@ -274,7 +274,14 @@ test("a value the drawing cannot read says what it is", () => {
      </div>) }`
   );
   const out = drawFromRoute(path.join(root, "Page.tsx"), {});
-  assert.match(out.html, /project name/, "a field the drawing cannot read stayed blocked out");
+  /**
+   * ⛔ A VALUE, NOT THE FIELD'S NAME. This asserted the words "project name" — the slot naming
+   * itself — which was the right answer when the alternative was a blank. Peter, on seeing the
+   * result: *"Blue Harbour / folder path / match score% name match ... still placeholders"*. A
+   * named slot is the same half-measure the letter `n` was; the name survives only where no shape
+   * can be guessed at all.
+   */
+  assert.match(out.html, /productos-sample[^>]*projectHints\.projectName/, "a field that could have had a value showed its own name instead");
   assert.doesNotMatch(out.html, /productos-unknown[^>]*projectHints/, "a nameable field still wears the warning stripes");
   /**
    * ⛔ A COUNT SHOWS A NUMBER, AND THE LETTER `n` WAS A HALF-MEASURE.
@@ -284,7 +291,7 @@ test("a value the drawing cannot read says what it is", () => {
    * drawing invents a name and a sum without hesitating, then refused to invent a number, so every
    * count sat in the middle of an otherwise finished sentence looking unbuilt.
    */
-  assert.match(out.html, /class="productos-slot"[^>]*>184</, "a count did not stand in as a number");
+  assert.match(out.html, /productos-sample[^>]*>184</, "a count did not stand in as a number");
   /** ⛔ And an expression with no name of its own is still marked rather than guessed at. */
   assert.match(out.html, /productos-unknown/, "an unnameable expression was given a name anyway");
   fs.rmSync(root, { recursive: true, force: true });
