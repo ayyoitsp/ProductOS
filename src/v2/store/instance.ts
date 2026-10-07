@@ -24,7 +24,8 @@ import os from "node:os";
 import path from "node:path";
 import http from "node:http";
 import { CORPUS_DIRS, corpusFiles } from "../load.js";
-import { appendedLines, writeLog } from "./corpus.js";
+import { appendedLines, sessionsIn, writeLog, writeSessions } from "./corpus.js";
+import { PRESENCE_MS } from "../presence.js";
 import { v2Route } from "../serve.js";
 import { type Db, isRefusal, type ProjectStore, storeFor } from "./access.js";
 import { principalFrom } from "./identity.js";
@@ -177,6 +178,8 @@ export interface Materialized {
   documents: Record<string, string>;
   /** How many log lines the request was given. Anything past this is what it appended. */
   logHad: number;
+  /** Who the store said was listening going in. Anything newer than this is a heartbeat to keep. */
+  listening: Array<{ session: string; at: string }>;
 }
 
 export async function materializeProject(store: ProjectStore): Promise<Materialized> {
@@ -185,11 +188,20 @@ export async function materializeProject(store: ProjectStore): Promise<Materiali
    * asking for the second only after the first arrived cost a full trip — 90ms against
    * Neon, on every single request, for nothing. `scripts/bench-store.mjs` is where that
    * number came from and is how to check it again.
+   *
+   * ⛔ PRESENCE RIDES ALONG IN THE SAME TRIP, for exactly that reason. It is read on every request
+   * because `/api/v2/presence` is a GET like any other, and a third serial round trip to answer
+   * "is anybody listening" would have made the cheapest question on the instance the slowest.
    */
-  const [documents, events] = await Promise.all([store.documents(), store.since(0, LOG_CEILING)]);
+  const [documents, events, listening] = await Promise.all([
+    store.documents(),
+    store.since(0, LOG_CEILING),
+    store.listening(PRESENCE_MS),
+  ]);
   const dir = materialize(documents);
   const logHad = writeLog(dir, events);
-  return { dir, documents, logHad };
+  writeSessions(dir, listening);
+  return { dir, documents, logHad, listening };
 }
 
 /**
@@ -214,6 +226,34 @@ function materialize(files: Record<string, string>): string {
     fs.writeFileSync(full, content, "utf-8");
   }
   return dir;
+}
+
+/**
+ * Keep whatever the request recorded about who is listening.
+ *
+ * ⛔ A DIFF, NOT A BLIND UPSERT. Every request materializes the living listeners so
+ * `/api/v2/presence` can answer, so writing all of them back would re-stamp `at` for sessions that
+ * did nothing this request — and a listener that died ten minutes ago would be reported alive for
+ * as long as anybody else kept making requests. Only a row the request actually MOVED is a
+ * heartbeat.
+ */
+async function keepHeartbeats(
+  store: ProjectStore,
+  dir: string,
+  before: Array<{ session: string; at: string }>,
+): Promise<void> {
+  const was = new Map(before.map((w) => [w.session, w.at]));
+  for (const w of sessionsIn(dir)) {
+    if (was.get(w.session) === w.at) continue;
+    const at = new Date(w.at);
+    if (Number.isNaN(at.getTime())) continue;
+    /** ⛔ One listener's bad row must not fail the request it rode in on. */
+    try {
+      await store.saw(w.session, at);
+    } catch {
+      // Presence is a convenience; losing one beat is a surface that lapses, not a broken write.
+    }
+  }
 }
 
 /**
@@ -326,7 +366,7 @@ export async function instanceRoute(
   const mutating = req.method !== "GET" && req.method !== "HEAD";
 
   const run = async (): Promise<boolean> => {
-    const { dir, documents: before, logHad } = await materializeProject(reached);
+    const { dir, documents: before, logHad, listening: wasListening } = await materializeProject(reached);
     /**
      * ⛔ A MUTATING RESPONSE IS HELD UNTIL THE WRITE LANDS, OR THE CALLER IS TOLD 200 FOR A WRITE
      * THAT WAS REFUSED. The delegate answers as soon as it has performed the act against the
@@ -352,6 +392,14 @@ export async function instanceRoute(
         held?.discard();
         return false;
       }
+
+      /**
+       * ⛔ BEFORE `writeBack`, AND NOT GATED ON IT. A heartbeat is not part of the corpus and must
+       * not share its fate: a claiming inbox read whose document write loses a conflict still
+       * happened, and the listener that made it is still listening. Reporting it as absent because
+       * somebody else's press landed first is the "nobody is working" lie in a narrower window.
+       */
+      await keepHeartbeats(reached, dir, wasListening);
 
       const result = await writeBack(reached, before, dir, logHad);
       if ("conflict" in result) {

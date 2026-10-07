@@ -2183,6 +2183,27 @@ export const Verdict = z
      */
     relayed_by: z.string().optional(),
     covers_slots: z.string().optional(),
+    /**
+     * The exact lines that were hashed, as they read when somebody agreed.
+     *
+     * ⛔ RECORDED BECAUSE THE WORDS WERE UNRECOVERABLE, AND SIX ACCEPTANCES DIED OF IT.
+     *
+     * Peter accepted six things on `create-deal#create-deal-form` on 2026-10-01. The next day a
+     * regeneration rewrote that view and every one went stale — correctly, because he had agreed to
+     * particular words and the words had changed. But the verdict kept only two hashes, so the
+     * sentence he actually agreed to was gone: there was no way to show him what moved, and
+     * re-confirming meant re-deriving the whole thing from scratch.
+     *
+     * ⛔ THIS DOES NOT KEEP THE ACCEPTANCE ALIVE, AND MUST NOT. A stamp that survived a reword would
+     * be a person's consent attached to words they never read — the exact laundering `canon` and the
+     * three stale states exist to prevent. What it buys is that re-confirming becomes one glance at
+     * a diff instead of an argument reconstructed from memory, and that a generator can be stopped
+     * BEFORE it rewords something agreed.
+     *
+     * Optional, because every verdict written before this exists without it, and a corpus must keep
+     * loading. Absent means "we cannot show you what changed", which is the state this fixes.
+     */
+    covered_text: z.array(z.string()).optional(),
     covers_criteria: z.string().optional(),
     // rule
     settles: z
@@ -2583,6 +2604,26 @@ export const Steer = z
      * An opaque steer with no provenance is a rule nobody can argue with and nobody chose.
      */
     learned_from: z.string().min(3).optional(),
+    /**
+     * ⛔ WHO THIS REACHES — A ROLE, A DISCIPLINE, OR BOTH. Empty means every author.
+     *
+     * Peter: *"shouldn't steer be based on the author, not discipline? or both, rather?"* — both,
+     * and the two are for different things:
+     *
+     *   a role       — the habit is about that role's craft. "Triggers are named in product
+     *                  language" is the machinist's, and is noise to anybody else.
+     *   a discipline — the habit is about the seat. "Never name the substrate" is engineering's,
+     *                  and ⛔ it reaches authors that do not exist yet. Scoping that one to the
+     *                  roles present on the day it was written would have silently stopped applying
+     *                  the moment a new engineering author landed, and nothing would have said so.
+     *
+     * ⛔ AND THE NAMES ARE NOT VALIDATED HERE, DELIBERATELY. A role can be renamed or retired, and
+     * a schema that refuses an unknown one would take every corpus steering it OFFLINE rather than
+     * merely wrong — which is exactly what `walked` did to two files in this repo, and why a
+     * document migration had to exist at all. `check` reports a target that reaches nobody; the
+     * verb that writes one refuses it up front. A corpus already holding one degrades to a finding.
+     */
+    for: z.array(z.string()).default([]),
     at: dateish,
     /**
      * ⛔ TURNED OFF, AND WHY — BECAUSE OTHERWISE IT COMES STRAIGHT BACK.

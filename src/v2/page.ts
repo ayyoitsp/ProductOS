@@ -20,10 +20,11 @@ import { scopeToShadow, liftFaces, PANE_FIT } from "./appcss.js";
 import { promisesOf, screensOf, type ProtoPromise, type ProtoScreen } from "./prototype.js";
 import { inferConnections, landingsFor, finishesFor, stateShowing } from "./connects.js";
 import { walkOf, type Walk } from "./walk.js";
-import { inEffect, declined as declinedSteers } from "./steers.js";
+import { inEffect, declined as declinedSteers, reaches } from "./steers.js";
+import { AUTHORS } from "../core/jobs.js";
 import { SLOTS, SLOT_ASKS_SHORT, statements, saysText, type SlotName, type Scope, type Steer, type View, type Part, type Says } from "./schema.js";
 import { gridFor, gateFor, actsFor, ruleHomes, stageOf, reachOf, type Grid, type Cell } from "./grid.js";
-import { stampFor, decidedFor } from "./stamp.js";
+import { stampFor, decidedFor, whatChangedSince } from "./stamp.js";
 import { confidenceOf, whyConfident, discrepancyFor } from "./confidence.js";
 import { wireParts } from "./wire.js";
 import { questionsFor, descendants, type Question } from "./settle.js";
@@ -1609,7 +1610,24 @@ function confidenceParts(corpus: Corpus, ref: string): { chips: string; why: str
    * Shown when there is something to say beyond "nobody confirmed it and nothing was read" — which
    * is most of a young corpus, and a reason repeated on three hundred rows is noise.
    */
-  const worthSaying = c.support.length > 0 || c.contained.length > 0 || c.inherited.length > 0 || !!c.stale || !!late;
+  /**
+   * ⛔ WHAT MOVED, NOT JUST THAT SOMETHING DID. A chip reading "changed since" tells a reviewer their
+   * acceptance is dead and nothing about what to do next. Six of Peter's nine acceptances went stale
+   * in a day because a regeneration reworded the view they were on, and re-confirming meant
+   * reconstructing from memory what he had agreed to. The diff is the whole difference between that
+   * and one glance.
+   */
+  const moved = c.stale ? whatChangedSince(corpus, ref) : null;
+  const worthSaying =
+    c.support.length > 0 || c.contained.length > 0 || c.inherited.length > 0 || !!c.stale || !!late;
+  const diff = moved
+    ? `<div class="moved"><p class="k">what changed since ${esc(moved.by)} agreed on ${esc(moved.at)}</p>${
+        moved.gone.map((l) => `<p class="gone">− ${esc(l)}</p>`).join("")
+      }${moved.arrived.map((l) => `<p class="came">+ ${esc(l)}</p>`).join("")}</div>`
+    : c.stale
+      ? `<p class="moved k">⛔ This was agreed before the words were recorded, so what changed cannot be shown.</p>`
+      : "";
+
   const why = worthSaying
     ? `<ul class="why">${whyConfident(corpus, ref)
         .map(
@@ -1619,7 +1637,7 @@ function confidenceParts(corpus: Corpus, ref: string): { chips: string; why: str
         .join("")}</ul>`
     : "";
 
-  return { chips: `${stampChip}${strengthChip}`, why };
+  return { chips: `${stampChip}${strengthChip}`, why: `${diff}${why}` };
 }
 
 function renderCard(
@@ -5999,6 +6017,15 @@ export const STYLE = `<style>
     font-size: .78rem; color: var(--dim); }
   .why li { list-style: none; margin: .12rem 0; }
   .why li.borrowed { color: var(--warn); }
+  /*
+   * What moved since somebody agreed. Shown rather than summarised, because "changed since" tells a
+   * reviewer their acceptance is dead and nothing about what to do next.
+   */
+  .moved { margin: .3rem 0 0; padding-left: .7rem; border-left: 2px solid var(--warn);
+    font-size: .78rem; }
+  .moved .k { color: var(--warn); margin: 0 0 .15rem; }
+  .moved .gone { color: var(--dim); text-decoration: line-through; margin: .1rem 0; }
+  .moved .came { color: var(--ink); margin: .1rem 0; }
   .row-acts { display: flex; gap: .15rem; justify-content: flex-end; }
   /** ⛔ One gesture, one meaning: the footers use the same icons as a row. */
   footer.beh-acts.icons { display: flex; gap: .25rem; margin: .5rem 0 0; }
@@ -6584,6 +6611,7 @@ export const STYLE = `<style>
   .steer-list .steer-says { display: block; }
   .steer-list .steer-from { display: block; margin-top: .2rem; font-size: .82rem; color: var(--dim); }
   .steer-list .steer-nowhere { color: var(--warn); }
+  .steer-list .steer-for { display: block; margin-top: .2rem; font-size: .82rem; color: var(--dim); }
   .steer-list .steer-why { display: block; margin-top: .2rem; font-size: .82rem; color: var(--dim); font-style: italic; }
   /** ⛔ Legible, not hidden. A declined habit is evidence about this project, not clutter. */
   .steer-list li.steer-off .steer-says { text-decoration: line-through; color: var(--dim); }
@@ -6720,6 +6748,20 @@ function renderSettings(corpus: Corpus): string {
            ? `<span class="steer-from">learned from ${line(x.learned_from)}</span>`
            : `<span class="steer-from steer-nowhere">nothing says what this was inferred from — so there is nothing here anybody can argue with</span>`
        }
+       ${
+         /**
+          * ⛔ RESOLVED, NEVER THE RAW `for`. Naming a seat is the point of seats — `engineering`
+          * is two authors today and three tomorrow — so echoing the word back tells a reviewer
+          * nothing about who is currently being steered, which is the question they are here for.
+          */
+         (() => {
+           if (dead) return "";
+           const hits = AUTHORS.filter((a) => reaches(x, a.name)).map((a) => a.name);
+           return x.for?.length
+             ? `<span class="steer-for">reaches ${hits.map((h) => esc(h)).join(", ") || "nobody"} — aimed at ${x.for.map((f) => esc(f)).join(", ")}</span>`
+             : `<span class="steer-for">reaches every author</span>`;
+         })()
+       }
        ${dead ? `<span class="steer-why">declined — ${line(x.declined ?? "")}</span>` : ""}
      </li>`;
   return `<section class="view" id="view-settings" data-view="settings" data-ref="settings" data-label="What steers this">
@@ -6738,8 +6780,8 @@ function renderSettings(corpus: Corpus): string {
       live.length
         ? `<div class="steer-block" data-ref="steers-live">
              <h2>In force</h2>
-             <p class="lede">Carried into every author that writes for this product. ⛔ And into no
-             reviewer — one told what this project likes can no longer notice the project is wrong.</p>
+             <p class="lede">Carried into the authors each one names. ⛔ And into no reviewer — one
+             told what this project likes can no longer notice the project is wrong.</p>
              <ul class="steer-list">${live.map((x) => row(x, false)).join("")}</ul>
            </div>`
         : ""

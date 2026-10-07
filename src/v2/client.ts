@@ -122,6 +122,26 @@ export const note = (i: Instance, about: string, says: string, by?: string): Pro
 export const inbox = (i: Instance, o: { since?: number; claim?: string; limit?: number }): Promise<unknown> =>
   call(i, "/api/v2/inbox", { method: "POST", body: JSON.stringify(o) });
 
+/**
+ * ⛔ THE REPLY, OVER THE WIRE. `notes say` had no remote branch, so against an instance it read the
+ * local directory called `v2` and either failed or — worse — replied in the wrong corpus.
+ */
+export const say = (i: Instance, note: string, says: string, by?: string): Promise<Outcome> =>
+  call(i, "/api/v2/say", { method: "POST", body: JSON.stringify({ note, says, by }) }) as Promise<Outcome>;
+
+/**
+ * The conversation on an instance — what was asked, and what has been said back.
+ *
+ * ⛔ READING IT HAD NO REMOTE PATH EITHER, so `notes --at <url>` parsed a URL as a directory. A
+ * listener that cannot list what is waiting on the instance it is listening to is not listening.
+ */
+export const thread = (i: Instance, about?: string[]): Promise<unknown> =>
+  call(i, `/api/v2/thread${about?.length ? `?about=${encodeURIComponent(about.join("|"))}` : ""}`);
+
+/** ⛔ And the close, for the same reason: until it is closed the request comes back on every poll. */
+export const close = (i: Instance, note: string, outcome: string): Promise<Outcome> =>
+  call(i, "/api/v2/close", { method: "POST", body: JSON.stringify({ note, outcome }) }) as Promise<Outcome>;
+
 /** What a press would cover, before making it. ⛔ See the preview route — consent shown its object. */
 export const preview = (i: Instance, act: Act, ref: string, extra: Record<string, unknown> = {}): Promise<unknown> =>
   call(i, "/api/v2/preview", { method: "POST", body: JSON.stringify({ act, ref, ...extra }) });

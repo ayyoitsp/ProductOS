@@ -177,6 +177,34 @@ export const leases = pgTable("leases", {
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
 }, (t) => [primaryKey({ columns: [t.projectId, t.noteId] })]);
 
+/**
+ * ⛔ WHO IS LISTENING — and on a hosted instance it had nowhere to live, so the page said nobody was.
+ *
+ * `presence.ts` records a listening session in `events/sessions.json` beside the corpus, which is
+ * right for a directory and was silently a no-op here: the hosted path materializes the corpus into
+ * a fresh temp directory per request, `corpusFiles` carries only `.md`/`.yaml` (a `.json` could
+ * never have been in it), and the directory is deleted in a `finally`. So every heartbeat was
+ * written and thrown away, and `/api/v2/presence` returned `working: []` forever.
+ *
+ * The cost of that is not cosmetic and is already on the record twice. Peter, at the banner:
+ * *"Nobody is working on this right now — 1 request is waiting"* → *"again??????"*. The one surface
+ * whose whole job is to say somebody is listening told the person who had just pressed send that
+ * nobody was — on the instance he actually reviews on, which is the only one where it mattered.
+ *
+ * ⛔ ITS OWN TABLE, NOT A DOCUMENT. Presence is not a claim about the product: a `documents` row
+ * would put a heartbeat in markdown export and in a packet. Same argument as `events`.
+ *
+ * ⛔ AND NOT `sessions`. That table is an authenticated browser session, which is what makes
+ * `via: page` provable. This is "some process read the inbox recently" — no account, no expiry it
+ * is trusted on, and it lapses on its own rather than being revoked.
+ */
+export const listening = pgTable("listening", {
+  projectId: text("project_id").notNull().references(() => projects.id),
+  /** The session id a poller passed as `claim`. Not an account, and deliberately not a foreign key. */
+  session: text("session").notNull(),
+  at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [primaryKey({ columns: [t.projectId, t.session] })]);
+
 // ---------------------------------------------------------------------------
 // The corpus
 // ---------------------------------------------------------------------------
@@ -242,5 +270,6 @@ export const schema = {
   sessions,
   events,
   leases,
+  listening,
   documents,
 };

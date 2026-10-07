@@ -210,7 +210,12 @@ function installClaudeAuthors(
      * It goes AFTER the prompt body, so the framework's own instructions are what an author reads
      * first; a habit that contradicts them is the habit being wrong, and the addendum says so.
      */
-    const learned = addendum(steers ?? []);
+    /**
+     * ⛔ BY NAME, SO A HABIT ABOUT ONE CRAFT STOPS REACHING EVERY SEAT. Before this every author got
+     * the identical block, so "triggers are named in product language" arrived in the designer's
+     * instructions, where it is noise at best and a thing to obey at worst.
+     */
+    const learned = addendum(steers ?? [], author.name);
     fs.writeFileSync(
       dst,
       front + fs.readFileSync(src, "utf-8") + (learned ? `\n\n---\n\n${learned}\n` : "")

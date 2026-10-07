@@ -35,7 +35,7 @@ import { decisionsUnder, howItWasDecided } from "../v2/record.js";
 import { renderScopePage, standalone } from "../v2/page.js";
 import { perform, preview, VIA, type Act, type Payload } from "../v2/acts.js";
 import { inbox, DEFAULT_LEASE_MS } from "../v2/inbox.js";
-import { closeNote, releaseNote } from "../v2/notes.js";
+import { closeNote, releaseNote, replyToNote } from "../v2/notes.js";
 import { howYouWillBeTold } from "./push-state.js";
 
 export interface McpTool {
@@ -399,6 +399,25 @@ const closeNoteTool = tool(
   (a, paths) => closeNote(dirOf(a, paths), a.id, a.outcome)
 );
 
+/**
+ * ⛔ THE REPLY THAT DOES NOT CLOSE ANYTHING — and MCP was the one surface that never got it.
+ *
+ * `close_note` was the only thing a session could say back, and it ends the request. So a question,
+ * a progress line, or "this is a framework gap and here is why" had no tool at all, and every
+ * session answering from MCP either closed a note it had not finished or said nothing. The CLI grew
+ * `notes say` for exactly this reason; the loop's primary interface did not.
+ */
+const sayOnNoteTool = tool(
+  "productos_exchange_say_on_note",
+  "Reply on a request without deciding it is finished — a question back, where you have got to, or why this is a gap in the framework rather than a mistake in the corpus. ⛔ USE THIS BEFORE close_note WHENEVER THE ANSWER IS NOT 'DONE': closing is the only thing that takes a request off the queue, so answering by closing something you have not finished is how a request disappears unanswered. The reply shows up where they were standing when they asked, so this is the only way to be read by somebody who is not in your chat window. Your lease is untouched — it is still yours to finish.",
+  AtDir.extend({
+    id: z.string().describe("the note id, as the inbox gave it to you"),
+    says: z.string().describe("what to tell them — their surface, so write it for them and not for a changelog"),
+    by: z.string().describe("who is replying").default("claude"),
+  }),
+  (a, paths) => replyToNote(dirOf(a, paths), a.id, a.by, a.says)
+);
+
 const releaseNoteTool = tool(
   "productos_exchange_release_note",
   "Hand a note back without closing it — you claimed it and are not going to finish it. ⛔ Use this rather than going quiet: a lease that has to expire on its own strands the request for as long as the lease lasts, and the person who asked is watching a queue that looks like somebody is on it.",
@@ -420,7 +439,7 @@ export const EXCHANGE_ACT_TOOLS: McpTool[] = [agreeAct, settleAct, latitudeAct, 
  * boundary the whole design rests on — a session can never mint consent, only carry one — would be
  * one refactor away from being argued about.
  */
-export const EXCHANGE_LOOP_TOOLS: McpTool[] = [inboxTool, closeNoteTool, releaseNoteTool];
+export const EXCHANGE_LOOP_TOOLS: McpTool[] = [inboxTool, sayOnNoteTool, closeNoteTool, releaseNoteTool];
 
 export const EXCHANGE_READ_TOOLS: McpTool[] = [
   scopesTool,

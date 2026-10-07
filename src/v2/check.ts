@@ -27,7 +27,7 @@ import {
   type Corpus,
 } from "./load.js";
 import { confidenceOf, containerOf } from "./confidence.js";
-import { stampFor, staleReason, coveredBy } from "./stamp.js";
+import { stampFor, staleReason, coveredBy, whatChangedSince } from "./stamp.js";
 import { resolveRef } from "./ref.js";
 import { descendants } from "./settle.js";
 import { ruleHomes, reachOf } from "./grid.js";
@@ -39,6 +39,7 @@ import { resolvePathsOrThrow } from "../core/paths.js";
 import { readConfig } from "../core/config.js";
 import path from "node:path";
 import { projectRootOf } from "../core/paths.js";
+import { wouldReach } from "./steers.js";
 
 export type Severity = "refuse" | "note" | "shape";
 
@@ -1393,14 +1394,36 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
     }
     const s = stampFor(corpus, v.target!);
     const why = staleReason(s);
-    if (why)
+    if (why) {
+      /**
+       * ⛔ WHICH WORDS MOVED, IN THE FINDING ITSELF — ONE FACT, ONE HOME.
+       *
+       * This said only that the stamp had stopped counting, so the only action it supported was "go
+       * and read the whole thing again". Six of nine acceptances in the reviewed corpus died in a
+       * single day because a regeneration rewrote the view they were on, and nothing anywhere could
+       * say what had been agreed to — the verdict kept two hashes and no words.
+       *
+       * ⛔ A SECOND FINDING WAS THE FIRST ATTEMPT AND WAS WRONG. Two findings about one ref is the
+       * duplication this project forbids: a reviewer clearing one would still see the other, and
+       * nothing would say they were the same thing.
+       */
+      const moved = whatChangedSince(corpus, v.target!);
+      const diff =
+        moved && (moved.gone.length || moved.arrived.length)
+          ? ` — was: "${(moved.gone[0] ?? "(nothing removed)").slice(0, 110)}"` +
+            (moved.arrived[0] ? ` · now: "${moved.arrived[0].slice(0, 110)}"` : "")
+          : moved
+            ? " — the hashed reading moved without any line changing, so a rule reaching it arrived, left or was reworded"
+            : " — ⛔ and this was agreed before the words were recorded, so what changed cannot be shown";
       add({
         severity: "refuse",
         kind: `acceptance-is-stale`,
         where: v.target!,
-        what: why,
-        fix: "re-read it and accept again, or withdraw the acceptance — it currently reads as reviewed and is not",
+        what: why + diff,
+        fix:
+          "restore the wording that was agreed, or put the new wording to whoever agreed. ⛔ Do not re-stamp it yourself — that attaches their consent to words they never read",
       });
+    }
   }
 
   /**
@@ -3333,6 +3356,28 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
           where: `steer:${st.id}`,
           what: `"${st.says}" says it was learned from ${missing.length === 1 ? "change" : "changes"} ${missing.join(", ")}, and ${missing.length === 1 ? "that record does" : "those records do"} not exist — a citation nobody can follow stops anybody looking, so the habit keeps its authority on a reference that was never there`,
           fix: `name records that exist, or say where it came from in words — "every button renamed in review since August" is a better provenance than an id that resolves to nothing`,
+        });
+    }
+    /**
+     * ⛔ A STEER AIMED AT NOBODY, WHICH IS THE `integrator` SHAPE ONE LEVEL UP: a value somebody can
+     * write that nothing acts on, and which reads as working.
+     *
+     * ⛔ REPORTED HERE RATHER THAN REFUSED BY THE SCHEMA, deliberately. A role gets renamed or
+     * retired, and a schema that refused an unknown name would take every corpus steering it
+     * OFFLINE rather than merely wrong — which is precisely what `walked` did to two files in this
+     * repository, and why a document migration had to be built at all. The verb that writes a steer
+     * refuses a bad target up front, where a typo is still a typo; this catches the ones that rot
+     * afterwards, when nobody is looking at the steer at all.
+     */
+    if (st.steers === "generation" && !st.declined && st.for?.length) {
+      const dead = st.for.filter((t) => !wouldReach(t).authors.length);
+      if (dead.length)
+        add({
+          severity: "note",
+          kind: "a-steer-aimed-at-nobody",
+          where: `steer:${st.id}`,
+          what: `"${st.says}" is aimed at ${dead.join(", ")}, and ${dead.length === 1 ? "that reaches" : "those reach"} no author — ${dead.map((t) => wouldReach(t).why).join("; ")}`,
+          fix: `aim it at a role or a seat that writes — or drop \`for\` entirely, which reaches every author. ⛔ A steer nothing carries is a habit somebody believes is in force`,
         });
     }
     if (st.steers !== "truth") continue;

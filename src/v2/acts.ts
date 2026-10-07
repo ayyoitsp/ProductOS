@@ -401,6 +401,23 @@ export function payloadFrom(act: Act, ref: string, body: Record<string, unknown>
             };
 }
 
+/**
+ * The accepted text, as YAML lines. ⛔ ONE WRITER FOR ALL THREE ACCEPT PATHS.
+ *
+ * `perform` records an acceptance in three places — a slot, a criterion, and a scope-level target —
+ * and each wrote its own `covers_slots`/`covers_criteria` pair. A fourth field written in two of
+ * three would be the drift this project has paid for before, and the path that forgot it would be
+ * silently unrecoverable rather than loudly broken.
+ *
+ * ⛔ JSON-QUOTED, because these lines carry colons, quotes and em dashes. A naive `- ${line}`
+ * produces YAML that will not parse back, which would make the field worse than absent.
+ */
+function coveredTextLines(cover: { reads?: unknown }, indent = "    "): string[] {
+  const reads = Array.isArray(cover.reads) ? (cover.reads as unknown[]).map(String) : [];
+  if (!reads.length) return [];
+  return [`${indent}covered_text:`, ...reads.map((line) => `${indent}  - ${JSON.stringify(line)}`)];
+}
+
 export function perform(dir: string, act: Act, payload: Payload, consent: Consent): Outcome {
   const outcome = run(dir, act, payload, consent);
   /**
@@ -555,6 +572,8 @@ function doAccept(dir: string, { target }: AcceptPayload, consent: Consent): Out
       `    via: ${consent.via}`,
       `    covers_slots: ${cover.slots}`,
       `    covers_criteria: ${cover.criteria}`,
+      /** ⛔ The words, not only their hash — see `covered_text` in the schema. */
+      ...coveredTextLines(cover, "    "),
     ], consent);
     /**
      * ⛔ THE REPORT MUST NOT CLAIM AGREEMENT SOFTWARE DID NOT GIVE. This said "agreed what X is for
@@ -631,6 +650,8 @@ function doAccept(dir: string, { target }: AcceptPayload, consent: Consent): Out
       `    via: ${consent.via}`,
       `    covers_slots: ${covered.slots}`,
       `    covers_criteria: ${covered.criteria}`,
+      /** ⛔ The words, not only their hash — see `covered_text` in the schema. */
+      ...coveredTextLines(covered, "    "),
     ], consent);
     return {
       ok: true,
@@ -712,6 +733,8 @@ function doAccept(dir: string, { target }: AcceptPayload, consent: Consent): Out
     `    via: ${consent.via}`,
     `    covers_slots: ${c.slots}`,
     `    covers_criteria: ${c.criteria}`,
+    /** ⛔ The words, not only their hash — see `covered_text` in the schema. */
+    ...coveredTextLines(c, "    "),
   ], consent);
   return {
     ok: true,

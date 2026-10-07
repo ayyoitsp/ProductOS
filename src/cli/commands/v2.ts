@@ -3,8 +3,9 @@ import path from "node:path";
 import { Command } from "commander";
 import pc from "picocolors";
 import { checkCorpus, summarise } from "../../v2/check.js";
+import { stampFor } from "../../v2/stamp.js";
 import { loadCorpus } from "../../v2/load.js";
-import { SLOTS, SLOT_ASKS_SHORT, Steer, type SlotName, type View, statements } from "../../v2/schema.js";
+import { SLOTS, SLOT_ASKS_SHORT, Steer, type Note as NoteT, type SlotName, type View, statements } from "../../v2/schema.js";
 import YAML from "yaml";
 import { gridFor, renderGridText, actsFor, gateFor } from "../../v2/grid.js";
 import { compilePacket } from "../../v2/packet.js";
@@ -15,13 +16,13 @@ import { fileNote, closeNote, replyToNote } from "../../v2/notes.js";
 import { snapshotStyle, styleOf, styleDrift, styleAt, wearTheme } from "../../v2/appcss.js";
 import { watchCorpus } from "../../v2/watch.js";
 import { inbox } from "../../v2/inbox.js";
-import { looksLikeInstance, instanceOf, mirror, act as remoteAct, note as remoteNote, inbox as remoteInbox, preview as remotePreview, whoami as remoteWhoami, presence as remotePresence } from "../../v2/client.js";
+import { looksLikeInstance, instanceOf, mirror, act as remoteAct, note as remoteNote, inbox as remoteInbox, preview as remotePreview, whoami as remoteWhoami, presence as remotePresence, say as remoteSay, close as remoteClose, thread as remoteThread } from "../../v2/client.js";
 import { lineFor } from "../../v2/log.js";
 import { drawFromRoute } from "../../v2/draw.js";
 import { everyView, everyViewV1, isResolved, resolveRoute } from "../../v2/routes.js";
 import { spokenFor } from "../../v2/spoken.js";
 import { idiomOf, proposeScreen } from "../../v2/propose.js";
-import { inEffect, readSteers, declined } from "../../v2/steers.js";
+import { inEffect, readSteers, declined, wouldReach, reaches } from "../../v2/steers.js";
 import { indexDesignSystem } from "../../v2/design.js";
 import { inferConnections, type Connection } from "../../v2/connects.js";
 import { DOC_MIGRATIONS } from "../../v2/store/doc-migrations.js";
@@ -181,6 +182,58 @@ export function v2Command(): Command {
       group("shape", "the shape of the whole, which no page can show", pc.cyan);
       if (s.refuse === 0 && s.note === 0) console.log(pc.green("\n✓ nothing refused, nothing noted"));
       if (s.refuse > 0) process.exitCode = 1;
+    });
+
+  cmd
+    .command("accepted")
+    /**
+     * ⛔ THE WORDS SOMEBODY AGREED TO, BEFORE YOU REWRITE THEM.
+     *
+     * Peter: *"when regenerating, we should take the approved ones into account and try to keep
+     * them."* Six of his nine acceptances died in one day because a regeneration rewrote the view
+     * they were on — not because anybody decided the wording was wrong, but because nothing told the
+     * author those words were agreed.
+     *
+     * ⛔ IT PRINTS THE SENTENCE, NOT A LIST OF REFS. A ref tells an author which slot to be careful
+     * with; the sentence lets them keep it. That is the difference between a warning and a usable
+     * instruction, and the whole reason this is a command rather than a note in a document.
+     */
+    .description("The exact wording somebody has agreed to — read this before rewriting a scope")
+    .argument("[scope]", "scope id; omit for every scope")
+    .option("--at <dir>", "corpus directory", "v2")
+    .action(async (scope: string | undefined, o: { at?: string; token?: string }) => {
+      const corpus = loadCorpus(await openAt(o));
+      warnIfBroken(corpus);
+      const live = corpus.verdicts.filter(
+        (v) =>
+          v.kind === "accept" &&
+          v.target &&
+          v.via !== "agent" &&
+          (!scope || v.target.startsWith(`${scope}#`) || v.target === scope) &&
+          stampFor(corpus, v.target).state === "accepted",
+      );
+      if (!live.length) {
+        console.log(pc.dim(scope ? `nothing in ${scope} has been agreed to yet` : "nothing in this corpus has been agreed to yet"));
+        return;
+      }
+      console.log(pc.bold(`${live.length} thing${live.length === 1 ? "" : "s"} somebody has agreed to.`));
+      console.log(pc.dim("⛔ Keep these words. Changing one ends the agreement, and nobody is asked again — it simply stops counting.\n"));
+      for (const v of live) {
+        const st = stampFor(corpus, v.target!);
+        /** ⛔ `through` only exists on the accepted branch — narrowed, not cast. */
+        const via = st.state === "accepted" && st.through ? ` · through the rule ${st.through}` : "";
+        console.log(`${pc.green("✓")} ${v.target}  ${pc.dim(`${v.by} on ${v.at}${via}`)}`);
+        /**
+         * ⛔ From the verdict, not re-derived. The point is the words as AGREED — re-reading them out
+         * of the corpus would print whatever is there now, which is exactly what this exists to
+         * protect against.
+         */
+        for (const line of v.covered_text ?? [])
+          if (line.trim()) console.log(`    ${line}`);
+        if (!v.covered_text?.length)
+          console.log(pc.yellow("    ⛔ agreed before the words were recorded — this one cannot be shown"));
+        console.log("");
+      }
     });
 
   cmd
@@ -1141,8 +1194,12 @@ export function v2Command(): Command {
     .requiredOption("--steers <what>", "generation (a habit — opaque, shapes what gets proposed) | truth (a claim — surfaced on the charter)")
     .option("--learned-from <provenance>", "⛔ required on anything learned — what it was inferred from, so the next person can go and look")
     .option("--id <id>", "one segment, kebab-case — derived from the words if absent")
+    .option(
+      "--for <who...>",
+      "a role, a discipline, or several — who this reaches. Absent means every author"
+    )
     .option("--at <dir>", "corpus directory", "v2")
-    .action((says: string, o: { steers: string; learnedFrom?: string; id?: string; at?: string }) => {
+    .action((says: string, o: { steers: string; learnedFrom?: string; id?: string; at?: string; for?: string[] }) => {
       /**
        * ⛔ A URL IS REFUSED, NOT RESOLVED AS A FOLDER. Without this, `--at https://…/p/acme` printed
        * a green tick and wrote `./https:/…/p/acme/steers/steers.yaml` on this machine — so somebody
@@ -1170,10 +1227,29 @@ export function v2Command(): Command {
           .filter((w) => w && !FILLER.has(w))
           .slice(0, 4)
           .join("-");
+      /**
+       * ⛔ REFUSED HERE, NOT AT LOAD. The schema takes any string on purpose — a role can be
+       * renamed, and a schema that refused an unknown one would take every corpus steering it
+       * OFFLINE rather than merely wrong, which is what `walked` did to two files in this repo.
+       * So the gate is at the moment somebody types it, where a typo is still a typo and the fix
+       * is free, and `check` reports the ones that rot later.
+       */
+      for (const t of o.for ?? []) {
+        const r = wouldReach(t);
+        if (!r.authors.length) {
+          console.error(pc.red("✗"), `"${t}" reaches nobody — ${r.why}`);
+          const roles = AUTHORS.map((a) => a.name);
+          const seats = [...new Set(AUTHORS.map((a) => a.discipline))];
+          console.error(pc.dim(`  roles: ${roles.join(" · ")}`));
+          console.error(pc.dim(`  seats: ${seats.join(" · ")}`));
+          process.exit(1);
+        }
+      }
       const rec = {
         id,
         says,
         steers: o.steers,
+        ...(o.for?.length ? { for: o.for } : {}),
         ...(o.learnedFrom ? { learned_from: o.learnedFrom } : {}),
         at: new Date().toISOString().slice(0, 10),
       };
@@ -1245,7 +1321,8 @@ export function v2Command(): Command {
       const truth = all.filter((x) => x.steers === "truth");
       if (live.length) {
         console.log("");
-        console.log(pc.bold("habits, in force") + pc.dim("  — into every author, and no judge"));
+        /** ⛔ It said "into every author", which stopped being true the moment one could be aimed. */
+        console.log(pc.bold("habits, in force") + pc.dim("  — into the authors each names, and into no judge"));
         for (const st of live) {
           console.log(`  ${pc.green("•")} ${pc.bold(st.id)} ${st.says}`);
           /**
@@ -1253,6 +1330,19 @@ export function v2Command(): Command {
            * somebody can go and check and decline; without it, it is a rule nobody chose.
            */
           console.log(pc.dim(`    learned from ${st.learned_from ?? "— nothing said, which the loader refuses"}`));
+          /**
+           * ⛔ WHO IT REACHES, RESOLVED — never the raw `for`. A seat is the point of naming a seat:
+           * `engineering` means two authors today and three tomorrow, and printing the word back
+           * tells somebody nothing about who is currently being steered.
+           */
+          const hits = AUTHORS.filter((a) => reaches(st, a.name)).map((a) => a.name);
+          console.log(
+            pc.dim(
+              st.for.length
+                ? `    reaches ${hits.join(", ") || "nobody — see productos v2 check"}  ${pc.dim(`(aimed at ${st.for.join(", ")})`)}`
+                : `    reaches every author — ${hits.length} of them`
+            )
+          );
         }
       }
       if (truth.length) {
@@ -2253,11 +2343,29 @@ export function v2Command(): Command {
     .command("notes")
     .description("What people have asked to be changed, and what they were looking at")
     .option("--all", "include the ones already dealt with")
-    .option("--at <dir>", "corpus directory", "v2")
-    .action((o: { all?: boolean; at?: string }) => {
-      const corpus = loadCorpus(at(o));
-      warnIfBroken(corpus);
-      const notes = corpus.notes.filter((n) => o.all || n.state === "open");
+    .option("--at <dir|url>", "corpus directory, or an instance URL", "v2")
+    .option("--token <t>", "bearer token for an instance (or $PRODUCTOS_TOKEN)")
+    /**
+     * ⛔ REMOTE-AWARE, or a listener cannot see what it is listening to. This parsed a URL as a
+     * directory name, so the one surface that says *what has somebody asked for and what has been
+     * said back* was unavailable against a hosted instance — the only place those requests arrive.
+     */
+    .action(async (o: { all?: boolean; at?: string; token?: string }) => {
+      const notes = looksLikeInstance(o.at)
+        ? await (async () => {
+            try {
+              const r = (await remoteThread(instanceOf(o.at!, o.token))) as { notes: NoteT[] };
+              return r.notes.filter((n) => o.all || n.state === "open");
+            } catch (e) {
+              console.error(pc.red("✗"), e instanceof Error ? e.message : String(e));
+              process.exit(1);
+            }
+          })()
+        : (() => {
+            const corpus = loadCorpus(at(o));
+            warnIfBroken(corpus);
+            return corpus.notes.filter((n) => o.all || n.state === "open");
+          })();
       if (!notes.length) {
         console.log(pc.dim(o.all ? "no notes at all" : "nothing open — nobody has asked for a change"));
         return;
@@ -2352,7 +2460,26 @@ export function v2Command(): Command {
     .argument("<id>")
     .requiredOption("--says <what>", "what to tell them")
     .option("--by <who>", "who is replying", "claude")
-    .action((id: string, o: { says: string; by?: string }, self: Command) => {
+    /**
+     * ⛔ ASYNC AND REMOTE-AWARE, because the surface he reviews on is a hosted instance.
+     *
+     * This read the local directory called `v2` whatever `--at` said, so replying to a note filed
+     * on an instance either failed or answered in a different corpus — and the reply the page would
+     * have shown was never written. The one-way window was fixed for a directory only.
+     */
+    .action(async (id: string, o: { says: string; by?: string }, self: Command) => {
+      const g = self.optsWithGlobals() as { at?: string; token?: string };
+      if (looksLikeInstance(g.at)) {
+        try {
+          const r = (await remoteSay(instanceOf(g.at!, g.token), id, o.says, o.by)) as Outcome | Refused;
+          report(r);
+          if ((r as Outcome).ok) console.log(pc.dim("  it is still open — close it with: productos v2 notes done " + id + ' --outcome "…"'));
+          return;
+        } catch (e) {
+          console.error(pc.red("✗"), e instanceof Error ? e.message : String(e));
+          process.exit(1);
+        }
+      }
       const r = replyToNote(at(self.optsWithGlobals()), id, o.by ?? "claude", o.says);
       if (!r.ok) {
         console.error(pc.red("✗"), r.why);
@@ -2368,7 +2495,17 @@ export function v2Command(): Command {
     .description("Close a request, saying what was done about it")
     .argument("<id>")
     .requiredOption("--outcome <what>", "what actually happened — including \"we are not doing this\"")
-    .action((id: string, o: { outcome: string }, self: Command) => {
+    /** ⛔ Remote-aware for the same reason as `say`: an unclosed note comes back on every poll. */
+    .action(async (id: string, o: { outcome: string }, self: Command) => {
+      const g = self.optsWithGlobals() as { at?: string; token?: string };
+      if (looksLikeInstance(g.at)) {
+        try {
+          return report((await remoteClose(instanceOf(g.at!, g.token), id, o.outcome)) as Outcome | Refused);
+        } catch (e) {
+          console.error(pc.red("✗"), e instanceof Error ? e.message : String(e));
+          process.exit(1);
+        }
+      }
       const r = closeNote(at(self.optsWithGlobals()), id, o.outcome);
       if (!r.ok) {
         console.error(pc.red("✗"), r.why);
@@ -2679,7 +2816,8 @@ function proposeScreens(into: string, ref?: string): void {
        * repeating them per screen would bury the one line somebody needs: that this run was shaped
        * by something other than the truth and the app's own idiom.
        */
-      const steering = inEffect(corpus.steers);
+      /** ⛔ The same question the drawing answers — what shaped THESE, which is the designer's set. */
+      const steering = inEffect(corpus.steers, "designer");
       if (steering.length)
         console.log(
           pc.dim(`  shaped by ${steering.length} ${steering.length === 1 ? "habit" : "habits"} this project has learned: ${steering.map((st) => st.id).join(", ")}`)

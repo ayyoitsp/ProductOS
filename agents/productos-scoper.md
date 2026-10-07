@@ -690,6 +690,30 @@ Proven by parsing the example that used to be here against `Reading` — three e
 `id` required, `basis.ref` required, `basis` has an unrecognized key `what`. The enum now carries
 the four kinds this document was already offering.
 
+### ⛔ Before you rewrite anything: `productos v2 accepted <scope>`
+
+```bash
+productos v2 accepted create-deal --at <corpus>
+```
+
+It prints the exact sentences somebody has agreed to. **Keep those words.**
+
+⛔ **Changing one ends the agreement silently.** Nobody is asked again and nothing announces it — the
+stamp simply stops counting, and the page starts reading "changed since" over a sentence a person
+had already approved. This is not a hypothetical:
+
+> Peter accepted six things on one view on 2026-10-01. A regeneration rewrote that view the next
+> day, and all six died. Not because anybody judged the wording wrong — because nothing told the
+> author those words were agreed. Two thirds of the validation in that corpus went dead in a day.
+
+⛔ **Rewording an agreed sentence is not a small edit, it is a withdrawal.** If a sentence genuinely
+must change — it says something false, or the product moved — change it and say so plainly in your
+report, so whoever agreed is asked again. What you must never do is reword it for style, for
+consistency with a sibling scope, or because you would have phrased it differently.
+
+⛔ **And never re-stamp it yourself to make the page green.** That attaches somebody's consent to
+words they never read, which is the one thing this whole model exists to prevent.
+
 ### ⛔ You read code to write this. Record what you read, or the scale is empty
 
 Every behaviour you write came from somewhere — a component, a test, a ticket, a sentence somebody
@@ -1234,10 +1258,32 @@ which is why no corpus had one.
 
 ```bash
 productos v2 steer new "<the habit>" --steers generation \
-    --learned-from "<the screens, the reviews, the rejections>"
-productos v2 steer list                                   # what is in force, and where each came from
+    --learned-from "<the screens, the reviews, the rejections>" \
+    --for machinist                                       # optional — who it reaches
+productos v2 steer list                                   # what is in force, and who each one reaches
 productos v2 steer decline <id> --because "<why it is not a rule here>"
 ```
+
+### ⛔ Who a habit reaches: a role, a seat, or everybody
+
+Peter: *"shouldn't steer be based on the author, not discipline? or both, rather?"* — both, and they
+are for different things.
+
+| `--for` | use it when | and know |
+| --- | --- | --- |
+| a **role** (`machinist`) | the habit is about that role's craft | it stops applying to a role added later, and nothing will say so |
+| a **seat** (`engineering`) | the habit is about the discipline | ⛔ it reaches authors **that do not exist yet** — which is usually the point |
+| *omitted* | it is true of everything that writes here | unchanged from before targeting existed |
+
+⛔ **A seat is not the roles in it today.** Scoping *"never name the substrate"* to the engineering
+roles that happened to exist would have silently stopped covering the next one. Name the seat.
+
+⛔ **`--for` refuses a target that reaches nobody**, and there are three ways to write one: a typo
+(`design` and `designer` are one character apart and mean different things), a judge — which can
+never be steered, because a reviewer told what this project likes can no longer notice the project
+is wrong — and a seat with no authors in it. `check` reports the ones that rot afterwards, when a
+role is renamed; it is a finding and never a parse failure, because a schema that refused an unknown
+name would take a corpus offline rather than merely make it wrong.
 
 **A generation steer reaches every author's instructions**, at install and again when a screen is
 proposed — so after writing one, `productos init claude --update`. ⛔ **And it reaches no judge,

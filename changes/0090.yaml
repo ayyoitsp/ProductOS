@@ -4,10 +4,10 @@ at: 2026-10-06
 kind: concept
 reaches:
   model: machinist
-  generate: instrumenter
-  surface: instrumenter
-  instruct: What does this product do that nobody presses
+  instruct: nobody presses
   pin: an engineering author exists, and writes the half nobody presses
 waived:
   derive: "Nothing new is computed, inherited or gated. A role's tools are already derived from the capabilities it declares, and these declare the same four every author declares — so the derivation ran unchanged on the day they landed. Arguable: if a steer ever targets a discipline, which roles a steer reaches becomes a derivation and this stops holding."
   check: Every refusal these two authors can provoke already existed and was already load-bearing — a machinery ask with no trigger is refused by the schema, a dangling depends_on by check, and an instrument feeding nothing by 'an-instrument-feeds-nothing-that-exists'. All three were verified by running them. What was missing was never a check; it was anybody being told to write the fields they guard.
+  generate: "Nothing new generates. AGENTS.md, the skill presets and the installed agent files are all produced by walking the registries, so both roles appeared in all three the moment they were declared and no generator changed a line. Demonstrated rather than argued: regenerating produced two new agent files and two new rows with the generators untouched. Arguable the day a role needs anything generated that is not derivable from its declaration."
+  surface: Same mechanism, same demonstration. Where a person meets these is AGENTS.md and `productos v2 agents`, both generated from the registry; a new surface would mean a role carried something the existing rendering cannot say, and neither does.
