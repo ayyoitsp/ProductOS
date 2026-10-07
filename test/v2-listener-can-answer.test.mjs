@@ -212,3 +212,72 @@ test("a listening session is reported as working, on an instance with a database
     await new Promise((r) => server.close(r));
   }
 });
+
+test("a press on a hosted instance reaches an open stream, which it never did", async () => {
+  const { base, session, server, store } = await hosted();
+  /**
+   * ⛔ DRIVEN, NOT REASONED ABOUT. This defect is invisible from the outside by construction: the
+   * connection opens, the heartbeat arrives, and the page looks completely up to date while every
+   * press goes unannounced. The only evidence is a press made with a stream already open.
+   */
+  const ac = new AbortController();
+  try {
+    const about = await scopeIn(store);
+    const res = await fetch(`${base}/p/prj-ada/api/v2/live`, {
+      headers: { accept: "text/event-stream", cookie: `productos_session=${session}` },
+      signal: ac.signal,
+    });
+    assert.equal(res.status, 200);
+
+    const frames = [];
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let buf = "";
+    const pump = (async () => {
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) return;
+        buf += dec.decode(value, { stream: true });
+        const parts = buf.split("\n\n");
+        buf = parts.pop() ?? "";
+        for (const p of parts) if (p.includes("event: changed")) frames.push(p);
+      }
+    })().catch(() => {});
+
+    /** ⛔ The first frame is the `retry:` preamble, so wait for the stream to be established. */
+    const changed = new Promise((resolve, reject) => {
+      const started = Date.now();
+      const tick = setInterval(() => {
+        if (frames.length) {
+          clearInterval(tick);
+          resolve(frames[0]);
+        } else if (Date.now() - started > 8000) {
+          clearInterval(tick);
+          reject(new Error("the stream announced nothing — a press on a hosted instance reached no reader"));
+        }
+      }, 50);
+    });
+
+    await new Promise((r) => setTimeout(r, 300));
+    const filed = await call(base, "/p/prj-ada/api/v2/note", {
+      method: "POST",
+      session,
+      body: { about, says: "the stream has to carry this" },
+    });
+    assert.equal(filed.status, 200, `filing failed: ${JSON.stringify(filed.body)}`);
+
+    const frame = await changed;
+    assert.match(frame, /the stream has to carry this/, "the frame did not carry what was recorded");
+
+    /** ⛔ ONCE, NOT TWICE. A publish and the poll underneath both deliver the same row, and
+     *  announcing a press twice reads as two presses. */
+    await new Promise((r) => setTimeout(r, 600));
+    assert.equal(frames.length, 1, `one press was announced ${frames.length} times`);
+
+    ac.abort();
+    await pump;
+  } finally {
+    ac.abort();
+    await new Promise((r) => server.close(r));
+  }
+});

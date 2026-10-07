@@ -153,7 +153,21 @@ export function inbox(dir: string, opts: InboxOptions = {}): InboxRead {
         }
       }
     }
-    events.push(e);
+    /**
+     * ⛔ `work` MEANS "THIS STILL OWES YOU SOMETHING", so it is stripped once it does not.
+     *
+     * The field is permanent on the log line — it is which note the event was about — and every
+     * consumer of a DELIVERED event reads it as a request still waiting: the CLI prints
+     * `← owes work`, the MCP read lists it under `owed`, and a relay wakes a session for it. So a
+     * session resuming from `next_cursor` was handed notes somebody had already closed, labelled as
+     * work it owed, and the only way to find out otherwise was to read the corpus and compare —
+     * which is exactly the comparison this function exists to have already done.
+     *
+     * ⛔ `unfinished` IS THE ONE DEFINITION, reused rather than restated. `next_cursor` is computed
+     * from it above, so a second rule here is how the cursor and the field come to disagree about
+     * the same note.
+     */
+    events.push(e.work && !unfinished(e) ? { ...e, work: undefined } : e);
   }
 
   return { events, held, next_cursor, head, more };

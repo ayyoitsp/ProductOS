@@ -1,0 +1,9 @@
+id: "0103"
+said: Fix it + commit my work — the staging-guard hole let uncommitted work reach 4100 and run a migration on the shared Neon store
+at: 2026-10-07
+kind: operations
+reaches:
+  operate: staging serves what is MERGED — not what is in this tree
+  pin: an uncommitted migration refuses it too — that is the one that touches the managed store
+waived: {}
+closed: 2026-10-07
