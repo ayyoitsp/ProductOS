@@ -394,6 +394,14 @@ export const AREAS: Area[] = [
       "src/v2/client.ts",
       "src/v2/write.ts",
       "src/v2/wire.ts",
+      /**
+       * ⛔ BESIDE `wire.ts`, BECAUSE IT IS THE SAME JOB ONE STEP ON. `wire` puts `data-part` on an
+       * element; this puts `data-in="invalid"` on the same element and carries the one stylesheet
+       * that says what that looks like. A state is composed onto a screen's own drawing rather than
+       * stored as a second copy of it, so what a condition RENDERS AS is the whole of what this
+       * decides — which is a surface question, not a derivation.
+       */
+      "src/v2/states.ts",
       "src/v2/moved.ts",
       "src/cli/commands/v2.ts",
       "src/mcp/v2-tools.ts",

@@ -33,6 +33,7 @@ import { ruleHomes, reachOf } from "./grid.js";
 import { appStyleFor, styleDrift } from "./appcss.js";
 import { readLog } from "./log.js";
 import { landingsFor, finishesFor } from "./connects.js";
+import { pictureOf, unknownParts, undrawnConditions } from "./states.js";
 import fs from "node:fs";
 import { resolvePathsOrThrow } from "../core/paths.js";
 import { readConfig } from "../core/config.js";
@@ -1708,7 +1709,13 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
              * A control drawn in this state that leads somewhere else is a way out. The drawing is
              * the only record of which controls a state holds, so it is what gets asked.
              */
-            const holds = (id: string): boolean => st.sketch_html.includes(`data-part="${id}"`);
+            /**
+             * ⛔ THE COMPOSED PICTURE, not the stored one. A state now holds conditions on parts
+             * and may carry no picture of its own — asking `sketch_html` directly reported every
+             * such state as a dead end with no way out, because the string it looked in was empty.
+             */
+            const shown = pictureOf(v, st);
+            const holds = (id: string): boolean => shown.includes(`data-part="${id}"`);
             const ways = out.filter((l) => holds(l.part)).length
               + v.parts.filter((pt) => pt.leads_to && holds(pt.id)).length;
             if (ways) continue;

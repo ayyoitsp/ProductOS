@@ -1263,10 +1263,32 @@ which is why no corpus had one.
 
 ```bash
 productos v2 steer new "<the habit>" --steers generation \
-    --learned-from "<the screens, the reviews, the rejections>"
-productos v2 steer list                                   # what is in force, and where each came from
+    --learned-from "<the screens, the reviews, the rejections>" \
+    --for machinist                                       # optional — who it reaches
+productos v2 steer list                                   # what is in force, and who each one reaches
 productos v2 steer decline <id> --because "<why it is not a rule here>"
 ```
+
+### ⛔ Who a habit reaches: a role, a seat, or everybody
+
+Peter: *"shouldn't steer be based on the author, not discipline? or both, rather?"* — both, and they
+are for different things.
+
+| `--for` | use it when | and know |
+| --- | --- | --- |
+| a **role** (`machinist`) | the habit is about that role's craft | it stops applying to a role added later, and nothing will say so |
+| a **seat** (`engineering`) | the habit is about the discipline | ⛔ it reaches authors **that do not exist yet** — which is usually the point |
+| *omitted* | it is true of everything that writes here | unchanged from before targeting existed |
+
+⛔ **A seat is not the roles in it today.** Scoping *"never name the substrate"* to the engineering
+roles that happened to exist would have silently stopped covering the next one. Name the seat.
+
+⛔ **`--for` refuses a target that reaches nobody**, and there are three ways to write one: a typo
+(`design` and `designer` are one character apart and mean different things), a judge — which can
+never be steered, because a reviewer told what this project likes can no longer notice the project
+is wrong — and a seat with no authors in it. `check` reports the ones that rot afterwards, when a
+role is renamed; it is a finding and never a parse failure, because a schema that refused an unknown
+name would take a corpus offline rather than merely make it wrong.
 
 **A generation steer reaches every author's instructions**, at install and again when a screen is
 proposed — so after writing one, `productos init claude --update`. ⛔ **And it reaches no judge,
