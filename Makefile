@@ -450,6 +450,20 @@ remote-doctor: build
 # ---------------------------------------------------------------------------
 deploy-check: staging-guard
 	@echo "  ✓ clean, and identical to origin/main at $$(git rev-parse --short HEAD)"
+	@# ⛔ CHECKED FIRST, BECAUSE THE SUITE TAKES TEN MINUTES. `backup-remote` tests for `.env` too —
+	@#    but after the slow part, so a deploy checkout missing it burned the whole run before saying
+	@#    so. A gate that fails late on the cheapest possible question is a gate people stop running.
+	@#
+	@# ⛔ AND A WORKTREE NEVER HAS IT. `.env` is gitignored, correctly: it is a credential. So a fresh
+	@#    deploy checkout starts without the one file every staging target needs, and nothing says so
+	@#    until it is already ten minutes in. Found exactly that way.
+	@test -f .env || { \
+		echo "✗ no .env here, and every staging target needs DATABASE_URL from it."; \
+		echo "  It is gitignored, so a worktree does not inherit one:"; \
+		echo "    cp $(MAIN_WT)/.env .env"; \
+		exit 1; \
+	}
+	@echo "  ✓ .env names a store"
 	@echo "→ build"
 	@npm run build >/dev/null || { echo "✗ it does not compile"; exit 1; }
 	@echo "  ✓ compiles"
