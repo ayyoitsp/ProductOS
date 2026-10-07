@@ -2311,11 +2311,25 @@ function renderExchanges(corpus: Corpus, scopeIds: string[], cellOf: Map<string,
             </div>
           </div>`;
       }).join("");
+      /**
+       * ⛔ THE ADDRESS A BUILDER WAS HANDED, ON THE PAGE A PERSON READS IT FROM.
+       *
+       * The packet gives every requirement a ref and the hash of the words it was written from,
+       * and an agent carries both into whatever demonstrates it. If the only place that ref exists
+       * is the packet, then a person looking at a failing test called
+       * `money#record-earning#shows#4` has nowhere to go and look it up — and the half of this
+       * whose entire purpose is a human reviewing what was agreed would be the half that cannot
+       * see what a builder was told.
+       *
+       * ⛔ The ref only. The hash belongs to the packet, which is a machine artifact; printing
+       * sixteen hex characters beside a sentence a person is trying to read buys them nothing.
+       */
       const criteria = e.criteria
         .map(
           (c) => `
           <li>
             <span class="cslot">${esc(SLOT_LABEL[c.slot as SlotName] ?? c.slot)}</span>
+            <code class="creq">${esc(`${ref}#shows#${c.id}`)}</code>
             ${c.given ? `<span class="g">given</span> ${line(c.given)}` : ""}
             ${c.when ? `<span class="g">when</span> ${line(c.when)}` : ""}
             ${c.then ? `<span class="g">then</span> ${line(c.then)}` : ""}
@@ -6562,6 +6576,8 @@ export const STYLE = `<style>
   .crit ul { margin: .6rem 0 0; padding-left: 1.1rem; }
   .crit li { margin: .35rem 0; }
   .cslot { font-family: ui-monospace, Menlo, monospace; font-size: .78rem; color: var(--accent); margin-right: .4rem; }
+  /* The address a builder was handed. Quiet — it is a lookup key, not part of the sentence. */
+  .creq { font-family: ui-monospace, Menlo, monospace; font-size: .72rem; color: var(--dim); margin-right: .4rem; }
   .g { font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; color: var(--dim); margin: 0 .25rem; }
   .ex-card footer { margin-top: 1.1rem; padding-top: .9rem; border-top: 1px solid var(--line); }
   .gated { font-size: .9rem; }

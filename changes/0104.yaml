@@ -1,0 +1,15 @@
+id: "0104"
+said: our initial product OS release is to produce an execution packet for a coding agent to autonomously take end-to-end, implementing all the tests described. product os at this point should only generate what the testing requirements are, with an identifier. that's the current boundary
+at: 2026-10-07
+kind: concept
+reaches:
+  model: 'kind: "requirement"'
+  derive: requirementHash
+  surface: "#shows#"
+  check: requirement-names-no-statement
+  instruct: shows#<id>
+  pin: every testing requirement in a packet carries its own ref
+waived:
+  generate: |
+    Nothing in `generate` is reached, and the reason is the boundary itself. Peter set it at "only generate what the testing requirements ARE, with an identifier" — so ProductOS compiles the list and stops. No test file is written, nothing lands in a consumer repo, and no corpus generator produces a requirement: an author writes the criterion and the packet renders it. The one thing this change does produce is compiled by `packet.ts`, which `jobs.ts` classifies under `surface` rather than `generate`, correctly — the packet is a surface somebody reads. ⛔ If the boundary later moves to writing test stubs into a repo, that is a `generator` change and this waiver is the record of what it would undo.
+closed: 2026-10-07

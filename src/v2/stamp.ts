@@ -51,6 +51,32 @@ export function canon(v: unknown): string {
     .join(",")}}`;
 }
 
+/**
+ * One criterion's own hash, so a requirement handed to a builder can be found stale.
+ *
+ * ⛔ PER-CRITERION, ALONGSIDE THE PER-SET HASH AND NOT INSTEAD OF IT. `Covered.criteria`
+ * hashes the whole set deliberately: it answers "has anything about what must be
+ * demonstrated here moved since a human agreed", and collapsing it to a per-item hash would
+ * make adding a criterion indistinguishable from rewording one. That is the question a STAMP
+ * asks.
+ *
+ * A builder asks a different question about the same words — *which of the thirty-one
+ * requirements I implemented tests for is no longer the requirement I implemented* — and the
+ * set hash cannot answer it. Reword one `then` and all thirty-one look stale; nobody can tell
+ * which test to revisit, so in practice nobody revisits any.
+ *
+ * Peter: *"product os at this point should only generate what the testing requirements are,
+ * with an identifier. that's the current boundary"*. The id says WHICH requirement; this says
+ * which VERSION of it, and without the second half an identifier cannot survive truth moving.
+ *
+ * ⛔ Everything in the criterion goes in, including `example` and `level`. A criterion that
+ * stops being an illustration and becomes the rule is a different requirement, and a test
+ * written at one altitude does not demonstrate the same thing at another.
+ */
+export function requirementHash(criterion: unknown): string {
+  return h(canon(criterion));
+}
+
 export interface Covered {
   slots: string;
   criteria: string;

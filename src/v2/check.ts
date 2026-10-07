@@ -10,7 +10,7 @@
  *   note     worth a person's attention; never blocks
  *   shape    an observation about proportions, which no single page can show
  */
-import { SLOTS, SLOT_ASKS, statements, saysText, NOT_A_DOCUMENT, type SlotName, type Says } from "./schema.js";
+import { SLOTS, SLOT_ASKS, DEMONSTRABLE_SLOTS, owesDemonstration, statements, saysText, NOT_A_DOCUMENT, type SlotName, type Says } from "./schema.js";
 import {
   DOWNSTREAM_OF_ANSWER,
   answerIsUnknown,
@@ -1008,6 +1008,38 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
          * it is to read every criterion. It is a note, not a refusal — naming an example value
          * is legitimate — but a person should see how many of them a corpus is leaning on.
          */
+        /**
+         * ---- a requirement on a slot saying several things, naming none of them ----
+         *
+         * ⛔ `of` WAS OPTIONAL, CHECKED BY NOTHING, AND DROPPED BY THE PACKET. Its own schema
+         * comment says v1 lost this field in the migration and that flattening thirty-one cases
+         * onto one statement showed a reviewer "the evidence for all thirteen" claims. The field
+         * came back; nothing ever made an author write it, and `packet.ts` rendered `c.slot`
+         * instead — so the defect it exists to prevent was reproduced in the artifact a builder
+         * implements, with the fix sitting unused in the schema.
+         *
+         * A note rather than a refusal: on a slot saying one thing `of` is correctly absent, and
+         * the packet now marks the ambiguity in place, so this is here to be counted rather than
+         * to block. ⛔ But it is counted — a slot saying eleven things with one criterion on it
+         * reads as demonstrated and is a tenth demonstrated.
+         */
+        const said = ex.slots[c.slot] ? statements(ex.slots[c.slot]!.says) : [];
+        if (said.length > 1 && !c.of)
+          add({
+            severity: "note",
+            kind: "requirement-names-no-statement",
+            where: `${ref}#shows#${c.id}`,
+            what: `demonstrates \`${c.slot}\`, which says ${said.length} things, and names which with no \`of\``,
+            fix: `add \`of: <statement id>\` — one of ${said.map((s) => s.id).join(", ")}. Without it this reads as demonstrating the whole slot, and the statements nothing covers are invisible rather than missing`,
+          });
+        if (c.of && !said.some((s) => s.id === c.of))
+          add({
+            severity: "refuse",
+            kind: "requirement-points-at-nothing",
+            where: `${ref}#shows#${c.id}`,
+            what: `names \`${c.of}\`, and \`${c.slot}\` says ${said.length ? `only ${said.map((s) => s.id).join(", ")}` : "nothing with an id"}`,
+            fix: "one of the two is wrong — fix the pointer, or the statement id it was written against. ⛔ A builder handed this cannot tell which, and must not guess",
+          });
         if (c.example)
           add({
             severity: "note",
@@ -1103,13 +1135,14 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
        * arriving by the back door, and it is the same mistake the `PartRole` comment
        * records being made one layer down, to screen parts.
        */
-      const DEMONSTRABLE: SlotName[] = ["answer", "refuses", "fails", "again", "at_once"];
-      for (const slot of DEMONSTRABLE) {
-        const fill = ex.slots[slot];
-        if (!fill || fill.standing.kind !== "stated") continue;
-        if (fill.none || fill.cannot_fail) continue;
-        // Nothing to demonstrate where the refusal IS "nothing happens and nothing is told".
-        if (slot === "refuses" && (fill.outcomes ?? []).every((o) => /^nothing\b/i.test(o.told))) continue;
+      /**
+       * ⛔ The list and its three exclusions now live in `schema.ts` as `owesDemonstration`,
+       * because the packet asks the same question to tell a builder how much of the
+       * requirement list is missing. Two copies would let the packet call the set closed
+       * while this says it is not, on one corpus in one run.
+       */
+      for (const slot of DEMONSTRABLE_SLOTS) {
+        if (!owesDemonstration(slot, ex.slots[slot])) continue;
         if (!ex.criteria.some((c) => c.slot === slot) && !inherited.get(`${ref}#${slot}`))
           add({
             severity: "note",

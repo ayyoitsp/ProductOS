@@ -579,26 +579,54 @@ parse refusal, and a session authoring from this file produced corpora where
 
 ```yaml
 criteria:
-  - slot: answer                             # ⛔ which slot this demonstrates. Required
+  - id: 1                                    # ⛔ required, and the address a builder is handed
+    slot: answer                             # ⛔ which slot this demonstrates. Required
     of: a-deal-with-no-size-shows-a-dash     # which STATEMENT, where the slot says several things
     given: a multifamily deal that has never been sized
     when: the list renders with the loan column shown
     then: its loan-amount cell reads as a dash
     level: e2e                               # unit | integration | api | e2e
-    example: |                               # ⛔ an illustration, never the demonstration
-      Northgate, created today, never sized
     steps: |                                 # freeform, where given/when/then is the wrong shape
       1. open the list with no filters
+  - id: 2
+    slot: answer
+    given: Northgate, created today, never sized   # ⛔ a literal, so it is PRICED below
+    when: the list renders
+    then: its loan-amount cell reads as a dash
+    example:                                 # ⛔ an illustration, never the demonstration
+      because: the dash is the rule for any unsized deal; Northgate is one we happen to have
+      by: peter
+      at: 2026-10-07
 ```
 
 ⛔ **`then` is the whole thing.** `given` and `when` set it up; `then` is what somebody could observe
 being false. A criterion with no `then` demonstrates nothing.
 
-⛔ **`of:` when a slot says several things.** Without it a criterion attaches to the slot, and a slot
-saying eleven things reads as fully demonstrated by one criterion — the exact failure `of` exists to
-fix.
+⛔ **`id:` is required, and it is the address somebody builds against.** Until this line was
+written, the example here omitted it — and `Criterion` has no default for `id`, so the documented
+shape was a parse refusal in the same block whose own preamble is about a documented parse refusal.
 
-⛔ **`example` is not evidence.** `check` refuses a slot whose only criterion leans on one: an
+The packet compiles every criterion as **`<scope>#<exchange>#shows#<id>`** with the hash of its own
+words beside it, and that pair is what a coding agent carries into whatever demonstrates it. Two
+consequences, and both are about the id rather than the sentence:
+
+- ⛔ **Ids are stable. Renaming one is a new requirement**, not a renamed one — whatever was
+  demonstrating the old id is now demonstrating nothing, silently.
+- ⛔ **Numbers are fine and need not be contiguous.** Do not renumber to tidy up: every number you
+  move is a test somewhere pointing at a sentence it was not written for.
+
+⛔ **`of:` when a slot says several things, and `check` counts it now.** Without it a criterion
+attaches to the whole slot, and a slot saying eleven things reads as fully demonstrated by one
+criterion — the exact failure `of` exists to fix. A criterion with no `of` on a multi-statement slot
+is a `requirement-names-no-statement` note, the packet marks it in place, and the statements nothing
+reaches are listed under the requirement list rather than being invisible. ⛔ An `of` naming a
+statement that does not exist is **refused**: a builder handed that cannot tell which of the two is
+wrong and must not guess.
+
+⛔ **`example` is not evidence, and it is priced.** It is an object owing `because` (at least 30
+characters saying why the literal here is the example and not the rule), `by` and `at` — not a bare
+string, and not `true`. Until this line was written the block above taught the bare-string form,
+which `.strict()` rejects outright. `check` refuses a slot whose only criterion leans on one: an
 example shows what it might look like; a demonstration says what must be true.
 
 ### ⛔ A slot that says several things

@@ -89,8 +89,16 @@ const SEGMENT = "[a-z0-9][a-z0-9_-]*";
 export const PLACEHOLDER_TEXT = /^(tbd|to ?be ?decided|not ?yet ?decided|unclear|unknown|n\/?a|todo|\?+|-+)$/i;
 
 export const REF_PATTERN = new RegExp(`^${SEGMENT}(#${SEGMENT}){0,3}$`);
+/**
+ * ⛔ `<case>` IS A REFUSAL OR A STATEMENT, NEVER A TEST CASE, AND THE WORD HAS MISLED ONCE.
+ *
+ * It reads like a test case, so the first attempt at addressing a testing requirement spelled it
+ * `<scope>#<exchange>#<slot>#<case>` — which `resolveRef` answers by finding a named refusal, then
+ * a statement, and never a criterion. One address, three meanings, resolved by whichever branch
+ * matched first. A requirement has its own grain for that reason.
+ */
 export const REF_MESSAGE =
-  "a reference is a rule id, or <scope>#<exchange>[#<slot>[#<case>]] — nothing else addresses anything";
+  "a reference is a rule id, <scope>#<exchange>[#<slot>[#<case>]] where <case> is a named refusal or one statement, or <scope>#<exchange>#shows#<id> for one testing requirement — nothing else addresses anything";
 
 
 /**
@@ -845,6 +853,42 @@ export const SlotFill = z
     }
   });
 export type SlotFill = z.infer<typeof SlotFill>;
+
+/**
+ * The five slots that owe a demonstration, and the three reasons one of them does not.
+ *
+ * ⛔ ONE HOME, BECAUSE TWO READERS ASK THE SAME QUESTION AND MUST NOT DISAGREE. `check` asks it
+ * to report a slot nothing demonstrates; the packet asks it to tell a builder how much of the
+ * list is missing. Written twice, the two answers drift and the packet says the set is closed
+ * while `check` says it is not — on the same corpus, in the same run.
+ *
+ * ⛔ NOT `may` OR `with`. The long note in `check.ts` records what happened when they were
+ * included: it fired on 350 of 600 slots, its own fix text offered a field that did not exist,
+ * and the only way to silence it was filler which then landed in the packet as something a
+ * builder implements. `with: "Which kid."` is exercised by every criterion on the exchange.
+ */
+export const DEMONSTRABLE_SLOTS: readonly SlotName[] = [
+  "answer",
+  "refuses",
+  "fails",
+  "again",
+  "at_once",
+];
+
+/**
+ * Whether this slot, as filled, owes a given/when/then of its own.
+ *
+ * ⛔ The caller still has to ask whether an org-wide rule demonstrates it — that needs the
+ * resolved corpus, which this deliberately does not take.
+ */
+export function owesDemonstration(slot: SlotName, fill: SlotFill | undefined): boolean {
+  if (!fill || fill.standing.kind !== "stated") return false;
+  if (fill.none || fill.cannot_fail) return false;
+  if (!DEMONSTRABLE_SLOTS.includes(slot)) return false;
+  // Nothing to demonstrate where the refusal IS "nothing happens and nothing is told".
+  if (slot === "refuses" && (fill.outcomes ?? []).every((o) => /^nothing\b/i.test(o.told))) return false;
+  return true;
+}
 
 // ---------------------------------------------------------------------------
 // Criterion — first-class and separately hashed, which is the whole point.

@@ -22,7 +22,8 @@
  *   <scope>                                   a container, or a scope with exchanges
  *   <scope>#<exchange>                        one ask — the unit a human accepts
  *   <scope>#<exchange>#<slot>                 one of the seven
- *   <scope>#<exchange>#<slot>#<case>          one named refusal inside a slot
+ *   <scope>#<exchange>#<slot>#<case>          one named refusal inside a slot, or one statement
+ *   <scope>#<exchange>#shows#<id>             one testing requirement — a criterion
  *   <rule-id>                                 a rule, which has no `#`
  */
 import { SLOTS, type SlotName, type Standing , statements} from "./schema.js";
@@ -51,6 +52,26 @@ export type Ref =
    * reports the collision rather than letting a ref silently mean the other thing.
    */
   | { kind: "statement"; id: string; scope: string; exchange: string; slot: SlotName; name: string }
+  /**
+   * One testing requirement — a criterion, addressed as `<scope>#<exchange>#shows#<id>`.
+   *
+   * ⛔ A FIXED WORD IN THE SLOT POSITION, BECAUSE THE FOURTH SEGMENT IS ALREADY TWO THINGS.
+   *
+   * Peter: *"product os at this point should only generate what the testing requirements are, with
+   * an identifier. that's the current boundary"*. The obvious spelling was
+   * `<scope>#<exchange>#<slot>#<case>` — and `REF_MESSAGE` even calls that last segment `<case>`,
+   * which reads like a test case. It is not: it resolves a named refusal first and a statement
+   * second, and a criterion id is neither. Handing a builder `money#record-earning#answer#1` would
+   * have meant one address with three meanings, resolved by whichever branch matched first.
+   *
+   * So a requirement gets its own grain, with `shows` where a slot name would be — the same device
+   * `<scope>#why|risk|measure|instrument#<id>` already uses, and no slot is named `shows`. The
+   * criterion carries its own `slot`, so nothing is lost by leaving it out of the address.
+   *
+   * ⛔ Resolvable, not merely printable. An identifier nothing can look up is half an identifier:
+   * this is what lets a person park, question or rule on one requirement handed to a builder.
+   */
+  | { kind: "requirement"; id: string; scope: string; exchange: string; criterion: string; slot: SlotName }
   /**
    * One section of a product-wide document — a goal, a principle, a persona, a non-goal, a decision.
    *
@@ -213,6 +234,24 @@ export function resolveRef(corpus: Corpus, raw: string): Resolved | { error: str
   if (!ex) return { error: `no exchange "${exId}" in ${scopeId}` };
   if (parts.length === 2)
     return { ref: { kind: "exchange", id: raw, scope: scopeId!, exchange: exId! }, unsettled: false };
+  /**
+   * ⛔ Before the slot grammar, because `shows` is a fixed word and not a slot — so there is no
+   * ambiguity to resolve, exactly as for a framing card.
+   */
+  if (parts.length === 4 && slotName === "shows") {
+    const c = ex.criteria.find((x) => x.id === caseName);
+    if (!c)
+      return {
+        error: ex.criteria.length
+          ? `${exId} has no requirement "${caseName}" — it has ${ex.criteria.map((x) => x.id).join(", ")}`
+          : `${exId} has no testing requirements at all`,
+      };
+    /** A requirement carries no standing of its own: it demonstrates a slot, which has one. */
+    return {
+      ref: { kind: "requirement", id: raw, scope: scopeId!, exchange: exId!, criterion: c.id, slot: c.slot },
+      unsettled: false,
+    };
+  }
   if (!SLOTS.includes(slotName as SlotName))
     return { error: `"${slotName}" is not a slot — it is one of ${SLOTS.join(", ")}` };
   const fill = ex.slots[slotName as SlotName];
