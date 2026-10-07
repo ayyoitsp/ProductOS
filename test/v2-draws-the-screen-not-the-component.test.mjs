@@ -276,8 +276,15 @@ test("a value the drawing cannot read says what it is", () => {
   const out = drawFromRoute(path.join(root, "Page.tsx"), {});
   assert.match(out.html, /project name/, "a field the drawing cannot read stayed blocked out");
   assert.doesNotMatch(out.html, /productos-unknown[^>]*projectHints/, "a nameable field still wears the warning stripes");
-  /** ⛔ A count reads as a count: "length Matching Folders Found" was the field name in the sentence. */
-  assert.match(out.html, /class="productos-slot"[^>]*>n</, "a count was named after its field instead of standing in as a number");
+  /**
+   * ⛔ A COUNT SHOWS A NUMBER, AND THE LETTER `n` WAS A HALF-MEASURE.
+   *
+   * This asserted `n` first. Peter, looking at the deals list: *"what is up with 'n deals', or page
+   * 'n of n' ... we should be showing real values here"* — and the inconsistency was ours: the
+   * drawing invents a name and a sum without hesitating, then refused to invent a number, so every
+   * count sat in the middle of an otherwise finished sentence looking unbuilt.
+   */
+  assert.match(out.html, /class="productos-slot"[^>]*>184</, "a count did not stand in as a number");
   /** ⛔ And an expression with no name of its own is still marked rather than guessed at. */
   assert.match(out.html, /productos-unknown/, "an unnameable expression was given a name anyway");
   fs.rmSync(root, { recursive: true, force: true });
@@ -331,7 +338,15 @@ test("a value standing in a sentence is content, not a slot for a caller", () =>
      </div>) }`
   );
   const out = drawFromRoute(path.join(root, "Page.tsx"), {});
-  assert.match(out.html, /Page\s*<span[^>]*>n<\/span>\s*of\s*<span[^>]*>n<\/span>/, "the pager lost its numbers");
+  /**
+   * ⛔ AND THE TWO NUMBERS IN A PAGER ARE DIFFERENT QUANTITIES. "Page 1 of 12" — where you are, and
+   * how many there are. One sample for both would read "Page 184 of 184", which no product says.
+   */
+  assert.match(
+    out.html,
+    /Page\s*<span[^>]*>1<\/span>\s*of\s*<span[^>]*>12<\/span>/,
+    "the pager does not read as a pager"
+  );
   /** ⛔ And a lone child is still read as a slot, which is what kept those screens clean. */
   assert.doesNotMatch(out.html, /<section>\s*<span class="productos-(slot|unknown)"/, "a caller's slot was marked as missing content");
   fs.rmSync(root, { recursive: true, force: true });

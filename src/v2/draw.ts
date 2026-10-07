@@ -877,6 +877,28 @@ function emit(node: ts.Node, ctx: Ctx): string {
       (ts.isIdentifier(e) && e.text === "undefined")
     )
       return "";
+    /**
+     * ⛔ A PROP THAT HOLDS AN ELEMENT IS NOT A WORD, AND ITS NAME IS NOT CONTENT.
+     *
+     * Peter: *"has a bunch of {icon} placeholders.. whta hte heck?"* — thirty of them on one
+     * screen, every single one the literal word "icon".
+     *
+     * `{icon}` is a hole a caller fills with markup. Alone in an element the slot rule below
+     * already dropped it; standing beside text it looked like content, got named, and the name
+     * went onto the screen. A product never says the word "icon" — it shows one — so where the
+     * call site gave nothing to show, the right drawing is nothing.
+     *
+     * ⛔ ABOVE THE ROW BRANCH, NOT BELOW IT. Written below, it never ran for the case that
+     * produced it: these sat inside a mapped row, so the sampler and the row's own naming
+     * answered first and the word went onto the screen thirty times anyway. Second time this
+     * exact ordering mistake has been made in this function.
+     *
+     * ⛔ ONLY WHERE NOTHING WAS BOUND. `ctx.props` is checked first, further up: a caller that
+     * passed a real icon has already had it resolved and rendered, and this never sees it.
+     */
+    const HOLDS_AN_ELEMENT =
+      /^(icon|children|actions|adornment|avatar|badge|prefix|suffix|trailing|leading|leftIcon|rightIcon|leftElement|rightElement|startIcon|endIcon|thumbnail|media|aside|footer|header|extra)$/i;
+    if (ts.isIdentifier(e) && HOLDS_AN_ELEMENT.test(e.text)) return "";
     const made = ctx.inRow ? sampleValue(hint, ctx.row ?? 0) : undefined;
     if (made !== undefined) {
       ctx.unresolved.push(hint);
@@ -1730,6 +1752,34 @@ export interface DrawnState {
  * ternary do not — there is no single word they are the name of, and inventing one would be a guess
  * wearing a label's clothes. Those keep the ellipsis.
  */
+/**
+ * ⛔ A COUNT SHOWS A NUMBER. THE LETTER `n` WAS A HALF-MEASURE AND IT READ AS ONE.
+ *
+ * Peter, looking at the deals list: *"what is up with 'n deals', or page 'n of n' ... we should be
+ * showing real values here"*. He is right, and the inconsistency was mine: this invents
+ * "Blue Harbour" for a name and "$12,400.00" for a sum without hesitating, then refused to invent
+ * a number — so every count on every screen read as an unfinished wireframe sitting in the middle
+ * of a sentence that was otherwise complete.
+ *
+ * ⛔ THE NUMBERS ARE CHOSEN SO THE SENTENCE READS TRUE. A pager is "Page 1 of 12", never
+ * "Page 184 of 184": the page you are on and the number of pages are different quantities, and one
+ * sample for both says something no product would say.
+ */
+const COUNT_SAMPLES: Array<[RegExp, string]> = [
+  /** Where you are in a pager — a reader is almost always on the first one. */
+  [/^page$|\bpage$/, "1"],
+  /** How many there are of pages. */
+  [/pages|pagecount|totalpages|pagetotal/, "12"],
+  /** Everything else that counts things. */
+  [/count|total|number|num|qty|quantity|size|length|index|offset|limit/, "184"],
+];
+
+function countOf(word: string): string {
+  const flat = word.replace(/\s+/g, "");
+  for (const [re, value] of COUNT_SAMPLES) if (re.test(flat)) return value;
+  return "184";
+}
+
 function slotName(hint: string): string {
   /**
    * ⛔ `total.toLocaleString()` IS THE FIELD `total`, FORMATTED. A no-argument method on the end is
@@ -1764,7 +1814,7 @@ function slotName(hint: string): string {
    * "n" is the conventional mark for a count nobody has yet and sits in the line as the number it
    * replaces — "Page n of n", "n deals". Only counting words; a score, a rate, a name keeps its own.
    */
-  if (/\b(page|pages|count|total|number|num|index|qty|quantity|offset|limit|size|length)\b/.test(last)) return "n";
+  if (/\b(page|pages|count|total|number|num|index|qty|quantity|offset|limit|size|length)\b/.test(last)) return countOf(last);
   if (parts.length > 1 && /^(name|title|label|value|text|count|total|id|type|status|date)$/.test(last)) {
     const owner = words(parts[parts.length - 2]!);
     if (owner && owner !== last) last = `${owner} ${last}`;
