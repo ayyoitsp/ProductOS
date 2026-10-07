@@ -1350,9 +1350,58 @@ export const STATES_FOR_ROLE: Record<z.infer<typeof PartRole>, PartStateKind[]> 
   region: ["loading", "empty", "failed"],
 };
 
+/**
+ * ⛔ THE SIX ABOVE ARE NOT THE LIST. THEY ARE THE PART OF IT EVERY PRODUCT HAS.
+ *
+ * Peter: *"Loading/busy shouldn't be hard coded. We should support lots of different states, right?
+ * And it can change anything on screen"*. Both halves are right, and a closed enum of six would be
+ * wrong for somebody inside a week — `locked`, `syncing`, `stale`, `over quota`, `pending approval`
+ * are real conditions no vocabulary we write here could have anticipated.
+ *
+ * ⛔ BUT OPEN IS NOT THE SAME AS FREE TEXT, and free text would quietly cost three things the closed
+ * set was buying:
+ *
+ *   1. The role constraint. "A button is never `empty`" is only checkable against a known word.
+ *   2. The cross-screen question — *does every field that can be invalid appear invalid in some
+ *      state?* — which needs comparable names. As free text, `invalid`, `error` and `bad` are three
+ *      unrelated conditions and the question cannot be asked at all.
+ *   3. One appearance. `invalid` looking the same on every screen is the whole gain over a
+ *      per-state screenshot, where it looked like whatever that component happened to render.
+ *
+ * So a condition is a word, and a word a product uses it must DECLARE — which is what `terms`
+ * already does on a scope, with `means` and the option of `members`. The six built-in ones are
+ * declared here instead, because every product has them and asking each corpus to define `loading`
+ * would be a chore with one right answer.
+ *
+ * ⛔ THE HONEST COST, SAID RATHER THAN HIDDEN: a declared condition cannot be role-checked, because
+ * nothing here knows whether `syncing` belongs on a button or a region. `check` reports an undeclared
+ * one; it cannot report a misplaced one. That is the price of the openness and it is worth paying.
+ */
+export const PartCondition = z.string().min(2).regex(/^[a-z][a-z0-9-]*$/, "a condition is one lower-case word, kebab-case — it is a word a product declares, not a sentence");
+export type PartCondition = z.infer<typeof PartCondition>;
+
+/** ⛔ The built-in conditions, as the same shape a declared one has. One table, so `check`, `draw`
+ *  and the page agree about what `loading` means without three copies of the sentence. */
+export const BUILT_IN_CONDITIONS: Record<PartStateKind, string> = {
+  busy: "it is doing the work that was asked of it, and the person is waiting",
+  disabled: "it cannot be used right now",
+  invalid: "what it holds is not acceptable, and it says so",
+  loading: "what goes in it has not arrived yet",
+  empty: "it arrived and there is nothing in it",
+  failed: "it could not get what it shows, which is a different sentence from having nothing",
+};
+
+export const isBuiltInCondition = (c: string): c is PartStateKind =>
+  Object.prototype.hasOwnProperty.call(BUILT_IN_CONDITIONS, c);
+
 export const PartState = z
   .object({
-    kind: PartStateKind,
+    /**
+     * ⛔ A WORD, NOT AN ENUM. One of the six built-ins, or a condition this product declared in its
+     * scope's `terms`. `check` refuses one that is neither, so a typo is still caught — openness
+     * costs the role check, not the spell check.
+     */
+    kind: PartCondition,
     /**
      * What the person is told while it is in this condition.
      *
@@ -1446,6 +1495,15 @@ export const Part = z
      */
     const allowed = STATES_FOR_ROLE[p.role];
     for (const st of p.states ?? []) {
+      /**
+       * ⛔ ONLY THE BUILT-INS CAN BE ROLE-CHECKED, AND THAT IS THE PRICE OF AN OPEN VOCABULARY.
+       *
+       * Nothing here knows whether `syncing` belongs on a button or a region, so refusing an
+       * unrecognised word would mean refusing every condition a product declares for itself — the
+       * exact thing Peter asked for when he said loading and busy should not be hard coded. What
+       * survives is the check on the six words whose meaning this file does own.
+       */
+      if (!isBuiltInCondition(st.kind)) continue;
       if (!allowed.includes(st.kind)) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
@@ -1697,14 +1755,57 @@ export const View = z.object({
            */
           sketch_html: z.string().min(1).optional(),
           /**
-           * Which parts are in which condition while this state holds.
+           * What is different about each part while this state holds.
            *
-           * ⛔ THIS IS THE STATE. One picture, a set of conditions applied to it — so "the borrower
+           * ⛔ THIS IS THE STATE. One picture, a set of changes applied to it — so "the borrower
            * field is invalid AND the Continue button is working" is one state rather than a
-           * screenshot nobody generated. The kinds a part may be in come from its role; see
-           * `STATES_FOR_ROLE`.
+           * screenshot nobody generated.
+           *
+           * ⛔ AND A STATE CHANGES ANYTHING, NOT ONLY A CONDITION. Peter: *"it can change anything
+           * on screen"*. The first cut could only say "this part is in that condition", so a
+           * loading state that also hides the toolbar, or an error state that swaps the heading,
+           * had nowhere to go — and the only way to express it was the whole second screenshot this
+           * work exists to remove.
+           *
+           * A bare word is the common case and stays short:
+           *
+           *     holds: { borrower: invalid, continue: busy }
+           *
+           * and the long form says the rest:
+           *
+           *     holds:
+           *       borrower: { in: invalid, says: "Borrower is required." }
+           *       toolbar:  { hidden: true }
+           *       heading:  { says: "Checking the folder…" }
            */
-          holds: z.record(z.string(), PartStateKind).default({}),
+          holds: z
+            .record(
+              z.string(),
+              z.union([
+                PartCondition,
+                z
+                  .object({
+                    /** The condition it is in, if any. */
+                    in: PartCondition.optional(),
+                    /** ⛔ Not on the screen at all in this state — which is not the same as disabled. */
+                    hidden: z.boolean().optional(),
+                    /**
+                     * Different words here, in this state only.
+                     *
+                     * ⛔ OVERRIDES THE PART'S OWN `says` RATHER THAN COMPETING WITH IT. A field's
+                     * `invalid` message is usually one sentence wherever it appears, which is why it
+                     * lives on the part; a state that needs different words is the exception and has
+                     * to be able to say so in one place rather than by declaring a second condition.
+                     */
+                    says: z.string().min(1).optional(),
+                  })
+                  .strict()
+                  .refine((h) => h.in || h.hidden !== undefined || h.says, {
+                    message: "this says nothing is different about the part — give it `in`, `hidden` or `says`",
+                  }),
+              ]),
+            )
+            .default({}),
         })
         .strict()
         .superRefine((st, ctx) => {

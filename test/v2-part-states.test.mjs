@@ -21,8 +21,17 @@
  */
 import test from "node:test";
 import assert from "node:assert/strict";
-import { Part, View, STATES_FOR_ROLE, PartStateKind } from "../dist/v2/schema.js";
-import { pictureOf, mark, saysFor, unknownParts, undrawnConditions, STATE_CSS } from "../dist/v2/states.js";
+import { Part, View, STATES_FOR_ROLE, PartStateKind, BUILT_IN_CONDITIONS } from "../dist/v2/schema.js";
+import {
+  pictureOf,
+  mark,
+  saysFor,
+  unknownParts,
+  undrawnConditions,
+  undeclaredConditions,
+  differenceOf,
+  STATE_CSS,
+} from "../dist/v2/states.js";
 import { browserOrSkip, openPage } from "./support/chrome.mjs";
 
 const { skip } = browserOrSkip();
@@ -59,6 +68,30 @@ test("the role decides which conditions are possible, so a corpus cannot describ
 
   const field = Part.safeParse({ id: "name", role: "entry", states: [{ kind: "busy", says: "x" }] });
   assert.equal(field.success, false, "a text box was allowed to be busy");
+
+  /**
+   * ⛔ AN OPEN CONDITION IS NOT ROLE-CHECKED, and that is the price of not hard-coding the list.
+   * Peter: *"Loading/busy shouldn't be hard coded. We should support lots of different states"*.
+   * Nothing here knows whether `syncing` belongs on a button or a region, so refusing an
+   * unrecognised word would mean refusing every condition a product declares for itself.
+   */
+  const declared = Part.safeParse({ id: "go", role: "commits", states: [{ kind: "syncing" }] });
+  assert.equal(
+    declared.success,
+    true,
+    `a product's own condition was refused: ${declared.success ? "" : declared.error.issues[0].message}`,
+  );
+
+  /** ⛔ Still a word, not a sentence — openness is not an invitation to write prose here. */
+  assert.equal(Part.safeParse({ id: "go", role: "commits", states: [{ kind: "is Syncing now" }] }).success, false);
+  assert.equal(Part.safeParse({ id: "go", role: "commits", states: [{ kind: "a" }] }).success, false);
+
+  /** ⛔ The built-in table and the built-in enum must not drift apart. */
+  assert.deepEqual(
+    Object.keys(BUILT_IN_CONDITIONS).sort(),
+    [...PartStateKind.options].sort(),
+    "the built-in table and the built-in enum disagree about what is built in",
+  );
 
   /** And every role's own vocabulary is accepted, or the table and the check disagree. */
   for (const [role, kinds] of Object.entries(STATES_FOR_ROLE)) {
@@ -196,7 +229,7 @@ test("it can say which conditions nothing has drawn — the question the old sha
   const drawn = [{ label: "Submitting", holds: { continue: "busy" } }];
   const undrawn = undrawnConditions(v, drawn);
 
-  const asKeys = undrawn.map((u) => `${u.part}/${u.kind}`).sort();
+  const asKeys = undrawn.map((u) => `${u.part}/${u.condition}`).sort();
   assert.deepEqual(asKeys, [
     "borrower/invalid",
     "continue/disabled",
@@ -278,4 +311,101 @@ test("the stylesheet says something about every kind, so none renders as nothing
       `"${kind}" has no appearance — a state using it would render as though nothing had happened`,
     );
   }
+});
+
+// ---------------------------------------------------------------------------
+// A state changes anything on screen, not only a condition
+// ---------------------------------------------------------------------------
+
+test("a state can hide a part, change its words, or both — not only put it in a condition", () => {
+  /**
+   * ⛔ THE HALF THE FIRST CUT COULD NOT SAY. Peter: *"it can change anything on screen"*. A loading
+   * state that also hides the toolbar, or an error state that swaps the heading, had nowhere to go
+   * — and the only way to express it was the whole second screenshot this work exists to remove.
+   */
+  const v = form();
+  const html = pictureOf(v, {
+    label: "Checking the folder",
+    holds: {
+      matches: "loading",
+      continue: { hidden: true },
+      borrower: { in: "invalid", says: "That sponsor is already on another deal." },
+    },
+  });
+
+  assert.match(html, /data-part="matches" data-in="loading"/);
+  assert.match(html, /data-part="continue" data-gone="true"/, "a hidden part was not marked");
+
+  /** ⛔ The state's own words win over the part's — the exception is sayable in one place. */
+  assert.match(html, /data-says="That sponsor is already on another deal\."/);
+  assert.ok(!html.includes("Borrower is required."), "the part's default message overrode the state's");
+});
+
+test("the short and long forms mean the same thing, read through one function", () => {
+  /**
+   * ⛔ Every caller asking "string or object?" is a caller that gets it wrong once, and the bug
+   * would be a state that silently changes nothing.
+   */
+  assert.deepEqual(differenceOf("invalid"), { in: "invalid" });
+  assert.deepEqual(differenceOf({ in: "busy" }), { in: "busy" });
+  assert.deepEqual(differenceOf({ hidden: true }), { hidden: true });
+
+  const v = form();
+  assert.equal(
+    pictureOf(v, { label: "a", holds: { borrower: "invalid" } }),
+    pictureOf(v, { label: "a", holds: { borrower: { in: "invalid" } } }),
+    "the two forms composed differently",
+  );
+});
+
+test("a difference that says nothing is different is refused", () => {
+  const got = View.safeParse({ id: "v", title: "V", states: [{ label: "Nothing", holds: { thing: {} } }] });
+  assert.equal(got.success, false, "a state claimed a part was different and said how in no way");
+  assert.match(JSON.stringify(got.error.issues), /says nothing is different/);
+});
+
+test("a product's own condition composes and is marked, without this file inventing a look", () => {
+  /**
+   * ⛔ WHAT IT MUST NOT DO IS GUESS. Deciding what `syncing` looks like would be this file making a
+   * design decision for somebody else's product; rendering it as nothing would be worse — a
+   * reviewer shown the default screen while being asked about a case it does not contain.
+   */
+  const base = form();
+  const v = {
+    ...base,
+    parts: [
+      ...base.parts,
+      {
+        id: "sync-badge",
+        role: "display",
+        label: "Sync",
+        states: [{ kind: "syncing" }, { kind: "stale", says: "Last synced 2 days ago." }],
+      },
+    ],
+    sketch_html: base.sketch_html + '<span data-part="sync-badge">Synced</span>',
+  };
+
+  assert.match(pictureOf(v, { label: "Syncing", holds: { "sync-badge": "syncing" } }), /data-part="sync-badge" data-in="syncing"/);
+
+  /** ⛔ The catch-all rule is what keeps it visible rather than invisible. */
+  assert.match(STATE_CSS, /\[data-in\]:not/, "a declared condition would render as nothing at all");
+
+  /** A declared condition carrying words still says them, through the same rule as a built-in. */
+  assert.match(pictureOf(v, { label: "Stale", holds: { "sync-badge": "stale" } }), /data-says="Last synced 2 days ago\."/);
+});
+
+test("a condition no part declares is reported, which is the spell check openness still allows", () => {
+  /**
+   * ⛔ Nothing can say `syncing` belongs on a region rather than a button, but it can say no part
+   * claims that condition at all — catching the typo that would otherwise compose to a mark no
+   * stylesheet mentions and render as though nothing had happened.
+   */
+  const v = form();
+  assert.deepEqual(undeclaredConditions(v, { label: "Typo", holds: { borrower: "invald" } }), [
+    { part: "borrower", condition: "invald" },
+  ]);
+  assert.deepEqual(undeclaredConditions(v, { label: "Fine", holds: { borrower: "invalid" } }), []);
+
+  /** ⛔ Hiding a part declares no condition, so it must not be reported as an undeclared one. */
+  assert.deepEqual(undeclaredConditions(v, { label: "Hidden", holds: { continue: { hidden: true } } }), []);
 });
