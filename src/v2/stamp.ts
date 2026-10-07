@@ -559,3 +559,54 @@ export function decidedFor(corpus: Corpus, target: string): { by: string; at: st
   const last = landed[landed.length - 1];
   return last ? { by: last.by, at: last.at } : undefined;
 }
+
+/**
+ * What changed between the words somebody agreed to and the words there now.
+ *
+ * ⛔ THE POINT OF RECORDING THE TEXT, AND THE REASON A STALE STAMP IS SURVIVABLE.
+ *
+ * Six of Peter's nine acceptances went stale in one day because a regeneration rewrote the view
+ * they were on. Going stale was correct — he agreed to particular words and the words moved. What
+ * was not survivable is that nothing could say WHAT moved: the verdict held two hashes, so
+ * re-confirming meant reconstructing from memory what he had agreed to in the first place.
+ *
+ * ⛔ IT DOES NOT RESTORE THE STAMP. A stamp that survived a reword would be consent attached to
+ * words nobody read. This makes re-confirming one glance instead of an archaeology exercise.
+ *
+ * Returns null when the verdict predates `covered_text` — honestly absent rather than an empty
+ * diff, because "nothing changed" and "we cannot tell" are different answers.
+ */
+export interface Reworded {
+  by: string;
+  at: string;
+  /** Lines that were there when it was agreed and are not there now. */
+  gone: string[];
+  /** Lines that are there now and were not when it was agreed. */
+  arrived: string[];
+}
+
+export function whatChangedSince(corpus: Corpus, target: string): Reworded | null {
+  const accepts = corpus.verdicts.filter((v) => v.kind === "accept" && v.target === target && v.via !== "agent");
+  if (!accepts.length) return null;
+  const latest = accepts[accepts.length - 1]!;
+  const was = latest.covered_text;
+  if (!was?.length) return null;
+  const now = coveredBy(corpus, target);
+  if (!now) return null;
+  const nowLines = (Array.isArray(now.reads) ? now.reads : []).map(String);
+
+  /**
+   * ⛔ A SET DIFFERENCE, NOT A LINE-BY-LINE COMPARISON. The hashed reading includes rule-supplied
+   * lines and criteria, which reorder for reasons that are not a reword — so comparing by position
+   * would report every line as changed the first time a rule arrived. What a reader needs is which
+   * sentences left and which appeared.
+   */
+  const nowSet = new Set(nowLines.map((l) => l.trim()).filter(Boolean));
+  const wasSet = new Set(was.map((l) => l.trim()).filter(Boolean));
+  return {
+    by: latest.by,
+    at: latest.at,
+    gone: [...wasSet].filter((l) => !nowSet.has(l)),
+    arrived: [...nowSet].filter((l) => !wasSet.has(l)),
+  };
+}

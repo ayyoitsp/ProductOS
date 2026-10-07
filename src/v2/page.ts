@@ -22,7 +22,7 @@ import { inferConnections, landingsFor, finishesFor, stateShowing } from "./conn
 import { inEffect, declined as declinedSteers } from "./steers.js";
 import { SLOTS, SLOT_ASKS_SHORT, statements, saysText, type SlotName, type Scope, type Steer, type View, type Part, type Says } from "./schema.js";
 import { gridFor, gateFor, actsFor, ruleHomes, stageOf, reachOf, type Grid, type Cell } from "./grid.js";
-import { stampFor, decidedFor } from "./stamp.js";
+import { stampFor, decidedFor, whatChangedSince } from "./stamp.js";
 import { confidenceOf, whyConfident, discrepancyFor } from "./confidence.js";
 import { wireParts } from "./wire.js";
 import { questionsFor, descendants, type Question } from "./settle.js";
@@ -1608,7 +1608,24 @@ function confidenceParts(corpus: Corpus, ref: string): { chips: string; why: str
    * Shown when there is something to say beyond "nobody confirmed it and nothing was read" — which
    * is most of a young corpus, and a reason repeated on three hundred rows is noise.
    */
-  const worthSaying = c.support.length > 0 || c.contained.length > 0 || c.inherited.length > 0 || !!c.stale || !!late;
+  /**
+   * ⛔ WHAT MOVED, NOT JUST THAT SOMETHING DID. A chip reading "changed since" tells a reviewer their
+   * acceptance is dead and nothing about what to do next. Six of Peter's nine acceptances went stale
+   * in a day because a regeneration reworded the view they were on, and re-confirming meant
+   * reconstructing from memory what he had agreed to. The diff is the whole difference between that
+   * and one glance.
+   */
+  const moved = c.stale ? whatChangedSince(corpus, ref) : null;
+  const worthSaying =
+    c.support.length > 0 || c.contained.length > 0 || c.inherited.length > 0 || !!c.stale || !!late;
+  const diff = moved
+    ? `<div class="moved"><p class="k">what changed since ${esc(moved.by)} agreed on ${esc(moved.at)}</p>${
+        moved.gone.map((l) => `<p class="gone">− ${esc(l)}</p>`).join("")
+      }${moved.arrived.map((l) => `<p class="came">+ ${esc(l)}</p>`).join("")}</div>`
+    : c.stale
+      ? `<p class="moved k">⛔ This was agreed before the words were recorded, so what changed cannot be shown.</p>`
+      : "";
+
   const why = worthSaying
     ? `<ul class="why">${whyConfident(corpus, ref)
         .map(
@@ -1618,7 +1635,7 @@ function confidenceParts(corpus: Corpus, ref: string): { chips: string; why: str
         .join("")}</ul>`
     : "";
 
-  return { chips: `${stampChip}${strengthChip}`, why };
+  return { chips: `${stampChip}${strengthChip}`, why: `${diff}${why}` };
 }
 
 function renderCard(
@@ -5895,6 +5912,15 @@ export const STYLE = `<style>
     font-size: .78rem; color: var(--dim); }
   .why li { list-style: none; margin: .12rem 0; }
   .why li.borrowed { color: var(--warn); }
+  /*
+   * What moved since somebody agreed. Shown rather than summarised, because "changed since" tells a
+   * reviewer their acceptance is dead and nothing about what to do next.
+   */
+  .moved { margin: .3rem 0 0; padding-left: .7rem; border-left: 2px solid var(--warn);
+    font-size: .78rem; }
+  .moved .k { color: var(--warn); margin: 0 0 .15rem; }
+  .moved .gone { color: var(--dim); text-decoration: line-through; margin: .1rem 0; }
+  .moved .came { color: var(--ink); margin: .1rem 0; }
   .row-acts { display: flex; gap: .15rem; justify-content: flex-end; }
   /** ⛔ One gesture, one meaning: the footers use the same icons as a row. */
   footer.beh-acts.icons { display: flex; gap: .25rem; margin: .5rem 0 0; }

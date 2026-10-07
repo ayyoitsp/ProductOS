@@ -14,7 +14,7 @@ import type http from "node:http";
 import { loadCorpus, corpusFiles } from "./load.js";
 import { renderScopePage, standalone } from "./page.js";
 import { perform, preview, payloadFrom, VIA, type Act, type Via } from "./acts.js";
-import { fileNote } from "./notes.js";
+import { closeNote, fileNote, replyToNote } from "./notes.js";
 import { styleOf } from "./appcss.js";
 import { watchLog, lineFor } from "./log.js";
 import { inbox, DEFAULT_LEASE_MS } from "./inbox.js";
@@ -152,6 +152,17 @@ export async function v2Route(req: http.IncomingMessage, res: http.ServerRespons
      * path at all, and a route added to the body alone is a route nothing routes to.
      */
     "/api/v2/thread",
+    /**
+     * ⛔ THE REPLY HALF OF THE TWO-WAY WINDOW, WHICH ONLY EXISTED FOR A DIRECTORY.
+     *
+     * `notes say` and `notes done` had no remote branch, no route here and no MCP tool for the
+     * first of them — so against a HOSTED instance the window Peter asked for was write-only. He
+     * could file a request on the page and the only place anybody could answer it was a chat window
+     * he is deliberately moving away from, which is the exact defect `/api/v2/thread` was added to
+     * close, left half-closed: the page could SHOW replies that nothing could WRITE.
+     */
+    "/api/v2/say",
+    "/api/v2/close",
   ];
   if (p !== "/v2" && !p.startsWith("/v2/") && !OURS.includes(p)) return false;
 
@@ -377,6 +388,67 @@ export async function v2Route(req: http.IncomingMessage, res: http.ServerRespons
       via: "page",
       at: new Date().toISOString().slice(0, 10),
     });
+    return json(res, r.ok ? { ok: true, said: r.said } : r, r.ok ? 200 : 422), true;
+  }
+
+  /**
+   * ⛔ ANSWERING WHERE THEY ARE STANDING, WITHOUT DECIDING IT IS FINISHED.
+   *
+   * `done` was the only thing that could be said back, and it ends the request — so a question, a
+   * progress line, or "this is a framework gap and here is why" had to be said somewhere else.
+   * That was fixed for a directory and not for the wire, which is the surface he actually reviews
+   * on.
+   *
+   * ⛔ `author`, NOT `relay`. A reply is this principal's own words and it claims nothing about
+   * what a person agreed to — so it is the same gate authoring anything else goes through, and
+   * deliberately NOT `mayRecord`: nothing here is consent, and routing it through the consent gate
+   * would have made an agent's answer look like a human's press.
+   */
+  if (req.method === "POST" && p === "/api/v2/say") {
+    const body = await readJson(req);
+    if (!who.scopes.includes("author"))
+      return (
+        json(
+          res,
+          {
+            ok: false,
+            why: "this token may not reply on a request",
+            detail: [`it holds: ${who.scopes.join(" · ") || "nothing"}`, "it needs `author`"],
+          },
+          403
+        ),
+        true
+      );
+    const by = typeof body.by === "string" && body.by.trim() ? body.by.trim() : who.actor;
+    const r = replyToNote(dir, String(body.note ?? ""), by, String(body.says ?? ""));
+    return json(res, r.ok ? { ok: true, said: r.said } : r, r.ok ? 200 : 422), true;
+  }
+
+  /**
+   * ⛔ AND CLOSING IT, WHICH IS THE ONLY THING THAT TAKES IT OFF THE QUEUE.
+   *
+   * Until a note is closed it comes back on every restart, which is the point — but with no route
+   * here, a session working a hosted corpus could author the change and never record that it had.
+   * The request would be re-delivered forever and the page would go on saying somebody is waiting.
+   *
+   * ⛔ The outcome is required by `closeNote`, not re-checked here. One refusal, one message.
+   */
+  if (req.method === "POST" && p === "/api/v2/close") {
+    const body = await readJson(req);
+    if (!who.scopes.includes("author"))
+      return (
+        json(
+          res,
+          {
+            ok: false,
+            why: "this token may not close a request",
+            detail: [`it holds: ${who.scopes.join(" · ") || "nothing"}`, "it needs `author`"],
+          },
+          403
+        ),
+        true
+      );
+    const r = closeNote(dir, String(body.note ?? ""), String(body.outcome ?? ""));
     return json(res, r.ok ? { ok: true, said: r.said } : r, r.ok ? 200 : 422), true;
   }
 

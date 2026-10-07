@@ -695,6 +695,30 @@ Proven by parsing the example that used to be here against `Reading` — three e
 `id` required, `basis.ref` required, `basis` has an unrecognized key `what`. The enum now carries
 the four kinds this document was already offering.
 
+### ⛔ Before you rewrite anything: `productos v2 accepted <scope>`
+
+```bash
+productos v2 accepted create-deal --at <corpus>
+```
+
+It prints the exact sentences somebody has agreed to. **Keep those words.**
+
+⛔ **Changing one ends the agreement silently.** Nobody is asked again and nothing announces it — the
+stamp simply stops counting, and the page starts reading "changed since" over a sentence a person
+had already approved. This is not a hypothetical:
+
+> Peter accepted six things on one view on 2026-10-01. A regeneration rewrote that view the next
+> day, and all six died. Not because anybody judged the wording wrong — because nothing told the
+> author those words were agreed. Two thirds of the validation in that corpus went dead in a day.
+
+⛔ **Rewording an agreed sentence is not a small edit, it is a withdrawal.** If a sentence genuinely
+must change — it says something false, or the product moved — change it and say so plainly in your
+report, so whoever agreed is asked again. What you must never do is reword it for style, for
+consistency with a sibling scope, or because you would have phrased it differently.
+
+⛔ **And never re-stamp it yourself to make the page green.** That attaches somebody's consent to
+words they never read, which is the one thing this whole model exists to prevent.
+
 ### ⛔ You read code to write this. Record what you read, or the scale is empty
 
 Every behaviour you write came from somewhere — a component, a test, a ticket, a sentence somebody

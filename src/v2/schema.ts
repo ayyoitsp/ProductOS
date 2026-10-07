@@ -2156,6 +2156,27 @@ export const Verdict = z
      */
     relayed_by: z.string().optional(),
     covers_slots: z.string().optional(),
+    /**
+     * The exact lines that were hashed, as they read when somebody agreed.
+     *
+     * ⛔ RECORDED BECAUSE THE WORDS WERE UNRECOVERABLE, AND SIX ACCEPTANCES DIED OF IT.
+     *
+     * Peter accepted six things on `create-deal#create-deal-form` on 2026-10-01. The next day a
+     * regeneration rewrote that view and every one went stale — correctly, because he had agreed to
+     * particular words and the words had changed. But the verdict kept only two hashes, so the
+     * sentence he actually agreed to was gone: there was no way to show him what moved, and
+     * re-confirming meant re-deriving the whole thing from scratch.
+     *
+     * ⛔ THIS DOES NOT KEEP THE ACCEPTANCE ALIVE, AND MUST NOT. A stamp that survived a reword would
+     * be a person's consent attached to words they never read — the exact laundering `canon` and the
+     * three stale states exist to prevent. What it buys is that re-confirming becomes one glance at
+     * a diff instead of an argument reconstructed from memory, and that a generator can be stopped
+     * BEFORE it rewords something agreed.
+     *
+     * Optional, because every verdict written before this exists without it, and a corpus must keep
+     * loading. Absent means "we cannot show you what changed", which is the state this fixes.
+     */
+    covered_text: z.array(z.string()).optional(),
     covers_criteria: z.string().optional(),
     // rule
     settles: z

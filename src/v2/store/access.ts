@@ -10,11 +10,11 @@
  * ⛔ THE SCOPE IS THE PROJECT, NOT THE OWNER. So this survives the owner model changing: an owning
  * group arriving above accounts later does not touch a line in here.
  */
-import { and, asc, eq, gt, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, gt, isNull, lt, sql } from "drizzle-orm";
 import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 import type { Refusal } from "../identity.js";
 import { authIsOff } from "./identity.js";
-import { documents, events, projectMembers, projects } from "./schema.js";
+import { documents, events, listening, projectMembers, projects } from "./schema.js";
 
 /** Any drizzle Postgres instance. ⛔ The driver is the caller's business — see `migrate.ts`. */
 export type Db = PgDatabase<PgQueryResultHKT, Record<string, unknown>, Record<string, never>>;
@@ -60,6 +60,20 @@ export interface ProjectStore {
 
   append(kind: string, payload?: Record<string, unknown>): Promise<number>;
   since(cursor: number, limit?: number): Promise<StoredEvent[]>;
+
+  /**
+   * Note that a session is alive, and say who has been recently.
+   *
+   * ⛔ ON THE STORE, BECAUSE THE DIRECTORY IS THROWN AWAY. `presence.ts` writes
+   * `events/sessions.json` beside the corpus; on this path the corpus is a temp directory deleted
+   * when the request ends, so every heartbeat was lost and `/api/v2/presence` answered `working:
+   * []` on every instance that had a database behind it — the only instances anybody reviews on.
+   *
+   * ⛔ IT LAPSES, IT IS NOT REVOKED. A listener killed mid-session must stop claiming to be there
+   * and nothing is going to run a shutdown hook for it, so `within` is the whole expiry model.
+   */
+  saw(session: string, at: Date): Promise<void>;
+  listening(withinMs: number): Promise<Array<{ session: string; at: string }>>;
 }
 
 export interface Reachable {
@@ -199,6 +213,29 @@ function projectStore(db: Db, projectId: string): ProjectStore {
         .where(and(eq(events.projectId, projectId), gt(events.seq, cursor)))
         .orderBy(asc(events.seq))
         .limit(limit);
+    },
+
+    /** ⛔ An upsert, so a long-lived listener is one row rather than a heartbeat per two minutes. */
+    async saw(session, at) {
+      if (!session.trim()) return;
+      await db
+        .insert(listening)
+        .values({ projectId, session, at })
+        .onConflictDoUpdate({ target: [listening.projectId, listening.session], set: { at } });
+    },
+
+    /**
+     * ⛔ THE DEAD ARE DELETED ON THE WAY PAST, so the table cannot grow without bound over a
+     * long-lived instance — the same reason `presence.ts` keeps only the living in its file.
+     */
+    async listening(withinMs) {
+      const floor = new Date(Date.now() - withinMs);
+      await db.delete(listening).where(and(eq(listening.projectId, projectId), lt(listening.at, floor)));
+      const rows = await db
+        .select({ session: listening.session, at: listening.at })
+        .from(listening)
+        .where(and(eq(listening.projectId, projectId), gt(listening.at, floor)));
+      return rows.map((r) => ({ session: r.session, at: r.at.toISOString() }));
     },
   };
 }

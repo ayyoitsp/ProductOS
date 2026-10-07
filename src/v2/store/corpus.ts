@@ -77,6 +77,38 @@ export function logLines(events: StoredEvent[]): string {
     .concat(events.length ? "\n" : "");
 }
 
+/**
+ * Presence, laid out where `presence.ts` already looks for it.
+ *
+ * ⛔ CARRIED BOTH WAYS, LIKE THE LOG AND FOR THE SAME REASON. The corpus a hosted request runs
+ * against is a temp directory deleted when the request ends. `inbox` reports a claiming read by
+ * writing this file, so without carrying it back out every heartbeat was written into a directory
+ * that was then removed — and `/api/v2/presence`, whose entire job is to say somebody is listening,
+ * answered that nobody was on every instance with a database behind it.
+ *
+ * ⛔ IT IS NOT A CORPUS DOCUMENT AND MUST NOT BECOME ONE. `.json`, outside `CORPUS_DIRS`: a
+ * `documents` row would put a heartbeat in markdown export and in a packet. Same argument the log
+ * already makes above.
+ */
+export const SESSIONS_FILE = path.join("events", "sessions.json");
+
+/** What the store knows, laid out so `working()` finds it. */
+export function writeSessions(root: string, who: Array<{ session: string; at: string }>): void {
+  const target = path.join(root, SESSIONS_FILE);
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.writeFileSync(target, JSON.stringify(who, null, 2), "utf-8");
+}
+
+/** Whatever the request recorded. ⛔ Absent or unreadable is "nobody", never a throw mid-request. */
+export function sessionsIn(root: string): Array<{ session: string; at: string }> {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(path.join(root, SESSIONS_FILE), "utf-8")) as Array<{ session: string; at: string }>;
+    return Array.isArray(parsed) ? parsed.filter((w) => w && typeof w.session === "string" && typeof w.at === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
 /** Lay the log out beside the corpus so `readLog` finds it. */
 export function writeLog(root: string, events: StoredEvent[]): number {
   const target = path.join(root, LOG_FILE);
