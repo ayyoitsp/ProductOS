@@ -1,0 +1,15 @@
+id: "0106"
+said: uh, who deleted the capability tree? those should flow from the product design. engineers should more or less handle the capabilities. capabilities are something engineers can/should agree on in the future.. yes, capabilities need to come back. same nested structure as product. these are general subsystems. we have an engineering role that shoudl be mapping product feature into subsystems and figure out where they belong. capabilities are like object oriented design. just designing the subsystems, roughly what they do. that's it. they shoudl be logically grouped into areas. they obviously nest, or cross reference other areas.
+at: 2026-10-07
+kind: concept
+reaches:
+  model: Capability
+  derive: capabilityHash
+  surface: renderSubsystems
+  check: a-capability-serves-only-other-machinery
+  instruct: decomposer
+  pin: the subsystems render as a nested tree a person can read
+waived:
+  generate: |
+    Nothing new generates, and this is the same mechanism `0090` waived it on — demonstrated rather than argued. AGENTS.md, the skill's routes and the installed agent files are all produced by walking the registries, so the role appeared in all three the moment it was declared and no generator changed a line: regenerating both documents produced the new role and the new route with `agents-doc.ts` untouched, and the two drift tests then went green on the regenerated files. ⛔ Arguable the day a capability has to be DRAWN — a subsystem diagram derived from `serves` and `uses` would be a real generator, and this waiver is the record of what that would add.
+closed: 2026-10-07

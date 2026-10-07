@@ -2064,6 +2064,129 @@ export const Scope = z.object({
 export type Scope = z.infer<typeof Scope>;
 
 // ---------------------------------------------------------------------------
+// Capability — the subsystems beneath the product, and roughly what each does.
+
+/**
+ * ⛔ RESTORED. A CLAUDE SESSION DELETED THIS AND NOBODY ASKED IT TO.
+ *
+ * v1 had a capability tree: subsystems, nesting to any depth, each offering named
+ * capabilities. Commit `3db154c` (2026-09-21) built v2 as a parallel track and did not carry
+ * it across — the model it lists is *"Scope · View · Exchange · Slot · Criterion · Rule ·
+ * Standing · Reading · Verdict"*, with no capability in it. There is no change record and no
+ * request from Peter. The comment on `depends_on` calling this *"the deleted capability
+ * tree"* is that same session describing its own deletion.
+ *
+ * ⛔ AND THE DELETION WAS INVISIBLE BECAUSE TWO THINGS COVERED FOR IT.
+ *
+ *  - `Exchange.asked_by: system` looks close enough to pass for a capability. It is not: a
+ *    system-asked exchange is machinery-shaped PRODUCT TRUTH, written by a product author and
+ *    agreed by a product person. A capability is engineering's answer to it.
+ *  - Change `0090` — *"let's add some engineering authors! they should be authoring the
+ *    capabilities anyways"* — added `machinist` and `instrumenter`, who write system-asked
+ *    exchanges. So the authors came back and the thing they were meant to author did not, one
+ *    day before this was noticed.
+ *
+ * ⛔ AND A JUDGE WAS ALREADY REVIEWING IT. `productos-architect` asks *"are these the right
+ * subsystems, do their boundaries hold"* and its instructions say *"The site has two halves:
+ * the product's user-facing features, and the subsystems beneath them."* It has been
+ * dispatched against half a site that does not exist. Same shape as `test-design` judging
+ * criteria nobody derives — a reviewer for a layer with no author is how a layer goes missing
+ * without a single check going red.
+ *
+ * Peter: *"capabilities are like object oriented design. just designing the subsystems,
+ * roughly what they do. that's it. they shoudl be logically grouped into areas. they
+ * obviously nest, or cross reference other areas."*
+ *
+ * ⛔ "ROUGHLY WHAT THEY DO. THAT'S IT" IS A SCHEMA CONSTRAINT, not a tone. There are no slots
+ * here, no criteria, no standing contract, and there must not be: the eight-slot skeleton
+ * exists because a product promise has to be falsifiable before anybody builds against it,
+ * and a subsystem sketch is the opposite kind of artefact. Precision about behaviour lives in
+ * product truth; this layer says what parts there are and what each is for. Anything that
+ * makes an engineer write a given/when/then here has misunderstood the layer.
+ */
+export const CapabilityOffering = z
+  .object({
+    id: z.string().regex(new RegExp(`^${SEGMENT}$`), "a capability id is one segment, kebab-case"),
+    /** Roughly what it does. One or two sentences — see the constraint above. */
+    does: z.string().min(10, "a capability nobody can read is not worth agreeing to"),
+    /**
+     * What this exists to serve — a product statement, or another capability.
+     *
+     * ⛔ REQUIRED, AND THIS IS THE WHOLE OF "FLOW FROM THE PRODUCT DESIGN". Peter: *"those
+     * should flow from the product design"*. A capability serving nothing is an engineer
+     * inventing scope, and it is the single finding the architect exists to make — so it is
+     * mechanical rather than left to a reviewer's patience.
+     *
+     * ⛔ REQUIRED IN THE SCHEMA RATHER THAN AT A GATE, which is the opposite of the call made
+     * for `happy_path`, and the difference is adoptability. `happy_path` could not be required
+     * because making it so would have refused every corpus that already existed, including the
+     * pristine seed. ⛔ NO CORPUS HAS A CAPABILITY AT ALL, so there is nothing to refuse and
+     * the usual argument for optional-and-gated does not apply. A layer born optional is a
+     * layer whose load-bearing field is empty everywhere by the time anybody notices.
+     *
+     * ⛔ ANOTHER CAPABILITY IS A LEGITIMATE TARGET, because a general subsystem is often two
+     * levels away from a feature — the clock serves the ledger, and the ledger serves the
+     * money. What `check` enforces is that following `serves` eventually reaches product
+     * truth: machinery that only ever serves machinery is machinery nobody asked for.
+     */
+    serves: z.array(z.string().regex(REF_PATTERN, REF_MESSAGE)).min(1),
+  })
+  .strict();
+export type CapabilityOffering = z.infer<typeof CapabilityOffering>;
+
+export const Capability = z
+  .object({
+    id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/, "subsystem ids are kebab-case slugs, not paths"),
+    title: z.string().min(2),
+    /**
+     * Roughly what this part of the system does.
+     *
+     * ⛔ THE FIELD v1 DID NOT HAVE, AND ITS ABSENCE IS THE RECORDED COMPLAINT. From
+     * `product.ts`: *"capabilities rendered as a flat list of operations — 'limit resolution',
+     * 'deliver a version' — with nothing anywhere saying what subsystem offered them or what it
+     * was for. A directory name is not a description."*
+     */
+    does: z.string().min(10),
+    /**
+     * Where this subsystem is filed — the same containment `Scope.in` uses, to any depth.
+     *
+     * Peter: *"same nested structure as product … they shoudl be logically grouped into
+     * areas. they obviously nest"*. A container subsystem offers nothing itself and groups
+     * those beneath it, exactly as a product container holds no exchanges.
+     */
+    in: z.string().optional(),
+    /**
+     * Other subsystems this one leans on. ⛔ Peter: *"or cross reference other areas"*.
+     *
+     * Distinct from a capability's `serves`, and the direction is the point: `serves` points UP
+     * at what required this, `uses` points ACROSS at what this needs. A single field would make
+     * a cycle between two subsystems indistinguishable from a layering.
+     */
+    uses: z.array(z.string()).default([]),
+    offers: z.array(CapabilityOffering).default([]),
+  })
+  .strict()
+  .superRefine((c, ctx) => {
+    if (c.in === c.id)
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["in"],
+        message: "a subsystem cannot be filed inside itself",
+      });
+    const seen = new Set<string>();
+    for (const o of c.offers) {
+      if (seen.has(o.id))
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["offers"],
+          message: `two capabilities here are called "${o.id}" — an id is what a reference and a future agreement point at`,
+        });
+      seen.add(o.id);
+    }
+  });
+export type Capability = z.infer<typeof Capability>;
+
+// ---------------------------------------------------------------------------
 // Reading — an observation. ⛔ Never truth.
 
 export const Reading = z.object({

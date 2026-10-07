@@ -142,6 +142,18 @@ const oneScope = (steers = []) => ({
   steers,
   access: [],
   rules: [],
+  /**
+   * ⛔ PRESENT AND EMPTY, NOT ABSENT. A hand-built corpus has to carry every list the real loader
+   * produces, and this one did not when `capabilities` landed — `renderNav` read
+   * `corpus.capabilities.length` and all five tests below died on *"Cannot read properties of
+   * undefined"*.
+   *
+   * ⛔ The fix belongs here rather than a `?.` in the renderer. `Corpus` documents the difference
+   * between a list that is empty and one that is missing — see the note on `style` — and an
+   * optional-by-accident field is exactly how a hosted corpus that failed to load its subsystems
+   * would render as a product that has none.
+   */
+  capabilities: [],
   broken: [],
 });
 

@@ -16,6 +16,7 @@ flowchart LR
     surveyor["surveyor<br/><i>What does this product consist of — which areas, and which features in each?</i>"]
     scoper["scoper<br/><i>What does this one feature promise, and where does somebody meet it?</i><br/>· per feature ·"]
     machinist["machinist<br/><i>What does this product do that nobody presses, and what sets it off?</i><br/>· per feature ·"]
+    decomposer["decomposer<br/><i>Which parts of the system does this feature need, and where do they belong?</i><br/>· per feature ·"]
     instrumenter["instrumenter<br/><i>What does this product record, and which question does each recording answer?</i><br/>· per feature ·"]
     designer["designer<br/><i>What should this screen look like, where no code renders it?</i><br/>· per screen no component renders ·"]
     evidencer["evidencer<br/><i>What already demonstrates each of these claims?</i>"]
@@ -61,7 +62,7 @@ flowchart LR
 |---|---|
 | **product** | `surveyor` ·writes· · `scoper` ·writes· · `newcomer` · `completeness` · `coherence` |
 | **design** | `designer` ·writes· · `rendered` · `design-critique` |
-| **engineering** | `machinist` ·writes· · `instrumenter` ·writes· · `truthfulness` · `architecture` · `buildability` |
+| **engineering** | `machinist` ·writes· · `decomposer` ·writes· · `instrumenter` ·writes· · `truthfulness` · `architecture` · `buildability` |
 | **quality** | `evidencer` ·writes· · `coverage` · `hand-authored` · `test-design` |
 | **the framework itself** | `consistency` · `can-the-model-say-it` |
 
@@ -94,6 +95,8 @@ flowchart TD
   scan_a_codebase --> scan_a_codebase_hand-authored["hand-authored"]
   scan_a_codebase -.->|keeps| scan_a_codebase_self(["the session — 4 things it may not hand off"])
   hand_it_to_the_builders(["hand it to the builders<br/><i>The engineering and QA read, once product and design have signed off</i>"])
+  hand_it_to_the_builders --> hand_it_to_the_builders_decomposer["decomposer ×N"]
+  hand_it_to_the_builders --> hand_it_to_the_builders_architecture["architecture"]
   hand_it_to_the_builders --> hand_it_to_the_builders_buildability["buildability"]
   hand_it_to_the_builders --> hand_it_to_the_builders_test-design["test-design"]
   hand_it_to_the_builders -.->|keeps| hand_it_to_the_builders_self(["the session — 3 things it may not hand off"])
@@ -171,6 +174,8 @@ The engineering and QA read, once product and design have signed off.
 ⛔ **Runs at stage: ready for review** — derived by stageOf, never stored.
 
 **Spawns, in order:**
+- `decomposer` *(engineering · writes)* — one per unit, in parallel — which parts of the system this needs, now that the promise it answers is agreed
+- `architecture` *(engineering · judges, writes nothing)* — whether those are the right subsystems, with boundaries that hold
 - `buildability` *(engineering · judges, writes nothing)* — whether somebody could start on Monday — the second tenet, read from a builder's seat
 - `test-design` *(quality · judges, writes nothing)* — whether each criterion would show its claim holding, rather than merely pass
 
@@ -267,6 +272,7 @@ Held three ways rather than one: no author declares `ask-the-human`, so no host 
 | **surveyor** | What does this product consist of — which areas, and which features in each? | runs once | the areas, as scopes; each feature as a scope inside its area, with a title and nothing else |
 | **scoper** | What does this one feature promise, and where does somebody meet it? | feature | the happy path — what the feature is FOR, first; views and their parts; person-asked exchanges, and what each slot says; criteria — what would show a sentence holding; `why`, `risks` and `measures` — why this is worth building, what could go wrong, and how anybody would know it worked; `terms` — what each word means in this feature; `question:` on anything it cannot resolve, with no claim beside it |
 | **machinist** | What does this product do that nobody presses, and what sets it off? | feature | system- and integrator-asked exchanges, and what each slot says; `when.triggered_by` — what sets it off, in product language; `when.follows` — the ask this one comes after, where something in the product sets it off; `depends_on` — what this rests on and does not itself behaviour; `question:` on anything it cannot resolve, with no claim beside it |
+| **decomposer** | Which parts of the system does this feature need, and where do they belong? | feature | subsystems — roughly what each does, and which area it is filed inside; `offers` — the capabilities a subsystem provides, each in a sentence; `serves` — the product statement each capability exists for, or the capability that needs it; `uses` — what a subsystem leans on across the tree, where containment cannot say it |
 | **instrumenter** | What does this product record, and which question does each recording answer? | feature | instruments — what gets recorded, in the product's own terms; `feeds` — which measure each recording answers, which is what stops either end being decorative |
 | **designer** | What should this screen look like, where no code renders it? | screen no component renders | a drawing for a screen no component renders, stamped with what it was designed from |
 | **evidencer** | What already demonstrates each of these claims? | runs once | evidence against criteria, each naming what it is and where it came from |
@@ -352,6 +358,34 @@ Held three ways rather than one: no author declares `ask-the-human`, so no host 
 - stamp anything walked, validated or accepted
 
 **Needs:** read-files · search-files · run-commands · write-corpus  ·  **Prompt:** `agents/productos-machinist.md`
+
+### `decomposer`
+
+**Asks:** Which parts of the system does this feature need, and where do they belong?
+
+**Exists because:** The capability tree was deleted from the model by a session nobody asked, and the only trace was a comment calling it deleted. `architecture` went on being dispatched against *"the subsystems beneath them"* and finding none — a judge reviewing half a site that did not exist, which is how a whole layer goes missing with every check green.
+
+**Spawned:** once per feature
+
+**Reads, in this order:**
+- what this feature promises, which is what the machinery is required to answer
+- the subsystems that already exist, because a new part for work an existing one does is the most expensive thing this role can produce
+- the code where there is code, to name the parts that are really there rather than the ones a diagram would have
+
+**Writes:**
+- subsystems — roughly what each does, and which area it is filed inside
+- `offers` — the capabilities a subsystem provides, each in a sentence
+- `serves` — the product statement each capability exists for, or the capability that needs it
+- `uses` — what a subsystem leans on across the tree, where containment cannot say it
+
+**⛔ Never:**
+- write or reword product truth — a capability answers a promise and never changes one. ⛔ A decomposition that needed the promise to be different is a note, not an edit
+- invent a capability nothing serves: if no statement requires it, say so rather than filing it, because a part nobody asked for is indistinguishable from layering one level up
+- name infrastructure — a queue, a table, a topic or a framework is how a part is built, not what it is
+- write a given/when/then here: precision about behaviour belongs to product truth, and this layer is a sketch of the parts
+- stamp anything walked, validated or accepted. ⛔ Capabilities become agreeable by engineers later; nothing agrees to one today
+
+**Needs:** read-files · search-files · run-commands · write-corpus  ·  **Prompt:** `agents/productos-decomposer.md`
 
 ### `instrumenter`
 

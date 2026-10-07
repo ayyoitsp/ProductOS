@@ -1,0 +1,13 @@
+id: "0105"
+said: there's no longer a standalone 'packet'. the packet is what we've defined in the product truth, the capabilities, and the test cases. a product person doesn't write a criterion - what even is this? this is old shit. the agents decide what kind of tests need to exist.
+at: 2026-10-07
+kind: concept
+reaches:
+  model: ""
+  derive: ""
+  generate: ""
+  surface: ""
+  check: ""
+  instruct: ""
+  pin: ""
+waived: {}

@@ -3042,6 +3042,160 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
       });
   }
 
+  /**
+   * ---- capabilities: the subsystems, and whether they flow from anything ----
+   *
+   * ⛔ THE LAYER THAT WENT MISSING WITHOUT A SINGLE CHECK GOING RED, so these are the checks that
+   * would have noticed. A Claude session dropped the capability tree in `3db154c` and the only
+   * trace was a comment calling it deleted; `productos-architect` went on being dispatched to
+   * review *"the subsystems beneath them"*, and found none, forever.
+   *
+   * ⛔ AND NOT ONE OF THESE JUDGES THE DECOMPOSITION. Whether these are the right subsystems with
+   * the right boundaries is the architect's question and must stay a person's, because it needs
+   * taste about a domain this cannot read. What is mechanical is narrower and worth having: does
+   * each part flow from something the product promised, does every reference land, and is anything
+   * the product promised unanswered by any part.
+   */
+  {
+    const subs = new Map(corpus.capabilities.map((c) => [c.capability.id, c.capability]));
+    /** Every capability ref, so `serves` can be followed to see if it ever reaches truth. */
+    const servesOf = new Map<string, string[]>();
+    for (const { capability } of corpus.capabilities)
+      for (const o of capability.offers) servesOf.set(`${capability.id}#offers#${o.id}`, o.serves);
+
+    for (const { capability: cap, file } of corpus.capabilities) {
+      /**
+       * ⛔ A one-segment id is already three kinds — a rule, a scope, now a subsystem — resolved by
+       * lookup order. The same answer the statement-vs-case collision got: the sharing is the
+       * finding, because a shared id loses silently in exactly one direction.
+       */
+      if (corpus.scopes.some((s) => s.scope.id === cap.id) || corpus.rules.some((r) => r.rule.id === cap.id))
+        add({
+          severity: "refuse",
+          kind: "a-subsystem-shares-an-id-with-something-else",
+          where: cap.id,
+          what: "a scope or a rule here is also called this, and a bare reference resolves to one of them",
+          fix: "rename one. ⛔ A reference does not become ambiguous, it becomes silently wrong — the loser is whichever the resolver checks second",
+        });
+      if (cap.in && !subs.has(cap.in))
+        add({
+          severity: "refuse",
+          kind: "a-subsystem-filed-inside-nothing",
+          where: cap.id,
+          what: `filed inside "${cap.in}", which is not a subsystem here`,
+          fix: "file it inside one that exists, or drop `in:` and let it sit at the top. A dangling parent means it appears in no tree at all",
+        });
+      for (const u of cap.uses)
+        if (!subs.has(u))
+          add({
+            severity: "refuse",
+            kind: "a-subsystem-uses-nothing-that-exists",
+            where: cap.id,
+            what: `leans on "${u}", which is not a subsystem here`,
+            fix: "name one that exists, or say what it is in its own right — a cross-reference to nothing is a dependency nobody can plan around",
+          });
+      /** ⛔ A cycle in the TREE. `uses` may legitimately cycle; containment may not. */
+      const seen = new Set<string>([cap.id]);
+      for (let at = cap.in; at; at = subs.get(at)?.in) {
+        if (seen.has(at)) {
+          add({
+            severity: "refuse",
+            kind: "subsystems-filed-inside-each-other",
+            where: cap.id,
+            what: `its containment comes back round to ${at}`,
+            fix: "containment is a tree — break the loop. `uses:` is where a genuine mutual dependency belongs",
+          });
+          break;
+        }
+        seen.add(at);
+      }
+      if (!cap.offers.length && !corpus.capabilities.some((x) => x.capability.in === cap.id))
+        add({
+          severity: "note",
+          kind: "a-subsystem-that-does-nothing-and-holds-nothing",
+          where: cap.id,
+          what: "offers no capability and nothing is filed inside it",
+          fix: "say what it offers, or file the subsystems it groups inside it. As it stands it is a name with a description",
+        });
+
+      for (const o of cap.offers) {
+        const ref = `${cap.id}#offers#${o.id}`;
+        for (const s of o.serves) {
+          const r = resolveRef(corpus, s);
+          if ("error" in r)
+            add({
+              severity: "refuse",
+              kind: "a-capability-serves-nothing-here",
+              where: ref,
+              what: `says it serves "${s}" — ${r.error}`,
+              fix: "name the product statement it exists for, or another capability that does. ⛔ This is the whole of `serves`: a capability flowing from nothing is scope an engineer invented",
+            });
+        }
+        /**
+         * ⛔ FOLLOWED, NOT JUST RESOLVED. The clock serves the ledger and the ledger serves the
+         * money, which is legitimate layering — so `serves` accepts another capability. What it
+         * must not accept is machinery that only ever serves machinery: follow the chain and it
+         * has to come out at product truth somewhere, or nobody asked for any of it.
+         */
+        const walked = new Set<string>([ref]);
+        let reachesTruth = false;
+        for (const queue = [...o.serves]; queue.length; ) {
+          const at = queue.shift()!;
+          if (walked.has(at)) continue;
+          walked.add(at);
+          const chain = servesOf.get(at);
+          // Not a capability ref, so it is a product ref — and it already resolved above.
+          if (!chain) {
+            if (!("error" in resolveRef(corpus, at))) reachesTruth = true;
+            continue;
+          }
+          queue.push(...chain);
+        }
+        if (o.serves.length && !reachesTruth)
+          add({
+            severity: "refuse",
+            kind: "a-capability-serves-only-other-machinery",
+            where: ref,
+            what: "following what it serves never arrives at anything the product promised",
+            fix: "somewhere down the chain a capability has to serve a product statement. ⛔ Machinery that only serves machinery is machinery nobody asked for, and this is the one shape layering and self-justification look identical from one level up",
+          });
+      }
+    }
+
+    /**
+     * ---- what the product promised and no part of the system answers ----
+     *
+     * ⛔ THE ARCHITECT'S OTHER HALF, and a note rather than a refusal. Its question is *"is anything
+     * missing that the product cannot work without"*, and this is the mechanical shadow of it: a
+     * stated behaviour with no capability serving it. A note, because a corpus whose capability
+     * layer has only just been started would otherwise refuse on every behaviour at once — and a
+     * refusal that fires everywhere teaches people to run with it switched off.
+     */
+    if (corpus.capabilities.length) {
+      const served = [
+        ...new Set(corpus.capabilities.flatMap((c) => c.capability.offers.flatMap((o) => o.serves))),
+      ];
+      const every = corpus.scopes.flatMap(({ scope }) => scope.exchanges.map((ex) => `${scope.id}#${ex.id}`));
+      const unanswered = every.filter((ref) => !served.some((s) => s === ref || s.startsWith(`${ref}#`)));
+      /**
+       * ⛔ ONE FINDING WITH A COUNT, not one per behaviour — the same shape
+       * `behaviours-with-nothing-behind-them` uses, and for the same reason. A corpus that has just
+       * started its capability layer has every behaviour unanswered, and 38 identical notes is a
+       * report nobody reads followed by a check nobody runs.
+       */
+      if (unanswered.length)
+        add({
+          severity: "note",
+          kind: "behaviours-no-subsystem-answers",
+          where: `${unanswered.length} of ${every.length}`,
+          what:
+            unanswered.slice(0, 5).join(", ") +
+            (unanswered.length > 5 ? `, +${unanswered.length - 5} more` : ""),
+          fix: "name the part of the system that answers each — a capability whose `serves` points at it. ⛔ Where the gap is real this is the architect's finding made early: a promise with no machinery behind it, before anybody starts building",
+        });
+    }
+  }
+
   // ---- readings ----
   for (const r of corpus.readings) {
     if (!r.bears_on) {

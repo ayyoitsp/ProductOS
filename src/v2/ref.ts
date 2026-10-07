@@ -24,6 +24,8 @@
  *   <scope>#<exchange>#<slot>                 one of the seven
  *   <scope>#<exchange>#<slot>#<case>          one named refusal inside a slot, or one statement
  *   <scope>#<exchange>#shows#<id>             one testing requirement — a criterion
+ *   <subsystem>                               one subsystem, which has no `#`
+ *   <subsystem>#offers#<id>                   one capability it offers
  *   <rule-id>                                 a rule, which has no `#`
  */
 import { SLOTS, type SlotName, type Standing , statements} from "./schema.js";
@@ -73,6 +75,20 @@ export type Ref =
    */
   | { kind: "requirement"; id: string; scope: string; exchange: string; criterion: string; slot: SlotName }
   /**
+   * A subsystem, and one capability it offers — `<subsystem>` and `<subsystem>#offers#<id>`.
+   *
+   * ⛔ ADDRESSABLE BEFORE ANYTHING AGREES TO ONE, WHICH IS THE POINT. Peter: *"capabilities are
+   * something engineers can/should agree on in the future"*. An agreement needs something to point
+   * at and something to go stale against, and retrofitting identity onto a layer people have
+   * already written is what cost six acceptances the week `covered_text` was added.
+   *
+   * ⛔ `#offers#` rather than the two-segment form, for the reason `#shows#` exists: the fourth
+   * segment of an exchange ref already means a refusal case and then a statement, and a fixed word
+   * in the middle is how this grammar keeps a new grain from inheriting two old meanings.
+   */
+  | { kind: "subsystem"; id: string; subsystem: string }
+  | { kind: "capability"; id: string; subsystem: string; capability: string }
+  /**
    * One section of a product-wide document — a goal, a principle, a persona, a non-goal, a decision.
    *
    * ⛔ NOTHING AT THE TOP OF A CORPUS COULD BE REFERRED TO, SO NOTHING THERE COULD BE AGREED TO.
@@ -117,6 +133,28 @@ export function resolveRef(corpus: Corpus, raw: string): Resolved | { error: str
    * exchange id, so there is no ambiguity to resolve — and checked before the charter because a
    * three-segment ref is never a document section.
    */
+  /**
+   * ⛔ `<subsystem>#offers#<id>`, BEFORE THE EXCHANGE GRAMMAR. A subsystem is not a scope, so
+   * without this the four-segment path reaches `no scope "ledger"` — an error about a thing nobody
+   * was talking about, which is exactly the symptom the happy-path branch below was added for.
+   */
+  if (parts.length === 3 && parts[1] === "offers") {
+    const sub = corpus.capabilities.find((x) => x.capability.id === parts[0]);
+    if (sub) {
+      const one = sub.capability.offers.find((o) => o.id === parts[2]);
+      if (!one)
+        return {
+          error: sub.capability.offers.length
+            ? `${parts[0]} offers no "${parts[2]}" — it offers ${sub.capability.offers.map((o) => o.id).join(", ")}`
+            : `${parts[0]} offers nothing — it is a container, and groups the subsystems filed inside it`,
+        };
+      /** ⛔ No standing. A capability is engineering's sketch, not a claim with a decision behind it. */
+      return {
+        ref: { kind: "capability", id: raw, subsystem: parts[0]!, capability: one.id },
+        unsettled: false,
+      };
+    }
+  }
   if (parts.length === 3 && ["why", "risk", "measure", "instrument"].includes(parts[1]!)) {
     const sc = corpus.scopes.find((x) => x.scope.id === parts[0]);
     if (sc) {
@@ -216,7 +254,16 @@ export function resolveRef(corpus: Corpus, raw: string): Resolved | { error: str
     }
     const scope = corpus.scopes.find((s) => s.scope.id === raw);
     if (scope) return { ref: { kind: "scope", id: raw, scope: raw }, unsettled: false };
-    return { error: `"${raw}" is not a rule or a scope here` };
+    /**
+     * ⛔ THIRD IN LINE, AND `check` REPORTS A COLLISION RATHER THAN THIS SILENTLY PREFERRING ONE.
+     *
+     * Rules and scopes were already two one-segment kinds resolved by lookup order; a subsystem is
+     * the third. The same answer the statement-vs-case collision got applies here: a shared id
+     * loses quietly in exactly one direction, so the id being shared is itself the finding.
+     */
+    const sub = corpus.capabilities.find((c) => c.capability.id === raw);
+    if (sub) return { ref: { kind: "subsystem", id: raw, subsystem: raw }, unsettled: false };
+    return { error: `"${raw}" is not a rule, a scope or a subsystem here` };
   }
   const [scopeId, exId, slotName, caseName] = parts;
   const scope = corpus.scopes.find((s) => s.scope.id === scopeId)?.scope;

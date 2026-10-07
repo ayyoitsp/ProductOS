@@ -1076,6 +1076,60 @@ export const AUTHORS: Author[] = [
     authors: true,
     prompt: "agents/productos-machinist.md",
   },
+  /**
+   * ⛔ THE HALF `0090` MISSED, AND THE REASON THE CAPABILITY TREE STAYED DELETED FOR A DAY LONGER.
+   *
+   * Peter asked for engineering authors — *"let's add some engineering authors! they should be
+   * authoring the capabilities anyways"* — and what landed was `machinist` and `instrumenter`,
+   * who write system-asked exchanges and instruments. Both are real roles and neither writes a
+   * capability, because there was no capability to write: a Claude session had dropped the tree
+   * from v2 eight days earlier. So the request was satisfied in form and the named artefact was
+   * still authored by nobody.
+   *
+   * ⛔ AND A JUDGE WAS ALREADY WAITING FOR IT. `architecture` asks *"are these the right
+   * subsystems, do their boundaries hold"* and its prompt says the site has two halves. One of
+   * them did not exist. A reviewer for a layer with no author is the shape this registry has now
+   * produced twice — the other is `test-design`, judging criteria nobody derives.
+   *
+   * Peter: *"we have an engineering role that shoudl be mapping product feature into subsystems
+   * and figure out where they belong"*.
+   */
+  {
+    name: "decomposer",
+    discipline: "engineering",
+    asks: "Which parts of the system does this feature need, and where do they belong?",
+    because:
+      "The capability tree was deleted from the model by a session nobody asked, and the only " +
+      "trace was a comment calling it deleted. `architecture` went on being dispatched against " +
+      "*\"the subsystems beneath them\"* and finding none — a judge reviewing half a site that did " +
+      "not exist, which is how a whole layer goes missing with every check green.",
+    reads: [
+      "what this feature promises, which is what the machinery is required to answer",
+      "the subsystems that already exist, because a new part for work an existing one does is the most expensive thing this role can produce",
+      "the code where there is code, to name the parts that are really there rather than the ones a diagram would have",
+    ],
+    writes: [
+      "subsystems — roughly what each does, and which area it is filed inside",
+      "`offers` — the capabilities a subsystem provides, each in a sentence",
+      /**
+       * ⛔ THE LOAD-BEARING ONE. Peter: *"those should flow from the product design"*. A capability
+       * with no `serves` is an engineer inventing scope, and the schema refuses it outright.
+       */
+      "`serves` — the product statement each capability exists for, or the capability that needs it",
+      "`uses` — what a subsystem leans on across the tree, where containment cannot say it",
+    ],
+    never: [
+      "write or reword product truth — a capability answers a promise and never changes one. ⛔ A decomposition that needed the promise to be different is a note, not an edit",
+      "invent a capability nothing serves: if no statement requires it, say so rather than filing it, because a part nobody asked for is indistinguishable from layering one level up",
+      "name infrastructure — a queue, a table, a topic or a framework is how a part is built, not what it is",
+      "write a given/when/then here: precision about behaviour belongs to product truth, and this layer is a sketch of the parts",
+      "stamp anything walked, validated or accepted. ⛔ Capabilities become agreeable by engineers later; nothing agrees to one today",
+    ],
+    needs: ["read-files", "search-files", "run-commands", "write-corpus"],
+    each: "feature",
+    authors: true,
+    prompt: "agents/productos-decomposer.md",
+  },
   {
     name: "instrumenter",
     discipline: "engineering",
@@ -1527,6 +1581,25 @@ export const SHIMS: Shim[] = [
     when: "ready for review · is this buildable · can we start on this · engineering review · would these tests prove anything",
     at: "ready for review",
     steps: [
+      /**
+       * ⛔ THE ONE ENGINEERING AUTHOR ON THIS SIDE OF THE GATE, AND THE GATE IS THE ARGUMENT.
+       *
+       * `machinist` and `instrumenter` write in `scope a feature`, before anybody agrees, because
+       * what they write IS product truth — "the day a standing allowance falls due" is a sentence
+       * somebody has to sign off, so it has to exist before the signing.
+       *
+       * A capability is the opposite: it is not truth, nobody agrees to it, and it exists to answer
+       * a promise that has already been agreed. Peter: *"those should flow from the product
+       * design"*. Decomposing a draft would mean designing the system twice — once for the shape
+       * that was proposed and again for the one that was agreed — and the first pass is the one a
+       * builder would find lying around.
+       *
+       * ⛔ It runs BEFORE the two judges below, because `architecture`'s question is whether these
+       * are the right subsystems and `buildability`'s is whether somebody could start on Monday.
+       * Both were being asked against a corpus whose machinery layer did not exist.
+       */
+      { role: "decomposer", fan: true, why: "which parts of the system this needs, now that the promise it answers is agreed" },
+      { role: "architecture", why: "whether those are the right subsystems, with boundaries that hold" },
       { role: "buildability", why: "whether somebody could start on Monday — the second tenet, read from a builder's seat" },
       { role: "test-design", why: "whether each criterion would show its claim holding, rather than merely pass" },
     ],

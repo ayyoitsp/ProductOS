@@ -67,6 +67,8 @@ You are the **orchestrator**, and you are the session — not a subagent. That i
 
 **Spawn, in order:**
 
+- `decomposer` *(engineering · writes)* — **one per unit, in parallel** — which parts of the system this needs, now that the promise it answers is agreed
+- `architecture` *(engineering · judges, writes nothing)* — whether those are the right subsystems, with boundaries that hold
 - `buildability` *(engineering · judges, writes nothing)* — whether somebody could start on Monday — the second tenet, read from a builder's seat
 - `test-design` *(quality · judges, writes nothing)* — whether each criterion would show its claim holding, rather than merely pass
 

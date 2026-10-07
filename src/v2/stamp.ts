@@ -77,6 +77,27 @@ export function requirementHash(criterion: unknown): string {
   return h(canon(criterion));
 }
 
+/**
+ * One capability's hash — what a future engineering agreement would be an agreement TO.
+ *
+ * ⛔ IT EXISTS BEFORE ANYTHING USES IT, DELIBERATELY. Peter: *"capabilities are something engineers
+ * can/should agree on in the future"*. Nothing agrees to one today and no verdict kind reaches
+ * this layer, so on the day it lands this computes a hash nobody reads.
+ *
+ * That is the cheap half. The expensive half is the alternative: six acceptances on
+ * `create-deal#create-deal-form` died because the verdict kept hashes but not the words, and
+ * re-confirming meant re-deriving the argument from memory. A layer that becomes agreeable later
+ * without being hashable now has the same ending — an engineer agrees to "the ledger", somebody
+ * reworks what the ledger does, and the agreement goes on standing for a sketch nobody read.
+ *
+ * ⛔ `serves` goes in. A capability that stops serving the money and starts serving the tasks is a
+ * different capability wearing the same name, which is the one change an engineer would most want
+ * to be asked about again.
+ */
+export function capabilityHash(capability: unknown): string {
+  return h(canon(capability));
+}
+
 export interface Covered {
   slots: string;
   criteria: string;
