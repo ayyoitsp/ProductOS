@@ -2597,6 +2597,23 @@ export const Steer = z
      * verb that writes one refuses it up front. A corpus already holding one degrades to a finding.
      */
     for: z.array(z.string()).default([]),
+    /**
+     * ⛔ WHETHER ANYBODY HAS LOOKED AT THIS YET — AND IT IS NOT A GATE.
+     *
+     * Peter, asked how a learned habit should land: *"In force immediately"*. So a habit noticed
+     * from what people did is steering authors before anybody has read it, which is the one real
+     * cost of that choice: *a constraint nobody chose* is the phrase this whole concept is
+     * organised against, and in-force-on-arrival is exactly how you get one.
+     *
+     * ⛔ So the answer is visibility, never permission. This records that somebody has SEEN it. It
+     * does not decide whether it steers — removing it would change what a page shows and nothing
+     * about what any author is told. Making it a gate would quietly turn the choice above back into
+     * the other option, which is the kind of reversal nobody would notice in a diff.
+     *
+     * Absent means new. Refusing it on a hand-written steer would be noise: somebody who typed one
+     * has by definition seen it, so this is only ever interesting on something learned.
+     */
+    acknowledged: dateish.optional(),
     at: dateish,
     /**
      * ⛔ TURNED OFF, AND WHY — BECAUSE OTHERWISE IT COMES STRAIGHT BACK.

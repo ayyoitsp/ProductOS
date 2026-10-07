@@ -805,7 +805,7 @@ What `--help` cannot tell you, and why this exists: **who** types it, and **whic
 | `productos v2 watch` | Wait, and print a line whenever somebody records an act or asks for a change | surface | the model |
 | `productos v2 whoami` | What an instance thinks you are, and what it will let you do | surface | the model |
 | `productos v2 change` | Record a piece of feedback and drive it into every layer it must reach | instruct | the model |
-| `productos v2 steer` | What this project has learned — habits that shape what gets made, never what it promises | instruct | either |
+| `productos v2 steer` | What this project has learned — written, or noticed from what people did; habits that shape what gets made, never what it promises | instruct | either |
 | `productos v2 agents` | The roles: what each asks, and which skill orchestrates which | instruct | either |
 | `productos v2 reset` | Restore a corpus from the pristine seed, so every run starts identical | generate | the model |
 
@@ -844,7 +844,7 @@ Territory, not ownership. Nobody is assigned an area — an agent reads this to 
 | **derive** | derive | `src/v2/grid.ts` `src/v2/stamp.ts` `src/v2/confidence.ts` `src/v2/settle.ts` `src/v2/acts.ts` `src/v2/record.ts` `src/v2/spoken.ts` `src/v2/connects.ts` `src/v2/steers.ts` `src/v2/store/access.ts` `src/v2/store/identity.ts` `src/core/learn.ts` `src/adapters/claude.ts` |
 | **generate** | generate | `src/v2/migrate.ts` `src/v2/draw.ts` `src/v2/draw-write.ts` `src/v2/routes.ts` `src/v2/propose.ts` `src/v2/appcss.ts` `src/v2/icons.ts` `src/core/agents-doc.ts` `src/v2/design.ts` `src/v2/store/corpus.ts` `src/v2/store/doc-migrations.ts` `src/v2/store/migrate.ts` `src/v2/store/boot.ts` |
 | **operate** | operate | `Makefile` `Dockerfile` `docker-compose.yml` `docker-compose.remote.yml` `scripts/` |
-| **surface** | surface | `src/v2/page.ts` `src/v2/prototype.ts` `src/v2/serve.ts` `src/ui/server.ts` `src/ui/renderer.ts` `src/v2/store/server.ts` `src/v2/store/instance.ts` `src/v2/store/mcp.ts` `src/v2/store/choose.ts` `src/cli/commands/hosted.ts` `src/v2/packet.ts` `src/v2/notes.ts` `src/v2/watch.ts` `src/v2/log.ts` `src/v2/inbox.ts` `src/v2/presence.ts` `src/v2/identity.ts` `src/v2/client.ts` `src/v2/write.ts` `src/v2/wire.ts` `src/v2/moved.ts` `src/cli/commands/v2.ts` `src/mcp/v2-tools.ts` |
+| **surface** | surface | `src/v2/page.ts` `src/v2/prototype.ts` `src/v2/serve.ts` `src/ui/server.ts` `src/ui/renderer.ts` `src/v2/store/server.ts` `src/v2/store/instance.ts` `src/v2/store/pushes.ts` `src/v2/store/mcp.ts` `src/v2/store/choose.ts` `src/cli/commands/hosted.ts` `src/v2/packet.ts` `src/v2/notes.ts` `src/v2/watch.ts` `src/v2/log.ts` `src/v2/inbox.ts` `src/v2/presence.ts` `src/v2/identity.ts` `src/v2/client.ts` `src/v2/write.ts` `src/v2/wire.ts` `src/v2/moved.ts` `src/cli/commands/v2.ts` `src/mcp/v2-tools.ts` |
 | **instruct** | instruct | `skills` `agents` |
 | **pin** | pin | `test` |
 | **check** | check | `src/v2/check.ts` |
