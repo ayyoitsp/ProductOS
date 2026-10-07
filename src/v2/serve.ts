@@ -16,7 +16,7 @@ import { renderScopePage, standalone } from "./page.js";
 import { perform, preview, payloadFrom, VIA, type Act, type Via } from "./acts.js";
 import { closeNote, fileNote, replyToNote } from "./notes.js";
 import { styleOf } from "./appcss.js";
-import { watchLog, lineFor } from "./log.js";
+import { watchLog, lineFor, type LoggedEvent } from "./log.js";
 import { inbox, DEFAULT_LEASE_MS } from "./inbox.js";
 import { working } from "./presence.js";
 import { mayRecord, mayRelay, principalOf, localAccount, type Principal } from "./identity.js";
@@ -35,6 +35,22 @@ export interface V2Routes {
    * whether a request is a browser or a token would be a second place the guarantee could be wrong.
    */
   who?: Principal;
+  /**
+   * Where the live stream gets its events, when the corpus on disk is not where they land.
+   *
+   * ⛔ ONE FORMATTER, TWO SOURCES — NOT TWO FEEDS. `watchLog` tails `events/log.jsonl`, which is
+   * the whole story for a directory and NOTHING on a hosted instance: there the corpus is
+   * materialized into a temp directory that the request deletes on the way out, so the watcher was
+   * left watching a path that no longer existed. It emitted nothing, ever, and said so to nobody —
+   * the page held an open connection, received its heartbeats, and looked completely up to date
+   * while every press went unannounced.
+   *
+   * ⛔ WHY THIS IS INJECTED RATHER THAN BRANCHED ON. The comment above `/api/v2/live` says the page
+   * and the session read the SAME log because two feeds would be two answers to "what happened".
+   * A second SSE handler in the hosted adapter is exactly that second feed. So the frames, the
+   * heartbeat and the retry stay here, in one place, and only where the events come FROM changes.
+   */
+  stream?: (emit: (e: LoggedEvent) => void) => { stop: () => void };
   /**
    * Whose name goes on a press.
    *
@@ -200,9 +216,10 @@ export async function v2Route(req: http.IncomingMessage, res: http.ServerRespons
       connection: "keep-alive",
     });
     res.write("retry: 2000\n\n");
-    const { stop } = watchLog(dir, {
-      emit: (e) => res.write(`event: changed\ndata: ${JSON.stringify(lineFor(e))}\n\n`),
-    });
+    const emit = (e: LoggedEvent): void => {
+      res.write(`event: changed\ndata: ${JSON.stringify(lineFor(e))}\n\n`);
+    };
+    const { stop } = opts.stream ? opts.stream(emit) : watchLog(dir, { emit });
     /**
      * ⛔ A HEARTBEAT, because a silent stream is indistinguishable from a dead one to every proxy
      * between here and the browser — and a reader whose page has quietly stopped updating is worse

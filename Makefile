@@ -248,6 +248,17 @@ stacks:
 # So the first check asks GIT whether this is the main worktree, and never the script.
 # ⛔ ONE COPY, TWO GUARDS. The local stack and the managed-store stack both land on 4100 and both
 # need this question asked; a second copy is a second place to forget to change.
+#
+# ⛔ AND IT ASKS TWO QUESTIONS, BECAUSE A MERGED HEAD IS NOT A MERGED IMAGE.
+#
+# This checked only that HEAD was an ancestor of origin/main, which is not what gets built:
+# `Dockerfile` does `COPY src ./src`, so the image is the WORKING TREE. A checkout sitting on a
+# merged HEAD with uncommitted work in `src/` therefore passed the guard and shipped that work to
+# the one store everyone reviews on — and anything new in `drizzle/` ran against it on boot.
+#
+# That is not hypothetical: it is how a session's half-finished edits reached staging and created a
+# table on the managed store, with the guard reporting a clean merged HEAD the whole time. The
+# failure is silent on both sides — the deploy succeeds and the instance looks healthy.
 define MERGED_CHECK
 	git fetch -q origin main 2>/dev/null || true; \
 	if ! git merge-base --is-ancestor HEAD origin/main 2>/dev/null; then \
@@ -256,6 +267,21 @@ define MERGED_CHECK
 		echo ""; \
 		echo "  To try this branch, bring up its own dev stack — every checkout has one:"; \
 		echo "    make up        # this checkout, on its own port, against its own Postgres"; \
+		echo "  Or, deliberately: make $(2) DEV_ANYWAY=1"; \
+		exit 1; \
+	fi; \
+	if [ -n "$$(git status --porcelain -uall -- src skills drizzle bin Dockerfile package.json package-lock.json tsconfig.json 2>/dev/null)" ]; then \
+		echo "✗ $(1) is staging, and staging serves what is MERGED — not what is in this tree."; \
+		echo "  HEAD is in origin/main, and that is not the question the image asks."; \
+		echo ""; \
+		echo "  Dockerfile does \`COPY src ./src\`, so the build takes the WORKING TREE. Uncommitted"; \
+		echo "  work ships to the one store everyone reviews on, and a migration in drizzle/ runs"; \
+		echo "  against it — while this guard reports a clean merged HEAD. That has happened:"; \
+		echo "  half-finished edits reached staging and created a table on the managed store."; \
+		echo ""; \
+		git status --short -uall -- src skills drizzle bin Dockerfile package.json package-lock.json tsconfig.json | sed "s/^/    /"; \
+		echo ""; \
+		echo "  Commit them, or try them on this checkout's own stack:  make up"; \
 		echo "  Or, deliberately: make $(2) DEV_ANYWAY=1"; \
 		exit 1; \
 	fi
