@@ -38,6 +38,7 @@ import { resolvePathsOrThrow } from "../core/paths.js";
 import { readConfig } from "../core/config.js";
 import path from "node:path";
 import { projectRootOf } from "../core/paths.js";
+import { wouldReach } from "./steers.js";
 
 export type Severity = "refuse" | "note" | "shape";
 
@@ -3282,6 +3283,28 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
           where: `steer:${st.id}`,
           what: `"${st.says}" says it was learned from ${missing.length === 1 ? "change" : "changes"} ${missing.join(", ")}, and ${missing.length === 1 ? "that record does" : "those records do"} not exist — a citation nobody can follow stops anybody looking, so the habit keeps its authority on a reference that was never there`,
           fix: `name records that exist, or say where it came from in words — "every button renamed in review since August" is a better provenance than an id that resolves to nothing`,
+        });
+    }
+    /**
+     * ⛔ A STEER AIMED AT NOBODY, WHICH IS THE `integrator` SHAPE ONE LEVEL UP: a value somebody can
+     * write that nothing acts on, and which reads as working.
+     *
+     * ⛔ REPORTED HERE RATHER THAN REFUSED BY THE SCHEMA, deliberately. A role gets renamed or
+     * retired, and a schema that refused an unknown name would take every corpus steering it
+     * OFFLINE rather than merely wrong — which is precisely what `walked` did to two files in this
+     * repository, and why a document migration had to be built at all. The verb that writes a steer
+     * refuses a bad target up front, where a typo is still a typo; this catches the ones that rot
+     * afterwards, when nobody is looking at the steer at all.
+     */
+    if (st.steers === "generation" && !st.declined && st.for?.length) {
+      const dead = st.for.filter((t) => !wouldReach(t).authors.length);
+      if (dead.length)
+        add({
+          severity: "note",
+          kind: "a-steer-aimed-at-nobody",
+          where: `steer:${st.id}`,
+          what: `"${st.says}" is aimed at ${dead.join(", ")}, and ${dead.length === 1 ? "that reaches" : "those reach"} no author — ${dead.map((t) => wouldReach(t).why).join("; ")}`,
+          fix: `aim it at a role or a seat that writes — or drop \`for\` entirely, which reaches every author. ⛔ A steer nothing carries is a habit somebody believes is in force`,
         });
     }
     if (st.steers !== "truth") continue;

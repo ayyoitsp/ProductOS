@@ -232,7 +232,13 @@ export function proposeScreen(
    * the product would start agreeing to them, and a generation steer is the one kind of context
    * nobody agrees to — the moment one carries weight in a gate it has become product truth.
    */
-  const live = inEffect(steers);
+  /**
+   * ⛔ THE DESIGNER'S HABITS, NOT EVERY HABIT. A drawn screen is the designer's territory — so once
+   * a steer can be aimed, declaring the machinist's "triggers are named in product language" under
+   * a picture is noise a reviewer has to read past, and worse, implies it shaped something it had
+   * nothing to do with. Asking by role is what makes the claim on the screen true.
+   */
+  const live = inEffect(steers, "designer");
   const steered = live.length
     ? `<p class="pp-steered">Shaped by ${live.length} ${live.length === 1 ? "habit" : "habits"} this project has learned, not by anything it promises: ${live
         .map((st) => esc(st.says))

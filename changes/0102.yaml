@@ -1,0 +1,16 @@
+id: "0102"
+said: |-
+  shouldn't steer be based on the author, not discipline? or both, rather?
+
+  [answered: both, with a principle — role for craft, discipline for the seat, because a discipline-scoped steer reaches authors that do not exist yet] yes, build it
+at: 2026-10-07
+kind: concept
+reaches:
+  model: "for: z.array"
+  derive: wouldReach
+  generate: inEffect(steers, "designer")
+  surface: steer-for
+  check: a-steer-aimed-at-nobody
+  instruct: "Who a habit reaches: a role, a seat, or everybody"
+  pin: a habit aimed at a seat reaches authors that do not exist yet
+waived: {}

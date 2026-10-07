@@ -251,3 +251,95 @@ test("free-text provenance naming no record is left alone", () => {
   const { findings } = checkCorpus(path.join(dir, "v2"));
   assert.equal(findings.filter((f) => f.kind === "a-steer-learned-from-nothing").length, 0);
 });
+
+// ─── who a habit reaches ──────────────────────────────────────────────────────────────────────
+
+import { reaches, wouldReach } from "../dist/v2/steers.js";
+import { AUTHORS, AGENTS } from "../dist/core/jobs.js";
+
+const aimed = (at) => steer({ id: `aimed-${at.join("-")}`, for: at });
+
+test("a habit aimed at a role reaches that role and no other", () => {
+  const s = aimed(["machinist"]);
+  assert.ok(reaches(s, "machinist"));
+  for (const a of AUTHORS.filter((x) => x.name !== "machinist"))
+    assert.ok(!reaches(s, a.name), `${a.name} is being told a habit about somebody else's craft`);
+});
+
+test("⛔ a habit aimed at a seat reaches authors that do not exist yet", () => {
+  /**
+   * This is the whole argument for keeping disciplines alongside roles. Scoping "never name the
+   * substrate" to the engineering roles that happened to exist would have silently stopped covering
+   * the next one — and nothing would have said so.
+   */
+  const s = aimed(["engineering"]);
+  const eng = AUTHORS.filter((a) => a.discipline === "engineering").map((a) => a.name);
+  assert.ok(eng.length > 1, "the point needs more than one author in the seat to be demonstrable");
+  for (const n of eng) assert.ok(reaches(s, n), `${n} sits in the seat and is not reached`);
+  for (const a of AUTHORS.filter((x) => x.discipline !== "engineering"))
+    assert.ok(!reaches(s, a.name));
+});
+
+test("an untargeted habit still reaches every author — nothing already written changes meaning", () => {
+  const s = steer();
+  assert.deepEqual(s.for ?? [], [], "the fixture is supposed to be untargeted");
+  for (const a of AUTHORS) assert.ok(reaches(s, a.name));
+});
+
+test("⛔ no judge is reached, including by an untargeted habit", () => {
+  /**
+   * The first cut returned `true` for an empty `for` before looking at who was asking, so asking
+   * about `buildability` answered yes. Nothing calls it that way — the installer walks `AUTHORS` —
+   * but that made the guarantee a property of the caller rather than of this function.
+   */
+  for (const j of AGENTS) {
+    assert.ok(!reaches(steer(), j.name), `${j.name} judges and was reached by an untargeted habit`);
+    assert.ok(!reaches(aimed([j.discipline]), j.name), `${j.name} was reached through its own seat`);
+    assert.ok(!reaches(aimed([j.name]), j.name), `${j.name} was reached by being named outright`);
+  }
+});
+
+test("⛔ the three ways to aim at nobody are each named, not lumped together", () => {
+  /** A target that reaches nothing is the `integrator` shape: writable, inert, and reads as working. */
+  assert.deepEqual(wouldReach("machinist").authors, ["machinist"]);
+  assert.ok(wouldReach("engineering").authors.length > 1, "a seat resolves to its members");
+
+  assert.match(wouldReach("buildability").why, /judges/, "a judge is refused as a judge, not as unknown");
+  assert.match(wouldReach("the framework itself").why, /seat of reviewers/, "a seat with no authors needs its own reason");
+  assert.match(wouldReach("desgner").why, /no role or discipline/, "a typo needs to read as a typo");
+});
+
+test("⛔ `design` and `designer` are one character apart and mean different things", () => {
+  /** The only near-miss across the two namespaces, and the reason both lists are checked. */
+  assert.deepEqual(wouldReach("designer").authors, ["designer"]);
+  const seat = wouldReach("design").authors;
+  assert.ok(seat.includes("designer"));
+  assert.notDeepEqual(seat, [], "the seat has to resolve, or the pair is not actually ambiguous");
+});
+
+test("⛔ a target that rots is a finding, never a parse failure", async () => {
+  /**
+   * A role gets renamed. A schema refusing an unknown name would take every corpus steering it
+   * OFFLINE rather than merely wrong — which is exactly what `walked` did to two files here, and
+   * why a document migration had to be built. So the schema takes any string; `check` reports it.
+   */
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pos-rot-"));
+  fs.cpSync(path.join(process.cwd(), "v2-seed"), path.join(dir, "v2"), { recursive: true });
+  fs.mkdirSync(path.join(dir, "v2", "steers"), { recursive: true });
+  fs.writeFileSync(
+    path.join(dir, "v2", "steers", "steers.yaml"),
+    "steers:\n  - id: aimed-at-a-ghost\n    says: A habit aimed at a role somebody has since renamed.\n    steers: generation\n    learned_from: three reviews\n    for: [scopers]\n    at: 2026-10-07\n"
+  );
+  const { corpus, findings } = checkCorpus(path.join(dir, "v2"));
+  assert.deepEqual(corpus.broken, [], "⛔ the corpus went offline over a renamed role");
+  assert.equal(corpus.steers.length, 1);
+  const hit = findings.find((f) => f.kind === "a-steer-aimed-at-nobody");
+  assert.ok(hit, "a habit nothing carries is one somebody believes is in force");
+  assert.match(hit.what, /scopers/);
+});
+
+test("the install asks per author, not once for everybody", () => {
+  /** Before this, every author got the identical block — a craft habit landed in every seat. */
+  const src = fs.readFileSync(path.join(process.cwd(), "src/adapters/claude.ts"), "utf-8");
+  assert.match(src, /addendum\(steers \?\? \[\], author\.name\)/, "the addendum is still built once for everybody");
+});

@@ -21,6 +21,7 @@ import fs from "node:fs";
 import path from "node:path";
 import YAML from "yaml";
 import { Steer } from "./schema.js";
+import { AUTHORS, AGENTS, DISCIPLINES } from "../core/jobs.js";
 
 /**
  * The generation steers a project is actually working under.
@@ -33,8 +34,68 @@ import { Steer } from "./schema.js";
  * ⛔ A DECLINED STEER IS GONE FROM HERE, not softened. Somebody looked at it and said it is not a
  * rule in this project; a steer that still shapes output after that is a constraint nobody chose.
  */
-export function inEffect(steers: readonly Steer[]): Steer[] {
-  return steers.filter((s) => s.steers === "generation" && !s.declined);
+export function inEffect(steers: readonly Steer[], who?: string): Steer[] {
+  const live = steers.filter((s) => s.steers === "generation" && !s.declined);
+  return who === undefined ? live : live.filter((s) => reaches(s, who));
+}
+
+/**
+ * Whether one steer reaches one author, by name.
+ *
+ * ⛔ AN EMPTY `for` IS EVERY AUTHOR, AND THAT IS WHAT MAKES THIS SAFE TO ADD. Every steer written
+ * before targeting existed reaches exactly who it reached yesterday; nothing already in a corpus
+ * changes meaning because a field arrived.
+ *
+ * ⛔ AND IT IS ASKED ABOUT AN AUTHOR, NEVER A JUDGE. The caller is `installClaudeAuthors`, which
+ * walks `AUTHORS` — so "could a judge match a discipline?" is a question this function is never in
+ * a position to be asked. The guarantee stays where it was: two registries, two functions, one of
+ * which appends taste. Naming a judge in `for` is refused by the verb that writes a steer and
+ * reported by `check`; neither is load-bearing, because the reaching cannot happen either way.
+ */
+export function reaches(s: Steer, who: string): boolean {
+  /**
+   * ⛔ NOT AN AUTHOR, NOT REACHED — INCLUDING BY AN UNTARGETED STEER.
+   *
+   * The first cut returned `true` for an empty `for` before looking at who was asking, so asking
+   * this about `buildability` answered yes. Nothing calls it that way — `installClaudeAuthors`
+   * walks `AUTHORS` — but that made the guarantee a property of the caller, which is a comment
+   * doing a guarantee's job. Asked about anybody who does not write, the answer is no, here.
+   */
+  const author = AUTHORS.find((a) => a.name === who);
+  if (!author) return false;
+  /**
+   * ⛔ `?.` BECAUSE A DEFAULT ONLY APPLIES ON PARSE. `for` defaults to `[]` through the schema, so
+   * anything loaded from a corpus has it — but a renderer handed a steer built in code does not,
+   * and this is called from one. Crashing a page over an absent optional is a worse failure than
+   * the one the field exists to prevent.
+   */
+  if (!s.for?.length) return true;
+  return s.for.some((t) => t === who || t === author.discipline);
+}
+
+/**
+ * What a name in `for` would actually reach — the answer `check` reports on and the verb refuses on.
+ *
+ * ⛔ A TARGET THAT REACHES NOBODY IS THE `integrator` BUG AGAIN: a value somebody can write that
+ * nothing acts on, and which reads as working. Three ways to write one, all of them plausible:
+ * a typo (`design` and `designer` are one character apart and mean different things), a judge
+ * (`buildability` is a real role and can never be steered), and a discipline with no authors in it
+ * — `the framework itself` has two judges and nobody who writes.
+ */
+export function wouldReach(target: string): { authors: string[]; why?: string } {
+  const byName = AUTHORS.find((a) => a.name === target);
+  if (byName) return { authors: [byName.name] };
+  const judge = AGENTS.find((a) => a.name === target);
+  if (judge)
+    return {
+      authors: [],
+      why: `${target} judges — a reviewer told what this project likes can no longer notice the project is wrong`,
+    };
+  const seat = AUTHORS.filter((a) => a.discipline === target);
+  if (seat.length) return { authors: seat.map((a) => a.name) };
+  if ((DISCIPLINES as readonly string[]).includes(target))
+    return { authors: [], why: `nobody authors in "${target}" — it is a seat of reviewers` };
+  return { authors: [], why: `no role or discipline is called "${target}"` };
 }
 
 /** Every generation steer somebody has turned off, with the reason they gave. */
@@ -54,8 +115,13 @@ export function declined(steers: readonly Steer[]): Steer[] {
  * Returns an empty string where nothing is in effect, so a caller can append unconditionally
  * without emitting an empty heading.
  */
-export function addendum(steers: readonly Steer[]): string {
-  const live = inEffect(steers);
+export function addendum(steers: readonly Steer[], who?: string): string {
+  /**
+   * ⛔ ASKED PER AUTHOR NOW. Passing nothing still means "everything in force", which is what the
+   * settings surface wants; passing a name is what an install does, so a habit about one craft
+   * stops arriving in prompts it is noise in.
+   */
+  const live = inEffect(steers, who);
   if (!live.length) return "";
   const lines = live.map((s) =>
     // ⛔ The provenance is visible, not a comment. An author who cannot see what a habit was

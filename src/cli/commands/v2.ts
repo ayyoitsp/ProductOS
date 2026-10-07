@@ -22,7 +22,7 @@ import { drawFromRoute } from "../../v2/draw.js";
 import { everyView, everyViewV1, isResolved, resolveRoute } from "../../v2/routes.js";
 import { spokenFor } from "../../v2/spoken.js";
 import { idiomOf, proposeScreen } from "../../v2/propose.js";
-import { inEffect, readSteers, declined } from "../../v2/steers.js";
+import { inEffect, readSteers, declined, wouldReach, reaches } from "../../v2/steers.js";
 import { indexDesignSystem } from "../../v2/design.js";
 import { inferConnections, type Connection } from "../../v2/connects.js";
 import { writeLeadsTo } from "../../v2/draw-write.js";
@@ -1193,8 +1193,12 @@ export function v2Command(): Command {
     .requiredOption("--steers <what>", "generation (a habit — opaque, shapes what gets proposed) | truth (a claim — surfaced on the charter)")
     .option("--learned-from <provenance>", "⛔ required on anything learned — what it was inferred from, so the next person can go and look")
     .option("--id <id>", "one segment, kebab-case — derived from the words if absent")
+    .option(
+      "--for <who...>",
+      "a role, a discipline, or several — who this reaches. Absent means every author"
+    )
     .option("--at <dir>", "corpus directory", "v2")
-    .action((says: string, o: { steers: string; learnedFrom?: string; id?: string; at?: string }) => {
+    .action((says: string, o: { steers: string; learnedFrom?: string; id?: string; at?: string; for?: string[] }) => {
       /**
        * ⛔ A URL IS REFUSED, NOT RESOLVED AS A FOLDER. Without this, `--at https://…/p/acme` printed
        * a green tick and wrote `./https:/…/p/acme/steers/steers.yaml` on this machine — so somebody
@@ -1222,10 +1226,29 @@ export function v2Command(): Command {
           .filter((w) => w && !FILLER.has(w))
           .slice(0, 4)
           .join("-");
+      /**
+       * ⛔ REFUSED HERE, NOT AT LOAD. The schema takes any string on purpose — a role can be
+       * renamed, and a schema that refused an unknown one would take every corpus steering it
+       * OFFLINE rather than merely wrong, which is what `walked` did to two files in this repo.
+       * So the gate is at the moment somebody types it, where a typo is still a typo and the fix
+       * is free, and `check` reports the ones that rot later.
+       */
+      for (const t of o.for ?? []) {
+        const r = wouldReach(t);
+        if (!r.authors.length) {
+          console.error(pc.red("✗"), `"${t}" reaches nobody — ${r.why}`);
+          const roles = AUTHORS.map((a) => a.name);
+          const seats = [...new Set(AUTHORS.map((a) => a.discipline))];
+          console.error(pc.dim(`  roles: ${roles.join(" · ")}`));
+          console.error(pc.dim(`  seats: ${seats.join(" · ")}`));
+          process.exit(1);
+        }
+      }
       const rec = {
         id,
         says,
         steers: o.steers,
+        ...(o.for?.length ? { for: o.for } : {}),
         ...(o.learnedFrom ? { learned_from: o.learnedFrom } : {}),
         at: new Date().toISOString().slice(0, 10),
       };
@@ -1297,7 +1320,8 @@ export function v2Command(): Command {
       const truth = all.filter((x) => x.steers === "truth");
       if (live.length) {
         console.log("");
-        console.log(pc.bold("habits, in force") + pc.dim("  — into every author, and no judge"));
+        /** ⛔ It said "into every author", which stopped being true the moment one could be aimed. */
+        console.log(pc.bold("habits, in force") + pc.dim("  — into the authors each names, and into no judge"));
         for (const st of live) {
           console.log(`  ${pc.green("•")} ${pc.bold(st.id)} ${st.says}`);
           /**
@@ -1305,6 +1329,19 @@ export function v2Command(): Command {
            * somebody can go and check and decline; without it, it is a rule nobody chose.
            */
           console.log(pc.dim(`    learned from ${st.learned_from ?? "— nothing said, which the loader refuses"}`));
+          /**
+           * ⛔ WHO IT REACHES, RESOLVED — never the raw `for`. A seat is the point of naming a seat:
+           * `engineering` means two authors today and three tomorrow, and printing the word back
+           * tells somebody nothing about who is currently being steered.
+           */
+          const hits = AUTHORS.filter((a) => reaches(st, a.name)).map((a) => a.name);
+          console.log(
+            pc.dim(
+              st.for.length
+                ? `    reaches ${hits.join(", ") || "nobody — see productos v2 check"}  ${pc.dim(`(aimed at ${st.for.join(", ")})`)}`
+                : `    reaches every author — ${hits.length} of them`
+            )
+          );
         }
       }
       if (truth.length) {
@@ -2703,7 +2740,8 @@ function proposeScreens(into: string, ref?: string): void {
        * repeating them per screen would bury the one line somebody needs: that this run was shaped
        * by something other than the truth and the app's own idiom.
        */
-      const steering = inEffect(corpus.steers);
+      /** ⛔ The same question the drawing answers — what shaped THESE, which is the designer's set. */
+      const steering = inEffect(corpus.steers, "designer");
       if (steering.length)
         console.log(
           pc.dim(`  shaped by ${steering.length} ${steering.length === 1 ? "habit" : "habits"} this project has learned: ${steering.map((st) => st.id).join(", ")}`)

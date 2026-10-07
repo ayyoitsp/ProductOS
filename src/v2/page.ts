@@ -19,7 +19,8 @@ import { resolveRules, type Corpus } from "./load.js";
 import { scopeToShadow, liftFaces, PANE_FIT } from "./appcss.js";
 import { promisesOf, screensOf, type ProtoPromise, type ProtoScreen } from "./prototype.js";
 import { inferConnections, landingsFor, finishesFor, stateShowing } from "./connects.js";
-import { inEffect, declined as declinedSteers } from "./steers.js";
+import { inEffect, declined as declinedSteers, reaches } from "./steers.js";
+import { AUTHORS } from "../core/jobs.js";
 import { SLOTS, SLOT_ASKS_SHORT, statements, saysText, type SlotName, type Scope, type Steer, type View, type Part, type Says } from "./schema.js";
 import { gridFor, gateFor, actsFor, ruleHomes, stageOf, reachOf, type Grid, type Cell } from "./grid.js";
 import { stampFor, decidedFor, whatChangedSince } from "./stamp.js";
@@ -6477,6 +6478,7 @@ export const STYLE = `<style>
   .steer-list .steer-says { display: block; }
   .steer-list .steer-from { display: block; margin-top: .2rem; font-size: .82rem; color: var(--dim); }
   .steer-list .steer-nowhere { color: var(--warn); }
+  .steer-list .steer-for { display: block; margin-top: .2rem; font-size: .82rem; color: var(--dim); }
   .steer-list .steer-why { display: block; margin-top: .2rem; font-size: .82rem; color: var(--dim); font-style: italic; }
   /** ⛔ Legible, not hidden. A declined habit is evidence about this project, not clutter. */
   .steer-list li.steer-off .steer-says { text-decoration: line-through; color: var(--dim); }
@@ -6613,6 +6615,20 @@ function renderSettings(corpus: Corpus): string {
            ? `<span class="steer-from">learned from ${line(x.learned_from)}</span>`
            : `<span class="steer-from steer-nowhere">nothing says what this was inferred from — so there is nothing here anybody can argue with</span>`
        }
+       ${
+         /**
+          * ⛔ RESOLVED, NEVER THE RAW `for`. Naming a seat is the point of seats — `engineering`
+          * is two authors today and three tomorrow — so echoing the word back tells a reviewer
+          * nothing about who is currently being steered, which is the question they are here for.
+          */
+         (() => {
+           if (dead) return "";
+           const hits = AUTHORS.filter((a) => reaches(x, a.name)).map((a) => a.name);
+           return x.for?.length
+             ? `<span class="steer-for">reaches ${hits.map((h) => esc(h)).join(", ") || "nobody"} — aimed at ${x.for.map((f) => esc(f)).join(", ")}</span>`
+             : `<span class="steer-for">reaches every author</span>`;
+         })()
+       }
        ${dead ? `<span class="steer-why">declined — ${line(x.declined ?? "")}</span>` : ""}
      </li>`;
   return `<section class="view" id="view-settings" data-view="settings" data-ref="settings" data-label="What steers this">
@@ -6631,8 +6647,8 @@ function renderSettings(corpus: Corpus): string {
       live.length
         ? `<div class="steer-block" data-ref="steers-live">
              <h2>In force</h2>
-             <p class="lede">Carried into every author that writes for this product. ⛔ And into no
-             reviewer — one told what this project likes can no longer notice the project is wrong.</p>
+             <p class="lede">Carried into the authors each one names. ⛔ And into no reviewer — one
+             told what this project likes can no longer notice the project is wrong.</p>
              <ul class="steer-list">${live.map((x) => row(x, false)).join("")}</ul>
            </div>`
         : ""

@@ -2577,6 +2577,26 @@ export const Steer = z
      * An opaque steer with no provenance is a rule nobody can argue with and nobody chose.
      */
     learned_from: z.string().min(3).optional(),
+    /**
+     * ⛔ WHO THIS REACHES — A ROLE, A DISCIPLINE, OR BOTH. Empty means every author.
+     *
+     * Peter: *"shouldn't steer be based on the author, not discipline? or both, rather?"* — both,
+     * and the two are for different things:
+     *
+     *   a role       — the habit is about that role's craft. "Triggers are named in product
+     *                  language" is the machinist's, and is noise to anybody else.
+     *   a discipline — the habit is about the seat. "Never name the substrate" is engineering's,
+     *                  and ⛔ it reaches authors that do not exist yet. Scoping that one to the
+     *                  roles present on the day it was written would have silently stopped applying
+     *                  the moment a new engineering author landed, and nothing would have said so.
+     *
+     * ⛔ AND THE NAMES ARE NOT VALIDATED HERE, DELIBERATELY. A role can be renamed or retired, and
+     * a schema that refuses an unknown one would take every corpus steering it OFFLINE rather than
+     * merely wrong — which is exactly what `walked` did to two files in this repo, and why a
+     * document migration had to exist at all. `check` reports a target that reaches nobody; the
+     * verb that writes one refuses it up front. A corpus already holding one degrades to a finding.
+     */
+    for: z.array(z.string()).default([]),
     at: dateish,
     /**
      * ⛔ TURNED OFF, AND WHY — BECAUSE OTHERWISE IT COMES STRAIGHT BACK.
