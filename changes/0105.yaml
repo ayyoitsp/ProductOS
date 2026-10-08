@@ -1,0 +1,9 @@
+id: "0105"
+said: http://localhost:4100/p/prj-bks5f4m325/v2#at-price-a-deal has a bunch of {icon} placeholders.. whta hte heck?
+at: 2026-10-07
+kind: generator
+reaches:
+  generate: A PROP THAT HOLDS AN ELEMENT IS NOT A WORD, AND ITS NAME IS NOT CONTENT
+  pin: a value standing in a sentence is content, not a slot for a caller
+waived: {}
+closed: 2026-10-07
