@@ -11,11 +11,15 @@
  * — `refuses: none`, `cannot_fail`, `out_of_scope` are statements a builder can rely on,
  * where silence would have been something they had to guess about.
  */
-import { SLOTS, type SlotName , statements, saysText} from "./schema.js";
+import { SLOTS, DEMONSTRABLE_SLOTS, owesDemonstration, type SlotName , statements, saysText} from "./schema.js";
 import { resolveRules, disputeIndex, vocabularyReach, resolveView, DOWNSTREAM_OF_ANSWER, answerIsUnknown, type Corpus } from "./load.js";
 import { descendants } from "./settle.js";
 import { existsOf } from "./load.js";
-import { stampFor, staleReason } from "./stamp.js";
+import { stampFor, staleReason, requirementHash } from "./stamp.js";
+import { demonstrationOf } from "./demonstrate.js";
+
+/** Whitespace-insensitive, because a reflow is not a change of meaning. */
+const norm = (s: string) => s.replace(/\s+/g, " ").trim();
 
 
 /**
@@ -82,10 +86,24 @@ function compileOne(corpus: Corpus, scopeId: string): string | null {
         ? "⚠ NOT ACCEPTED BY ANYONE"
         : `⚠ accepted by ${s.by}, and CHANGED SINCE`;
   };
+  /**
+   * Which requirements were worked out from the claim as it now reads, and which were not.
+   * ⛔ One source — `demonstrate.ts` — so the packet cannot disagree with `check` about it.
+   */
+  const states = new Map<string, string>(
+    (entry.scope.exchanges ?? []).flatMap((e) =>
+      (demonstrationOf(corpus, scopeId, e.id)?.requirements ?? []).map((r) => [r.ref, r.state])
+    )
+  );
   const disputes = disputeIndex(corpus);
   const deferrals = new Map(corpus.verdicts.filter((v) => v.kind === "defer").map((v) => [v.target!, v]));
   const out: string[] = [];
   const holes: string[] = [];
+  /** Every requirement's ref, so the manifest can say how many there are. */
+  const requirements: string[] = [];
+  /** Stated behaviours with nothing against them, and statements a slot's criteria miss. */
+  const undemonstrated: string[] = [];
+  const partial: string[] = [];
 
   out.push(`# Packet — ${entry.scope.title}`);
   out.push("");
@@ -526,21 +544,183 @@ function compileOne(corpus: Corpus, scopeId: string): string | null {
       for (const s of setsOff)
         out.push(`- **${s.title}** (\`${s.id}\`) — ${(saysText(s.says) || "nothing stated").replace(/\s+/g, " ").trim()}`);
     }
+    /**
+     * ⛔ EVERY REQUIREMENT CARRIES ITS REF AND THE HASH OF THE WORDS IT WAS WRITTEN FROM.
+     *
+     * Peter: *"our initial product OS release is to produce an execution packet for a coding
+     * agent to autonomously take end-to-end, implementing all the tests described. product os
+     * at this point should only generate what the testing requirements are, with an identifier.
+     * that's the current boundary"*.
+     *
+     * This section used to print `- *answer* — given …, when …, then …` and nothing else. Two
+     * things followed, and both defeat the release:
+     *
+     *  - **An agent could not name what it implemented.** Thirty-one requirements arrived as
+     *    anonymous prose, so nothing it wrote could be pointed back at the sentence it came
+     *    from — and the moment truth moved, no surface could say which tests to revisit. An
+     *    identifier was the one thing asked for and it was the one thing absent.
+     *  - **`of` was dropped on the floor.** The renderer printed `c.slot` and never `c.of`, so
+     *    a slot saying three things showed three criteria all labelled *answer* — a reviewer
+     *    and a builder both read the first statement as fully demonstrated by a criterion
+     *    written for the third. That is the exact failure `of` exists to prevent, reproduced in
+     *    the one artifact anybody builds from. The schema had it right and the packet undid it.
+     *
+     * ⛔ `#shows#`, AND THE OBVIOUS SPELLING WAS WRONG. `<scope>#<exchange>#<slot>#<case>` looks
+     * exactly right and `REF_MESSAGE` even calls that segment `<case>` — but `resolveRef` answers
+     * it with a named refusal first and a statement second, so handing a builder
+     * `money#record-earning#answer#1` would have been one address with three meanings. The grain
+     * is `resolveRef`'s, not a spelling invented here: a person can park or question a requirement
+     * at exactly the address its test was written against.
+     */
     const cs = ex.criteria;
     if (cs.length) {
       out.push("");
-      out.push("What must be demonstrated:");
+      out.push(`What must be demonstrated — ${cs.length} requirement${cs.length === 1 ? "" : "s"}:`);
       for (const c of cs) {
+        const reqRef = `${ref}#shows#${c.id}`;
+        requirements.push(reqRef);
         const bits = [c.given && `given ${c.given}`, c.when && `when ${c.when}`, c.then && `then ${c.then}`]
           .filter(Boolean)
           .join(", ");
         out.push(
-          `- *${c.slot}*${c.level ? ` \`${c.level}\`` : ""} — ${bits || c.steps}${c.example ? " *(an example, not the rule)*" : ""}`
+          `- \`${reqRef}\` \`${requirementHash(c)}\`${c.level ? ` \`${c.level}\`` : ""} — ${bits || c.steps}${
+            c.example ? " *(an example, not the rule)*" : ""
+          }`
         );
+        /**
+         * ⛔ WHICH VERSION OF THE TRUTH THIS WAS WORKED OUT FROM, said on the requirement itself.
+         *
+         * A stale requirement is the one defect that ships wrong behaviour while looking correct:
+         * an engineer implements it, the test passes, and what it proves is a sentence nobody
+         * agrees to any more. Nothing downstream can catch that — the suite is green by
+         * construction — so the packet has to refuse to be quiet about it.
+         *
+         * `check` already refuses the corpus for this, which means a packet carrying one was
+         * compiled past a refusal. Saying so twice is correct: the person who compiled it may not
+         * be the person reading it.
+         */
+        const state = states.get(reqRef);
+        if (state === "stale")
+          out.push(
+            `    ⛔ **DO NOT IMPLEMENT THIS YET.** It was worked out on ${c.derived?.at} from an earlier wording of this claim, which has changed since. Whatever demonstrates it would pass and would prove the old sentence.`
+          );
+        else if (state === "authored")
+          out.push(
+            `    ⚠ Typed by hand rather than worked out from the claim, so nothing can say whether it is still current. Treat it as a draft of a requirement.`
+          );
+        /**
+         * ⛔ WHICH SENTENCE, where the slot says more than one. Without this line a builder
+         * cannot tell which statement they are being asked to demonstrate, and the statements
+         * that nothing demonstrates are invisible rather than missing.
+         */
+        const said = ex.slots[c.slot] ? statements(ex.slots[c.slot]!.says) : [];
+        if (said.length > 1) {
+          const named = c.of ? said.find((s) => s.id === c.of) : undefined;
+          if (named)
+            out.push(
+              `    demonstrates **${c.slot}** \`${named.id}\` — ${norm(named.says)}`
+            );
+          else if (c.of)
+            out.push(
+              `    ⛔ **points at \`${c.of}\`, which **${c.slot}** does not say.** One of the two is wrong; do not guess which.`
+            );
+          else
+            out.push(
+              `    ⛔ **${c.slot} says ${said.length} things and this names none of them.** Treat it as demonstrating only what its \`then\` actually asserts — the rest of the slot is undemonstrated.`
+            );
+        }
       }
+      /**
+       * ⛔ WHICH STATEMENTS OF A MULTI-STATEMENT SLOT NOTHING REACHES. `check`'s
+       * `nothing-demonstrates-this` works at slot grain, so one criterion on a slot saying
+       * eleven things clears it — and the packet then reads as a closed list over a slot that
+       * is a tenth demonstrated.
+       */
+      for (const slot of DEMONSTRABLE_SLOTS) {
+        const fill = ex.slots[slot];
+        if (!owesDemonstration(slot, fill)) continue;
+        const said = statements(fill!.says);
+        if (said.length < 2) continue;
+        const reached = new Set(cs.filter((c) => c.slot === slot).map((c) => c.of).filter(Boolean));
+        const missed = said.filter((s) => !reached.has(s.id));
+        // All of them unreached means no criterion named one; the per-criterion line above
+        // already said so, and repeating it per statement is noise.
+        if (!missed.length || missed.length === said.length) continue;
+        for (const m of missed) {
+          partial.push(`${ref}#${slot}\`${m.id}\``);
+          out.push(
+            `- ⛔ **nothing demonstrates \`${slot}\` \`${m.id}\`** — ${norm(m.says)}`
+          );
+        }
+      }
+    }
+    /**
+     * ⛔ AND WHAT IS STATED WITH NOTHING AT ALL AGAINST IT, counted here so the manifest can
+     * say the list is not the whole job. Same predicate `check` uses, from one home.
+     */
+    for (const slot of DEMONSTRABLE_SLOTS) {
+      if (!owesDemonstration(slot, ex.slots[slot])) continue;
+      if (!ex.criteria.some((c) => c.slot === slot) && !inherited.get(`${ref}#${slot}`))
+        undemonstrated.push(`${ref}#${slot}`);
     }
     out.push("");
   }
+
+  /**
+   * ⛔ THE LIST HAS TO BE COUNTABLE, OR "IMPLEMENT ALL THE TESTS DESCRIBED" IS NOT AN
+   * INSTRUCTION.
+   *
+   * The holes banner above counts UNSETTLED TRUTH — slots a human has not decided. That is a
+   * different question from how much of the settled truth has a requirement against it, and an
+   * agent told to go end-to-end autonomously needs the second one answered in the artifact. A
+   * packet with no count reads as complete whatever it contains.
+   */
+  const manifest = [
+    `> **${requirements.length} testing requirement${requirements.length === 1 ? "" : "s"} below.** ` +
+      `Each is addressed as \`<scope>#<exchange>#shows#<id>\` and carries the hash of the words it was ` +
+      `written from. ⛔ Carry both into whatever demonstrates it: the ref says which requirement, the hash ` +
+      `says which version, and a requirement whose hash no longer matches this packet is one to revisit ` +
+      `rather than to trust.`,
+  ];
+  if (undemonstrated.length)
+    manifest.push(
+      `> ⛔ **${undemonstrated.length} stated behaviour${undemonstrated.length === 1 ? " has" : "s have"} no requirement at all** ` +
+        `(${undemonstrated.join(", ")}). Nothing here says what would show ${
+          undemonstrated.length === 1 ? "it" : "them"
+        } working, so the list below is not the whole job.`
+    );
+  /**
+   * ⛔ HOW MANY OF THEM ANYBODY ACTUALLY WORKED OUT, at the top, next to the count.
+   *
+   * "22 testing requirements below" reads as a specification. "22 requirements, 3 worked out from
+   * the claims and 19 typed by hand" reads as what it is. An agent told to take this end to end
+   * deserves to know which half it is holding before it starts, and a corpus whose set is entirely
+   * authored has not begun deriving anything.
+   */
+  {
+    const stale = [...states.values()].filter((s) => s === "stale").length;
+    const typed = [...states.values()].filter((s) => s === "authored").length;
+    if (stale)
+      manifest.push(
+        `> ⛔ **${stale} requirement${stale === 1 ? " was" : "s were"} worked out from an earlier wording** of the claim ` +
+          `${stale === 1 ? "it demonstrates" : "they demonstrate"}, which has changed since. ${
+            stale === 1 ? "It is" : "They are"
+          } marked below. Do not implement ${stale === 1 ? "it" : "them"}: whatever demonstrates ` +
+          `${stale === 1 ? "it" : "them"} would pass, and would prove a sentence nobody agrees to any more.`
+      );
+    if (typed)
+      manifest.push(
+        `> ⚠ **${typed} of ${states.size} ${typed === 1 ? "requirement was" : "requirements were"} typed by hand** rather than worked out from the claim, ` +
+          `so nothing can say whether ${typed === 1 ? "it is" : "they are"} still current.`
+      );
+  }
+  if (partial.length)
+    manifest.push(
+      `> ⛔ **${partial.length} stated sentence${partial.length === 1 ? "" : "s"} inside a slot ${
+        partial.length === 1 ? "is" : "are"
+      } undemonstrated** — marked in place below. A slot with one requirement on it is not a demonstrated slot.`
+    );
+  out.unshift("", ...manifest);
 
   if (holes.length) {
     out.unshift("");

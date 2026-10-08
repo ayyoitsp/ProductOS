@@ -22,7 +22,10 @@
  *   <scope>                                   a container, or a scope with exchanges
  *   <scope>#<exchange>                        one ask — the unit a human accepts
  *   <scope>#<exchange>#<slot>                 one of the seven
- *   <scope>#<exchange>#<slot>#<case>          one named refusal inside a slot
+ *   <scope>#<exchange>#<slot>#<case>          one named refusal inside a slot, or one statement
+ *   <scope>#<exchange>#shows#<id>             one testing requirement — a criterion
+ *   <subsystem>#offers                        one part of the system beneath the product
+ *   <subsystem>#offers#<id>                   one capability it offers
  *   <rule-id>                                 a rule, which has no `#`
  */
 import { SLOTS, type SlotName, type Standing , statements} from "./schema.js";
@@ -51,6 +54,40 @@ export type Ref =
    * reports the collision rather than letting a ref silently mean the other thing.
    */
   | { kind: "statement"; id: string; scope: string; exchange: string; slot: SlotName; name: string }
+  /**
+   * One testing requirement — a criterion, addressed as `<scope>#<exchange>#shows#<id>`.
+   *
+   * ⛔ A FIXED WORD IN THE SLOT POSITION, BECAUSE THE FOURTH SEGMENT IS ALREADY TWO THINGS.
+   *
+   * Peter: *"product os at this point should only generate what the testing requirements are, with
+   * an identifier. that's the current boundary"*. The obvious spelling was
+   * `<scope>#<exchange>#<slot>#<case>` — and `REF_MESSAGE` even calls that last segment `<case>`,
+   * which reads like a test case. It is not: it resolves a named refusal first and a statement
+   * second, and a criterion id is neither. Handing a builder `money#record-earning#answer#1` would
+   * have meant one address with three meanings, resolved by whichever branch matched first.
+   *
+   * So a requirement gets its own grain, with `shows` where a slot name would be — the same device
+   * `<scope>#why|risk|measure|instrument#<id>` already uses, and no slot is named `shows`. The
+   * criterion carries its own `slot`, so nothing is lost by leaving it out of the address.
+   *
+   * ⛔ Resolvable, not merely printable. An identifier nothing can look up is half an identifier:
+   * this is what lets a person park, question or rule on one requirement handed to a builder.
+   */
+  | { kind: "requirement"; id: string; scope: string; exchange: string; criterion: string; slot: SlotName }
+  /**
+   * A subsystem, and one capability it offers — `<subsystem>` and `<subsystem>#offers#<id>`.
+   *
+   * ⛔ ADDRESSABLE BEFORE ANYTHING AGREES TO ONE, WHICH IS THE POINT. Peter: *"capabilities are
+   * something engineers can/should agree on in the future"*. An agreement needs something to point
+   * at and something to go stale against, and retrofitting identity onto a layer people have
+   * already written is what cost six acceptances the week `covered_text` was added.
+   *
+   * ⛔ `#offers#` rather than the two-segment form, for the reason `#shows#` exists: the fourth
+   * segment of an exchange ref already means a refusal case and then a statement, and a fixed word
+   * in the middle is how this grammar keeps a new grain from inheriting two old meanings.
+   */
+  | { kind: "subsystem"; id: string; subsystem: string }
+  | { kind: "capability"; id: string; subsystem: string; capability: string }
   /**
    * One section of a product-wide document — a goal, a principle, a persona, a non-goal, a decision.
    *
@@ -96,6 +133,31 @@ export function resolveRef(corpus: Corpus, raw: string): Resolved | { error: str
    * exchange id, so there is no ambiguity to resolve — and checked before the charter because a
    * three-segment ref is never a document section.
    */
+  /**
+   * ⛔ `<subsystem>#offers#<id>`, BEFORE THE EXCHANGE GRAMMAR. A subsystem is not a scope, so
+   * without this the four-segment path reaches `no scope "ledger"` — an error about a thing nobody
+   * was talking about, which is exactly the symptom the happy-path branch below was added for.
+   */
+  if ((parts.length === 2 || parts.length === 3) && parts[1] === "offers") {
+    const sub = corpus.capabilities.find((x) => x.capability.id === parts[0]);
+    if (sub) {
+      /** `<id>#offers` is the subsystem itself — see why it is not addressable bare, below. */
+      if (parts.length === 2)
+        return { ref: { kind: "subsystem", id: raw, subsystem: parts[0]! }, unsettled: false };
+      const one = sub.capability.offers.find((o) => o.id === parts[2]);
+      if (!one)
+        return {
+          error: sub.capability.offers.length
+            ? `${parts[0]} offers no "${parts[2]}" — it offers ${sub.capability.offers.map((o) => o.id).join(", ")}`
+            : `${parts[0]} offers nothing — it is a container, and groups the subsystems filed inside it`,
+        };
+      /** ⛔ No standing. A capability is engineering's sketch, not a claim with a decision behind it. */
+      return {
+        ref: { kind: "capability", id: raw, subsystem: parts[0]!, capability: one.id },
+        unsettled: false,
+      };
+    }
+  }
   if (parts.length === 3 && ["why", "risk", "measure", "instrument"].includes(parts[1]!)) {
     const sc = corpus.scopes.find((x) => x.scope.id === parts[0]);
     if (sc) {
@@ -195,7 +257,26 @@ export function resolveRef(corpus: Corpus, raw: string): Resolved | { error: str
     }
     const scope = corpus.scopes.find((s) => s.scope.id === raw);
     if (scope) return { ref: { kind: "scope", id: raw, scope: raw }, unsettled: false };
-    return { error: `"${raw}" is not a rule or a scope here` };
+    /**
+     * ⛔ A SUBSYSTEM IS NOT ADDRESSABLE BARE, AND THAT IS WHAT MAKES A COLLISION IMPOSSIBLE.
+     *
+     * The first cut resolved a bare id as a subsystem, third in line after rules and scopes, with
+     * a `check` refusal for the collision — on the reasoning that a shared id loses silently in
+     * exactly one direction, so the sharing is the finding.
+     *
+     * ⛔ RUN AGAINST BILROST, THAT REFUSED FIVE OF THE SIX SUBSYSTEMS. Its v1 corpus had a real
+     * capability tree whose contents were migrated into `truth/` as scopes, keeping their names —
+     * so `access-control`, `agency-pricing`, `cre-templates`, `document-intake` and `pricing` each
+     * name a scope AND the obvious name for the subsystem. And they SHOULD share a name: "access
+     * control" is both the part of the system and the area of product truth about it. A refusal
+     * that fires on the most natural naming in the commonest migration path is a refusal that gets
+     * worked around.
+     *
+     * So the grammar carries the distinction instead: `<id>#offers` names the subsystem, the same
+     * fixed-word device as `#shows#` and `<scope>#risk#<id>`, and nothing is ambiguous for `check`
+     * to report. One finding deleted, one false refusal gone, and nobody has to rename anything.
+     */
+    return { error: `"${raw}" is not a rule or a scope here — a subsystem is \`<id>#offers\`` };
   }
   const [scopeId, exId, slotName, caseName] = parts;
   const scope = corpus.scopes.find((s) => s.scope.id === scopeId)?.scope;
@@ -213,6 +294,24 @@ export function resolveRef(corpus: Corpus, raw: string): Resolved | { error: str
   if (!ex) return { error: `no exchange "${exId}" in ${scopeId}` };
   if (parts.length === 2)
     return { ref: { kind: "exchange", id: raw, scope: scopeId!, exchange: exId! }, unsettled: false };
+  /**
+   * ⛔ Before the slot grammar, because `shows` is a fixed word and not a slot — so there is no
+   * ambiguity to resolve, exactly as for a framing card.
+   */
+  if (parts.length === 4 && slotName === "shows") {
+    const c = ex.criteria.find((x) => x.id === caseName);
+    if (!c)
+      return {
+        error: ex.criteria.length
+          ? `${exId} has no requirement "${caseName}" — it has ${ex.criteria.map((x) => x.id).join(", ")}`
+          : `${exId} has no testing requirements at all`,
+      };
+    /** A requirement carries no standing of its own: it demonstrates a slot, which has one. */
+    return {
+      ref: { kind: "requirement", id: raw, scope: scopeId!, exchange: exId!, criterion: c.id, slot: c.slot },
+      unsettled: false,
+    };
+  }
   if (!SLOTS.includes(slotName as SlotName))
     return { error: `"${slotName}" is not a slot — it is one of ${SLOTS.join(", ")}` };
   const fill = ex.slots[slotName as SlotName];
