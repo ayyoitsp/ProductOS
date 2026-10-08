@@ -235,6 +235,12 @@ export const AREAS: Area[] = [
        */
       "src/v2/demonstrate.ts",
       /**
+       * ⛔ `derive` for the same reason `demonstrate.ts` is: it computes what work an analysis has
+       * left from state the corpus already holds, and writes nothing. A sweep that produced the
+       * analysis would belong to `generate`; this one names the units and stops.
+       */
+      "src/v2/analyse.ts",
+      /**
        * ⛔ A DERIVATION, NOT A MODEL CONCEPT, AND THE DISTINCTION IS LOAD-BEARING. How
        * well-supported a statement is comes from counting readings and asking `stampFor`; a stored
        * confidence is a number that was true when it was written and unfalsifiable afterwards.
@@ -1420,6 +1426,13 @@ export const COMMANDS: Verb[] = [
    * changes.
    */
   { name: "v2 claim", does: "The hash of what a claim says, for a requirement worked out against it", owns: "derive", who: "claude", track: "exchange" },
+  /**
+   * ⛔ `derive`, NOT `generate`, AND THE DISTINCTION IS THE WHOLE BOUNDARY. It computes what work
+   * an analysis has left and writes nothing — ProductOS cannot spawn a role, the host does. A
+   * command that produced the analysis itself would be the hand-authoring trap with a bigger
+   * engine.
+   */
+  { name: "v2 analyse", does: "What work an analysis has left across a corpus, and which of it is stale", owns: "derive", who: "claude", track: "exchange" },
   { name: "v2 next", does: "What to ask somebody next about one feature", owns: "derive", who: "claude", track: "exchange" },
   { name: "v2 page", does: "Render one scope as a page a person can review", owns: "surface", who: "claude", track: "exchange" },
   { name: "v2 publishable", does: "Emit the interactive page for publishing, if the corpus allows it", owns: "surface", who: "claude", track: "exchange" },
@@ -1684,6 +1697,41 @@ export const SHIMS: Shim[] = [
       "running `productos v2 check` before anybody is asked to look",
       "putting the survey in front of a person before thirty scopers start against a partition that is wrong",
       "every act of judgement — nothing here is validated by having been written",
+    ],
+  },
+  /**
+   * ⛔ ONE ANALYSIS, ACROSS EVERYTHING, OVER ONLY WHAT IS ACTUALLY OUTSTANDING.
+   *
+   * Peter: *"let's do it - let's do the decomposer across a corpus. this should be extendable to
+   * view state analysis, product analysis, etc."*
+   *
+   * `decomposer` landed with a grain and no way to run it over a whole corpus, so indexing meant
+   * listing features by eye — tedious on 36 scopes, and silently incomplete, because nothing said
+   * which were already done or which were done against truth that has since moved.
+   *
+   * ⛔ THE FIRST STEP IS A COMMAND, NOT A ROLE, and that is the load-bearing part of this route.
+   * `productos v2 analyse <name>` says which units are outstanding; the fan goes over those refs
+   * and no others. Fanning over every feature is how a sweep costs thirty role runs to redo
+   * twenty-nine finished ones, and it is what makes re-running this safe rather than expensive.
+   *
+   * ⛔ Extendable by a row in `ANALYSES`, not by a step here. A new analysis — view states, the
+   * product as a whole — appears in `analyse` and in this route's worklist the moment it is
+   * declared, because both walk the registry.
+   */
+  {
+    route: "index a corpus",
+    does: "Run one analysis across everything, over only what is outstanding",
+    when: "index the capabilities · re-derive the test cases · analyse the whole corpus · what is left to work out · sweep this corpus",
+    steps: [
+      { role: "decomposer", fan: true, why: "the parts each feature needs — one per ref `analyse capabilities` names, never one per feature in the corpus" },
+      { role: "demonstrator", fan: true, why: "what would show each claim holding — one per ref `analyse requirements` names" },
+      { role: "designer", fan: true, why: "a picture for each screen `analyse drawings` names, including the appearances a screen falls into" },
+    ],
+    keeps: [
+      "⛔ running `productos v2 analyse <name>` FIRST and fanning only over the refs it returns — a sweep that runs over everything redoes finished work and stops being something anybody runs twice",
+      "deciding which analysis to run: this route does one at a time, because thirty roles of three kinds at once is a diff nobody reviews",
+      "⛔ reading the stale ones before the missing ones — a unit that was done and now answers an older wording looks finished to everybody reading it",
+      "every act of judgement. Nothing swept is validated by having been swept, and none of these roles may stamp",
     ],
   },
   /**

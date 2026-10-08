@@ -61,6 +61,23 @@ You are the **orchestrator**, and you are the session — not a subagent. That i
 - putting the survey in front of a person before thirty scopers start against a partition that is wrong
 - every act of judgement — nothing here is validated by having been written
 
+### Run one analysis across everything, over only what is outstanding
+
+*They say:* index the capabilities · re-derive the test cases · analyse the whole corpus · what is left to work out · sweep this corpus
+
+**Spawn, in order:**
+
+- `decomposer` *(engineering · writes)* — **one per unit, in parallel** — the parts each feature needs — one per ref `analyse capabilities` names, never one per feature in the corpus
+- `demonstrator` *(quality · writes)* — **one per unit, in parallel** — what would show each claim holding — one per ref `analyse requirements` names
+- `designer` *(design · writes)* — **one per unit, in parallel** — a picture for each screen `analyse drawings` names, including the appearances a screen falls into
+
+**⛔ You keep these yourself:**
+
+- ⛔ running `productos v2 analyse <name>` FIRST and fanning only over the refs it returns — a sweep that runs over everything redoes finished work and stops being something anybody runs twice
+- deciding which analysis to run: this route does one at a time, because thirty roles of three kinds at once is a diff nobody reviews
+- ⛔ reading the stale ones before the missing ones — a unit that was done and now answers an older wording looks finished to everybody reading it
+- every act of judgement. Nothing swept is validated by having been swept, and none of these roles may stamp
+
 ### The engineering and QA read, once product and design have signed off
 
 *They say:* ready for review · is this buildable · can we start on this · engineering review · would these tests prove anything
