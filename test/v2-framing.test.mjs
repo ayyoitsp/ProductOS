@@ -18,6 +18,7 @@
  * because the identical mistake happened with terms.
  */
 import assert from "node:assert/strict";
+import { temp } from "./support/temp.mjs";
 import { test } from "node:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -52,7 +53,7 @@ instruments:
 `;
 
 function seeded(framing = FRAMING) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "v2frame-"));
+  const dir = temp("v2frame-");
   fs.cpSync("v2-seed", dir, { recursive: true });
   const f = path.join(dir, "truth", "tasks.md");
   const was = fs.readFileSync(f, "utf-8");

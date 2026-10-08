@@ -10,6 +10,7 @@
  * Prose did not catch that for the life of the concept. These do.
  */
 import assert from "node:assert/strict";
+import { temp } from "./support/temp.mjs";
 import { test } from "node:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -102,7 +103,7 @@ test("a steers file that will not parse does not take the install down", () => {
    * for the first time has config and little else, and making the install throw on a bad file
    * would break it for the people most likely to be running it.
    */
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pos-steers-"));
+  const dir = temp("pos-steers-");
   fs.mkdirSync(path.join(dir, "steers"));
   fs.writeFileSync(path.join(dir, "steers", "steers.yaml"), "steers: [ this is not: valid: yaml");
   assert.deepEqual(readSteers(dir), []);
@@ -116,7 +117,7 @@ test("a steers file that will not parse does not take the install down", () => {
 });
 
 test("a corpus with no steers directory is not an error", () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pos-nosteers-"));
+  const dir = temp("pos-nosteers-");
   assert.deepEqual(readSteers(dir), []);
 });
 
@@ -223,7 +224,7 @@ test("⛔ provenance that cites a change record has to cite one that exists", ()
    *
    * The same refusal `depends_on`, `affected_by` and `leads_to` already carry.
    */
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pos-prov-"));
+  const dir = temp("pos-prov-");
   fs.cpSync(path.join(process.cwd(), "v2-seed"), path.join(dir, "v2"), { recursive: true });
   // a project root: `<root>/productos/config.yaml` is what makes `changes/` findable
   fs.mkdirSync(path.join(dir, "productos"), { recursive: true });
@@ -249,7 +250,7 @@ test("⛔ provenance that cites a change record has to cite one that exists", ()
 
 test("free-text provenance naming no record is left alone", () => {
   /** ⛔ The point is a citation nobody can follow — not a demand that every habit cite a ticket. */
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pos-prose-"));
+  const dir = temp("pos-prose-");
   fs.cpSync(path.join(process.cwd(), "v2-seed"), path.join(dir, "v2"), { recursive: true });
   fs.mkdirSync(path.join(dir, "productos"), { recursive: true });
   fs.writeFileSync(path.join(dir, "productos", "config.yaml"), "version: 0.0.1\n");
@@ -335,7 +336,7 @@ test("⛔ a target that rots is a finding, never a parse failure", async () => {
    * OFFLINE rather than merely wrong — which is exactly what `walked` did to two files here, and
    * why a document migration had to be built. So the schema takes any string; `check` reports it.
    */
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pos-rot-"));
+  const dir = temp("pos-rot-");
   fs.cpSync(path.join(process.cwd(), "v2-seed"), path.join(dir, "v2"), { recursive: true });
   fs.mkdirSync(path.join(dir, "v2", "steers"), { recursive: true });
   fs.writeFileSync(

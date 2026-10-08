@@ -11,6 +11,7 @@
  * somebody can read beats a dead port every time.
  */
 import assert from "node:assert/strict";
+import { temp } from "./support/temp.mjs";
 import { test } from "node:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -19,7 +20,7 @@ import path from "node:path";
 const { loads } = await import(path.resolve("dist/core/hot-reload.js"));
 
 test("a module that will not load is caught before the server hands over", () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "reload-"));
+  const dir = temp("reload-");
 
   const good = path.join(dir, "good.mjs");
   fs.writeFileSync(good, "export const x = 1;\n");

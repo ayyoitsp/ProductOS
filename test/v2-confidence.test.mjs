@@ -13,6 +13,7 @@
  * confirmation it inherited from. Those two conditions are what most of this file asserts.
  */
 import assert from "node:assert/strict";
+import { temp } from "./support/temp.mjs";
 import { test } from "node:test";
 import {
   confidenceOf,
@@ -41,7 +42,7 @@ const { loadCorpus } = await import("../dist/v2/load.js");
 const { coveredBy } = await import("../dist/v2/stamp.js");
 
 const seeded = () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "v2conf-"));
+  const dir = temp("v2conf-");
   fs.cpSync("v2-seed", dir, { recursive: true });
   return { dir, corpus: loadCorpus(dir) };
 };

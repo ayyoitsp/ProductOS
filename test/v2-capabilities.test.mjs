@@ -27,6 +27,7 @@
  * into areas. they obviously nest, or cross reference other areas."*
  */
 import assert from "node:assert/strict";
+import { temp } from "./support/temp.mjs";
 import test from "node:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -86,7 +87,7 @@ The once-per-day guarantee lives here.
 
 /** The pristine seed plus a capability layer. Written per test so a mutation cannot leak. */
 function withCapabilities(files = { "ledger.md": LEDGER, "records.md": RECORDS, "clock.md": CLOCK }) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "v2cap-"));
+  const dir = temp("v2cap-");
   fs.cpSync("v2-seed", dir, { recursive: true });
   fs.mkdirSync(path.join(dir, "capabilities"), { recursive: true });
   for (const [name, body] of Object.entries(files))

@@ -22,6 +22,7 @@
  *     agreed to words a machine wrote after they signed
  */
 import assert from "node:assert/strict";
+import { temp } from "./support/temp.mjs";
 import { test } from "node:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -37,7 +38,7 @@ import { parseFrontmatter } from "../dist/core/frontmatter.js";
 const MONEY = path.join("truth", "money.md");
 
 function seed() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "v2der-"));
+  const dir = temp("v2der-");
   fs.cpSync("v2-seed", dir, { recursive: true });
   return dir;
 }

@@ -11,6 +11,7 @@
  * must fire on it, and nothing may fire on the pristine seed.
  */
 import assert from "node:assert/strict";
+import { temp } from "./support/temp.mjs";
 import { test } from "node:test";
 import { checkCorpus } from "../dist/v2/check.js";
 import { loadCorpus } from "../dist/v2/load.js";
@@ -222,7 +223,7 @@ test("the seed's queue stays small enough to work", () => {
  * Both halves passed every check. Pinned by building the shape rather than by reading the renderer.
  */
 test("a behaviour arriving on another scope's screen is whole in both packets", () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "v2xs-"));
+  const dir = temp("v2xs-");
   fs.cpSync("v2-seed", dir, { recursive: true });
   const f = path.join(dir, "truth", "money.md");
   const before = fs.readFileSync(f, "utf-8");

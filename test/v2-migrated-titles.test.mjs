@@ -20,6 +20,7 @@
  * read a migrated corpus by eye.
  */
 import assert from "node:assert/strict";
+import { temp } from "./support/temp.mjs";
 import { test } from "node:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -93,7 +94,7 @@ const CALLER = {
 };
 
 function migrated() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "v2mig-"));
+  const dir = temp("v2mig-");
   const v1 = path.join(dir, "productos");
   fs.mkdirSync(path.join(v1, "products", "intake"), { recursive: true });
   for (const doc of [V1, CALLER])

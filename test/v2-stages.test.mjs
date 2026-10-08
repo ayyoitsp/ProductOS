@@ -16,6 +16,7 @@
  *   — and UNREACHABLE while a question is open, however much else has been agreed
  */
 import assert from "node:assert/strict";
+import { temp } from "./support/temp.mjs";
 import { test } from "node:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -26,7 +27,7 @@ import { STAGES } from "../dist/v2/schema.js";
 import { execFileSync } from "node:child_process";
 
 function seed() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "v2stage-"));
+  const dir = temp("v2stage-");
   fs.cpSync("v2-seed", dir, { recursive: true });
   /**
    * ⛔ A SEED HAS NO VERDICTS, DELIBERATELY — AND `stamp` BELOW WRITES ONE.

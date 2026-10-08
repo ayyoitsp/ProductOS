@@ -20,6 +20,7 @@
  * it reads as current forever.
  */
 import assert from "node:assert/strict";
+import { temp } from "./support/temp.mjs";
 import { test } from "node:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -30,7 +31,7 @@ import { resolveRef } from "../dist/v2/ref.js";
 import { stampFor } from "../dist/v2/stamp.js";
 
 function corpus({ clash = false } = {}) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "v2top-"));
+  const dir = temp("v2top-");
   fs.mkdirSync(path.join(dir, "charter"), { recursive: true });
   fs.mkdirSync(path.join(dir, "truth"), { recursive: true });
   fs.writeFileSync(path.join(dir, "charter", "goals.md"), `---

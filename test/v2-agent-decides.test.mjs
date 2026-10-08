@@ -13,6 +13,7 @@
  * the single function every gate in the model asks.
  */
 import assert from "node:assert/strict";
+import { temp } from "./support/temp.mjs";
 import { test } from "node:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -24,7 +25,7 @@ import { perform, isHuman, VIA } from "../dist/v2/acts.js";
 import { renderScopePage } from "../dist/v2/page.js";
 
 const corpusWithPurpose = () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "agentdec-"));
+  const dir = temp("agentdec-");
   fs.cpSync("v2-seed", dir, { recursive: true });
   return dir;
 };

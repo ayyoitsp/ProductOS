@@ -24,6 +24,7 @@
  * three meanings. Hence `#shows#`, and hence the test below that the printed ref resolves.
  */
 import assert from "node:assert/strict";
+import { temp } from "./support/temp.mjs";
 import { test } from "node:test";
 import { loadCorpus } from "../dist/v2/load.js";
 import { compilePacket } from "../dist/v2/packet.js";
@@ -35,7 +36,7 @@ import os from "node:os";
 
 /** A throwaway copy of the pristine seed, so a mutation cannot leak into another test. */
 function seed() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "v2req-"));
+  const dir = temp("v2req-");
   fs.cpSync("v2-seed", dir, { recursive: true });
   return dir;
 }

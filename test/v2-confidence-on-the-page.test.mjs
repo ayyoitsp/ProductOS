@@ -14,6 +14,7 @@
  * `one-reading` printed over a statement with no readings.
  */
 import assert from "node:assert/strict";
+import { temp } from "./support/temp.mjs";
 import { test } from "node:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -31,7 +32,7 @@ const B = "money#see-a-balance#refuses";
  * whole mechanism exists for, rendered through the real command.
  */
 function rendered() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "v2cpage-"));
+  const dir = temp("v2cpage-");
   fs.cpSync("v2-seed", dir, { recursive: true });
   const now = coveredBy(loadCorpus(dir), A);
   assert.ok(now, `${A} no longer resolves in the seed`);

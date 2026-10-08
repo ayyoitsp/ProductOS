@@ -17,6 +17,7 @@
  * So this asserts the round trip AND that it runs on the real log.
  */
 import assert from "node:assert/strict";
+import { temp } from "./support/temp.mjs";
 import { test } from "node:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -39,7 +40,7 @@ import { worthWaking } from "../dist/mcp/server.js";
 const CLI = path.resolve("dist/cli/index.js");
 
 function corpusOnDisk() {
-  const dir = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "productos-loop-")), "v2");
+  const dir = path.join(temp("productos-loop-"), "v2");
   execFileSync("node", [CLI, "v2", "reset", "--at", dir], { stdio: "pipe" });
   return dir;
 }

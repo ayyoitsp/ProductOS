@@ -1,0 +1,9 @@
+id: "0118"
+said: just do the rm on those directories. do the PR to clean it up
+at: 2026-10-08
+kind: instruction
+reaches:
+  pin: no test reaches for mkdtempSync itself
+waived:
+  instruct: "The instruction landed, in CLAUDE.md under `A test never calls mkdtempSync — it calls temp()`, which this layer's file list does not cover: `files: [\"skills\", \"agents\"]` is where a future session is told what to write into a CORPUS, and this tells a session working on ProductOS itself how to write a test. Arguable, and the file list has been wrong once before for exactly this reason — it was `[\"skills\"]` alone until `agents` was added, and the comment on it records a waiver granted for work that had in fact been done. If repo-level instruction is a thing the cascade should verify, CLAUDE.md belongs in the list and this stops being a waiver."
+closed: 2026-10-08
