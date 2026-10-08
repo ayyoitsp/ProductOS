@@ -11,6 +11,7 @@
  *   shape    an observation about proportions, which no single page can show
  */
 import { SLOTS, SLOT_ASKS, statements, saysText, NOT_A_DOCUMENT, type SlotName, type Says } from "./schema.js";
+import { walkOf } from "./walk.js";
 import {
   DOWNSTREAM_OF_ANSWER,
   answerIsUnknown,
@@ -267,6 +268,77 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
    * do — while the one person who could has already seen it, locally, before importing.
    */
   const couldCarry = app.from.length > 0 || app.missing.length > 0;
+  /**
+   * ⛔ OUTSIDE THE STYLE SECTION, AND IT WAS NOT. Written directly above the stylesheet findings it
+   * landed inside their `else`, so it ran only for a corpus that HAS a snapshot — every fixture
+   * without one silently reported nothing, and the refusal below looked like it did not work. A
+   * finding that fires only when an unrelated thing is configured is worse than no finding.
+   */
+  /**
+   * ⛔ WHAT HOLDS WHAT, AND WHAT NOBODY CAN GET TO.
+   *
+   * Peter: *"we should be able to know the true navigation, leverage screens within screens"*. Two
+   * things can go wrong once a screen may say it is inside another, and they fail very differently:
+   * a `within` that points at nothing is an authoring mistake and is refused; a screen with no way
+   * in is a fact about the product and is reported.
+   */
+  {
+    const walk = walkOf(corpus);
+    for (const entry of corpus.scopes)
+      for (const view of entry.scope.views ?? []) {
+        if (!view.within) continue;
+        const ref = `${entry.scope.id}#${view.id}`;
+        const step = walk.steps.get(ref);
+        const held = step && [...walk.steps.values()].some((s) => s.holds.includes(ref));
+        if (held) continue;
+        add({
+          severity: "refuse",
+          kind: "within-points-at-nothing",
+          where: ref,
+          what: `says it appears inside \`${view.within}\`, and there is no such screen here`,
+          fix: "name a view in this scope, or `<scope>#<view>` for one elsewhere — ⛔ `within` is where a screen APPEARS, which is not the same as the feature it belongs to",
+        });
+      }
+    /**
+     * ⛔ REPORTED, NOT REFUSED. A screen nobody can reach may be one nobody has wired up yet, and
+     * the corpus is target state: refusing it would make describing a screen before its door exists
+     * impossible, which is the thing this model exists to allow.
+     */
+    if (walk.unreachable.length)
+      add({
+        severity: "note",
+        kind: "no-way-in",
+        where: "the product as a walk",
+        what: `${walk.unreachable.length} screen${walk.unreachable.length === 1 ? " has" : "s have"} no way in — nothing holds ${
+          walk.unreachable.length === 1 ? "it" : "them"
+        } and no control leads there: ${walk.unreachable.slice(0, 5).join(", ")}${
+          walk.unreachable.length > 5 ? `, and ${walk.unreachable.length - 5} more` : ""
+        }`,
+        fix: "say what holds it with `within`, or say where a control lands so something leads to it. A screen with no door cannot be walked to, whatever else is true of it.",
+      });
+    /**
+     * ⛔ THE CANDIDATE, NOT THE ANSWER. Two screens drawn from the SAME route are one page, so one
+     * of them very likely holds the other — but which way round is not derivable, and guessing it
+     * would put a shell inside its own tab. So this points and does not decide.
+     */
+    const byRoute = new Map<string, string[]>();
+    for (const entry of corpus.scopes)
+      for (const view of entry.scope.views ?? []) {
+        if (!view.drawn_from || view.within) continue;
+        const key = view.drawn_from;
+        byRoute.set(key, [...(byRoute.get(key) ?? []), `${entry.scope.id}#${view.id}`]);
+      }
+    for (const [route, refs] of byRoute)
+      if (refs.length > 1)
+        add({
+          severity: "note",
+          kind: "one-page-two-screens",
+          where: refs[0]!,
+          what: `${refs.length} screens are drawn from the same route and none says it is inside another — ${refs.join(", ")}`,
+          fix: `they are one page, so one of them probably holds the others: say which with \`within\`. ⛔ Nothing here guesses the direction — a shell filed inside its own tab is worse than no answer. (${route})`,
+        });
+  }
+
   if (!corpus.style?.css) {
     if (drawnInAppClasses && couldCarry)
       add({
@@ -318,6 +390,7 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
       }
     }
   }
+
     for (const u of corpus.style.unreachable.slice(0, 1))
       add({
         severity: "note",
@@ -3314,6 +3387,25 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
           fix: `aim it at a role or a seat that writes — or drop \`for\` entirely, which reaches every author. ⛔ A steer nothing carries is a habit somebody believes is in force`,
         });
     }
+    /**
+     * ⛔ A HABIT NOBODY HAS READ IS THE PRICE OF APPLYING ONE ON ARRIVAL, AND IT IS WORTH NAMING.
+     *
+     * Peter chose *"In force immediately"* over a press, which is a real choice with a real cost:
+     * a habit learned from what people did is shaping every author it names before anybody has
+     * looked at it. *A constraint nobody chose* is the phrase this concept is organised against.
+     *
+     * ⛔ So this is a NOTE and must stay one. Refusing a corpus over an unread habit would be a gate
+     * by another route, and would reverse the decision above without anybody editing it. What it
+     * does is make the backlog of unread habits impossible to not notice.
+     */
+    if (st.steers === "generation" && !st.declined && st.learned_from && !st.acknowledged)
+      add({
+        severity: "note",
+        kind: "a-learned-steer-nobody-has-read",
+        where: `steer:${st.id}`,
+        what: `"${st.says}" was learned rather than written, is steering authors now, and nobody has looked at it`,
+        fix: `read it and \`productos v2 steer seen ${st.id}\` — or \`steer decline ${st.id} --because "…"\` if it is not a rule here, which is remembered so it is not learned back`,
+      });
     if (st.steers !== "truth") continue;
     /**
      * ⛔ AND IT IS NOT SATISFIED BY EXISTING. A constraint has to reach somebody — the charter is

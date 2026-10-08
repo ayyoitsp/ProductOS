@@ -248,6 +248,12 @@ export const AREAS: Area[] = [
        * goes to one and whether it renders goes to the other.
        */
       "src/v2/derive-states.ts",
+      /**
+       * ⛔ WHAT HOLDS WHAT AND WHAT LEADS WHERE — beside `connects.ts`, because it is the same kind
+       * of fact about the truth and renders none of it. Filed under `generate` first, which is
+       * where a reviewer asked about navigation would not have looked.
+       */
+      "src/v2/walk.ts",
       "src/v2/steers.ts",
       /**
        * ⛔ AUTHORIZATION IS A GATE, AND THESE ARE WHERE IT IS DECIDED. `storeFor(db, who).project(id)`
@@ -290,6 +296,7 @@ export const AREAS: Area[] = [
       "src/v2/appcss.ts",
       /** ⛔ Glyphs read out of the product's own icon package — a generator source, same as draw. */
       "src/v2/icons.ts",
+
       "src/core/agents-doc.ts",
       /** ⛔ The design system index: a generator source like `draw`, reading a product's own vocabulary. */
       "src/v2/design.ts",
@@ -1280,6 +1287,7 @@ export const COMMANDS: Verb[] = [
   /** ⛔ The parent is a command too — `productos v2` with no verb lists the tree. */
   { name: "v2", does: "The Exchange model — the tree every verb below it hangs from", owns: "surface", who: "both", track: "exchange" },
   { name: "v2 check", does: "What this corpus refuses, and what it merely reports", owns: "check", who: "claude", track: "exchange" },
+  { name: "v2 forward", does: "Bring a corpus on disk forward to this build's schema", owns: "derive", who: "claude", track: "exchange" },
   { name: "v2 grid", does: "The behaviours a scope states, and where each one stands", owns: "derive", who: "claude", track: "exchange" },
   { name: "v2 accepted", does: "The exact wording somebody has agreed to, before anybody rewrites it", owns: "surface", who: "claude", track: "exchange" },
   { name: "v2 acts", does: "How many acts of human judgement this corpus carries", owns: "derive", who: "claude", track: "exchange" },
@@ -1322,7 +1330,7 @@ export const COMMANDS: Verb[] = [
    * verb produces is appended to every author's prompt at install, which makes it the same layer
    * `init` and `v2 change` serve: what a future session will be told.
    */
-  { name: "v2 steer", does: "What this project has learned — habits that shape what gets made, never what it promises", owns: "instruct", who: "both", track: "exchange" },
+  { name: "v2 steer", does: "What this project has learned — written, or noticed from what people did; habits that shape what gets made, never what it promises", owns: "instruct", who: "both", track: "exchange" },
   { name: "v2 agents", does: "The roles: what each asks, and which skill orchestrates which", owns: "instruct", who: "both", track: "exchange" },
   { name: "v2 reset", does: "Restore a corpus from the pristine seed, so every run starts identical", owns: "generate", who: "claude", track: "exchange" },
 

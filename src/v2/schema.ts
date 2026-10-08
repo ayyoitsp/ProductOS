@@ -1705,6 +1705,33 @@ export const View = z.object({
    */
   shows: z.array(z.string()).default([]),
   /**
+   * The screen this one appears INSIDE, as `<view>` in the same scope or `<scope>#<view>`.
+   *
+   * ⛔ WITHOUT THIS A PRODUCT IS A PILE OF SCREENS, NOT A PRODUCT.
+   *
+   * Peter: *"we should be able to know the true navigation, leverage screens within screens, like
+   * really a walkable single prototype that can link out to the different areas"*.
+   *
+   * The corpus already knows two kinds of relation and neither one is containment: scopes nest, so
+   * it knows a screen belongs to a FEATURE; and `connect` infers that a control LEADS somewhere
+   * from what the words say. A deal workspace declares five views — a shell and four tabs — and the
+   * model could say only that the five are siblings in one feature. Nothing recorded that four of
+   * them are shown inside the first, which is the plainest fact about that screen and the one a
+   * person uses to find their way.
+   *
+   * It matters most where inference is weakest. On the corpus this was built against, `connect`
+   * found four links across twenty-two screens: eighteen screens with no way in or out, because
+   * most controls genuinely do not navigate — they act on the screen they are on, or they switch a
+   * tab, and switching a tab is containment rather than a link. A map drawn from links alone said
+   * the product was in pieces. It is not; the truth simply had nowhere to say so.
+   *
+   * ⛔ IT IS WHERE A SCREEN APPEARS, NOT WHAT IT IS ABOUT. `within` is a sibling of `drawn_from`,
+   * not of the scope tree: a screen can be filed under one feature and appear inside a screen owned
+   * by another, and that is a normal product, not a mistake. Resolution and the refusal to point at
+   * nothing live in `check`.
+   */
+  within: z.string().optional(),
+  /**
    * The component this drawing was generated from, and the commit it was generated at.
    *
    * ⛔ THE GENERATOR KNEW BOTH AND THREW THEM AWAY, which is why nothing could tell that a screen
@@ -2856,6 +2883,23 @@ export const Steer = z
      * verb that writes one refuses it up front. A corpus already holding one degrades to a finding.
      */
     for: z.array(z.string()).default([]),
+    /**
+     * ⛔ WHETHER ANYBODY HAS LOOKED AT THIS YET — AND IT IS NOT A GATE.
+     *
+     * Peter, asked how a learned habit should land: *"In force immediately"*. So a habit noticed
+     * from what people did is steering authors before anybody has read it, which is the one real
+     * cost of that choice: *a constraint nobody chose* is the phrase this whole concept is
+     * organised against, and in-force-on-arrival is exactly how you get one.
+     *
+     * ⛔ So the answer is visibility, never permission. This records that somebody has SEEN it. It
+     * does not decide whether it steers — removing it would change what a page shows and nothing
+     * about what any author is told. Making it a gate would quietly turn the choice above back into
+     * the other option, which is the kind of reversal nobody would notice in a diff.
+     *
+     * Absent means new. Refusing it on a hand-written steer would be noise: somebody who typed one
+     * has by definition seen it, so this is only ever interesting on something learned.
+     */
+    acknowledged: dateish.optional(),
     at: dateish,
     /**
      * ⛔ TURNED OFF, AND WHY — BECAUSE OTHERWISE IT COMES STRAIGHT BACK.
