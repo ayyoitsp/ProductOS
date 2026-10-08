@@ -41,6 +41,12 @@ const SPEAKS_TO_INSTANCES = new Map([
   ["v2 grid", "reads an instance"],
   ["v2 acts", "reads an instance"],
   ["v2 packet", "compiles from the instance's corpus"],
+  /**
+   * ⛔ A READ, so a URL is the point rather than the hazard. It answers "what does this claim hash
+   * to" from whichever corpus `--at` names, which is exactly what the role working out a test set
+   * needs against a hosted instance — the same shape as `check`, `grid` and `packet` above.
+   */
+  ["v2 claim", "hashes a claim out of the instance's corpus"],
   ["v2 page", "renders the instance's corpus"],
   ["v2 next", "reads an instance"],
   ["v2 inbox", "polls the instance's event log"],

@@ -8,6 +8,7 @@
  *
  *   truth/<slug>.md          one Scope — frontmatter + prose body (framing only, governs nothing)
  *   rules/<name>.md          one Rule per file
+ *   capabilities/<slug>.md   one subsystem — engineering's answer to the truth. Never truth itself.
  *   readings/<slug>.yaml     observations. Never truth.
  *   verdicts/<slug>.yaml     a human's acts. Append-only. No machine writer.
  */
@@ -15,12 +16,13 @@ import fs from "node:fs";
 import path from "node:path";
 import { parseFrontmatter } from "../core/frontmatter.js";
 import YAML from "yaml";
-import { Scope, Rule, Reading, Verdict, Charter, type SlotName , saysText, type Says, Note, Steer, Access, Style} from "./schema.js";
+import { Scope, Rule, Capability, Reading, Verdict, Charter, type SlotName , saysText, type Says, Note, Steer, Access, Style} from "./schema.js";
 
 export interface V2Paths {
   root: string;
   truth: string;
   rules: string;
+  capabilities: string;
   readings: string;
   verdicts: string;
 }
@@ -30,6 +32,7 @@ export function v2Paths(root: string): V2Paths {
     root,
     truth: path.join(root, "truth"),
     rules: path.join(root, "rules"),
+    capabilities: path.join(root, "capabilities"),
     readings: path.join(root, "readings"),
     verdicts: path.join(root, "verdicts"),
   };
@@ -73,6 +76,20 @@ export interface Corpus {
    */
   style?: Style;
   rules: Array<{ rule: Rule; body: string; file: string }>;
+  /**
+   * The subsystems beneath the product, and roughly what each does.
+   *
+   * ⛔ A SEPARATE TREE FROM `scopes`, AND THAT IS THE WHOLE REASON IT EXISTS. One subsystem serves
+   * many features and one feature leans on several subsystems, so the engineering decomposition
+   * cannot be derived from the product's own grouping — which is why v1 kept its own tree, and why
+   * collapsing it into `Exchange.asked_by` lost information rather than simplifying.
+   *
+   * ⛔ NEVER TRUTH. A capability is engineering's answer to the truth: it flows from the design,
+   * and no product acceptance reaches it. Peter: *"capabilities are something engineers can/should
+   * agree on in the future"* — so each one is addressable and hashed from the day it lands, and
+   * nothing yet agrees to any of them.
+   */
+  capabilities: Array<{ capability: Capability; body: string; file: string }>;
   readings: Reading[];
   verdicts: Verdict[];
   /** Files that would not parse, with why. ⛔ Reported, never thrown — one malformed file
@@ -133,6 +150,7 @@ export const CORPUS_DIRS = [
   "readings",
   "notes",
   "verdicts",
+  "capabilities",
   /**
    * ⛔ ADDED LATE, AND IT HAD BEEN SILENTLY MISSING. `loadCorpus` has read `steers/` since steers
    * existed; this list did not have it, so every steer was invisible over `--at <url>` and absent
@@ -224,6 +242,7 @@ export function loadCorpus(root: string, store: Store = diskStore): Corpus {
   const broken: Corpus["broken"] = [];
   const scopes: Corpus["scopes"] = [];
   const rules: Corpus["rules"] = [];
+  const capabilities: Corpus["capabilities"] = [];
   const charter: Corpus["charter"] = [];
 
   for (const file of readDir(paths.truth, [".md"])) {
@@ -239,6 +258,15 @@ export function loadCorpus(root: string, store: Store = diskStore): Corpus {
     try {
       const p = parseFrontmatter(readFile(file));
       rules.push({ rule: Rule.parse(p.data), body: p.content.trim(), file });
+    } catch (e) {
+      broken.push({ file, why: why(e) });
+    }
+  }
+  for (const file of readDir(paths.capabilities, [".md"])) {
+    if (path.basename(file).toLowerCase() === "readme.md") continue;
+    try {
+      const p = parseFrontmatter(readFile(file));
+      capabilities.push({ capability: Capability.parse(p.data), body: p.content.trim(), file });
     } catch (e) {
       broken.push({ file, why: why(e) });
     }
@@ -325,7 +353,7 @@ export function loadCorpus(root: string, store: Store = diskStore): Corpus {
       broken.push({ file, why: why(e) });
     }
   }
-  return { paths, scopes, rules, charter, notes, readings, verdicts, steers, access, style, broken };
+  return { paths, scopes, rules, capabilities, charter, notes, readings, verdicts, steers, access, style, broken };
 }
 
 // ---------------------------------------------------------------------------

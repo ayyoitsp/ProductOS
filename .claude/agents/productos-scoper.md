@@ -574,37 +574,34 @@ answer.
 containing everything its selector reaches. Reach the whole product and it is genuinely
 org-wide — reported once, in the shared queue, not on every row.
 
-### ⛔ Criteria — what would show a sentence holding
+### ⛔ Criteria — you do not write these
 
-**The concept these instructions left out entirely, for as long as there have been instructions.** A
-reviewer caught it: `criteria` appeared zero times here while the schema, the derivation, the
-generator, the page, the packet and eight checks all knew about it — so the rule example below was a
-parse refusal, and a session authoring from this file produced corpora where
-`nothing-demonstrates-this` fired on every stated slot.
+Peter: *"a product person doesn't write a criterion - what even is this? this is old shit. the
+agents decide what kind of tests need to exist."*
 
-```yaml
-criteria:
-  - slot: answer                             # ⛔ which slot this demonstrates. Required
-    of: a-deal-with-no-size-shows-a-dash     # which STATEMENT, where the slot says several things
-    given: a multifamily deal that has never been sized
-    when: the list renders with the loan column shown
-    then: its loan-amount cell reads as a dash
-    level: e2e                               # unit | integration | api | e2e
-    example: |                               # ⛔ an illustration, never the demonstration
-      Northgate, created today, never sized
-    steps: |                                 # freeform, where given/when/then is the wrong shape
-      1. open the list with no filters
-```
+**This section used to teach you how to write a `criteria:` block, and that was the defect.** You
+are the role describing what the product promises; working out what would have to be demonstrated
+for a promise to be believed is a different question, asked by `demonstrator` after somebody has
+agreed the promise. Two things follow:
 
-⛔ **`then` is the whole thing.** `given` and `when` set it up; `then` is what somebody could observe
-being false. A criterion with no `then` demonstrates nothing.
+- ⛔ **Write no `criteria:` at all.** A slot with nothing demonstrating it is not a hole you should
+  fill — it is a claim waiting for sign-off, after which the set gets worked out from the words
+  that were actually agreed. Typing one here produces a test derived from a draft, and the draft is
+  what a builder finds lying around.
+- ⛔ **Make the claim demonstrable instead.** That is the part only you can do, and it is where your
+  leverage over the test set actually is. A sentence whose truth no observation could distinguish
+  from its opposite cannot be demonstrated by anybody — *"the list feels fast"* has no set. Say what
+  would be observably different, and the requirements follow.
 
-⛔ **`of:` when a slot says several things.** Without it a criterion attaches to the slot, and a slot
-saying eleven things reads as fully demonstrated by one criterion — the exact failure `of` exists to
-fix.
+What `check` will tell you about this, so the numbers do not alarm you: `requirements-nobody-worked-out`
+counts the criteria in a corpus that somebody typed, and `nothing-demonstrates-this` names stated
+slots with no set yet. Both are notes, and on a freshly scoped feature both are expected.
 
-⛔ **`example` is not evidence.** `check` refuses a slot whose only criterion leans on one: an
-example shows what it might look like; a demonstration says what must be true.
+⛔ **One thing you DO owe the test set: `of` ids on a slot that says several things.** The
+requirements for statement eleven have to be able to go stale when statement eleven is reworded,
+and without an id on each sentence there is nothing for them to point at — so the whole slot's set
+stales together and nobody can tell which test to revisit. Giving each statement an id is
+addressing, not testing, and it is yours. See the next section.
 
 ### ⛔ A slot that says several things
 
@@ -1282,6 +1279,40 @@ are for different things.
 
 ⛔ **A seat is not the roles in it today.** Scoping *"never name the substrate"* to the engineering
 roles that happened to exist would have silently stopped covering the next one. Name the seat.
+
+### ⛔ A habit can be learned from what people did, and it steers the moment it is
+
+Peter: *"do we suggest steering when users are operating the product truth and suggesting steering or
+auto-steering? shouldn't be explicit"* — and, asked which: ***"In force immediately"***.
+
+```bash
+productos v2 steer learn            # what the record of human acts says this project keeps doing
+productos v2 steer learn --write    # record it — ⛔ steering from that moment, not after a press
+productos v2 steer seen --all       # mark read. It was already steering; this clears the mark only
+```
+
+It reads **rulings** — where somebody rejected a sentence and wrote another, which is literally what
+gets rejected and why — and **requests they closed**.
+
+⛔ **It learns only from acts a PERSON made.** A ruling recorded `via: agent` is software's own
+output, and a learner that reads those closes a loop with nothing human left in it: every pass
+afterwards is the system agreeing with itself more loudly, with `learned_from` populated and
+worthless.
+
+⛔ **It states what was observed, never a principle.** *"`currency` was put into 3 rulings that did
+not have it"* is checkable; *"amounts are always shown with their currency"* is a generalisation
+nobody made. Reword it into a principle if you like — and then it is yours, not something that
+accumulated.
+
+⛔ **`acknowledged:` records that somebody has read it, and gates nothing.** Absent means new.
+`steer seen` is what sets it; it was steering before and is steering after, and the only thing that
+changes is whether the page shows a badge. ⛔ If it ever decides whether a habit applies, the choice
+above has been reversed by a field nobody read as a reversal.
+
+⛔ **Unread is a mark, not a gate.** A learned habit steers before anybody looks at it; that is the
+cost of the choice above, and the protections are that it says what it was drawn from, shows as new
+until somebody reads it, `check` reports the ones nobody has, and declining is remembered — so a
+refused habit is not learned straight back from acts that are all still in the record.
 
 ⛔ **`--for` refuses a target that reaches nobody**, and there are three ways to write one: a typo
 (`design` and `designer` are one character apart and mean different things), a judge — which can

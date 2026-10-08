@@ -10,7 +10,7 @@
  *   note     worth a person's attention; never blocks
  *   shape    an observation about proportions, which no single page can show
  */
-import { SLOTS, SLOT_ASKS, statements, saysText, NOT_A_DOCUMENT, type SlotName, type Says } from "./schema.js";
+import { SLOTS, SLOT_ASKS, DEMONSTRABLE_SLOTS, owesDemonstration, statements, saysText, NOT_A_DOCUMENT, type SlotName, type Says } from "./schema.js";
 import { walkOf } from "./walk.js";
 import {
   DOWNSTREAM_OF_ANSWER,
@@ -35,12 +35,14 @@ import { appStyleFor, styleDrift } from "./appcss.js";
 import { readLog } from "./log.js";
 import { landingsFor, finishesFor } from "./connects.js";
 import { pictureOf, unknownParts, undrawnConditions } from "./states.js";
+import { deriveStates } from "./derive-states.js";
 import fs from "node:fs";
 import { resolvePathsOrThrow } from "../core/paths.js";
 import { readConfig } from "../core/config.js";
 import path from "node:path";
 import { projectRootOf } from "../core/paths.js";
 import { wouldReach } from "./steers.js";
+import { demonstrations } from "./demonstrate.js";
 
 export type Severity = "refuse" | "note" | "shape";
 
@@ -1082,6 +1084,59 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
          * it is to read every criterion. It is a note, not a refusal — naming an example value
          * is legitimate — but a person should see how many of them a corpus is leaning on.
          */
+        /**
+         * ---- a requirement on a slot saying several things, naming none of them ----
+         *
+         * ⛔ `of` WAS OPTIONAL, CHECKED BY NOTHING, AND DROPPED BY THE PACKET. Its own schema
+         * comment says v1 lost this field in the migration and that flattening thirty-one cases
+         * onto one statement showed a reviewer "the evidence for all thirteen" claims. The field
+         * came back; nothing ever made an author write it, and `packet.ts` rendered `c.slot`
+         * instead — so the defect it exists to prevent was reproduced in the artifact a builder
+         * implements, with the fix sitting unused in the schema.
+         *
+         * A note rather than a refusal: on a slot saying one thing `of` is correctly absent, and
+         * the packet now marks the ambiguity in place, so this is here to be counted rather than
+         * to block. ⛔ But it is counted — a slot saying eleven things with one criterion on it
+         * reads as demonstrated and is a tenth demonstrated.
+         */
+        const said = ex.slots[c.slot] ? statements(ex.slots[c.slot]!.says) : [];
+        if (said.length > 1 && !c.of)
+          add({
+            severity: "note",
+            kind: "requirement-names-no-statement",
+            where: `${ref}#shows#${c.id}`,
+            what: `demonstrates \`${c.slot}\`, which says ${said.length} things, and names which with no \`of\``,
+            fix: `add \`of: <statement id>\` — one of ${said.map((s) => s.id).join(", ")}. Without it this reads as demonstrating the whole slot, and the statements nothing covers are invisible rather than missing`,
+          });
+        /**
+         * ---- a requirement pointing at a statement that is not there ----
+         *
+         * ⛔ ONLY WHERE THE SLOT SAYS SEVERAL THINGS, AND THE FIRST CUT OF THIS REFUSED 67 TIMES ON
+         * A REAL CORPUS.
+         *
+         * `statements()` normalises a bare sentence into ONE statement whose id is the literal
+         * string `it` — so on every single-statement slot, any `of` an author had written compared
+         * unequal and was refused. Run against Bilrost: 67 refusals, every one reading *"names
+         * `x`, and `answer` says only it"*, on a corpus nothing had ever complained about. A real
+         * repo could not be handed over because of a check that shipped the same morning.
+         *
+         * ⛔ AND THE CONDITION WAS NEVER A DEFECT THERE. The harm `of` exists to prevent is a
+         * builder unable to tell WHICH statement a requirement demonstrates. Where the slot says
+         * one thing there is nothing to be unable to tell — the pointer is redundant, not
+         * ambiguous, which is exactly why `Criterion.of`'s own comment calls it "optional because a
+         * slot saying one thing needs no pointer". Refusing redundancy as if it were ambiguity is
+         * the shape `nothing-demonstrates-this` records being got wrong on `may` and `with`: a
+         * check that fires everywhere, cannot be cleared by doing the right thing, and teaches
+         * people to run with it switched off.
+         */
+        if (said.length > 1 && c.of && !said.some((s) => s.id === c.of))
+          add({
+            severity: "refuse",
+            kind: "requirement-points-at-nothing",
+            where: `${ref}#shows#${c.id}`,
+            what: `names \`${c.of}\`, and \`${c.slot}\` says ${said.map((s) => s.id).join(", ")}`,
+            fix: "one of the two is wrong — fix the pointer, or the statement id it was written against. ⛔ A builder handed this cannot tell which, and must not guess",
+          });
         if (c.example)
           add({
             severity: "note",
@@ -1177,13 +1232,14 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
        * arriving by the back door, and it is the same mistake the `PartRole` comment
        * records being made one layer down, to screen parts.
        */
-      const DEMONSTRABLE: SlotName[] = ["answer", "refuses", "fails", "again", "at_once"];
-      for (const slot of DEMONSTRABLE) {
-        const fill = ex.slots[slot];
-        if (!fill || fill.standing.kind !== "stated") continue;
-        if (fill.none || fill.cannot_fail) continue;
-        // Nothing to demonstrate where the refusal IS "nothing happens and nothing is told".
-        if (slot === "refuses" && (fill.outcomes ?? []).every((o) => /^nothing\b/i.test(o.told))) continue;
+      /**
+       * ⛔ The list and its three exclusions now live in `schema.ts` as `owesDemonstration`,
+       * because the packet asks the same question to tell a builder how much of the
+       * requirement list is missing. Two copies would let the packet call the set closed
+       * while this says it is not, on one corpus in one run.
+       */
+      for (const slot of DEMONSTRABLE_SLOTS) {
+        if (!owesDemonstration(slot, ex.slots[slot])) continue;
         if (!ex.criteria.some((c) => c.slot === slot) && !inherited.get(`${ref}#${slot}`))
           add({
             severity: "note",
@@ -1296,6 +1352,31 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
     }
 
     for (const v of scope.views) {
+      /**
+       * ---- a refusal nobody can place on the screen ----
+       *
+       * ⛔ THE ONE QUESTION A SENTENCE GENUINELY DOES NOT ANSWER, AND IT IS WORTH ASKING.
+       *
+       * A named refusal carries its trigger and the words the asker reads, so the state it
+       * describes derives for free — except for which control shows it. Where the refusal names a
+       * field, that is not a guess; where it names two, or none, placing it anyway would put an
+       * error on the wrong control and the picture would look right while saying the wrong thing.
+       *
+       * ⛔ A NOTE, NOT A REFUSAL. The corpus is not wrong — a sentence is complete and a placement
+       * is undecided. Refusing here would block a corpus over a question the author may well
+       * answer with "it is a banner, not a field", which is a real answer this model can already
+       * hold.
+       */
+      for (const u of deriveStates(scope, v).unplaced) {
+        add({
+          severity: "note",
+          kind: "nothing-says-which-part-shows-this",
+          where: `${scope.id}#${v.id}`,
+          what: `"${u.outcome}" tells somebody "${u.told}" and nothing says where they read it — ${u.why}`,
+          fix: "name the control it appears on, or say it is shown somewhere that is not a control and declare that part — until then this case has no picture and the sentence cannot be reviewed against one",
+        });
+      }
+
       /**
        * ⛔ `view-never-walked` WAS HERE AND IS GONE WITH THE FIELD IT READ. It fired on every
        * screen in every corpus, asking for a boolean that asserted a human had confirmed something
@@ -1722,6 +1803,56 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
     for (const { scope } of corpus.scopes) {
       for (const v of scope.views) {
         if (v.exists === "withdrawn") continue;
+        /**
+         * ---- two states of one screen drawn with the same picture ----
+         *
+         * ⛔ FOUND ON A REAL CORPUS, AND IT IS THE `walked` CLASS OF DEFECT: a drawing that does
+         * not show what it claims to show.
+         *
+         * Bilrost's `review-the-rows` carries three states of one screen — "Needs look pass",
+         * "With pass remaining", "File open" — whose `sketch_html` is BYTE-IDENTICAL, 153,107
+         * characters each. Whatever captured them never put the screen into any of those states;
+         * it captured the default render three times and labelled them differently. A reviewer
+         * clicking through sees one picture under three names, cannot tell, and signs off on states
+         * nobody has ever looked at.
+         *
+         * ⛔ AT THE TOP OF THE LOOP, BECAUSE THE FIRST CUT WAS UNREACHABLE. It sat below
+         * `the-drawing-is-older-than-the-controls`, which deliberately skips the per-behaviour
+         * checks under it — and that note fires on exactly the corpora most likely to have this
+         * defect, so the check was silent on its own fixture. Found by the test failing, not by
+         * reading the code.
+         *
+         * ⛔ A REFUSAL, like the other drawing checks. Nothing else can catch it:
+         * `the-states-of-this-screen-are-unspoken` counts states, the rendered checks read one
+         * drawing at a time, and both are perfectly happy with three copies of one picture. On that
+         * corpus captured markup is 84% of the truth tree by bytes — 1.72 MB of 2.05 MB — so the
+         * duplication is not a rounding error either.
+         */
+        {
+          const same = new Map<string, string[]>();
+          for (const st of v.states ?? []) {
+            /**
+             * ⛔ THE COMPOSED PICTURE, because a state need not store one any more.
+             *
+             * This measured the problem — captured markup at 84% of the truth tree — and asked the
+             * stored `sketch_html` directly, which is now optional: a state can say which parts are
+             * different and let the screen's own drawing carry the rest. Reading the stored field
+             * would have keyed every composed state on the empty string and reported them all as
+             * duplicates of each other, which is the opposite of what this check is for.
+             */
+            const key = pictureOf(v, st).replace(/\s+/g, " ").trim();
+            same.set(key, [...(same.get(key) ?? []), st.label]);
+          }
+          for (const [, labels] of same)
+            if (labels.length > 1)
+              add({
+                severity: "refuse",
+                kind: "one-picture-labelled-as-several-states",
+                where: `${scope.id}#${v.id}`,
+                what: `${labels.length} states are drawn with the same picture — ${labels.join(", ")}`,
+                fix: "draw each state as it actually appears, or drop the states that are not distinct. ⛔ A reviewer clicking through these sees one screen under several names and cannot tell — which is worse than a screen with no drawing, because that one says so",
+              });
+        }
         /**
          * ⛔ A SCREEN WITH FIVE APPEARANCES AND ONE SENTENCE IS A SCREEN NOBODY HAS DESCRIBED.
          *
@@ -2299,7 +2430,21 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
         kind: "nothing-says-why-this-is-worth-building",
         where: scope.id,
         what: `${scope.exchanges.length} behaviours are specified here and nothing says what is wrong today — so every one of them is justified against a reason nobody wrote down`,
-        fix: `say what is broken now, as a reason. ⛔ Not what the feature does: "a parent and a kid remember the same chore differently" is a reason, "parents want to assign chores" is the feature with its name changed`,
+        /**
+         * ⛔ THE EXAMPLE IS THE SHAPE, NOT A DOMAIN — and it used to name one.
+         *
+         * This read *"a parent and a kid remember the same chore differently" is a reason, "parents
+         * want to assign chores" is the feature with its name changed*. Correct about the
+         * distinction, and it fired twenty times on a commercial-mortgage corpus, explaining
+         * pocket money to somebody scoping agency lending. Advice that names another product's
+         * domain reads as the tool being confused about which corpus it is looking at, which costs
+         * exactly the credibility the finding needs in order to be acted on.
+         *
+         * ⛔ Still a worked example rather than a rule, because the rule alone — "say what is
+         * broken, not what the feature does" — is what every author already believes they wrote.
+         * The two halves have to be shown side by side; they just do not have to be about chores.
+         */
+        fix: `say what is broken TODAY, as a reason. ⛔ Not what the feature does: "two people looking at the same record reach different numbers" is a reason — "people need a shared view" is the feature with its name changed`,
       });
   }
 
@@ -3063,6 +3208,27 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
     // check gave when a parse failure hid the exchanges a rule reached.
     if (rule.standing && rule.standing.kind !== "stated") continue;
     const hits = reach.get(rule.id) ?? [];
+    /**
+     * ⛔ MOVED HERE FROM THE SCHEMA, WHERE IT WAS A DEADLOCK.
+     *
+     * `Rule` used to refuse to PARSE without a conformance criterion — right about the guarantee,
+     * impossible in the sequence. Nobody authors a criterion now: the scoper writes a rule before
+     * sign-off and `demonstrator` works out what would show it holding after, because a set worked
+     * out over a draft has to be done twice. For the whole interval between those two steps every
+     * rule in the corpus had none — so the corpus would not load, for anybody, including the role
+     * whose job was to fix it and including `check`.
+     *
+     * The guarantee is unchanged and arrives where it matters: nothing is handed over and no packet
+     * compiles until a rule can be shown holding.
+     */
+    if (!rule.criteria.some((c) => c.kind === "conformance"))
+      add({
+        severity: "refuse",
+        kind: "a-rule-that-demonstrates-nothing",
+        where: rule.id,
+        what: `fills "${rule.fills}" on ${hits.length} exchanges and nothing says what would show it holding`,
+        fix: "have its conformance criteria worked out — `productos` routes this to the demonstrator. ⛔ This is the widest reach in the model: one rule lands on every exchange its selector touches, so an aspiration here fills a slot on all of them and demonstrates nothing on any",
+      });
     if (hits.length === 0)
       add({
         severity: "refuse",
@@ -3087,6 +3253,232 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
         what: `fills "${rule.fills}" on ${hits.length} exchanges — one accept here reaches all of them`,
         fix: "read its conformance criteria closely; this is the stamp with the longest reach in the corpus",
       });
+  }
+
+  /**
+   * ---- a rule that demonstrates nothing ----
+   *
+   * ⛔ MOVED HERE FROM THE SCHEMA, WHERE IT WAS A DEADLOCK. `Rule` used to refuse to parse without
+   * a conformance criterion — right about the guarantee, impossible in the sequence: the scoper
+   * writes a rule before sign-off and `demonstrator` works out its criteria after, so for the
+   * whole interval between them the corpus would not load, including for the role whose job was to
+   * fix it. The guarantee is identical here and arrives at the moment it matters: nothing is handed
+   * over, and no packet compiles, until a rule can be shown holding.
+   */
+  /**
+   * ---- requirements worked out from truth that has since moved ----
+   *
+   * ⛔ THE OTHER HALF OF "KEEP THEM IDEMPOTENT AS TRUTH CHANGES", AND THE ONLY HALF THAT CAN
+   * REFUSE.
+   *
+   * Peter: *"the agents decide what kind of tests need to exist"* — and the moment they do, the
+   * question stops being "did somebody write a test case" and becomes "is this test still a test
+   * of what the product now promises". A requirement carries the hash of the claim it was worked
+   * out from, so that is answerable by arithmetic: the sentence moved, this did not, and whatever
+   * demonstrates it is demonstrating the old words.
+   *
+   * ⛔ A REFUSAL, unlike the authored note below. A stale requirement in a packet is the one defect
+   * that silently ships wrong behaviour: an engineer implements it, the test passes, and the test
+   * proves a sentence nobody agreed to any more. Nothing downstream can catch that — the suite is
+   * green by construction.
+   */
+  for (const d of demonstrations(corpus)) {
+    for (const r of d.requirements) {
+      if (r.state === "stale")
+        add({
+          severity: "refuse",
+          kind: "a-requirement-older-than-its-claim",
+          where: r.ref,
+          what: `worked out on ${r.criterion.derived?.at} against ${r.claim}, which has been reworded since`,
+          fix: `work it out again from the claim as it now reads. ⛔ Whatever demonstrates this is demonstrating the old sentence, and it still passes — which is why this refuses rather than noting`,
+        });
+    }
+  }
+  /**
+   * ⛔ ONE NOTE WITH A COUNT, AND THE FIRST CUT OF THIS EMITTED TWENTY-FIVE.
+   *
+   * Every corpus in existence is full of criteria somebody typed — the pristine seed is 100% of
+   * them — so per-requirement this fires on all of them at once. That is the third time in one day
+   * this project has written a finding that reports on everything: `requirement-points-at-nothing`
+   * refused 67 times on Bilrost, the subsystem collision refused 5 of 6, and both had to be
+   * unwound. The house answer already existed in `behaviours-with-nothing-behind-them`: say how
+   * many, show the first few, and let the number be the signal.
+   *
+   * What it buys is the honest reading of how far a corpus has got — a corpus whose requirements
+   * are all `authored` has not started working any of them out, and that is one line rather than a
+   * wall nobody reads.
+   */
+  {
+    const typed = demonstrations(corpus)
+      .flatMap((d) => d.requirements)
+      .filter((r) => r.state === "authored");
+    const all = demonstrations(corpus).flatMap((d) => d.requirements);
+    if (typed.length)
+      add({
+        severity: "note",
+        kind: "requirements-nobody-worked-out",
+        where: `${typed.length} of ${all.length}`,
+        what:
+          typed.slice(0, 4).map((r) => r.ref).join(", ") +
+          (typed.length > 4 ? `, +${typed.length - 4} more` : ""),
+        fix: "have them worked out from the claims they demonstrate — `productos` routes this to the demonstrator. ⛔ A typed criterion is not wrong, it is unfalsifiable: when the sentence above it moves, nothing can say whether this went with it",
+      });
+  }
+
+  /**
+   * ---- capabilities: the subsystems, and whether they flow from anything ----
+   *
+   * ⛔ THE LAYER THAT WENT MISSING WITHOUT A SINGLE CHECK GOING RED, so these are the checks that
+   * would have noticed. A Claude session dropped the capability tree in `3db154c` and the only
+   * trace was a comment calling it deleted; `productos-architect` went on being dispatched to
+   * review *"the subsystems beneath them"*, and found none, forever.
+   *
+   * ⛔ AND NOT ONE OF THESE JUDGES THE DECOMPOSITION. Whether these are the right subsystems with
+   * the right boundaries is the architect's question and must stay a person's, because it needs
+   * taste about a domain this cannot read. What is mechanical is narrower and worth having: does
+   * each part flow from something the product promised, does every reference land, and is anything
+   * the product promised unanswered by any part.
+   */
+  {
+    const subs = new Map(corpus.capabilities.map((c) => [c.capability.id, c.capability]));
+    /** Every capability ref, so `serves` can be followed to see if it ever reaches truth. */
+    const servesOf = new Map<string, string[]>();
+    for (const { capability } of corpus.capabilities)
+      for (const o of capability.offers) servesOf.set(`${capability.id}#offers#${o.id}`, o.serves);
+
+    for (const { capability: cap, file } of corpus.capabilities) {
+      /**
+       * ⛔ THERE IS NO ID-COLLISION FINDING HERE, AND DELETING IT WAS THE FIX RATHER THAN A
+       * CONCESSION.
+       *
+       * One existed: a subsystem sharing a name with a scope or a rule was refused, because a bare
+       * one-segment ref resolved rule → scope → subsystem and the loser lost silently. Run against
+       * Bilrost it refused five of six subsystems — its v1 capability tree was migrated into
+       * `truth/` as scopes keeping their names, so `access-control` names both the part of the
+       * system and the area of product truth about it. Which is correct, and should not need a
+       * rename: the two really are the same subject seen from two sides.
+       *
+       * `ref.ts` now spells a subsystem `<id>#offers`, so nothing can be ambiguous and there is
+       * nothing to report. A refusal that fires on the most natural naming in the commonest
+       * migration path does not survive first contact with a real repo.
+       */
+      if (cap.in && !subs.has(cap.in))
+        add({
+          severity: "refuse",
+          kind: "a-subsystem-filed-inside-nothing",
+          where: cap.id,
+          what: `filed inside "${cap.in}", which is not a subsystem here`,
+          fix: "file it inside one that exists, or drop `in:` and let it sit at the top. A dangling parent means it appears in no tree at all",
+        });
+      for (const u of cap.uses)
+        if (!subs.has(u))
+          add({
+            severity: "refuse",
+            kind: "a-subsystem-uses-nothing-that-exists",
+            where: cap.id,
+            what: `leans on "${u}", which is not a subsystem here`,
+            fix: "name one that exists, or say what it is in its own right — a cross-reference to nothing is a dependency nobody can plan around",
+          });
+      /** ⛔ A cycle in the TREE. `uses` may legitimately cycle; containment may not. */
+      const seen = new Set<string>([cap.id]);
+      for (let at = cap.in; at; at = subs.get(at)?.in) {
+        if (seen.has(at)) {
+          add({
+            severity: "refuse",
+            kind: "subsystems-filed-inside-each-other",
+            where: cap.id,
+            what: `its containment comes back round to ${at}`,
+            fix: "containment is a tree — break the loop. `uses:` is where a genuine mutual dependency belongs",
+          });
+          break;
+        }
+        seen.add(at);
+      }
+      if (!cap.offers.length && !corpus.capabilities.some((x) => x.capability.in === cap.id))
+        add({
+          severity: "note",
+          kind: "a-subsystem-that-does-nothing-and-holds-nothing",
+          where: cap.id,
+          what: "offers no capability and nothing is filed inside it",
+          fix: "say what it offers, or file the subsystems it groups inside it. As it stands it is a name with a description",
+        });
+
+      for (const o of cap.offers) {
+        const ref = `${cap.id}#offers#${o.id}`;
+        for (const s of o.serves) {
+          const r = resolveRef(corpus, s);
+          if ("error" in r)
+            add({
+              severity: "refuse",
+              kind: "a-capability-serves-nothing-here",
+              where: ref,
+              what: `says it serves "${s}" — ${r.error}`,
+              fix: "name the product statement it exists for, or another capability that does. ⛔ This is the whole of `serves`: a capability flowing from nothing is scope an engineer invented",
+            });
+        }
+        /**
+         * ⛔ FOLLOWED, NOT JUST RESOLVED. The clock serves the ledger and the ledger serves the
+         * money, which is legitimate layering — so `serves` accepts another capability. What it
+         * must not accept is machinery that only ever serves machinery: follow the chain and it
+         * has to come out at product truth somewhere, or nobody asked for any of it.
+         */
+        const walked = new Set<string>([ref]);
+        let reachesTruth = false;
+        for (const queue = [...o.serves]; queue.length; ) {
+          const at = queue.shift()!;
+          if (walked.has(at)) continue;
+          walked.add(at);
+          const chain = servesOf.get(at);
+          // Not a capability ref, so it is a product ref — and it already resolved above.
+          if (!chain) {
+            if (!("error" in resolveRef(corpus, at))) reachesTruth = true;
+            continue;
+          }
+          queue.push(...chain);
+        }
+        if (o.serves.length && !reachesTruth)
+          add({
+            severity: "refuse",
+            kind: "a-capability-serves-only-other-machinery",
+            where: ref,
+            what: "following what it serves never arrives at anything the product promised",
+            fix: "somewhere down the chain a capability has to serve a product statement. ⛔ Machinery that only serves machinery is machinery nobody asked for, and this is the one shape layering and self-justification look identical from one level up",
+          });
+      }
+    }
+
+    /**
+     * ---- what the product promised and no part of the system answers ----
+     *
+     * ⛔ THE ARCHITECT'S OTHER HALF, and a note rather than a refusal. Its question is *"is anything
+     * missing that the product cannot work without"*, and this is the mechanical shadow of it: a
+     * stated behaviour with no capability serving it. A note, because a corpus whose capability
+     * layer has only just been started would otherwise refuse on every behaviour at once — and a
+     * refusal that fires everywhere teaches people to run with it switched off.
+     */
+    if (corpus.capabilities.length) {
+      const served = [
+        ...new Set(corpus.capabilities.flatMap((c) => c.capability.offers.flatMap((o) => o.serves))),
+      ];
+      const every = corpus.scopes.flatMap(({ scope }) => scope.exchanges.map((ex) => `${scope.id}#${ex.id}`));
+      const unanswered = every.filter((ref) => !served.some((s) => s === ref || s.startsWith(`${ref}#`)));
+      /**
+       * ⛔ ONE FINDING WITH A COUNT, not one per behaviour — the same shape
+       * `behaviours-with-nothing-behind-them` uses, and for the same reason. A corpus that has just
+       * started its capability layer has every behaviour unanswered, and 38 identical notes is a
+       * report nobody reads followed by a check nobody runs.
+       */
+      if (unanswered.length)
+        add({
+          severity: "note",
+          kind: "behaviours-no-subsystem-answers",
+          where: `${unanswered.length} of ${every.length}`,
+          what:
+            unanswered.slice(0, 5).join(", ") +
+            (unanswered.length > 5 ? `, +${unanswered.length - 5} more` : ""),
+          fix: "name the part of the system that answers each — a capability whose `serves` points at it. ⛔ Where the gap is real this is the architect's finding made early: a promise with no machinery behind it, before anybody starts building",
+        });
+    }
   }
 
   // ---- readings ----

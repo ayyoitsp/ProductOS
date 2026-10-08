@@ -226,3 +226,47 @@ test("the set of keys the schema cannot explain does not grow unnoticed", () => 
       [...unexplained].join(", "),
   );
 });
+
+/**
+ * ⛔ A DOCUMENTED BLOCK THAT CAN BE PARSED MUST BE PARSED, AND A MISSING REQUIRED FIELD IS
+ * INVISIBLE TO EVERY CHECK ABOVE.
+ *
+ * Everything else in this file compares a documented field NAME against the schema, or a documented
+ * VALUE against its declared type. Neither can see the defect that was actually sitting in
+ * `productos-scoper.md`: the worked `criteria:` example omitted `id`, which `Criterion` requires and
+ * gives no default. So the one block teaching an author how to write a testing requirement had
+ * never been loadable — in the same section whose own preamble is about a documented parse refusal.
+ *
+ * ⛔ Only `criteria:` for now, and deliberately. Most documented blocks are fragments of a larger
+ * document and cannot be parsed standalone; a list of criteria can. Widening this is worth doing
+ * and is not worth faking — a parse that silently skipped what it could not handle would report
+ * green over the next unloadable example.
+ */
+test("every documented criteria block parses as a Criterion", async () => {
+  const { Criterion } = await import("../dist/v2/schema.js");
+  let parsed = 0;
+  for (const { file, text } of blocks()) {
+    let doc;
+    try {
+      doc = yaml.parse(text);
+    } catch {
+      // A fragment that is not valid YAML on its own is somebody else's problem — see above.
+      continue;
+    }
+    if (!doc || !Array.isArray(doc.criteria)) continue;
+    for (const c of doc.criteria) {
+      const r = Criterion.safeParse(c);
+      assert.ok(
+        r.success,
+        `${file} documents a criterion the model refuses to load: ` +
+          (r.error?.issues ?? []).map((i) => `${i.path.join(".") || "(root)"} — ${i.message}`).join("; ")
+      );
+      parsed++;
+    }
+  }
+  /**
+   * ⛔ A loop over nothing is not evidence — proven on this very change, where a sibling test
+   * passed with the defect restored because its list came back empty.
+   */
+  assert.ok(parsed >= 1, "no documented criteria block was found at all — collection is broken");
+});

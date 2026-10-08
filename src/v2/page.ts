@@ -20,6 +20,7 @@ import { scopeToShadow, liftFaces, PANE_FIT } from "./appcss.js";
 import { promisesOf, screensOf, type ProtoPromise, type ProtoScreen } from "./prototype.js";
 import { inferConnections, landingsFor, finishesFor, stateShowing } from "./connects.js";
 import { pictureOf, STATE_CSS } from "./states.js";
+import { deriveStates } from "./derive-states.js";
 import { walkOf, type Walk } from "./walk.js";
 import { inEffect, declined as declinedSteers, reaches } from "./steers.js";
 import { AUTHORS } from "../core/jobs.js";
@@ -29,6 +30,8 @@ import { stampFor, decidedFor, whatChangedSince } from "./stamp.js";
 import { confidenceOf, whyConfident, discrepancyFor } from "./confidence.js";
 import { wireParts } from "./wire.js";
 import { questionsFor, descendants, type Question } from "./settle.js";
+import { resolveRef } from "./ref.js";
+import { demonstrationOf } from "./demonstrate.js";
 import { decisionsOn, decisionsUnder, howItWasDecided, type Decision } from "./record.js";
 
 const esc = (s: unknown): string =>
@@ -831,7 +834,29 @@ function renderScreens(scope: Scope, ctx: Ctx, scopeId: string, opts: PageOption
             `<div class="proto html"${themeAttr(opts)}><template shadowrootmode="open">${PT_STYLE}<div class="${esc(
               opts.mockClass || "productos-mock"
             )}">${html}</div></template></div>`;
-          const states = v.states ?? [];
+          /**
+           * ⛔ THE STATES THE SENTENCES ALREADY DESCRIBE, COMPUTED HERE RATHER THAN STORED.
+           *
+           * Peter: *"THE WHOLE SYSTEM IS TO MAKE IT EASIER TO INFER SHIT NEEDS TO BE DONE, WHY
+           * WOULD WE ASK PEOPLE TO WRITE ANYTHING DOWN?"* — `refuses` carries a case, its trigger
+           * and the words an asker reads; `fails` what they are left with; `again` the in-flight
+           * moment. Those ARE view states, and nothing was showing them.
+           *
+           * ⛔ ON READ, NEVER WRITTEN INTO THE CORPUS. A derived state stored in truth is wrong the
+           * moment its sentence is reworded, and nothing would say so — the same defect as a
+           * hand-written drawing, one level down. Computing it here means it cannot drift.
+           *
+           * ⛔ AND A DERIVED STATE IS NOT AN AGREED ONE. It is marked on the page, because a tab
+           * nobody can tell was worked out by software is a tab somebody agrees to as though a
+           * person had written it.
+           */
+          const stored = v.states ?? [];
+          const derived = deriveStates(scope, v).states.filter(
+            /** A stored state for the same case wins — somebody has already drawn that one. */
+            (d) => !stored.some((s) => s.label.toLowerCase() === d.label.toLowerCase()),
+          );
+          const states = [...stored, ...derived];
+          const isDerived = (i: number): boolean => i >= stored.length;
           /**
            * ⛔ A PRESS HAS TO MOVE THE PICTURE, OR IT IS A DIAGRAM WITH EXTRA STEPS.
            *
@@ -997,9 +1022,23 @@ function renderScreens(scope: Scope, ctx: Ctx, scopeId: string, opts: PageOption
                      ${states
                        .map(
                          (st, i) =>
-                           `<button type="button" class="state-tab" data-state="${i + 1}" title="${esc(
-                             `in the code: ${st.when}`
-                           )}">${line(st.label)}</button>`
+                           /**
+                            * ⛔ A DERIVED TAB SAYS SO, AND SAYS WHERE IT CAME FROM. Nobody has
+                            * agreed to it — it was worked out from a sentence — and a tab that
+                            * looks identical to a drawn one is a tab somebody accepts as though a
+                            * person had written it.
+                            *
+                            * ⛔ AND `when` IS OPTIONAL NOW. "in the code: undefined" was what this
+                            * produced for a state of a screen nobody has built, which is most of
+                            * the point of making `when` optional in the first place.
+                            */
+                           `<button type="button" class="state-tab${isDerived(i) ? " derived" : ""}" data-state="${i + 1}" title="${esc(
+                             isDerived(i)
+                               ? `worked out from ${(st as { from?: string }).from ?? "the sentences"} — nobody has agreed to this yet`
+                               : st.when
+                                 ? `in the code: ${st.when}`
+                                 : "this screen states this, and no code was read for it"
+                           )}">${line(st.label)}${isDerived(i) ? " ·" : ""}</button>`
                        )
                        .join("")}
                      ${
@@ -2325,11 +2364,43 @@ function renderExchanges(corpus: Corpus, scopeIds: string[], cellOf: Map<string,
             </div>
           </div>`;
       }).join("");
+      /**
+       * ⛔ THE ADDRESS A BUILDER WAS HANDED, ON THE PAGE A PERSON READS IT FROM.
+       *
+       * The packet gives every requirement a ref and the hash of the words it was written from,
+       * and an agent carries both into whatever demonstrates it. If the only place that ref exists
+       * is the packet, then a person looking at a failing test called
+       * `money#record-earning#shows#4` has nowhere to go and look it up — and the half of this
+       * whose entire purpose is a human reviewing what was agreed would be the half that cannot
+       * see what a builder was told.
+       *
+       * ⛔ The ref only. The hash belongs to the packet, which is a machine artifact; printing
+       * sixteen hex characters beside a sentence a person is trying to read buys them nothing.
+       */
+      /**
+       * ⛔ WHETHER EACH REQUIREMENT IS STILL A REQUIREMENT OF WHAT THIS NOW SAYS.
+       *
+       * Nobody writes these; a role works them out from the claim and records which wording it
+       * worked from. So the question a reader has about one is no longer "do I agree with it" — it
+       * is "was this worked out from the sentence above it, or from an older one". A page that
+       * shows a derived test set without that is a page claiming currency it cannot know.
+       */
+      const reqState = new Map(
+        (demonstrationOf(corpus, sid, e.id)?.requirements ?? []).map((r) => [r.criterion.id, r.state])
+      );
       const criteria = e.criteria
         .map(
           (c) => `
-          <li>
+          <li class="req-${esc(reqState.get(c.id) ?? "authored")}">
             <span class="cslot">${esc(SLOT_LABEL[c.slot as SlotName] ?? c.slot)}</span>
+            <code class="creq">${esc(`${ref}#shows#${c.id}`)}</code>
+            ${
+              reqState.get(c.id) === "stale"
+                ? `<span class="badge warn">worked out from an earlier wording</span>`
+                : reqState.get(c.id) === "authored"
+                  ? `<span class="badge">typed by hand</span>`
+                  : ""
+            }
             ${c.given ? `<span class="g">given</span> ${line(c.given)}` : ""}
             ${c.when ? `<span class="g">when</span> ${line(c.when)}` : ""}
             ${c.then ? `<span class="g">then</span> ${line(c.then)}` : ""}
@@ -2644,6 +2715,24 @@ function renderNav(
       ? [{ id: "settings", label: "What steers this", toRead: inEffect(corpus.steers).length }]
       : []),
     /**
+     * ⛔ ABSENT WHERE THERE ARE NO SUBSYSTEMS, for the reason the nav comment at the top of this
+     * list opens on: a row that does nothing reads as *already checked that*. A corpus with no
+     * capability layer must not grow a tab implying somebody has described the machinery.
+     *
+     * The count is how many capabilities exist, not how many subsystems — "which part do I look at
+     * next" is answered by how much is said inside, and a container holding four parts that each
+     * offer nothing should not read as four things to go and look at.
+     */
+    ...(corpus.capabilities.length
+      ? [
+          {
+            id: "subsystems",
+            label: "How it works",
+            toRead: corpus.capabilities.reduce((n, c) => n + c.capability.offers.length, 0),
+          },
+        ]
+      : []),
+    /**
      * ⛔ WHAT A PERSON SEES, THEN THE MACHINERY UNDERNEATH. File order put the subsystems first,
      * which is backwards for every reader: the behaviours are the product, and the machinery is what
      * they rest on. Ordered by whether anything beneath the section has a screen, so it holds
@@ -2902,6 +2991,7 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
         renderPrototype(protoScreens, protoPromises) +
         renderWalk(theWalk) +
         renderSettings(corpus) +
+        renderSubsystems(corpus) +
         `<section class="view" id="view-overview" data-view="overview" data-ref="${esc(scopeId)}" data-label="Overview">
            <div class="sub-view" data-tabs="product" data-sub-view="queue" data-ref="queue" data-label="Queue">
              ${
@@ -6712,6 +6802,23 @@ export const STYLE = `<style>
   .crit ul { margin: .6rem 0 0; padding-left: 1.1rem; }
   .crit li { margin: .35rem 0; }
   .cslot { font-family: ui-monospace, Menlo, monospace; font-size: .78rem; color: var(--accent); margin-right: .4rem; }
+  /* The address a builder was handed. Quiet — it is a lookup key, not part of the sentence. */
+  .creq { font-family: ui-monospace, Menlo, monospace; font-size: .72rem; color: var(--dim); margin-right: .4rem; }
+  /* The subsystems. ⛔ The containment IS the indent — a child renders inside its parent's box, so
+     no depth variable and no computed margin. Deliberately plainer than a behaviour card: this is
+     an engineering sketch and it must not wear product truth's furniture. */
+  .subsys { margin: .9rem 0; padding: .75rem .9rem; border: 1px solid var(--line); border-radius: 8px; background: var(--card); }
+  .subsys > header { display: flex; align-items: baseline; gap: .5rem; flex-wrap: wrap; }
+  .subsys > header h3 { margin: 0; font-size: 1rem; }
+  .subsys > header code { font-family: ui-monospace, Menlo, monospace; font-size: .72rem; color: var(--dim); }
+  .subsys-does { margin: .35rem 0; }
+  .subsys-uses, .subsys-groups { margin: .35rem 0; font-size: .85rem; color: var(--dim); }
+  .cap-list { margin: .5rem 0 0; padding-left: 1.1rem; }
+  .cap-list li { margin: .4rem 0; }
+  .cap-does { display: block; }
+  .cap-serves { display: block; font-size: .85rem; color: var(--dim); }
+  .cap-up { font-style: italic; }
+  .cap-dead { color: var(--warn, #b4541f); }
   .g { font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; color: var(--dim); margin: 0 .25rem; }
   .ex-card footer { margin-top: 1.1rem; padding-top: .9rem; border-top: 1px solid var(--line); }
   .gated { font-size: .9rem; }
@@ -6822,6 +6929,99 @@ function renderSettings(corpus: Corpus): string {
            </div>`
         : ""
     }
+  </section>`;
+}
+
+/**
+ * The subsystems beneath the product, and roughly what each does.
+ *
+ * ⛔ THE HALF OF THE SITE A JUDGE HAS BEEN SENT TO READ SINCE BEFORE IT EXISTED.
+ * `productos-architect`'s instructions say *"The site has two halves: the product's user-facing
+ * features, and the subsystems beneath them. Read the features to learn what the system is
+ * required to do; read the subsystems to see whether anybody has said how."* There was no second
+ * half. Every architect run has been reviewing the features and reporting the machinery missing,
+ * which is correct and was never actionable, because no author and no surface existed for it.
+ *
+ * ⛔ AND A CAPABILITY IS NEVER SHOWN AS AGREED, because none of this is truth. Peter:
+ * *"capabilities are something engineers can/should agree on in the future"* — future, so the
+ * lede says plainly that nobody has agreed to any of it. ⛔ Rendering an engineering sketch with
+ * the furniture of product truth is the exact mistake `packet.ts` made when it printed "accepted
+ * separately" on rules nobody had stamped.
+ */
+function renderSubsystems(corpus: Corpus): string {
+  if (!corpus.capabilities.length) return "";
+  const subs = corpus.capabilities.map((x) => x.capability);
+  const titleOf = (id: string) => subs.find((s) => s.id === id)?.title ?? id;
+
+  /** What a `serves` ref actually says, so a reader is not left holding an address. */
+  const servedText = (ref: string): string => {
+    const r = resolveRef(corpus, ref);
+    if ("error" in r) return `<span class="cap-dead">${esc(ref)} — nothing here</span>`;
+    if (r.ref.kind === "capability") {
+      const other = subs.find((s) => s.id === (r.ref as { subsystem: string }).subsystem);
+      const o = other?.offers.find((x) => x.id === (r.ref as { capability: string }).capability);
+      return `<span class="cap-up">${esc(other?.title ?? "")} · ${line(o?.does ?? ref)}</span>`;
+    }
+    const [scopeId, exId] = ref.split("#");
+    const sc = corpus.scopes.find((s) => s.scope.id === scopeId)?.scope;
+    const ex = sc?.exchanges.find((e) => e.id === exId);
+    return `<a href="#${anchorOf(`${scopeId}#${exId}`)}">${line(ex?.title ?? ref)}</a>`;
+  };
+
+  /**
+   * ⛔ THE INDENT IS THE NESTING, NOT A DEPTH VARIABLE. The first cut carried `style="--d:N"` and a
+   * `margin-left: calc(var(--d) * 1.4rem)` — which double-counts, because a child subsystem is
+   * already rendered INSIDE its parent's box and already offset by its padding. Depth 2 got two
+   * levels of containment plus 2.8rem of margin on top.
+   *
+   * ⛔ Found because the test could not fail. Deleting the margin rule left every assertion green:
+   * the geometry check was `child.left > parent.left + 10` and the parent's padding alone is ~15px,
+   * so it was passing on containment while claiming to measure the indent. The mechanism was
+   * redundant and the test was measuring the wrong thing — one defect, visible from two sides.
+   */
+  const one = (s: (typeof subs)[number]): string => `
+    <article class="subsys" data-ref="${esc(s.id)}">
+      <header>
+        <h3>${line(s.title)}</h3>
+        <code>${esc(`${s.id}#offers`)}</code>
+      </header>
+      <p class="subsys-does">${line(s.does)}</p>
+      ${
+        s.uses.length
+          ? `<p class="subsys-uses">leans on ${s.uses.map((u) => `<strong>${line(titleOf(u))}</strong>`).join(", ")}</p>`
+          : ""
+      }
+      ${
+        s.offers.length
+          ? `<ul class="cap-list">${s.offers
+              .map(
+                (o) => `
+            <li>
+              <code class="creq">${esc(`${s.id}#offers#${o.id}`)}</code>
+              <span class="cap-does">${line(o.does)}</span>
+              <span class="cap-serves">for ${o.serves.map(servedText).join(", ")}</span>
+            </li>`
+              )
+              .join("")}</ul>`
+          : `<p class="subsys-groups">Groups what is filed inside it; offers nothing itself.</p>`
+      }
+      ${subs
+        .filter((x) => x.in === s.id)
+        .map((x) => one(x))
+        .join("")}
+    </article>`;
+
+  /** ⛔ Orphans render too. A subsystem filed inside nothing is a `check` refusal, not a reason to
+   *  hide it — a page that silently drops it is a page that disagrees with the check. */
+  const parented = new Set(subs.filter((s) => s.in && subs.some((x) => x.id === s.in)).map((s) => s.id));
+  const roots = subs.filter((s) => !parented.has(s.id));
+
+  return `<section class="view" id="view-subsystems" data-view="subsystems" data-ref="subsystems" data-label="How it works">
+    <p class="lede">The parts of the system beneath the product, and roughly what each does.
+    ⛔ <strong>Not product truth, and nobody has agreed to any of it.</strong> This is engineering's
+    answer to what the product promised — each part says what it exists to serve, and you can follow
+    that back to the behaviour that required it. What the product commits to is on the features.</p>
+    ${roots.map((s) => one(s)).join("")}
   </section>`;
 }
 

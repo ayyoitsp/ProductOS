@@ -81,11 +81,11 @@ const humanise = (slug: string): string =>
  * in its own words is not a guess at all; the control the ask was made from is the next most
  * likely; past that nothing here knows, and saying so is the honest answer.
  */
-export function partForRefusal(
+export function partsForRefusal(
   view: Pick<View, "parts">,
   exchange: ExchangeLike,
   outcome: { name: string; when: string; told: string },
-): { part?: string; why: string } {
+): { parts: string[]; why: string } {
   const text = `${outcome.when} ${outcome.told} ${outcome.name}`.toLowerCase();
 
   const named = view.parts
@@ -95,16 +95,34 @@ export function partForRefusal(
       return words.some((w) => w.length > 2 && text.includes(w));
     });
 
-  /** ⛔ ONE MATCH ONLY. Two fields both named is precisely the case a person has to settle. */
-  if (named.length === 1) return { part: named[0]!.id, why: "the refusal names this field" };
+  if (named.length === 1) return { parts: [named[0]!.id], why: "the refusal names this field" };
+
+  /**
+   * ⛔ SEVERAL FIELDS AT ONCE IS A STATE, NOT AN AMBIGUITY — WHERE THE SENTENCE SAYS SO.
+   *
+   * This used to refuse to place anything and ask which field, and the first real sentence it
+   * asked about was bilrost's: *"beside EACH ONE that is missing, that it is required"* — which
+   * answers the question in its own words. Four fields invalid at once is the exact case a state
+   * made of part conditions exists to express, and asking about it was the old one-picture-per-
+   * state assumption still talking.
+   *
+   * ⛔ ON AN EXPLICIT WORD, NOT ON PLURALITY. "either the name or the borrower is blank" also
+   * names two fields and means the message appears once — so this reads for a distributive word
+   * and keeps asking otherwise. A heuristic that guessed from the count would put errors on fields
+   * a product never marks.
+   */
+  const distributive = /\b(each|every|all of|both|any that|those that)\b/.test(text);
+  if (named.length > 1 && distributive)
+    return { parts: named.map((p) => p.id), why: "the refusal says it appears beside each of these" };
   if (named.length > 1)
     return {
-      why: `it names more than one field (${named.map((p) => p.id).join(", ")}), so which one shows it is a product decision`,
+      parts: [],
+      why: `it names ${named.length} fields (${named.map((p) => p.id).join(", ")}) without saying it appears on each, so which one shows it is a product decision`,
     };
 
-  if (exchange.at?.part) return { part: exchange.at.part, why: "shown on the control the ask was made from" };
+  if (exchange.at?.part) return { parts: [exchange.at.part], why: "shown on the control the ask was made from" };
 
-  return { why: "nothing in the refusal names a part, and the ask does not arrive at one" };
+  return { parts: [], why: "nothing in the refusal names a part, and the ask does not arrive at one" };
 }
 
 /**
@@ -176,21 +194,26 @@ export function deriveStates(
     }
 
     for (const o of slots.refuses?.outcomes ?? []) {
-      const { part, why } = partForRefusal(view, e, o);
-      if (!part) {
+      const { parts, why } = partsForRefusal(view, e, o);
+      if (!parts.length) {
         unplaced.push({ outcome: o.name, told: o.told, why });
         continue;
       }
-      const role = roleOf(part);
-      const condition =
-        role === "entry" ? "invalid" : role === "commits" || role === "navigates" ? "disabled" : "failed";
-      conditions.push({ part, condition, says: o.told, from: `${e.id}#refuses/${o.name}` });
-      states.push({
-        label: humanise(o.name),
-        when: o.when,
-        holds: { [part]: { in: condition, says: o.told } },
-        from: `${e.id}#refuses/${o.name}`,
-      });
+
+      /**
+       * ⛔ ONE STATE HOLDING ALL OF THEM, not one state each. "every required field is missing" is a
+       * single moment a person is looking at, and splitting it into four tabs would ask them to
+       * agree four times to one decision — while never showing them the screen as it actually is.
+       */
+      const holds: Record<string, { in: string; says: string }> = {};
+      for (const part of parts) {
+        const role = roleOf(part);
+        const condition =
+          role === "entry" ? "invalid" : role === "commits" || role === "navigates" ? "disabled" : "failed";
+        conditions.push({ part, condition, says: o.told, from: `${e.id}#refuses/${o.name}` });
+        holds[part] = { in: condition, says: o.told };
+      }
+      states.push({ label: humanise(o.name), when: o.when, holds, from: `${e.id}#refuses/${o.name}` });
     }
   }
 

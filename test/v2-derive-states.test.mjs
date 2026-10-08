@@ -17,7 +17,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { deriveStates, partForRefusal } from "../dist/v2/derive-states.js";
+import { deriveStates, partsForRefusal } from "../dist/v2/derive-states.js";
 import { pictureOf } from "../dist/v2/states.js";
 import { parseFrontmatter } from "../dist/core/frontmatter.js";
 
@@ -179,7 +179,13 @@ test("a refusal naming two fields is reported, not placed on the first one", () 
         slots: {
           refuses: {
             outcomes: [
-              { name: "incomplete", when: "the deal name or the borrower is blank", told: "Fill in every required field." },
+              /**
+               * ⛔ NO DISTRIBUTIVE WORD, which is what makes this the ambiguous case. The first
+               * version of this fixture said "Fill in EVERY required field" — and once a
+               * distributive word became the signal, that sentence answered the question itself
+               * and the test was asserting the old behaviour.
+               */
+              { name: "incomplete", when: "either the deal name or the borrower is blank", told: "Fill one of them in." },
             ],
           },
         },
@@ -189,11 +195,12 @@ test("a refusal naming two fields is reported, not placed on the first one", () 
   const { states, unplaced } = deriveStates(scope, view());
   assert.deepEqual(states, [], "it placed a refusal that names two fields");
   assert.equal(unplaced.length, 1);
-  assert.match(unplaced[0].why, /more than one field/);
+  assert.match(unplaced[0].why, /names 2 fields/);
+  assert.match(unplaced[0].why, /without saying it appears on each/);
   assert.match(unplaced[0].why, /deal-name/);
   assert.match(unplaced[0].why, /borrower/);
   /** ⛔ The question carries the words, so the person is asked something answerable. */
-  assert.equal(unplaced[0].told, "Fill in every required field.");
+  assert.equal(unplaced[0].told, "Fill one of them in.");
 });
 
 test("a refusal naming nothing, on an ask that arrives nowhere, is reported", () => {
@@ -230,15 +237,62 @@ test("a refusal of the whole ask is reported on the control it was made from", (
   assert.equal(states[0].holds.continue.says, "That deal already exists.");
 });
 
-test("partForRefusal explains itself either way, because the reason is the useful part", () => {
+test("partsForRefusal explains itself either way, because the reason is the useful part", () => {
   const v = view();
-  const named = partForRefusal(v, { id: "x", at: {} }, { name: "n", when: "the borrower is blank", told: "t" });
-  assert.equal(named.part, "borrower");
+  const named = partsForRefusal(v, { id: "x", at: {} }, { name: "n", when: "the borrower is blank", told: "t" });
+  assert.deepEqual(named.parts, ["borrower"]);
   assert.match(named.why, /names this field/);
 
-  const nowhere = partForRefusal(v, { id: "x", at: {} }, { name: "n", when: "something else", told: "t" });
-  assert.equal(nowhere.part, undefined);
+  const nowhere = partsForRefusal(v, { id: "x", at: {} }, { name: "n", when: "something else", told: "t" });
+  assert.deepEqual(nowhere.parts, []);
   assert.ok(nowhere.why.length > 20, "a refusal to place something said nothing a person could act on");
+});
+
+test("a refusal that says it appears beside EACH field places on all of them, as one state", () => {
+  /**
+   * ⛔ THE FIRST REAL SENTENCE THIS WAS ASKED ABOUT ANSWERED IT ITSELF. bilrost's
+   * `something-required-is-missing` says *"beside each one that is missing, that it is required"*
+   * and names four fields — and the first version reported it as ambiguous. Four fields invalid at
+   * once is the exact case a state made of part conditions exists to express, so asking about it
+   * was the one-picture-per-state assumption still talking.
+   */
+  const scope = {
+    exchanges: [
+      {
+        id: "x",
+        at: { view: "create-deal-form", part: "continue" },
+        slots: {
+          refuses: {
+            outcomes: [
+              {
+                name: "something-required-is-missing",
+                when: "the deal name or the borrower is blank",
+                told: "beside each one that is missing, that it is required",
+              },
+            ],
+          },
+        },
+      },
+    ],
+  };
+
+  const { states, unplaced } = deriveStates(scope, view());
+  assert.deepEqual(unplaced, [], "it still asked about a sentence that answers itself");
+  assert.equal(states.length, 1, "it split one moment into several states");
+
+  /** ⛔ ONE state holding BOTH — splitting it would ask somebody to agree twice to one decision. */
+  assert.deepEqual(Object.keys(states[0].holds).sort(), ["borrower", "deal-name"]);
+  assert.equal(states[0].holds.borrower.in, "invalid");
+  assert.equal(states[0].holds["deal-name"].in, "invalid");
+
+  /** ⛔ AND IT IS THE WORD, NOT THE COUNT. "either/or" with no distributive word keeps asking. */
+  const either = partsForRefusal(
+    view(),
+    { id: "x", at: {} },
+    { name: "n", when: "either the deal name or the borrower is blank", told: "Fill one in." },
+  );
+  assert.deepEqual(either.parts, [], "plurality alone was treated as meaning every field");
+  assert.match(either.why, /without saying it appears on each/);
 });
 
 test("a screen with no exchanges derives nothing, rather than inventing a default", () => {
@@ -275,11 +329,18 @@ test(
         /** Every derived state must compose onto a part the screen actually has. */
         for (const st of out.states) {
           const ids = Object.keys(st.holds);
-          assert.equal(ids.length, 1, `${v.id}: a derived state touches ${ids.length} parts`);
-          assert.ok(
-            (v.parts ?? []).some((p) => p.id === ids[0]),
-            `${v.id}: derived a condition on "${ids[0]}", which this screen does not have`,
-          );
+          /**
+           * ⛔ AT LEAST ONE, NOT EXACTLY ONE. I asserted exactly one and the corpus produced a
+           * four-part state from "beside each one that is missing" — which is the feature, not a
+           * fault. Several parts at once is the whole reason a state is conditions rather than a
+           * picture.
+           */
+          assert.ok(ids.length >= 1, `${v.id}: a derived state holds no parts`);
+          for (const id of ids)
+            assert.ok(
+              (v.parts ?? []).some((p) => p.id === id),
+              `${v.id}: derived a condition on "${id}", which this screen does not have`,
+            );
           assert.ok(st.from, `${v.id}: a derived state does not record where it came from`);
         }
 

@@ -89,8 +89,16 @@ const SEGMENT = "[a-z0-9][a-z0-9_-]*";
 export const PLACEHOLDER_TEXT = /^(tbd|to ?be ?decided|not ?yet ?decided|unclear|unknown|n\/?a|todo|\?+|-+)$/i;
 
 export const REF_PATTERN = new RegExp(`^${SEGMENT}(#${SEGMENT}){0,3}$`);
+/**
+ * ⛔ `<case>` IS A REFUSAL OR A STATEMENT, NEVER A TEST CASE, AND THE WORD HAS MISLED ONCE.
+ *
+ * It reads like a test case, so the first attempt at addressing a testing requirement spelled it
+ * `<scope>#<exchange>#<slot>#<case>` — which `resolveRef` answers by finding a named refusal, then
+ * a statement, and never a criterion. One address, three meanings, resolved by whichever branch
+ * matched first. A requirement has its own grain for that reason.
+ */
 export const REF_MESSAGE =
-  "a reference is a rule id, or <scope>#<exchange>[#<slot>[#<case>]] — nothing else addresses anything";
+  "a reference is a rule id, <scope>#<exchange>[#<slot>[#<case>]] where <case> is a named refusal or one statement, or <scope>#<exchange>#shows#<id> for one testing requirement — nothing else addresses anything";
 
 
 /**
@@ -846,6 +854,42 @@ export const SlotFill = z
   });
 export type SlotFill = z.infer<typeof SlotFill>;
 
+/**
+ * The five slots that owe a demonstration, and the three reasons one of them does not.
+ *
+ * ⛔ ONE HOME, BECAUSE TWO READERS ASK THE SAME QUESTION AND MUST NOT DISAGREE. `check` asks it
+ * to report a slot nothing demonstrates; the packet asks it to tell a builder how much of the
+ * list is missing. Written twice, the two answers drift and the packet says the set is closed
+ * while `check` says it is not — on the same corpus, in the same run.
+ *
+ * ⛔ NOT `may` OR `with`. The long note in `check.ts` records what happened when they were
+ * included: it fired on 350 of 600 slots, its own fix text offered a field that did not exist,
+ * and the only way to silence it was filler which then landed in the packet as something a
+ * builder implements. `with: "Which kid."` is exercised by every criterion on the exchange.
+ */
+export const DEMONSTRABLE_SLOTS: readonly SlotName[] = [
+  "answer",
+  "refuses",
+  "fails",
+  "again",
+  "at_once",
+];
+
+/**
+ * Whether this slot, as filled, owes a given/when/then of its own.
+ *
+ * ⛔ The caller still has to ask whether an org-wide rule demonstrates it — that needs the
+ * resolved corpus, which this deliberately does not take.
+ */
+export function owesDemonstration(slot: SlotName, fill: SlotFill | undefined): boolean {
+  if (!fill || fill.standing.kind !== "stated") return false;
+  if (fill.none || fill.cannot_fail) return false;
+  if (!DEMONSTRABLE_SLOTS.includes(slot)) return false;
+  // Nothing to demonstrate where the refusal IS "nothing happens and nothing is told".
+  if (slot === "refuses" && (fill.outcomes ?? []).every((o) => /^nothing\b/i.test(o.told))) return false;
+  return true;
+}
+
 // ---------------------------------------------------------------------------
 // Criterion — first-class and separately hashed, which is the whole point.
 
@@ -874,6 +918,38 @@ export const Criterion = z
      */
     of: z.string().optional(),
     kind: CriterionKind.default("instance"),
+    /**
+     * Who worked out that this had to be demonstrated, and against which words.
+     *
+     * ⛔ A CRITERION IS NOT AUTHORED. Peter: *"a product person doesn't write a criterion - what
+     * even is this? this is old shit. the agents decide what kind of tests need to exist."*
+     *
+     * Everything about this field follows from that sentence:
+     *
+     *  - **`from` is the hash of the claim it was worked out against**, which is the whole of
+     *    "keep them idempotent as truth changes". Re-deriving over unchanged truth produces the
+     *    same set; a reworded sentence leaves exactly the requirements that came from it pointing
+     *    at a hash nothing matches, and `check` says which. Without it, re-derivation is a fresh
+     *    unrelated set of tests every run and nothing can be kept.
+     *  - **It is what keeps a human's acceptance honest.** `coveredBy` hashes only the criteria
+     *    NOBODY derived, so a machine rewriting the test specs can no longer stale a stamp — a
+     *    person cannot have agreed to words they never saw, and before this a re-derivation would
+     *    have invalidated every acceptance in a corpus at once.
+     *  - **Absent means somebody typed it**, which is the old shape and still loads. `check` says
+     *    so as a note and names the role that should have produced it. ⛔ Not a refusal: every
+     *    corpus in existence is full of authored criteria, and a refusal firing on all of them is
+     *    one people switch off — which this project has now learned twice in one day.
+     */
+    derived: z
+      .object({
+        /** The role that worked it out. ⛔ Never a person: that is what `authored` means. */
+        by: z.string().min(1),
+        at: dateish,
+        /** The claim hash this was worked out against — see `claimHash`. */
+        from: z.string().min(8),
+      })
+      .strict()
+      .optional(),
     given: z.string().optional(),
     when: z.string().optional(),
     then: z.string().optional(),
@@ -2161,14 +2237,26 @@ export const Rule = z
           "a rule that supplies `refuses` has to name the cases it refuses — prose here fills the slot and tells a builder nothing they can implement",
       });
     }
-    if (!undecided && !r.criteria.some((c) => c.kind === "conformance")) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["criteria"],
-        message:
-          "a rule needs at least one conformance criterion — without one it is an aspiration that fills a slot and demonstrates nothing",
-      });
-    }
+    /**
+     * ⛔ THIS REFUSAL MOVED TO `check`, AND THE SEQUENCE IS WHY.
+     *
+     * It was a load refusal: a rule with no conformance criterion would not parse, on the entirely
+     * sound reasoning that such a rule "is an aspiration that fills a slot and demonstrates
+     * nothing". The guarantee is right and is unchanged — it is now
+     * `a-rule-that-demonstrates-nothing`, which refuses a handover rather than a read.
+     *
+     * What forced the move: nobody authors a criterion any more. Peter: *"a product person doesn't
+     * write a criterion … the agents decide what kind of tests need to exist."* The scoper writes a
+     * rule while scoping, BEFORE sign-off; `demonstrator` works out what must be demonstrated AFTER
+     * sign-off, because a set worked out over a draft has to be done twice. Between those two
+     * moments every rule in the corpus has no conformance criterion — so as a load refusal this
+     * made the corpus unreadable for the whole interval, including to the role whose job is to fix
+     * it, and including to `check` itself.
+     *
+     * ⛔ A refusal that fires between two steps of the documented sequence is not a strict schema,
+     * it is a deadlock. Refusing at handover keeps every bit of the protection that matters: no
+     * packet compiles over it, and `check` must pass before anybody is asked to review.
+     */
     for (const c of r.criteria) {
       if (c.kind === "instance" && !r.scope.only) {
         ctx.addIssue({
@@ -2304,6 +2392,129 @@ export const Scope = z.object({
   was: z.string().optional(),
 }).strict();
 export type Scope = z.infer<typeof Scope>;
+
+// ---------------------------------------------------------------------------
+// Capability — the subsystems beneath the product, and roughly what each does.
+
+/**
+ * ⛔ RESTORED. A CLAUDE SESSION DELETED THIS AND NOBODY ASKED IT TO.
+ *
+ * v1 had a capability tree: subsystems, nesting to any depth, each offering named
+ * capabilities. Commit `3db154c` (2026-09-21) built v2 as a parallel track and did not carry
+ * it across — the model it lists is *"Scope · View · Exchange · Slot · Criterion · Rule ·
+ * Standing · Reading · Verdict"*, with no capability in it. There is no change record and no
+ * request from Peter. The comment on `depends_on` calling this *"the deleted capability
+ * tree"* is that same session describing its own deletion.
+ *
+ * ⛔ AND THE DELETION WAS INVISIBLE BECAUSE TWO THINGS COVERED FOR IT.
+ *
+ *  - `Exchange.asked_by: system` looks close enough to pass for a capability. It is not: a
+ *    system-asked exchange is machinery-shaped PRODUCT TRUTH, written by a product author and
+ *    agreed by a product person. A capability is engineering's answer to it.
+ *  - Change `0090` — *"let's add some engineering authors! they should be authoring the
+ *    capabilities anyways"* — added `machinist` and `instrumenter`, who write system-asked
+ *    exchanges. So the authors came back and the thing they were meant to author did not, one
+ *    day before this was noticed.
+ *
+ * ⛔ AND A JUDGE WAS ALREADY REVIEWING IT. `productos-architect` asks *"are these the right
+ * subsystems, do their boundaries hold"* and its instructions say *"The site has two halves:
+ * the product's user-facing features, and the subsystems beneath them."* It has been
+ * dispatched against half a site that does not exist. Same shape as `test-design` judging
+ * criteria nobody derives — a reviewer for a layer with no author is how a layer goes missing
+ * without a single check going red.
+ *
+ * Peter: *"capabilities are like object oriented design. just designing the subsystems,
+ * roughly what they do. that's it. they shoudl be logically grouped into areas. they
+ * obviously nest, or cross reference other areas."*
+ *
+ * ⛔ "ROUGHLY WHAT THEY DO. THAT'S IT" IS A SCHEMA CONSTRAINT, not a tone. There are no slots
+ * here, no criteria, no standing contract, and there must not be: the eight-slot skeleton
+ * exists because a product promise has to be falsifiable before anybody builds against it,
+ * and a subsystem sketch is the opposite kind of artefact. Precision about behaviour lives in
+ * product truth; this layer says what parts there are and what each is for. Anything that
+ * makes an engineer write a given/when/then here has misunderstood the layer.
+ */
+export const CapabilityOffering = z
+  .object({
+    id: z.string().regex(new RegExp(`^${SEGMENT}$`), "a capability id is one segment, kebab-case"),
+    /** Roughly what it does. One or two sentences — see the constraint above. */
+    does: z.string().min(10, "a capability nobody can read is not worth agreeing to"),
+    /**
+     * What this exists to serve — a product statement, or another capability.
+     *
+     * ⛔ REQUIRED, AND THIS IS THE WHOLE OF "FLOW FROM THE PRODUCT DESIGN". Peter: *"those
+     * should flow from the product design"*. A capability serving nothing is an engineer
+     * inventing scope, and it is the single finding the architect exists to make — so it is
+     * mechanical rather than left to a reviewer's patience.
+     *
+     * ⛔ REQUIRED IN THE SCHEMA RATHER THAN AT A GATE, which is the opposite of the call made
+     * for `happy_path`, and the difference is adoptability. `happy_path` could not be required
+     * because making it so would have refused every corpus that already existed, including the
+     * pristine seed. ⛔ NO CORPUS HAS A CAPABILITY AT ALL, so there is nothing to refuse and
+     * the usual argument for optional-and-gated does not apply. A layer born optional is a
+     * layer whose load-bearing field is empty everywhere by the time anybody notices.
+     *
+     * ⛔ ANOTHER CAPABILITY IS A LEGITIMATE TARGET, because a general subsystem is often two
+     * levels away from a feature — the clock serves the ledger, and the ledger serves the
+     * money. What `check` enforces is that following `serves` eventually reaches product
+     * truth: machinery that only ever serves machinery is machinery nobody asked for.
+     */
+    serves: z.array(z.string().regex(REF_PATTERN, REF_MESSAGE)).min(1),
+  })
+  .strict();
+export type CapabilityOffering = z.infer<typeof CapabilityOffering>;
+
+export const Capability = z
+  .object({
+    id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/, "subsystem ids are kebab-case slugs, not paths"),
+    title: z.string().min(2),
+    /**
+     * Roughly what this part of the system does.
+     *
+     * ⛔ THE FIELD v1 DID NOT HAVE, AND ITS ABSENCE IS THE RECORDED COMPLAINT. From
+     * `product.ts`: *"capabilities rendered as a flat list of operations — 'limit resolution',
+     * 'deliver a version' — with nothing anywhere saying what subsystem offered them or what it
+     * was for. A directory name is not a description."*
+     */
+    does: z.string().min(10),
+    /**
+     * Where this subsystem is filed — the same containment `Scope.in` uses, to any depth.
+     *
+     * Peter: *"same nested structure as product … they shoudl be logically grouped into
+     * areas. they obviously nest"*. A container subsystem offers nothing itself and groups
+     * those beneath it, exactly as a product container holds no exchanges.
+     */
+    in: z.string().optional(),
+    /**
+     * Other subsystems this one leans on. ⛔ Peter: *"or cross reference other areas"*.
+     *
+     * Distinct from a capability's `serves`, and the direction is the point: `serves` points UP
+     * at what required this, `uses` points ACROSS at what this needs. A single field would make
+     * a cycle between two subsystems indistinguishable from a layering.
+     */
+    uses: z.array(z.string()).default([]),
+    offers: z.array(CapabilityOffering).default([]),
+  })
+  .strict()
+  .superRefine((c, ctx) => {
+    if (c.in === c.id)
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["in"],
+        message: "a subsystem cannot be filed inside itself",
+      });
+    const seen = new Set<string>();
+    for (const o of c.offers) {
+      if (seen.has(o.id))
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["offers"],
+          message: `two capabilities here are called "${o.id}" — an id is what a reference and a future agreement point at`,
+        });
+      seen.add(o.id);
+    }
+  });
+export type Capability = z.infer<typeof Capability>;
 
 // ---------------------------------------------------------------------------
 // Reading — an observation. ⛔ Never truth.
