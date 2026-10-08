@@ -28,6 +28,7 @@
  * wrong permanently unassertable.
  */
 import assert from "node:assert/strict";
+import { temp } from "./support/temp.mjs";
 import { test } from "node:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -44,7 +45,7 @@ import {
   writeMcpRegistration,
 } from "../dist/adapters/claude.js";
 
-const tmp = (tag) => fs.mkdtempSync(path.join(os.tmpdir(), `pos-wt-${tag}-`));
+const tmp = (tag) => temp(`pos-wt-${tag}-`);
 
 /** A directory that looks like a dev checkout: a launcher to spawn and a `src/` beside `skills/`. */
 const fakeCheckout = (tag) => {

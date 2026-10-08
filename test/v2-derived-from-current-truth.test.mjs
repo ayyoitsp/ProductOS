@@ -27,6 +27,7 @@
  * agreed is reported rather than required.
  */
 import assert from "node:assert/strict";
+import { temp } from "./support/temp.mjs";
 import { test } from "node:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -59,7 +60,7 @@ Append-only is the whole design.
 `;
 
 function corpusWithAPart() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "v2cur-"));
+  const dir = temp("v2cur-");
   fs.cpSync("v2-seed", dir, { recursive: true });
   fs.mkdirSync(path.join(dir, "capabilities"), { recursive: true });
   fs.writeFileSync(path.join(dir, "capabilities", "ledger.md"), LEDGER);

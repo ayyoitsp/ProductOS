@@ -21,6 +21,7 @@
  * None of the three is visible to a test that asks whether the drawing matches its source file.
  */
 import assert from "node:assert/strict";
+import { temp } from "./support/temp.mjs";
 import { test } from "node:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -29,7 +30,7 @@ import { drawFromRoute, layoutsAround, sampleValue } from "../dist/v2/draw.js";
 
 /** A Next-shaped app: a root layout, a group layout with chrome, and a page inside it. */
 function app() {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "productos-route-"));
+  const root = temp("productos-route-");
   const put = (rel, body) => {
     fs.mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
     fs.writeFileSync(path.join(root, rel), body);
@@ -85,7 +86,7 @@ test("which shell a screen sits in is still answerable", () => {
 });
 
 test("a product with no layouts has no chain to report", () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "productos-flat-"));
+  const root = temp("productos-flat-");
   const file = path.join(root, "Screen.tsx");
   fs.writeFileSync(file, 'export default function S(){ return (<div className="p-6">Hi</div>) }');
   assert.deepEqual(layoutsAround(file), []);
@@ -98,7 +99,7 @@ test("what a screen shows before anybody touches it is read, not guessed from th
    * ⛔ `open` is on no list of open-ish words, and `const [open, setOpen] = useState(false)` says
    * exactly what the screen looks like at rest. A declaration beats a word match.
    */
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "productos-state-"));
+  const root = temp("productos-state-");
   const file = path.join(root, "Menu.tsx");
   fs.writeFileSync(
     file,
@@ -119,7 +120,7 @@ test("what a screen shows before anybody touches it is read, not guessed from th
 });
 
 test("a local class helper is resolved; a class-list call still has its arguments harvested", () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "productos-cls-"));
+  const root = temp("productos-cls-");
   const file = path.join(root, "Form.tsx");
   fs.writeFileSync(
     file,
@@ -148,7 +149,7 @@ test("a conditional class draws the resting arm, not both", () => {
    * a screen that cannot exist. The false arm is what the element looks like before anything
    * happens to it, which is the same rule as reading `useState(false)`.
    */
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "productos-cond-"));
+  const root = temp("productos-cond-");
   const file = path.join(root, "Nav.tsx");
   fs.writeFileSync(
     file,
@@ -169,7 +170,7 @@ test("a component handed a prop that is false at rest renders nothing at rest", 
    * into the sidebar, and therefore into every screen that has one. The fix asks the component's
    * own source what it does when the prop is false rather than guessing from the prop's name.
    */
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "productos-modal-"));
+  const root = temp("productos-modal-");
   const put = (rel, body) => {
     fs.mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
     fs.writeFileSync(path.join(root, rel), body);
@@ -205,7 +206,7 @@ test("a list written down in the source draws as that list", () => {
    * ⛔ IT STILL INVENTS NOTHING: literals only, and an array it cannot resolve falls back to the
    * three-row shape exactly as before.
    */
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "productos-list-"));
+  const root = temp("productos-list-");
   const put = (rel, body) => {
     fs.mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
     fs.writeFileSync(path.join(root, rel), body);
@@ -234,7 +235,7 @@ test("a name is an icon in the file that imported it, not everywhere", () => {
    * drawn as an icon glyph and swallowed its children. The sidebar had the right number of rows and
    * no words in any of them, which is a very convincing way to look broken.
    */
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "productos-icon-"));
+  const root = temp("productos-icon-");
   const put = (rel, body) => {
     fs.mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
     fs.writeFileSync(path.join(root, rel), body);
@@ -264,7 +265,7 @@ test("a value the drawing cannot read says what it is", () => {
    * Only a plain path gets one — a template literal or a call has no single word it is the name
    * of, and those keep the ellipsis rather than inventing one.
    */
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "productos-slot-"));
+  const root = temp("productos-slot-");
   fs.writeFileSync(
     path.join(root, "Page.tsx"),
     `export default function P(){ return (<div>
@@ -307,7 +308,7 @@ test("a table cell takes its sample from the column it sits in", () => {
    *
    * Peter: *"we should populate template values with ones that make sense!"*
    */
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "productos-col-"));
+  const root = temp("productos-col-");
   fs.writeFileSync(
     path.join(root, "Page.tsx"),
     `export default function P(){ return (<table>
@@ -336,7 +337,7 @@ test("a value standing in a sentence is content, not a slot for a caller", () =>
    * twenty hatched ellipses on a screen whose real text was four words. But nobody writes "Page "
    * and " of " around a slot, and the pager read like a broken string.
    */
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "productos-sentence-"));
+  const root = temp("productos-sentence-");
   fs.writeFileSync(
     path.join(root, "Page.tsx"),
     `export default function P(){ return (<div>
@@ -374,7 +375,7 @@ test("a prop is threaded through every wrapper that passes it on", () => {
    * was one branch — ask whether the identifier is a prop THIS component was handed before asking
    * whether it is a local.
    */
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "productos-thread-"));
+  const root = temp("productos-thread-");
   const put = (rel, body) => {
     fs.mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
     fs.writeFileSync(path.join(root, rel), body);

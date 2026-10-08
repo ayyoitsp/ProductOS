@@ -9,6 +9,7 @@
  * strip should show the pinned version" as something the product does.
  */
 import assert from "node:assert/strict";
+import { temp } from "./support/temp.mjs";
 import { test } from "node:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -46,7 +47,7 @@ test("a note carries what the person was looking at", () => {
 });
 
 test("notes are kept apart from verdicts", () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "v2notes-"));
+  const dir = temp("v2notes-");
   fs.cpSync("v2-seed", dir, { recursive: true });
   fs.mkdirSync(path.join(dir, "notes"), { recursive: true });
   fs.writeFileSync(

@@ -17,6 +17,7 @@
  * the block is lifted out of the Makefile and run against scratch repositories in both states.
  */
 import assert from "node:assert/strict";
+import { temp } from "./support/temp.mjs";
 import { test } from "node:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -56,7 +57,7 @@ function dirtyCheck() {
 }
 
 function scratchRepo() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "productos-guard-"));
+  const dir = temp("productos-guard-");
   const git = (...a) => execFileSync("git", a, { cwd: dir, stdio: "pipe" });
   git("init", "-q");
   git("config", "user.email", "t@example.com");

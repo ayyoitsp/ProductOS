@@ -10,6 +10,7 @@
  * the square and stays recorded as unresolved.
  */
 import test from "node:test";
+import { temp } from "./support/temp.mjs";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
@@ -18,7 +19,7 @@ import { lucideSvg } from "../dist/v2/icons.js";
 
 /** A stand-in for an installed `lucide-react`, with one real icon and one aliased name. */
 function app() {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "productos-icons-"));
+  const root = temp("productos-icons-");
   const icons = path.join(root, "node_modules/lucide-react/dist/esm/icons");
   fs.mkdirSync(icons, { recursive: true });
   fs.writeFileSync(
@@ -95,7 +96,7 @@ test("a name with no icon behind it draws nothing rather than a guess", () => {
 });
 
 test("a product with no icon package installed is not an error", () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "productos-noicons-"));
+  const root = temp("productos-noicons-");
   const page = path.join(root, "page.tsx");
   fs.writeFileSync(page, "x");
   assert.equal(lucideSvg("Folder", page), undefined, "a product that uses no icon package must still draw");

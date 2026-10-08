@@ -10,6 +10,7 @@
  * source changes, so it is wrong the day after it is written.
  */
 import assert from "node:assert/strict";
+import { temp } from "./support/temp.mjs";
 import { test } from "node:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -26,7 +27,7 @@ const COMPONENT = `export function Balance({ total }: { total: string }) {
 
 /** A seed corpus, and a component in a real git repo so provenance resolves. */
 function drawn() {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "v2drawn-"));
+  const root = temp("v2drawn-");
   const corpusDir = path.join(root, "corpus");
   const compDir = path.join(root, "app");
   fs.cpSync("v2-seed", corpusDir, { recursive: true });
@@ -88,7 +89,7 @@ test("no provenance, no reading — it is never guessed", () => {
    * component outside a git repo therefore yields no provenance, and a reading invented without a
    * checkable pointer would be the opposite of the point.
    */
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "v2nogit-"));
+  const dir = temp("v2nogit-");
   fs.cpSync("v2-seed", dir, { recursive: true });
   const loose = path.join(dir, "Loose.tsx");
   fs.writeFileSync(loose, COMPONENT);

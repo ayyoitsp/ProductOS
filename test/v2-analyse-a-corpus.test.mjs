@@ -14,6 +14,7 @@
  * a sweep is incremental, and nothing in the sweep writes or spawns anything.
  */
 import assert from "node:assert/strict";
+import { temp } from "./support/temp.mjs";
 import { test } from "node:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -26,7 +27,7 @@ import { AUTHORS, SHIMS, COMMANDS } from "../dist/core/jobs.js";
 import { parseFrontmatter } from "../dist/core/frontmatter.js";
 
 function seed() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "v2an-"));
+  const dir = temp("v2an-");
   fs.cpSync("v2-seed", dir, { recursive: true });
   return dir;
 }

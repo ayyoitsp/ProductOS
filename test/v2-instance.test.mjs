@@ -13,6 +13,7 @@
  * and it surfaces weeks later as a stamp over a sentence nobody recognises.
  */
 import assert from "node:assert/strict";
+import { temp } from "./support/temp.mjs";
 import { test } from "node:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -29,7 +30,7 @@ import { inbox } from "../dist/v2/inbox.js";
 const CLI = path.resolve("dist/cli/index.js");
 
 function instance() {
-  const dir = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "productos-instance-")), "v2");
+  const dir = path.join(temp("productos-instance-"), "v2");
   execFileSync("node", [CLI, "v2", "reset", "--at", dir], { stdio: "pipe" });
   return dir;
 }

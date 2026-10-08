@@ -14,6 +14,7 @@
  * surfaced.
  */
 import assert from "node:assert/strict";
+import { temp } from "./support/temp.mjs";
 import { test } from "node:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -77,7 +78,7 @@ test("an opaque steer carries its provenance", () => {
 });
 
 test("a corpus loads what steers it, beside the truth and never inside it", () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "steers-"));
+  const dir = temp("steers-");
   fs.mkdirSync(path.join(dir, "truth"), { recursive: true });
   fs.mkdirSync(path.join(dir, "steers"), { recursive: true });
   fs.writeFileSync(path.join(dir, "truth", "a.md"), "---\nid: a\ntitle: A thing\nviews: []\nexchanges: []\n---\n\nProse.\n");

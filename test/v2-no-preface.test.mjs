@@ -17,6 +17,7 @@
  * goes on writing them — so the check and the scoper's instruction are pinned here too.
  */
 import assert from "node:assert/strict";
+import { temp } from "./support/temp.mjs";
 import { test } from "node:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -42,7 +43,7 @@ function withPreface(dir, file, prose) {
 }
 
 function seeded() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "v2pref-"));
+  const dir = temp("v2pref-");
   fs.cpSync("v2-seed", dir, { recursive: true });
   return withPreface(dir, "tasks.md", PREFACE);
 }
@@ -65,7 +66,7 @@ test("a feature's preface is not rendered, and its purpose still is", () => {
  * home rather than a duplicate of one.
  */
 test("a grouping still renders its prose", () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "v2pref2-"));
+  const dir = temp("v2pref2-");
   fs.cpSync("v2-seed", dir, { recursive: true });
   withPreface(dir, "family-wallet.md", "A shared wallet two parents and two kids all see.");
   const html = renderScopePage(loadCorpus(dir), "family-wallet", { interactive: true, by: "a-person" });

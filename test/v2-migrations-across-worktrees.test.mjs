@@ -20,6 +20,7 @@
  *  3. A WORKTREE TAKES DEV. One port, one project, one volume for every checkout.
  */
 import assert from "node:assert/strict";
+import { temp } from "./support/temp.mjs";
 import { test } from "node:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -43,7 +44,7 @@ const fresh = () => drizzle(new PGlite());
 
 /** A journal and its files, written somewhere disposable. */
 const tree = (entries) => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "productos-mig-"));
+  const dir = temp("productos-mig-");
   fs.mkdirSync(path.join(dir, "meta"));
   for (const e of entries) {
     if (e.file !== false) fs.writeFileSync(path.join(dir, `${e.tag}.sql`), e.sql ?? `create table ${e.tag.replace(/\W/g, "_")} (id text primary key);`);

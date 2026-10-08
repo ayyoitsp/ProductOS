@@ -21,6 +21,7 @@
  * assert the fifteen lines and skip `writeBack`, which is the half I was wrong about.
  */
 import assert from "node:assert/strict";
+import { temp } from "./support/temp.mjs";
 import { test } from "node:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -56,7 +57,7 @@ async function hosted() {
   const store = await storeFor(db, { kind: "browser", account: ada, reach: [] }).project("prj-doc");
   assert.ok(!isRefusal(store));
 
-  const dir = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "productos-doc-")), "v2");
+  const dir = path.join(temp("productos-doc-"), "v2");
   execFileSync("node", [CLI, "v2", "reset", "--at", dir], { stdio: "pipe" });
   await importFromDisk(store, dir);
 

@@ -11,6 +11,7 @@
  * high-level view, built and rendered and driven in a browser with nothing asserting a line of it.
  */
 import assert from "node:assert/strict";
+import { temp } from "./support/temp.mjs";
 import { test } from "node:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -20,7 +21,7 @@ import { ChangeRecord, verify, missing, nextId, readChanges, writeChange } from 
 import { CASCADE, KINDS } from "../dist/core/jobs.js";
 
 const scratch = () => {
-  const d = fs.mkdtempSync(path.join(os.tmpdir(), "chg-"));
+  const d = temp("chg-");
   // A tiny stand-in framework, so the verifiers have somewhere real to look.
   fs.mkdirSync(path.join(d, "src/v2"), { recursive: true });
   fs.mkdirSync(path.join(d, "skills/x"), { recursive: true });

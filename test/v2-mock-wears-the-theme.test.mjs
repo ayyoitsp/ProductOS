@@ -19,6 +19,7 @@
  * emitted markup rather than about how a page looks, because what went wrong was invisible.
  */
 import assert from "node:assert/strict";
+import { temp } from "./support/temp.mjs";
 import { test } from "node:test";
 import { scopeToShadow, themesIn, appStyleFor, wearTheme, snapshotStyle, styleOf, styleDrift, liftFaces } from "../dist/v2/appcss.js";
 import YAML from "yaml";
@@ -221,7 +222,7 @@ test("a face the stylesheet loads travels with the drawing", () => {
    * of type on the page can be judged. There is nowhere for a mock to fetch one from: a published
    * page is under a CSP that blocks every fetch, and `serve` has no route into a build directory.
    */
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "productos-faces-"));
+  const root = temp("productos-faces-");
   fs.mkdirSync(path.join(root, "productos"), { recursive: true });
   fs.mkdirSync(path.join(root, "build", "css"), { recursive: true });
   fs.mkdirSync(path.join(root, "build", "media"), { recursive: true });
@@ -263,7 +264,7 @@ test("a sweep finds the screens in both corpus layouts, and writes each into its
    * screen reported as redrawn, each one landed on the Exchange file with the similar id, and the
    * products tree was never touched. Both trees still parsed, so nothing anywhere said a word.
    */
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "productos-sweep-"));
+  const root = temp("productos-sweep-");
   const put = (rel, body) => {
     fs.mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
     fs.writeFileSync(path.join(root, rel), body);
@@ -294,7 +295,7 @@ test("a sweep finds the screens in both corpus layouts, and writes each into its
 
 /** A repo with a corpus, a design system and a built stylesheet — enough to snapshot from. */
 function project() {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "productos-style-"));
+  const root = temp("productos-style-");
   const put = (rel, body) => {
     fs.mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
     fs.writeFileSync(path.join(root, rel), body);
@@ -382,7 +383,7 @@ test("a snapshot can be caught having gone stale, and says so only where it can 
    * compare against; reporting in-sync there would assert something nothing checked, on exactly the
    * surface where nobody can go and look.
    */
-  const alone = fs.mkdtempSync(path.join(os.tmpdir(), "productos-nowhere-"));
+  const alone = temp("productos-nowhere-");
   assert.deepEqual(styleDrift(alone, style), { known: false }, "a corpus with no repository claimed to know");
   assert.deepEqual(styleDrift(corpus, undefined), { known: false }, "a corpus with no snapshot claimed to know");
   fs.rmSync(root, { recursive: true, force: true });
@@ -449,7 +450,7 @@ test("a corpus already in a store takes the style as one document, and loses not
 });
 
 test("the list of stylesheets is what gets read, not the single one", () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "productos-appcss-"));
+  const root = temp("productos-appcss-");
   fs.mkdirSync(path.join(root, "productos"), { recursive: true });
   fs.mkdirSync(path.join(root, "styles"), { recursive: true });
   fs.writeFileSync(path.join(root, "styles", "tokens.css"), ":root { --a: 1 }");

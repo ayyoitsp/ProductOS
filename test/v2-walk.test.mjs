@@ -14,6 +14,7 @@
  * tab, and switching a tab is containment.
  */
 import test from "node:test";
+import { temp } from "./support/temp.mjs";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
@@ -24,7 +25,7 @@ import { checkCorpus } from "../dist/v2/check.js";
 
 /** A corpus with a shell, two tabs inside it, and a screen in another feature. */
 function corpus(views, extra = "") {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "productos-walk-"));
+  const dir = temp("productos-walk-");
   fs.cpSync("v2-seed", dir, { recursive: true });
   fs.writeFileSync(
     path.join(dir, "truth", "workspace.md"),

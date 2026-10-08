@@ -12,6 +12,7 @@
  * they leave is over whichever they believed.
  */
 import assert from "node:assert/strict";
+import { temp } from "./support/temp.mjs";
 import { test } from "node:test";
 import { loadCorpus, resolveRules, lineageOf } from "../dist/v2/load.js";
 import { gridFor, actsFor, ruleHomes } from "../dist/v2/grid.js";
@@ -109,7 +110,7 @@ test("no link on the page points at an anchor the page does not render", () => {
  * Built here rather than borrowed, so the shape is pinned whatever the seed happens to contain.
  */
 test("a slot answered at a rule is named, not linked", () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "v2wait-"));
+  const dir = temp("v2wait-");
   fs.cpSync("v2-seed", dir, { recursive: true });
   // One org-wide question, unsettled, reaching a slot no exchange states.
   fs.writeFileSync(
@@ -426,7 +427,7 @@ test("everything the page can hide is overridden back into view by nothing", () 
  * This is the shape a migration actually produces, so it is the shape that has to be honest.
  */
 test("a queue with no questions says how much is unwritten", () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "v2bare-"));
+  const dir = temp("v2bare-");
   fs.mkdirSync(path.join(dir, "truth"), { recursive: true });
   for (const d of ["rules", "readings", "verdicts"]) fs.mkdirSync(path.join(dir, d), { recursive: true });
   // One behaviour, one slot said, the rest blank — a migration's output in miniature.
@@ -989,7 +990,7 @@ test("the context is agreed before its details, and rewording it withdraws them"
    * is for. The context got supplied from memory, differently each time, and never recorded. Worse,
    * every stamp underneath an unconfirmed purpose is spent twice the moment the purpose changes.
    */
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "v2hp-"));
+  const dir = temp("v2hp-");
   fs.cpSync("v2-seed", dir, { recursive: true });
   const acts = () => actsFor(loadCorpus(dir));
 

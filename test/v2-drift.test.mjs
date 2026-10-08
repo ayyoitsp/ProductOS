@@ -21,6 +21,7 @@
  * Peter: "and why didn't moved properly regenerate?"
  */
 import assert from "node:assert/strict";
+import { temp } from "./support/temp.mjs";
 import { test } from "node:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -35,7 +36,7 @@ const CLI = path.resolve("dist/cli/index.js");
 
 /** A corpus inside a real project, with one screen drawn from a real file. */
 function project(sourceExists) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "productos-drift-"));
+  const root = temp("productos-drift-");
   const dir = path.join(root, "v2");
   execFileSync("node", [CLI, "v2", "reset", "--at", dir], { stdio: "pipe" });
   /** A `productos/` directory is what makes this a project the corpus can name a codebase from. */
@@ -93,7 +94,7 @@ test("a corpus with no codebase behind it is not accused of anything", () => {
    * ⛔ The commonest shape there is — a corpus written before anybody pointed it at a repository.
    * Refusing every screen in it would make the gate a punishment for not having a codebase yet.
    */
-  const dir = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "productos-nocode-")), "v2");
+  const dir = path.join(temp("productos-nocode-"), "v2");
   execFileSync("node", [CLI, "v2", "reset", "--at", dir], { stdio: "pipe" });
   const findings = checkCorpus(dir).findings.filter((x) => x.kind === "the-code-dropped-this-screen");
   assert.deepEqual(findings, []);
