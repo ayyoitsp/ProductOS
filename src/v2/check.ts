@@ -34,6 +34,8 @@ import { ruleHomes, reachOf } from "./grid.js";
 import { appStyleFor, styleDrift } from "./appcss.js";
 import { readLog } from "./log.js";
 import { landingsFor, finishesFor } from "./connects.js";
+import { pictureOf, unknownParts, undrawnConditions } from "./states.js";
+import { deriveStates } from "./derive-states.js";
 import fs from "node:fs";
 import { resolvePathsOrThrow } from "../core/paths.js";
 import { readConfig } from "../core/config.js";
@@ -1351,6 +1353,31 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
 
     for (const v of scope.views) {
       /**
+       * ---- a refusal nobody can place on the screen ----
+       *
+       * ⛔ THE ONE QUESTION A SENTENCE GENUINELY DOES NOT ANSWER, AND IT IS WORTH ASKING.
+       *
+       * A named refusal carries its trigger and the words the asker reads, so the state it
+       * describes derives for free — except for which control shows it. Where the refusal names a
+       * field, that is not a guess; where it names two, or none, placing it anyway would put an
+       * error on the wrong control and the picture would look right while saying the wrong thing.
+       *
+       * ⛔ A NOTE, NOT A REFUSAL. The corpus is not wrong — a sentence is complete and a placement
+       * is undecided. Refusing here would block a corpus over a question the author may well
+       * answer with "it is a banner, not a field", which is a real answer this model can already
+       * hold.
+       */
+      for (const u of deriveStates(scope, v).unplaced) {
+        add({
+          severity: "note",
+          kind: "nothing-says-which-part-shows-this",
+          where: `${scope.id}#${v.id}`,
+          what: `"${u.outcome}" tells somebody "${u.told}" and nothing says where they read it — ${u.why}`,
+          fix: "name the control it appears on, or say it is shown somewhere that is not a control and declare that part — until then this case has no picture and the sentence cannot be reviewed against one",
+        });
+      }
+
+      /**
        * ⛔ `view-never-walked` WAS HERE AND IS GONE WITH THE FIELD IT READ. It fired on every
        * screen in every corpus, asking for a boolean that asserted a human had confirmed something
        * and that anybody could write. See the note where `walked` used to be declared.
@@ -1804,7 +1831,16 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
         {
           const same = new Map<string, string[]>();
           for (const st of v.states ?? []) {
-            const key = st.sketch_html.replace(/\s+/g, " ").trim();
+            /**
+             * ⛔ THE COMPOSED PICTURE, because a state need not store one any more.
+             *
+             * This measured the problem — captured markup at 84% of the truth tree — and asked the
+             * stored `sketch_html` directly, which is now optional: a state can say which parts are
+             * different and let the screen's own drawing carry the rest. Reading the stored field
+             * would have keyed every composed state on the empty string and reported them all as
+             * duplicates of each other, which is the opposite of what this check is for.
+             */
+            const key = pictureOf(v, st).replace(/\s+/g, " ").trim();
             same.set(key, [...(same.get(key) ?? []), st.label]);
           }
           for (const [, labels] of same)
@@ -1877,7 +1913,13 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
              * A control drawn in this state that leads somewhere else is a way out. The drawing is
              * the only record of which controls a state holds, so it is what gets asked.
              */
-            const holds = (id: string): boolean => st.sketch_html.includes(`data-part="${id}"`);
+            /**
+             * ⛔ THE COMPOSED PICTURE, not the stored one. A state now holds conditions on parts
+             * and may carry no picture of its own — asking `sketch_html` directly reported every
+             * such state as a dead end with no way out, because the string it looked in was empty.
+             */
+            const shown = pictureOf(v, st);
+            const holds = (id: string): boolean => shown.includes(`data-part="${id}"`);
             const ways = out.filter((l) => holds(l.part)).length
               + v.parts.filter((pt) => pt.leads_to && holds(pt.id)).length;
             if (ways) continue;

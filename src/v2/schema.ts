@@ -1376,12 +1376,141 @@ export const PartRole = z.enum([
   "region",
 ]);
 
+/**
+ * What a part can be doing, as opposed to what the screen is doing.
+ *
+ * ⛔ A STATE BELONGS TO A PART. Peter: *"we need to have STATES on a screen, rich enough to describe
+ * VARIOUS TYPES OF ERRORS, LOADING STATES, etc. multiple buttons could have LOADING States.
+ * MULTIPLE FIELDS COULD HAVE ERROR STATES."*
+ *
+ * ⛔ AND THE MEASUREMENT IS WHY, not the preference. `create-deal-form` holds its error state as a
+ * complete second copy of the screen: 3,244 bytes, **96% byte-identical to the default frame**,
+ * differing in 129 bytes — one red line under one field. One form costs 19,723 bytes across five
+ * pictures.
+ *
+ * Storing a state as a whole picture makes exactly what he asked for impossible. Two fields in
+ * error is a third picture; two fields plus a working button is a fourth; and loading never arrives
+ * at all, because it is not a branch in a render tree that anything can harvest. A condition on a
+ * part composes — four conditions on one picture is still one picture.
+ *
+ * ⛔ THE ROLE DECIDES WHICH OF THESE ARE EVEN POSSIBLE, which is why this is not one flat list a
+ * reader has to interpret. A button is never `empty`; a text box is never `loading`. The constraint
+ * is in `Part` below, so a corpus cannot say a thing no screen can do.
+ */
+export const PartStateKind = z.enum([
+  /** It is doing the work that was asked of it, and the person is waiting. `commits` only. */
+  "busy",
+  /** It cannot be used right now. Any role that can be used at all. */
+  "disabled",
+  /** What it holds is not acceptable, and it says so. `entry` only — see `says`. */
+  "invalid",
+  /** What goes in it has not arrived yet. Shown things, never controls. */
+  "loading",
+  /** It arrived and there is nothing in it. ⛔ Not the same as `loading`, and not the same as a failure. */
+  "empty",
+  /** It could not get what it shows, which is a different sentence from having nothing. */
+  "failed",
+]);
+export type PartStateKind = z.infer<typeof PartStateKind>;
+
+/**
+ * ⛔ WHICH KINDS EACH ROLE MAY BE IN. Exported so `check`, `draw` and the page all ask one table —
+ * three copies of this would disagree within a month, which is the defect `SLOT_ASKS` already has
+ * a comment about.
+ */
+export const STATES_FOR_ROLE: Record<z.infer<typeof PartRole>, PartStateKind[]> = {
+  commits: ["busy", "disabled"],
+  entry: ["invalid", "disabled"],
+  navigates: ["disabled"],
+  display: ["loading", "empty", "failed"],
+  region: ["loading", "empty", "failed"],
+};
+
+/**
+ * ⛔ THE SIX ABOVE ARE NOT THE LIST. THEY ARE THE PART OF IT EVERY PRODUCT HAS.
+ *
+ * Peter: *"Loading/busy shouldn't be hard coded. We should support lots of different states, right?
+ * And it can change anything on screen"*. Both halves are right, and a closed enum of six would be
+ * wrong for somebody inside a week — `locked`, `syncing`, `stale`, `over quota`, `pending approval`
+ * are real conditions no vocabulary we write here could have anticipated.
+ *
+ * ⛔ BUT OPEN IS NOT THE SAME AS FREE TEXT, and free text would quietly cost three things the closed
+ * set was buying:
+ *
+ *   1. The role constraint. "A button is never `empty`" is only checkable against a known word.
+ *   2. The cross-screen question — *does every field that can be invalid appear invalid in some
+ *      state?* — which needs comparable names. As free text, `invalid`, `error` and `bad` are three
+ *      unrelated conditions and the question cannot be asked at all.
+ *   3. One appearance. `invalid` looking the same on every screen is the whole gain over a
+ *      per-state screenshot, where it looked like whatever that component happened to render.
+ *
+ * So a condition is a word, and a word a product uses it must DECLARE — which is what `terms`
+ * already does on a scope, with `means` and the option of `members`. The six built-in ones are
+ * declared here instead, because every product has them and asking each corpus to define `loading`
+ * would be a chore with one right answer.
+ *
+ * ⛔ THE HONEST COST, SAID RATHER THAN HIDDEN: a declared condition cannot be role-checked, because
+ * nothing here knows whether `syncing` belongs on a button or a region. `check` reports an undeclared
+ * one; it cannot report a misplaced one. That is the price of the openness and it is worth paying.
+ */
+export const PartCondition = z.string().min(2).regex(/^[a-z][a-z0-9-]*$/, "a condition is one lower-case word, kebab-case — it is a word a product declares, not a sentence");
+export type PartCondition = z.infer<typeof PartCondition>;
+
+/** ⛔ The built-in conditions, as the same shape a declared one has. One table, so `check`, `draw`
+ *  and the page agree about what `loading` means without three copies of the sentence. */
+export const BUILT_IN_CONDITIONS: Record<PartStateKind, string> = {
+  busy: "it is doing the work that was asked of it, and the person is waiting",
+  disabled: "it cannot be used right now",
+  invalid: "what it holds is not acceptable, and it says so",
+  loading: "what goes in it has not arrived yet",
+  empty: "it arrived and there is nothing in it",
+  failed: "it could not get what it shows, which is a different sentence from having nothing",
+};
+
+export const isBuiltInCondition = (c: string): c is PartStateKind =>
+  Object.prototype.hasOwnProperty.call(BUILT_IN_CONDITIONS, c);
+
+export const PartState = z
+  .object({
+    /**
+     * ⛔ A WORD, NOT AN ENUM. One of the six built-ins, or a condition this product declared in its
+     * scope's `terms`. `check` refuses one that is neither, so a typo is still caught — openness
+     * costs the role check, not the spell check.
+     */
+    kind: PartCondition,
+    /**
+     * What the person is told while it is in this condition.
+     *
+     * ⛔ REQUIRED ON ANYTHING THAT REPORTS A PROBLEM, because an error nobody can read is not a
+     * state anybody can review — "the borrower field is invalid" is not reviewable, "Borrower is
+     * required" is. Enforced below rather than hoped for.
+     */
+    says: z.string().min(3).optional(),
+    /**
+     * The condition in the code that produces it, where there is code.
+     *
+     * ⛔ OPTIONAL, AND THAT IS THE WHOLE POINT. The old shape required a code condition, so a screen
+     * the product SHOULD have could not say it has a loading state until somebody wrote the
+     * component — which contradicts the rule this project is most insistent about: *"product truth
+     * is supposed to represent the target state always, doesn't matter what's been built."* Where
+     * code exists this is kept verbatim so the two can be compared; where it does not, its absence
+     * is not a gap in the target.
+     */
+    when: z.string().optional(),
+  })
+  .strict();
+export type PartState = z.infer<typeof PartState>;
+
 export const Part = z
   .object({
     id: z.string(),
     role: PartRole,
     label: z.string().optional(),
     leads_to: z.string().optional(),
+    /**
+     * The conditions this part can be in. ⛔ Empty means nobody has said — never means it has none.
+     */
+    states: z.array(PartState).default([]),
     /**
      * ⛔ GOES BACK TO THIS SCREEN AS IT WAS — the destination that had nowhere to live.
      *
@@ -1433,6 +1562,56 @@ export const Part = z
         path: ["leads_to"],
         message: `"${p.label ?? p.id}" commits work — where it lands afterwards is part of the answer slot, not a link`,
       });
+    }
+
+    /**
+     * ⛔ THE ROLE ALREADY SAYS WHICH CONDITIONS ARE POSSIBLE, so this is a constraint rather than a
+     * convention. A button that claims to be `loading` is somebody describing a spinner where the
+     * product has a working button, and the two are drawn differently and reviewed differently.
+     */
+    const allowed = STATES_FOR_ROLE[p.role];
+    for (const st of p.states ?? []) {
+      /**
+       * ⛔ ONLY THE BUILT-INS CAN BE ROLE-CHECKED, AND THAT IS THE PRICE OF AN OPEN VOCABULARY.
+       *
+       * Nothing here knows whether `syncing` belongs on a button or a region, so refusing an
+       * unrecognised word would mean refusing every condition a product declares for itself — the
+       * exact thing Peter asked for when he said loading and busy should not be hard coded. What
+       * survives is the check on the six words whose meaning this file does own.
+       */
+      if (!isBuiltInCondition(st.kind)) continue;
+      if (!allowed.includes(st.kind)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["states"],
+          message: `"${p.label ?? p.id}" ${p.role === "commits" || p.role === "entry" || p.role === "navigates" ? "is a control" : "is shown"}, so it cannot be "${st.kind}" — it can be: ${allowed.join(", ") || "nothing"}`,
+        });
+      }
+
+      /**
+       * ⛔ AN ERROR THAT DOES NOT SAY ANYTHING IS NOT REVIEWABLE. "the borrower field is invalid"
+       * tells a reader nothing they can disagree with; "Borrower is required" is a product
+       * decision somebody can accept or reword. The same is true of a failure.
+       */
+      if ((st.kind === "invalid" || st.kind === "failed") && !st.says) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["states"],
+          message: `"${p.label ?? p.id}" can be ${st.kind} and does not say what the person is told — write it in \`says\`, because a reader cannot agree with a condition whose words are missing`,
+        });
+      }
+    }
+
+    /** ⛔ One condition per kind, or two sentences claim the same moment and nothing says which. */
+    const kinds = (p.states ?? []).map((s) => s.kind);
+    for (const k of new Set(kinds)) {
+      if (kinds.filter((x) => x === k).length > 1) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["states"],
+          message: `"${p.label ?? p.id}" declares "${k}" twice — one condition, one description, or a reader cannot tell which applies`,
+        });
+      }
     }
   });
 
@@ -1661,11 +1840,91 @@ export const View = z.object({
     .array(
       z
         .object({
-          when: z.string().min(1).describe("the condition in the code that produces this state"),
+          when: z.string().optional().describe("the condition in the code that produces this state, where there is code"),
           label: z.string().min(2),
-          sketch_html: z.string().min(1),
+          /**
+           * ⛔ NO LONGER REQUIRED, AND THE MEASUREMENT IS WHY. `create-deal-form`'s error state is
+           * 3,244 bytes and **96% byte-identical to the default frame** — 129 bytes of difference,
+           * one red line under one field — stored as a complete second copy of the screen. One form
+           * costs 19,723 bytes across five pictures.
+           *
+           * A state whose picture is the whole screen cannot compose: two fields in error is a
+           * third picture, two fields plus a working button a fourth, and loading never arrives at
+           * all because it is not a render branch anything can harvest.
+           *
+           * ⛔ KEPT, NOT DELETED, because a state that genuinely IS a different arrangement still
+           * needs one — and every corpus in existence has these. Where `holds` is given, the
+           * picture is composed from the screen's own drawing instead.
+           */
+          sketch_html: z.string().min(1).optional(),
+          /**
+           * What is different about each part while this state holds.
+           *
+           * ⛔ THIS IS THE STATE. One picture, a set of changes applied to it — so "the borrower
+           * field is invalid AND the Continue button is working" is one state rather than a
+           * screenshot nobody generated.
+           *
+           * ⛔ AND A STATE CHANGES ANYTHING, NOT ONLY A CONDITION. Peter: *"it can change anything
+           * on screen"*. The first cut could only say "this part is in that condition", so a
+           * loading state that also hides the toolbar, or an error state that swaps the heading,
+           * had nowhere to go — and the only way to express it was the whole second screenshot this
+           * work exists to remove.
+           *
+           * A bare word is the common case and stays short:
+           *
+           *     holds: { borrower: invalid, continue: busy }
+           *
+           * and the long form says the rest:
+           *
+           *     holds:
+           *       borrower: { in: invalid, says: "Borrower is required." }
+           *       toolbar:  { hidden: true }
+           *       heading:  { says: "Checking the folder…" }
+           */
+          holds: z
+            .record(
+              z.string(),
+              z.union([
+                PartCondition,
+                z
+                  .object({
+                    /** The condition it is in, if any. */
+                    in: PartCondition.optional(),
+                    /** ⛔ Not on the screen at all in this state — which is not the same as disabled. */
+                    hidden: z.boolean().optional(),
+                    /**
+                     * Different words here, in this state only.
+                     *
+                     * ⛔ OVERRIDES THE PART'S OWN `says` RATHER THAN COMPETING WITH IT. A field's
+                     * `invalid` message is usually one sentence wherever it appears, which is why it
+                     * lives on the part; a state that needs different words is the exception and has
+                     * to be able to say so in one place rather than by declaring a second condition.
+                     */
+                    says: z.string().min(1).optional(),
+                  })
+                  .strict()
+                  .refine((h) => h.in || h.hidden !== undefined || h.says, {
+                    message: "this says nothing is different about the part — give it `in`, `hidden` or `says`",
+                  }),
+              ]),
+            )
+            .default({}),
         })
         .strict()
+        .superRefine((st, ctx) => {
+          /**
+           * ⛔ A STATE WITH NEITHER A PICTURE NOR ANY CONDITIONS IS A LABEL. Nobody can look at it
+           * and nobody can tell what it claims, which is the same defect as a screen with no
+           * drawing one level down.
+           */
+          if (!st.sketch_html && !Object.keys(st.holds ?? {}).length) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: ["holds"],
+              message: `"${st.label}" is a state with no picture and no conditions — say which parts are in which condition, or there is nothing here to review`,
+            });
+          }
+        })
     )
     .default([]),
   /**

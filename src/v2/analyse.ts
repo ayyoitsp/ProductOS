@@ -25,6 +25,7 @@
  */
 import type { Corpus } from "./load.js";
 import { demonstrationOf, derivedCapabilities } from "./demonstrate.js";
+import { pictureOf } from "./states.js";
 
 /**
  * ⛔ THREE STATES, AND `stale` IS THE ONE THAT MAKES A SWEEP WORTH RE-RUNNING.
@@ -186,15 +187,27 @@ export const ANALYSES: Analysis[] = [
                 state: "missing" as UnitState,
                 why: "nothing draws this screen, so nobody can review what it promises",
               };
-            /**
-             * ⛔ A state with no picture of its own is work, and a state drawn with ITS NEIGHBOUR'S
-             * picture is worse — that is `one-picture-labelled-as-several-states`, found on a real
-             * corpus where three states carried byte-identical markup.
-             */
             const states = v.states ?? [];
+            /**
+             * ⛔ A STATE THAT COMPOSES IS NOT A STATE MISSING A PICTURE, and conflating the two
+             * would make this analysis report the better form as work.
+             *
+             * `states[].sketch_html` stopped being required: where a state gives `holds` — what is
+             * different about each part while it holds — the picture is composed from the screen's
+             * own drawing. That change exists because a whole second copy of a screen cannot
+             * compose, measured at 96% byte-identical for one error state. So only the states that
+             * carry their own markup can duplicate each other, and only those are checked here.
+             */
+            const drawnStates = states.filter((st) => !!st.sketch_html);
+            /**
+             * ⛔ THE COMPOSED PICTURE, THROUGH THE SAME FUNCTION `check` USES. A sweep and a check
+             * that disagree about whether a screen has two states drawn alike is the drift this
+             * repo keeps writing about — `gateFor` diverged from `check` by one clause and made two
+             * of five seed exchanges permanently un-acceptable, invisibly, in both directions.
+             */
             const seen = new Map<string, number>();
             for (const st of states) {
-              const k = st.sketch_html.replace(/\s+/g, " ").trim();
+              const k = pictureOf(v, st).replace(/\s+/g, " ").trim();
               seen.set(k, (seen.get(k) ?? 0) + 1);
             }
             const duped = [...seen.values()].filter((n) => n > 1).length;
@@ -203,7 +216,23 @@ export const ANALYSES: Analysis[] = [
                 ref,
                 title: v.title,
                 state: "stale" as UnitState,
-                why: `${states.length} appearances are drawn and ${duped === 1 ? "two or more share one picture" : `${duped} pictures are each used for several`}`,
+                why: `${drawnStates.length} appearances carry their own picture and ${
+                  duped === 1 ? "two or more of them are the same picture" : `${duped} pictures are each used for several`
+                }`,
+              };
+            /**
+             * ⛔ A state that neither composes nor draws says nothing about what is different while
+             * it holds — which is the one shape a reader cannot judge at all.
+             */
+            const empty = states.filter((st) => !st.sketch_html && !(st.holds ?? []).length);
+            if (empty.length)
+              return {
+                ref,
+                title: v.title,
+                state: "missing" as UnitState,
+                why: `${empty.length} appearance${empty.length === 1 ? "" : "s"} say nothing about what is different while ${
+                  empty.length === 1 ? "it holds" : "they hold"
+                } — ${empty.map((st) => st.label).slice(0, 3).join(", ")}`,
               };
             return {
               ref,
@@ -216,7 +245,11 @@ export const ANALYSES: Analysis[] = [
                * somebody can contradict; "drawn" is a tick.
                */
               why: states.length
-                ? `drawn, with ${states.length} further appearance${states.length === 1 ? "" : "s"}, each with its own picture`
+                ? `drawn, with ${states.length} further appearance${states.length === 1 ? "" : "s"} — ${
+                    drawnStates.length
+                      ? `${drawnStates.length} drawn in full, ${states.length - drawnStates.length} composed`
+                      : "all composed from this screen's own drawing"
+                  }`
                 : "drawn, and no further appearance of this screen is stated",
             };
           })
