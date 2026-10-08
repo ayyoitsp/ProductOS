@@ -13,13 +13,18 @@
 import type http from "node:http";
 import { loadCorpus, corpusFiles } from "./load.js";
 import { renderScopePage, standalone } from "./page.js";
-import { perform, preview, payloadFrom, VIA, type Act, type Via } from "./acts.js";
-import { closeNote, fileNote, replyToNote } from "./notes.js";
+import { perform, preview, payloadFrom, VIA, ACTS, type Act, type Via } from "./acts.js";
+/**
+ * ⛔ NOTHING FROM `notes.js` AND NO AUTHORITY CHECK IS IMPORTED HERE ANY MORE, which is the shape
+ * of the change rather than tidying. Filing, replying and closing a request — and the gate each
+ * needs — moved to `intents.ts`, so this file routes and does not decide.
+ */
 import { styleOf } from "./appcss.js";
 import { watchLog, lineFor, type LoggedEvent } from "./log.js";
 import { inbox, DEFAULT_LEASE_MS } from "./inbox.js";
 import { working } from "./presence.js";
-import { mayRecord, mayRelay, principalOf, localAccount, type Principal } from "./identity.js";
+import { principalOf, localAccount, type Principal } from "./identity.js";
+import { intentNamed, refuseIntent, theIntents } from "./intents.js";
 
 
 export interface V2Routes {
@@ -87,15 +92,13 @@ const readJson = (req: http.IncomingMessage): Promise<Record<string, unknown>> =
   });
 
 /**
- * ⛔ EVERY ACT THE PAGE CAN PRESS, AND `withdraw` WAS MISSING FROM IT.
+ * ⛔ THE LIST OF ACTS USED TO LIVE HERE, AND THAT IS WHY IT ONCE DISAGREED WITH THE TYPE.
  *
- * This list is what the HTTP endpoint will accept, and it is maintained by hand beside an `Act`
- * union that is not. So the trash icon was rendered, pressed, and refused by the server as an
- * unknown act — a control that exists and cannot work, which this codebase treats as worse than no
- * control at all. Caught by reading the two lists side by side; nothing connects them.
+ * It was a private const in this file, maintained by hand beside an `Act` union that is not — so
+ * `withdraw` was in the type and not in the list, the trash icon rendered and was refused by the
+ * server as an unknown act, and every refusal built from the list said "not one of the five acts"
+ * while the list held six. It is `ACTS` in `acts.ts` now, beside the type it enumerates.
  */
-const ACTS: readonly Act[] = ["accept", "rule", "read", "waive", "defer", "withdraw"] as const;
-
 
 /**
  * ⛔ THE SESSION COOKIE THE INSTANCE ISSUES, which is what makes `via: page` a thing the instance
@@ -153,11 +156,23 @@ export async function v2Route(req: http.IncomingMessage, res: http.ServerRespons
    * that protects a corpus naming a real client would become a punishment for using it.
    */
   const OURS = [
-    "/api/v2/act",
-    "/api/v2/note",
+    /**
+     * ⛔ ONE INPUT, AND IT REPLACED FIVE. `/act`, `/carry`, `/note`, `/say` and `/close` were five
+     * routes whose first ten lines were each a different authority check, so a sixth would have
+     * arrived with its own copy or with none.
+     *
+     * Peter: *"the generic door can mint consent - it's a human input. yes, add a single input, get
+     * rid of the specific commands. the input should still route to the right subsystem"*.
+     *
+     * ⛔ And he is right that the door may mint consent, which is the part I had wrong: the gate was
+     * never the route. `mayRecord` reads the PRINCIPAL and the claimed `via`, so it refuses a token
+     * claiming a person pressed something no matter which path the request came down. `INTENTS`
+     * declares the authority per intent; this list no longer carries one entry per thing anybody
+     * can do.
+     */
+    "/api/v2/in",
     "/api/v2/live",
     "/api/v2/inbox",
-    "/api/v2/carry",
     "/api/v2/preview",
     "/api/v2/corpus",
     "/api/v2/whoami",
@@ -168,17 +183,6 @@ export async function v2Route(req: http.IncomingMessage, res: http.ServerRespons
      * path at all, and a route added to the body alone is a route nothing routes to.
      */
     "/api/v2/thread",
-    /**
-     * ⛔ THE REPLY HALF OF THE TWO-WAY WINDOW, WHICH ONLY EXISTED FOR A DIRECTORY.
-     *
-     * `notes say` and `notes done` had no remote branch, no route here and no MCP tool for the
-     * first of them — so against a HOSTED instance the window Peter asked for was write-only. He
-     * could file a request on the page and the only place anybody could answer it was a chat window
-     * he is deliberately moving away from, which is the exact defect `/api/v2/thread` was added to
-     * close, left half-closed: the page could SHOW replies that nothing could WRITE.
-     */
-    "/api/v2/say",
-    "/api/v2/close",
   ];
   if (p !== "/v2" && !p.startsWith("/v2/") && !OURS.includes(p)) return false;
 
@@ -333,28 +337,6 @@ export async function v2Route(req: http.IncomingMessage, res: http.ServerRespons
   }
 
   /**
-   * ⛔ CARRYING A PRESS IS THE ONE THING A SESSION MAY DO WITH SOMEBODY ELSE'S CONSENT.
-   *
-   * A person can press somewhere this instance cannot see — a published page's database, another
-   * instance. Losing that because the courier was automated would be worse than carrying it. So the
-   * verdict keeps the PRESSER's name and `via`, and records who carried it; the courier's identity
-   * never becomes the presser's.
-   */
-  if (req.method === "POST" && p === "/api/v2/carry") {
-    const body = await readJson(req);
-    const refusedRelay = mayRelay(who);
-    if (refusedRelay) return json(res, refusedRelay, 403), true;
-    const act = String(body.act ?? "") as Act;
-    if (!ACTS.includes(act)) return json(res, { ok: false, why: `"${body.act}" is not one of the five acts`, detail: [ACTS.join(" · ")] }, 400), true;
-    const via = String(body.via ?? "") as Via;
-    if (!VIA.includes(via)) return json(res, { ok: false, why: `"${via}" is not a way consent could have been obtained` }, 400), true;
-    const by = String(body.by ?? "").trim();
-    if (!by) return json(res, { ok: false, why: "a carried press has to name who made it — that is the whole point of carrying it rather than recording it" }, 400), true;
-    const r = perform(dir, act, payloadFrom(act, String(body.ref ?? ""), body), { by, via, relayedBy: who.actor });
-    return json(res, r, r.ok ? 200 : 422), true;
-  }
-
-  /**
    * ⛔ THE SESSION'S HALF OF THE LOOP, over the same log the page streams.
    *
    * Peter: "mcp main interface, a loop back path that claude sessions will poll from for now."
@@ -385,116 +367,48 @@ export async function v2Route(req: http.IncomingMessage, res: http.ServerRespons
   }
 
   /**
-   * ⛔ A NOTE IS NOT AN ACT, so it is a different route and a different file.
+   * ⛔ ONE INPUT, ROUTED BY A NAMED INTENT — replacing `/act`, `/carry`, `/note`, `/say` and `/close`.
    *
-   * Routing it through `/api/v2/act` would have been less code and would have made a request for
-   * change indistinguishable from a judgement about truth at the one place both arrive.
+   * Peter: *"don't we have a 'generic' way to message the system? and have it do whatever is
+   * needed? why do we need so many endpoints?"* and then *"the generic door can mint consent - it's
+   * a human input. yes, add a single input, get rid of the specific commands. the input should still
+   * route to the right subsystem"*.
+   *
+   * ⛔ THE DOOR MAY MINT CONSENT, AND MY OBJECTION TO THAT WAS CONFUSED. I argued a generic endpoint
+   * would let a model's request arrive wearing a person's authority. The gate was never the route:
+   * `mayRecord` reads the PRINCIPAL and the claimed `via`, and refuses a token claiming a person
+   * pressed something however it asks. Five routes were five copies of one authority check, not
+   * five authorities — which is why a sixth would have arrived with its own copy or with none.
+   *
+   * ⛔ AND THE INTENT IS NAMED, NEVER INFERRED. `CLAUDE.md`: *"The tag sets `Note.kind`; nothing
+   * infers it. A classifier reading the sentence would be a guess wearing a decision's clothes."*
+   * That binds harder here — a classifier mis-reading a sentence as `accept` mints consent nobody
+   * gave. An unknown intent is refused with the list.
    */
-  if (req.method === "POST" && p === "/api/v2/note") {
+  if (req.method === "POST" && p === "/api/v2/in") {
     const body = await readJson(req);
-    /**
-     * ⛔ Filed through `fileNote`, not written here. This handler used to assemble the YAML itself,
-     * which is the `gateFor`/`check` shape again — two writers for one file, diverging by whichever
-     * field one of them forgot.
-     */
-    const asker = typeof body.by === "string" && body.by.trim() ? body.by.trim() : whoIsPressing(req, opts.by);
-    const r = fileNote(dir, {
-      about: String(body.about ?? ""),
-      says: String(body.says ?? ""),
-      by: asker,
-      via: "page",
-      at: new Date().toISOString().slice(0, 10),
-    });
-    return json(res, r.ok ? { ok: true, said: r.said } : r, r.ok ? 200 : 422), true;
-  }
-
-  /**
-   * ⛔ ANSWERING WHERE THEY ARE STANDING, WITHOUT DECIDING IT IS FINISHED.
-   *
-   * `done` was the only thing that could be said back, and it ends the request — so a question, a
-   * progress line, or "this is a framework gap and here is why" had to be said somewhere else.
-   * That was fixed for a directory and not for the wire, which is the surface he actually reviews
-   * on.
-   *
-   * ⛔ `author`, NOT `relay`. A reply is this principal's own words and it claims nothing about
-   * what a person agreed to — so it is the same gate authoring anything else goes through, and
-   * deliberately NOT `mayRecord`: nothing here is consent, and routing it through the consent gate
-   * would have made an agent's answer look like a human's press.
-   */
-  if (req.method === "POST" && p === "/api/v2/say") {
-    const body = await readJson(req);
-    if (!who.scopes.includes("author"))
+    const name = String(body.intent ?? "").trim();
+    const intent = intentNamed(name);
+    if (!intent)
       return (
         json(
           res,
           {
             ok: false,
-            why: "this token may not reply on a request",
-            detail: [`it holds: ${who.scopes.join(" · ") || "nothing"}`, "it needs `author`"],
+            why: name ? `"${name}" is not something you can ask for` : "say which intent you mean",
+            detail: [theIntents().join(" · "), "⛔ nothing here guesses an intent from a sentence"],
           },
-          403
+          400
         ),
         true
       );
-    const by = typeof body.by === "string" && body.by.trim() ? body.by.trim() : who.actor;
-    const r = replyToNote(dir, String(body.note ?? ""), by, String(body.says ?? ""));
-    return json(res, r.ok ? { ok: true, said: r.said } : r, r.ok ? 200 : 422), true;
-  }
-
-  /**
-   * ⛔ AND CLOSING IT, WHICH IS THE ONLY THING THAT TAKES IT OFF THE QUEUE.
-   *
-   * Until a note is closed it comes back on every restart, which is the point — but with no route
-   * here, a session working a hosted corpus could author the change and never record that it had.
-   * The request would be re-delivered forever and the page would go on saying somebody is waiting.
-   *
-   * ⛔ The outcome is required by `closeNote`, not re-checked here. One refusal, one message.
-   */
-  if (req.method === "POST" && p === "/api/v2/close") {
-    const body = await readJson(req);
-    if (!who.scopes.includes("author"))
-      return (
-        json(
-          res,
-          {
-            ok: false,
-            why: "this token may not close a request",
-            detail: [`it holds: ${who.scopes.join(" · ") || "nothing"}`, "it needs `author`"],
-          },
-          403
-        ),
-        true
-      );
-    const r = closeNote(dir, String(body.note ?? ""), String(body.outcome ?? ""));
-    return json(res, r.ok ? { ok: true, said: r.said } : r, r.ok ? 200 : 422), true;
-  }
-
-  if (req.method === "POST" && p === "/api/v2/act") {
-    const body = await readJson(req);
-    const act = String(body.act ?? "") as Act;
-    if (!ACTS.includes(act)) return json(res, { ok: false, why: `"${body.act}" is not one of the five acts`, detail: [ACTS.join(" · ")] }, 400), true;
-
-    const via = (typeof body.via === "string" ? body.via : "page") as Via;
-    if (!VIA.includes(via)) return json(res, { ok: false, why: `"${via}" is not a way consent could have been obtained`, detail: [VIA.join(" · ")] }, 400), true;
-
-    const payload = payloadFrom(act, String(body.ref ?? ""), body);
-
-    /**
-     * ⛔ THE BOUNDARY, AT THE POINT OF THE WRITE. A token asking to record `via: page` is claiming a
-     * person agreed, and no person is holding a token. Refused whatever it claims — see `mayRecord`,
-     * and `carry` below for the one thing a session may legitimately do with somebody else's press.
-     */
-    const refused = mayRecord(who, via);
+    const asking = { dir, who, pressing: whoIsPressing(req, opts.by) };
+    const refused = refuseIntent(intent, asking, body);
     if (refused) return json(res, refused, 403), true;
-
-    /**
-     * ⛔ A BROWSER PRESS IS RECORDED AS THE ACCOUNT THE INSTANCE AUTHENTICATED, not as a name the
-     * request asked for. `by` from the wire was the last thing here anybody could forge.
-     */
-    const by = who.kind === "browser" ? who.actor : typeof body.by === "string" && body.by.trim() ? body.by.trim() : who.actor;
-    const r = perform(dir, act, payload, { by, via });
+    const r = intent.run(asking, body);
     return json(res, r, r.ok ? 200 : 422), true;
   }
+
 
   if (req.method === "GET") {
     const corpus = loadCorpus(dir);
