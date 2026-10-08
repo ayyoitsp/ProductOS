@@ -22,7 +22,7 @@ import { drawFromRoute } from "../../v2/draw.js";
 import { everyView, everyViewV1, isResolved, resolveRoute } from "../../v2/routes.js";
 import { spokenFor } from "../../v2/spoken.js";
 import { idiomOf, proposeScreen } from "../../v2/propose.js";
-import { inEffect, readSteers, declined, wouldReach, reaches } from "../../v2/steers.js";
+import { inEffect, readSteers, declined, wouldReach, reaches, learnFrom } from "../../v2/steers.js";
 import { indexDesignSystem } from "../../v2/design.js";
 import { inferConnections, type Connection } from "../../v2/connects.js";
 import { DOC_MIGRATIONS } from "../../v2/store/doc-migrations.js";
@@ -1303,6 +1303,56 @@ export function v2Command(): Command {
     });
 
   steer
+    .command("learn")
+    .description("Notice habits from what people did to the truth — rulings they made, requests they closed")
+    .option("--write", "⛔ record what it found. Without this it only reports")
+    .option("--least <n>", "independent acts a pattern needs before it counts", "3")
+    .option("--at <dir>", "corpus directory", "v2")
+    .action((o: { write?: boolean; least?: string; at?: string }) => {
+      refuseUrl(o, "learning a steer");
+      const dir = path.resolve(o.at ?? "v2");
+      const corpus = loadCorpus(dir);
+      const found = learnFrom(corpus, { least: Number(o.least ?? 3) });
+      if (!found.length) {
+        console.log(pc.dim("nothing has happened often enough to be a habit yet"));
+        console.log(
+          pc.dim(`  it reads rulings and closed requests — ⛔ only ones a PERSON made, never software's own`)
+        );
+        return;
+      }
+      console.log("");
+      for (const l of found) {
+        console.log(`${pc.yellow("▸")} ${l.says}`);
+        console.log(pc.dim(`  ${l.from.slice(0, 8).join("  ")}${l.from.length > 8 ? ` … and ${l.from.length - 8} more` : ""}`));
+      }
+      console.log("");
+      if (!o.write) {
+        console.log(pc.dim(`  productos v2 steer learn --write   — record ${found.length === 1 ? "it" : "them"}, in force`));
+        console.log("");
+        return;
+      }
+      /**
+       * ⛔ IN FORCE THE MOMENT IT IS WRITTEN. Peter, asked how a learned habit should land: *"In
+       * force immediately"*. The protection is not a gate — it is that each one says what it was
+       * drawn from, shows as unread until somebody looks, and can be declined in a way that is
+       * remembered.
+       */
+      const existing = readSteers(dir);
+      const at = new Date().toISOString().slice(0, 10);
+      const made = found.map((l) =>
+        Steer.parse({ id: l.id, says: l.says, steers: "generation", learned_from: l.from.join(", "), at })
+      );
+      const file = path.join(dir, "steers", "steers.yaml");
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, YAML.stringify({ steers: [...existing, ...made] }, { lineWidth: 0 }));
+      console.log(pc.green("✓"), `${made.length} now steering, and unread until somebody looks`);
+      console.log(pc.dim("  productos v2 steer list        — what they are and who each reaches"));
+      console.log(pc.dim('  productos v2 steer decline <id> --because "…"   — if one is not a rule here'));
+      console.log(pc.dim("  ⛔ declining is remembered, so a refused habit is not learned back next pass"));
+      console.log("");
+    });
+
+  steer
     .command("list")
     .description("What steers this project, and where each was learned")
     .option("--at <dir>", "corpus directory", "v2")
@@ -1324,7 +1374,9 @@ export function v2Command(): Command {
         /** ⛔ It said "into every author", which stopped being true the moment one could be aimed. */
         console.log(pc.bold("habits, in force") + pc.dim("  — into the authors each names, and into no judge"));
         for (const st of live) {
-          console.log(`  ${pc.green("•")} ${pc.bold(st.id)} ${st.says}`);
+          /** ⛔ Learned and unread is the state worth seeing — it is steering and nobody has looked. */
+          const unread = Boolean(st.learned_from) && !st.acknowledged;
+          console.log(`  ${unread ? pc.yellow("●") : pc.green("•")} ${pc.bold(st.id)} ${st.says}${unread ? pc.yellow("  new") : ""}`);
           /**
            * ⛔ THE PROVENANCE IS THE POINT OF SHOWING IT. A habit with its source shown is one
            * somebody can go and check and decline; without it, it is a rule nobody chose.
@@ -1359,6 +1411,38 @@ export function v2Command(): Command {
         }
       }
       console.log("");
+    });
+
+  steer
+    .command("seen")
+    .description("Mark a learned habit as read — ⛔ it was already steering; this only clears the unread mark")
+    .argument("[id]", "one habit, or every unread one with --all")
+    .option("--all", "every unread habit at once — which is what reading the list is")
+    .option("--at <dir>", "corpus directory", "v2")
+    .action((id: string | undefined, o: { all?: boolean; at?: string }) => {
+      refuseUrl(o, "acknowledging a steer");
+      const dir = path.resolve(o.at ?? "v2");
+      const all = readSteers(dir);
+      if (!id && !o.all) {
+        console.error(pc.red("✗"), "name one, or --all");
+        process.exit(1);
+      }
+      const hit = (x: Steer): boolean => (o.all ? !x.acknowledged : x.id === id);
+      const touched = all.filter((x) => hit(x) && !x.acknowledged);
+      if (!touched.length) {
+        console.log(pc.dim(id ? `"${id}" is either unknown or already read` : "nothing unread"));
+        return;
+      }
+      const at = new Date().toISOString().slice(0, 10);
+      const next = all.map((x) => (hit(x) && !x.acknowledged ? { ...x, acknowledged: at } : x));
+      fs.writeFileSync(path.join(dir, "steers", "steers.yaml"), YAML.stringify({ steers: next }, { lineWidth: 0 }));
+      console.log(pc.green("✓"), `${touched.length} marked read`);
+      /**
+       * ⛔ SAID OUT LOUD, BECAUSE THE WORD "read" IMPLIES A GATE THAT IS NOT THERE. These were
+       * steering before this command and are steering after it; the only thing that changed is
+       * whether the page shows them as new.
+       */
+      console.log(pc.dim("  they were already steering — this changed nothing about that"));
     });
 
   steer

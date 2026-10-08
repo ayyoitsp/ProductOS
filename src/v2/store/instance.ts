@@ -25,9 +25,10 @@ import path from "node:path";
 import http from "node:http";
 import { CORPUS_DIRS, corpusFiles } from "../load.js";
 import { appendedLines, sessionsIn, writeLog, writeSessions } from "./corpus.js";
+import { published, streamFor } from "./pushes.js";
 import { PRESENCE_MS } from "../presence.js";
 import { v2Route } from "../serve.js";
-import { type Db, isRefusal, type ProjectStore, storeFor } from "./access.js";
+import { type Db, isRefusal, type ProjectStore, type StoredEvent, storeFor } from "./access.js";
 import { principalFrom } from "./identity.js";
 import { projects } from "./schema.js";
 import { eq } from "drizzle-orm";
@@ -298,10 +299,32 @@ export async function writeBack(
    * ⛔ IN ORDER, AND AFTER THE DOCUMENTS. An event announcing a change that is not in the store yet
    * would wake a session to read truth that has not landed.
    */
+  /**
+   * ⛔ WHAT LANDED, SO IT CAN BE ANNOUNCED. `store.append` hands back the `seq` it allocated, which
+   * is the position `readLog` would have derived — so these rows are already in the shape a reader
+   * of the log expects, and `published` does not have to go and read them again.
+   */
+  const landed: StoredEvent[] = [];
   for (const e of appended) {
     const { kind, ...rest } = e as { kind?: string };
-    await store.append(String(kind ?? "corpus-changed"), rest as Record<string, unknown>);
+    const k = String(kind ?? "corpus-changed");
+    const seq = await store.append(k, rest as Record<string, unknown>);
+    landed.push({ seq, kind: k, payload: rest as Record<string, unknown>, at: new Date() });
   }
+
+  /**
+   * ⛔ ANNOUNCED HERE, WHERE THE WRITE LANDED — not beside each act.
+   *
+   * `/api/v2/live` is the page's only way to find out that somebody pressed something, and on this
+   * path it announced nothing at all: the watcher behind it tails a file in the materialized corpus,
+   * which this request deletes on the way out. A publish written beside each `perform` instead would
+   * be one every author has to remember, and the one that forgot would be a press no page ever heard
+   * about — the same argument the comment above about synthesizing events makes in reverse.
+   *
+   * ⛔ AFTER the rows are in, never before. A reader woken by an event it cannot then read would go
+   * and find the old truth, and cache it.
+   */
+  published(store.projectId, landed);
 
   return { changed: [...changed, ...removed], logged: appended.length };
 }
@@ -382,6 +405,16 @@ export async function instanceRoute(
       const handled = await v2Route(req, held ? held.proxy : res, addressed.rest, {
         dir,
         who,
+        /**
+         * ⛔ THE STREAM READS THE STORE, NOT THE DIRECTORY IT WAS HANDED.
+         *
+         * `dir` is deleted in the `finally` below, and an SSE response outlives this function by
+         * design — so the default source (a watcher on `events/log.jsonl`) was watching a path that
+         * had been removed, and `/api/v2/live` emitted nothing on every hosted instance while
+         * holding the connection open and heartbeating. `logHad` is where the log stood when this
+         * request was given it, which is exactly "from now" for a reader connecting at this moment.
+         */
+        stream: streamFor(reached, logHad),
         /**
          * ⛔ THE ACCOUNT, NOT THE PROCESS'S OS USER. For a browser press `serve.ts` already takes
          * `who.actor`; this covers the two places that fell back to the local account.

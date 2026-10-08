@@ -3380,6 +3380,25 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
           fix: `aim it at a role or a seat that writes — or drop \`for\` entirely, which reaches every author. ⛔ A steer nothing carries is a habit somebody believes is in force`,
         });
     }
+    /**
+     * ⛔ A HABIT NOBODY HAS READ IS THE PRICE OF APPLYING ONE ON ARRIVAL, AND IT IS WORTH NAMING.
+     *
+     * Peter chose *"In force immediately"* over a press, which is a real choice with a real cost:
+     * a habit learned from what people did is shaping every author it names before anybody has
+     * looked at it. *A constraint nobody chose* is the phrase this concept is organised against.
+     *
+     * ⛔ So this is a NOTE and must stay one. Refusing a corpus over an unread habit would be a gate
+     * by another route, and would reverse the decision above without anybody editing it. What it
+     * does is make the backlog of unread habits impossible to not notice.
+     */
+    if (st.steers === "generation" && !st.declined && st.learned_from && !st.acknowledged)
+      add({
+        severity: "note",
+        kind: "a-learned-steer-nobody-has-read",
+        where: `steer:${st.id}`,
+        what: `"${st.says}" was learned rather than written, is steering authors now, and nobody has looked at it`,
+        fix: `read it and \`productos v2 steer seen ${st.id}\` — or \`steer decline ${st.id} --because "…"\` if it is not a rule here, which is remembered so it is not learned back`,
+      });
     if (st.steers !== "truth") continue;
     /**
      * ⛔ AND IT IS NOT SATISFIED BY EXISTING. A constraint has to reach somebody — the charter is

@@ -1,14 +1,9 @@
 id: "0103"
-said: we should be able to know the true navigation, leverage screens within screens, like really a walkable single prototype that can link out to the different areas.  so the goal here is to just have a SINGLE screen that can go through the whole product, based on the established truth
+said: Fix it + commit my work — the staging-guard hole let uncommitted work reach 4100 and run a migration on the shared Neon store
 at: 2026-10-07
-kind: concept
+kind: operations
 reaches:
-  model: WITHOUT THIS A PRODUCT IS A PILE OF SCREENS, NOT A PRODUCT
-  derive: walkOf
-  surface: renderWalk
-  check: within-points-at-nothing
-  instruct: Say what a screen appears INSIDE
-  pin: a screen says which screen it appears inside, and the walk holds it there
-waived:
-  generate: Nothing new is generated. The screens were already drawn and the links were already inferred by `connect`; what was missing was a relation the model could not state and a surface that walks it. The drawings this shows are the same `sketch_html` the board shows — it clones from the board rather than carrying a second copy, which is the opposite of generating something.
+  operate: staging serves what is MERGED — not what is in this tree
+  pin: an uncommitted migration refuses it too — that is the one that touches the managed store
+waived: {}
 closed: 2026-10-07

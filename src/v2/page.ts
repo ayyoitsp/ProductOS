@@ -6611,6 +6611,10 @@ export const STYLE = `<style>
   .steer-list .steer-says { display: block; }
   .steer-list .steer-from { display: block; margin-top: .2rem; font-size: .82rem; color: var(--dim); }
   .steer-list .steer-nowhere { color: var(--warn); }
+  /** ⛔ A mark, not a warning — it says nobody has read this, not that anything is wrong. */
+  .steer-list .steer-new { font-size: .72rem; text-transform: uppercase; letter-spacing: .04em;
+    color: var(--accent); border: 1px solid var(--line); border-radius: 999px; padding: .05rem .4rem;
+    vertical-align: middle; margin-left: .3rem; }
   .steer-list .steer-for { display: block; margin-top: .2rem; font-size: .82rem; color: var(--dim); }
   .steer-list .steer-why { display: block; margin-top: .2rem; font-size: .82rem; color: var(--dim); font-style: italic; }
   /** ⛔ Legible, not hidden. A declined habit is evidence about this project, not clutter. */
@@ -6737,7 +6741,15 @@ function renderSettings(corpus: Corpus): string {
     `<li id="${anchorOf(`steer#${x.id}`)}" data-ref="${esc(`steer#${x.id}`)}" data-label="${esc(plain(x.says).slice(0, 60))}"${
       dead ? ' class="steer-off"' : ""
     }>
-       <span class="steer-says">${line(x.says)}</span>
+       <span class="steer-says">${line(x.says)}${
+         /**
+          * ⛔ LEARNED AND UNREAD — the one state worth a mark, and the cost of "in force
+          * immediately". It is already steering every author it names; nobody has looked at it yet.
+          * The badge is not a gate and must never become one, or the choice to apply on arrival has
+          * been quietly reversed by a rendering change.
+          */
+         Boolean(x.learned_from) && !x.acknowledged && !dead ? ` <span class="steer-new">new</span>` : ""
+       }</span>
        ${
          /**
           * ⛔ THE PROVENANCE IS THE WHOLE REASON THIS IS LOOKABLE-AT. A habit with its source shown

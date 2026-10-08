@@ -1,9 +1,17 @@
 id: "0104"
-said: what is up with 'n deals', or page 'n of n' at http://localhost:4100/p/prj-bks5f4m325/v2#at-deal-list - we should be showing real values here
+said: |-
+  do we suggest steering when users are operating the product truth and suggesting steering or auto-steering? shouldn't be explicit
+
+  [asked how a learned habit should land] In force immediately — visible with its provenance, and declinable
+  [asked what it learns from] Rulings, and notes with their outcomes
 at: 2026-10-07
-kind: generator
+kind: concept
 reaches:
-  generate: A COUNT SHOWS A NUMBER. THE LETTER `n` WAS A HALF-MEASURE AND IT READ AS ONE
-  pin: a count did not stand in as a number
-waived: {}
-closed: 2026-10-07
+  model: acknowledged
+  derive: learnFrom
+  surface: steer-new
+  check: a-learned-steer-nobody-has-read
+  instruct: It learns only from acts a PERSON made
+  pin: a habit is never learned from software
+waived:
+  generate: "Nothing new generates. A learned habit is a Steer like any other, so it reaches an author through the addendum that already existed — demonstrated rather than argued: a habit written by `steer learn` appears in the scoper's block, with its provenance, through a path this change does not touch a line of. The learner DERIVES candidates and the CLI writes them, and both of those layers are reached. Arguable the day a learned habit needs to be rendered differently from a written one anywhere a generator runs."
