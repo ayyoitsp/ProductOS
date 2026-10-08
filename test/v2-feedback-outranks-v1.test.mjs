@@ -15,6 +15,7 @@
  * shape he had refused — and the notes recording the refusal were CLOSED, so nothing objected.
  */
 import { test } from "node:test";
+import { temp } from "./support/temp.mjs";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
@@ -23,7 +24,7 @@ import path from "node:path";
 const { spokenFor, scopeOfRef } = await import(path.resolve("dist/v2/spoken.js"));
 
 function corpus(notes, verdicts) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "productos-spoken-"));
+  const dir = temp("productos-spoken-");
   fs.mkdirSync(path.join(dir, "notes"), { recursive: true });
   fs.mkdirSync(path.join(dir, "verdicts"), { recursive: true });
   fs.writeFileSync(path.join(dir, "notes/notes.yaml"), notes);

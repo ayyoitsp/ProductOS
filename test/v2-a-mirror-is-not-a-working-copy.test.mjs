@@ -16,6 +16,7 @@
  * writer there will ever be, and they fail loudly.
  */
 import assert from "node:assert/strict";
+import { temp } from "./support/temp.mjs";
 import { test } from "node:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -35,7 +36,7 @@ import { CORPUS_DIRS } from "../dist/v2/load.js";
  * last test holds `mirror()` to calling it.
  */
 function likeAMirror() {
-  const dir = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "mirrortest-")), "corpus");
+  const dir = path.join(temp("mirrortest-"), "corpus");
   for (const sub of CORPUS_DIRS) fs.mkdirSync(path.join(dir, sub), { recursive: true });
   fs.writeFileSync(path.join(dir, "truth", "money.md"), "---\nid: money\ntitle: Money\n---\n");
   lockMirror(dir, "http://localhost:4100/p/example");
@@ -50,7 +51,7 @@ test("a mirror says what it is, in a file anything reading the directory will se
   assert.match(said, /mirror, not a corpus/i);
 
   /** And an ordinary corpus is not one, or the guard would refuse every real write. */
-  const real = fs.mkdtempSync(path.join(os.tmpdir(), "realcorpus-"));
+  const real = temp("realcorpus-");
   fs.mkdirSync(path.join(real, "truth"), { recursive: true });
   assert.equal(isMirror(real), false, "a corpus somebody owns reads as a mirror");
 });

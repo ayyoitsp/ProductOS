@@ -15,6 +15,7 @@
  * rather than argued.
  */
 import assert from "node:assert/strict";
+import { temp } from "./support/temp.mjs";
 import { test } from "node:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -33,7 +34,7 @@ import { loadFromStore } from "../dist/v2/store/corpus.js";
 const CLI = path.resolve("dist/cli/index.js");
 
 function corpusOnDisk() {
-  const dir = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "productos-hosted-")), "v2");
+  const dir = path.join(temp("productos-hosted-"), "v2");
   execFileSync("node", [CLI, "v2", "reset", "--at", dir], { stdio: "pipe" });
   return dir;
 }
@@ -319,7 +320,7 @@ test("a write built on a stale corpus is refused, not merged", async () => {
     const somebodyElse = `${docs[victim]}\n<!-- landed while the other request was working -->\n`;
     await store.put(victim, somebodyElse);
 
-    const dir = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "productos-stale-")), "corpus");
+    const dir = path.join(temp("productos-stale-"), "corpus");
     for (const [rel, content] of Object.entries(stale)) {
       const full = path.join(dir, rel);
       fs.mkdirSync(path.dirname(full), { recursive: true });

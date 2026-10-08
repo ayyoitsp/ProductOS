@@ -15,6 +15,7 @@
  * wrong the day after it is written and nothing says so.
  */
 import assert from "node:assert/strict";
+import { temp } from "./support/temp.mjs";
 import { test } from "node:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -26,7 +27,7 @@ import { loadCorpus } from "../dist/v2/load.js";
 const CLI = path.resolve("dist/cli/index.js");
 
 function fixture(componentSource) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "productos-sketch-"));
+  const root = temp("productos-sketch-");
   const dir = path.join(root, "v2");
   execFileSync("node", [CLI, "v2", "reset", "--at", dir], { stdio: "pipe" });
   fs.mkdirSync(path.join(root, "productos"), { recursive: true });

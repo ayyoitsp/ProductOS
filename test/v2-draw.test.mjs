@@ -7,6 +7,7 @@
  * drawing that is structurally plausible and empty, which is the failure mode hardest to notice.
  */
 import assert from "node:assert/strict";
+import { temp } from "./support/temp.mjs";
 import { test } from "node:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -21,7 +22,7 @@ const write = (dir, rel, body) => {
 };
 
 test("a parenthesised branch is drawn, not dropped", () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "draw-"));
+  const dir = temp("draw-");
   /**
    * ⛔ Every conditional branch in real JSX is written `cond && ( <div/> )`. A walker that only
    * recognises JSX nodes returned nothing for all of them, and the first real drawing came out as a
@@ -89,7 +90,7 @@ test("a parenthesised branch is drawn, not dropped", () => {
 });
 
 test("a named export is read, and the main render is preferred over the guard", () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "draw2-"));
+  const dir = temp("draw2-");
   /**
    * ⛔ TWO DEFECTS IN ONE FIXTURE, because they compound. Looking only for `export default` refused
    * a named export outright — "the route exports no component this can read", which reads as
@@ -117,7 +118,7 @@ test("a named export is read, and the main render is preferred over the guard", 
 });
 
 test("a co-located component is inlined, and its props are bound", () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "draw3-"));
+  const dir = temp("draw3-");
   /**
    * ⛔ A component directory is full of thin wrappers over co-located components. Resolving only by
    * filename missed every one: a 1,162-line settings screen generated to 111 bytes — a wrapper, and
@@ -139,7 +140,7 @@ test("a co-located component is inlined, and its props are bound", () => {
 });
 
 test("what it cannot read is marked, never guessed — and parts are stamped", () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "draw4-"));
+  const dir = temp("draw4-");
   const route = write(
     dir,
     "page.tsx",
@@ -205,7 +206,7 @@ test("what it cannot read is marked, never guessed — and parts are stamped", (
 });
 
 test("drift is content, not timestamps", () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "draw5-"));
+  const dir = temp("draw5-");
   const route = write(dir, "page.tsx", `export default function P() { return <div className="a">hi</div> }`);
   const same = drawFromRoute(route).html;
   assert.equal(driftedFrom(route, same).drifted, false, "an identical drawing read as drifted");
@@ -230,7 +231,7 @@ test("drift is content, not timestamps", () => {
  * generator that declines to follow it draws frames and throws away pictures.
  */
 test("a local render helper is the body of the screen, and each of its arms is a state", () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "draw6-"));
+  const dir = temp("draw6-");
   const route = write(
     dir,
     "page.tsx",
@@ -305,7 +306,7 @@ test("a counter samples as a number, whatever it hangs off", () => {
  * drawing that looked like the product.
  */
 test("a switch arm is a state, and drawing one of several products is said out loud", () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "draw7-"));
+  const dir = temp("draw7-");
   write(dir, "MultifamilyForm.tsx", `export function MultifamilyForm() { return <div className="mf">New Multifamily Deal</div> }`);
   write(dir, "RentAnalysisForm.tsx", `export function RentAnalysisForm() { return <div className="ra">Rent Analysis</div> }`);
   write(dir, "BenchmarkForm.tsx", `export function BenchmarkForm() { return <div className="bm">Benchmark</div> }`);
@@ -359,7 +360,7 @@ test("a switch arm is a state, and drawing one of several products is said out l
 
 /** ⛔ And a screen that forks nowhere reports no fork — a warning on every drawing is a warning on none. */
 test("a route that renders one screen reports no fork", () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "draw8-"));
+  const dir = temp("draw8-");
   const route = write(
     dir,
     "page.tsx",
@@ -389,7 +390,7 @@ test("a route that renders one screen reports no fork", () => {
  *   3. an icon-only button — nothing wrong with the drawing, and still nothing a reviewer can read
  */
 test("a control always carries words, whatever made it empty", () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "draw9-"));
+  const dir = temp("draw9-");
   const route = write(
     dir,
     "page.tsx",
@@ -430,7 +431,7 @@ test("a control always carries words, whatever made it empty", () => {
 
 /** ⛔ A state tab names the moment, not the expression: "Creating", not "when state.isCreating". */
 test("a state is named in the product's words, never in the code's", () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "draw10-"));
+  const dir = temp("draw10-");
   const route = write(
     dir,
     "page.tsx",
@@ -458,7 +459,7 @@ test("a state is named in the product's words, never in the code's", () => {
 
 /** ⛔ JSX text is HTML. "We&apos;ll" meant an apostrophe and rendered as those nine characters. */
 test("an entity the source already wrote is not escaped twice", () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "draw11-"));
+  const dir = temp("draw11-");
   const route = write(
     dir,
     "page.tsx",

@@ -10,6 +10,7 @@
  * refuses a directory that does not look like a corpus instead of quietly creating one.
  */
 import assert from "node:assert/strict";
+import { temp } from "./support/temp.mjs";
 import { test } from "node:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -63,7 +64,7 @@ test("no command anywhere in the CLI re-declares an option a parent owns", async
 });
 
 test("a corpus directory that is not one is refused, not written into", () => {
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "v2at-"));
+  const tmp = temp("v2at-");
   const missing = path.join(tmp, "nowhere");
 
   const r = run(["v2", "notes", "add", "something that should change", "--about", "x", "--by", "peter", "--at", missing], tmp);
@@ -84,7 +85,7 @@ test("a corpus directory that is not one is refused, not written into", () => {
 });
 
 test("--at is honoured on whichever side of a nested verb it is typed", () => {
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "v2at2-"));
+  const tmp = temp("v2at2-");
   const corpus = path.join(tmp, "corpus");
   fs.cpSync("v2-seed", corpus, { recursive: true });
   const elsewhere = path.join(tmp, "elsewhere");

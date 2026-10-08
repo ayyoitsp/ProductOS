@@ -341,6 +341,32 @@ have passed on all three — a green test asserting the opposite of the truth.
 defect back and watching the test go red. Do that for any new one: a renderer test that has
 never failed has not been shown to test anything.
 
+### ⛔ A test never calls `mkdtempSync` — it calls `temp()`
+
+```js
+import { temp } from "./support/temp.mjs";
+const dir = temp("productos-thing-");   // removed when this file's process exits
+```
+
+**The suite left 58,932 directories in the system temp root — 95% of everything in it.** One
+throwaway corpus per `fs.mkdtempSync`, over ten days, because 45 of 74 test files never removed
+what they made.
+
+It was not merely untidy. `drawFromRoute` indexes a route's neighbourhood to resolve `<Wizard/>`,
+and a route in `/var/folders/…/T/draw5-x/` has the temp **root** one level up — so the suite's own
+litter became the suite's input: 61,520 directories given a recursive descent to yield four `.tsx`
+files, 52 seconds a call, 216 seconds in one test, 13 minutes for the run.
+
+⛔ **And a trailing `rmSync` is not the fix — that is what the 29 well-behaved files already did.**
+It sits at the end of the test, so it is not reached when an assertion fails, and a red run litters
+exactly like an unfixed one. `temp()` reaps at process exit, which does not care how the process
+got there.
+
+⛔ **It is a test, not a convention** — `v2-tests-clean-up-after-themselves` fails if any file under
+`test/` calls `mkdtempSync` itself. Every one of those 74 files was written by somebody who could
+have cleaned up; 45 did not. Same reason `framework-not-just-output` exists: prose with a ⛔ on it
+did not stop this.
+
 ---
 
 ## Versions stay at 0.1.0

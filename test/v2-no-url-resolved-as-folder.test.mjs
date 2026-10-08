@@ -21,6 +21,7 @@
  * only the commands actually under suspicion are run.
  */
 import assert from "node:assert/strict";
+import { temp } from "./support/temp.mjs";
 import { test } from "node:test";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
@@ -85,7 +86,7 @@ test("⛔ no command resolves an instance URL into a local folder", () => {
    * Run from a scratch directory, because the failure being guarded against WRITES — and a test
    * that leaves `https:/…` directories in the repo is its own small version of the bug.
    */
-  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "pos-url-"));
+  const cwd = temp("pos-url-");
   const args = {
     "v2 steer new": ["A habit long enough to be a steer.", "--steers", "generation", "--learned-from", "review"],
     "v2 steer decline": ["some-id", "--because", "not a rule here"],
@@ -135,7 +136,7 @@ test("⛔ no command resolves an instance URL into a local folder", () => {
 
 test("the steer commands refuse an instance, and write nothing", () => {
   /** The three that shipped without the guard — pinned by name as well as by the class above. */
-  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "pos-steer-url-"));
+  const cwd = temp("pos-steer-url-");
   for (const a of [
     ["steer", "list"],
     ["steer", "new", "A habit long enough to be a steer.", "--steers", "generation", "--learned-from", "review"],

@@ -16,6 +16,7 @@
  * the transport test is what proves the pure function is actually on the path.
  */
 import assert from "node:assert/strict";
+import { temp } from "./support/temp.mjs";
 import { test } from "node:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -36,7 +37,7 @@ import { HUMAN_VIA, TOKEN_SCOPES } from "../dist/v2/identity.js";
 const CLI = path.resolve("dist/cli/index.js");
 
 function corpusOnDisk() {
-  const dir = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "productos-mcp-")), "v2");
+  const dir = path.join(temp("productos-mcp-"), "v2");
   execFileSync("node", [CLI, "v2", "reset", "--at", dir], { stdio: "pipe" });
   return dir;
 }

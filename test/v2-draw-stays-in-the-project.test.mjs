@@ -26,6 +26,7 @@
  * SIBLING project would be indexed and drawn into this screen, with the drawing looking fine.
  */
 import assert from "node:assert/strict";
+import { temp } from "./support/temp.mjs";
 import { test } from "node:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -33,7 +34,7 @@ import path from "node:path";
 import { drawFromRoute } from "../dist/v2/draw.js";
 
 function tree(files) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "drawnb-"));
+  const root = temp("drawnb-");
   for (const [p, s] of Object.entries(files)) {
     const f = path.join(root, p);
     fs.mkdirSync(path.dirname(f), { recursive: true });

@@ -16,6 +16,7 @@
  * rule that over-reports gets dismissed along with the next one.
  */
 import assert from "node:assert/strict";
+import { temp } from "./support/temp.mjs";
 import { test } from "node:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -24,7 +25,7 @@ import { checkCorpus } from "../dist/v2/check.js";
 
 /** A feature whose purpose lists its own fields, in the phrasing a person actually writes. */
 function corpusWith(brings) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "v2alt-"));
+  const dir = temp("v2alt-");
   fs.mkdirSync(path.join(dir, "truth"), { recursive: true });
   fs.writeFileSync(path.join(dir, "truth", "create-deal.md"), `---
 id: create-deal

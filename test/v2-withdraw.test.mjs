@@ -15,6 +15,7 @@
  * to, silently, and both read as correct.
  */
 import assert from "node:assert/strict";
+import { temp } from "./support/temp.mjs";
 import { test } from "node:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -26,7 +27,7 @@ const REASON =
   "The field was removed from the form in September, nothing reads it any more, and the screen no longer shows it.";
 
 function seed() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "v2wd-"));
+  const dir = temp("v2wd-");
   fs.cpSync("v2-seed", dir, { recursive: true });
   return dir;
 }

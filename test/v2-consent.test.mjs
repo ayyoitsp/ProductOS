@@ -19,6 +19,7 @@
  * boundary was not part of this decision.
  */
 import assert from "node:assert/strict";
+import { temp } from "./support/temp.mjs";
 import { test } from "node:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -33,7 +34,7 @@ const REASON =
 const paths = { productsDir: path.resolve("productos/products") };
 
 function seed() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "v2consent-"));
+  const dir = temp("v2consent-");
   fs.cpSync("v2-seed", dir, { recursive: true });
   return dir;
 }
@@ -249,7 +250,7 @@ test("a corpus's publish permission comes from its own project, not the working 
    * checkout happens to contain made it a statement about the checkout as well. A project built
    * here says only what it means to say.
    */
-  const allowing = fs.mkdtempSync(path.join(os.tmpdir(), "v2allow-"));
+  const allowing = temp("v2allow-");
   fs.mkdirSync(path.join(allowing, "productos"), { recursive: true });
   fs.writeFileSync(path.join(allowing, "productos", "config.yaml"), "exchange:\n  publish: allow\n");
   fs.cpSync("v2-seed", path.join(allowing, "v2"), { recursive: true });
@@ -260,7 +261,7 @@ test("a corpus's publish permission comes from its own project, not the working 
   );
 
   // A corpus in a directory belonging to no project carries no permission, so it cannot inherit one.
-  const orphan = fs.mkdtempSync(path.join(os.tmpdir(), "v2orphan-"));
+  const orphan = temp("v2orphan-");
   fs.cpSync("v2-seed", orphan, { recursive: true });
   let resolvedFromCorpus;
   try {
