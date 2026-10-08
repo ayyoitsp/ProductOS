@@ -188,10 +188,10 @@ test("a browser press is recorded as the authenticated account, and lands in the
     const ref = await firstScope(store);
     const before = (await loadFromStore(store)).verdicts.length;
 
-    const r = await call(base, "/p/prj-ada/api/v2/act", {
+    const r = await call(base, "/p/prj-ada/api/v2/in", {
       method: "POST",
       session,
-      body: { act: "read", ref, via: "page", buildable: false, by: "somebody-else" },
+      body: { intent: "read", ref, via: "page", buildable: false, by: "somebody-else" },
     });
     assert.equal(r.status, 200, JSON.stringify(r.body).slice(0, 300));
 
@@ -220,10 +220,10 @@ test("over HTTP against a real store, a token claiming `via: page` is refused an
     const ref = await firstScope(store);
     const before = (await loadFromStore(store)).verdicts.length;
 
-    const r = await call(base, "/p/prj-ada/api/v2/act", {
+    const r = await call(base, "/p/prj-ada/api/v2/in", {
       method: "POST",
       token,
-      body: { act: "read", ref, via: "page", buildable: false, by: "ada@example.com" },
+      body: { intent: "read", ref, via: "page", buildable: false, by: "ada@example.com" },
     });
     assert.equal(r.status, 403, `expected a refusal, got ${r.status}`);
     assert.equal(
@@ -247,10 +247,10 @@ test("a carried press keeps the presser's name and records the courier", async (
     });
     const ref = await firstScope(store);
 
-    const r = await call(base, "/p/prj-ada/api/v2/carry", {
+    const r = await call(base, "/p/prj-ada/api/v2/in", {
       method: "POST",
       token,
-      body: { act: "read", ref, by: "peter", via: "page", buildable: false },
+      body: { intent: "carry", act: "read", ref, by: "peter", via: "page", buildable: false },
     });
     assert.equal(r.status, 200, JSON.stringify(r.body).slice(0, 300));
 
@@ -277,10 +277,10 @@ test("two presses arriving at once both land, and neither erases the other", asy
      * stale and whichever finishes last silently contains only its own press.
      */
     const presses = refs.concat(refs).map((ref) =>
-      call(base, "/p/prj-ada/api/v2/act", {
+      call(base, "/p/prj-ada/api/v2/in", {
         method: "POST",
         session,
-        body: { act: "read", ref, via: "page", buildable: false },
+        body: { intent: "read", ref, via: "page", buildable: false },
       }),
     );
     const results = await Promise.all(presses);
@@ -343,10 +343,10 @@ test("a change to the corpus appends an event, and the cursor is per project", a
     const ref = await firstScope(store);
     assert.deepEqual(await store.since(0), [], "the project started with events already in it");
 
-    await call(base, "/p/prj-ada/api/v2/act", {
+    await call(base, "/p/prj-ada/api/v2/in", {
       method: "POST",
       session,
-      body: { act: "read", ref, via: "page", buildable: false },
+      body: { intent: "read", ref, via: "page", buildable: false },
     });
 
     const events = await store.since(0);

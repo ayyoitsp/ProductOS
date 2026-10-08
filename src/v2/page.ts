@@ -3868,10 +3868,19 @@ async function record(payload, form, button) {
   status.textContent = "recording…";
   try {
     if (MODE === "http") {
-      const res = await fetch("/api/v2/act", {
+      /**
+       * ⛔ ONE DOOR, AND THE ACT IS THE INTENT. /api/v2/act and four others became /api/v2/in,
+       * routed by a named intent — and the act a press carries IS that name, so the mapping is one
+       * line here rather than a second envelope on the wire.
+       *
+       * ⛔ NO BACKTICKS IN THIS COMMENT. Everything in this function is inside a template literal,
+       * so a backtick closes the string — which is exactly how the first version of this edit broke
+       * the build in two places at once.
+       */
+      const res = await fetch("/api/v2/in", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ intent: payload.act, ...payload }),
       });
       const body = await res.json();
       if (!res.ok || body.ok === false) {
@@ -4113,10 +4122,11 @@ if (noteBar) {
     status.textContent = "sending…"; status.className = "status";
     try {
       if (MODE === "http") {
-        const res = await fetch("/api/v2/note", {
+        /** ⛔ The same one door. Filing a request is the "note" intent. */
+        const res = await fetch("/api/v2/in", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify(payload),
+          body: JSON.stringify({ intent: "note", ...payload }),
         });
         const body = await res.json();
         if (!res.ok || body.ok === false) throw new Error(body.why || res.statusText);

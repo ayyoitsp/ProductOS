@@ -1,0 +1,20 @@
+id: "0115"
+said: don't we have a 'generic' way to message the system? and have it do whatever is needed? why do we need so many endpoints? the generic door can mint consent - it's a human input. yes, add a single input, get rid of the specific commands. the input should still route to the right subsystem
+at: 2026-10-08
+kind: surface
+reaches:
+  surface: /api/v2/in
+  pin: a token claiming a person pressed something is refused through the one door
+  # ⛔ Recorded though `surface` does not demand it: the list of operations the endpoint accepts
+  #    moved out of `serve.ts` and next to the `Act` type, which is a derive-layer file.
+  derive: ACTS
+waived: {}
+closed: 2026-10-08
+# ⛔ FILED AS `concept` FIRST, AND THAT WAS WRONG — three layers came back unreached and the honest
+#    reading is that they SHOULD be. Nothing here changes what the model can say: no schema field, no
+#    new thing a corpus can express, nothing an author writes differently. It changes how a client
+#    speaks to an instance, which is `surface`, and the five routes it replaced were surface too.
+#
+#    ⛔ Reaching for `concept` and then waiving four sevenths of its cascade would have been the
+#    cascade used as paperwork. The kind is a claim about where feedback has to land, and a change
+#    that lands in two places should say two.

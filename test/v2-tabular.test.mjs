@@ -23,6 +23,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { loadCorpus } from "../dist/v2/load.js";
+import { theIntents } from "../dist/v2/intents.js";
 import { renderScopePage } from "../dist/v2/page.js";
 import { payloadFrom } from "../dist/v2/acts.js";
 import { perform } from "../dist/v2/acts.js";
@@ -115,15 +116,25 @@ test("withdraw gets a target, not a ruling's slot", () => {
  * maintained by hand beside the `Act` union. `withdraw` was missing, so the press was refused as an
  * unknown act.
  */
-test("every act the page can press is one the endpoint accepts", () => {
-  const serve = fs.readFileSync("src/v2/serve.ts", "utf-8");
-  const listed = /const ACTS: readonly Act\[\] = \[([^\]]*)\]/.exec(serve);
-  assert.ok(listed, "the endpoint's list of acts is gone");
+/**
+ * ⛔ AGAINST THE REGISTRY, NOT AGAINST A REGEX OVER `serve.ts`.
+ *
+ * This used to read a `const ACTS` out of the server's source with a regular expression — which
+ * worked while the list lived there and broke the moment it moved beside the `Act` type it
+ * enumerates. That is the right thing to have happened: the list being private to the server is
+ * exactly how it came to hold six values while every refusal built from it said "the five acts".
+ *
+ * The guarantee is also stronger now. Five write routes became one input routed by a NAMED INTENT,
+ * so the question is no longer "is this act in a list the endpoint happens to check" — it is
+ * "is what the page presses something the door can route at all".
+ */
+test("every act the page can press is an intent the one input accepts", () => {
   const html = page(seeded());
-  for (const m of html.matchAll(/data-act="([a-z]+)"/g)) {
-    const act = m[1] === "say" ? "rule" : m[1];
-    assert.match(listed[1], new RegExp(`"${act}"`), `the page presses "${act}" and the endpoint does not accept it`);
-  }
+  const pressed = [...html.matchAll(/data-act="([a-z]+)"/g)].map((m) => (m[1] === "say" ? "rule" : m[1]));
+  assert.ok(pressed.length > 0, "the page presses nothing — this test is asserting over an empty list");
+  const known = theIntents();
+  for (const act of new Set(pressed))
+    assert.ok(known.includes(act), `the page presses "${act}" and no intent of that name exists — it would be refused with the list`);
 });
 
 /**

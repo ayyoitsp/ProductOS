@@ -365,6 +365,13 @@ export const AREAS: Area[] = [
       "src/v2/prototype.ts",
       "src/v2/serve.ts",
       /**
+       * ⛔ `surface`, because it IS the instance's input. Five write routes became one, routed by a
+       * named intent, and this is where each intent declares the authority it needs — so the
+       * surface a client speaks to and the gate it passes are one file rather than five copies of a
+       * check in five handlers' first ten lines.
+       */
+      "src/v2/intents.ts",
+      /**
        * ⛔ THE PROCESS THAT HOSTS EVERY SURFACE, AND IT WAS ON NO AREA. `v2Route` is mounted here,
        * the port is bound here, and the one line that told anybody where the page was reachable is
        * here — which is how a corpus naming a real client came to answer the whole network while
