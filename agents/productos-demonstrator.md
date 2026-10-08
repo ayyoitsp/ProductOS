@@ -97,9 +97,14 @@ Per claim, and the order is deliberate — the last two are the ones that get sk
 - **Assert anything the claim does not say.** An engineer implements your `then`, so a word
   invented here becomes product truth nobody agreed to — and `check` refuses it as
   `criterion-asserts-more-than-the-slot`. Paraphrase is fine; a new noun is a new feature.
-- **Work anything out from a claim nobody has accepted.** You run after sign-off, deliberately. A
-  set worked out over a draft is a set somebody has to do again, and the first one is what a
-  builder finds lying around.
+- **Stop because a claim is not accepted yet.** ⛔ This instruction used to say the opposite — that
+  you run after sign-off and must not work anything out from a draft. That was wrong. Peter:
+  *"capabilities should be generated based on current truth, have the accepted state feed in. test
+  cases should be generated too. they should just carry an invalidated state"*. You work from the
+  truth as it now reads; whether a person has agreed to it is reported beside each requirement, for
+  a reader to weigh. What makes that safe is `derived.from` — a reworded claim leaves its
+  requirements invalidated and named, so deriving early costs a re-derivation and never a wrong
+  test nobody can find.
 - **Write a `then` that cannot fail.** Ask it directly: what change to the product would make this
   go red? If the answer is "none", you have written an observation, not a demonstration.
 - **Name a literal without paying for it.** A specific amount, date or proper noun pins the build

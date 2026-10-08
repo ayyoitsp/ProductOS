@@ -4,6 +4,7 @@ import { Command } from "commander";
 import pc from "picocolors";
 import { checkCorpus, summarise } from "../../v2/check.js";
 import { stampFor, claimHash } from "../../v2/stamp.js";
+import { servesHash } from "../../v2/demonstrate.js";
 import { resolveRef } from "../../v2/ref.js";
 import { loadCorpus } from "../../v2/load.js";
 import { SLOTS, SLOT_ASKS_SHORT, Steer, type Note as NoteT, type SlotName, type View, statements } from "../../v2/schema.js";
@@ -399,10 +400,30 @@ export function v2Command(): Command {
   cmd
     .command("claim")
     .description("The hash of what a claim says, for a requirement worked out against it")
-    .argument("<ref>", "<scope>#<exchange>#<slot>[#<statement>]")
+    .argument("<ref>", "<scope>#<exchange>#<slot>[#<statement>], or several comma-separated for a part")
     .option("--at <dir>", "corpus directory", "v2")
     .action(async (ref: string, o: { at?: string }) => {
       const corpus = loadCorpus(await openAt(o));
+      /**
+       * ⛔ A LIST OF REFS HASHES AS A SET, AND IT IS CHECKED FIRST — a comma-joined argument is not
+       * a ref, so resolving it before splitting fails on the whole string.
+       *
+       * This is what a capability is worked out from: a part serves several promises at once, so
+       * `derived.from` covers all of them. The role needs one call that answers for the set, rather
+       * than N calls it has to combine in a way nothing else would agree with.
+       */
+      if (ref.includes(",")) {
+        const parts = ref.split(",").map((x) => x.trim()).filter(Boolean);
+        for (const p of parts) {
+          const one = resolveRef(corpus, p);
+          if ("error" in one) {
+            console.error(pc.red("✗"), one.error);
+            process.exit(1);
+          }
+        }
+        console.log(servesHash(corpus, parts));
+        return;
+      }
       const resolved = resolveRef(corpus, ref);
       if ("error" in resolved) {
         console.error(pc.red("✗"), resolved.error);

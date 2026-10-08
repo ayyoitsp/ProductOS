@@ -40,7 +40,7 @@ import { readConfig } from "../core/config.js";
 import path from "node:path";
 import { projectRootOf } from "../core/paths.js";
 import { wouldReach } from "./steers.js";
-import { demonstrations } from "./demonstrate.js";
+import { demonstrations, derivedCapabilities } from "./demonstrate.js";
 
 export type Severity = "refuse" | "note" | "shape";
 
@@ -3403,6 +3403,36 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
             fix: "somewhere down the chain a capability has to serve a product statement. ⛔ Machinery that only serves machinery is machinery nobody asked for, and this is the one shape layering and self-justification look identical from one level up",
           });
       }
+    }
+
+    /**
+     * ---- a part worked out from truth that has since moved ----
+     *
+     * ⛔ THE SAME STATE A REQUIREMENT CARRIES, FOR THE SAME REASON, AND IT REPLACED A GATE.
+     *
+     * `decomposer` was briefly routed behind sign-off so that a part could only be worked out from
+     * agreed truth. Peter: *"why should capabilities depend on acceptance?"* — and then
+     * *"capabilities should be generated based on current truth, have the accepted state feed in.
+     * test cases should be generated too. they should just carry an invalidated state"*.
+     *
+     * So the part is generated whenever, and this is what makes that safe: a part records the hash
+     * of everything it serves, and the moment one of those sentences moves it reads as invalidated
+     * rather than quietly answering a promise nobody made any more.
+     *
+     * ⛔ A NOTE, NOT A REFUSAL, and the asymmetry with `a-requirement-older-than-its-claim` is the
+     * point. A stale requirement gets IMPLEMENTED and passes, proving the old sentence — nothing
+     * downstream can catch it. A stale part is a sketch whose boundary may want revisiting; it
+     * misleads a reader, which is worth saying, and it does not silently ship.
+     */
+    for (const d of derivedCapabilities(corpus)) {
+      if (d.state !== "stale") continue;
+      add({
+        severity: "note",
+        kind: "a-part-older-than-what-it-serves",
+        where: d.ref,
+        what: `worked out on ${d.offering.derived?.at} against truth that has been reworded since`,
+        fix: "work out again what parts this needs, from the truth as it now reads. ⛔ Or confirm the boundary still holds and re-record what it was worked out from — what must not happen is a part going on answering a promise nobody made",
+      });
     }
 
     /**
