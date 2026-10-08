@@ -247,6 +247,15 @@ export const AREAS: Area[] = [
       "src/v2/spoken.ts",
       "src/v2/connects.ts",
       /**
+       * ⛔ A DERIVATION, AND DELIBERATELY NOT BESIDE `states.ts`. That file is surface — it composes
+       * a picture and owns what a condition looks like. This one reads sentences: `refuses` carries
+       * a condition and the words an asker is told, `fails` what they are left with, `again` the
+       * in-flight moment. The states a screen has follow from those, so they are computed rather
+       * than written — and the split matters, because a reviewer asked whether a state is right
+       * goes to one and whether it renders goes to the other.
+       */
+      "src/v2/derive-states.ts",
+      /**
        * ⛔ WHAT HOLDS WHAT AND WHAT LEADS WHERE — beside `connects.ts`, because it is the same kind
        * of fact about the truth and renders none of it. Filed under `generate` first, which is
        * where a reviewer asked about navigation would not have looked.
@@ -408,6 +417,14 @@ export const AREAS: Area[] = [
       "src/v2/client.ts",
       "src/v2/write.ts",
       "src/v2/wire.ts",
+      /**
+       * ⛔ BESIDE `wire.ts`, BECAUSE IT IS THE SAME JOB ONE STEP ON. `wire` puts `data-part` on an
+       * element; this puts `data-in="invalid"` on the same element and carries the one stylesheet
+       * that says what that looks like. A state is composed onto a screen's own drawing rather than
+       * stored as a second copy of it, so what a condition RENDERS AS is the whole of what this
+       * decides — which is a surface question, not a derivation.
+       */
+      "src/v2/states.ts",
       "src/v2/moved.ts",
       "src/cli/commands/v2.ts",
       "src/mcp/v2-tools.ts",

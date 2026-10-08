@@ -19,6 +19,8 @@ import { resolveRules, type Corpus } from "./load.js";
 import { scopeToShadow, liftFaces, PANE_FIT } from "./appcss.js";
 import { promisesOf, screensOf, type ProtoPromise, type ProtoScreen } from "./prototype.js";
 import { inferConnections, landingsFor, finishesFor, stateShowing } from "./connects.js";
+import { pictureOf, STATE_CSS } from "./states.js";
+import { deriveStates } from "./derive-states.js";
 import { walkOf, type Walk } from "./walk.js";
 import { inEffect, declined as declinedSteers, reaches } from "./steers.js";
 import { AUTHORS } from "../core/jobs.js";
@@ -595,7 +597,18 @@ const PT_STYLE = `<style>
    */
   .focus { outline: 3px solid #f59e0b; outline-offset: 3px; border-radius: 3px;
     box-shadow: 0 0 0 7px rgba(245,158,11,.22); position: relative; z-index: 1; }
-</style>`;
+</style>${STATE_CSS}`;
+/**
+ * ⛔ `STATE_CSS` GOES IN HERE, AND ONLY BECAUSE THE MOCK LIVES IN A SHADOW ROOT.
+ *
+ * A composed state marks a part with `data-in="invalid"` and lets one stylesheet say what that
+ * looks like. Page-level CSS does not cross a shadow boundary, so putting it beside the page's own
+ * `STYLE` would have produced states that compose correctly and render as though nothing had
+ * happened — a reviewer shown a form with no error on it, agreeing to a sentence about an error.
+ *
+ * Appended to `PT_STYLE` rather than to each call site: there is one shadow root builder, and a
+ * second place to remember would be a second place to forget.
+ */
 
 /** Normalised for label matching: the sketch writes "[ × Clear ]" where the part says "Clear filters". */
 const forMatch = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
@@ -821,7 +834,29 @@ function renderScreens(scope: Scope, ctx: Ctx, scopeId: string, opts: PageOption
             `<div class="proto html"${themeAttr(opts)}><template shadowrootmode="open">${PT_STYLE}<div class="${esc(
               opts.mockClass || "productos-mock"
             )}">${html}</div></template></div>`;
-          const states = v.states ?? [];
+          /**
+           * ⛔ THE STATES THE SENTENCES ALREADY DESCRIBE, COMPUTED HERE RATHER THAN STORED.
+           *
+           * Peter: *"THE WHOLE SYSTEM IS TO MAKE IT EASIER TO INFER SHIT NEEDS TO BE DONE, WHY
+           * WOULD WE ASK PEOPLE TO WRITE ANYTHING DOWN?"* — `refuses` carries a case, its trigger
+           * and the words an asker reads; `fails` what they are left with; `again` the in-flight
+           * moment. Those ARE view states, and nothing was showing them.
+           *
+           * ⛔ ON READ, NEVER WRITTEN INTO THE CORPUS. A derived state stored in truth is wrong the
+           * moment its sentence is reworded, and nothing would say so — the same defect as a
+           * hand-written drawing, one level down. Computing it here means it cannot drift.
+           *
+           * ⛔ AND A DERIVED STATE IS NOT AN AGREED ONE. It is marked on the page, because a tab
+           * nobody can tell was worked out by software is a tab somebody agrees to as though a
+           * person had written it.
+           */
+          const stored = v.states ?? [];
+          const derived = deriveStates(scope, v).states.filter(
+            /** A stored state for the same case wins — somebody has already drawn that one. */
+            (d) => !stored.some((s) => s.label.toLowerCase() === d.label.toLowerCase()),
+          );
+          const states = [...stored, ...derived];
+          const isDerived = (i: number): boolean => i >= stored.length;
           /**
            * ⛔ A PRESS HAS TO MOVE THE PICTURE, OR IT IS A DIAGRAM WITH EXTRA STEPS.
            *
@@ -889,7 +924,8 @@ function renderScreens(scope: Scope, ctx: Ctx, scopeId: string, opts: PageOption
             const at: number[] = [];
             if (v.sketch_html?.includes(`data-part="${id}"`)) at.push(0);
             states.forEach((st, i) => {
-              if (st.sketch_html.includes(`data-part="${id}"`)) at.push(i + 1);
+              /** ⛔ The COMPOSED picture — a state may carry conditions and no drawing of its own. */
+              if (pictureOf(v, st).includes(`data-part="${id}"`)) at.push(i + 1);
             });
             return at;
           };
@@ -986,9 +1022,23 @@ function renderScreens(scope: Scope, ctx: Ctx, scopeId: string, opts: PageOption
                      ${states
                        .map(
                          (st, i) =>
-                           `<button type="button" class="state-tab" data-state="${i + 1}" title="${esc(
-                             `in the code: ${st.when}`
-                           )}">${line(st.label)}</button>`
+                           /**
+                            * ⛔ A DERIVED TAB SAYS SO, AND SAYS WHERE IT CAME FROM. Nobody has
+                            * agreed to it — it was worked out from a sentence — and a tab that
+                            * looks identical to a drawn one is a tab somebody accepts as though a
+                            * person had written it.
+                            *
+                            * ⛔ AND `when` IS OPTIONAL NOW. "in the code: undefined" was what this
+                            * produced for a state of a screen nobody has built, which is most of
+                            * the point of making `when` optional in the first place.
+                            */
+                           `<button type="button" class="state-tab${isDerived(i) ? " derived" : ""}" data-state="${i + 1}" title="${esc(
+                             isDerived(i)
+                               ? `worked out from ${(st as { from?: string }).from ?? "the sentences"} — nobody has agreed to this yet`
+                               : st.when
+                                 ? `in the code: ${st.when}`
+                                 : "this screen states this, and no code was read for it"
+                           )}">${line(st.label)}${isDerived(i) ? " ·" : ""}</button>`
                        )
                        .join("")}
                      ${
@@ -1003,7 +1053,7 @@ function renderScreens(scope: Scope, ctx: Ctx, scopeId: string, opts: PageOption
                    ${states
                      .map(
                        (st, i) =>
-                         `<div class="state-frame" data-state="${i + 1}" hidden>${asMock(withFinish(withLands(withGoes(st.sketch_html), i + 1)))}</div>`
+                         `<div class="state-frame" data-state="${i + 1}" hidden>${asMock(withFinish(withLands(withGoes(pictureOf(v, st)), i + 1)))}</div>`
                      )
                      .join("")}
                    ${hasDone ? `<div class="state-frame" data-state="${doneAt}" hidden>${doneFrame()}</div>` : ""}
