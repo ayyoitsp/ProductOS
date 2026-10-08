@@ -2263,6 +2263,38 @@ export function drawFromRoute(routeFile: string, opts: DrawOptions = {}): DrawRe
    * namesake in components_dir still wins: these are only added where nothing is registered.
    */
   const near = path.dirname(path.resolve(routeFile));
+  /**
+   * ⛔ IT CLIMBED OUT OF THE PROJECT, AND THAT COST FIFTY-TWO SECONDS A CALL.
+   *
+   * Peter, on the suite: *"still running the suite??? … 57 per call to what?"* Measured on a
+   * ONE-LINE `.tsx` file: **6ms** for a route four levels under a quiet directory, **52,140ms** for
+   * the identical file sitting in the system temp directory. Same work, same input; the only
+   * difference is what was above it.
+   *
+   * `up < 4` climbs four levels with no notion of where the project ends. From a route in
+   * `/var/folders/…/T/draw5-x/`, level one is the system temp root — thousands of directories from
+   * every process on the machine — and each one got a recursive descent. The brake was
+   * `seen < 200`, which counts `.tsx` files FOUND: in a tree with none it never engages, so the
+   * walk ran to exhaustion. The slowest test in the suite was 216 seconds of this, 27% of a
+   * thirteen-minute run, for three assertions about whitespace.
+   *
+   * ⛔ AND IT IS A CORRECTNESS BUG, NOT ONLY A SLOW ONE. Four levels above
+   * `app/(app)/deals/page.tsx` in a monorepo leaves the package. A namesake component in a
+   * SIBLING project would be indexed and drawn into this screen, and the drawing would look fine.
+   *
+   * So two bounds, and the neighbourhood indexing itself is untouched — it exists because
+   * `create-deal` drew 190 bytes when its wizard lived beside its route, and that must keep
+   * working:
+   *
+   *   1. **Stop at the project root.** The last directory indexed is the one holding `package.json`
+   *      or `.git`. "The route's own neighbourhood" cannot mean somebody else's project.
+   *   2. **Cap directories VISITED, not files found** — so no tree shape can run away, including a
+   *      route that is in no project at all.
+   */
+  const AT_MOST_DIRS = 400;
+  let visited = 0;
+  const isRoot = (d: string): boolean =>
+    fs.existsSync(path.join(d, "package.json")) || fs.existsSync(path.join(d, ".git"));
   for (let up = 0, dir = near; up < 4; up++, dir = path.dirname(dir)) {
     let entries: fs.Dirent[];
     try {
@@ -2274,8 +2306,9 @@ export function drawFromRoute(routeFile: string, opts: DrawOptions = {}): DrawRe
       if (!e.isDirectory() || e.name === "node_modules" || e.name.startsWith(".")) continue;
       const stack = [path.join(dir, e.name)];
       let seen = 0;
-      while (stack.length && seen < 200) {
+      while (stack.length && seen < 200 && visited < AT_MOST_DIRS) {
         const at = stack.pop()!;
+        visited++;
         let kids: fs.Dirent[];
         try {
           kids = fs.readdirSync(at, { withFileTypes: true });
@@ -2303,6 +2336,12 @@ export function drawFromRoute(routeFile: string, opts: DrawOptions = {}): DrawRe
         }
       }
     }
+    /**
+     * ⛔ AFTER INDEXING IT, NOT BEFORE. The project root is part of the neighbourhood — a
+     * `components/` directory at the top of a package is exactly where a shared component lives.
+     * What must not happen is the NEXT climb, which leaves the project.
+     */
+    if (isRoot(dir) || path.dirname(dir) === dir || visited >= AT_MOST_DIRS) break;
   }
 
   const ctx: Ctx = {
