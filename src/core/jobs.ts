@@ -306,6 +306,18 @@ export const AREAS: Area[] = [
       "src/v2/draw-write.ts",
       "src/v2/routes.ts",
       "src/v2/propose.ts",
+      /**
+       * ⛔ `generate` BESIDE `propose.ts`, AND NOT `derive`. It reads the application's own
+       * components — a source outside the corpus — and produces sentences that were not there
+       * before. `derive` is the other thing: computing over content the corpus already holds.
+       *
+       * ⛔ AND IT IS THE GENERATOR MOST ABLE TO DO HARM, so it is the one most needing a reviewer:
+       * `told` is copy a user reads, and a sentence this file invents is indistinguishable on the
+       * page from one a person agreed to. Its whole design is about refusing to write words —
+       * every message is lifted verbatim, every trigger is read off the check that states it, and
+       * where neither is available it raises the question with no answer.
+       */
+      "src/v2/propose-slots.ts",
       "src/v2/appcss.ts",
       /** ⛔ Glyphs read out of the product's own icon package — a generator source, same as draw. */
       "src/v2/icons.ts",
