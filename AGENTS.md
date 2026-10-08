@@ -97,6 +97,11 @@ flowchart TD
   scan_a_codebase --> scan_a_codebase_coherence["coherence"]
   scan_a_codebase --> scan_a_codebase_hand-authored["hand-authored"]
   scan_a_codebase -.->|keeps| scan_a_codebase_self(["the session — 4 things it may not hand off"])
+  index_a_corpus(["index a corpus<br/><i>Run one analysis across everything, over only what is outstanding</i>"])
+  index_a_corpus --> index_a_corpus_decomposer["decomposer ×N"]
+  index_a_corpus --> index_a_corpus_demonstrator["demonstrator ×N"]
+  index_a_corpus --> index_a_corpus_designer["designer ×N"]
+  index_a_corpus -.->|keeps| index_a_corpus_self(["the session — 4 things it may not hand off"])
   hand_it_to_the_builders(["hand it to the builders<br/><i>The engineering and QA read, once product and design have signed off</i>"])
   hand_it_to_the_builders --> hand_it_to_the_builders_architecture["architecture"]
   hand_it_to_the_builders --> hand_it_to_the_builders_buildability["buildability"]
@@ -170,6 +175,21 @@ Turn a whole codebase into a first corpus.
 - running `productos v2 check` before anybody is asked to look
 - putting the survey in front of a person before thirty scopers start against a partition that is wrong
 - every act of judgement — nothing here is validated by having been written
+
+### index a corpus
+
+Run one analysis across everything, over only what is outstanding.
+
+**Spawns, in order:**
+- `decomposer` *(engineering · writes)* — one per unit, in parallel — the parts each feature needs — one per ref `analyse capabilities` names, never one per feature in the corpus
+- `demonstrator` *(quality · writes)* — one per unit, in parallel — what would show each claim holding — one per ref `analyse requirements` names
+- `designer` *(design · writes)* — one per unit, in parallel — a picture for each screen `analyse drawings` names, including the appearances a screen falls into
+
+**⛔ Keeps, because it may not be delegated:**
+- ⛔ running `productos v2 analyse <name>` FIRST and fanning only over the refs it returns — a sweep that runs over everything redoes finished work and stops being something anybody runs twice
+- deciding which analysis to run: this route does one at a time, because thirty roles of three kinds at once is a diff nobody reviews
+- ⛔ reading the stale ones before the missing ones — a unit that was done and now answers an older wording looks finished to everybody reading it
+- every act of judgement. Nothing swept is validated by having been swept, and none of these roles may stamp
 
 ### hand it to the builders
 
@@ -824,7 +844,7 @@ Held three ways rather than one: no author declares `ask-the-human`, so no host 
 
 What `--help` cannot tell you, and why this exists: **who** types it, and **which track** it belongs to. *Never hand a human a flag* is a rule the skills state and nothing enforced — a command marked `claude` appearing in instructions addressed to a person is now a visible contradiction. And two parallel models have been running for months with nothing saying which commands belong to which.
 
-### Current — 49 commands
+### Current — 50 commands
 
 | command | does | layer | typed by |
 |---|---|---|---|
@@ -853,6 +873,7 @@ What `--help` cannot tell you, and why this exists: **who** types it, and **whic
 | `productos v2 acts` | How many acts of human judgement this corpus carries | derive | the model |
 | `productos v2 packet` | Compile the execution packet for one scope | generate | the model |
 | `productos v2 claim` | The hash of what a claim says, for a requirement worked out against it | derive | the model |
+| `productos v2 analyse` | What work an analysis has left across a corpus, and which of it is stale | derive | the model |
 | `productos v2 next` | What to ask somebody next about one feature | derive | the model |
 | `productos v2 page` | Render one scope as a page a person can review | surface | the model |
 | `productos v2 publishable` | Emit the interactive page for publishing, if the corpus allows it | surface | the model |
@@ -910,7 +931,7 @@ Territory, not ownership. Nobody is assigned an area — an agent reads this to 
 | area | layers | files |
 |---|---|---|
 | **model** | model | `src/v2/schema.ts` `src/v2/load.ts` `src/v2/ref.ts` `src/core/jobs.ts` `src/core/change.ts` `src/core/config.ts` `src/v2/store/schema.ts` |
-| **derive** | derive | `src/v2/grid.ts` `src/v2/stamp.ts` `src/v2/demonstrate.ts` `src/v2/confidence.ts` `src/v2/settle.ts` `src/v2/acts.ts` `src/v2/record.ts` `src/v2/spoken.ts` `src/v2/connects.ts` `src/v2/walk.ts` `src/v2/steers.ts` `src/v2/store/access.ts` `src/v2/store/identity.ts` `src/core/learn.ts` `src/adapters/claude.ts` |
+| **derive** | derive | `src/v2/grid.ts` `src/v2/stamp.ts` `src/v2/demonstrate.ts` `src/v2/analyse.ts` `src/v2/confidence.ts` `src/v2/settle.ts` `src/v2/acts.ts` `src/v2/record.ts` `src/v2/spoken.ts` `src/v2/connects.ts` `src/v2/walk.ts` `src/v2/steers.ts` `src/v2/store/access.ts` `src/v2/store/identity.ts` `src/core/learn.ts` `src/adapters/claude.ts` |
 | **generate** | generate | `src/v2/migrate.ts` `src/v2/draw.ts` `src/v2/draw-write.ts` `src/v2/routes.ts` `src/v2/propose.ts` `src/v2/appcss.ts` `src/v2/icons.ts` `src/core/agents-doc.ts` `src/v2/design.ts` `src/v2/store/corpus.ts` `src/v2/store/doc-migrations.ts` `src/v2/store/migrate.ts` `src/v2/store/boot.ts` |
 | **operate** | operate | `Makefile` `Dockerfile` `docker-compose.yml` `docker-compose.remote.yml` `scripts/` |
 | **surface** | surface | `src/v2/page.ts` `src/v2/prototype.ts` `src/v2/serve.ts` `src/ui/server.ts` `src/ui/renderer.ts` `src/v2/store/server.ts` `src/v2/store/instance.ts` `src/v2/store/pushes.ts` `src/v2/store/mcp.ts` `src/v2/store/choose.ts` `src/cli/commands/hosted.ts` `src/v2/packet.ts` `src/v2/notes.ts` `src/v2/watch.ts` `src/v2/log.ts` `src/v2/inbox.ts` `src/v2/presence.ts` `src/v2/identity.ts` `src/v2/client.ts` `src/v2/write.ts` `src/v2/wire.ts` `src/v2/moved.ts` `src/cli/commands/v2.ts` `src/mcp/v2-tools.ts` |
