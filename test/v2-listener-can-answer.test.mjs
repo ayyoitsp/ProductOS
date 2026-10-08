@@ -95,10 +95,10 @@ test("a request filed on a hosted instance can be answered where it was filed, a
   try {
     const about = await scopeIn(store);
 
-    const filed = await call(base, "/p/prj-ada/api/v2/note", {
+    const filed = await call(base, "/p/prj-ada/api/v2/in", {
       method: "POST",
       session,
-      body: { about, says: "this screen says nothing about what happens next" },
+      body: { intent: "note", about, says: "this screen says nothing about what happens next" },
     });
     assert.equal(filed.status, 200, `filing failed: ${JSON.stringify(filed.body)}`);
 
@@ -111,10 +111,10 @@ test("a request filed on a hosted instance can be answered where it was filed, a
      * ⛔ THE WHOLE POINT: the reply lands, and it lands WITHOUT closing the request. A listener whose
      * only way to be heard is `close` either closes work it has not finished or says nothing.
      */
-    const said = await call(base, "/p/prj-ada/api/v2/say", {
+    const said = await call(base, "/p/prj-ada/api/v2/in", {
       method: "POST",
       session,
-      body: { note: note.id, says: "the framework had no field for this — adding one, then I will redraw it" },
+      body: { intent: "say", note: note.id, says: "the framework had no field for this — adding one, then I will redraw it" },
     });
     assert.equal(said.status, 200, `replying failed: ${JSON.stringify(said.body)}`);
 
@@ -130,10 +130,10 @@ test("a request filed on a hosted instance can be answered where it was filed, a
     const stored = reloaded.notes.find((n) => n.id === note.id);
     assert.equal(stored.replies.length, 1, "the reply never reached the store");
 
-    const closed = await call(base, "/p/prj-ada/api/v2/close", {
+    const closed = await call(base, "/p/prj-ada/api/v2/in", {
       method: "POST",
       session,
-      body: { note: note.id, outcome: "added the field and redrew the screen" },
+      body: { intent: "close", note: note.id, outcome: "added the field and redrew the screen" },
     });
     assert.equal(closed.status, 200, `closing failed: ${JSON.stringify(closed.body)}`);
 
@@ -156,7 +156,7 @@ test("an outcome is still required to close a request over the wire", async () =
   const { base, session, server, store } = await hosted();
   try {
     const about = await scopeIn(store);
-    await call(base, "/p/prj-ada/api/v2/note", { method: "POST", session, body: { about, says: "something is wrong here" } });
+    await call(base, "/p/prj-ada/api/v2/in", { method: "POST", session, body: { intent: "note", about, says: "something is wrong here" } });
     const open = await call(base, `/p/prj-ada/api/v2/thread?about=${encodeURIComponent(about)}`, { session });
     const note = open.body.notes.find((n) => n.state === "open");
 
@@ -164,13 +164,13 @@ test("an outcome is still required to close a request over the wire", async () =
      * ⛔ ONE REFUSAL, NOT TWO. The route does not re-check this — a second gate written beside the
      * first is how the two come to disagree about what an acceptable outcome is.
      */
-    const bare = await call(base, "/p/prj-ada/api/v2/close", { method: "POST", session, body: { note: note.id, outcome: "" } });
+    const bare = await call(base, "/p/prj-ada/api/v2/in", { method: "POST", session, body: { intent: "close", note: note.id, outcome: "" } });
     assert.equal(bare.status, 422, "a request was closed with no account of what happened");
 
-    const missing = await call(base, "/p/prj-ada/api/v2/say", {
+    const missing = await call(base, "/p/prj-ada/api/v2/in", {
       method: "POST",
       session,
-      body: { note: "n-nothing", says: "hello" },
+      body: { intent: "say", note: "n-nothing", says: "hello" },
     });
     assert.equal(missing.status, 422, "a reply was accepted on a note that does not exist");
   } finally {
@@ -259,10 +259,10 @@ test("a press on a hosted instance reaches an open stream, which it never did", 
     });
 
     await new Promise((r) => setTimeout(r, 300));
-    const filed = await call(base, "/p/prj-ada/api/v2/note", {
+    const filed = await call(base, "/p/prj-ada/api/v2/in", {
       method: "POST",
       session,
-      body: { about, says: "the stream has to carry this" },
+      body: { intent: "note", about, says: "the stream has to carry this" },
     });
     assert.equal(filed.status, 200, `filing failed: ${JSON.stringify(filed.body)}`);
 

@@ -67,6 +67,26 @@ export const isHuman = (via: Via): boolean => via !== "agent";
 
 export type Act = "accept" | "rule" | "read" | "waive" | "defer" | "withdraw";
 
+/**
+ * Every operation this module performs, as values — beside the type, so the two cannot disagree.
+ *
+ * ⛔ SIX, AND "THE FIVE ACTS" WAS NEVER WRONG — one name was carrying two concepts.
+ *
+ * `Verdict.kind` holds exactly five: accept · rule · read · defer · waive. Those are the five acts,
+ * and every document in this repo that says so is right. `withdraw` is the sixth member of `Act`
+ * and is NOT a verdict: it takes something out of the corpus rather than recording a judgement
+ * about it, which is why nothing stamps it and why `payloadFrom` needs a different shape for it.
+ *
+ * So the defect was not a stale count. It was that a list of SIX OPERATIONS was called `ACTS`,
+ * lived privately in `serve.ts`, and had refusals built from it reading *"not one of the five
+ * acts"* — a sentence that is true about the five and false about the list. Two concepts, one name,
+ * and the message picked the wrong one.
+ *
+ * ⛔ Hence no count in any message built from this: a refusal lists what it will take. And hence one
+ * home beside the type, so the next operation added is added once.
+ */
+export const ACTS: readonly Act[] = ["accept", "rule", "read", "waive", "defer", "withdraw"] as const;
+
 export interface Consent {
   /** ⛔ Recorded, never authenticated. See `requireName`. */
   by: string;
