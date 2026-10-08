@@ -239,6 +239,15 @@ export const AREAS: Area[] = [
       "src/v2/record.ts",
       "src/v2/spoken.ts",
       "src/v2/connects.ts",
+      /**
+       * ⛔ A DERIVATION, AND DELIBERATELY NOT BESIDE `states.ts`. That file is surface — it composes
+       * a picture and owns what a condition looks like. This one reads sentences: `refuses` carries
+       * a condition and the words an asker is told, `fails` what they are left with, `again` the
+       * in-flight moment. The states a screen has follow from those, so they are computed rather
+       * than written — and the split matters, because a reviewer asked whether a state is right
+       * goes to one and whether it renders goes to the other.
+       */
+      "src/v2/derive-states.ts",
       "src/v2/steers.ts",
       /**
        * ⛔ AUTHORIZATION IS A GATE, AND THESE ARE WHERE IT IS DECIDED. `storeFor(db, who).project(id)`
