@@ -23,9 +23,10 @@ import { drawFromRoute } from "../../v2/draw.js";
 import { everyView, everyViewV1, isResolved, resolveRoute } from "../../v2/routes.js";
 import { spokenFor } from "../../v2/spoken.js";
 import { idiomOf, proposeScreen } from "../../v2/propose.js";
-import { inEffect, readSteers, declined, wouldReach, reaches } from "../../v2/steers.js";
+import { inEffect, readSteers, declined, wouldReach, reaches, learnFrom } from "../../v2/steers.js";
 import { indexDesignSystem } from "../../v2/design.js";
 import { inferConnections, type Connection } from "../../v2/connects.js";
+import { DOC_MIGRATIONS } from "../../v2/store/doc-migrations.js";
 import { writeLeadsTo } from "../../v2/draw-write.js";
 import { AGENTS, AUTHORS, CASCADE, KINDS, SHIMS, SKILL, byDiscipline } from "../../core/jobs.js";
 
@@ -1344,6 +1345,56 @@ export function v2Command(): Command {
     });
 
   steer
+    .command("learn")
+    .description("Notice habits from what people did to the truth — rulings they made, requests they closed")
+    .option("--write", "⛔ record what it found. Without this it only reports")
+    .option("--least <n>", "independent acts a pattern needs before it counts", "3")
+    .option("--at <dir>", "corpus directory", "v2")
+    .action((o: { write?: boolean; least?: string; at?: string }) => {
+      refuseUrl(o, "learning a steer");
+      const dir = path.resolve(o.at ?? "v2");
+      const corpus = loadCorpus(dir);
+      const found = learnFrom(corpus, { least: Number(o.least ?? 3) });
+      if (!found.length) {
+        console.log(pc.dim("nothing has happened often enough to be a habit yet"));
+        console.log(
+          pc.dim(`  it reads rulings and closed requests — ⛔ only ones a PERSON made, never software's own`)
+        );
+        return;
+      }
+      console.log("");
+      for (const l of found) {
+        console.log(`${pc.yellow("▸")} ${l.says}`);
+        console.log(pc.dim(`  ${l.from.slice(0, 8).join("  ")}${l.from.length > 8 ? ` … and ${l.from.length - 8} more` : ""}`));
+      }
+      console.log("");
+      if (!o.write) {
+        console.log(pc.dim(`  productos v2 steer learn --write   — record ${found.length === 1 ? "it" : "them"}, in force`));
+        console.log("");
+        return;
+      }
+      /**
+       * ⛔ IN FORCE THE MOMENT IT IS WRITTEN. Peter, asked how a learned habit should land: *"In
+       * force immediately"*. The protection is not a gate — it is that each one says what it was
+       * drawn from, shows as unread until somebody looks, and can be declined in a way that is
+       * remembered.
+       */
+      const existing = readSteers(dir);
+      const at = new Date().toISOString().slice(0, 10);
+      const made = found.map((l) =>
+        Steer.parse({ id: l.id, says: l.says, steers: "generation", learned_from: l.from.join(", "), at })
+      );
+      const file = path.join(dir, "steers", "steers.yaml");
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, YAML.stringify({ steers: [...existing, ...made] }, { lineWidth: 0 }));
+      console.log(pc.green("✓"), `${made.length} now steering, and unread until somebody looks`);
+      console.log(pc.dim("  productos v2 steer list        — what they are and who each reaches"));
+      console.log(pc.dim('  productos v2 steer decline <id> --because "…"   — if one is not a rule here'));
+      console.log(pc.dim("  ⛔ declining is remembered, so a refused habit is not learned back next pass"));
+      console.log("");
+    });
+
+  steer
     .command("list")
     .description("What steers this project, and where each was learned")
     .option("--at <dir>", "corpus directory", "v2")
@@ -1365,7 +1416,9 @@ export function v2Command(): Command {
         /** ⛔ It said "into every author", which stopped being true the moment one could be aimed. */
         console.log(pc.bold("habits, in force") + pc.dim("  — into the authors each names, and into no judge"));
         for (const st of live) {
-          console.log(`  ${pc.green("•")} ${pc.bold(st.id)} ${st.says}`);
+          /** ⛔ Learned and unread is the state worth seeing — it is steering and nobody has looked. */
+          const unread = Boolean(st.learned_from) && !st.acknowledged;
+          console.log(`  ${unread ? pc.yellow("●") : pc.green("•")} ${pc.bold(st.id)} ${st.says}${unread ? pc.yellow("  new") : ""}`);
           /**
            * ⛔ THE PROVENANCE IS THE POINT OF SHOWING IT. A habit with its source shown is one
            * somebody can go and check and decline; without it, it is a rule nobody chose.
@@ -1400,6 +1453,38 @@ export function v2Command(): Command {
         }
       }
       console.log("");
+    });
+
+  steer
+    .command("seen")
+    .description("Mark a learned habit as read — ⛔ it was already steering; this only clears the unread mark")
+    .argument("[id]", "one habit, or every unread one with --all")
+    .option("--all", "every unread habit at once — which is what reading the list is")
+    .option("--at <dir>", "corpus directory", "v2")
+    .action((id: string | undefined, o: { all?: boolean; at?: string }) => {
+      refuseUrl(o, "acknowledging a steer");
+      const dir = path.resolve(o.at ?? "v2");
+      const all = readSteers(dir);
+      if (!id && !o.all) {
+        console.error(pc.red("✗"), "name one, or --all");
+        process.exit(1);
+      }
+      const hit = (x: Steer): boolean => (o.all ? !x.acknowledged : x.id === id);
+      const touched = all.filter((x) => hit(x) && !x.acknowledged);
+      if (!touched.length) {
+        console.log(pc.dim(id ? `"${id}" is either unknown or already read` : "nothing unread"));
+        return;
+      }
+      const at = new Date().toISOString().slice(0, 10);
+      const next = all.map((x) => (hit(x) && !x.acknowledged ? { ...x, acknowledged: at } : x));
+      fs.writeFileSync(path.join(dir, "steers", "steers.yaml"), YAML.stringify({ steers: next }, { lineWidth: 0 }));
+      console.log(pc.green("✓"), `${touched.length} marked read`);
+      /**
+       * ⛔ SAID OUT LOUD, BECAUSE THE WORD "read" IMPLIES A GATE THAT IS NOT THERE. These were
+       * steering before this command and are steering after it; the only thing that changed is
+       * whether the page shows them as new.
+       */
+      console.log(pc.dim("  they were already steering — this changed nothing about that"));
     });
 
   steer
@@ -1952,6 +2037,81 @@ export function v2Command(): Command {
      * initializing/onboarding"*. A graph read out of `router.push` can only join screens that exist;
      * the corpus describes the target, so it can join screens nobody has built.
      */
+    /**
+     * ⛔ A CORPUS ON DISK CAN BE BEHIND THE SCHEMA, AND NOTHING COULD BRING IT FORWARD.
+     *
+     * Document migrations existed and ran against the STORE — `hosted import` calls them, boot
+     * calls them — so a hosted corpus was always current. A corpus in a directory was not reachable
+     * by any of it, and every disk command reads files directly. When `walked` was removed from the
+     * schema, twelve files in a working corpus stopped parsing and `check` answered
+     * `cannot-judge-this-corpus`: not one finding, about anything, until somebody noticed the key.
+     *
+     * Same rules as the store: the list is append-only, each rule reports what it touched, and a
+     * file no rule matches is not rewritten.
+     */
+    /** ⛔ Not `migrate` — that verb is taken by the v1→Exchange conversion, which is a different act. */
+    .command("forward")
+    .description("Bring a corpus on disk forward to this build's schema")
+    .option("--at <dir>", "the corpus", ".")
+    .option("-n, --dry-run", "say what it would change and change nothing")
+    .action((o: { at?: string; dryRun?: boolean }) => {
+      /**
+       * ⛔ AN INSTANCE IS NOT A FOLDER, AND `path.resolve` WILL HAPPILY PRETEND IT IS. This rewrites
+       * files, so pointed at a URL it would have written a corpus into `./https:/…`. An instance
+       * brings its own documents forward at import and at boot; there is nothing here for it.
+       */
+      if (/^https?:\/\//i.test(o.at ?? "")) {
+        console.error(pc.red("✗"), `${o.at} is an instance, and this rewrites files on disk`);
+        console.error(" ", pc.dim("an instance brings its documents forward when a corpus is imported and when it boots"));
+        process.exit(1);
+      }
+      const root = path.resolve(o.at ?? ".");
+      const changed: Array<{ file: string; by: string }> = [];
+      const walkDir = (dir: string): string[] => {
+        const out: string[] = [];
+        for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+          if (e.name.startsWith(".")) continue;
+          const full = path.join(dir, e.name);
+          if (e.isDirectory()) out.push(...walkDir(full));
+          else if (/\.(md|ya?ml)$/.test(e.name)) out.push(full);
+        }
+        return out;
+      };
+      if (!fs.existsSync(root)) {
+        console.error(pc.red("✗"), `no corpus at ${root}`);
+        process.exit(1);
+      }
+      for (const file of walkDir(root)) {
+        /** The rules are written against store-relative paths — `truth/x.md` — so match that. */
+        const rel = path.relative(root, file).split(path.sep).join("/");
+        let source = fs.readFileSync(file, "utf-8");
+        for (const m of DOC_MIGRATIONS) {
+          const next = m.apply(rel, source);
+          if (next === null || next === source) continue;
+          source = next;
+          changed.push({ file: rel, by: m.id });
+        }
+        if (!o.dryRun && changed.some((c) => c.file === rel)) fs.writeFileSync(file, source);
+      }
+      if (!changed.length) {
+        console.log(pc.green("✓"), "already current — no document is behind this build's schema");
+        return;
+      }
+      console.log(
+        pc.green("✓"),
+        `${o.dryRun ? "would bring" : "brought"} ${new Set(changed.map((c) => c.file)).size} document(s) forward`
+      );
+      for (const m of new Set(changed.map((c) => c.by))) {
+        const files = changed.filter((c) => c.by === m).map((c) => c.file);
+        console.log(" ", pc.dim(`${m}: ${files.slice(0, 6).join(", ")}${files.length > 6 ? `, and ${files.length - 6} more` : ""}`));
+      }
+      if (o.dryRun) console.log(" ", pc.dim("nothing was written — drop -n to apply"));
+    });
+
+  /** ⛔ A NEW STATEMENT. `.command()` returns the CHILD, so chaining the next one onto it makes a
+   *     subcommand — `v2 forward connect` — and the test that catches it does so by noticing the
+   *     child re-declares an option its new parent owns. */
+  cmd
     .command("connect")
     .description("Work out what each control leads to, from what the corpus says about it")
     .option("--into <dir>", "the corpus", ".")

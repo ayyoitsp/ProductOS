@@ -1280,6 +1280,40 @@ are for different things.
 ⛔ **A seat is not the roles in it today.** Scoping *"never name the substrate"* to the engineering
 roles that happened to exist would have silently stopped covering the next one. Name the seat.
 
+### ⛔ A habit can be learned from what people did, and it steers the moment it is
+
+Peter: *"do we suggest steering when users are operating the product truth and suggesting steering or
+auto-steering? shouldn't be explicit"* — and, asked which: ***"In force immediately"***.
+
+```bash
+productos v2 steer learn            # what the record of human acts says this project keeps doing
+productos v2 steer learn --write    # record it — ⛔ steering from that moment, not after a press
+productos v2 steer seen --all       # mark read. It was already steering; this clears the mark only
+```
+
+It reads **rulings** — where somebody rejected a sentence and wrote another, which is literally what
+gets rejected and why — and **requests they closed**.
+
+⛔ **It learns only from acts a PERSON made.** A ruling recorded `via: agent` is software's own
+output, and a learner that reads those closes a loop with nothing human left in it: every pass
+afterwards is the system agreeing with itself more loudly, with `learned_from` populated and
+worthless.
+
+⛔ **It states what was observed, never a principle.** *"`currency` was put into 3 rulings that did
+not have it"* is checkable; *"amounts are always shown with their currency"* is a generalisation
+nobody made. Reword it into a principle if you like — and then it is yours, not something that
+accumulated.
+
+⛔ **`acknowledged:` records that somebody has read it, and gates nothing.** Absent means new.
+`steer seen` is what sets it; it was steering before and is steering after, and the only thing that
+changes is whether the page shows a badge. ⛔ If it ever decides whether a habit applies, the choice
+above has been reversed by a field nobody read as a reversal.
+
+⛔ **Unread is a mark, not a gate.** A learned habit steers before anybody looks at it; that is the
+cost of the choice above, and the protections are that it says what it was drawn from, shows as new
+until somebody reads it, `check` reports the ones nobody has, and declining is remembered — so a
+refused habit is not learned straight back from acts that are all still in the record.
+
 ⛔ **`--for` refuses a target that reaches nobody**, and there are three ways to write one: a typo
 (`design` and `designer` are one character apart and mean different things), a judge — which can
 never be steered, because a reviewer told what this project likes can no longer notice the project

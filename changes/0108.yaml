@@ -1,0 +1,9 @@
+id: "0108"
+said: what is up with 'n deals', or page 'n of n' at http://localhost:4100/p/prj-bks5f4m325/v2#at-deal-list - we should be showing real values here
+at: 2026-10-07
+kind: generator
+reaches:
+  generate: A COUNT SHOWS A NUMBER. THE LETTER `n` WAS A HALF-MEASURE AND IT READ AS ONE
+  pin: a count did not stand in as a number
+waived: {}
+closed: 2026-10-07

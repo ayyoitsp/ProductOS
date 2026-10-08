@@ -4,7 +4,22 @@ dist/
 *.tsbuildinfo
 .npm/
 .pnpm-store/
-package-lock.json
+# ⛔ `package-lock.json` IS NOT IGNORED, AND IT WAS — IN A GENERIC "Node / TS" BLOCK.
+#
+# That is the boilerplate pattern for a LIBRARY. ProductOS ships a Dockerfile that does
+# `COPY package.json package-lock.json ./` followed by `npm ci`, and `npm ci` refuses to run
+# without a lockfile. So:
+#
+#   - the image could not be built from a commit at all. A fresh clone has no lockfile, the COPY
+#     fails, and the build dies. It worked only on machines that happened to have one locally.
+#   - the Dockerfile's own stated invariant — "the image is a pure function of the lockfile" — was
+#     unenforceable, because the lockfile was not in the commit the image claims to be a function of.
+#   - a git worktree could not `npm install` or run the suite, which is how this was found: the
+#     deploy checkout had no lockfile and no node_modules, and `npm run build` appeared to work only
+#     because node walked up to the main checkout's modules.
+#
+# ⛔ `yarn.lock` and `pnpm-lock.yaml` STAY IGNORED. This project is npm; one of those appearing is a
+# mistake, not a second opinion.
 yarn.lock
 pnpm-lock.yaml
 

@@ -17,7 +17,7 @@
 
 .PHONY: default help install link build watch dev dev-serve typecheck all clean doctor \
         up down logs rebuild restart nuke psql hosted-doctor seed shell hosted-help \
-        stacks migrations-check dev-guard staging-guard backup restore up-remote down-remote logs-remote remote-doctor checkpoint projects session
+        stacks migrations-check dev-guard staging-guard deploy deploy-check backup restore up-remote down-remote logs-remote remote-doctor checkpoint projects session
 
 # The hosted instance, in Docker:
 #   make up         — build and start (ProductOS + Postgres), wait until healthy
@@ -325,12 +325,45 @@ dev-guard:
 # that is the check, not the presence of the word in the file.
 staging-guard:
 	@test -n "$(STAGING_STACK)" || { echo "✗ staging's identity is unknown — scripts/stack.sh is missing here"; exit 1; }
-	@if [ -n "$(THIS_WT)" ] && [ -n "$(MAIN_WT)" ] && [ "$(THIS_WT)" != "$(MAIN_WT)" ]; then \
-		echo "✗ this is a worktree, and staging is one shared database."; \
-		echo "  $(STAGING_STACK) on $(STAGING_PORT) serves the store everyone reviews on. A worktree"; \
-		echo "  writing to it would put this branch's schema and corpus there, and no port changes that."; \
+	@# ⛔ THE QUESTION IS NOT "AM I A WORKTREE", IT IS "IS THIS EXACTLY WHAT IS MERGED".
+	@#
+	@# This refused every worktree outright, using "is a worktree" as a proxy for "carries unmerged
+	@# work". The proxy is usually right and was wrong about the one case that matters: a checkout
+	@# kept permanently on main, clean, for nothing but deploying. Meanwhile the main checkout is
+	@# where feature branches get worked on — so the proxy pointed the deploy at the dirtiest tree
+	@# on the machine and refused the cleanest.
+	@#
+	@# ⛔ AND `COPY src ./src` IS WHY THE TREE MATTERS AT ALL, which another session caught: the image
+	@# takes the WORKING TREE, not the commit. So "HEAD is in origin/main" was never the whole
+	@# question — a clean HEAD with sixteen uncommitted files ships those files to the shared store
+	@# while reporting a clean commit.
+	@#
+	@# So: any checkout may deploy if its tree is clean AND identical to origin/main. Nothing else may,
+	@# worktree or not. That is strictly stronger than what it replaced.
+	@# ⛔ THE TREE CHECK LIVES IN `MERGED_CHECK`, NOT HERE — ONE FACT, ONE HOME.
+	@#
+	@# Both halves of this were written twice, independently, on the same afternoon: the listener
+	@# session added a working-tree question to MERGED_CHECK, and I added one here. Theirs wins and
+	@# mine is deleted, for two reasons worth recording rather than arguing again later.
+	@#
+	@# It is PATH-SCOPED — `-uall -- src skills drizzle bin Dockerfile package*.json tsconfig.json` —
+	@# which is exactly the set `.dockerignore` lets into the build context. A scratch file in the
+	@# repo root cannot reach the image, so refusing on it would be a guard that cries about things
+	@# that cannot hurt you, and those are the guards people learn to bypass.
+	@#
+	@# And it is DRIVEN rather than text-matched: `test/v2-staging-serves-what-is-merged.test.mjs`
+	@# lifts the shell block out of the Makefile and runs it against scratch repositories in both
+	@# states. My version asserted that the Makefile CONTAINS `git status --porcelain`, which would
+	@# pass on a snippet that named the wrong paths, inverted the test, or could never fire.
+	@#
+	@# What stays here is the question theirs does not ask: identity.
+	@git fetch -q origin main 2>/dev/null || true
+	@if [ -z "$(DEV_ANYWAY)" ] && [ "$$(git rev-parse HEAD)" != "$$(git rev-parse origin/main 2>/dev/null)" ]; then \
+		echo "✗ this checkout is not at origin/main, and staging serves what is merged."; \
+		echo "    here:        $$(git rev-parse --short HEAD) on $$(git rev-parse --abbrev-ref HEAD)"; \
+		echo "    origin/main: $$(git rev-parse --short origin/main 2>/dev/null || echo unknown)"; \
 		echo ""; \
-		echo "  Use this worktree's own dev stack instead:  make up"; \
+		echo "  Deploy from a checkout that is exactly origin/main. Use a dev stack for a branch: make up"; \
 		exit 1; \
 	fi
 	@if [ -z "$(DEV_ANYWAY)" ]; then \
@@ -396,6 +429,72 @@ remote-doctor: build
 # you have stood a second one up beside it with a local Postgres, which looks like it worked.
 #
 # So they exist by name, and the help says which stack each belongs to.
+# ---------------------------------------------------------------------------
+# ⛔ `make deploy` — THE ONLY SANCTIONED WAY 4100 CHANGES.
+#
+# Peter: *"going to have this session focused only on redeploying 4100 as changes come in, making
+# sure the main branch is clean before deploy"*.
+#
+# `staging-guard` above answers "is this exactly what is merged, and is the tree clean" — which is
+# what the IMAGE depends on, because `COPY src ./src` builds from the tree. This adds the two
+# questions it cannot answer: does it compile, and does the suite pass. Every one of those has been
+# wrong here within a day:
+#
+#   - a commit sat unpushed while the guard correctly refused, and finding out why took three commands
+#   - local main and origin/main diverged after somebody merged a PR, and `pull` aborted
+#   - `$(DEV)` was used by six targets and defined nowhere, with the suite green because the file
+#     that would have caught it was a stale duplicate
+#
+# So the gate is a target rather than a habit. `deploy-check` deploys nothing and is safe to run at
+# any time; `deploy` runs it, backs the store up, deploys, waits for health, then reads the store.
+# ---------------------------------------------------------------------------
+deploy-check: staging-guard
+	@echo "  ✓ clean, and identical to origin/main at $$(git rev-parse --short HEAD)"
+	@# ⛔ CHECKED FIRST, BECAUSE THE SUITE TAKES TEN MINUTES. `backup-remote` tests for `.env` too —
+	@#    but after the slow part, so a deploy checkout missing it burned the whole run before saying
+	@#    so. A gate that fails late on the cheapest possible question is a gate people stop running.
+	@#
+	@# ⛔ AND A WORKTREE NEVER HAS IT. `.env` is gitignored, correctly: it is a credential. So a fresh
+	@#    deploy checkout starts without the one file every staging target needs, and nothing says so
+	@#    until it is already ten minutes in. Found exactly that way.
+	@test -f .env || { \
+		echo "✗ no .env here, and every staging target needs DATABASE_URL from it."; \
+		echo "  It is gitignored, so a worktree does not inherit one:"; \
+		echo "    cp $(MAIN_WT)/.env .env"; \
+		exit 1; \
+	}
+	@echo "  ✓ .env names a store"
+	@echo "→ build"
+	@npm run build >/dev/null || { echo "✗ it does not compile"; exit 1; }
+	@echo "  ✓ compiles"
+	@echo "→ migration numbering"
+	@node scripts/migrations-check.mjs | sed 's/^/  /'
+	@echo "→ the suite (this is the slow one)"
+	@out=$$(npm test 2>&1); \
+	echo "$$out" | grep -E '^# (tests|pass|fail)' | sed 's/^/  /'; \
+	echo "$$out" | grep -qE '^# fail 0$$' || { \
+		echo "✗ tests fail — not deploying. The failures:"; \
+		echo "$$out" | grep '^not ok' | head -10 | sed 's/^/    /'; exit 1; }
+	@echo "✓ deployable"
+
+deploy: deploy-check
+	@echo "→ backing up the store first"
+	@$(MAKE) --no-print-directory backup-remote
+	@echo "→ deploying $$(git rev-parse --short HEAD) to $(STAGING_STACK) on $(STAGING_PORT)"
+	@$(MAKE) --no-print-directory rebuild-remote >/dev/null
+	@printf "→ waiting for health"
+	@for i in $$(seq 1 90); do \
+		if curl -fsS -m 2 http://localhost:$(STAGING_PORT)/health >/dev/null 2>&1; then echo " ✓"; break; fi; \
+		printf "."; sleep 1; \
+		test $$i -lt 90 || { echo ""; echo "✗ never became healthy. Its log:"; \
+			docker compose -f docker-compose.remote.yml logs --tail 40 productos; exit 1; }; \
+	done
+	@# ⛔ The store is read AFTER, not before. A deploy that comes up healthy against a half-migrated
+	@#    store is the failure worth catching, and `/health` deliberately says nothing about the
+	@#    corpus so an exposed instance leaks no project names.
+	@$(MAKE) --no-print-directory remote-doctor | tail -3 | sed 's/^/  /'
+	@echo "✓ $$(git rev-parse --short HEAD) is live on $(STAGING_PORT)"
+
 rebuild-remote: staging-guard build
 	@test -f .env || { echo "no .env here — DATABASE_URL lives beside the compose file you started from"; exit 1; }
 	docker compose -f docker-compose.remote.yml up --build -d

@@ -163,3 +163,167 @@ export function readSteers(corpusDir: string): Steer[] {
   }
   return out;
 }
+
+// ─── learning a habit from what people did to the truth ────────────────────────────────────────
+
+/**
+ * ⛔ A HABIT NOTICED FROM WHAT PEOPLE ACTUALLY DID, RATHER THAN FROM SOMEBODY TYPING IT.
+ *
+ * Peter: *"do we suggest steering when users are operating the product truth and suggesting
+ * steering or auto-steering? shouldn't be explicit"* — and, asked which: *"In force immediately"*,
+ * learned from *"Rulings, and notes with their outcomes"*.
+ *
+ * ⛔ IT LEARNS ONLY FROM HUMAN ACTS, AND THAT IS THE WHOLE THING HOLDING IT HONEST. A ruling
+ * recorded `via: agent` is software's own output; a learner that reads those closes a loop with
+ * nothing human left in it, and every pass afterwards is the system agreeing with itself more
+ * loudly. `learned_from` would still be populated, and would still be worthless.
+ *
+ * ⛔ AND IT STATES WHAT WAS OBSERVED, NEVER A PRINCIPLE. "The word `currency` was added in three
+ * rulings" is checkable; "amounts are always shown with their currency" is a generalisation nobody
+ * made, which is the shape of a decision nobody took. A person reading it can reword it into a
+ * principle — and then it is theirs.
+ */
+export interface Learned {
+  /** A stable id, derived from the pattern, so the same observation is not learned twice. */
+  id: string;
+  /** The habit, as the observation it actually is. */
+  says: string;
+  /** ⛔ The acts behind it, by their own references, so somebody can go and look at each one. */
+  from: string[];
+}
+
+/**
+ * ⛔ WORDS THAT CARRY NO HABIT. Without this the commonest "pattern" across any two sentences is
+ * `the`, and the learner reports grammar back as taste.
+ */
+const FILLER = new Set(
+  ("a an and are as at be been being but by can could did do does for from had has have he her his " +
+    "how i if in into is it its may me must my no not of on or our should so than that the their them " +
+    "then there these they this to too up us was we were what when where which who will with would you " +
+    "your").split(" ")
+);
+
+const words = (s: string): string[] =>
+  s
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter((w) => w.length > 2 && !FILLER.has(w));
+
+const slug = (s: string): string =>
+  s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || "habit";
+
+/**
+ * What the record of human acts says this project keeps doing.
+ *
+ * `least` is the number of independent acts a pattern needs. ⛔ Two is a coincidence with a sample
+ * size; a learner that reports it teaches people to ignore the output, which costs more than the
+ * finding was worth.
+ */
+export function learnFrom(
+  corpus: { verdicts: readonly Verdictish[]; notes: readonly Noteish[]; steers: readonly Steer[] },
+  opts: { least?: number } = {}
+): Learned[] {
+  const least = opts.least ?? 3;
+  const out: Learned[] = [];
+
+  /**
+   * ⛔ `via !== "agent"`. See the header — this is the refusal the whole concept rests on, and it
+   * is one clause, which is exactly why it needs saying out loud here as well.
+   */
+  const rulings = corpus.verdicts.filter(
+    (v) => v.kind === "rule" && v.via !== "agent" && typeof v.says === "string" && typeof v.replaced === "string"
+  );
+
+  /** A word repeatedly put IN, or repeatedly taken OUT, across independent rulings. */
+  const added = new Map<string, Set<string>>();
+  const removed = new Map<string, Set<string>>();
+  for (const v of rulings) {
+    const before = new Set(words(v.replaced!));
+    const after = new Set(words(v.says!));
+    const where = v.target ?? "a ruling";
+    for (const w of after) if (!before.has(w)) (added.get(w) ?? added.set(w, new Set()).get(w)!).add(where);
+    for (const w of before) if (!after.has(w)) (removed.get(w) ?? removed.set(w, new Set()).get(w)!).add(where);
+  }
+
+  for (const [word, where] of added)
+    if (where.size >= least)
+      out.push({
+        id: slug(`says-${word}`),
+        says: `"${word}" belongs in a sentence here — it was put into ${where.size} rulings that did not have it.`,
+        from: [...where].sort(),
+      });
+
+  for (const [word, where] of removed)
+    if (where.size >= least)
+      out.push({
+        id: slug(`not-${word}`),
+        says: `"${word}" does not belong in a sentence here — it was taken out of ${where.size} rulings.`,
+        from: [...where].sort(),
+      });
+
+  /**
+   * ⛔ THE SAME REASONING GIVEN TWICE IS A STANDING ARGUMENT. A ruling's `because` exists so the
+   * question is not relitigated from scratch; one written out again on a third slot has stopped
+   * being a judgement about that slot and become how this project thinks.
+   */
+  const reasons = new Map<string, { why: string; where: Set<string> }>();
+  for (const v of rulings) {
+    const key = (v.because ?? "").toLowerCase().replace(/\s+/g, " ").trim();
+    if (key.length < 15) continue;
+    const seen = reasons.get(key) ?? { why: v.because!, where: new Set<string>() };
+    seen.where.add(v.target ?? "a ruling");
+    reasons.set(key, seen);
+  }
+  for (const [, r] of reasons)
+    if (r.where.size >= least)
+      out.push({
+        id: slug(`because-${r.why}`),
+        says: `${r.why.replace(/\s+/g, " ").trim()} — the same reasoning settled ${r.where.size} separate slots.`,
+        from: [...r.where].sort(),
+      });
+
+  /**
+   * Notes somebody closed. ⛔ A WEAKER SIGNAL AND IT IS TREATED AS ONE: both ends are prose, so the
+   * bar is what the asks have in common rather than what any one of them said. Only notes that were
+   * acted on count — an open note is a request, not a thing this project does.
+   */
+  const asks = new Map<string, Set<string>>();
+  for (const n of corpus.notes) {
+    if (n.state !== "done" || !n.outcome) continue;
+    for (const w of new Set(words(n.says ?? ""))) (asks.get(w) ?? asks.set(w, new Set()).get(w)!).add(n.id);
+  }
+  for (const [word, ids] of asks)
+    if (ids.size >= least + 1)
+      out.push({
+        id: slug(`asked-${word}`),
+        says: `"${word}" keeps coming up — ${ids.size} separate requests named it, and all of them were acted on.`,
+        from: [...ids].sort(),
+      });
+
+  /**
+   * ⛔ ANYTHING ALREADY DECLINED IS NOT LEARNED AGAIN. Somebody looked at this and said it is not a
+   * rule here; the acts it was drawn from are still in the record, so without this the next pass
+   * learns it straight back and the decline is a thing you have to keep doing forever.
+   */
+  const refused = new Set(corpus.steers.filter((s) => s.declined).map((s) => s.id));
+  const known = new Set(corpus.steers.map((s) => s.id));
+  return out.filter((l) => !refused.has(l.id) && !known.has(l.id)).sort((a, b) => a.id.localeCompare(b.id));
+}
+
+/** The shapes this reads, named loosely on purpose — it needs four fields, not the whole model. */
+interface Verdictish {
+  kind: string;
+  via: string;
+  target?: string;
+  says?: string;
+  replaced?: string;
+  because?: string;
+}
+interface Noteish {
+  id: string;
+  says?: string;
+  state?: string;
+  outcome?: string;
+}

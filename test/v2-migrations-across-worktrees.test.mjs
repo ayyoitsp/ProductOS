@@ -76,7 +76,13 @@ const recipe = (mk, name) => {
   const lines = mk.slice(i + 1).split("\n").slice(1);
   const out = [];
   for (const l of lines) {
-    if (l.startsWith("\t")) out.push(l);
+    /**
+     * ⛔ MAKE'S OWN COMMENTS ARE TAB-INDENTED TOO, SO THEY WERE IN THE RECIPE. An assertion looking
+     * for `git status --porcelain` passed on a COMMENT mentioning it — the same defect as a test
+     * matching the prose that explains a fix rather than the fix. Dropped here, once.
+     */
+    if (l.startsWith("\t") && !/^\t@?#/.test(l)) out.push(l);
+    else if (l.startsWith("\t")) continue;
     else if (out.length) break;
     else if (l.trim() === "" || l.startsWith("#")) continue;
     else break;
@@ -331,9 +337,27 @@ test("nothing that starts a container skips the dev guard", () => {
    */
   assert.match(mk, /^staging-guard:\n\t/m, "staging-guard has no recipe — it is a name that always succeeds");
   const rbody = recipe(mk, "staging-guard");
-  /** ⛔ A worktree may not run it at all — one shared database, so no port makes it safe. */
-  assert.match(rbody, /THIS_WT.*!=.*MAIN_WT|"\$\(THIS_WT\)" != "\$\(MAIN_WT\)"/s, "a worktree can point at the shared store");
-  assert.match(rbody, /MERGED_CHECK/, "nothing checks that the managed instance serves what is merged");
+  /**
+   * ⛔ THE QUESTION CHANGED, AND THIS ASSERTION WAS THE OLD ONE. It demanded that staging-guard
+   * compare THIS_WT against MAIN_WT — i.e. refuse every worktree, using "is a worktree" as a proxy
+   * for "carries unmerged work".
+   *
+   * The proxy is usually right and was wrong about the one case that matters. The MAIN checkout is
+   * where feature branches are worked on, so it is the dirtiest tree on the machine, and it passed;
+   * a checkout kept permanently on main for nothing but deploying was refused. The proxy pointed the
+   * deploy at the wrong tree in both directions.
+   *
+   * ⛔ AND `COPY src ./src` IS WHY THE TREE MATTERS AT ALL: the image is built from the WORKING TREE,
+   * not the commit, so "HEAD is in origin/main" never covered it. A clean HEAD with sixteen
+   * uncommitted files ships those files to the shared store while git reports a clean commit — which
+   * nearly happened here.
+   *
+   * So the condition asserted is the one that was always meant, and it is strictly stronger.
+   */
+  /** ⛔ The tree check lives in `MERGED_CHECK` — one home; see `v2-deploy-gate` for why theirs won. */
+  assert.match(rbody, /MERGED_CHECK/, "staging-guard does not reach the working-tree check");
+  assert.match(rbody, /rev-parse origin\/main/, "the guard does not compare against origin/main");
+  assert.doesNotMatch(rbody, /merge-base --is-ancestor/, "an ancestor check lets a commit BEHIND origin/main deploy");
   /**
    * ⛔ THE GUARD ASKS GIT, NOT THE SCRIPT, AND THIS IS THE ASSERTION THAT WOULD HAVE CAUGHT IT. A
    * worktree on a branch without `scripts/stack.sh` makes `$(shell ...)` empty, compose uses its
@@ -368,10 +392,30 @@ test("nothing that starts a container skips the dev guard", () => {
   assert.doesNotMatch(body, /MERGED_CHECK/, "dev-guard refuses an unmerged branch, which is what a dev stack is for");
   assert.match(body, /STAGING_STACK/, "dev-guard does not compare against staging's identity");
   assert.match(mk, /^define MERGED_CHECK$/m, "the merge check is not shared");
-  /** ⛔ The worktree question, now staging's alone. */
-  assert.match(rbody, /THIS_WT/, "staging-guard does not ask git which checkout this is");
-  assert.match(rbody, /MAIN_WT/);
-  assert.match(mk, /merge-base --is-ancestor HEAD origin\/main/, "nothing checks that dev serves what is merged");
+  /**
+   * ⛔ THE WORKTREE QUESTION IS GONE FROM STAGING, AND STAYS IN DEV. `dev-guard` still asks which
+   * checkout this is, because a worktree resolving to staging's stack and port is a real mistake it
+   * must catch. `staging-guard` asks the stronger thing instead — clean, and identical to
+   * origin/main — which makes "am I a worktree" irrelevant there.
+   *
+   * `merge-base --is-ancestor` survives only in `MERGED_CHECK`, which `dev-guard` uses: dev may run
+   * anything merged. Staging demands identity, because an ancestor is a stale deploy.
+   */
+  /**
+   * ⛔ `dev-guard` DELIBERATELY DOES NOT ASK WHETHER HEAD IS MERGED — a dev stack is FOR an unmerged
+   * branch, and refusing that would make the thing useless. `MERGED_CHECK` therefore survives with
+   * exactly one caller, staging-guard, where it is now belt-and-braces behind the identity check.
+   */
+  assert.doesNotMatch(body, /MERGED_CHECK/, "dev-guard refuses an unmerged branch, which is what a dev stack is for");
+  assert.match(mk, /merge-base --is-ancestor HEAD origin\/main/, "the merge check is gone entirely");
+  /**
+   * ⛔ THE OVERRIDE REACHES EVERY CHECK, OR IT ADVERTISES AN ESCAPE HATCH IT DOES NOT HAVE.
+   *
+   * The tree check moved to `MERGED_CHECK`, which staging-guard already calls behind its own
+   * `DEV_ANYWAY` test — so one gate covers it. The identity check is separate and needs its own.
+   */
+  assert.match(rbody, /\[ -z "\$\(DEV_ANYWAY\)" \][\s\S]*MERGED_CHECK/, "DEV_ANYWAY cannot get past the tree check");
+  assert.match(rbody, /\[ -z "\$\(DEV_ANYWAY\)" \][\s\S]*rev-parse origin\/main/, "DEV_ANYWAY cannot get past the identity check");
   assert.match(mk, /DEV_ANYWAY/, "there is no way to override it on purpose");
   assert.match(mk, /^up: dev-guard migrations-check$/m, "up does not check the numbering before starting");
 });

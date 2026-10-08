@@ -1,0 +1,21 @@
+id: "0112"
+said: Let's watch how good let's test this and make sure we can index Bilrost. Fix all the bugs
+at: 2026-10-07
+kind: concept
+reaches:
+  model: "`<id>#offers`"
+  generate: titleFrom
+  surface: "#offers`"
+  check: said.length > 1 && c.of
+  instruct: Name a part after what it is
+  pin: no migrated title is a bare character cut at a fixed width
+waived:
+  derive: >
+    Nothing is computed, inherited, gated or stamped differently. Every fix in this round was a
+    refusal that fired on a real corpus where nothing was wrong (two of them), a generator mangling
+    its output (one), or advice naming the wrong product's domain (one) — all of them in what
+    already existed rather than in what is derived from it. The three hashes this round touches
+    (`requirementHash`, `capabilityHash`, `coveredBy`) are unchanged and were verified unchanged by
+    the suite. ⛔ Arguable the day a staleness state is derived FROM a capability, which is what an
+    engineering agreement will need and does not exist yet.
+closed: 2026-10-07

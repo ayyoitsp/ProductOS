@@ -1,23 +1,9 @@
 id: "0105"
-said: there's no longer a standalone 'packet'. the packet is what we've defined in the product truth, the capabilities, and the test cases. a product person doesn't write a criterion - what even is this? this is old shit. the agents decide what kind of tests need to exist.
+said: http://localhost:4100/p/prj-bks5f4m325/v2#at-price-a-deal has a bunch of {icon} placeholders.. whta hte heck?
 at: 2026-10-07
-kind: concept
+kind: generator
 reaches:
-  model: "derived"
-  derive: claimHash
-  surface: "DO NOT IMPLEMENT THIS YET"
-  check: a-requirement-older-than-its-claim
-  instruct: Criteria — you do not write these
-  pin: a derived requirement cannot stale a human's acceptance
-waived:
-  generate: >
-    Nothing in `generate` is reached, and the one candidate was examined and rejected on the
-    merits. `migrate.ts` carries v1 `test_cases` into v2 criteria, and the question is whether it
-    should mark them `derived`. It must not: a v1 test case was typed by a person, so marking it
-    derived would claim a role worked it out from a claim hash that was never computed — and would
-    then exempt it from staling the stamp of whoever accepted it. Carrying them as `authored` is
-    the true thing, it needed no code change, and `requirements-nobody-worked-out` counts them so a
-    migrated corpus reads honestly as having derived none of its set. ⛔ Arguable the day the
-    demonstrator is run by a generator rather than spawned as a role, which is the shape
-    `productos v2 draw` has and this deliberately does not.
+  generate: A PROP THAT HOLDS AN ELEMENT IS NOT A WORD, AND ITS NAME IS NOT CONTENT
+  pin: a value standing in a sentence is content, not a slot for a caller
+waived: {}
 closed: 2026-10-07

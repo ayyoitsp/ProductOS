@@ -1,21 +1,14 @@
 id: "0107"
-said: Let's watch how good let's test this and make sure we can index Bilrost. Fix all the bugs
+said: we should be able to know the true navigation, leverage screens within screens, like really a walkable single prototype that can link out to the different areas.  so the goal here is to just have a SINGLE screen that can go through the whole product, based on the established truth
 at: 2026-10-07
 kind: concept
 reaches:
-  model: "`<id>#offers`"
-  generate: titleFrom
-  surface: "#offers`"
-  check: said.length > 1 && c.of
-  instruct: Name a part after what it is
-  pin: no migrated title is a bare character cut at a fixed width
+  model: WITHOUT THIS A PRODUCT IS A PILE OF SCREENS, NOT A PRODUCT
+  derive: walkOf
+  surface: renderWalk
+  check: within-points-at-nothing
+  instruct: Say what a screen appears INSIDE
+  pin: a screen says which screen it appears inside, and the walk holds it there
 waived:
-  derive: >
-    Nothing is computed, inherited, gated or stamped differently. Every fix in this round was a
-    refusal that fired on a real corpus where nothing was wrong (two of them), a generator mangling
-    its output (one), or advice naming the wrong product's domain (one) — all of them in what
-    already existed rather than in what is derived from it. The three hashes this round touches
-    (`requirementHash`, `capabilityHash`, `coveredBy`) are unchanged and were verified unchanged by
-    the suite. ⛔ Arguable the day a staleness state is derived FROM a capability, which is what an
-    engineering agreement will need and does not exist yet.
+  generate: Nothing new is generated. The screens were already drawn and the links were already inferred by `connect`; what was missing was a relation the model could not state and a surface that walks it. The drawings this shows are the same `sketch_html` the board shows — it clones from the board rather than carrying a second copy, which is the opposite of generating something.
 closed: 2026-10-07

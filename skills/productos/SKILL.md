@@ -369,6 +369,59 @@ line of code kept working locally.
 So the snapshot is taken **where the repository is**, by `v2 style` or by `v2 generate`, which runs
 it first. Everything downstream — a hosted instance, a packet, a published page — reads the corpus.
 
+### ⛔ Say what a screen appears INSIDE — `within`
+
+A product is not a pile of screens, and for a long time that is all a corpus could say. Scopes nest,
+so it knew a screen belongs to a **feature**; `connect` infers that a control **leads** somewhere
+from what its words say. Neither of those is containment.
+
+```yaml
+views:
+  - id: workspace-shell
+    title: Deal workspace
+  - id: overview-tab
+    title: Overview
+    within: workspace-shell          # a view in this scope
+  - id: activity-tab
+    title: Activity
+    within: deal-workspace#shell     # or one somewhere else
+```
+
+⛔ **It is where a screen APPEARS, not what it is about.** A screen can be filed under one feature
+and shown inside a screen owned by another — that is a normal product, not a mistake.
+
+⛔ **Write it wherever one screen is shown inside another**: a tab, a pane, a step in a wizard, a
+drawer. Where you do not, that screen has no way in unless some control happens to lead to it, and
+the walk will say so.
+
+**Why it matters more than it looks.** On the corpus this was built against, `connect` found four
+links across twenty-two screens — eighteen with no way in or out — so the product looked like it was
+in pieces. It was not. Most controls do not navigate: they act where they are, or they switch a tab,
+and switching a tab is containment. The truth simply had nowhere to say so.
+
+```bash
+productos v2 check --at <corpus>   # within-points-at-nothing · no-way-in · one-page-two-screens
+```
+
+⛔ **`one-page-two-screens` points and does not decide.** Two screens drawn from the same route are
+one page, so one very likely holds the other — but which way round is not derivable, and a shell
+filed inside its own tab is worse than no answer.
+
+### ⛔ A corpus on disk can be behind the schema — `productos v2 forward`
+
+```bash
+productos v2 forward --at <corpus> -n   # what it would bring forward
+productos v2 forward --at <corpus>      # bring it forward
+```
+
+Document migrations always ran against the **store** — `hosted import` calls them, boot calls them —
+so a hosted corpus was current and a corpus in a **directory** was not reachable by any of it. When
+`walked` was removed from `View`, twelve files in a working corpus stopped parsing and `check`
+answered `cannot-judge-this-corpus`: not one finding, about anything, until somebody read the key.
+
+⛔ **Run it when `check` says a key is unrecognized.** That is what it looks like from the outside: a
+corpus written by an older build, read by a newer one.
+
 ⛔ **A drawing is only right if it RENDERS right, and there is a test harness that renders in a
 real browser.** `test/support/chrome.mjs`, used by `test/v2-the-mock-in-a-real-browser.test.mjs`:
 

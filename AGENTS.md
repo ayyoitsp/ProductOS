@@ -824,7 +824,7 @@ Held three ways rather than one: no author declares `ask-the-human`, so no host 
 
 What `--help` cannot tell you, and why this exists: **who** types it, and **which track** it belongs to. *Never hand a human a flag* is a rule the skills state and nothing enforced — a command marked `claude` appearing in instructions addressed to a person is now a visible contradiction. And two parallel models have been running for months with nothing saying which commands belong to which.
 
-### Current — 48 commands
+### Current — 49 commands
 
 | command | does | layer | typed by |
 |---|---|---|---|
@@ -847,6 +847,7 @@ What `--help` cannot tell you, and why this exists: **who** types it, and **whic
 | `productos hosted session` | A browser session for one account, which is what makes a press provable | surface | either |
 | `productos v2` | The Exchange model — the tree every verb below it hangs from | surface | either |
 | `productos v2 check` | What this corpus refuses, and what it merely reports | check | the model |
+| `productos v2 forward` | Bring a corpus on disk forward to this build's schema | derive | the model |
 | `productos v2 grid` | The behaviours a scope states, and where each one stands | derive | the model |
 | `productos v2 accepted` | The exact wording somebody has agreed to, before anybody rewrites it | surface | the model |
 | `productos v2 acts` | How many acts of human judgement this corpus carries | derive | the model |
@@ -873,7 +874,7 @@ What `--help` cannot tell you, and why this exists: **who** types it, and **whic
 | `productos v2 watch` | Wait, and print a line whenever somebody records an act or asks for a change | surface | the model |
 | `productos v2 whoami` | What an instance thinks you are, and what it will let you do | surface | the model |
 | `productos v2 change` | Record a piece of feedback and drive it into every layer it must reach | instruct | the model |
-| `productos v2 steer` | What this project has learned — habits that shape what gets made, never what it promises | instruct | either |
+| `productos v2 steer` | What this project has learned — written, or noticed from what people did; habits that shape what gets made, never what it promises | instruct | either |
 | `productos v2 agents` | The roles: what each asks, and which skill orchestrates which | instruct | either |
 | `productos v2 reset` | Restore a corpus from the pristine seed, so every run starts identical | generate | the model |
 
@@ -909,7 +910,7 @@ Territory, not ownership. Nobody is assigned an area — an agent reads this to 
 | area | layers | files |
 |---|---|---|
 | **model** | model | `src/v2/schema.ts` `src/v2/load.ts` `src/v2/ref.ts` `src/core/jobs.ts` `src/core/change.ts` `src/core/config.ts` `src/v2/store/schema.ts` |
-| **derive** | derive | `src/v2/grid.ts` `src/v2/stamp.ts` `src/v2/demonstrate.ts` `src/v2/confidence.ts` `src/v2/settle.ts` `src/v2/acts.ts` `src/v2/record.ts` `src/v2/spoken.ts` `src/v2/connects.ts` `src/v2/steers.ts` `src/v2/store/access.ts` `src/v2/store/identity.ts` `src/core/learn.ts` `src/adapters/claude.ts` |
+| **derive** | derive | `src/v2/grid.ts` `src/v2/stamp.ts` `src/v2/demonstrate.ts` `src/v2/confidence.ts` `src/v2/settle.ts` `src/v2/acts.ts` `src/v2/record.ts` `src/v2/spoken.ts` `src/v2/connects.ts` `src/v2/walk.ts` `src/v2/steers.ts` `src/v2/store/access.ts` `src/v2/store/identity.ts` `src/core/learn.ts` `src/adapters/claude.ts` |
 | **generate** | generate | `src/v2/migrate.ts` `src/v2/draw.ts` `src/v2/draw-write.ts` `src/v2/routes.ts` `src/v2/propose.ts` `src/v2/appcss.ts` `src/v2/icons.ts` `src/core/agents-doc.ts` `src/v2/design.ts` `src/v2/store/corpus.ts` `src/v2/store/doc-migrations.ts` `src/v2/store/migrate.ts` `src/v2/store/boot.ts` |
 | **operate** | operate | `Makefile` `Dockerfile` `docker-compose.yml` `docker-compose.remote.yml` `scripts/` |
 | **surface** | surface | `src/v2/page.ts` `src/v2/prototype.ts` `src/v2/serve.ts` `src/ui/server.ts` `src/ui/renderer.ts` `src/v2/store/server.ts` `src/v2/store/instance.ts` `src/v2/store/pushes.ts` `src/v2/store/mcp.ts` `src/v2/store/choose.ts` `src/cli/commands/hosted.ts` `src/v2/packet.ts` `src/v2/notes.ts` `src/v2/watch.ts` `src/v2/log.ts` `src/v2/inbox.ts` `src/v2/presence.ts` `src/v2/identity.ts` `src/v2/client.ts` `src/v2/write.ts` `src/v2/wire.ts` `src/v2/moved.ts` `src/cli/commands/v2.ts` `src/mcp/v2-tools.ts` |

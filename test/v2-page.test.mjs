@@ -341,6 +341,8 @@ test("the frame has tabs for each half, and Overview carries the queue", () => {
    * prototype"*, and it sits second because it is the way in: a person can tell a screen is wrong.
    */
   assert.equal(tabs[1], "prototype", "the prototype is not offered beside Overview");
+  /** ⛔ And the walk beside it, because the two are read together: what is there, and how to get through it. */
+  assert.equal(tabs[2], "walk", "the walk is not offered beside the prototype");
   for (const half of corpus.scopes.filter((s) => s.scope.in === root))
     assert.ok(tabs.includes(half.scope.id), `${half.scope.id} is a half of the product and has no tab`);
 
@@ -350,7 +352,13 @@ test("the frame has tabs for each half, and Overview carries the queue", () => {
       (n, d) => n + (corpus.scopes.find((y) => y.scope.id === d)?.scope.views.length ?? 0),
       0
     );
-  const FIXED = new Set(["overview", "prototype"]);
+  /**
+   * ⛔ A FIXED SURFACE IS NOT A HALF OF THE PRODUCT, and the ordering rule below only governs halves.
+   * `walk` joined these: it answers "how does a person get through this" where the board answers
+   * "what is there". Left out of this set it was read as a half with no screens and sorted itself
+   * into the middle of the product.
+   */
+  const FIXED = new Set(["overview", "prototype", "walk"]);
   const halves = tabs.filter((t) => !FIXED.has(t));
   for (let i = 1; i < halves.length; i++)
     assert.ok(

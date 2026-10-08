@@ -355,3 +355,120 @@ test("the install asks per author, not once for everybody", () => {
   const src = fs.readFileSync(path.join(process.cwd(), "src/adapters/claude.ts"), "utf-8");
   assert.match(src, /addendum\(steers \?\? \[\], author\.name\)/, "the addendum is still built once for everybody");
 });
+
+// ─── a habit learned from what people did ──────────────────────────────────────────────────────
+
+import { learnFrom } from "../dist/v2/steers.js";
+
+const ruling = (target, replaced, says, over = {}) => ({
+  kind: "rule", by: "peter", at: "2026-10-07", via: "page", target, settles: target, replaced, says,
+  because: "An amount without a currency is a number somebody will read as their own.", ...over,
+});
+const corpusOf = (verdicts = [], notes = [], steers = []) => ({ verdicts, notes, steers });
+
+const CURRENCY = [
+  ruling("money#a#answer", "The balance is shown.", "The balance is shown with its currency."),
+  ruling("money#b#answer", "The amount is recorded.", "The amount is recorded with its currency."),
+  ruling("tasks#c#answer", "The reward is shown.", "The reward is shown with its currency."),
+];
+
+test("⛔ a habit is never learned from software's own acts", () => {
+  /**
+   * The refusal the whole concept rests on. A ruling recorded `via: agent` is the system's own
+   * output; a learner that reads those closes a loop with nothing human left in it, and every pass
+   * afterwards is the system agreeing with itself more loudly — with `learned_from` populated, and
+   * worthless.
+   */
+  const byAgent = CURRENCY.map((r) => ({ ...r, via: "agent" }));
+  assert.deepEqual(learnFrom(corpusOf(byAgent)), [], "software taught itself a habit");
+
+  const human = learnFrom(corpusOf(CURRENCY));
+  assert.ok(human.length, "the same acts, made by a person, teach nothing");
+});
+
+test("one agent ruling among human ones does not count toward the pattern", () => {
+  /** The exclusion has to be per act, not all-or-nothing — a mixed record is the normal case. */
+  const mixed = [...CURRENCY, ruling("tasks#d#answer", "It is shown.", "It is shown with its currency.", { via: "agent" })];
+  const added = learnFrom(mixed.length ? corpusOf(mixed) : corpusOf([])).find((l) => l.id === "says-currency");
+  assert.ok(added);
+  assert.equal(added.from.length, 3, "the agent's ruling was counted as evidence");
+  assert.ok(!added.from.includes("tasks#d#answer"));
+});
+
+test("⛔ two is not a habit", () => {
+  assert.deepEqual(learnFrom(corpusOf(CURRENCY.slice(0, 2))), [], "a coincidence was reported as taste");
+});
+
+test("⛔ it states what was observed, not a principle nobody said", () => {
+  /**
+   * "`currency` was put into 3 rulings that did not have it" is checkable. "Amounts are always
+   * shown with their currency" is a generalisation nobody made — a decision nobody took, written
+   * as though somebody had.
+   */
+  const says = learnFrom(corpusOf(CURRENCY)).find((l) => l.id === "says-currency").says;
+  assert.match(says, /3 rulings/, "the sentence does not carry its own evidence");
+  assert.match(says, /"currency"/);
+});
+
+test("the same reasoning settling several slots is its own habit", () => {
+  const hit = learnFrom(corpusOf(CURRENCY)).find((l) => l.id.startsWith("because-"));
+  assert.ok(hit, "a standing argument is not being noticed");
+  assert.equal(hit.from.length, 3);
+});
+
+test("a word taken OUT repeatedly is a habit too", () => {
+  const out = [
+    ruling("a#x#answer", "Press Submit to continue.", "Press Continue."),
+    ruling("b#x#answer", "Submit the form.", "Send the form."),
+    ruling("c#x#answer", "Submit when ready.", "Send when ready."),
+  ];
+  const hit = learnFrom(corpusOf(out)).find((l) => l.id === "not-submit");
+  assert.ok(hit, "a word repeatedly removed says as much as one repeatedly added");
+});
+
+test("⛔ grammar is not taste", () => {
+  /** Without filler words, the commonest pattern across any two sentences is `the`. */
+  const ids = learnFrom(corpusOf(CURRENCY)).map((l) => l.id);
+  for (const w of ["says-the", "says-with", "says-its", "not-the"]) assert.ok(!ids.includes(w), `${w} was learned`);
+});
+
+test("⛔ a declined habit is not learned straight back", () => {
+  /**
+   * The acts it came from are all still in the record, so without this the next pass learns it
+   * again and declining is a thing somebody has to keep doing forever.
+   */
+  const declinedAlready = [{
+    id: "says-currency", says: "x", steers: "generation", learned_from: "a, b, c",
+    at: "2026-10-07", declined: "the design system settles this", for: [],
+  }];
+  const ids = learnFrom(corpusOf(CURRENCY, [], declinedAlready)).map((l) => l.id);
+  assert.ok(!ids.includes("says-currency"), "a refused habit came straight back");
+});
+
+test("a habit already recorded is not recorded twice", () => {
+  const already = [{ id: "says-currency", says: "x", steers: "generation", learned_from: "a, b, c", at: "2026-10-07", for: [] }];
+  assert.ok(!learnFrom(corpusOf(CURRENCY, [], already)).map((l) => l.id).includes("says-currency"));
+});
+
+test("only requests somebody acted on count", () => {
+  /** An open note is a request, not a thing this project does. */
+  const asks = (state, outcome) =>
+    [1, 2, 3, 4].map((i) => ({ id: `n${i}`, says: "the currency should be beside the amount", state, outcome }));
+  assert.deepEqual(learnFrom(corpusOf([], asks("open", undefined))), [], "open requests were read as habits");
+  assert.ok(learnFrom(corpusOf([], asks("done", "did it"))).some((l) => l.id === "asked-currency"));
+});
+
+test("⛔ unread is a mark and never a gate", () => {
+  /**
+   * Peter chose "In force immediately" over a press. A learned habit that did not steer until
+   * acknowledged would be the other option, arrived at by a rendering change nobody would read as
+   * a reversal — so what `acknowledged` controls is asserted to be nothing but visibility.
+   */
+  const unread = steer({ id: "learned-thing", learned_from: "a, b, c" });
+  const read = { ...unread, acknowledged: "2026-10-07" };
+  for (const a of AUTHORS) {
+    assert.equal(reaches(unread, a.name), reaches(read, a.name), "acknowledging changed who it steers");
+    assert.ok(reaches(unread, a.name), "an unread habit is not steering, which makes it a gate");
+  }
+  assert.equal(inEffect([unread]).length, 1, "an unread habit is not in force");
+});
