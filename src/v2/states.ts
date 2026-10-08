@@ -97,15 +97,77 @@ export function mark(html: string, partId: string, diff: Difference, fallbackSay
  * this composes only where the model has been told what is different. The old shape keeps working,
  * and nothing has to be migrated before the new one is useful.
  */
-export function pictureOf(view: Pick<View, "sketch_html" | "parts">, state: ViewState): string {
+/**
+ * Which picture a state should be composed onto.
+ *
+ * ⛔ NOT ALWAYS THE DEFAULT FRAME, AND ASSUMING SO MADE 16 OF 18 DERIVED STATES RENDER NOTHING.
+ *
+ * Found by taking a screenshot rather than by reading: pressing "While it works" on bilrost's
+ * create-deal showed the plain form, because `use-existing-folder` is a control on the FOLDER step
+ * and the folder step is filed as another state with its own picture. The derivation was right and
+ * the marking was right; the thing being marked did not contain the control.
+ *
+ * ⛔ AND IT IS THE FAILURE THIS WHOLE FILE WARNS ABOUT — a state that composes cleanly and renders
+ * as though nothing happened. A reviewer presses the tab, sees the ordinary screen, and concludes
+ * the case does not exist rather than that the picture is wrong.
+ *
+ * So the base is the picture that actually holds the parts: the default frame where it has them,
+ * otherwise whichever state's own drawing holds the most of them. `connects.ts` already reasons
+ * this way in `stateShowing`, which finds the state whose picture contains a part.
+ */
+export function baseFor(
+  view: Pick<View, "sketch_html"> & { states?: Array<{ sketch_html?: string }> },
+  partIds: string[],
+): string {
+  const held = (html: string | undefined): number =>
+    html ? partIds.filter((id) => html.includes(`data-part="${id}"`)).length : 0;
+
+  const frame = view.sketch_html ?? "";
+  const inFrame = held(frame);
+  if (!partIds.length || inFrame === partIds.length) return frame;
+
+  let best = frame;
+  let bestCount = inFrame;
+  for (const st of view.states ?? []) {
+    const n = held(st.sketch_html);
+    /** ⛔ Strictly better, so the default frame wins a tie — it is the screen as it is. */
+    if (n > bestCount) {
+      bestCount = n;
+      best = st.sketch_html!;
+    }
+  }
+  return best;
+}
+
+export function pictureOf(
+  view: Pick<View, "sketch_html" | "parts"> & { states?: Array<{ sketch_html?: string }> },
+  state: ViewState,
+): string {
   if (state.sketch_html) return state.sketch_html;
 
-  let html = view.sketch_html ?? "";
+  let html = baseFor(view, Object.keys(state.holds ?? {}));
   for (const [partId, diff] of Object.entries(state.holds ?? {})) {
     const d = differenceOf(diff);
     html = mark(html, partId, diff, d.in ? saysFor(view, partId, d.in) : undefined);
   }
   return html;
+}
+
+/**
+ * Parts a state is about that appear in no picture this screen has.
+ *
+ * ⛔ THE ONE WAY COMPOSITION FAILS SILENTLY. Marking is a string substitution: a part the picture
+ * does not contain is simply not marked, and the result is a correct-looking screen missing the
+ * very case somebody was asked to review.
+ */
+export function unpicturedParts(
+  view: Pick<View, "sketch_html"> & { states?: Array<{ sketch_html?: string }> },
+  state: ViewState,
+): string[] {
+  if (state.sketch_html) return [];
+  const ids = Object.keys(state.holds ?? {});
+  const base = baseFor(view, ids);
+  return ids.filter((id) => !base.includes(`data-part="${id}"`));
 }
 
 /**
