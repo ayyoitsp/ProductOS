@@ -169,9 +169,21 @@ test("the seed's queue stays small enough to work", () => {
    * a count. What they owe is either a reading or a confirmation on each statement, which this test
    * already counts through the findings that name those statements individually.
    */
+  /**
+   * ⛔ THE SAME REASONING AS THE PARAGRAPH ABOVE, APPLIED TWICE MORE — and it caught this test
+   * failing for the documented reason rather than for a real one.
+   *
+   * `requirements-nobody-worked-out` reports "25 of 25" once for the whole corpus, and
+   * `behaviours-no-subsystem-answers` reports "n of m". Both are summary lines by construction,
+   * for exactly the reason recorded above: emitted per item they fire on everything a corpus has,
+   * which this project shipped and had to unwind three times in one day. Nobody owes a decision on
+   * a count — what they owe is a requirement worked out per claim and a subsystem named per
+   * behaviour, and neither is a review act.
+   */
   const INFORMATIONAL = new Set([
     "leans-on-an-example", "parked-by-a-person", "one-word-defined-twice", "nothing-to-compare-this-against",
     "behaviours-with-nothing-behind-them", "nothing-in-this-corpus-rests-on-anything",
+    "requirements-nobody-worked-out", "behaviours-no-subsystem-answers",
   ]);
   const questions = findings.filter((f) => f.severity === "note" && !INFORMATIONAL.has(f.kind));
   const exchanges = corpus.scopes.reduce((n, s) => n + s.scope.exchanges.length, 0);

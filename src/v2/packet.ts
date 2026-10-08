@@ -16,6 +16,7 @@ import { resolveRules, disputeIndex, vocabularyReach, resolveView, DOWNSTREAM_OF
 import { descendants } from "./settle.js";
 import { existsOf } from "./load.js";
 import { stampFor, staleReason, requirementHash } from "./stamp.js";
+import { demonstrationOf } from "./demonstrate.js";
 
 /** Whitespace-insensitive, because a reflow is not a change of meaning. */
 const norm = (s: string) => s.replace(/\s+/g, " ").trim();
@@ -85,6 +86,15 @@ function compileOne(corpus: Corpus, scopeId: string): string | null {
         ? "⚠ NOT ACCEPTED BY ANYONE"
         : `⚠ accepted by ${s.by}, and CHANGED SINCE`;
   };
+  /**
+   * Which requirements were worked out from the claim as it now reads, and which were not.
+   * ⛔ One source — `demonstrate.ts` — so the packet cannot disagree with `check` about it.
+   */
+  const states = new Map<string, string>(
+    (entry.scope.exchanges ?? []).flatMap((e) =>
+      (demonstrationOf(corpus, scopeId, e.id)?.requirements ?? []).map((r) => [r.ref, r.state])
+    )
+  );
   const disputes = disputeIndex(corpus);
   const deferrals = new Map(corpus.verdicts.filter((v) => v.kind === "defer").map((v) => [v.target!, v]));
   const out: string[] = [];
@@ -578,6 +588,27 @@ function compileOne(corpus: Corpus, scopeId: string): string | null {
           }`
         );
         /**
+         * ⛔ WHICH VERSION OF THE TRUTH THIS WAS WORKED OUT FROM, said on the requirement itself.
+         *
+         * A stale requirement is the one defect that ships wrong behaviour while looking correct:
+         * an engineer implements it, the test passes, and what it proves is a sentence nobody
+         * agrees to any more. Nothing downstream can catch that — the suite is green by
+         * construction — so the packet has to refuse to be quiet about it.
+         *
+         * `check` already refuses the corpus for this, which means a packet carrying one was
+         * compiled past a refusal. Saying so twice is correct: the person who compiled it may not
+         * be the person reading it.
+         */
+        const state = states.get(reqRef);
+        if (state === "stale")
+          out.push(
+            `    ⛔ **DO NOT IMPLEMENT THIS YET.** It was worked out on ${c.derived?.at} from an earlier wording of this claim, which has changed since. Whatever demonstrates it would pass and would prove the old sentence.`
+          );
+        else if (state === "authored")
+          out.push(
+            `    ⚠ Typed by hand rather than worked out from the claim, so nothing can say whether it is still current. Treat it as a draft of a requirement.`
+          );
+        /**
          * ⛔ WHICH SENTENCE, where the slot says more than one. Without this line a builder
          * cannot tell which statement they are being asked to demonstrate, and the statements
          * that nothing demonstrates are invisible rather than missing.
@@ -658,6 +689,31 @@ function compileOne(corpus: Corpus, scopeId: string): string | null {
           undemonstrated.length === 1 ? "it" : "them"
         } working, so the list below is not the whole job.`
     );
+  /**
+   * ⛔ HOW MANY OF THEM ANYBODY ACTUALLY WORKED OUT, at the top, next to the count.
+   *
+   * "22 testing requirements below" reads as a specification. "22 requirements, 3 worked out from
+   * the claims and 19 typed by hand" reads as what it is. An agent told to take this end to end
+   * deserves to know which half it is holding before it starts, and a corpus whose set is entirely
+   * authored has not begun deriving anything.
+   */
+  {
+    const stale = [...states.values()].filter((s) => s === "stale").length;
+    const typed = [...states.values()].filter((s) => s === "authored").length;
+    if (stale)
+      manifest.push(
+        `> ⛔ **${stale} requirement${stale === 1 ? " was" : "s were"} worked out from an earlier wording** of the claim ` +
+          `${stale === 1 ? "it demonstrates" : "they demonstrate"}, which has changed since. ${
+            stale === 1 ? "It is" : "They are"
+          } marked below. Do not implement ${stale === 1 ? "it" : "them"}: whatever demonstrates ` +
+          `${stale === 1 ? "it" : "them"} would pass, and would prove a sentence nobody agrees to any more.`
+      );
+    if (typed)
+      manifest.push(
+        `> ⚠ **${typed} of ${states.size} ${typed === 1 ? "requirement was" : "requirements were"} typed by hand** rather than worked out from the claim, ` +
+          `so nothing can say whether ${typed === 1 ? "it is" : "they are"} still current.`
+      );
+  }
   if (partial.length)
     manifest.push(
       `> ⛔ **${partial.length} stated sentence${partial.length === 1 ? "" : "s"} inside a slot ${

@@ -228,6 +228,13 @@ export const AREAS: Area[] = [
       "src/v2/grid.ts",
       "src/v2/stamp.ts",
       /**
+       * ⛔ `derive` AND NOT `generate`, WHICH IS THE WHOLE DISTINCTION. It does not decide what to
+       * demonstrate — a role does, reading the claim. This computes whether each worked-out
+       * requirement is still current with the words it came from, which is inherited state over
+       * existing content: the same kind of thing `stamp.ts` and `confidence.ts` do.
+       */
+      "src/v2/demonstrate.ts",
+      /**
        * ⛔ A DERIVATION, NOT A MODEL CONCEPT, AND THE DISTINCTION IS LOAD-BEARING. How
        * well-supported a statement is comes from counting readings and asking `stampFor`; a stored
        * confidence is a number that was true when it was written and unfalsifiable afterwards.
@@ -1130,6 +1137,67 @@ export const AUTHORS: Author[] = [
     authors: true,
     prompt: "agents/productos-decomposer.md",
   },
+  /**
+   * ⛔ THE AUTHOR `test-design` HAS BEEN JUDGING SINCE BEFORE IT EXISTED.
+   *
+   * Peter: *"a product person doesn't write a criterion - what even is this? this is old shit. the
+   * agents decide what kind of tests need to exist."*
+   *
+   * Until this landed, a `criteria:` block was hand-authored YAML and the SCOPER was the only role
+   * that wrote one — a product person producing the artefact a builder implements, as a side-effect
+   * of describing a feature. Meanwhile `test-design` asks *"would this criterion show its claim
+   * holding, or would it just pass"* and is explicitly forbidden from writing: *"⛔ Naming the
+   * defect is the output."*
+   *
+   * So the test set was written by whoever was least equipped to design it and reviewed by a role
+   * that could not fix what it found. Second time this registry has shipped that shape — the other
+   * was `architecture`, judging a capability tree that had been deleted from the model.
+   *
+   * ⛔ QUALITY, NOT ENGINEERING, and the discipline is the argument. What has to be demonstrated
+   * for a claim to be believed is a question about evidence, not about how the thing is built; an
+   * engineering author would reach for the altitudes the codebase makes convenient, which is how a
+   * refusal ends up demonstrated only where it is cheap to observe.
+   */
+  {
+    name: "demonstrator",
+    discipline: "quality",
+    asks: "What would have to be demonstrated for this claim to be believed?",
+    because:
+      "A criterion was authored, by the scoper, as a side-effect of scoping — so the artefact a " +
+      "builder implements was produced by the role least equipped to design it. `test-design` has " +
+      "asked whether each one would show its claim holding since before anything could act on the " +
+      "answer, because naming the defect is its only output. A judge with no author is how the " +
+      "whole layer stayed as thin as whoever happened to be describing the feature.",
+    reads: [
+      "the claim, as agreed — ⛔ never a draft, because working out the tests for a sentence nobody has accepted means doing it twice",
+      "what the claim refuses and what it fails at, because those are the cases a happy-path demonstration never reaches",
+      "what the slot says statement by statement, where it says several things, so each one is demonstrated rather than the first",
+      "the rules resolved into the slot, because a requirement has to hold under them and not only under the local sentence",
+    ],
+    writes: [
+      "criteria — what must be demonstrated for each claim, as given/when/then",
+      /**
+       * ⛔ THE FIELD THAT MAKES RE-DERIVATION IDEMPOTENT, and the one thing a human could never
+       * have supplied. Without it a re-run is a fresh unrelated set of tests and nothing can be
+       * kept; with it, unchanged truth yields the same set and a reworded sentence leaves exactly
+       * its own requirements pointing at a hash nothing matches.
+       */
+      "`derived` — the role, the date, and the hash of the claim it was worked out against",
+      "`of` — which statement, wherever the slot says more than one thing",
+      "`level` — where somebody would have to stand to observe it, where that is knowable from the claim",
+    ],
+    never: [
+      "write or reword a claim. ⛔ A requirement that needs the sentence to be different is a note addressed to whoever owns the sentence — changing it would be the test deciding the product",
+      "assert anything the claim does not say: an engineer implements the `then`, so a word invented here becomes product truth nobody agreed to",
+      "demonstrate a claim about refusing with a case that succeeds — the whole content of the claim is in the part a happy path never reaches",
+      "work anything out from a claim nobody has accepted yet",
+      "stamp anything walked, validated or accepted",
+    ],
+    needs: ["read-files", "search-files", "run-commands", "write-corpus"],
+    each: "feature",
+    authors: true,
+    prompt: "agents/productos-demonstrator.md",
+  },
   {
     name: "instrumenter",
     discipline: "engineering",
@@ -1321,6 +1389,12 @@ export const COMMANDS: Verb[] = [
   { name: "v2 accepted", does: "The exact wording somebody has agreed to, before anybody rewrites it", owns: "surface", who: "claude", track: "exchange" },
   { name: "v2 acts", does: "How many acts of human judgement this corpus carries", owns: "derive", who: "claude", track: "exchange" },
   { name: "v2 packet", does: "Compile the execution packet for one scope", owns: "generate", who: "claude", track: "exchange" },
+  /**
+   * ⛔ `claude`, not `person`. Nobody types this: it is how the role working out a test set records
+   * which wording it worked from, which is the whole of keeping a derived set idempotent as truth
+   * changes.
+   */
+  { name: "v2 claim", does: "The hash of what a claim says, for a requirement worked out against it", owns: "derive", who: "claude", track: "exchange" },
   { name: "v2 next", does: "What to ask somebody next about one feature", owns: "derive", who: "claude", track: "exchange" },
   { name: "v2 page", does: "Render one scope as a page a person can review", owns: "surface", who: "claude", track: "exchange" },
   { name: "v2 publishable", does: "Emit the interactive page for publishing, if the corpus allows it", owns: "surface", who: "claude", track: "exchange" },
@@ -1600,6 +1674,14 @@ export const SHIMS: Shim[] = [
        */
       { role: "decomposer", fan: true, why: "which parts of the system this needs, now that the promise it answers is agreed" },
       { role: "architecture", why: "whether those are the right subsystems, with boundaries that hold" },
+      /**
+       * ⛔ BEFORE ITS OWN JUDGE, AND AFTER THE SIGN-OFF. A requirement is worked out from the claim
+       * as AGREED — doing it over a draft means doing it twice, and the first set is the one a
+       * builder finds lying around. And it has to run before `test-design`, which has spent its
+       * whole existence asking whether each criterion would show its claim holding with nothing
+       * upstream that could act on the answer.
+       */
+      { role: "demonstrator", fan: true, why: "what would have to be demonstrated for each agreed claim to be believed" },
       { role: "buildability", why: "whether somebody could start on Monday — the second tenet, read from a builder's seat" },
       { role: "test-design", why: "whether each criterion would show its claim holding, rather than merely pass" },
     ],

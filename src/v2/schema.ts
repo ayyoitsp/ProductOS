@@ -918,6 +918,38 @@ export const Criterion = z
      */
     of: z.string().optional(),
     kind: CriterionKind.default("instance"),
+    /**
+     * Who worked out that this had to be demonstrated, and against which words.
+     *
+     * ⛔ A CRITERION IS NOT AUTHORED. Peter: *"a product person doesn't write a criterion - what
+     * even is this? this is old shit. the agents decide what kind of tests need to exist."*
+     *
+     * Everything about this field follows from that sentence:
+     *
+     *  - **`from` is the hash of the claim it was worked out against**, which is the whole of
+     *    "keep them idempotent as truth changes". Re-deriving over unchanged truth produces the
+     *    same set; a reworded sentence leaves exactly the requirements that came from it pointing
+     *    at a hash nothing matches, and `check` says which. Without it, re-derivation is a fresh
+     *    unrelated set of tests every run and nothing can be kept.
+     *  - **It is what keeps a human's acceptance honest.** `coveredBy` hashes only the criteria
+     *    NOBODY derived, so a machine rewriting the test specs can no longer stale a stamp — a
+     *    person cannot have agreed to words they never saw, and before this a re-derivation would
+     *    have invalidated every acceptance in a corpus at once.
+     *  - **Absent means somebody typed it**, which is the old shape and still loads. `check` says
+     *    so as a note and names the role that should have produced it. ⛔ Not a refusal: every
+     *    corpus in existence is full of authored criteria, and a refusal firing on all of them is
+     *    one people switch off — which this project has now learned twice in one day.
+     */
+    derived: z
+      .object({
+        /** The role that worked it out. ⛔ Never a person: that is what `authored` means. */
+        by: z.string().min(1),
+        at: dateish,
+        /** The claim hash this was worked out against — see `claimHash`. */
+        from: z.string().min(8),
+      })
+      .strict()
+      .optional(),
     given: z.string().optional(),
     when: z.string().optional(),
     then: z.string().optional(),
@@ -1919,14 +1951,26 @@ export const Rule = z
           "a rule that supplies `refuses` has to name the cases it refuses — prose here fills the slot and tells a builder nothing they can implement",
       });
     }
-    if (!undecided && !r.criteria.some((c) => c.kind === "conformance")) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["criteria"],
-        message:
-          "a rule needs at least one conformance criterion — without one it is an aspiration that fills a slot and demonstrates nothing",
-      });
-    }
+    /**
+     * ⛔ THIS REFUSAL MOVED TO `check`, AND THE SEQUENCE IS WHY.
+     *
+     * It was a load refusal: a rule with no conformance criterion would not parse, on the entirely
+     * sound reasoning that such a rule "is an aspiration that fills a slot and demonstrates
+     * nothing". The guarantee is right and is unchanged — it is now
+     * `a-rule-that-demonstrates-nothing`, which refuses a handover rather than a read.
+     *
+     * What forced the move: nobody authors a criterion any more. Peter: *"a product person doesn't
+     * write a criterion … the agents decide what kind of tests need to exist."* The scoper writes a
+     * rule while scoping, BEFORE sign-off; `demonstrator` works out what must be demonstrated AFTER
+     * sign-off, because a set worked out over a draft has to be done twice. Between those two
+     * moments every rule in the corpus has no conformance criterion — so as a load refusal this
+     * made the corpus unreadable for the whole interval, including to the role whose job is to fix
+     * it, and including to `check` itself.
+     *
+     * ⛔ A refusal that fires between two steps of the documented sequence is not a strict schema,
+     * it is a deadlock. Refusing at handover keeps every bit of the protection that matters: no
+     * packet compiles over it, and `check` must pass before anybody is asked to review.
+     */
     for (const c of r.criteria) {
       if (c.kind === "instance" && !r.scope.only) {
         ctx.addIssue({

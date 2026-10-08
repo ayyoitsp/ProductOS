@@ -98,6 +98,43 @@ export function capabilityHash(capability: unknown): string {
   return h(canon(capability));
 }
 
+/**
+ * ⛔ WHAT A STAMP COVERS, NOW THAT NOBODY WRITES A CRITERION.
+ *
+ * Peter: *"a product person doesn't write a criterion … the agents decide what kind of tests need
+ * to exist."*
+ *
+ * The criteria half of the stamp exists because accepting a claim used to silently bless every
+ * case attached to it, including ones nobody read. That reasoning holds for a criterion a PERSON
+ * wrote and was shown. It inverts for a derived one: if a role works the test set out from the
+ * claim, then a re-derivation would stale every acceptance in a corpus at once — invalidating
+ * somebody's consent because a machine rewrote words they never saw, which is the laundering this
+ * file exists to prevent, running in the other direction.
+ *
+ * So the criteria hash covers the criteria NOBODY derived. A derived set moving is a question
+ * about whether the set is current with the claim, answered by `claimHash` and `check` without
+ * anybody being asked again; an authored one moving is still a question for the person who
+ * accepted it.
+ *
+ * ⛔ And this is why `Criterion.derived` cannot be defaulted. Absent has to mean "somebody typed
+ * this", because that is the case where the stronger guarantee still applies.
+ */
+const authored = (cs: readonly unknown[]): unknown[] =>
+  cs.filter((c) => !(c as { derived?: unknown }).derived);
+
+/**
+ * The hash of what a slot or one of its statements says, as the resolved behaviour.
+ *
+ * ⛔ THE RESOLVED behaviour, not the local sentence — so a requirement worked out under an org-wide
+ * rule goes stale when that rule is reworded. `coveredBy` already hashes the slot text, the
+ * exchange envelope, the terms in reach and the id and statement of every rule resolved in, which
+ * is exactly the set of things that change what a slot MEANS. A derived test written against the
+ * old meaning is a test that demonstrates the wrong thing, whichever layer moved.
+ */
+export function claimHash(corpus: Corpus, ref: string): string | null {
+  return coveredBy(corpus, ref)?.slots ?? null;
+}
+
 export interface Covered {
   slots: string;
   criteria: string;
@@ -197,7 +234,7 @@ export function coveredBy(corpus: Corpus, target: string): Covered | null {
       // Same reasoning as the slot half: everything the rule carries except its criteria,
       // which are hashed separately so adding one does not read as a reworded statement.
       slots: h(canon({ ...rule.rule, criteria: undefined })),
-      criteria: h(canon(rule.rule.criteria)),
+      criteria: h(canon(authored(rule.rule.criteria))),
       parts: [`statement`, `mode: ${rule.rule.mode}`, `fills: ${rule.rule.fills}`, `${rule.rule.criteria.length} criteria`],
       criteriaCount: rule.rule.criteria.length,
       reads: [
@@ -442,7 +479,7 @@ export function coveredBy(corpus: Corpus, target: string): Covered | null {
     slots: h(slotBits.join("\n")),
     // ⛔ Only the criteria filed against this slot, or adding one to a sibling would stale a stamp
     // on a sentence nobody touched — the failure `coveredBy` already fixed once for the glossary.
-    criteria: h(canon(only ? ex.criteria.filter((c) => c.slot === only) : ex.criteria)),
+    criteria: h(canon(authored(only ? ex.criteria.filter((c) => c.slot === only) : ex.criteria))),
     parts,
     /**
      * ⛔ THE CRITERIA, NOT A COUNT OF THEM.

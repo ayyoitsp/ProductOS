@@ -17,6 +17,7 @@ flowchart LR
     scoper["scoper<br/><i>What does this one feature promise, and where does somebody meet it?</i><br/>· per feature ·"]
     machinist["machinist<br/><i>What does this product do that nobody presses, and what sets it off?</i><br/>· per feature ·"]
     decomposer["decomposer<br/><i>Which parts of the system does this feature need, and where do they belong?</i><br/>· per feature ·"]
+    demonstrator["demonstrator<br/><i>What would have to be demonstrated for this claim to be believed?</i><br/>· per feature ·"]
     instrumenter["instrumenter<br/><i>What does this product record, and which question does each recording answer?</i><br/>· per feature ·"]
     designer["designer<br/><i>What should this screen look like, where no code renders it?</i><br/>· per screen no component renders ·"]
     evidencer["evidencer<br/><i>What already demonstrates each of these claims?</i>"]
@@ -63,7 +64,7 @@ flowchart LR
 | **product** | `surveyor` ·writes· · `scoper` ·writes· · `newcomer` · `completeness` · `coherence` |
 | **design** | `designer` ·writes· · `rendered` · `design-critique` |
 | **engineering** | `machinist` ·writes· · `decomposer` ·writes· · `instrumenter` ·writes· · `truthfulness` · `architecture` · `buildability` |
-| **quality** | `evidencer` ·writes· · `coverage` · `hand-authored` · `test-design` |
+| **quality** | `demonstrator` ·writes· · `evidencer` ·writes· · `coverage` · `hand-authored` · `test-design` |
 | **the framework itself** | `consistency` · `can-the-model-say-it` |
 
 
@@ -97,6 +98,7 @@ flowchart TD
   hand_it_to_the_builders(["hand it to the builders<br/><i>The engineering and QA read, once product and design have signed off</i>"])
   hand_it_to_the_builders --> hand_it_to_the_builders_decomposer["decomposer ×N"]
   hand_it_to_the_builders --> hand_it_to_the_builders_architecture["architecture"]
+  hand_it_to_the_builders --> hand_it_to_the_builders_demonstrator["demonstrator ×N"]
   hand_it_to_the_builders --> hand_it_to_the_builders_buildability["buildability"]
   hand_it_to_the_builders --> hand_it_to_the_builders_test-design["test-design"]
   hand_it_to_the_builders -.->|keeps| hand_it_to_the_builders_self(["the session — 3 things it may not hand off"])
@@ -176,6 +178,7 @@ The engineering and QA read, once product and design have signed off.
 **Spawns, in order:**
 - `decomposer` *(engineering · writes)* — one per unit, in parallel — which parts of the system this needs, now that the promise it answers is agreed
 - `architecture` *(engineering · judges, writes nothing)* — whether those are the right subsystems, with boundaries that hold
+- `demonstrator` *(quality · writes)* — one per unit, in parallel — what would have to be demonstrated for each agreed claim to be believed
 - `buildability` *(engineering · judges, writes nothing)* — whether somebody could start on Monday — the second tenet, read from a builder's seat
 - `test-design` *(quality · judges, writes nothing)* — whether each criterion would show its claim holding, rather than merely pass
 
@@ -273,6 +276,7 @@ Held three ways rather than one: no author declares `ask-the-human`, so no host 
 | **scoper** | What does this one feature promise, and where does somebody meet it? | feature | the happy path — what the feature is FOR, first; views and their parts; person-asked exchanges, and what each slot says; criteria — what would show a sentence holding; `why`, `risks` and `measures` — why this is worth building, what could go wrong, and how anybody would know it worked; `terms` — what each word means in this feature; `question:` on anything it cannot resolve, with no claim beside it |
 | **machinist** | What does this product do that nobody presses, and what sets it off? | feature | system- and integrator-asked exchanges, and what each slot says; `when.triggered_by` — what sets it off, in product language; `when.follows` — the ask this one comes after, where something in the product sets it off; `depends_on` — what this rests on and does not itself behaviour; `question:` on anything it cannot resolve, with no claim beside it |
 | **decomposer** | Which parts of the system does this feature need, and where do they belong? | feature | subsystems — roughly what each does, and which area it is filed inside; `offers` — the capabilities a subsystem provides, each in a sentence; `serves` — the product statement each capability exists for, or the capability that needs it; `uses` — what a subsystem leans on across the tree, where containment cannot say it |
+| **demonstrator** | What would have to be demonstrated for this claim to be believed? | feature | criteria — what must be demonstrated for each claim, as given/when/then; `derived` — the role, the date, and the hash of the claim it was worked out against; `of` — which statement, wherever the slot says more than one thing; `level` — where somebody would have to stand to observe it, where that is knowable from the claim |
 | **instrumenter** | What does this product record, and which question does each recording answer? | feature | instruments — what gets recorded, in the product's own terms; `feeds` — which measure each recording answers, which is what stops either end being decorative |
 | **designer** | What should this screen look like, where no code renders it? | screen no component renders | a drawing for a screen no component renders, stamped with what it was designed from |
 | **evidencer** | What already demonstrates each of these claims? | runs once | evidence against criteria, each naming what it is and where it came from |
@@ -386,6 +390,35 @@ Held three ways rather than one: no author declares `ask-the-human`, so no host 
 - stamp anything walked, validated or accepted. ⛔ Capabilities become agreeable by engineers later; nothing agrees to one today
 
 **Needs:** read-files · search-files · run-commands · write-corpus  ·  **Prompt:** `agents/productos-decomposer.md`
+
+### `demonstrator`
+
+**Asks:** What would have to be demonstrated for this claim to be believed?
+
+**Exists because:** A criterion was authored, by the scoper, as a side-effect of scoping — so the artefact a builder implements was produced by the role least equipped to design it. `test-design` has asked whether each one would show its claim holding since before anything could act on the answer, because naming the defect is its only output. A judge with no author is how the whole layer stayed as thin as whoever happened to be describing the feature.
+
+**Spawned:** once per feature
+
+**Reads, in this order:**
+- the claim, as agreed — ⛔ never a draft, because working out the tests for a sentence nobody has accepted means doing it twice
+- what the claim refuses and what it fails at, because those are the cases a happy-path demonstration never reaches
+- what the slot says statement by statement, where it says several things, so each one is demonstrated rather than the first
+- the rules resolved into the slot, because a requirement has to hold under them and not only under the local sentence
+
+**Writes:**
+- criteria — what must be demonstrated for each claim, as given/when/then
+- `derived` — the role, the date, and the hash of the claim it was worked out against
+- `of` — which statement, wherever the slot says more than one thing
+- `level` — where somebody would have to stand to observe it, where that is knowable from the claim
+
+**⛔ Never:**
+- write or reword a claim. ⛔ A requirement that needs the sentence to be different is a note addressed to whoever owns the sentence — changing it would be the test deciding the product
+- assert anything the claim does not say: an engineer implements the `then`, so a word invented here becomes product truth nobody agreed to
+- demonstrate a claim about refusing with a case that succeeds — the whole content of the claim is in the part a happy path never reaches
+- work anything out from a claim nobody has accepted yet
+- stamp anything walked, validated or accepted
+
+**Needs:** read-files · search-files · run-commands · write-corpus  ·  **Prompt:** `agents/productos-demonstrator.md`
 
 ### `instrumenter`
 
@@ -791,7 +824,7 @@ Held three ways rather than one: no author declares `ask-the-human`, so no host 
 
 What `--help` cannot tell you, and why this exists: **who** types it, and **which track** it belongs to. *Never hand a human a flag* is a rule the skills state and nothing enforced — a command marked `claude` appearing in instructions addressed to a person is now a visible contradiction. And two parallel models have been running for months with nothing saying which commands belong to which.
 
-### Current — 47 commands
+### Current — 48 commands
 
 | command | does | layer | typed by |
 |---|---|---|---|
@@ -818,6 +851,7 @@ What `--help` cannot tell you, and why this exists: **who** types it, and **whic
 | `productos v2 accepted` | The exact wording somebody has agreed to, before anybody rewrites it | surface | the model |
 | `productos v2 acts` | How many acts of human judgement this corpus carries | derive | the model |
 | `productos v2 packet` | Compile the execution packet for one scope | generate | the model |
+| `productos v2 claim` | The hash of what a claim says, for a requirement worked out against it | derive | the model |
 | `productos v2 next` | What to ask somebody next about one feature | derive | the model |
 | `productos v2 page` | Render one scope as a page a person can review | surface | the model |
 | `productos v2 publishable` | Emit the interactive page for publishing, if the corpus allows it | surface | the model |
@@ -875,7 +909,7 @@ Territory, not ownership. Nobody is assigned an area — an agent reads this to 
 | area | layers | files |
 |---|---|---|
 | **model** | model | `src/v2/schema.ts` `src/v2/load.ts` `src/v2/ref.ts` `src/core/jobs.ts` `src/core/change.ts` `src/core/config.ts` `src/v2/store/schema.ts` |
-| **derive** | derive | `src/v2/grid.ts` `src/v2/stamp.ts` `src/v2/confidence.ts` `src/v2/settle.ts` `src/v2/acts.ts` `src/v2/record.ts` `src/v2/spoken.ts` `src/v2/connects.ts` `src/v2/steers.ts` `src/v2/store/access.ts` `src/v2/store/identity.ts` `src/core/learn.ts` `src/adapters/claude.ts` |
+| **derive** | derive | `src/v2/grid.ts` `src/v2/stamp.ts` `src/v2/demonstrate.ts` `src/v2/confidence.ts` `src/v2/settle.ts` `src/v2/acts.ts` `src/v2/record.ts` `src/v2/spoken.ts` `src/v2/connects.ts` `src/v2/steers.ts` `src/v2/store/access.ts` `src/v2/store/identity.ts` `src/core/learn.ts` `src/adapters/claude.ts` |
 | **generate** | generate | `src/v2/migrate.ts` `src/v2/draw.ts` `src/v2/draw-write.ts` `src/v2/routes.ts` `src/v2/propose.ts` `src/v2/appcss.ts` `src/v2/icons.ts` `src/core/agents-doc.ts` `src/v2/design.ts` `src/v2/store/corpus.ts` `src/v2/store/doc-migrations.ts` `src/v2/store/migrate.ts` `src/v2/store/boot.ts` |
 | **operate** | operate | `Makefile` `Dockerfile` `docker-compose.yml` `docker-compose.remote.yml` `scripts/` |
 | **surface** | surface | `src/v2/page.ts` `src/v2/prototype.ts` `src/v2/serve.ts` `src/ui/server.ts` `src/ui/renderer.ts` `src/v2/store/server.ts` `src/v2/store/instance.ts` `src/v2/store/pushes.ts` `src/v2/store/mcp.ts` `src/v2/store/choose.ts` `src/cli/commands/hosted.ts` `src/v2/packet.ts` `src/v2/notes.ts` `src/v2/watch.ts` `src/v2/log.ts` `src/v2/inbox.ts` `src/v2/presence.ts` `src/v2/identity.ts` `src/v2/client.ts` `src/v2/write.ts` `src/v2/wire.ts` `src/v2/moved.ts` `src/cli/commands/v2.ts` `src/mcp/v2-tools.ts` |

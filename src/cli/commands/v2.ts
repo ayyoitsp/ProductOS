@@ -3,7 +3,8 @@ import path from "node:path";
 import { Command } from "commander";
 import pc from "picocolors";
 import { checkCorpus, summarise } from "../../v2/check.js";
-import { stampFor } from "../../v2/stamp.js";
+import { stampFor, claimHash } from "../../v2/stamp.js";
+import { resolveRef } from "../../v2/ref.js";
 import { loadCorpus } from "../../v2/load.js";
 import { SLOTS, SLOT_ASKS_SHORT, Steer, type Note as NoteT, type SlotName, type View, statements } from "../../v2/schema.js";
 import YAML from "yaml";
@@ -380,6 +381,47 @@ export function v2Command(): Command {
           console.log(`  ${"".padEnd(16)} ${pc.dim(`back when: ${d.until}`)}`);
         }
       }
+    });
+
+  /**
+   * ⛔ WHAT A REQUIREMENT IS WORKED OUT AGAINST, so the role that works it out can record it.
+   *
+   * `Criterion.derived.from` is the whole of "keep them idempotent as truth changes": with it, a
+   * re-derivation can tell which requirements are still current and leave them alone; without it,
+   * every run throws the previous answer away and a corpus never accumulates a test set.
+   *
+   * ⛔ IT EXISTS BECAUSE THE PROMPT NAMES IT. `productos-demonstrator.md` tells the role to run
+   * this, and an instruction naming a command that does not exist is the defect class found twice
+   * this morning in the scoper — a documented shape nobody could follow, with no reason to doubt
+   * it. Writing the prompt first and the verb second is how that happens.
+   */
+  cmd
+    .command("claim")
+    .description("The hash of what a claim says, for a requirement worked out against it")
+    .argument("<ref>", "<scope>#<exchange>#<slot>[#<statement>]")
+    .option("--at <dir>", "corpus directory", "v2")
+    .action(async (ref: string, o: { at?: string }) => {
+      const corpus = loadCorpus(await openAt(o));
+      const resolved = resolveRef(corpus, ref);
+      if ("error" in resolved) {
+        console.error(pc.red("✗"), resolved.error);
+        process.exit(1);
+      }
+      if (resolved.ref.kind !== "slot" && resolved.ref.kind !== "statement") {
+        console.error(
+          pc.red("✗"),
+          `${ref} is not a claim — it resolves to ${resolved.ref.kind}, and a requirement is worked out against a slot or one of its statements`
+        );
+        console.error(pc.dim("  <scope>#<exchange>#<slot>[#<statement>]"));
+        process.exit(1);
+      }
+      const hash = claimHash(corpus, ref);
+      if (!hash) {
+        console.error(pc.red("✗"), `nothing here hashes ${ref}`);
+        process.exit(1);
+      }
+      /** ⛔ The hash alone on stdout, so it can be read by whatever is writing the criterion. */
+      console.log(hash);
     });
 
   cmd

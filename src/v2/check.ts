@@ -39,6 +39,7 @@ import { readConfig } from "../core/config.js";
 import path from "node:path";
 import { projectRootOf } from "../core/paths.js";
 import { wouldReach } from "./steers.js";
+import { demonstrations } from "./demonstrate.js";
 
 export type Severity = "refuse" | "note" | "shape";
 
@@ -1703,6 +1704,47 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
       for (const v of scope.views) {
         if (v.exists === "withdrawn") continue;
         /**
+         * ---- two states of one screen drawn with the same picture ----
+         *
+         * ⛔ FOUND ON A REAL CORPUS, AND IT IS THE `walked` CLASS OF DEFECT: a drawing that does
+         * not show what it claims to show.
+         *
+         * Bilrost's `review-the-rows` carries three states of one screen — "Needs look pass",
+         * "With pass remaining", "File open" — whose `sketch_html` is BYTE-IDENTICAL, 153,107
+         * characters each. Whatever captured them never put the screen into any of those states;
+         * it captured the default render three times and labelled them differently. A reviewer
+         * clicking through sees one picture under three names, cannot tell, and signs off on states
+         * nobody has ever looked at.
+         *
+         * ⛔ AT THE TOP OF THE LOOP, BECAUSE THE FIRST CUT WAS UNREACHABLE. It sat below
+         * `the-drawing-is-older-than-the-controls`, which deliberately skips the per-behaviour
+         * checks under it — and that note fires on exactly the corpora most likely to have this
+         * defect, so the check was silent on its own fixture. Found by the test failing, not by
+         * reading the code.
+         *
+         * ⛔ A REFUSAL, like the other drawing checks. Nothing else can catch it:
+         * `the-states-of-this-screen-are-unspoken` counts states, the rendered checks read one
+         * drawing at a time, and both are perfectly happy with three copies of one picture. On that
+         * corpus captured markup is 84% of the truth tree by bytes — 1.72 MB of 2.05 MB — so the
+         * duplication is not a rounding error either.
+         */
+        {
+          const same = new Map<string, string[]>();
+          for (const st of v.states ?? []) {
+            const key = st.sketch_html.replace(/\s+/g, " ").trim();
+            same.set(key, [...(same.get(key) ?? []), st.label]);
+          }
+          for (const [, labels] of same)
+            if (labels.length > 1)
+              add({
+                severity: "refuse",
+                kind: "one-picture-labelled-as-several-states",
+                where: `${scope.id}#${v.id}`,
+                what: `${labels.length} states are drawn with the same picture — ${labels.join(", ")}`,
+                fix: "draw each state as it actually appears, or drop the states that are not distinct. ⛔ A reviewer clicking through these sees one screen under several names and cannot tell — which is worse than a screen with no drawing, because that one says so",
+              });
+        }
+        /**
          * ⛔ A SCREEN WITH FIVE APPEARANCES AND ONE SENTENCE IS A SCREEN NOBODY HAS DESCRIBED.
          *
          * Peter, on the create-a-deal screen the moment it finally drew: *"and there's a single
@@ -3051,6 +3093,27 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
     // check gave when a parse failure hid the exchanges a rule reached.
     if (rule.standing && rule.standing.kind !== "stated") continue;
     const hits = reach.get(rule.id) ?? [];
+    /**
+     * ⛔ MOVED HERE FROM THE SCHEMA, WHERE IT WAS A DEADLOCK.
+     *
+     * `Rule` used to refuse to PARSE without a conformance criterion — right about the guarantee,
+     * impossible in the sequence. Nobody authors a criterion now: the scoper writes a rule before
+     * sign-off and `demonstrator` works out what would show it holding after, because a set worked
+     * out over a draft has to be done twice. For the whole interval between those two steps every
+     * rule in the corpus had none — so the corpus would not load, for anybody, including the role
+     * whose job was to fix it and including `check`.
+     *
+     * The guarantee is unchanged and arrives where it matters: nothing is handed over and no packet
+     * compiles until a rule can be shown holding.
+     */
+    if (!rule.criteria.some((c) => c.kind === "conformance"))
+      add({
+        severity: "refuse",
+        kind: "a-rule-that-demonstrates-nothing",
+        where: rule.id,
+        what: `fills "${rule.fills}" on ${hits.length} exchanges and nothing says what would show it holding`,
+        fix: "have its conformance criteria worked out — `productos` routes this to the demonstrator. ⛔ This is the widest reach in the model: one rule lands on every exchange its selector touches, so an aspiration here fills a slot on all of them and demonstrates nothing on any",
+      });
     if (hits.length === 0)
       add({
         severity: "refuse",
@@ -3074,6 +3137,76 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
         where: rule.id,
         what: `fills "${rule.fills}" on ${hits.length} exchanges — one accept here reaches all of them`,
         fix: "read its conformance criteria closely; this is the stamp with the longest reach in the corpus",
+      });
+  }
+
+  /**
+   * ---- a rule that demonstrates nothing ----
+   *
+   * ⛔ MOVED HERE FROM THE SCHEMA, WHERE IT WAS A DEADLOCK. `Rule` used to refuse to parse without
+   * a conformance criterion — right about the guarantee, impossible in the sequence: the scoper
+   * writes a rule before sign-off and `demonstrator` works out its criteria after, so for the
+   * whole interval between them the corpus would not load, including for the role whose job was to
+   * fix it. The guarantee is identical here and arrives at the moment it matters: nothing is handed
+   * over, and no packet compiles, until a rule can be shown holding.
+   */
+  /**
+   * ---- requirements worked out from truth that has since moved ----
+   *
+   * ⛔ THE OTHER HALF OF "KEEP THEM IDEMPOTENT AS TRUTH CHANGES", AND THE ONLY HALF THAT CAN
+   * REFUSE.
+   *
+   * Peter: *"the agents decide what kind of tests need to exist"* — and the moment they do, the
+   * question stops being "did somebody write a test case" and becomes "is this test still a test
+   * of what the product now promises". A requirement carries the hash of the claim it was worked
+   * out from, so that is answerable by arithmetic: the sentence moved, this did not, and whatever
+   * demonstrates it is demonstrating the old words.
+   *
+   * ⛔ A REFUSAL, unlike the authored note below. A stale requirement in a packet is the one defect
+   * that silently ships wrong behaviour: an engineer implements it, the test passes, and the test
+   * proves a sentence nobody agreed to any more. Nothing downstream can catch that — the suite is
+   * green by construction.
+   */
+  for (const d of demonstrations(corpus)) {
+    for (const r of d.requirements) {
+      if (r.state === "stale")
+        add({
+          severity: "refuse",
+          kind: "a-requirement-older-than-its-claim",
+          where: r.ref,
+          what: `worked out on ${r.criterion.derived?.at} against ${r.claim}, which has been reworded since`,
+          fix: `work it out again from the claim as it now reads. ⛔ Whatever demonstrates this is demonstrating the old sentence, and it still passes — which is why this refuses rather than noting`,
+        });
+    }
+  }
+  /**
+   * ⛔ ONE NOTE WITH A COUNT, AND THE FIRST CUT OF THIS EMITTED TWENTY-FIVE.
+   *
+   * Every corpus in existence is full of criteria somebody typed — the pristine seed is 100% of
+   * them — so per-requirement this fires on all of them at once. That is the third time in one day
+   * this project has written a finding that reports on everything: `requirement-points-at-nothing`
+   * refused 67 times on Bilrost, the subsystem collision refused 5 of 6, and both had to be
+   * unwound. The house answer already existed in `behaviours-with-nothing-behind-them`: say how
+   * many, show the first few, and let the number be the signal.
+   *
+   * What it buys is the honest reading of how far a corpus has got — a corpus whose requirements
+   * are all `authored` has not started working any of them out, and that is one line rather than a
+   * wall nobody reads.
+   */
+  {
+    const typed = demonstrations(corpus)
+      .flatMap((d) => d.requirements)
+      .filter((r) => r.state === "authored");
+    const all = demonstrations(corpus).flatMap((d) => d.requirements);
+    if (typed.length)
+      add({
+        severity: "note",
+        kind: "requirements-nobody-worked-out",
+        where: `${typed.length} of ${all.length}`,
+        what:
+          typed.slice(0, 4).map((r) => r.ref).join(", ") +
+          (typed.length > 4 ? `, +${typed.length - 4} more` : ""),
+        fix: "have them worked out from the claims they demonstrate — `productos` routes this to the demonstrator. ⛔ A typed criterion is not wrong, it is unfalsifiable: when the sentence above it moves, nothing can say whether this went with it",
       });
   }
 

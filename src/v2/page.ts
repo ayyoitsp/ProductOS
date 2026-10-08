@@ -28,6 +28,7 @@ import { confidenceOf, whyConfident, discrepancyFor } from "./confidence.js";
 import { wireParts } from "./wire.js";
 import { questionsFor, descendants, type Question } from "./settle.js";
 import { resolveRef } from "./ref.js";
+import { demonstrationOf } from "./demonstrate.js";
 import { decisionsOn, decisionsUnder, howItWasDecided, type Decision } from "./record.js";
 
 const esc = (s: unknown): string =>
@@ -2325,12 +2326,30 @@ function renderExchanges(corpus: Corpus, scopeIds: string[], cellOf: Map<string,
        * ⛔ The ref only. The hash belongs to the packet, which is a machine artifact; printing
        * sixteen hex characters beside a sentence a person is trying to read buys them nothing.
        */
+      /**
+       * ⛔ WHETHER EACH REQUIREMENT IS STILL A REQUIREMENT OF WHAT THIS NOW SAYS.
+       *
+       * Nobody writes these; a role works them out from the claim and records which wording it
+       * worked from. So the question a reader has about one is no longer "do I agree with it" — it
+       * is "was this worked out from the sentence above it, or from an older one". A page that
+       * shows a derived test set without that is a page claiming currency it cannot know.
+       */
+      const reqState = new Map(
+        (demonstrationOf(corpus, sid, e.id)?.requirements ?? []).map((r) => [r.criterion.id, r.state])
+      );
       const criteria = e.criteria
         .map(
           (c) => `
-          <li>
+          <li class="req-${esc(reqState.get(c.id) ?? "authored")}">
             <span class="cslot">${esc(SLOT_LABEL[c.slot as SlotName] ?? c.slot)}</span>
             <code class="creq">${esc(`${ref}#shows#${c.id}`)}</code>
+            ${
+              reqState.get(c.id) === "stale"
+                ? `<span class="badge warn">worked out from an earlier wording</span>`
+                : reqState.get(c.id) === "authored"
+                  ? `<span class="badge">typed by hand</span>`
+                  : ""
+            }
             ${c.given ? `<span class="g">given</span> ${line(c.given)}` : ""}
             ${c.when ? `<span class="g">when</span> ${line(c.when)}` : ""}
             ${c.then ? `<span class="g">then</span> ${line(c.then)}` : ""}
