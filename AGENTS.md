@@ -80,6 +80,8 @@ flowchart TD
   scope_a_feature --> scope_a_feature_scoper["scoper"]
   scope_a_feature --> scope_a_feature_machinist["machinist"]
   scope_a_feature --> scope_a_feature_instrumenter["instrumenter"]
+  scope_a_feature --> scope_a_feature_decomposer["decomposer ×N"]
+  scope_a_feature --> scope_a_feature_demonstrator["demonstrator ×N"]
   scope_a_feature --> scope_a_feature_designer["designer ×N"]
   scope_a_feature --> scope_a_feature_completeness["completeness"]
   scope_a_feature --> scope_a_feature_design-critique["design-critique ×N"]
@@ -96,9 +98,7 @@ flowchart TD
   scan_a_codebase --> scan_a_codebase_hand-authored["hand-authored"]
   scan_a_codebase -.->|keeps| scan_a_codebase_self(["the session — 4 things it may not hand off"])
   hand_it_to_the_builders(["hand it to the builders<br/><i>The engineering and QA read, once product and design have signed off</i>"])
-  hand_it_to_the_builders --> hand_it_to_the_builders_decomposer["decomposer ×N"]
   hand_it_to_the_builders --> hand_it_to_the_builders_architecture["architecture"]
-  hand_it_to_the_builders --> hand_it_to_the_builders_demonstrator["demonstrator ×N"]
   hand_it_to_the_builders --> hand_it_to_the_builders_buildability["buildability"]
   hand_it_to_the_builders --> hand_it_to_the_builders_test-design["test-design"]
   hand_it_to_the_builders -.->|keeps| hand_it_to_the_builders_self(["the session — 3 things it may not hand off"])
@@ -138,6 +138,8 @@ Turn one in-flight feature into product truth.
 - `scoper` *(product · writes)* — the feature written in a context holding nothing but that feature
 - `machinist` *(engineering · writes)* — the half of this feature nobody presses — what runs by itself, and what sets it off
 - `instrumenter` *(engineering · writes)* — what has to be recorded for any of this feature's measures to be knowable
+- `decomposer` *(engineering · writes)* — one per unit, in parallel — which parts of the system this feature needs, from the truth as it now reads
+- `demonstrator` *(quality · writes)* — one per unit, in parallel — what would have to be demonstrated for each claim to be believed, invalidated when the claim moves
 - `designer` *(design · writes)* — one per unit, in parallel — screens the product should have and nothing renders yet
 - `completeness` *(product · judges, writes nothing)* — whether somebody can get from the start of this feature to the end of it
 - `design-critique` *(design · judges, writes nothing)* — one per unit, in parallel — whether these are the right screens for the job, not just complete ones
@@ -176,9 +178,7 @@ The engineering and QA read, once product and design have signed off.
 ⛔ **Runs at stage: ready for review** — derived by stageOf, never stored.
 
 **Spawns, in order:**
-- `decomposer` *(engineering · writes)* — one per unit, in parallel — which parts of the system this needs, now that the promise it answers is agreed
 - `architecture` *(engineering · judges, writes nothing)* — whether those are the right subsystems, with boundaries that hold
-- `demonstrator` *(quality · writes)* — one per unit, in parallel — what would have to be demonstrated for each agreed claim to be believed
 - `buildability` *(engineering · judges, writes nothing)* — whether somebody could start on Monday — the second tenet, read from a builder's seat
 - `test-design` *(quality · judges, writes nothing)* — whether each criterion would show its claim holding, rather than merely pass
 
@@ -400,7 +400,7 @@ Held three ways rather than one: no author declares `ask-the-human`, so no host 
 **Spawned:** once per feature
 
 **Reads, in this order:**
-- the claim, as agreed — ⛔ never a draft, because working out the tests for a sentence nobody has accepted means doing it twice
+- the claim as it now reads — ⛔ agreed or not, and whether it is agreed is reported beside each requirement rather than deciding whether there is one
 - what the claim refuses and what it fails at, because those are the cases a happy-path demonstration never reaches
 - what the slot says statement by statement, where it says several things, so each one is demonstrated rather than the first
 - the rules resolved into the slot, because a requirement has to hold under them and not only under the local sentence

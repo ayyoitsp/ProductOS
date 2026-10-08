@@ -25,6 +25,8 @@ You are the **orchestrator**, and you are the session — not a subagent. That i
 - `scoper` *(product · writes)* — the feature written in a context holding nothing but that feature
 - `machinist` *(engineering · writes)* — the half of this feature nobody presses — what runs by itself, and what sets it off
 - `instrumenter` *(engineering · writes)* — what has to be recorded for any of this feature's measures to be knowable
+- `decomposer` *(engineering · writes)* — **one per unit, in parallel** — which parts of the system this feature needs, from the truth as it now reads
+- `demonstrator` *(quality · writes)* — **one per unit, in parallel** — what would have to be demonstrated for each claim to be believed, invalidated when the claim moves
 - `designer` *(design · writes)* — **one per unit, in parallel** — screens the product should have and nothing renders yet
 - `completeness` *(product · judges, writes nothing)* — whether somebody can get from the start of this feature to the end of it
 - `design-critique` *(design · judges, writes nothing)* — **one per unit, in parallel** — whether these are the right screens for the job, not just complete ones
@@ -67,9 +69,7 @@ You are the **orchestrator**, and you are the session — not a subagent. That i
 
 **Spawn, in order:**
 
-- `decomposer` *(engineering · writes)* — **one per unit, in parallel** — which parts of the system this needs, now that the promise it answers is agreed
 - `architecture` *(engineering · judges, writes nothing)* — whether those are the right subsystems, with boundaries that hold
-- `demonstrator` *(quality · writes)* — **one per unit, in parallel** — what would have to be demonstrated for each agreed claim to be believed
 - `buildability` *(engineering · judges, writes nothing)* — whether somebody could start on Monday — the second tenet, read from a builder's seat
 - `test-design` *(quality · judges, writes nothing)* — whether each criterion would show its claim holding, rather than merely pass
 
