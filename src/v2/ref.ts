@@ -24,7 +24,7 @@
  *   <scope>#<exchange>#<slot>                 one of the seven
  *   <scope>#<exchange>#<slot>#<case>          one named refusal inside a slot, or one statement
  *   <scope>#<exchange>#shows#<id>             one testing requirement — a criterion
- *   <subsystem>                               one subsystem, which has no `#`
+ *   <subsystem>#offers                        one part of the system beneath the product
  *   <subsystem>#offers#<id>                   one capability it offers
  *   <rule-id>                                 a rule, which has no `#`
  */
@@ -138,9 +138,12 @@ export function resolveRef(corpus: Corpus, raw: string): Resolved | { error: str
    * without this the four-segment path reaches `no scope "ledger"` — an error about a thing nobody
    * was talking about, which is exactly the symptom the happy-path branch below was added for.
    */
-  if (parts.length === 3 && parts[1] === "offers") {
+  if ((parts.length === 2 || parts.length === 3) && parts[1] === "offers") {
     const sub = corpus.capabilities.find((x) => x.capability.id === parts[0]);
     if (sub) {
+      /** `<id>#offers` is the subsystem itself — see why it is not addressable bare, below. */
+      if (parts.length === 2)
+        return { ref: { kind: "subsystem", id: raw, subsystem: parts[0]! }, unsettled: false };
       const one = sub.capability.offers.find((o) => o.id === parts[2]);
       if (!one)
         return {
@@ -255,15 +258,25 @@ export function resolveRef(corpus: Corpus, raw: string): Resolved | { error: str
     const scope = corpus.scopes.find((s) => s.scope.id === raw);
     if (scope) return { ref: { kind: "scope", id: raw, scope: raw }, unsettled: false };
     /**
-     * ⛔ THIRD IN LINE, AND `check` REPORTS A COLLISION RATHER THAN THIS SILENTLY PREFERRING ONE.
+     * ⛔ A SUBSYSTEM IS NOT ADDRESSABLE BARE, AND THAT IS WHAT MAKES A COLLISION IMPOSSIBLE.
      *
-     * Rules and scopes were already two one-segment kinds resolved by lookup order; a subsystem is
-     * the third. The same answer the statement-vs-case collision got applies here: a shared id
-     * loses quietly in exactly one direction, so the id being shared is itself the finding.
+     * The first cut resolved a bare id as a subsystem, third in line after rules and scopes, with
+     * a `check` refusal for the collision — on the reasoning that a shared id loses silently in
+     * exactly one direction, so the sharing is the finding.
+     *
+     * ⛔ RUN AGAINST BILROST, THAT REFUSED FIVE OF THE SIX SUBSYSTEMS. Its v1 corpus had a real
+     * capability tree whose contents were migrated into `truth/` as scopes, keeping their names —
+     * so `access-control`, `agency-pricing`, `cre-templates`, `document-intake` and `pricing` each
+     * name a scope AND the obvious name for the subsystem. And they SHOULD share a name: "access
+     * control" is both the part of the system and the area of product truth about it. A refusal
+     * that fires on the most natural naming in the commonest migration path is a refusal that gets
+     * worked around.
+     *
+     * So the grammar carries the distinction instead: `<id>#offers` names the subsystem, the same
+     * fixed-word device as `#shows#` and `<scope>#risk#<id>`, and nothing is ambiguous for `check`
+     * to report. One finding deleted, one false refusal gone, and nobody has to rename anything.
      */
-    const sub = corpus.capabilities.find((c) => c.capability.id === raw);
-    if (sub) return { ref: { kind: "subsystem", id: raw, subsystem: raw }, unsettled: false };
-    return { error: `"${raw}" is not a rule, a scope or a subsystem here` };
+    return { error: `"${raw}" is not a rule or a scope here — a subsystem is \`<id>#offers\`` };
   }
   const [scopeId, exId, slotName, caseName] = parts;
   const scope = corpus.scopes.find((s) => s.scope.id === scopeId)?.scope;

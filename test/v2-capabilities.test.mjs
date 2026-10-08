@@ -112,8 +112,17 @@ test("a corpus carries its subsystems, nested, and each one is addressable", () 
   const one = resolveRef(corpus, "ledger#offers#record-a-movement");
   assert.ok(!one.error, one.error);
   assert.equal(one.ref.kind, "capability");
-  const sub = resolveRef(corpus, "records");
+  /**
+   * ⛔ `<id>#offers`, NOT A BARE ID, AND BILROST IS WHY. The first cut resolved a bare one-segment
+   * id as a subsystem — after rules and scopes — with a `check` refusal for the collision. Against
+   * the real corpus that refused five of six subsystems: its v1 capability tree had been migrated
+   * into `truth/` as scopes keeping their names, so `access-control` names both the part of the
+   * system and the area of product truth about it. They SHOULD share a name. The grammar carries
+   * the distinction instead, and the collision finding was deleted rather than worked around.
+   */
+  const sub = resolveRef(corpus, "records#offers");
   assert.equal(sub.ref?.kind, "subsystem");
+  assert.ok(resolveRef(corpus, "records").error, "a bare id still resolves as a subsystem");
 });
 
 /**
@@ -177,13 +186,37 @@ test("subsystems filed inside each other are refused", () => {
 });
 
 /**
- * ⛔ A ONE-SEGMENT ID IS NOW THREE KINDS — a rule, a scope, a subsystem — resolved by lookup order.
- * The statement-vs-case collision got this same answer: the sharing is the finding, because a
- * shared id loses silently in exactly one direction.
+ * ⛔ THE OPPOSITE OF WHAT THIS TEST FIRST ASSERTED, AND BILROST IS THE REASON.
+ *
+ * It originally pinned a refusal: a subsystem sharing a one-segment id with a scope or a rule was
+ * refused, because a bare ref resolved rule → scope → subsystem and the loser lost silently.
+ *
+ * Run against the real corpus it refused five of six subsystems. Bilrost's v1 capability tree was
+ * migrated into `truth/` as scopes keeping their names, so `access-control`, `agency-pricing`,
+ * `cre-templates`, `document-intake` and `pricing` each name a scope AND the obvious name for the
+ * part of the system. They should share a name — the two are one subject seen from two sides, the
+ * promise and the machinery. A refusal firing on the most natural naming in the commonest
+ * migration path is one somebody turns off.
+ *
+ * So `ref.ts` spells a subsystem `<id>#offers`, nothing is ambiguous, and the finding is gone.
  */
-test("a subsystem sharing an id with a scope or a rule is refused", () => {
-  const clash = RECORDS.replace("id: records", "id: money");
-  assert.ok(kinds(withCapabilities({ "ledger.md": LEDGER.replace("in: records", "in: money"), "records.md": clash, "clock.md": CLOCK.replace("in: records", "in: money") })).includes("a-subsystem-shares-an-id-with-something-else"));
+test("a subsystem may share a name with the feature it answers", () => {
+  const sameName = RECORDS.replace("id: records", "id: money");
+  const dir = withCapabilities({
+    "ledger.md": LEDGER.replace("in: records", "in: money"),
+    "records.md": sameName,
+    "clock.md": CLOCK.replace("in: records", "in: money"),
+  });
+  const found = kinds(dir);
+  assert.ok(
+    !found.some((k) => k.includes("shares-an-id")),
+    "naming a subsystem after the feature it answers is refused"
+  );
+
+  // ⛔ And the two are still told apart, which is the whole reason the refusal could go.
+  const corpus = loadCorpus(dir);
+  assert.equal(resolveRef(corpus, "money").ref.kind, "scope");
+  assert.equal(resolveRef(corpus, "money#offers").ref.kind, "subsystem");
 });
 
 /**

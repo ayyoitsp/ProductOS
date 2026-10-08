@@ -186,20 +186,65 @@ test("a requirement on a slot saying several things names which one, or the pack
   assert.match(packet, /stated sentences? inside a slot/);
 });
 
+/**
+ * ⛔ ON A MULTI-STATEMENT SLOT ONLY, AND THE FIRST VERSION OF THIS TEST PINNED A BUG.
+ *
+ * It added a bad `of` to a criterion on the seed's `answer`, which says ONE bare sentence, and
+ * asserted the refusal. `statements()` normalises a bare sentence into one statement whose id is
+ * the literal string `it` — so the refusal fired for the wrong reason, and it fired on every `of`
+ * ever written against a single-statement slot. Run against the real Bilrost corpus: 67 refusals,
+ * each reading *"names `x`, and `answer` says only it"*, blocking a handover on a corpus nothing
+ * had previously complained about.
+ *
+ * Where a slot says one thing, a pointer is redundant, not ambiguous — there is nothing a builder
+ * could fail to tell apart. The test now sets up the condition the refusal is actually about.
+ */
 test("a requirement pointing at a statement that is not there is refused, not guessed", () => {
   const dir = seed();
   const f = path.join(dir, MONEY);
   const before = fs.readFileSync(f, "utf-8");
+  const one = `      answer:
+        says: >
+          What the kid has now, and everything recorded against them most recent first,
+          each with the day, what it was for, and the amount.`;
+  const several = `      answer:
+        says:
+          - id: the-figure
+            says: What the kid has now.
+          - id: the-history
+            says: Everything recorded against them, most recent first.`;
+  assert.ok(before.includes(one), "seed shape moved — re-aim this test");
   fs.writeFileSync(
     f,
-    before.replace(
-      "        then: the three are listed most recent first, each with the day, what it was for, and the amount",
-      "        of: a-sentence-nobody-wrote\n        then: the three are listed most recent first, each with the day, what it was for, and the amount"
-    )
+    before
+      .replace(one, several)
+      .replace(
+        "        then: the three are listed most recent first, each with the day, what it was for, and the amount",
+        "        of: a-sentence-nobody-wrote\n        then: the three are listed most recent first, each with the day, what it was for, and the amount"
+      )
   );
   const refusals = checkCorpus(dir).findings.filter((x) => x.kind === "requirement-points-at-nothing");
   assert.equal(refusals.length, 1, "a requirement naming a statement that does not exist passed unmentioned");
   assert.equal(refusals[0].severity, "refuse");
+
+  // ⛔ And a pointer on a slot that says ONE thing is silent. This is the regression that cost a
+  // real corpus 67 refusals; `it` is a synthetic id no author ever typed.
+  const redundant = seed();
+  const g = path.join(redundant, MONEY);
+  fs.writeFileSync(
+    g,
+    fs
+      .readFileSync(g, "utf-8")
+      .replace(
+        "        then: the three are listed most recent first, each with the day, what it was for, and the amount",
+        "        of: whatever-an-author-happened-to-write\n        then: the three are listed most recent first, each with the day, what it was for, and the amount"
+      )
+  );
+  assert.equal(
+    checkCorpus(redundant).findings.filter((x) => x.kind === "requirement-points-at-nothing").length,
+    0,
+    "a redundant pointer on a single-statement slot is refused as if it were ambiguous"
+  );
 });
 
 /**

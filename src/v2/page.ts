@@ -6769,7 +6769,7 @@ function renderSubsystems(corpus: Corpus): string {
     <article class="subsys" data-ref="${esc(s.id)}">
       <header>
         <h3>${line(s.title)}</h3>
-        <code>${esc(s.id)}</code>
+        <code>${esc(`${s.id}#offers`)}</code>
       </header>
       <p class="subsys-does">${line(s.does)}</p>
       ${

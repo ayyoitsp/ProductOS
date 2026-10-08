@@ -1032,12 +1032,33 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
             what: `demonstrates \`${c.slot}\`, which says ${said.length} things, and names which with no \`of\``,
             fix: `add \`of: <statement id>\` — one of ${said.map((s) => s.id).join(", ")}. Without it this reads as demonstrating the whole slot, and the statements nothing covers are invisible rather than missing`,
           });
-        if (c.of && !said.some((s) => s.id === c.of))
+        /**
+         * ---- a requirement pointing at a statement that is not there ----
+         *
+         * ⛔ ONLY WHERE THE SLOT SAYS SEVERAL THINGS, AND THE FIRST CUT OF THIS REFUSED 67 TIMES ON
+         * A REAL CORPUS.
+         *
+         * `statements()` normalises a bare sentence into ONE statement whose id is the literal
+         * string `it` — so on every single-statement slot, any `of` an author had written compared
+         * unequal and was refused. Run against Bilrost: 67 refusals, every one reading *"names
+         * `x`, and `answer` says only it"*, on a corpus nothing had ever complained about. A real
+         * repo could not be handed over because of a check that shipped the same morning.
+         *
+         * ⛔ AND THE CONDITION WAS NEVER A DEFECT THERE. The harm `of` exists to prevent is a
+         * builder unable to tell WHICH statement a requirement demonstrates. Where the slot says
+         * one thing there is nothing to be unable to tell — the pointer is redundant, not
+         * ambiguous, which is exactly why `Criterion.of`'s own comment calls it "optional because a
+         * slot saying one thing needs no pointer". Refusing redundancy as if it were ambiguity is
+         * the shape `nothing-demonstrates-this` records being got wrong on `may` and `with`: a
+         * check that fires everywhere, cannot be cleared by doing the right thing, and teaches
+         * people to run with it switched off.
+         */
+        if (said.length > 1 && c.of && !said.some((s) => s.id === c.of))
           add({
             severity: "refuse",
             kind: "requirement-points-at-nothing",
             where: `${ref}#shows#${c.id}`,
-            what: `names \`${c.of}\`, and \`${c.slot}\` says ${said.length ? `only ${said.map((s) => s.id).join(", ")}` : "nothing with an id"}`,
+            what: `names \`${c.of}\`, and \`${c.slot}\` says ${said.map((s) => s.id).join(", ")}`,
             fix: "one of the two is wrong — fix the pointer, or the statement id it was written against. ⛔ A builder handed this cannot tell which, and must not guess",
           });
         if (c.example)
@@ -2252,7 +2273,21 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
         kind: "nothing-says-why-this-is-worth-building",
         where: scope.id,
         what: `${scope.exchanges.length} behaviours are specified here and nothing says what is wrong today — so every one of them is justified against a reason nobody wrote down`,
-        fix: `say what is broken now, as a reason. ⛔ Not what the feature does: "a parent and a kid remember the same chore differently" is a reason, "parents want to assign chores" is the feature with its name changed`,
+        /**
+         * ⛔ THE EXAMPLE IS THE SHAPE, NOT A DOMAIN — and it used to name one.
+         *
+         * This read *"a parent and a kid remember the same chore differently" is a reason, "parents
+         * want to assign chores" is the feature with its name changed*. Correct about the
+         * distinction, and it fired twenty times on a commercial-mortgage corpus, explaining
+         * pocket money to somebody scoping agency lending. Advice that names another product's
+         * domain reads as the tool being confused about which corpus it is looking at, which costs
+         * exactly the credibility the finding needs in order to be acted on.
+         *
+         * ⛔ Still a worked example rather than a rule, because the rule alone — "say what is
+         * broken, not what the feature does" — is what every author already believes they wrote.
+         * The two halves have to be shown side by side; they just do not have to be about chores.
+         */
+        fix: `say what is broken TODAY, as a reason. ⛔ Not what the feature does: "two people looking at the same record reach different numbers" is a reason — "people need a shared view" is the feature with its name changed`,
       });
   }
 
@@ -3065,18 +3100,20 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
 
     for (const { capability: cap, file } of corpus.capabilities) {
       /**
-       * ⛔ A one-segment id is already three kinds — a rule, a scope, now a subsystem — resolved by
-       * lookup order. The same answer the statement-vs-case collision got: the sharing is the
-       * finding, because a shared id loses silently in exactly one direction.
+       * ⛔ THERE IS NO ID-COLLISION FINDING HERE, AND DELETING IT WAS THE FIX RATHER THAN A
+       * CONCESSION.
+       *
+       * One existed: a subsystem sharing a name with a scope or a rule was refused, because a bare
+       * one-segment ref resolved rule → scope → subsystem and the loser lost silently. Run against
+       * Bilrost it refused five of six subsystems — its v1 capability tree was migrated into
+       * `truth/` as scopes keeping their names, so `access-control` names both the part of the
+       * system and the area of product truth about it. Which is correct, and should not need a
+       * rename: the two really are the same subject seen from two sides.
+       *
+       * `ref.ts` now spells a subsystem `<id>#offers`, so nothing can be ambiguous and there is
+       * nothing to report. A refusal that fires on the most natural naming in the commonest
+       * migration path does not survive first contact with a real repo.
        */
-      if (corpus.scopes.some((s) => s.scope.id === cap.id) || corpus.rules.some((r) => r.rule.id === cap.id))
-        add({
-          severity: "refuse",
-          kind: "a-subsystem-shares-an-id-with-something-else",
-          where: cap.id,
-          what: "a scope or a rule here is also called this, and a bare reference resolves to one of them",
-          fix: "rename one. ⛔ A reference does not become ambiguous, it becomes silently wrong — the loser is whichever the resolver checks second",
-        });
       if (cap.in && !subs.has(cap.in))
         add({
           severity: "refuse",

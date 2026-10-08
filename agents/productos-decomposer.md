@@ -62,6 +62,18 @@ the clock serves the ledger and the ledger serves the money. Use `<subsystem>#of
 that only ever serves machinery is machinery nobody asked for, and from one level up that looks
 exactly like layering.
 
+### ⛔ Name a part after what it is, even when a feature already has that name
+
+A subsystem is addressed as **`<id>#offers`**, and one of its capabilities as
+`<id>#offers#<capability>`. The subsystem is deliberately *not* addressable by a bare id, and that
+is what lets you do the natural thing: **a part may share a name with the area of product truth it
+answers.** `access-control#offers` is the part of the system; `access-control` is the feature
+area about it. The same subject from two sides, and nothing is ambiguous.
+
+This was once refused. Run against a real corpus whose v1 capability tree had been carried into
+product truth under its own names, the refusal fired on five of six subsystems and asked for a
+rename that would have made every name worse. Do not invent `access-control-subsystem`.
+
 ### Areas, nesting, and cross-reference
 
 `in:` is containment and it is a tree — the same shape the product's own grouping uses. An area
