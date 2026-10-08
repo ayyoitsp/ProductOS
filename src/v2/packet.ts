@@ -90,11 +90,23 @@ function compileOne(corpus: Corpus, scopeId: string): string | null {
    * Which requirements were worked out from the claim as it now reads, and which were not.
    * ⛔ One source — `demonstrate.ts` — so the packet cannot disagree with `check` about it.
    */
-  const states = new Map<string, string>(
-    (entry.scope.exchanges ?? []).flatMap((e) =>
-      (demonstrationOf(corpus, scopeId, e.id)?.requirements ?? []).map((r) => [r.ref, r.state])
-    )
+  const derived = (entry.scope.exchanges ?? []).flatMap(
+    (e) => demonstrationOf(corpus, scopeId, e.id)?.requirements ?? []
   );
+  const states = new Map<string, string>(derived.map((r) => [r.ref, r.state]));
+  /**
+   * ⛔ WHICH REQUIREMENTS REST ON TRUTH NOBODY HAS AGREED TO — information, not a gate.
+   *
+   * Peter: *"capabilities should be generated based on current truth, have the accepted state feed
+   * in."* This is the feeding in. Both derived layers were briefly gated behind sign-off, and a
+   * gate's only output is absence: the requirement is missing and the reader cannot tell whether
+   * that is because nobody agreed the claim or because nobody ran the role.
+   *
+   * ⛔ STATEMENT-GRAINED, which is why this is not the same as the per-exchange stamp printed above.
+   * Acceptance lands on a slot or one of its statements, so an exchange can carry one requirement
+   * resting on an agreed sentence and another resting on a proposal.
+   */
+  const unagreed = new Set(derived.filter((r) => !r.agreed).map((r) => r.ref));
   const disputes = disputeIndex(corpus);
   const deferrals = new Map(corpus.verdicts.filter((v) => v.kind === "defer").map((v) => [v.target!, v]));
   const out: string[] = [];
@@ -712,6 +724,12 @@ function compileOne(corpus: Corpus, scopeId: string): string | null {
       manifest.push(
         `> ⚠ **${typed} of ${states.size} ${typed === 1 ? "requirement was" : "requirements were"} typed by hand** rather than worked out from the claim, ` +
           `so nothing can say whether ${typed === 1 ? "it is" : "they are"} still current.`
+      );
+    if (unagreed.size)
+      manifest.push(
+        `> ⚠ **${unagreed.size} of ${states.size} ${unagreed.size === 1 ? "requirement rests" : "requirements rest"} on a sentence nobody has agreed to yet.** ` +
+          `${unagreed.size === 1 ? "It is" : "They are"} here because the set is worked out from the truth as it reads, not from what has been signed off — ` +
+          `so ${unagreed.size === 1 ? "it" : "they"} may change when somebody reads the claim. Build what is agreed first.`
       );
   }
   if (partial.length)

@@ -2201,6 +2201,39 @@ export const CapabilityOffering = z
      * truth: machinery that only ever serves machinery is machinery nobody asked for.
      */
     serves: z.array(z.string().regex(REF_PATTERN, REF_MESSAGE)).min(1),
+    /**
+     * What this was worked out from, and when — the same shape `Criterion.derived` carries, and
+     * for the same reason.
+     *
+     * ⛔ A CAPABILITY IS GENERATED FROM CURRENT TRUTH AND CARRIES AN INVALIDATED STATE. Peter:
+     * *"capabilities should be generated based on current truth, have the accepted state feed in.
+     * test cases should be generated too. they should just carry an invalidated state"*.
+     *
+     * This replaces a gate. `decomposer` was briefly routed behind sign-off, on the reasoning that
+     * a part flows from agreed truth so decomposing a draft means designing the system twice — and
+     * that was wrong in both directions. It put an engineering AUTHOR on the judges' side of a line
+     * this repo had already drawn, and it meant nobody could see what a promise costs until after
+     * they had agreed to it, which is exactly backwards for the stage where `buildability` and
+     * `architecture` ask their questions.
+     *
+     * ⛔ `from` HASHES WHAT IT SERVES, NOT THE PART ITSELF. `capabilityHash` already answers "has
+     * this part been reworked" for a future engineering agreement. This answers the other question:
+     * has the truth this part exists to answer moved since anybody worked the part out. One hash
+     * over the whole `serves` set, because a part is coarse by design — "roughly what they do" —
+     * and the useful grain is the part, not the individual promise.
+     *
+     * Absent means nobody recorded what it was worked out from, which is the same third state
+     * `Criterion` has: not wrong, just unfalsifiable.
+     */
+    derived: z
+      .object({
+        by: z.string().min(1),
+        at: dateish,
+        /** The hash of everything this serves, as it read when the part was worked out. */
+        from: z.string().min(8),
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 export type CapabilityOffering = z.infer<typeof CapabilityOffering>;

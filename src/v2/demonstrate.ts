@@ -23,9 +23,10 @@
  * it is countable, none of it needs a model, and without it "re-derive the tests" means throwing
  * the previous answer away every time truth moves by a comma.
  */
-import { DEMONSTRABLE_SLOTS, owesDemonstration, statements, type Criterion, type SlotName } from "./schema.js";
+import { DEMONSTRABLE_SLOTS, owesDemonstration, statements, type Criterion, type CapabilityOffering, type SlotName } from "./schema.js";
 import { resolveRules, type Corpus } from "./load.js";
-import { claimHash } from "./stamp.js";
+import { claimHash, capabilityHash, stampFor } from "./stamp.js";
+import { resolveRef } from "./ref.js";
 
 /**
  * ⛔ THREE STATES, AND `authored` IS ONE OF THEM RATHER THAN AN ERROR.
@@ -52,6 +53,20 @@ export interface Requirement {
   /** The claim this demonstrates, and its hash now. */
   claim: string;
   now: string | null;
+  /**
+   * Whether a person has agreed to the claim this was worked out from.
+   *
+   * ⛔ REPORTED, NEVER REQUIRED — and that distinction is the whole correction. Peter: *"why should
+   * capabilities depend on acceptance?"*, then *"capabilities should be generated based on current
+   * truth, have the accepted state feed in."*
+   *
+   * Both derived layers were briefly gated behind sign-off. A gate's only output is absence: the
+   * thing is missing and nobody can tell whether that is because the truth is unagreed or because
+   * nobody ran the role. Feeding the state in says strictly more — this requirement exists, here is
+   * what it demonstrates, and nobody has agreed to that sentence yet — which is what a reader
+   * actually needs in order to decide how much to lean on it.
+   */
+  agreed: boolean;
 }
 
 export interface Demonstration {
@@ -95,6 +110,8 @@ export function demonstrationOf(corpus: Corpus, scopeId: string, exchangeId: str
       claim,
       now,
       state: !c.derived ? "authored" : c.derived.from === now ? "current" : "stale",
+      /** ⛔ Information, not a precondition. See `Requirement.agreed`. */
+      agreed: stampFor(corpus, claim).state === "accepted",
     };
   });
 
@@ -126,6 +143,74 @@ export function demonstrations(corpus: Corpus): Demonstration[] {
     scope.exchanges
       .map((e) => demonstrationOf(corpus, scope.id, e.id))
       .filter((d): d is Demonstration => d !== null)
+  );
+}
+
+// ---------------------------------------------------------------------------
+// The other derived layer. ⛔ Same question, same three states, one home.
+
+/**
+ * The hash of everything a capability serves, as it now reads.
+ *
+ * ⛔ ONE HOME FOR BOTH DERIVED LAYERS, because the question is identical: has the truth this was
+ * worked out from moved since anybody worked it out. A capability and a requirement go stale for
+ * the same reason and must not answer it two different ways — `check` reports both, the page shows
+ * both, and two implementations would drift the way `gateFor` drifted from `check` by one clause.
+ *
+ * ⛔ A `serves` TARGET MAY BE ANOTHER CAPABILITY, so this resolves either: a product ref hashes
+ * through `claimHash`, a `#offers#` ref through that part's own `capabilityHash`. The clock serves
+ * the ledger serves the money, and reworking the ledger has to invalidate the clock — otherwise the
+ * layering this model deliberately allows is the one place staleness cannot reach.
+ */
+export function servesHash(corpus: Corpus, serves: readonly string[]): string {
+  const parts = serves.map((s) => {
+    const r = resolveRef(corpus, s);
+    if ("error" in r) return `${s}=gone`;
+    if (r.ref.kind === "capability") {
+      const { subsystem, capability } = r.ref;
+      const sub = corpus.capabilities.find((c) => c.capability.id === subsystem)?.capability;
+      const o = sub?.offers.find((x) => x.id === capability);
+      /** ⛔ Its `derived` is excluded: a neighbour being re-derived is not this part changing. */
+      return `${s}=${o ? capabilityHash({ ...o, derived: undefined }) : "gone"}`;
+    }
+    return `${s}=${claimHash(corpus, s) ?? "gone"}`;
+  });
+  return capabilityHash(parts);
+}
+
+export interface DerivedCapability {
+  /** `<subsystem>#offers#<id>` */
+  ref: string;
+  subsystem: string;
+  offering: CapabilityOffering;
+  state: RequirementState;
+  now: string;
+  /** ⛔ Whether anybody has agreed to the truth this part answers. Reported, never required. */
+  agreed: boolean;
+}
+
+export function derivedCapabilities(corpus: Corpus): DerivedCapability[] {
+  return corpus.capabilities.flatMap(({ capability }) =>
+    capability.offers.map((o) => {
+      const now = servesHash(corpus, o.serves);
+      return {
+        ref: `${capability.id}#offers#${o.id}`,
+        subsystem: capability.id,
+        offering: o,
+        now,
+        state: (!o.derived ? "authored" : o.derived.from === now ? "current" : "stale") as RequirementState,
+        /**
+         * ⛔ Every product statement it serves has to be agreed for this to read as agreed — a part
+         * answering one settled promise and one draft is answering a draft.
+         */
+        agreed: o.serves.every((s) => {
+          const r = resolveRef(corpus, s);
+          if ("error" in r) return false;
+          if (r.ref.kind === "capability") return true; // judged at the part it points at
+          return stampFor(corpus, s).state === "accepted";
+        }),
+      };
+    })
   );
 }
 

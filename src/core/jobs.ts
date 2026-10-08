@@ -1176,7 +1176,7 @@ export const AUTHORS: Author[] = [
       "answer, because naming the defect is its only output. A judge with no author is how the " +
       "whole layer stayed as thin as whoever happened to be describing the feature.",
     reads: [
-      "the claim, as agreed — ⛔ never a draft, because working out the tests for a sentence nobody has accepted means doing it twice",
+      "the claim as it now reads — ⛔ agreed or not, and whether it is agreed is reported beside each requirement rather than deciding whether there is one",
       "what the claim refuses and what it fails at, because those are the cases a happy-path demonstration never reaches",
       "what the slot says statement by statement, where it says several things, so each one is demonstrated rather than the first",
       "the rules resolved into the slot, because a requirement has to hold under them and not only under the local sentence",
@@ -1598,6 +1598,27 @@ export const SHIMS: Shim[] = [
        */
       { role: "machinist", why: "the half of this feature nobody presses — what runs by itself, and what sets it off" },
       { role: "instrumenter", why: "what has to be recorded for any of this feature's measures to be knowable" },
+      /**
+       * ⛔ THE TWO DERIVED LAYERS, GENERATED FROM TRUTH AS IT NOW READS — not gated on anybody
+       * having agreed to it.
+       *
+       * Peter: *"capabilities should be generated based on current truth, have the accepted state
+       * feed in. test cases should be generated too. they should just carry an invalidated state"*.
+       *
+       * Both were briefly on `hand it to the builders`, behind sign-off, on the reasoning that
+       * deriving over a draft means deriving twice. That reasoning is wrong twice over: it put two
+       * AUTHORS on the judges' side of the line the comment above draws, and it meant the person
+       * deciding whether to sign off could not see what the promise costs — because the
+       * decomposition and the test set only existed after they had signed.
+       *
+       * Deriving twice is not a cost worth a gate. Each derived thing records the hash of the truth
+       * it came from, so a reword leaves it INVALIDATED and nameable rather than silently wrong,
+       * and re-deriving over unchanged truth is a no-op. ⛔ The accepted state feeds in as
+       * information — a requirement worked out from a sentence nobody has agreed to says so — which
+       * is strictly more than a gate could tell anybody, because a gate's output is absence.
+       */
+      { role: "decomposer", fan: true, why: "which parts of the system this feature needs, from the truth as it now reads" },
+      { role: "demonstrator", fan: true, why: "what would have to be demonstrated for each claim to be believed, invalidated when the claim moves" },
       { role: "designer", fan: true, why: "screens the product should have and nothing renders yet" },
       /**
        * ⛔ PRODUCT AND DESIGN ONLY, AND IT STOPS. Peter: *"we need to a rough scope, nail down human
@@ -1664,32 +1685,30 @@ export const SHIMS: Shim[] = [
     at: "ready for review",
     steps: [
       /**
-       * ⛔ THE ONE ENGINEERING AUTHOR ON THIS SIDE OF THE GATE, AND THE GATE IS THE ARGUMENT.
+       * ⛔ THE TWO DERIVED LAYERS USED TO RUN HERE, AND GATING THEM ON SIGN-OFF WAS WRONG.
        *
-       * `machinist` and `instrumenter` write in `scope a feature`, before anybody agrees, because
-       * what they write IS product truth — "the day a standing allowance falls due" is a sentence
-       * somebody has to sign off, so it has to exist before the signing.
+       * `decomposer` and `demonstrator` were placed on this route on the reasoning that a
+       * capability and a test set both flow from agreed truth, so deriving either over a draft
+       * means doing it twice. Peter: *"why should capabilities depend on acceptance?"* and then
+       * *"capabilities should be generated based on current truth, have the accepted state feed in.
+       * test cases should be generated too. they should just carry an invalidated state"*.
        *
-       * A capability is the opposite: it is not truth, nobody agrees to it, and it exists to answer
-       * a promise that has already been agreed. Peter: *"those should flow from the product
-       * design"*. Decomposing a draft would mean designing the system twice — once for the shape
-       * that was proposed and again for the one that was agreed — and the first pass is the one a
-       * builder would find lying around.
+       * He is right, and this file already said so twelve lines above: **engineering authors run
+       * during specification; engineering judges wait.** `machinist` and `instrumenter` write
+       * before anybody agrees. Both of these are authors and both were put on the judges' side.
        *
-       * ⛔ It runs BEFORE the two judges below, because `architecture`'s question is whether these
-       * are the right subsystems and `buildability`'s is whether somebody could start on Monday.
-       * Both were being asked against a corpus whose machinery layer did not exist.
+       * ⛔ AND THE GATE INVERTED THE POINT OF THE STAGE. `buildability` asks whether somebody could
+       * start on Monday and `architecture` asks whether these are the right subsystems — both at
+       * THIS stage. With the decomposition written only here, the person deciding whether to sign
+       * off had no idea what the promise costs, and the one review that could have shown a promise
+       * to be expensive arrived after the promise was agreed.
+       *
+       * What replaces the gate is a STATE: each derived thing records the truth it came from, so a
+       * reword invalidates it rather than blocking it, and whether that truth is accepted is
+       * reported alongside rather than required. The judges stay here, which is where a judge
+       * belongs.
        */
-      { role: "decomposer", fan: true, why: "which parts of the system this needs, now that the promise it answers is agreed" },
       { role: "architecture", why: "whether those are the right subsystems, with boundaries that hold" },
-      /**
-       * ⛔ BEFORE ITS OWN JUDGE, AND AFTER THE SIGN-OFF. A requirement is worked out from the claim
-       * as AGREED — doing it over a draft means doing it twice, and the first set is the one a
-       * builder finds lying around. And it has to run before `test-design`, which has spent its
-       * whole existence asking whether each criterion would show its claim holding with nothing
-       * upstream that could act on the answer.
-       */
-      { role: "demonstrator", fan: true, why: "what would have to be demonstrated for each agreed claim to be believed" },
       { role: "buildability", why: "whether somebody could start on Monday — the second tenet, read from a builder's seat" },
       { role: "test-design", why: "whether each criterion would show its claim holding, rather than merely pass" },
     ],
