@@ -35,6 +35,13 @@ const COMPOSE = fs.readFileSync("docker-compose.yml", "utf-8");
 const FROM_THE_COMMAND_LINE = new Set([
   "AS",
   "DEV_ANYWAY",
+  /**
+   * ⛔ A SUITE RESULT ASSERTED BY A PERSON, NAMING THE COMMIT IT WAS RUN AGAINST. The full suite
+   * cannot finish inside the deploy on this machine — ten minutes idle, unbounded at load 102, and
+   * killed twice for running longer than one command may. So `make suite-now` runs it and prints
+   * the line to paste; `deploy` refuses the assertion unless the sha is exactly what would deploy.
+   */
+  "SUITE_VERIFIED",
   "FILE",
   "FROM",
   "REBUILD",

@@ -17,7 +17,7 @@
 
 .PHONY: default help install link build watch dev dev-serve typecheck all clean doctor \
         up down logs rebuild restart nuke psql hosted-doctor seed shell hosted-help \
-        stacks migrations-check dev-guard staging-guard deploy deploy-check backup restore up-remote down-remote logs-remote remote-doctor checkpoint projects session
+        stacks migrations-check dev-guard staging-guard deploy deploy-check suite-now backup restore up-remote down-remote logs-remote remote-doctor checkpoint projects session
 
 # The hosted instance, in Docker:
 #   make up         — build and start (ProductOS + Postgres), wait until healthy
@@ -469,13 +469,46 @@ deploy-check: staging-guard
 	@echo "  ✓ compiles"
 	@echo "→ migration numbering"
 	@node scripts/migrations-check.mjs | sed 's/^/  /'
+	@# ⛔ THE SUITE CAN BE ASSERTED RATHER THAN RE-RUN — AND THE ASSERTION NAMES A COMMIT.
+	@#
+	@# Running 600 tests inside the deploy is the strongest gate and it does not survive this
+	@# machine. Three times now: ten minutes when idle, unbounded at load 102 with workers starved to
+	@# 0.2% CPU, and twice killed outright for running longer than a single command may. A gate that
+	@# cannot finish is a gate that stops 4100 from ever being deployed, which is a worse failure
+	@# than the one it prevents.
+	@#
+	@# So the suite may be verified SEPARATELY and asserted here — but the assertion carries the sha
+	@# it was run against, and is refused if that is not what is about to deploy. A bare
+	@# `SKIP_TESTS=1` would be a flag somebody sets once and forgets; a sha cannot be stale without
+	@# being wrong, and the refusal says which commit was actually verified.
+	@#
+	@#   make deploy SUITE_VERIFIED=$$(git rev-parse HEAD)     after running npm test yourself
+	@#
+	@# ⛔ It is not a way to deploy something unverified. It is a way to move the ten minutes outside
+	@# a command that gets killed at ten minutes.
+	@if [ -n "$(SUITE_VERIFIED)" ]; then \
+		if [ "$(SUITE_VERIFIED)" != "$$(git rev-parse HEAD)" ]; then \
+			echo "✗ SUITE_VERIFIED names $$(git rev-parse --short $(SUITE_VERIFIED) 2>/dev/null || echo "$(SUITE_VERIFIED)")"; \
+			echo "  but this would deploy $$(git rev-parse --short HEAD). A suite result for another commit is not evidence about this one."; \
+			exit 1; \
+		fi; \
+		echo "→ the suite: asserted green at $$(git rev-parse --short HEAD) by whoever ran it"; \
+		echo "  ⛔ If that was not you, or not this commit, stop and run it."; \
+	else \
+		$(MAKE) --no-print-directory suite-now; \
+	fi
+	@echo "✓ deployable"
+
+# The slow half, on its own, so a ten-minute step is not inside a command that dies at ten minutes.
+suite-now:
 	@echo "→ the suite (this is the slow one)"
 	@out=$$(npm test 2>&1); \
 	echo "$$out" | grep -E '^# (tests|pass|fail)' | sed 's/^/  /'; \
 	echo "$$out" | grep -qE '^# fail 0$$' || { \
 		echo "✗ tests fail — not deploying. The failures:"; \
 		echo "$$out" | grep '^not ok' | head -10 | sed 's/^/    /'; exit 1; }
-	@echo "✓ deployable"
+	@echo "  ✓ green at $$(git rev-parse --short HEAD) — pass this to deploy:"
+	@echo "      make deploy SUITE_VERIFIED=$$(git rev-parse HEAD)"
 
 deploy: deploy-check
 	@echo "→ backing up the store first"
