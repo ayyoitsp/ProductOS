@@ -51,7 +51,30 @@ if [ -z "$top" ] || [ -z "$main" ]; then
   name=main
   slug=main
 else
-  if [ "$top" = "$main" ]; then name=main; else name=$(basename "$top"); fi
+  if [ "$top" = "$main" ]; then
+    name=main
+  else
+    name=$(basename "$top")
+    # ⛔ `main` IS RESERVED, AND A WORKTREE DIRECTORY MAY BE CALLED THAT.
+    #
+    # The main checkout is named `main` above regardless of its path. Anything else is named after
+    # its directory — so a worktree at `…/scratchpad/main` claimed `productos-dev-main` and port
+    # 4286, the SAME compose project and the SAME two ports as the main checkout. Two trees sharing
+    # one project share one volume and one database, which is the single thing a stack per worktree
+    # exists to prevent; it arrived back through the name rather than through the port arithmetic.
+    #
+    # Found by `no checkout resolves to staging's stack or either of its ports`, which asserts the
+    # derived ports are distinct across every checkout git knows about. Another session had made a
+    # worktree called `main` in its scratchpad, and the whole suite went red on `origin/main`.
+    #
+    # Disambiguated by a stable hash of the ABSOLUTE PATH, so the answer survives `make down`, a
+    # reboot and a re-clone, and is the same asked from inside the worktree or from anywhere else.
+    # ⛔ Only when it would collide: appending a hash unconditionally would rename every existing
+    # stack, and five sessions have containers running under the current names.
+    if [ "$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g')" = "main" ]; then
+      name="$name-$(printf '%s' "$top" | cksum | awk '{ printf "%04x", $1 % 65536 }')"
+    fi
+  fi
   slug=$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g' | cut -c1-40)
 fi
 

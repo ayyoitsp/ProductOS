@@ -9,8 +9,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
+
+import { temp } from "./support/temp.mjs";
 
 import {
   readableMessage,
@@ -134,7 +135,7 @@ test("every candidate carries the one consequence that is a fact", () => {
 
 /** A corpus on disk, so `proposeSlots` is exercised the way it runs. */
 function corpusWith(component, exchanges) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "slots-"));
+  const dir = temp("slots-");
   fs.mkdirSync(path.join(dir, "src"), { recursive: true });
   fs.writeFileSync(path.join(dir, "src/Screen.tsx"), component);
   return { dir, scope: { id: "s", views: [{ id: "v", drawn_from: "src/Screen.tsx" }], exchanges } };

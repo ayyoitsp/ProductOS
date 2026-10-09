@@ -231,6 +231,51 @@ const stack = (dir) => {
  * no branch of `scripts/stack.sh` that can answer 4100. Found while wiring `make up`: from the main
  * checkout it wanted 4100, which the staging container was holding.
  */
+/**
+ * ⛔ `main` IS RESERVED, AND A WORKTREE DIRECTORY MAY BE CALLED THAT — WHICH TOOK THE SUITE RED.
+ *
+ * The main checkout is named `main` whatever its path; every other checkout is named after its
+ * directory. So a worktree at `…/scratchpad/main` resolved to `productos-dev-main` on 4286 — the
+ * same compose project and the same two ports as the main checkout. Two trees under one project
+ * share one volume and one database, which is the single thing a stack per worktree exists to
+ * prevent, arriving back through the NAME rather than through the port arithmetic.
+ *
+ * The test below catches it on this machine only while such a worktree happens to exist. This one
+ * catches it always, by asking the script directly.
+ */
+test("a worktree named main does not take the main checkout's stack", () => {
+  const main = execFileSync("./scripts/stack.sh", [".", "staging-stack"], { encoding: "utf-8" });
+  assert.ok(main.trim().length > 0, "the script did not answer at all");
+
+  const mine = stack(execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf-8" }).trim());
+
+  /** A real worktree whose directory is literally `main`, which is the colliding shape. */
+  const parent = temp("productos-wt-");
+  const at = path.join(parent, "main");
+  execFileSync("git", ["worktree", "add", "--detach", at, "HEAD"], { stdio: "ignore" });
+  try {
+    const named = stack(at);
+    const theMainCheckout = stack(
+      execFileSync("git", ["worktree", "list"], { encoding: "utf-8" }).trim().split("\n")[0].split(" ")[0],
+    );
+    assert.equal(theMainCheckout.PRODUCTOS_STACK, "productos-dev-main", "the reserved name moved");
+    assert.notEqual(
+      named.PRODUCTOS_STACK,
+      theMainCheckout.PRODUCTOS_STACK,
+      "a worktree called main took the main checkout's compose project — one volume, two trees",
+    );
+    assert.notEqual(named.PORT, theMainCheckout.PORT, "and its port");
+    assert.notEqual(named.PG_PORT, theMainCheckout.PG_PORT, "and its postgres port");
+    assert.notEqual(named.PORT, mine.PORT, "it also collided with this checkout");
+
+    /** ⛔ Stable: the same answer asked twice, and asked from inside the worktree. */
+    assert.equal(stack(at).PRODUCTOS_STACK, named.PRODUCTOS_STACK, "the name is not stable");
+    assert.match(named.PRODUCTOS_STACK, /^productos-dev-main-[0-9a-f]{4}$/, "not disambiguated by a path hash");
+  } finally {
+    execFileSync("git", ["worktree", "remove", "--force", at], { stdio: "ignore" });
+  }
+});
+
 test("no checkout resolves to staging's stack or either of its ports", () => {
   const staging = {
     stack: execFileSync("./scripts/stack.sh", [".", "staging-stack"], { encoding: "utf-8" }).trim(),
