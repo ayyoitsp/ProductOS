@@ -428,6 +428,18 @@ export const AREAS: Area[] = [
        * where neither is available it raises the question with no answer.
        */
       "src/v2/propose-slots.ts",
+      /**
+       * ⛔ `generate`, AND THE ONLY ONE HERE THAT INVENTS NOTHING AT ALL. It proposes that an
+       * existing statement is filed under the wrong question and names the one it answers — same
+       * words, same id, different slot.
+       *
+       * It exists because 45 of bilrost's 54 exchanges have exactly one slot filled and it is
+       * always `answer`: they carry `was:` provenance from v1, where a feature held a flat list of
+       * behaviours and there was no `refuses` or `fails` to file anything under. So the blanks are
+       * not missing truth, they are truth filed in the only place that existed — and moving it is
+       * cheaper and safer than going to the code for new sentences.
+       */
+      "src/v2/reslot.ts",
       "src/v2/appcss.ts",
       /** ⛔ Glyphs read out of the product's own icon package — a generator source, same as draw. */
       "src/v2/icons.ts",
