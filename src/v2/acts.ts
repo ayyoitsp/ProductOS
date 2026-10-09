@@ -1168,3 +1168,74 @@ function doDefer(dir: string, o: DeferPayload, consent: Consent): Outcome {
 }
 
 export type { SlotName };
+
+/**
+ * ⛔ WHAT EACH ACT OWES, IN ONE TABLE, SHARED BY EVERY SURFACE THAT ASKS FOR IT.
+ *
+ * The floors live on the `Verdict` schema and are charged there; this is only what to ask for,
+ * so a person is never refused for a field no surface offered them. That exact dead end happened
+ * twice on the CLI — a refusal printing a remedy the tool then rejected.
+ *
+ * ⛔ AND IT SAID "EVERY SURFACE" WHILE BEING PRIVATE TO THE RENDERER.
+ *
+ * It was a `const` inside `page.ts`, so the only surface that could read what an act owes was the
+ * one drawing the composer. `/api/v2/in` could not, the CLI could not, and MCP could not — which
+ * means the third surface to ask would have hardcoded its own copy, and the second would have been
+ * refused for a field it never offered. The comment above describes that dead end happening twice
+ * already; a generic door and an MCP bridge are the third and fourth chances to repeat it.
+ *
+ * ⛔ IT LIVES BESIDE `payloadFrom`, WHICH READS EXACTLY THESE FIELDS. That is the other half of the
+ * same fact: this says what to ask for, `payloadFrom` says where the answer goes. Apart, they drift
+ * — a field added to one and not the other is a question nobody asked or an answer nobody stored.
+ *
+ * ⛔ KEYED BY THE COMPOSER'S VOCABULARY, NOT BY INTENT NAME, and the difference is load-bearing.
+ * `say` HERE is a ruling written in somebody's own words — a `rule` whose sentence the person
+ * supplies. The `say` INTENT on the door is a reply on a filed request. One word, two things, two
+ * tables; merging them by name would route a reply into a ruling.
+ */
+/**
+ * ⛔ WHAT ELSE AN ACT WILL ACCEPT, WHICH NOBODY OWES — a different fact from `OWED`, so a different
+ * table.
+ *
+ * `OWED` is what a surface must ASK a person for; this is what `payloadFrom` will READ if it is
+ * offered. Collapsing the two would make the composer demand `blockedBy` from somebody recording
+ * that they read a scope, and the whole point of `OWED` is that nobody is asked for a field they
+ * do not owe.
+ *
+ * ⛔ IT EXISTS BECAUSE `payloadFrom` READ FIELDS NO TABLE NAMED. `read` takes `buildable`,
+ * `blockedBy` and `note`; `withdraw` takes `because`; a ruling takes six more. None of them
+ * appeared in `OWED`, so a caller that was not the page could not discover them at all — it had to
+ * read `payloadFrom` and guess which branch it would land in.
+ */
+export const ALSO: Record<string, Array<{ name: string; label: string; long?: boolean }>> = {
+  read: [
+    { name: "buildable", label: "Whether somebody could build from this as it stands" },
+    { name: "blockedBy", label: "What stops them, if anything — refs" },
+    { name: "note", label: "Anything the reading should carry", long: true },
+  ],
+  withdraw: [{ name: "because", label: "Why it is being taken out", long: true }],
+  rule: [
+    { name: "pick", label: "Which drafted option was taken, by number" },
+    { name: "says", label: "The sentence, when no drafted option is right", long: true },
+    { name: "alsoConsidered", label: "What was rejected and why it lost", long: true },
+    { name: "stands", label: "What this holds for" },
+    { name: "then", label: "What would show this holding" },
+    { name: "defersTo", label: "A rule this yields to" },
+    { name: "insteadOf", label: "What this replaces" },
+    { name: "refuses", label: "Whether this is a refusal" },
+  ],
+};
+
+export const OWED: Record<string, Array<{ name: string; label: string; floor?: number; long?: boolean }>> = {
+  accept: [],
+  rule: [{ name: "because", label: "Why — this is what stops it being argued again", floor: 40, long: true }],
+  say: [
+    { name: "says", label: "What it is, now decided", floor: 10, long: true },
+    { name: "because", label: "Why — this is what stops it being argued again", floor: 40, long: true },
+  ],
+  waive: [{ name: "because", label: "Why this is not yours to answer — a builder is about to be told it is theirs", floor: 40, long: true }],
+  defer: [
+    { name: "because", label: "Why not now", long: true },
+    { name: "until", label: "What brings it back — an event, not a date" },
+  ],
+};

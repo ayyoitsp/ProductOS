@@ -24,7 +24,7 @@ import { watchLog, lineFor, type LoggedEvent } from "./log.js";
 import { inbox, DEFAULT_LEASE_MS } from "./inbox.js";
 import { working } from "./presence.js";
 import { principalOf, localAccount, type Principal } from "./identity.js";
-import { intentNamed, refuseIntent, theIntents } from "./intents.js";
+import { intentNamed, refuseIntent, incomplete, theIntents, describeIntents } from "./intents.js";
 
 
 export interface V2Routes {
@@ -385,6 +385,45 @@ export async function v2Route(req: http.IncomingMessage, res: http.ServerRespons
    * That binds harder here — a classifier mis-reading a sentence as `accept` mints consent nobody
    * gave. An unknown intent is refused with the list.
    */
+  /**
+   * ⛔ THE DOOR DESCRIBES ITSELF, ON THE SAME PATH IT TAKES ORDERS ON.
+   *
+   * Peter: *"let's make sure we have a re-usable way to send messages to product OS, and appropriate
+   * context/routing hints… eventually i'd like to be able to send mcp commands or have a slack
+   * channel monitor that would take commands and route to the appropriate place"*.
+   *
+   * The door existed and could not say what it would take. `theIntents()` returned eleven names and
+   * nothing else — not what each does, not what authority it needs, not one field — while its own
+   * comment claimed it existed "so a caller never has to read this file to find the list". True of
+   * the names, and the names are the part nobody needed help with. So the second client (MCP) and
+   * the third (Slack) would each hardcode a contract they could not see, and `OWED`'s comment
+   * already records what that costs: a refusal naming a remedy the surface never offered, twice.
+   *
+   * ⛔ GENERATED FROM `INTENTS`, NEVER WRITTEN OUT HERE. A hand-kept description beside a registry
+   * is the same defect as a hand-kept list beside a union: it agrees on the day it is written.
+   *
+   * ⛔ GET ON THE POST PATH, DELIBERATELY. "What can I say to you" and "here is what I am saying"
+   * are one conversation, so a caller that found the door has found its manual.
+   */
+  if (req.method === "GET" && p === "/api/v2/in") {
+    return (
+      json(res, {
+        door: "/api/v2/in",
+        how: "POST { intent, ...fields }",
+        gates: {
+          consent: "a person agreed — ⛔ a token can never claim this, whatever it asks",
+          relay: "carrying a press somebody else made, keeping whose it was",
+          author: "this principal's own words, claiming nothing about what anybody agreed to",
+          open: "anybody may",
+        },
+        intents: describeIntents(),
+        /** ⛔ The rule a relay must obey, carried WITH the contract rather than left in a file. */
+        never: "nothing here guesses an intent, or what a request is about, from a sentence",
+      }),
+      true
+    );
+  }
+
   if (req.method === "POST" && p === "/api/v2/in") {
     const body = await readJson(req);
     const name = String(body.intent ?? "").trim();
@@ -396,15 +435,31 @@ export async function v2Route(req: http.IncomingMessage, res: http.ServerRespons
           {
             ok: false,
             why: name ? `"${name}" is not something you can ask for` : "say which intent you mean",
-            detail: [theIntents().join(" · "), "⛔ nothing here guesses an intent from a sentence"],
+            detail: [
+              theIntents().join(" · "),
+              "⛔ nothing here guesses an intent from a sentence",
+              "GET this same path for what each one does and the fields it takes",
+            ],
           },
           400
         ),
         true
       );
     const asking = { dir, who, pressing: whoIsPressing(req, opts.by) };
+    /**
+     * ⛔ TWO QUESTIONS, IN THIS ORDER, WITH DIFFERENT STATUSES.
+     *
+     * 403 is "you may not"; 422 is "you have not said enough". A relay does opposite things with
+     * them — forbidden stops and tells a person, incomplete supplies the field and retries — so one
+     * status for both turns a retryable mistake into what reads as a permissions outage.
+     *
+     * ⛔ AND THE AUTHORITY IS FIRST. Listing an operation's fields and only then refusing the
+     * authority to perform it hands out its shape to a caller probing what it can reach.
+     */
     const refused = refuseIntent(intent, asking, body);
     if (refused) return json(res, refused, 403), true;
+    const short = incomplete(intent, body);
+    if (short) return json(res, short, 422), true;
     const r = intent.run(asking, body);
     return json(res, r, r.ok ? 200 : 422), true;
   }
