@@ -181,10 +181,22 @@ test("the seed's queue stays small enough to work", () => {
    * a count — what they owe is a requirement worked out per claim and a subsystem named per
    * behaviour, and neither is a review act.
    */
+  /**
+   * ⛔ `no-picture-of-this-screen-contains-this-control` IS THE SAME SHAPE AS
+   * `nothing-to-compare-this-against`, and it took this ratchet to notice.
+   *
+   * It says a derived state is about a control no drawing of that screen holds, so the state
+   * renders as the ordinary screen — real, and worth saying, because the failure is silent. But the
+   * only way to act on it is to draw the screen in a state where that control is on it, which is
+   * generation work and not a decision anybody owes. Counted as a question it took the seed from 14
+   * to 17 against 14 reviewable things, and this assertion failed — correctly by its own logic, and
+   * wrongly about the thing, exactly as the three paragraphs above describe.
+   */
   const INFORMATIONAL = new Set([
     "leans-on-an-example", "parked-by-a-person", "one-word-defined-twice", "nothing-to-compare-this-against",
     "behaviours-with-nothing-behind-them", "nothing-in-this-corpus-rests-on-anything",
     "requirements-nobody-worked-out", "behaviours-no-subsystem-answers",
+    "no-picture-of-this-screen-contains-this-control",
   ]);
   const questions = findings.filter((f) => f.severity === "note" && !INFORMATIONAL.has(f.kind));
   const exchanges = corpus.scopes.reduce((n, s) => n + s.scope.exchanges.length, 0);

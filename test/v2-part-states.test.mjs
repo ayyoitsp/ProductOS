@@ -30,6 +30,8 @@ import {
   undrawnConditions,
   undeclaredConditions,
   differenceOf,
+  baseFor,
+  unpicturedParts,
   STATE_CSS,
 } from "../dist/v2/states.js";
 import { browserOrSkip, openPage } from "./support/chrome.mjs";
@@ -408,4 +410,74 @@ test("a condition no part declares is reported, which is the spell check opennes
 
   /** ⛔ Hiding a part declares no condition, so it must not be reported as an undeclared one. */
   assert.deepEqual(undeclaredConditions(v, { label: "Hidden", holds: { continue: { hidden: true } } }), []);
+});
+
+// ---------------------------------------------------------------------------
+// Which picture a state is composed onto
+// ---------------------------------------------------------------------------
+
+test("a state is composed onto the picture that holds its control, not always the default frame", () => {
+  /**
+   * ⛔ FOUND BY TAKING A SCREENSHOT, NOT BY READING. Pressing "While it works" on bilrost's
+   * create-deal showed the plain form — because `use-existing-folder` is a control on the FOLDER
+   * step, and the folder step is filed as another state with its own picture. The derivation was
+   * right and the marking was right; the thing being marked did not contain the control.
+   *
+   * 16 derived states out of 18 rendered nothing, and every one of them looked fine.
+   */
+  const v = {
+    id: "wizard",
+    sketch_html: '<form><input data-part="name" /><button data-part="next">Next</button></form>',
+    parts: [
+      { id: "name", role: "entry", label: "Name", states: [] },
+      { id: "next", role: "commits", label: "Next", states: [] },
+      { id: "use-existing", role: "commits", label: "Use this one", states: [] },
+    ],
+    /** A later step, with its own drawing and its own controls. */
+    states: [{ label: "Folder", sketch_html: '<div><button data-part="use-existing">Use this one</button></div>' }],
+  };
+
+  const onTheStep = pictureOf(v, { label: "While it works", holds: { "use-existing": "busy" } });
+  assert.match(onTheStep, /data-part="use-existing" data-in="busy"/, "it composed onto a picture without the control");
+
+  /** ⛔ And a control the default frame DOES have still composes there — the frame wins a tie. */
+  const onTheFrame = pictureOf(v, { label: "Working", holds: { next: "busy" } });
+  assert.match(onTheFrame, /data-part="next" data-in="busy"/);
+  assert.match(onTheFrame, /data-part="name"/, "it left the default frame for no reason");
+});
+
+test("the base picture is chosen by how many of the parts it holds", () => {
+  const v = {
+    sketch_html: '<div><span data-part="a"></span></div>',
+    parts: [],
+    states: [
+      { label: "Few", sketch_html: '<div><span data-part="b"></span></div>' },
+      { label: "Most", sketch_html: '<div><span data-part="b"></span><span data-part="c"></span></div>' },
+    ],
+  };
+  assert.match(baseFor(v, ["b", "c"]), /data-part="c"/, "it did not pick the picture holding both");
+  /** ⛔ A tie goes to the default frame: it is the screen as it is. */
+  assert.equal(baseFor(v, []), v.sketch_html);
+  assert.equal(baseFor(v, ["a"]), v.sketch_html);
+});
+
+test("a control in no picture at all is reported, because marking it fails silently", () => {
+  /**
+   * ⛔ MARKING IS A STRING SUBSTITUTION. A control no drawing contains is simply not marked, and the
+   * state renders as the ordinary screen — so somebody presses the tab, sees nothing different, and
+   * concludes the case does not exist rather than that the picture is missing it.
+   */
+  const v = {
+    sketch_html: '<form><input data-part="name" /></form>',
+    parts: [{ id: "name", role: "entry", label: "Name", states: [] }],
+    states: [],
+  };
+  assert.deepEqual(unpicturedParts(v, { label: "x", holds: { nowhere: "busy" } }), ["nowhere"]);
+  assert.deepEqual(unpicturedParts(v, { label: "x", holds: { name: "invalid" } }), []);
+
+  /** ⛔ A state carrying its own drawing is somebody's picture and is never second-guessed. */
+  assert.deepEqual(
+    unpicturedParts(v, { label: "x", sketch_html: "<div>whatever</div>", holds: { nowhere: "busy" } }),
+    [],
+  );
 });

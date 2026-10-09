@@ -34,7 +34,7 @@ import { ruleHomes, reachOf } from "./grid.js";
 import { appStyleFor, styleDrift } from "./appcss.js";
 import { readLog } from "./log.js";
 import { landingsFor, finishesFor } from "./connects.js";
-import { pictureOf, unknownParts, undrawnConditions } from "./states.js";
+import { pictureOf, unknownParts, undrawnConditions, unpicturedParts } from "./states.js";
 import { deriveStates } from "./derive-states.js";
 import fs from "node:fs";
 import { resolvePathsOrThrow } from "../core/paths.js";
@@ -1367,13 +1367,42 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
        * answer with "it is a banner, not a field", which is a real answer this model can already
        * hold.
        */
-      for (const u of deriveStates(scope, v).unplaced) {
+      const derivedHere = deriveStates(scope, v);
+      for (const u of derivedHere.unplaced) {
         add({
           severity: "note",
           kind: "nothing-says-which-part-shows-this",
           where: `${scope.id}#${v.id}`,
           what: `"${u.outcome}" tells somebody "${u.told}" and nothing says where they read it — ${u.why}`,
           fix: "name the control it appears on, or say it is shown somewhere that is not a control and declare that part — until then this case has no picture and the sentence cannot be reviewed against one",
+        });
+      }
+
+      /**
+       * ---- a case whose control is in no picture of this screen ----
+       *
+       * ⛔ THE ONE WAY A STATE FAILS SILENTLY, AND IT WAS FOUND BY LOOKING RATHER THAN READING.
+       *
+       * A state is composed by marking the control it is about. Marking is a string substitution,
+       * so a control no drawing contains is simply not marked — and the tab renders the ordinary
+       * screen. A reviewer presses it, sees nothing different, and concludes the case does not
+       * exist rather than that the picture is missing it.
+       *
+       * On a real corpus this was 16 derived states out of 18 showing nothing at all, and every one
+       * of them looked fine.
+       */
+      const unpictured = new Map<string, string[]>();
+      for (const st of derivedHere.states)
+        for (const p of unpicturedParts(v, st))
+          unpictured.set(p, [...(unpictured.get(p) ?? []), st.label]);
+
+      for (const [part, labels] of unpictured) {
+        add({
+          severity: "note",
+          kind: "no-picture-of-this-screen-contains-this-control",
+          where: `${scope.id}#${v.id} · ${part}`,
+          what: `${labels.length} case${labels.length === 1 ? " is" : "s are"} about "${part}" — ${labels.slice(0, 3).join(", ")}${labels.length > 3 ? " …" : ""} — and no drawing of this screen contains it, so ${labels.length === 1 ? "it renders" : "each of them renders"} as the ordinary screen`,
+          fix: `draw the screen in a state where "${part}" is on it, or move the control to the screen it actually appears on — a case that renders as the default frame reads as a case that does not exist`,
         });
       }
 
