@@ -87,6 +87,22 @@ const AUTHORED_SHAPES = [
   "Steer",
   "Note",
   "Access",
+  /**
+   * ⛔ AND THIS ONE ESCAPED A SECOND WAY: IT HAD NO NAME TO PUT IN THE LIST.
+   *
+   * The three above were named shapes somebody forgot to add. `ViewState` was an anonymous object
+   * inside `View.states`, and this test walks each named shape exactly one level deep — so for
+   * `View` it confirmed `states:` was documented and never descended into what a state is made of.
+   *
+   * `holds` was the cost. Defined in the schema, composed by `states.ts`, rendered on the page,
+   * and named in no authoring instruction anywhere — so every state in every corpus kept being
+   * written as a whole second screenshot: 43 of them across bilrost, not one declaring it, which is
+   * precisely "a field that only ever appears where somebody typed it by hand".
+   *
+   * ⛔ So a shape being anonymous is now itself the bug. A field this test cannot reach is a field
+   * it is not checking, and an inline shape is unreachable by construction.
+   */
+  "ViewState",
 ];
 
 /**
@@ -117,6 +133,77 @@ function shapeOf(name, obj) {
   return cur._def.shape();
 }
 
+/**
+ * The key an author writes this shape UNDER — so an ambiguous field can be checked against the
+ * place it is actually written rather than against the whole document.
+ *
+ * ⛔ WITHOUT THIS THE TEST WAS VACUOUS FOR A FIFTH OF THE MODEL. 21 of 107 field names sit on more
+ * than one shape, and the check was a match against one concatenated blob — so a field documented
+ * on ANY shape marked that name documented on EVERY shape.
+ *
+ * Two real gaps were passing because of it, both of them concepts somebody had asked for by name:
+ *
+ *   ViewState.holds   passed on `Access.holds` — "what a role actually grants, listed", a flat list
+ *                     of permission names on an unrelated object. 43 states across bilrost carry a
+ *                     whole picture and not one declares `holds`, because no author was ever told
+ *                     it exists.
+ *   Part.states       passed on `View.states`. Peter: *"multiple buttons could have LOADING States.
+ *                     MULTIPLE FIELDS COULD HAVE ERROR STATES"* — the whole part-condition
+ *                     vocabulary (`busy`, `invalid`, `disabled`, `loading`, `empty`, `failed`)
+ *                     appears nowhere in any authoring instruction.
+ *
+ * ⛔ So a name is not an address. A field is documented when it is shown where it is written: in a
+ * fenced example that also carries the key its shape hangs off.
+ */
+/** Every fenced block in the instruction text, so a field can be read in context. */
+const BLOCKS = [...SKILL_TEXT.matchAll(/```[a-z]*\n([\s\S]*?)```/g)].map((m) => m[1]);
+
+/**
+ * Is this block an example OF this shape? It is, if it carries two or more of that shape's own
+ * fields — enough that a reader would recognise what they are looking at.
+ *
+ * ⛔ TWO, AND IT IS SELF-CALIBRATING RATHER THAN A LIST I MAINTAIN. The first cut demanded the
+ * parent key in the same block — `states:` for a `ViewState`, `parts:` for a `Part` — and reported
+ * 18 fields, 16 of which were fine and merely shown in a fragment that omitted the parent. A check
+ * that is wrong 16 times out of 18 gets waived on sight, which would have cost more than the hole
+ * it closes.
+ */
+function isExampleOf(block, fields) {
+  let hit = 0;
+  for (const f of fields) if (new RegExp(`(^|\\s)${f}:`, "m").test(block)) hit++;
+  return hit >= 2;
+}
+
+/**
+ * Ambiguous fields documented in prose rather than in an example, each with the sentence that does
+ * it. ⛔ An entry here is a claim that a named sentence tells an author what to write — not a way to
+ * silence the test, the same contract `NOT_AUTHORED` carries.
+ *
+ * ⛔ AND IT IS A LIST RATHER THAN A PATTERN, BECAUSE THE PATTERN REOPENED THE HOLE. The first
+ * attempt matched the shape's own word within 400 characters of the field. `ViewState`'s word is
+ * "state", which appears on nearly every page of these instructions — so `holds` passed on
+ * proximity to prose about something else entirely, which is precisely the false green this whole
+ * check exists to remove. Verified by deleting the real documentation and watching the test stay
+ * green.
+ */
+const DOCUMENTED_IN_PROSE = new Map([
+  [
+    "Selector.view_kind",
+    'the scoper: "`tags`, `view_kind` and a part\'s `role` exist so a rule can select on them — `tag:`, `view_kind:` and `part_role:` in a selector"',
+  ],
+]);
+
+/** Which shapes each field name sits on — the thing that makes a bare match unsafe. */
+const SHARED = (() => {
+  const seen = new Map();
+  for (const name of AUTHORED_SHAPES) {
+    const obj = schema[name];
+    if (!obj) continue;
+    for (const f of Object.keys(shapeOf(name, obj))) seen.set(f, (seen.get(f) ?? 0) + 1);
+  }
+  return seen;
+})();
+
 test("no field in the model is invisible to the skill that authors it", () => {
   const missing = [];
   for (const name of AUTHORED_SHAPES) {
@@ -125,6 +212,22 @@ test("no field in the model is invisible to the skill that authors it", () => {
     const shape = shapeOf(name, obj);
     for (const field of Object.keys(shape)) {
       if (NOT_AUTHORED.has(field)) continue;
+      /**
+       * ⛔ AN AMBIGUOUS FIELD MUST BE SHOWN WHERE IT IS WRITTEN. One example carrying both its
+       * shape's key and the field is proof an author was told; the bare name proves nothing, since
+       * some other shape may own the only mention.
+       */
+      if ((SHARED.get(field) ?? 0) > 1) {
+        const siblings = Object.keys(shape);
+        const shown =
+          BLOCKS.some((b) => isExampleOf(b, siblings) && new RegExp(`(^|\\s)${field}:`, "m").test(b)) ||
+          DOCUMENTED_IN_PROSE.has(`${name}.${field}`);
+        if (!shown)
+          missing.push(
+            `${name}.${field}  — the name is documented, but on ${SHARED.get(field) - 1} other shape(s), and no example of a ${name} shows it`
+          );
+        continue;
+      }
       /**
        * ⛔ NAMED AS A FIELD, not merely present as an English word. `shows` passed a bare word
        * match because the prose elsewhere says "shows" — so a concept nobody had ever been told to

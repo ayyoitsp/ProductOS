@@ -207,13 +207,40 @@ test("every example that names its file parses against the shape that file holds
 test("the set of keys the schema cannot explain does not grow unnoticed", () => {
   const known = new Set([...schema.matchAll(/^\s*([a-z_]+):\s*z\./gm)].map((m) => m[1]));
   const vocabulary = new Set(["given", "when", "then", "kind", "says", "because", "by", "at", "id", "title", "label", "role", "means", "name", "told", "to", "from", "of", "it"]);
+  /**
+   * Fields whose KEYS the author chooses — a `z.record`, where what is on the left of the colon is
+   * a part id and not a field name at all.
+   *
+   * ⛔ WITHOUT THIS, DOCUMENTING `holds` TAUGHT THE TEST FOUR NEW "UNKNOWN FIELDS". The worked
+   * example reads `borrower: invalid` / `continue: busy` / `toolbar: { hidden: true }` /
+   * `heading: { says: … }`, and every one of those is a part on the screen being described. The
+   * scanner treats any indented `key: value` as a field, so a record's contents are indistinguishable
+   * from a misspelled field — and the only alternatives were to raise the ceiling, which is the
+   * waive this test exists to refuse, or to stop documenting the field, which is how `holds` came to
+   * be undocumented in the first place.
+   */
+  const recordFields = new Set(
+    [...schema.matchAll(/([a-z_]+):\s*z\s*\n?\s*\.record\(/g)].map((m) => m[1]),
+  );
   const unexplained = new Set();
-  for (const { text } of blocks())
+  for (const { text } of blocks()) {
+    /** How deep we are inside a record's own keys, if at all. */
+    let recordIndent = null;
     for (const line of text.split("\n")) {
+      const indent = line.length - line.trimStart().length;
+      if (recordIndent !== null && line.trim() && indent <= recordIndent) recordIndent = null;
+      /** ⛔ A trailing comment still opens a block — these examples are annotated throughout. */
+      const opens = /^(\s*)([a-z_]+):\s*(#.*)?$/.exec(line);
+      if (opens && recordFields.has(opens[2])) {
+        recordIndent = opens[1].length;
+        continue;
+      }
+      if (recordIndent !== null) continue;
       const m = /^\s{2,}([a-z][a-z_]{2,})::?\s/.exec(line.replace(/::/, ":")) ?? /^\s{2,}([a-z][a-z_]{2,}):\s*\S/.exec(line);
       if (!m) continue;
       if (!known.has(m[1]) && !vocabulary.has(m[1])) unexplained.add(m[1]);
     }
+  }
 
   /**
    * ⛔ `what` IS GONE FROM THIS SET, AND THAT IS THE POINT OF RECORDING THE NUMBER. It was the only
