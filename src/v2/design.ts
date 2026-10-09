@@ -18,7 +18,12 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import ts from "typescript";
+import type * as TS from "typescript";
+
+import { compilerFor } from "./compiler.js";
+
+/** ⛔ Lazy — see `compiler.ts`. An eager import here killed every CLI verb in the runtime image. */
+const ts: typeof TS = compilerFor("indexing a design system");
 
 export interface Variant {
   /** The axis — `variant`, `size`, `tone`. */
@@ -46,7 +51,7 @@ export interface DesignSystem {
   unread: string[];
 }
 
-const text = (n: ts.Node): string => (ts.isStringLiteralLike(n) ? n.text : "");
+const text = (n: TS.Node): string => (ts.isStringLiteralLike(n) ? n.text : "");
 
 /**
  * Every name a barrel file exports.
@@ -60,7 +65,7 @@ function exported(root: string): Set<string> {
     const f = path.join(root, entry);
     if (!fs.existsSync(f)) continue;
     const src = ts.createSourceFile(f, fs.readFileSync(f, "utf-8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-    const walk = (n: ts.Node): void => {
+    const walk = (n: TS.Node): void => {
       if (ts.isExportDeclaration(n) && n.exportClause && ts.isNamedExports(n.exportClause))
         for (const e of n.exportClause.elements) {
           /** ⛔ A type is not a part. `type ButtonProps` is how you talk about one. */
@@ -82,7 +87,7 @@ function exported(root: string): Set<string> {
  * always the root element, and reported as weaker evidence than a declared variant map.
  */
 function readPiece(name: string, file: string): Piece | undefined {
-  let source: ts.SourceFile;
+  let source: TS.SourceFile;
   try {
     source = ts.createSourceFile(file, fs.readFileSync(file, "utf-8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   } catch {
@@ -92,7 +97,7 @@ function readPiece(name: string, file: string): Piece | undefined {
   const variants: Variant[] = [];
   const classesFor: Record<string, string> = {};
 
-  const walk = (n: ts.Node): void => {
+  const walk = (n: TS.Node): void => {
     if (ts.isCallExpression(n) && ts.isIdentifier(n.expression) && n.expression.text === "cva") {
       const [first, config] = n.arguments;
       if (first) base = text(first);
@@ -142,14 +147,14 @@ function readPiece(name: string, file: string): Piece | undefined {
      * for the same reason.
      */
     const locals = new Map<string, string>();
-    const collect = (n: ts.Node): void => {
+    const collect = (n: TS.Node): void => {
       if (ts.isVariableDeclaration(n) && ts.isIdentifier(n.name) && n.initializer) {
         /**
          * ⛔ AND `.trim()` AROUND IT IS NOT STRUCTURE. The convention is
          * `const inputClasses = \`${a} ${b}\`.trim()` — a call expression, so a reader looking for a
          * template found none. `draw` unwraps exactly this shape for exactly this reason.
          */
-        let init: ts.Node = n.initializer;
+        let init: TS.Node = n.initializer;
         while (ts.isCallExpression(init) && ts.isPropertyAccessExpression(init.expression))
           init = init.expression.expression;
         if (ts.isParenthesizedExpression(init)) init = init.expression;
@@ -178,7 +183,7 @@ function readPiece(name: string, file: string): Piece | undefined {
       ts.forEachChild(n, collect);
     };
     collect(source);
-    const classes = (n: ts.Node): void => {
+    const classes = (n: TS.Node): void => {
       if (ts.isJsxAttribute(n) && n.name.getText() === "className" && n.initializer) {
         const v = ts.isJsxExpression(n.initializer) ? n.initializer.expression : n.initializer;
         /**
@@ -226,10 +231,10 @@ function readPiece(name: string, file: string): Piece | undefined {
      * element; what is inside it is its contents.
      */
     let root = "";
-    const rootOf = (n: ts.Node): void => {
+    const rootOf = (n: TS.Node): void => {
       if (root) return;
       if (ts.isReturnStatement(n) && n.expression) {
-        let e: ts.Node = n.expression;
+        let e: TS.Node = n.expression;
         if (ts.isParenthesizedExpression(e)) e = e.expression;
         const open = ts.isJsxElement(e) ? e.openingElement : ts.isJsxSelfClosingElement(e) ? e : undefined;
         if (open)
