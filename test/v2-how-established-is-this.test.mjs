@@ -300,6 +300,21 @@ test("the product being seen doing it is derived, and reading the code about it 
     assert.equal(inferred.route, "inferred");
   }
   assert.ok(!SEEN_RUNNING.includes("code"), "⛔ reading the source counted as watching the product");
+  /**
+   * ⛔ A WALK IS THE STRONGEST MEMBER OF THIS SET, NOT A FIFTH LEVEL.
+   *
+   * `level.ts` says a reading kind meaning "driven, rather than read" belongs in `SEEN_RUNNING` the
+   * day it lands. `kind: walk` is that kind — an agent drove the running product and recorded what
+   * happened — so it reads `derived`/`observed` like the rest, and the rung Peter asked for stays a
+   * ZONE (`Confidence.observed`) rather than a sixth word in the one field a consumer's gate reads.
+   */
+  assert.ok(SEEN_RUNNING.includes("walk"), "⛔ a walk of the running product did not count as watching it");
+  const walked = ok(levelOf(withReadings(corpus, [reading("walked-it", AGAIN, "http://localhost:3001/wallet", "walk", { at: "2026-10-05" })]), AGAIN));
+  assert.equal(walked.level, "derived", "a walk of the running product did not reach derived");
+  assert.equal(walked.route, "observed");
+  assert.match(walked.because, /The product was seen doing this — walk at http:\/\/localhost:3001\/wallet on 2026-10-05/);
+  /** ⛔ And never above it: a walk cannot say anybody agreed. */
+  assert.match(walked.because, /Nobody has agreed that it should/);
   /** ⛔ However many of them there are. The cap is the point, in both zones. */
   const many = Array.from({ length: 12 }, (_, i) => reading(`c${i}`, AGAIN, `src/a.ts:${i}`));
   assert.equal(ok(levelOf(withReadings(corpus, many), AGAIN)).level, "suggested");

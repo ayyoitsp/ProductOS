@@ -966,13 +966,38 @@ id: analysts-retype-sponsor
 observes: analysts re-type the sponsor name rather than search for it
 bears_on: deal-list#see-the-list            # the scope or exchange it speaks to
 basis:
-  kind: trial                               # code | test-run | screen | inspection | trial | interview | support | telemetry | log
+  kind: trial                               # code | test-run | screen | inspection | walk | trial | interview | support | telemetry | log
   ref: eleven sessions watched, September 2026   # where this was observed, specifically
   at: 2026-09-30
 ```
 
 A reading is evidence, not a claim: it is shown beside a question so whoever answers is answering
 against something.
+
+⛔ **`kind: walk` IS AN AGENT HAVING DRIVEN THE RUNNING PRODUCT, AND `inspection` IS A PERSON HAVING
+LOOKED AT IT.** They are not interchangeable. Peter: *"it doesn't give us CONFIRMED state. but it
+gives us a starting place for how an existing product already behaves… we should have a level that
+is 'product behavior' or something. humans can confirm it."*
+
+```yaml
+# readings/the-deals-list-was-driven.yaml
+id: the-deals-list-was-driven
+observes: the list loaded twelve deals, and an unsized one showed a dash in the loan column
+bears_on: deal-list#see-the-list
+basis:
+  kind: walk
+  ref: http://localhost:3000/cre-deals     # ⛔ the URL — a walk nobody can re-run is an assertion
+  at: 2026-10-08
+```
+
+A walk earns a rung above anything an agent merely inferred, and it earns it for exactly one
+reason: **it names a place anybody can go and disagree with it.** An inference has nothing to point
+at. So `ref` is the URL walked, never a description of walking.
+
+⛔ **It is still not confirmed, and it never becomes confirmed.** A walk of a product with a bug
+records the bug faithfully, so it says how the product behaves today and not that this is what it
+*should* do — which is the only thing the corpus is for. The page says both on the same line, and a
+walk dated after somebody's agreement raises a discrepancy rather than quietly replacing it.
 
 ⛔ **AND THIS EXAMPLE DID NOT PARSE, WHICH IS WHY `readings/` IS EMPTY — NOT BECAUSE NOBODY WAS
 TOLD.** It was documented without `id`, with `what:` where the schema has `ref:`, and with a `kind`

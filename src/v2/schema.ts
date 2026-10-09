@@ -3079,8 +3079,25 @@ export const Reading = z.object({
      * is what it recorded in aggregate, and `inspection` is somebody looking at the running product
      * rather than at its code.
      */
+    /**
+     * ⛔ `walk` ADDED, AND IT IS DELIBERATELY NOT `inspection`.
+     *
+     * Peter: *"let's add walk-to-index. it doesn't give us CONFIRMED state. but it gives us a
+     * starting place for how an existing product already behaves. it should also have a level of
+     * confirmation that is higher than 'LLM generated'."*
+     *
+     * `inspection` is a PERSON looking at the running product. A walk is an AGENT driving it and
+     * recording what it did. Folding the two together would have been the laundering this codebase
+     * keeps finding: an agent's observation rendering identically to somebody's, so a reader asking
+     * "did a human see this?" gets yes from a field that means no.
+     *
+     * ⛔ AND IT IS WHY A WALK EARNS A RUNG AT ALL. An agent's inference cannot be re-checked — there
+     * is nothing to point at. A walk names a URL and what happened there, so anybody can go and run
+     * it again and disagree. That is the whole difference between this and `via: agent`, and it is
+     * the property that makes it evidence rather than a louder guess.
+     */
     kind: z.enum([
-      "code", "test-run", "screen", "inspection",
+      "code", "test-run", "screen", "inspection", "walk",
       "trial", "interview", "support",
       "telemetry", "log",
     ]),

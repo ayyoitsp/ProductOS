@@ -75,6 +75,29 @@ export interface Confidence {
    * set it; it is `stampFor`'s answer, and `stampFor` is the one place that refuses an agent.
    */
   confirmed: { by: string; at: string; through?: string } | null;
+  /**
+   * The product was seen doing this — ⛔ A THIRD ZONE, AND NOT A TIER OF `strength`.
+   *
+   * Peter: *"it doesn't give us CONFIRMED state. but it gives us a starting place for how an
+   * existing product already behaves. it should also have a level of confirmation that is higher
+   * than 'LLM generated'. like, we have human confirmed, we should have a level that is 'product
+   * behavior' or something. humans can confirm it."*
+   *
+   * ⛔ WHY IT IS NOT `strength: "observed"`. `strength` answers HOW MUCH support there is; this
+   * answers WHAT KIND. That is the same argument the top of this file makes for keeping `confirmed`
+   * out of the scale — a different kind of claim cannot be a rung on a quantity ladder without
+   * making the ladder mean two things. Three sources and a walk are independent facts, and a reader
+   * deciding what to trust needs both.
+   *
+   * ⛔ AND IT IS THE ONE ZONE AN AGENT MAY WRITE, WHICH IS SAFE ONLY BECAUSE IT IS FALSIFIABLE. It
+   * asserts "the product did this at this URL", which anybody can go and re-run. `confirmed`
+   * asserts "a person agreed", which nothing can re-derive — so that one stays unreachable from
+   * here, and a walk never sets it.
+   *
+   * ⛔ DERIVED FROM THE READINGS, NEVER STORED, like everything else here. A stored flag saying the
+   * product behaves some way is a claim that was true when written and unfalsifiable after.
+   */
+  observed: { where: string; at?: string; by?: string } | null;
   /** Confirmed once, and the sentence has moved since. ⛔ Not confirmed, and not nothing either. */
   stale: null | "claim-changed" | "criteria-changed" | "both-changed";
   /** Readings bearing directly on this ref. */
@@ -222,6 +245,37 @@ export function inheritedFor(corpus: Corpus, ref: string): Inherited[] {
   });
 }
 
+/**
+ * The walk that saw this behaviour, if one did — the newest, since the product moves.
+ *
+ * ⛔ `walk` ONLY, AND NOT `inspection` OR `screen`. Those are a person looking and a drawing; this
+ * zone exists to say an agent drove the product and recorded what happened, which is the one claim
+ * about behaviour that can be re-run and disagreed with.
+ *
+ * ⛔ AND IT IS NARROWER THAN `level.ts`'s `observed` ROUTE, WHICH IS NOT AN OVERSIGHT BUT IS A
+ * DIVERGENCE SOMEBODY HAS TO SETTLE — SO IT IS NAMED HERE RATHER THAN FOUND LATER.
+ *
+ * `level.SEEN_RUNNING` holds six kinds — `test-run`, `screen`, `inspection`, `telemetry`, `log` and
+ * now `walk` — and its question is a GATE: may a consumer holding a ticket build from this? A
+ * person who looked answers that, so `inspection` belongs there, and the test beside it says so.
+ *
+ * This field's question is different and the sentence it produces is why: *"a walk, so it is
+ * re-runnable and anybody may disagree with it"*. Only an agent driving a named URL earns that
+ * clause. A person's inspection is not re-runnable by the reader, and filing one here would print a
+ * promise the evidence cannot keep.
+ *
+ * ⛔ They therefore share a word and not a definition, which is the shape a bug takes later. Nothing
+ * renders both today — `level.ts` is wired to no surface yet — so the cheapest honest thing is to
+ * say so here. Whoever wires it decides: either this widens to `SEEN_RUNNING` and the page sentence
+ * stops promising re-runnability, or this keeps its meaning and gets a word of its own.
+ */
+export function observedFrom(support: SupportUnit[]): Confidence["observed"] {
+  const walks = support.filter((s) => s.kind === "walk");
+  if (!walks.length) return null;
+  const newest = walks.reduce((a, b) => ((b.at ?? "") > (a.at ?? "") ? b : a));
+  return { where: newest.ref, ...(newest.at ? { at: newest.at } : {}) };
+}
+
 /** Everything known about how well-founded one statement is. */
 export function confidenceOf(corpus: Corpus, ref: string): Confidence {
   const stamp = stampFor(corpus, ref);
@@ -238,6 +292,14 @@ export function confidenceOf(corpus: Corpus, ref: string): Confidence {
         ? { by: stamp.by, at: stamp.at, ...(stamp.through ? { through: stamp.through } : {}) }
         : null,
     stale: stamp.state === "never" || stamp.state === "accepted" ? null : stamp.state,
+    /**
+     * ⛔ FROM A WALK OF THIS STATEMENT, NOT OF ITS EXCHANGE. `contained` support is deliberately
+     * counted toward `strength`, because a reading about an exchange genuinely bears on every slot
+     * in it. "The product was seen doing THIS" does not inherit that way: a walk that observed what
+     * the deals list answers has not observed what it refuses, and letting it say so would put a
+     * behaviour claim on seven slots nobody drove.
+     */
+    observed: observedFrom(support),
     support,
     contained,
     sources,
@@ -288,6 +350,21 @@ export function whyConfident(corpus: Corpus, ref: string): string[] {
       `Confirmed once, and the ${c.stale === "both-changed" ? "sentence and its criteria have" : c.stale === "claim-changed" ? "sentence has" : "criteria have"} changed since — so it is not confirmed now.`,
     );
   else lines.push("Nobody has confirmed this.");
+
+  /**
+   * ⛔ SAID IMMEDIATELY AFTER THE CONFIRMATION LINE, AND IN THE SAME BREATH AS WHAT IT IS NOT.
+   *
+   * "The product was seen doing this" is the sentence most able to be mistaken for "this is right",
+   * and the two are independent: a walk of a product with a bug records the bug faithfully. So the
+   * line states what was seen, where, and that nobody has agreed it is what the product SHOULD do —
+   * which is the distinction the corpus exists to hold.
+   */
+  if (c.observed)
+    lines.push(
+      `The product was seen doing this at ${c.observed.where}${c.observed.at ? ` on ${c.observed.at}` : ""} — ` +
+        `a walk, so it is re-runnable and anybody may disagree with it. ` +
+        `⛔ It says how the product behaves today, not that this is what it should do; only a person can say that.`,
+    );
 
   for (const s of c.support) lines.push(`Read from ${s.kind} at ${s.ref}: ${s.observes}`);
   if (!c.support.length) lines.push("Nothing has been observed about it directly.");
