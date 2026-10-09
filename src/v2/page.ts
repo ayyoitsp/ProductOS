@@ -27,6 +27,8 @@ import { AUTHORS } from "../core/jobs.js";
 import { SLOTS, SLOT_ASKS_SHORT, statements, saysText, type SlotName, type Scope, type Steer, type View, type Part, type Says } from "./schema.js";
 import { gridFor, gateFor, actsFor, ruleHomes, stageOf, reachOf, type Grid, type Cell } from "./grid.js";
 import { stampFor, decidedFor, whatChangedSince } from "./stamp.js";
+/** ⛔ The one table of what an act owes. It lived here and no other surface could read it. */
+import { OWED } from "./acts.js";
 import { confidenceOf, whyConfident, discrepancyFor } from "./confidence.js";
 import { wireParts } from "./wire.js";
 import { questionsFor, descendants, type Question } from "./settle.js";
@@ -3453,26 +3455,6 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
 }
 
 
-/**
- * ⛔ WHAT EACH ACT OWES, IN ONE TABLE, SHARED BY EVERY SURFACE THAT ASKS FOR IT.
- *
- * The floors live on the `Verdict` schema and are charged there; this is only what to ask for,
- * so a person is never refused for a field no surface offered them. That exact dead end happened
- * twice on the CLI — a refusal printing a remedy the tool then rejected.
- */
-const OWED: Record<string, Array<{ name: string; label: string; floor?: number; long?: boolean }>> = {
-  accept: [],
-  rule: [{ name: "because", label: "Why — this is what stops it being argued again", floor: 40, long: true }],
-  say: [
-    { name: "says", label: "What it is, now decided", floor: 10, long: true },
-    { name: "because", label: "Why — this is what stops it being argued again", floor: 40, long: true },
-  ],
-  waive: [{ name: "because", label: "Why this is not yours to answer — a builder is about to be told it is theirs", floor: 40, long: true }],
-  defer: [
-    { name: "because", label: "Why not now", long: true },
-    { name: "until", label: "What brings it back — an event, not a date" },
-  ],
-};
 
 /**
  * ⛔ EVERYTHING BELOW THIS LINE IS INSIDE A TEMPLATE LITERAL, SO NO BACKTICKS — not in code and

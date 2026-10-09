@@ -330,6 +330,48 @@ truth to claude.ai. Do not argue with the gate; tell them what it said.
 
 See `WATCHING_PRESSES.md` for reading presses back and turning them into truth.
 
+## ⛔ One door into a corpus, and it tells you what it takes — `/api/v2/in`
+
+Everything that changes a corpus goes through **one input**, named by an **intent**. There is no
+endpoint per operation and no new route for a new capability — a capability costs an intent.
+
+```bash
+curl -s <instance>/api/v2/in                      # what it takes: every intent, its authority, its fields
+curl -sX POST <instance>/api/v2/in \
+  -d '{"intent":"note","about":"pricing#publish","says":"this screen says nothing about what happens next"}'
+```
+
+From MCP, the same door and the same contract:
+
+```
+productos_intents   # ask what may be said, and what each field means
+productos_in        # say it: { intent, fields: { … } }
+```
+
+⛔ **Ask before you guess.** `GET /api/v2/in` and `productos_intents` are generated from the intent
+registry, so they cannot be out of date. A hardcoded idea of the fields is wrong the first time one
+changes — and the cost is on the record twice already: *a refusal printing a remedy the tool then
+rejected.*
+
+⛔ **The intent is NAMED, never inferred — and neither is what a request is about.** A classifier
+reading a sentence as `accept` mints consent nobody gave; one guessing `about` files a request
+against the wrong feature, which is worse than one that asked. **If you do not know what somebody is
+referring to, ask them.** This binds anything that relays messages in — a chat channel, a bot, a
+queue — where there is no page context to read it from.
+
+⛔ **A relay carries a press; it never makes one.** Use `carry`, which keeps the presser's name and
+records who carried it. Recording a relayed message as a direct press claims a person agreed to
+something in a room they were not in.
+
+| What came back | What it means | What to do |
+| --- | --- | --- |
+| `403` | **you may not** — this principal lacks the authority | stop, and tell a person |
+| `422` | **you have not said enough** — the refusal names each field and what it is | supply it and retry |
+
+The four authorities: `consent` (a person agreed — ⛔ a token can never claim this), `relay`
+(carrying somebody else's press), `author` (your own words, claiming nothing about what anyone
+agreed to), `open` (anybody may).
+
 ## ⛔ `pos:` means the framework
 
 The review page is a conversation. The composer files a request; a bar at the bottom says how many

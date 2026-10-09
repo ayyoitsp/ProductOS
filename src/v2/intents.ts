@@ -24,7 +24,7 @@
  * a classifier that mis-reads a sentence as `accept` mints consent nobody gave. A caller says which
  * intent it means, and an unknown one is refused with the list.
  */
-import { perform, payloadFrom, VIA, ACTS, type Act, type Via } from "./acts.js";
+import { perform, payloadFrom, VIA, ACTS, OWED, ALSO, type Act, type Via } from "./acts.js";
 import { closeNote, fileNote, replyToNote } from "./notes.js";
 import { mayRecord, mayRelay, type Principal } from "./identity.js";
 import fs from "node:fs";
@@ -57,12 +57,53 @@ export interface Asking {
   pressing: string;
 }
 
+/**
+ * One field an intent will read, in the words a caller should be shown.
+ *
+ * ⛔ DECLARED, BECAUSE `run` READING `body.x` IS NOT A CONTRACT ANYBODY ELSE CAN SEE.
+ *
+ * Every `run` below reaches into `body` by hand. That is fine for the page, which was written
+ * beside it, and useless for everything else: an MCP bridge, a Slack relay or any second client
+ * cannot learn what to send without reading this file, so each one hardcodes a copy and the copies
+ * rot. `theIntents` already claimed to exist "so a caller never has to read this file to find the
+ * list" — true of the names and false of everything that makes a name usable.
+ */
+export interface Field {
+  name: string;
+  /** What it is. Shown to whoever is being asked, so it is a sentence and not a type. */
+  says: string;
+  /** Refused when absent. ⛔ Enforced in `refuseIntent`, so this cannot drift into decoration. */
+  required: boolean;
+  /** A paragraph rather than a word, so a surface knows to offer a textarea. */
+  long?: boolean;
+  /** The length the schema will charge, said UP FRONT rather than as a refusal. */
+  floor?: number;
+  /** ⛔ This field's own words when it is absent, where they beat anything generic. */
+  ifMissing?: string;
+}
+
 export interface Intent {
   name: string;
   gate: Gate;
   does: string;
+  /** ⛔ What it reads. Generated into discovery and charged by `refuseIntent`. */
+  takes: Field[];
   run: (a: Asking, body: Record<string, unknown>) => Outcome;
 }
+
+/** ⛔ Carried by every act, so no intent re-describes them and none forgets one. */
+const REF: Field = { name: "ref", says: "What it is about — a scope, a slot or an exchange ref", required: true };
+const VIA_F: Field = { name: "via", says: `How consent was obtained: ${VIA.join(" | ")}`, required: false };
+const BY_F: Field = { name: "by", says: "Who it was — ignored for a browser press, which is recorded as the authenticated account", required: false };
+
+/** `OWED` is what a person must be asked for; `ALSO` is what will be read if offered. */
+const fieldsFor = (act: Act): Field[] => [
+  REF,
+  ...(OWED[act] ?? []).map((f) => ({ name: f.name, says: f.label, required: true, long: f.long, floor: f.floor })),
+  ...(ALSO[act] ?? []).map((f) => ({ name: f.name, says: f.label, required: false, long: f.long })),
+  VIA_F,
+  BY_F,
+];
 
 const str = (v: unknown): string => (typeof v === "string" ? v.trim() : "");
 
@@ -83,6 +124,7 @@ function theAct(act: Act): Intent {
     name: act,
     gate: "consent",
     does: `Record that somebody ${act === "accept" ? "agreed to" : act === "rule" ? "settled" : act === "read" ? "read" : act === "defer" ? "parked" : "waived"} something`,
+    takes: fieldsFor(act),
     run: (a, body) => {
       const via = (typeof body.via === "string" ? body.via : "page") as Via;
       if (!VIA.includes(via))
@@ -103,6 +145,12 @@ export const INTENTS: Intent[] = [
     name: "carry",
     gate: "relay",
     does: "Carry a press made somewhere this instance could not see, keeping whose it was",
+    takes: [
+      { name: "act", says: `Which act was pressed: ${ACTS.join(" | ")}`, required: true },
+      REF,
+      { name: "by", says: "⛔ Who actually pressed it. Required here — that is the whole point of carrying rather than recording", required: true },
+      { name: "via", says: `How they pressed it: ${VIA.join(" | ")}`, required: true },
+    ],
     run: (a, body) => {
       const act = str(body.act) as Act;
       if (!ACTS.includes(act))
@@ -122,6 +170,15 @@ export const INTENTS: Intent[] = [
     name: "note",
     gate: "open",
     does: "File a request against what this corpus says",
+    takes: [
+      {
+        name: "about",
+        says: "What they were looking at — a scope, or a ref down to the part. ⛔ Never inferred from the words: a request filed against the wrong thing is worse than one that asked",
+        required: true,
+      },
+      { name: "says", says: "What should change, in their words", required: true, long: true },
+      { name: "by", says: "Who is asking — defaults to whoever the instance authenticated", required: false },
+    ],
     run: (a, body) =>
       fileNote(a.dir, {
         about: str(body.about),
@@ -160,6 +217,15 @@ export const INTENTS: Intent[] = [
     name: "document",
     gate: "author",
     does: "Write one document of the corpus — truth, a rule, a part, a reading",
+    takes: [
+      {
+        name: "key",
+        says: `Which document, relative to the corpus root — e.g. truth/money.md. One of: ${CORPUS_DIRS.join(" / ")}`,
+        required: true,
+        ifMissing: "say which document",
+      },
+      { name: "says", says: "The whole document. ⛔ Replaces it — this is not a patch", required: true, long: true },
+    ],
     run: (a, body) => {
       const key = str(body.key);
       const says = typeof body.says === "string" ? body.says : "";
@@ -202,12 +268,26 @@ export const INTENTS: Intent[] = [
     name: "say",
     gate: "author",
     does: "Answer on a filed request without deciding it is finished",
+    takes: [
+      { name: "note", says: "The request's id, as the inbox gave it to you", required: true },
+      { name: "says", says: "What to tell them. Their surface, so write it for them and not for a changelog", required: true, long: true },
+      { name: "by", says: "Who is replying", required: false },
+    ],
     run: (a, body) => replyToNote(a.dir, str(body.note), str(body.by) || a.who.actor, str(body.says)),
   },
   {
     name: "close",
     gate: "author",
     does: "Answer a filed request and take it off the queue",
+    takes: [
+      { name: "note", says: "The request's id", required: true },
+      {
+        name: "outcome",
+        says: 'What was actually done — including "we are not doing this". ⛔ A closed request with no account of what happened cannot be told from one somebody dropped',
+        required: true,
+        long: true,
+      },
+    ],
     run: (a, body) => closeNote(a.dir, str(body.note), str(body.outcome)),
   },
 ];
@@ -221,7 +301,78 @@ export const intentNamed = (name: string): Intent | undefined => INTENTS.find((i
  * its first ten lines, which is how `/say` and `/close` ended up with the same fifteen lines of
  * refusal text twice and how a sixth route would have arrived with none.
  */
+/**
+ * Required fields a request has not supplied.
+ *
+ * ⛔ FALSY IS NOT ABSENT. `buildable: false` and `pick: 0` are answers. The first version refused
+ * `pick: 0`, which is a drafted option somebody chose.
+ *
+ * ⛔ AND NEITHER IS BLANK. A whitespace `says` on `document` means "a deletion wearing a write", and
+ * its own `run` says exactly that — a generic "needs `says`" here threw that away. Only the intent
+ * knows what an empty answer MEANS, so an answer that was given reaches it, however thin.
+ */
+export const missingFrom = (intent: Intent, body: Record<string, unknown>): Field[] =>
+  intent.takes.filter((f) => f.required && (body[f.name] === undefined || body[f.name] === null));
+
+/**
+ * ⛔ WHAT THE DOOR WILL TAKE, AS DATA — so no second client has to read this file.
+ *
+ * Generated from `INTENTS`, which is what stops it drifting: a new intent, or a field added to an
+ * existing one, appears here without anybody remembering to say so. A hand-maintained copy of this
+ * is exactly the dead end `OWED`'s own comment records happening twice — a refusal naming a remedy
+ * the surface never offered.
+ */
+export const describeIntents = (): Array<{ name: string; does: string; gate: Gate; takes: Field[] }> =>
+  INTENTS.map((i) => ({ name: i.name, does: i.does, gate: i.gate, takes: i.takes }));
+
+/**
+ * May this principal do this at all — and NOTHING about whether they said enough.
+ *
+ * ⛔ THE TWO QUESTIONS ARE SEPARATE, AND FOLDING THEM TOGETHER BROKE THREE TESTS THAT SAID SO.
+ *
+ * I made this charge the field contract too. `v2-one-input` already asserted the opposite, in the
+ * plainest possible way: `refuseIntent(carry, token-with-relay, {})` must be `null` — an empty body
+ * is not a permission problem. Authority and completeness are answered by different people for
+ * different reasons, and a caller does opposite things with the answers: forbidden means stop and
+ * tell somebody, incomplete means supply the field and retry.
+ *
+ * So this stayed what it was, and `incomplete` below is the other question. The route asks both, in
+ * that order.
+ */
 export function refuseIntent(intent: Intent, a: Asking, body: Record<string, unknown>): Outcome | null {
+  /**
+   * ⛔ THE AUTHORITY FIRST, THE FIELDS SECOND, AND NEVER THE OTHER WAY ROUND.
+   *
+   * Telling a caller which fields a thing needs, and only then refusing it the authority to do it,
+   * hands out the shape of an operation nobody may perform — and does it in the one place where a
+   * token is probing what it can reach. So the gate decides before anything is described.
+   */
+  return gateRefuses(intent, a, body);
+}
+
+/**
+ * Required fields this request has not supplied — asked AFTER the gate, never before.
+ *
+ * ⛔ THE ORDER IS A BOUNDARY, NOT A PREFERENCE. Describing an operation's fields and only then
+ * refusing the authority to perform it hands out its shape, in the one place a token is probing
+ * what it can reach. So the caller must already be allowed before it is told what to send.
+ */
+export function incomplete(intent: Intent, body: Record<string, unknown>): Outcome | null {
+  const short = missingFrom(intent, body);
+  if (!short.length) return null;
+  return {
+    ok: false,
+    /**
+     * ⛔ A FIELD MAY KEEP ITS OWN SENTENCE. `document` said "say which document", which is better
+     * than anything generic — a generic message that replaces a specific one is a regression
+     * wearing a refactor.
+     */
+    why: short.length === 1 && short[0]!.ifMissing ? short[0]!.ifMissing : `${intent.name} needs ${short.map((f) => `\`${f.name}\``).join(", ")}`,
+    detail: [...short.map((f) => `${f.name} — ${f.says}`), "⛔ nothing here is guessed from the other fields"],
+  };
+}
+
+function gateRefuses(intent: Intent, a: Asking, body: Record<string, unknown>): Outcome | null {
   switch (intent.gate) {
     case "consent": {
       /**
