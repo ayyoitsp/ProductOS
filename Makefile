@@ -725,10 +725,14 @@ PG_IMAGE  ?= postgres:18-alpine
 PG_CLIENT ?= $(PG_IMAGE)
 export PG_IMAGE
 
+# ⛔ THE DUMP GOES THROUGH THE DIRECT ENDPOINT, NEVER THE POOLER — see scripts/unpooled.sh.
+# pg_dump sets search_path to '' at SESSION scope, which a transaction pooler then hands to the next
+# client. In this Makefile the next client is the container `deploy` recreates forty seconds later,
+# and it died on its first statement with 3F000. Staging went down that way.
 backup-remote:
 	@test -f .env || { echo "no .env here — DATABASE_URL lives beside the compose file you started from"; exit 1; }
 	@mkdir -p $(BACKUP_DIR)
-	@url=$$(./scripts/envvar.sh .env DATABASE_URL); 	test -n "$$url" || { echo "DATABASE_URL is empty in .env"; exit 1; }; 	stamp=$$(date +%Y%m%d-%H%M%S); 	out=$(BACKUP_DIR)/productos-remote-$$stamp.sql.gz; 	docker run --rm -e PGURL="$$url" $(PG_CLIENT) sh -c \
+	@url=$$(./scripts/envvar.sh .env DATABASE_URL); 	test -n "$$url" || { echo "DATABASE_URL is empty in .env"; exit 1; }; 	url=$$(./scripts/unpooled.sh "$$url"); 	stamp=$$(date +%Y%m%d-%H%M%S); 	out=$(BACKUP_DIR)/productos-remote-$$stamp.sql.gz; 	docker run --rm -e PGURL="$$url" $(PG_CLIENT) sh -c \
 	  'pg_dump "$$PGURL" --clean --if-exists --no-owner --no-privileges --schema=public' \
 	  | gzip > $$out || { echo "the dump failed — run 'make remote-doctor' first"; rm -f $$out; exit 1; }; 	test -s $$out || { echo "the dump is empty"; rm -f $$out; exit 1; }; 	gunzip -c $$out | grep -q "DROP TABLE IF EXISTS" || { echo "the dump cannot replace an existing schema"; rm -f $$out; exit 1; }; 	echo "✓ $$out ($$(du -h $$out | cut -f1))"; 	echo "  $$(gunzip -c $$out | grep -c '^COPY public') tables with data · restore with: make restore-remote FILE=$$out"
 
