@@ -7,9 +7,9 @@
  * cases below are mostly the literals that fooled the first version on real bilrost components.
  */
 import { test } from "node:test";
+import { temp } from "./support/temp.mjs";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 
 import {
@@ -134,7 +134,7 @@ test("every candidate carries the one consequence that is a fact", () => {
 
 /** A corpus on disk, so `proposeSlots` is exercised the way it runs. */
 function corpusWith(component, exchanges) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "slots-"));
+  const dir = temp("slots-");
   fs.mkdirSync(path.join(dir, "src"), { recursive: true });
   fs.writeFileSync(path.join(dir, "src/Screen.tsx"), component);
   return { dir, scope: { id: "s", views: [{ id: "v", drawn_from: "src/Screen.tsx" }], exchanges } };
@@ -157,7 +157,6 @@ test("a control's ask does not inherit the screen's failure", () => {
   const props = proposeSlots(scope, dir);
   const owners = [...new Set(props.map((p) => p.exchange))];
   assert.deepEqual(owners, ["screen-ask"], "page-wide evidence was attributed to a control's ask");
-  fs.rmSync(dir, { recursive: true, force: true });
 });
 
 test("a slot somebody already answered is left alone", () => {
@@ -167,7 +166,6 @@ test("a slot somebody already answered is left alone", () => {
   ]);
   const slots = proposeSlots(scope, dir).map((p) => p.slot);
   assert.ok(!slots.includes("fails"), "it proposed over an answer a person already gave");
-  fs.rmSync(dir, { recursive: true, force: true });
 });
 
 test("an open question is already somebody's, so it is not asked twice", () => {
@@ -182,7 +180,6 @@ test("an open question is already somebody's, so it is not asked twice", () => {
   ]);
   const slots = proposeSlots(scope, dir).map((p) => p.slot);
   assert.ok(!slots.includes("fails"), "a question already in somebody's queue was raised a second time");
-  fs.rmSync(dir, { recursive: true, force: true });
 });
 
 test("a system-asked exchange with no screen is not reached at all", () => {
@@ -192,5 +189,4 @@ test("a system-asked exchange with no screen is not reached at all", () => {
     { id: "pure-logic", asked_by: "system", slots: {} },
   ]);
   assert.deepEqual(proposeSlots(scope, dir), []);
-  fs.rmSync(dir, { recursive: true, force: true });
 });
