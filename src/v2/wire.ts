@@ -55,6 +55,29 @@ export function wireParts(html: string, parts: WireablePart[]): Wired {
     return `${withClass} data-part="${esc(pt.id)}"${goes}${selfClosing ? " /" : ""}`;
   };
 
+  /**
+   * ⛔ A MARK ALREADY IN THE DRAWING MAY STILL BE ON THE WRONG ELEMENT, AND FOR `entry` THAT IS
+   * VISIBLE TO A REVIEWER.
+   *
+   * Seen on 4100: *"Something required is missing"* drew its red outline around the word
+   * **Borrower** and pushed the message between the label and the box. The corpus holds
+   * `<label><span data-part="borrower">Borrower</span> …</label><input …>` — the mark on the label's
+   * text, written by an earlier generator, with the input beside it unmarked.
+   *
+   * ⛔ UNWRAPPED HERE RATHER THAN FIXED IN THE CORPUS, because `draw` and the page call this same
+   * function: correcting it here fixes every drawing already written as well as every one generated
+   * from now on, and editing the corpus would fix one and leave the generator free to do it again.
+   * The text survives — only the marker moves, to the control the label names.
+   */
+  for (const pt of parts.filter((p) => p.role === "entry")) {
+    const on = new RegExp(`<(\\w+)\\b[^>]*\\bdata-part\\s*=\\s*["']${pt.id}["'][^>]*>`, "i").exec(out);
+    if (!on || /^(input|textarea|select)$/i.test(on[1]!)) continue;
+    /** Only a bare wrapper is safe to remove — unwrap `<span …>Text</span>` back to `Text`. */
+    const wrapper = new RegExp(`<span\\b[^>]*\\bdata-part\\s*=\\s*["']${pt.id}["'][^>]*>([^<]*)</span>`, "i");
+    if (!wrapper.test(out)) continue;
+    out = out.replace(wrapper, "$1");
+  }
+
   // 1. Anything already carrying the attribute is done — give it the class and move on.
   for (const pt of parts) {
     const has = new RegExp(`data-part\\s*=\\s*["']${pt.id}["']`).test(out);
@@ -108,6 +131,48 @@ export function wireParts(html: string, parts: WireablePart[]): Wired {
     if (!hit) continue;
     matched.add(pt.id);
     out = out.replace(hit[0], `<${hit[1]}${attrs(pt, hit[2]!)}>`);
+  }
+
+  /**
+   * ⛔ A LABEL NAMES A CONTROL; IT IS NOT THE CONTROL. THIS IS THE STEP THAT WAS MISSING.
+   *
+   * Seen on 4100: the derived state *"Something required is missing"* drew its red outline around
+   * the word **Borrower** and injected the message between the label and the box, shoving the form
+   * down — because the input's placeholder is "Sponsor or borrowing entity", which does not contain
+   * the word "Borrower". Attribute matching therefore missed, and the text pass below wrapped the
+   * label instead. A reviewer reads that as "the label is wrong".
+   *
+   * A form says which control a label belongs to, in two ways, and both are cheap to follow:
+   * `for="x"` pointing at `id="x"`, or the control that comes next. So an `entry` part resolves
+   * through its label to the thing you actually type in.
+   *
+   * ⛔ AND IT RUNS BEFORE THE TEXT PASS, NOT AFTER, because the text pass would have claimed the
+   * label first and marked this part done.
+   */
+  for (const pt of parts.filter((p) => !matched.has(p.id) && p.role === "entry")) {
+    const label = esc(pt.label ?? pt.id).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    /** The <label> whose text is this part's name — its `for`, if it has one. */
+    const lab = new RegExp(`<label\\b([^>]*)>\\s*${label}\\b`, "i").exec(out);
+    if (!lab) continue;
+    const forId = /\bfor\s*=\s*["']([^"']+)["']/i.exec(lab[1] ?? "")?.[1];
+
+    let target: RegExpExecArray | null = null;
+    if (forId) {
+      const byId = new RegExp(`<(input|textarea|select)\\b([^>]*\\bid\\s*=\\s*["']${forId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}["'][^>]*)>`, "i");
+      target = byId.exec(out);
+    }
+    /** ⛔ No `for`, so the next control after the label — which is what the markup means by position. */
+    if (!target) {
+      const after = out.slice(lab.index);
+      const next = /<(input|textarea|select)\b([^>]*)>/i.exec(after);
+      if (next) {
+        target = next;
+        target.index += lab.index;
+      }
+    }
+    if (!target) continue;
+    matched.add(pt.id);
+    out = out.slice(0, target.index) + `<${target[1]}${attrs(pt, target[2]!)}>` + out.slice(target.index + target[0].length);
   }
 
   /**
