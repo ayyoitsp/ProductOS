@@ -21,7 +21,50 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import ts from "typescript";
+/**
+ * ⛔ THE COMPILER IS LOADED WHEN A SCREEN IS DRAWN, NOT WHEN THIS MODULE IS IMPORTED.
+ *
+ * `typescript` is a devDependency, and `import ts from "typescript"` at the top of this file meant
+ * that in any install without dev dependencies — the runtime image, notably — **every CLI verb died
+ * on module resolution**, including the ones that never draw anything. The hosted service escaped
+ * only because it boots `store/boot.js` and never reaches here.
+ *
+ * ⛔ AND NOT BY MOVING IT TO `dependencies`, which was the other obvious fix. That ships a whole
+ * compiler in the runtime image to serve a path the service never takes.
+ *
+ * ⛔ A PROXY RATHER THAN `await import`, BECAUSE EVERY ONE OF THE 206 USES IS SYNCHRONOUS. Making
+ * them async would mean rewriting `emit`, `returnedJsx`, `falseAtFirst` and everything that calls
+ * them for a module-loading concern — a large change to working code, in exchange for nothing a
+ * reader of those functions would understand. `createRequire` is synchronous, so the first property
+ * access resolves it and every call site stays exactly as it was. Type positions (`ts.Node`,
+ * `ts.Identifier`) never touch the proxy at all; TypeScript elides them.
+ */
+import { createRequire } from "node:module";
+import type * as TS from "typescript";
+
+let compiler: typeof TS | undefined;
+
+const ts: typeof TS = new Proxy({} as typeof TS, {
+  get(_target, prop) {
+    if (!compiler) {
+      try {
+        compiler = createRequire(import.meta.url)("typescript") as typeof TS;
+      } catch {
+        /**
+         * ⛔ Named, because the failure this replaces was `Cannot find module 'typescript'` from a
+         * verb that had nothing to do with drawing, and that sent somebody looking in the wrong
+         * place for an hour.
+         */
+        throw new Error(
+          "drawing a screen from code needs the TypeScript compiler, which is a development " +
+            "dependency and is not installed here. Run `npm install` in a checkout, or draw from " +
+            "the truth and the design system instead of from a component."
+        );
+      }
+    }
+    return (compiler as unknown as Record<string | symbol, unknown>)[prop];
+  },
+});
 import { lucideSvg } from "./icons.js";
 import { wireParts, type WireablePart } from "./wire.js";
 
@@ -91,10 +134,10 @@ const text = (s: string): string =>
  * `return`. That is how a class helper is written; anything with branching or statements is a
  * program, and guessing which path it takes would be inventing styling rather than reading it.
  */
-function bodyOfLocal(name: ts.Identifier): ts.Expression | undefined {
+function bodyOfLocal(name: TS.Identifier): TS.Expression | undefined {
   const sf = name.getSourceFile();
-  let found: ts.Expression | undefined;
-  const visit = (n: ts.Node): void => {
+  let found: TS.Expression | undefined;
+  const visit = (n: TS.Node): void => {
     if (found) return;
     if (ts.isVariableDeclaration(n) && ts.isIdentifier(n.name) && n.name.text === name.text && n.initializer) {
       const init = n.initializer;
@@ -110,16 +153,16 @@ function bodyOfLocal(name: ts.Identifier): ts.Expression | undefined {
 }
 
 /** The expression of a block's only `return`, where there is exactly one. */
-function returnedExpression(block: ts.Block): ts.Expression | undefined {
+function returnedExpression(block: TS.Block): TS.Expression | undefined {
   const returns = block.statements.filter(ts.isReturnStatement);
   return returns.length === 1 ? returns[0]!.expression : undefined;
 }
 
-function classOf(node: ts.JsxAttributeValue | undefined, preferTrue = false): string {
+function classOf(node: TS.JsxAttributeValue | undefined, preferTrue = false): string {
   if (!node) return "";
   const out: string[] = [];
-  const seen = new Set<ts.Node>();
-  const walk = (n: ts.Node): void => {
+  const seen = new Set<TS.Node>();
+  const walk = (n: TS.Node): void => {
     if (ts.isStringLiteral(n) || ts.isNoSubstitutionTemplateLiteral(n)) out.push(n.text);
     else if (ts.isTemplateExpression(n)) {
       out.push(n.head.text);
@@ -270,9 +313,9 @@ interface Ctx {
 }
 
 /** A component's own returned JSX, found by name in a file. */
-function returnedJsx(file: string, name?: string): ts.Node | undefined {
+function returnedJsx(file: string, name?: string): TS.Node | undefined {
   const src = ts.createSourceFile(file, fs.readFileSync(file, "utf-8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-  let found: ts.Node | undefined;
+  let found: TS.Node | undefined;
   /**
    * ⛔ THE BIGGEST RETURN, NOT THE FIRST.
    *
@@ -326,8 +369,8 @@ function returnedJsx(file: string, name?: string): ts.Node | undefined {
    * that renders five products now offers five pictures with the product's own word on each tab,
    * instead of silently being one of them.
    */
-  const guardedBy = (n: ts.Node): string | undefined => {
-    let at: ts.Node | undefined = n.parent;
+  const guardedBy = (n: TS.Node): string | undefined => {
+    let at: TS.Node | undefined = n.parent;
     while (at) {
       if (ts.isIfStatement(at) && at.thenStatement && at.thenStatement.pos <= n.pos && n.end <= at.thenStatement.end)
         return at.expression.getText().replace(/\s+/g, " ");
@@ -347,13 +390,13 @@ function returnedJsx(file: string, name?: string): ts.Node | undefined {
     return undefined;
   };
 
-  const fromBody = (body: ts.Node): { main?: ts.Node; guards: Array<{ when: string; node: ts.Node }> } => {
-    let best: ts.Node | undefined;
+  const fromBody = (body: TS.Node): { main?: TS.Node; guards: Array<{ when: string; node: TS.Node }> } => {
+    let best: TS.Node | undefined;
     let widest = 0;
-    let fallback: ts.Node | undefined;
+    let fallback: TS.Node | undefined;
     let fallbackWidth = 0;
-    const guards: Array<{ when: string; node: ts.Node }> = [];
-    const seek = (n: ts.Node): void => {
+    const guards: Array<{ when: string; node: TS.Node }> = [];
+    const seek = (n: TS.Node): void => {
       if (ts.isReturnStatement(n) && n.expression) {
         const e = ts.isParenthesizedExpression(n.expression) ? n.expression.expression : n.expression;
         if (ts.isJsxElement(e) || ts.isJsxSelfClosingElement(e) || ts.isJsxFragment(e)) {
@@ -384,12 +427,12 @@ function returnedJsx(file: string, name?: string): ts.Node | undefined {
    * name matches the file, which is the convention every component directory follows; else the only
    * exported component in the file.
    */
-  const byName = new Map<string, ts.Node>();
+  const byName = new Map<string, TS.Node>();
   /** ⛔ The guarded returns of whichever component is chosen — the screen's states, kept not dropped. */
-  const guardsByName = new Map<string, Array<{ when: string; node: ts.Node }>>();
-  let dflt: ts.Node | undefined;
+  const guardsByName = new Map<string, Array<{ when: string; node: TS.Node }>>();
+  let dflt: TS.Node | undefined;
   const exported = new Set<string>();
-  const visit = (n: ts.Node): void => {
+  const visit = (n: TS.Node): void => {
     if (ts.isFunctionDeclaration(n) && n.body && n.name) {
       const mods = n.modifiers ?? [];
       const isExport = mods.some((m) => m.kind === ts.SyntaxKind.ExportKeyword);
@@ -438,7 +481,7 @@ function returnedJsx(file: string, name?: string): ts.Node | undefined {
 }
 
 /** Turn one JSX node into HTML. */
-function emit(node: ts.Node, ctx: Ctx): string {
+function emit(node: TS.Node, ctx: Ctx): string {
   /**
    * ⛔ UNWRAP PARENTHESES FIRST. Every conditional branch in real JSX is written
    * `cond && ( <div…> )`, so a walker that only recognises JSX nodes silently returned nothing for
@@ -568,13 +611,13 @@ function emit(node: ts.Node, ctx: Ctx): string {
      */
     const DOING = /\bis[A-Z]\w*ing\b/;
     const EMPTY = /(===\s*0|!\s*\w+(?:\.\w+)*\.length\b|\blength\s*===\s*0\b|\bisEmpty\b|\bnoResults\b)/i;
-    const pick = (cond: ts.Node, a: ts.Node, b: ts.Node): string => {
+    const pick = (cond: TS.Node, a: TS.Node, b: TS.Node): string => {
       const c = cond.getText();
       /** ⛔ Read what it asserts — see `asserted` above for the screen this cost. */
       const said = asserted(c);
-      const span = (n: ts.Node): number => n.getEnd() - n.getStart();
-      let chosen: ts.Node;
-      let skipped: ts.Node;
+      const span = (n: TS.Node): number => n.getEnd() - n.getStart();
+      let chosen: TS.Node;
+      let skipped: TS.Node;
       /**
        * ⛔ A PROP THE CALLER PASSED AS FALSE DECIDES THIS, AND IT IS NOT A GUESS.
        *
@@ -622,7 +665,7 @@ function emit(node: ts.Node, ctx: Ctx): string {
       return emit(
         ts.isJsxElement(chosen) || ts.isJsxSelfClosingElement(chosen) || ts.isJsxFragment(chosen)
           ? chosen
-          : ts.factory.createJsxExpression(undefined, chosen as ts.Expression),
+          : ts.factory.createJsxExpression(undefined, chosen as TS.Expression),
         ctx
       );
     };
@@ -1108,7 +1151,7 @@ function emit(node: ts.Node, ctx: Ctx): string {
     const DIALOG = /(modal|dialog|drawer|sheet|popover|overlay|lightbox)$/i;
     if (DIALOG.test(tag)) {
       const openAttr = open.attributes.properties.find(
-        (a): a is ts.JsxAttribute => ts.isJsxAttribute(a) && /^(open|isOpen|visible|shown)$/.test(a.name.getText())
+        (a): a is TS.JsxAttribute => ts.isJsxAttribute(a) && /^(open|isOpen|visible|shown)$/.test(a.name.getText())
       );
       const literallyOpen =
         openAttr?.initializer &&
@@ -1174,7 +1217,7 @@ function emit(node: ts.Node, ctx: Ctx): string {
        */
       const sized = classOf(
         open.attributes.properties.find(
-          (a): a is ts.JsxAttribute => ts.isJsxAttribute(a) && a.name.getText() === "className"
+          (a): a is TS.JsxAttribute => ts.isJsxAttribute(a) && a.name.getText() === "className"
         )?.initializer
       );
       const glyph = ctx.sameFile ? lucideSvg(tag, ctx.sameFile, sized) : undefined;
@@ -1196,7 +1239,7 @@ function emit(node: ts.Node, ctx: Ctx): string {
      */
     ctx.unresolved.push(`<${tag}>`);
     const own = classOf(
-      open.attributes.properties.find((a): a is ts.JsxAttribute => ts.isJsxAttribute(a) && a.name.getText() === "className")
+      open.attributes.properties.find((a): a is TS.JsxAttribute => ts.isJsxAttribute(a) && a.name.getText() === "className")
         ?.initializer
     );
     const cls = own ? `${text(own)} productos-unknown` : "productos-unknown";
@@ -1377,11 +1420,11 @@ function sourceOf(file: string): string {
  * ⛔ ONE IMPORT DEEP AND LITERALS ONLY. This is a reader, not an evaluator: a value that is not a
  * string or number in the source is left out, and the caller falls back to drawing the shape.
  */
-function literalItems(name: ts.Identifier, fromFile?: string, depth = 0): Array<Map<string, string>> | undefined {
+function literalItems(name: TS.Identifier, fromFile?: string, depth = 0): Array<Map<string, string>> | undefined {
   if (depth > 4) return undefined;
   const sf = name.getSourceFile();
-  let decl: ts.Expression | undefined;
-  const visit = (n: ts.Node): void => {
+  let decl: TS.Expression | undefined;
+  const visit = (n: TS.Node): void => {
     if (decl) return;
     if (ts.isVariableDeclaration(n) && ts.isIdentifier(n.name) && n.name.text === name.text && n.initializer)
       decl = n.initializer;
@@ -1407,7 +1450,7 @@ function literalItems(name: ts.Identifier, fromFile?: string, depth = 0): Array<
    * drawing shows the list the product has rather than one person's view of it.
    */
   if (decl && ts.isCallExpression(decl) && decl.arguments.length === 1 && ts.isIdentifier(decl.arguments[0]!))
-    return literalItems(decl.arguments[0] as ts.Identifier, fromFile, depth + 1);
+    return literalItems(decl.arguments[0] as TS.Identifier, fromFile, depth + 1);
 
   if (!decl) {
     /** Not declared here: follow the import that brought the name in. */
@@ -1417,7 +1460,7 @@ function literalItems(name: ts.Identifier, fromFile?: string, depth = 0): Array<
     if (!target) return undefined;
     const src = ts.createSourceFile(target, sourceOf(target), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
     let found: Array<Map<string, string>> | undefined;
-    const look = (n: ts.Node): void => {
+    const look = (n: TS.Node): void => {
       if (found) return;
       if (ts.isVariableDeclaration(n) && ts.isIdentifier(n.name) && n.name.text === name.text && n.initializer)
         found = itemsOf(n.initializer);
@@ -1430,7 +1473,7 @@ function literalItems(name: ts.Identifier, fromFile?: string, depth = 0): Array<
 }
 
 /** An array literal's object literals, as plain string fields. */
-function itemsOf(e: ts.Expression): Array<Map<string, string>> | undefined {
+function itemsOf(e: TS.Expression): Array<Map<string, string>> | undefined {
   if (!ts.isArrayLiteralExpression(e)) return undefined;
   const out: Array<Map<string, string>> = [];
   for (const el of e.elements) {
@@ -1450,7 +1493,7 @@ function itemsOf(e: ts.Expression): Array<Map<string, string>> | undefined {
 }
 
 /** The module specifier a name was imported from, if it was. */
-function importSpecifierFor(sf: ts.SourceFile, name: string): string | undefined {
+function importSpecifierFor(sf: TS.SourceFile, name: string): string | undefined {
   for (const st of sf.statements) {
     if (!ts.isImportDeclaration(st) || !ts.isStringLiteral(st.moduleSpecifier)) continue;
     const named = st.importClause?.namedBindings;
@@ -1516,7 +1559,7 @@ function iconHere(file: string | undefined, name: string): boolean {
 }
 
 const CLOSED_AT_FIRST = new Map<string, Set<string>>();
-function falseAtFirst(node: ts.Node): Set<string> {
+function falseAtFirst(node: TS.Node): Set<string> {
   const sf = node.getSourceFile();
   let have = CLOSED_AT_FIRST.get(sf.fileName);
   if (!have) {
@@ -1552,9 +1595,9 @@ export function layoutsAround(routeFile: string): string[] {
  * each one is the difference between a drawing and a pause.
  */
 /** The JSX a block-bodied callback returns, if it returns any. */
-function returnedFrom(block: ts.Block): ts.Node | undefined {
-  let found: ts.Node | undefined;
-  const walk = (n: ts.Node): void => {
+function returnedFrom(block: TS.Block): TS.Node | undefined {
+  let found: TS.Node | undefined;
+  const walk = (n: TS.Node): void => {
     if (found) return;
     if (ts.isReturnStatement(n) && n.expression) {
       const e = ts.isParenthesizedExpression(n.expression) ? n.expression.expression : n.expression;
@@ -1991,19 +2034,19 @@ function labelFor(cond: string): string {
  * places that want only the screen — and every one of them would otherwise have to learn about
  * states to keep compiling. Read immediately after the call that produced it.
  */
-let lastGuards: Array<{ when: string; node: ts.Node }> = [];
-export function guardsOfLastRead(): Array<{ when: string; node: ts.Node }> {
+let lastGuards: Array<{ when: string; node: TS.Node }> = [];
+export function guardsOfLastRead(): Array<{ when: string; node: TS.Node }> {
   return lastGuards;
 }
 
-const localCache = new Map<string, Map<string, ts.Node>>();
-function localJsx(file: string, name: string): ts.Node | undefined {
+const localCache = new Map<string, Map<string, TS.Node>>();
+function localJsx(file: string, name: string): TS.Node | undefined {
   let found = localCache.get(file);
   if (!found) {
-    found = new Map<string, ts.Node>();
+    found = new Map<string, TS.Node>();
     try {
       const src = ts.createSourceFile(file, fs.readFileSync(file, "utf-8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-      const walk = (n: ts.Node): void => {
+      const walk = (n: TS.Node): void => {
         if (ts.isVariableDeclaration(n) && ts.isIdentifier(n.name) && n.initializer) {
           const init = ts.isParenthesizedExpression(n.initializer) ? n.initializer.expression : n.initializer;
           if (ts.isJsxElement(init) || ts.isJsxSelfClosingElement(init) || ts.isJsxFragment(init)) found!.set(n.name.text, init);
@@ -2038,9 +2081,9 @@ function localJsx(file: string, name: string): ts.Node | undefined {
  */
 interface Region {
   /** The arm drawn by default: the screen as somebody first meets it. */
-  main: ts.Node;
+  main: TS.Node;
   /** Every arm, in source order, with the condition that reaches it. */
-  arms: Array<{ when: string; node: ts.Node }>;
+  arms: Array<{ when: string; node: TS.Node }>;
 }
 
 const regionCache = new Map<string, Map<string, Region | null>>();
@@ -2054,15 +2097,15 @@ function localRegion(file: string, name: string): Region | undefined {
   if (byName.has(name)) return byName.get(name) ?? undefined;
   byName.set(name, null);
 
-  let src: ts.SourceFile;
+  let src: TS.SourceFile;
   try {
     src = ts.createSourceFile(file, fs.readFileSync(file, "utf-8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   } catch {
     return undefined;
   }
 
-  let fn: ts.Node | undefined;
-  const find = (n: ts.Node): void => {
+  let fn: TS.Node | undefined;
+  const find = (n: TS.Node): void => {
     if (fn) return;
     if (
       ts.isVariableDeclaration(n) &&
@@ -2078,9 +2121,9 @@ function localRegion(file: string, name: string): Region | undefined {
   find(src);
   if (!fn) return undefined;
 
-  const body = (fn as ts.ArrowFunction | ts.FunctionDeclaration).body;
+  const body = (fn as TS.ArrowFunction | TS.FunctionDeclaration).body;
   if (!body) return undefined;
-  const isJsx = (e: ts.Node): boolean => ts.isJsxElement(e) || ts.isJsxSelfClosingElement(e) || ts.isJsxFragment(e);
+  const isJsx = (e: TS.Node): boolean => ts.isJsxElement(e) || ts.isJsxSelfClosingElement(e) || ts.isJsxFragment(e);
 
   /** A concise arrow — `const Row = () => <tr>…</tr>` — has no branches and no returns to find. */
   if (!ts.isBlock(body)) {
@@ -2098,8 +2141,8 @@ function localRegion(file: string, name: string): Region | undefined {
    * the `switch`, so the condition reads the way the same state would read as a ternary, and the
    * redraw pass can match it against `prefer` without a second vocabulary.
    */
-  const reaching = (n: ts.Node): string | undefined => {
-    let at: ts.Node | undefined = n.parent;
+  const reaching = (n: TS.Node): string | undefined => {
+    let at: TS.Node | undefined = n.parent;
     while (at && at !== body) {
       if (ts.isCaseClause(at)) {
         const sw = at.parent.parent;
@@ -2113,9 +2156,9 @@ function localRegion(file: string, name: string): Region | undefined {
     return undefined;
   };
 
-  const arms: Array<{ when: string; node: ts.Node }> = [];
-  let open: ts.Node | undefined;
-  const seek = (n: ts.Node): void => {
+  const arms: Array<{ when: string; node: TS.Node }> = [];
+  let open: TS.Node | undefined;
+  const seek = (n: TS.Node): void => {
     /** A callback inside this helper returns for ITSELF, not for the screen. */
     if (n !== body && (ts.isArrowFunction(n) || ts.isFunctionExpression(n) || ts.isFunctionDeclaration(n))) return;
     if (ts.isReturnStatement(n) && n.expression) {
@@ -2158,11 +2201,11 @@ function localRegion(file: string, name: string): Region | undefined {
  * against the obvious shape is what found it.
  */
 function forkOf(
-  guards: Array<{ when: string; node: ts.Node }>,
-  chosen: ts.Node,
+  guards: Array<{ when: string; node: TS.Node }>,
+  chosen: TS.Node,
   where: string
 ): { on: string; chose: string; others: string[]; where: string } | undefined {
-  const nameOf = (n: ts.Node): string | undefined => {
+  const nameOf = (n: TS.Node): string | undefined => {
     if (ts.isJsxElement(n)) return n.openingElement.tagName.getText();
     if (ts.isJsxSelfClosingElement(n)) return n.tagName.getText();
     return undefined;

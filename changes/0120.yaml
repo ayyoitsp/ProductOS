@@ -1,0 +1,9 @@
+id: "0120"
+said: draw.js sounds like it needs to be fixed?
+at: 2026-10-09
+kind: generator
+reaches:
+  generate: createRequire
+  pin: importing the drawing module does not load the TypeScript compiler
+waived: {}
+closed: 2026-10-09
