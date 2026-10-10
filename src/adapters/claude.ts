@@ -567,6 +567,42 @@ export function pruneUninstalledSkills(
  * as four anonymous lines inside the installer — reached, and unverifiable, which is the same
  * position as not having been done.
  */
+/**
+ * ⛔ THE CODE THAT INSTALLS AND THE PROJECT INSTALLED INTO ARE NOT ALWAYS THE SAME CHECKOUT, AND
+ * WHEN BOTH ARE PRODUCTOS THE OLDER ONE SILENTLY WINS.
+ *
+ * The global `productos` is an `npm link`: the entry in `lib/node_modules` is a symlink to one
+ * checkout. So the binary runs **whatever branch that checkout happens to be on**, from any
+ * directory. `checkoutRoot()` resolves from the module's own location and therefore names that
+ * tree, while `configRoot` names the project being written to — and the pruning guard below was
+ * written assuming those are one tree.
+ *
+ * What that cost, observed: an `init claude --update` run from a worktree, served by a main checkout
+ * sitting on an unrelated feature branch, **deleted `productos-decomposer` and
+ * `productos-demonstrator`** from the worktree — the stale registry has no such roles, so pruning
+ * read them as renamed — and **reverted `productos-scoper.md`** to a `criteria` section that had
+ * been deliberately removed. Silently, and with a success report.
+ *
+ * ⛔ THE RULE IS NOT "SAME CHECKOUT", WHICH WOULD BREAK THE NORMAL CASE. Installing into a consumer
+ * repo is exactly what this is for, and there the target is of course a different tree — it just
+ * has no `agents/` or `skills/` of its own to lose. The dangerous case is narrower: **the target is
+ * itself a ProductOS checkout, and a different one.** Then it carries its own authoritative copies
+ * of everything about to be overwritten, and this code has no way to know which of the two is newer.
+ */
+function anotherProductosCheckout(cfgRoot?: string): { ours: string; theirs: string } | null {
+  if (!cfgRoot) return null;
+  const ours = real(checkoutRoot());
+  const theirs = real(path.resolve(cfgRoot));
+  if (ours === theirs) return null;
+  /**
+   * ⛔ Identified by what makes it ProductOS rather than by a path convention: the registry the
+   * roles come from, and the prompts they are written from. A consumer repo has neither.
+   */
+  const isProductos =
+    fs.existsSync(path.join(theirs, "src/core/jobs.ts")) && fs.existsSync(path.join(theirs, "agents"));
+  return isProductos ? { ours, theirs } : null;
+}
+
 function pruneRenamedRoles(installed: string[], cfgRoot?: string, main = true, home: string = HOME): string[] {
   if (!installed.length) return [];
   /**
@@ -617,6 +653,33 @@ export function installClaudeSkills(
   if (!fs.existsSync(host.claude)) {
     throw new Error(
       `Claude Code not detected at ${host.claude}. Install Claude Code first, then re-run.`
+    );
+  }
+  /**
+   * ⛔ BEFORE ANYTHING IS WRITTEN OR REMOVED, because both halves of the damage happen inside the
+   * normal path and neither reports itself. See `anotherProductosCheckout` for the account.
+   *
+   * ⛔ AND IT THROWS RATHER THAN SKIPPING THE RISKY PART. A partial install is the state nobody can
+   * reason about afterwards: the complaint that found this was two agents missing and a third
+   * reverted, which looked exactly like somebody having deleted them by hand.
+   */
+  const crossed = anotherProductosCheckout(opts.configRoot);
+  if (crossed) {
+    throw new Error(
+      [
+        `This install would write one ProductOS checkout's roles into another one.`,
+        ``,
+        `  the code running:  ${crossed.ours}`,
+        `  the project:       ${crossed.theirs}`,
+        ``,
+        `Usually that means the global \`productos\` was used: it is an npm link into one checkout,`,
+        `so it runs whatever branch THAT tree is on no matter where you invoke it. Its registry`,
+        `would overwrite this project's own \`agents/\` and \`skills/\`, deleting any role it has`,
+        `not heard of — which is a thing that has actually happened here, silently.`,
+        ``,
+        `Run \`npm run build && node bin/productos.js init claude --update\` from ${crossed.theirs}`,
+        `instead, so the roles installed are the ones that project actually defines.`,
+      ].join("\n")
     );
   }
   fs.mkdirSync(host.skills, { recursive: true });
