@@ -1,0 +1,47 @@
+id: "0121"
+said: "Yes"
+at: 2026-10-10
+kind: derivation
+reaches:
+  derive: anotherProductosCheckout
+  pin: installing into another ProductOS checkout is refused, and names both trees
+waived:
+  surface: "The surface is the refusal message, and it is held in the file that decides the refusal rather than in a rendering layer — because there is nothing to render. An installer either proceeds or stops, and the stop has one sentence and two paths in it. Filing the text somewhere else would put the words a person reads at one remove from the condition that produces them, which is the arrangement every other refusal in `claude.ts` already avoids. Arguable the day a second host adapter needs the same refusal, because then the words are shared and the condition is not."
+  check: "`productos v2 check` reads a corpus and reports what is wrong with product truth; nothing about which checkout installed a role is a fact about a product. The equivalent of a check here is the refusal itself — it runs on every install, before anything is written, and cannot be skipped. Arguable if the install ever becomes something a corpus records, which it is not."
+# ⛔ HIS WORD WAS "Yes". The question it answered was mine, and the distinction is the whole point of
+# quoting verbatim — so it goes here as context rather than into `said:` where it would read as his
+# account of the bug:
+#
+#   "The global `productos` command is a symlink into /Users/peter/personal/productos/ — and that
+#    checkout sits on a feature branch with ten uncommitted files. So `productos init claude
+#    --update`, run from anywhere, installs whatever that branch happens to be holding at the time.
+#    […] Want me to take that one?"
+#
+# ⛔ ONE CHECKOUT'S INSTALLER OVERWROTE ANOTHER'S ROLES, SILENTLY, AND REPORTED SUCCESS.
+#
+# `lib/node_modules/productos` is an `npm link` — a symlink to the main checkout. So the global
+# binary runs whatever branch that one tree is on, from any directory. `checkoutRoot()` resolves
+# from the module's own location and names that tree; `configRoot` names the project being written
+# to. Every guard in the installer was written assuming those are the same tree, and the comment on
+# `pruneRenamedRoles` even reasons carefully about worktrees — it just never considered that the
+# CODE could come from one checkout while the TARGET is another.
+#
+# Observed, from one `init claude --update` run in a worktree:
+#
+#   · `productos-decomposer.md` and `productos-demonstrator.md` DELETED — the stale registry has no
+#     such roles, so pruning read them as renamed and tidied them away
+#   · `productos-scoper.md` REVERTED to the `criteria` section removed after "a product person
+#     doesn't write a criterion - what even is this? this is old shit"
+#
+# Reproduced from scratch with the guard removed, rather than argued: a role only the target
+# checkout defines exists before the install and does not after.
+#
+# ⛔ THE RULE IS NOT "REFUSE WHEN THE TREES DIFFER", WHICH WOULD BREAK WHAT THIS IS FOR. Installing
+# into a consumer repo means a different tree every time — it just has no `agents/` of its own to
+# lose. The refusal is narrower: the target is ITSELF a ProductOS checkout and a different one,
+# identified by `src/core/jobs.ts` and `agents/` rather than by a path convention. Three of the four
+# pins are exactly the three cases, and only the middle one refuses.
+#
+# ⛔ It throws rather than skipping the risky part, because a partial install is the state nobody can
+# reason about afterwards — which is how this presented: two agents missing and a third reverted,
+# looking exactly like somebody having deleted them by hand.
