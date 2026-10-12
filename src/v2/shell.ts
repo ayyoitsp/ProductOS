@@ -118,6 +118,15 @@ export function navIn(html: string): ShellNav[] {
 /**
  * Point each menu item at the screen it names.
  *
+ * ⛔ A PROTOTYPE'S MENU IS THE AUTHOR'S, ONCE THEY HAVE TOUCHED IT, and this function is why that
+ * is possible: it only ever fills in `to`. The labels and their order are whatever it was handed —
+ * the product's own menu the first time, and after that whatever the author made of it.
+ *
+ * Peter: *"I want to allow users to change high level navigation ... prototype 1 is for the admin
+ * role, 2 is for the loan processor role"*. A role's navigation is a product decision, and it is
+ * precisely what somebody builds a prototype to try; a generator that replaced it on every run
+ * made the surface read-only in the one place it must not be.
+ *
  * ⛔ ON THE TITLE, AND ONLY WHERE IT IS UNAMBIGUOUS. A menu says "CRE Deals" and a screen is titled
  * "CRE Deals"; that is the product telling you where its menu goes, and it needs no inference. Two
  * screens answering equally well is a guess, and a menu that silently goes to the wrong one is

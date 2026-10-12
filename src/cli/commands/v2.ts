@@ -2233,7 +2233,8 @@ export function v2Command(): Command {
     .description("Draw each prototype's chrome, and aim its menu at the screens it names")
     .option("--into <dir>", "the corpus", ".")
     .option("-n, --dry-run", "say what it would draw and change nothing")
-    .action((o: { into?: string; dryRun?: boolean }) => {
+    .option("--renav", "take the product's own menu again, discarding a prototype's edits to it")
+    .action((o: { into?: string; dryRun?: boolean; renav?: boolean }) => {
       const into = path.resolve(o.into ?? ".");
       const corpus = loadCorpus(into);
       if (!corpus.prototypes.length) {
@@ -2283,11 +2284,31 @@ export function v2Command(): Command {
           console.log(pc.yellow("?"), `${proto.id} — nothing wraps that route, so this prototype has no chrome`);
           return proto;
         }
-        const nav = aimNav(shell.nav, screens);
+        /**
+         * ⛔ A PROTOTYPE'S MENU IS THE AUTHOR'S, ONCE THEY HAVE TOUCHED IT.
+         *
+         * Peter: *"one thing I want to allow users to do is change high level navigation ... say a
+         * user just wanted to do something like 'oh, I want 3 main prototypes, prototype 1 is for
+         * the admin role, 2 is for the loan processor role'"*.
+         *
+         * Several prototypes was already expressible. Editing one's menu was not: this replaced
+         * `nav` wholesale on every run, so an author who removed four items from the admin walk got
+         * them back the next time anybody drew. A role's navigation is a product decision — it is
+         * precisely the thing somebody wants to try in a prototype — and a generator that overwrites
+         * it makes the surface read-only in the one place it should not be.
+         *
+         * So: a nav that is already there is kept, in the author's order, with its `to` refreshed
+         * against the screens that exist now. `--renav` takes the product's own menu again and
+         * discards the edits, which is the only way back and should be asked for explicitly.
+         */
+        const authored = (proto.nav ?? []).length > 0 && !o.renav;
+        const nav = aimNav(authored ? proto.nav : shell.nav, screens);
         const aimed = nav.filter((n) => n.to).length;
         console.log(
           pc.green("✓"),
-          `${proto.id} — chrome from ${shell.from.length} layout(s), ${nav.length} menu item(s), ${aimed} of them aimed`
+          `${proto.id} — chrome from ${shell.from.length} layout(s), ${nav.length} menu item(s)${
+            authored ? " (this prototype's own, kept)" : ""
+          }, ${aimed} of them aimed`
         );
         for (const n of nav)
           console.log(pc.dim(`    ${n.label}${n.to ? `  →  ${n.to}` : "  —  names no screen here"}`));
