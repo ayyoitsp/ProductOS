@@ -1,0 +1,14 @@
+id: "0125"
+said: the stronger one, if you want it, is a test that fails when ANY glyph in the corpus falls back, because that survives lucide changing shape a third time without anybody predicting the shape
+at: 2026-10-12
+kind: derivation
+reaches:
+  check: ASSERT THE CONDITION, NOT THE SHAPE SOMEBODY HAPPENED TO FIX
+  pin: a corpus says so when its glyphs drew as grey squares
+waived:
+  model: Nothing new can be said. A fallback is already recorded in the drawing as `class="productos-icon"` with the name it could not resolve — the condition was always expressible, nothing was ever asking it.
+  derive: No state is computed. Two counts over drawings the corpus already holds.
+  generate: The generator is unchanged and deliberately so. This exists because a FUTURE generator change — or a dependency moving under it — can silently stop resolving glyphs; wiring it into the generator would tie the question to the thing it is meant to outlive.
+  surface: "`v2 check` is the surface for conditions a corpus must meet. A second home would be a second copy."
+  instruct: No author writes or decides anything here. The note tells them the likely cause is the package rather than their names, which is the only judgement involved and it is in the finding.
+closed: 2026-10-12
