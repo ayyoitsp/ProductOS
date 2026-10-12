@@ -22,7 +22,7 @@ import { inferConnections, landingsFor, finishesFor, stateShowing } from "./conn
 import { walkOf, type Walk } from "./walk.js";
 import { inEffect, declined as declinedSteers, reaches } from "./steers.js";
 import { AUTHORS } from "../core/jobs.js";
-import { SLOTS, SLOT_ASKS_SHORT, statements, saysText, type SlotName, type Scope, type Steer, type View, type Part, type Says } from "./schema.js";
+import { SLOTS, SLOT_ASKS_SHORT, statements, saysText, type SlotName, type Scope, type Steer, type View, type Part, type Says, type Prototype } from "./schema.js";
 import { gridFor, gateFor, actsFor, ruleHomes, stageOf, reachOf, type Grid, type Cell } from "./grid.js";
 import { stampFor, decidedFor, whatChangedSince } from "./stamp.js";
 import { confidenceOf, whyConfident, discrepancyFor } from "./confidence.js";
@@ -2586,7 +2586,7 @@ function renderNav(
    */
   const rootId = corpus.scopes.find((x) => !x.scope.in)?.scope.id;
   const protoScreens = screensOf(corpus);
-  const theWalk = walkOf(corpus);
+  const theWalk = walkOf(corpus, corpus.prototypes?.[0]?.starts_at);
   const protoPromises = promisesOf(corpus);
   /**
    * ⛔ WHERE A CONTROL GOES, WORKED OUT FROM THE TRUTH AT RENDER TIME.
@@ -2753,7 +2753,7 @@ function renderNav(
  */
 export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptions = {}): string | null {
   const protoScreens = screensOf(corpus);
-  const theWalk = walkOf(corpus);
+  const theWalk = walkOf(corpus, corpus.prototypes?.[0]?.starts_at);
   const protoPromises = promisesOf(corpus);
   const entry = corpus.scopes.find((s) => s.scope.id === scopeId);
   if (!entry) return null;
@@ -2879,7 +2879,7 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
          * under seven open questions and nobody reads them. A second row of items, at the level
          * they belong to.
          */
-        renderPrototype(protoScreens, protoPromises, theWalk) +
+        renderPrototype(protoScreens, protoPromises, theWalk, (corpus.prototypes ?? [])) +
         renderSettings(corpus) +
         `<section class="view" id="view-overview" data-view="overview" data-ref="${esc(scopeId)}" data-label="Overview">
            <div class="sub-view" data-tabs="product" data-sub-view="queue" data-ref="queue" data-label="Queue">
@@ -5211,6 +5211,23 @@ const DRIVE = `<script>
       dangling: document.getElementById("walk-dangling"),
     };
     const trail = [];
+    /** Which way through the product is being walked. The first is the one it opens on. */
+    let current = (walk.prototypes || [])[0] || null;
+
+    function choose(id) {
+      const next = (walk.prototypes || []).find((p) => p.id === id);
+      if (!next) return;
+      current = next;
+      trail.length = 0;
+      for (const b of document.querySelectorAll("[data-walk-proto]"))
+        b.classList.toggle("on", b.dataset.walkProto === id);
+      go(next.startsAt, false);
+    }
+
+    document.addEventListener("click", (ev) => {
+      const b = ev.target instanceof Element ? ev.target.closest("[data-walk-proto]") : null;
+      if (b) { ev.preventDefault(); choose(b.dataset.walkProto); }
+    });
 
     function moveButton(ref, label, sub) {
       const b = document.createElement("button");
@@ -5246,10 +5263,36 @@ const DRIVE = `<script>
         const host = document.createElement("div");
         host.className = "proto-mock";
         const tpl = document.createElement("template");
-        tpl.innerHTML = src.innerHTML;
+        /**
+         * ⛔ THE SCREEN INSIDE THE PRODUCT'S OWN CHROME.
+         *
+         * Drawings carry no shell on purpose — a screen under review wants the room, and the same
+         * menu on all seventeen says nothing. A WALK is the opposite case: the menu is how you get
+         * around, so with no shell there was nothing to press and "Back to CRE Deals" did nothing.
+         * The chrome is the prototype's, not the product's: an unauthenticated flow has none.
+         */
+        const shell = (current && current.shell) || "";
+        tpl.innerHTML = shell.includes("<!--screen-->")
+          ? shell.replace("<!--screen-->", src.innerHTML)
+          : src.innerHTML;
         host.appendChild(tpl);
         stage.appendChild(host);
-        hydrate(host);
+        const root = hydrate(host);
+        /**
+         * ⛔ THE MENU MOVES THE WALK. Each item was aimed at the screen it names when the chrome was
+         * drawn; here the press is caught inside the shadow root and turned into a step. A nav item
+         * nothing resolved is left alone — it is real chrome, and pretending it navigates would be
+         * a prototype lying about the product.
+         */
+        if (root && current && current.nav)
+          root.addEventListener("click", (ev) => {
+            for (const el of ev.composedPath()) {
+              if (!(el instanceof Element) || !el.textContent) continue;
+              const label = el.textContent.replace(/\s+/g, " ").trim();
+              const hit = current.nav.find((n) => n.to && n.label === label);
+              if (hit) { ev.preventDefault(); go(hit.to, true); return; }
+            }
+          });
       } else {
         /** ⛔ Said plainly. A blank stage reads as broken; "no picture" is a fact about the corpus. */
         const p = document.createElement("p");
@@ -5283,7 +5326,9 @@ const DRIVE = `<script>
       backBtn.hidden = trail.length === 0;
     });
 
-    if (walk.entries && walk.entries.length) go(walk.entries[0], false);
+    const opensOn = (current && current.startsAt && walk.steps[current.startsAt] && current.startsAt)
+      || (walk.entries && walk.entries[0]);
+    if (opensOn) go(opensOn, false);
   })();
 
 })();
@@ -6833,10 +6878,22 @@ function renderSettings(corpus: Corpus): string {
  * ⛔ AND IT NAMES THE SCREENS WITH NO DOOR. A walk that silently skipped them would read as a
  * complete product with part of itself missing, which is the opposite of what this is for.
  */
-function walkInside(walk: Walk): string {
+function walkInside(walk: Walk, protos: Prototype[]): string {
   if (!walk.steps.size) return "";
 
   const data = {
+    /**
+     * ⛔ EVERY PROTOTYPE TRAVELS WITH THE PAGE. The chrome is drawn from layouts in a repository the
+     * hosted instance does not have, so it rides in the corpus or it does not exist — the same
+     * argument `style.yaml` travels on.
+     */
+    prototypes: protos.map((p) => ({
+      id: p.id,
+      title: p.title,
+      startsAt: p.starts_at,
+      shell: p.shell_html ?? "",
+      nav: p.nav ?? [],
+    })),
     steps: Object.fromEntries(
       [...walk.steps.entries()].map(([ref, st]) => [
         ref,
@@ -6875,6 +6932,16 @@ function walkInside(walk: Walk): string {
 
   return `<script type="application/json" id="walk-data">${JSON.stringify(data).replace(/</g, "\\u003c")}</script>
     <p class="lede">The product as one thing, walked from what the truth says. <strong>Inside</strong> is a screen shown within this one; <strong>goes to</strong> is a control the truth says leads somewhere.</p>
+    ${
+      protos.length > 1
+        ? `<div class="wpicks">${protos
+            .map(
+              (p, i) =>
+                `<button type="button" class="wpick${i === 0 ? " on" : ""}" data-walk-proto="${esc(p.id)}">${line(p.title)}</button>`
+            )
+            .join("")}</div>`
+        : ""
+    }
     <div class="wbar"><span class="wwhere" id="walk-where"></span><button type="button" class="wback" id="walk-back" hidden>◀ back</button></div>
     <div class="wrap-walk">
       <div class="wstage" id="walk-stage"></div>
@@ -6888,7 +6955,7 @@ function walkInside(walk: Walk): string {
     ${stranded}`;
 }
 
-function renderPrototype(screens: ProtoScreen[], promises: ProtoPromise[], walk?: Walk): string {
+function renderPrototype(screens: ProtoScreen[], promises: ProtoPromise[], walk?: Walk, protos?: Prototype[]): string {
   if (!screens.length && !promises.length) return "";
 
   /**
@@ -6957,7 +7024,7 @@ function renderPrototype(screens: ProtoScreen[], promises: ProtoPromise[], walk?
   return `<script type="application/json" id="proto-says">${JSON.stringify(index).replace(/</g, "\\u003c")}</script>
   <script type="application/json" id="proto-titles">${JSON.stringify(titles).replace(/</g, "\\u003c")}</script>
   <section class="view" id="view-prototype" data-view="prototype" data-ref="prototype" data-label="Prototype">
-    ${walk ? walkInside(walk) : ""}
+    ${walk ? walkInside(walk, protos ?? []) : ""}
     <!--
       ⛔ ONE PROTOTYPE, NOT TWO TABS.
 

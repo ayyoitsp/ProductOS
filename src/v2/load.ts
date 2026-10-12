@@ -15,7 +15,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { parseFrontmatter } from "../core/frontmatter.js";
 import YAML from "yaml";
-import { Scope, Rule, Reading, Verdict, Charter, type SlotName , saysText, type Says, Note, Steer, Access, Style} from "./schema.js";
+import { Scope, Rule, Reading, Verdict, Charter, type SlotName , saysText, type Says, Note, Steer, Access, Style, Prototype, PrototypeFile } from "./schema.js";
 
 export interface V2Paths {
   root: string;
@@ -72,6 +72,13 @@ export interface Corpus {
    * missing one if this is widened to a default.
    */
   style?: Style;
+  /**
+   * The ways through this product — each with its own front door and its own chrome.
+   *
+   * ⛔ SEVERAL, NOT ONE. An unauthenticated flow and a signed-in one do not share a menu; two
+   * lending businesses in one codebase do not share a walk. See `Prototype`.
+   */
+  prototypes: Prototype[];
   rules: Array<{ rule: Rule; body: string; file: string }>;
   readings: Reading[];
   verdicts: Verdict[];
@@ -307,6 +314,15 @@ export function loadCorpus(root: string, store: Store = diskStore): Corpus {
    * product rather than one per scope, and a root file is what `corpusFiles` enumerates, so it
    * reaches the store, a packet and an export with nothing else to keep in step.
    */
+  let prototypes: Prototype[] = [];
+  for (const file of readDir(paths.root, [".yaml", ".yml"]).filter((f) => /prototypes\.ya?ml$/.test(f))) {
+    try {
+      const raw = YAML.parse(fs.readFileSync(file, "utf-8")) ?? {};
+      if (raw.prototypes) prototypes = PrototypeFile.parse(raw).prototypes;
+    } catch {
+      /* a corpus with an unreadable prototypes file still loads — `check` reports it */
+    }
+  }
   let style: Style | undefined;
   for (const file of readDir(paths.root, [".yaml", ".yml"]).filter((f) => /style\.ya?ml$/.test(f))) {
     try {
@@ -325,7 +341,7 @@ export function loadCorpus(root: string, store: Store = diskStore): Corpus {
       broken.push({ file, why: why(e) });
     }
   }
-  return { paths, scopes, rules, charter, notes, readings, verdicts, steers, access, style, broken };
+  return { paths, scopes, rules, charter, notes, readings, verdicts, steers, access, style, prototypes, broken };
 }
 
 // ---------------------------------------------------------------------------

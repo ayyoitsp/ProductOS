@@ -2765,6 +2765,59 @@ export const AccessFile = z.object({ access: z.array(Access).default([]) }).stri
  * that read disk where it could and the corpus where it could not would be two products that look
  * the same until somebody publishes one.
  */
+/**
+ * One way through the product, with its own front door and its own chrome.
+ *
+ * ⛔ A PRODUCT HAS SEVERAL, AND ASSUMING ONE WAS THE MISTAKE. The walk was built as "the product,
+ * walked" — one start, one shell. Peter: *"we can have different prototypes for differnet
+ * prototypes.. like 'unauthenticated' could be a flow, and CRE vs private lending"*.
+ *
+ * He is right, and the clearest case proves it: an unauthenticated flow has no application menu at
+ * all. A single shell for the whole product would put the signed-in navigation around a sign-in
+ * screen, which is not a drawing of anything. Two lending businesses that share a codebase are the
+ * same argument one level up — they are different products to the person using them, and a
+ * prototype that mixes their screens is a walk nobody takes.
+ *
+ * ⛔ IT NAMES A START, BECAUSE A PROTOTYPE OPENS SOMEWHERE. Without one the walk sorted its screens
+ * and opened on whichever came first — Peter: *"and it just starts at 'sizing results' ?? hahahah"*.
+ * Sorting is not a product decision and should never look like one.
+ */
+export const Prototype = z
+  .object({
+    id: z.string(),
+    title: z.string(),
+    /** `<scope>#<view>` — the screen a person comes in on. */
+    starts_at: z.string(),
+    /**
+     * A route whose LAYOUTS are this prototype's chrome.
+     *
+     * ⛔ THE LAYOUTS, NOT THE PAGE. Composing a page and cutting its content out afterwards bakes
+     * one screen's markup into the frame every other screen then wears.
+     */
+    shell_from: z.string().optional(),
+    /** The drawn chrome, with `<!--screen-->` where the screen goes. Output — never hand-written. */
+    shell_html: z.string().optional(),
+    /**
+     * The chrome's own menu, each item pointed at the screen it names where one is unambiguous.
+     *
+     * ⛔ THIS IS THE PRODUCT'S OWN STATEMENT OF HOW TO GET AROUND ITSELF, and it is a far better
+     * source than inference: `connect` reads a control's sentence and guesses, and on the corpus
+     * this was built against it found four links across seventeen screens. A menu names its areas
+     * outright, in one place, in the product's own words.
+     */
+    nav: z
+      .array(z.object({ label: z.string(), to: z.string().optional() }).strict())
+      .default([]),
+    /** Which layout files it was drawn from, so a reader can go and look. */
+    from: z.array(z.string()).default([]),
+    drawn_at: z.string().optional(),
+  })
+  .strict();
+export type Prototype = z.infer<typeof Prototype>;
+
+/** The file a corpus keeps its prototypes in — one home, beside `style.yaml`. */
+export const PrototypeFile = z.object({ prototypes: z.array(Prototype).default([]) }).strict();
+
 export const Style = z
   .object({
     /**
