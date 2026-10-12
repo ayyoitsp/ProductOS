@@ -117,3 +117,39 @@ test("an icon carries its own size, or it fills whatever holds it", () => {
   assert.match(lucideSvg("Folder", page, "h-4 w-4"), /class="h-4 w-4"/, "the call site lost its sizing");
   fs.rmSync(root, { recursive: true, force: true });
 });
+
+test("the package's newer icon shape is read too", () => {
+  /**
+   * ⛔ A DEPENDENCY BUMP PUT EVERY ICON BACK TO A GREY SQUARE, SILENTLY.
+   *
+   * lucide v1.34 wrote `const __iconNode = [["path", {…}]]`; v1.50 writes
+   * `const __iconData = { name, size, node: [["path", {…}]] }`. The upgrade landed in the
+   * application's node_modules between one session and the next — nobody here chose it — and every
+   * glyph in the corpus reverted to the exact defect this file exists to end. Caught by checking
+   * before a deploy rather than by a screenshot afterwards.
+   *
+   * Both shapes are read, and neither is chosen by sniffing a version string: the data is found
+   * wherever it actually is.
+   */
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "productos-icons-v2-"));
+  const icons = path.join(root, "node_modules/lucide-react/dist/esm/icons");
+  fs.mkdirSync(icons, { recursive: true });
+  fs.writeFileSync(
+    path.join(icons, "folder.mjs"),
+    `import createLucideIcon from '../createLucideIcon.mjs';\n` +
+      `const __iconData = {\n  name: "folder",\n  size: 24,\n  node: [\n    ["path", { d: "M20 20a2 2 0 0 0 2-2V8Z", key: "1kt360" }]\n  ]\n};\n` +
+      `const Folder = createLucideIcon(__iconData);\nexport { __iconData, Folder as default };`
+  );
+  fs.writeFileSync(
+    path.join(icons, "..", "lucide-react.mjs"),
+    `export { default as Folder } from './icons/folder.mjs';`
+  );
+  const page = path.join(root, "app/page.tsx");
+  fs.mkdirSync(path.dirname(page), { recursive: true });
+  fs.writeFileSync(page, "x");
+
+  const svg = lucideSvg("Folder", page);
+  assert.ok(svg, "the newer icon shape was not read, so every glyph is a grey square again");
+  assert.match(svg, /M20 20a2 2 0 0 0 2-2V8Z/, "the path drawn is not the one the package holds");
+  fs.rmSync(root, { recursive: true, force: true });
+});
