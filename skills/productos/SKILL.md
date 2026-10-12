@@ -25,6 +25,8 @@ You are the **orchestrator**, and you are the session — not a subagent. That i
 - `scoper` *(product · writes)* — the feature written in a context holding nothing but that feature
 - `machinist` *(engineering · writes)* — the half of this feature nobody presses — what runs by itself, and what sets it off
 - `instrumenter` *(engineering · writes)* — what has to be recorded for any of this feature's measures to be knowable
+- `decomposer` *(engineering · writes)* — **one per unit, in parallel** — which parts of the system this feature needs, from the truth as it now reads
+- `demonstrator` *(quality · writes)* — **one per unit, in parallel** — what would have to be demonstrated for each claim to be believed, invalidated when the claim moves
 - `designer` *(design · writes)* — **one per unit, in parallel** — screens the product should have and nothing renders yet
 - `completeness` *(product · judges, writes nothing)* — whether somebody can get from the start of this feature to the end of it
 - `design-critique` *(design · judges, writes nothing)* — **one per unit, in parallel** — whether these are the right screens for the job, not just complete ones
@@ -59,6 +61,23 @@ You are the **orchestrator**, and you are the session — not a subagent. That i
 - putting the survey in front of a person before thirty scopers start against a partition that is wrong
 - every act of judgement — nothing here is validated by having been written
 
+### Run one analysis across everything, over only what is outstanding
+
+*They say:* index the capabilities · re-derive the test cases · analyse the whole corpus · what is left to work out · sweep this corpus
+
+**Spawn, in order:**
+
+- `decomposer` *(engineering · writes)* — **one per unit, in parallel** — the parts each feature needs — one per ref `analyse capabilities` names, never one per feature in the corpus
+- `demonstrator` *(quality · writes)* — **one per unit, in parallel** — what would show each claim holding — one per ref `analyse requirements` names
+- `designer` *(design · writes)* — **one per unit, in parallel** — a picture for each screen `analyse drawings` names, including the appearances a screen falls into
+
+**⛔ You keep these yourself:**
+
+- ⛔ running `productos v2 analyse <name>` FIRST and fanning only over the refs it returns — a sweep that runs over everything redoes finished work and stops being something anybody runs twice
+- deciding which analysis to run: this route does one at a time, because thirty roles of three kinds at once is a diff nobody reviews
+- ⛔ reading the stale ones before the missing ones — a unit that was done and now answers an older wording looks finished to everybody reading it
+- every act of judgement. Nothing swept is validated by having been swept, and none of these roles may stamp
+
 ### The engineering and QA read, once product and design have signed off
 
 *They say:* ready for review · is this buildable · can we start on this · engineering review · would these tests prove anything
@@ -67,6 +86,7 @@ You are the **orchestrator**, and you are the session — not a subagent. That i
 
 **Spawn, in order:**
 
+- `architecture` *(engineering · judges, writes nothing)* — whether those are the right subsystems, with boundaries that hold
 - `buildability` *(engineering · judges, writes nothing)* — whether somebody could start on Monday — the second tenet, read from a builder's seat
 - `test-design` *(quality · judges, writes nothing)* — whether each criterion would show its claim holding, rather than merely pass
 
@@ -309,6 +329,48 @@ database. It **refuses unless that corpus is marked publishable**, because publi
 truth to claude.ai. Do not argue with the gate; tell them what it said.
 
 See `WATCHING_PRESSES.md` for reading presses back and turning them into truth.
+
+## ⛔ One door into a corpus, and it tells you what it takes — `/api/v2/in`
+
+Everything that changes a corpus goes through **one input**, named by an **intent**. There is no
+endpoint per operation and no new route for a new capability — a capability costs an intent.
+
+```bash
+curl -s <instance>/api/v2/in                      # what it takes: every intent, its authority, its fields
+curl -sX POST <instance>/api/v2/in \
+  -d '{"intent":"note","about":"pricing#publish","says":"this screen says nothing about what happens next"}'
+```
+
+From MCP, the same door and the same contract:
+
+```
+productos_intents   # ask what may be said, and what each field means
+productos_in        # say it: { intent, fields: { … } }
+```
+
+⛔ **Ask before you guess.** `GET /api/v2/in` and `productos_intents` are generated from the intent
+registry, so they cannot be out of date. A hardcoded idea of the fields is wrong the first time one
+changes — and the cost is on the record twice already: *a refusal printing a remedy the tool then
+rejected.*
+
+⛔ **The intent is NAMED, never inferred — and neither is what a request is about.** A classifier
+reading a sentence as `accept` mints consent nobody gave; one guessing `about` files a request
+against the wrong feature, which is worse than one that asked. **If you do not know what somebody is
+referring to, ask them.** This binds anything that relays messages in — a chat channel, a bot, a
+queue — where there is no page context to read it from.
+
+⛔ **A relay carries a press; it never makes one.** Use `carry`, which keeps the presser's name and
+records who carried it. Recording a relayed message as a direct press claims a person agreed to
+something in a room they were not in.
+
+| What came back | What it means | What to do |
+| --- | --- | --- |
+| `403` | **you may not** — this principal lacks the authority | stop, and tell a person |
+| `422` | **you have not said enough** — the refusal names each field and what it is | supply it and retry |
+
+The four authorities: `consent` (a person agreed — ⛔ a token can never claim this), `relay`
+(carrying somebody else's press), `author` (your own words, claiming nothing about what anyone
+agreed to), `open` (anybody may).
 
 ## ⛔ `pos:` means the framework
 

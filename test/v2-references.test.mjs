@@ -15,6 +15,7 @@
  * So the property is asserted directly: a made-up name in any reference field is refused.
  */
 import assert from "node:assert/strict";
+import { temp } from "./support/temp.mjs";
 import { test } from "node:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -24,7 +25,7 @@ import { checkCorpus } from "../dist/v2/check.js";
 const PHANTOM = "a-rule-that-was-never-written";
 
 function seeded(mutate) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "v2ref-"));
+  const dir = temp("v2ref-");
   fs.cpSync("v2-seed", dir, { recursive: true });
   const file = path.join(dir, "truth", "money.md");
   fs.writeFileSync(file, mutate(fs.readFileSync(file, "utf-8")), "utf-8");

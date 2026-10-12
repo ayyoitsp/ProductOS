@@ -1,0 +1,9 @@
+id: "0117"
+said: still running the suite??? 57 per call to what? what are we testing exactly in the suite? uh, let's fix the thing. wtf? where are those 60k files at?
+at: 2026-10-08
+kind: generator
+reaches:
+  generate: AT_MOST_DIRS
+  pin: a namesake in a sibling project is not drawn into this screen
+waived: {}
+closed: 2026-10-08

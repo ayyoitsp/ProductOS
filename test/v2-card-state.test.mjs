@@ -14,6 +14,7 @@
  * next to it says — which is the one thing no check was comparing.
  */
 import assert from "node:assert/strict";
+import { temp } from "./support/temp.mjs";
 import { test } from "node:test";
 import { stateShowing } from "../dist/v2/connects.js";
 
@@ -93,7 +94,7 @@ import path from "node:path";
 import os2 from "node:os";
 
 function drawnBeforeParts(withMarkers) {
-  const dir = fs.mkdtempSync(path.join(os2.tmpdir(), "v2stale-"));
+  const dir = temp("v2stale-");
   fs.mkdirSync(path.join(dir, "truth"), { recursive: true });
   /**
    * ⛔ A BLOCK SCALAR BELOW, so the marker's own double quotes need no escaping. Escaping them

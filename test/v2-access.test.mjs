@@ -16,6 +16,7 @@
  * than their own. So every finding here is gated on `access:`, and `neither` is a real answer.
  */
 import assert from "node:assert/strict";
+import { temp } from "./support/temp.mjs";
 import { test } from "node:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -39,7 +40,7 @@ const ACCESS = `access:
 `;
 
 function corpus({ access = "roles", held = ["create-deals"], says = "anybody whose role lets them create deals here" } = {}) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "v2acc-"));
+  const dir = temp("v2acc-");
   fs.mkdirSync(path.join(dir, "corpus", "truth"), { recursive: true });
   fs.mkdirSync(path.join(dir, "productos"), { recursive: true });
   fs.writeFileSync(path.join(dir, "productos", "config.yaml"), `version: "0.1.0"\nexchange:\n  access: ${access}\n`);

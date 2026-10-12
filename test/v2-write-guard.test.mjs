@@ -7,6 +7,7 @@
  * to a corpus that passes. These are the four paths, each with the exact damage it used to do.
  */
 import assert from "node:assert/strict";
+import { temp } from "./support/temp.mjs";
 import { test } from "node:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -17,7 +18,7 @@ import { loadCorpus } from "../dist/v2/load.js";
 const REASON = "A reason long enough to carry the argument, which the schema requires of a ruling.";
 
 function seed() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "v2write-"));
+  const dir = temp("v2write-");
   fs.cpSync("v2-seed", dir, { recursive: true });
   return dir;
 }

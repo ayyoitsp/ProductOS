@@ -12,6 +12,7 @@
  * which ProductOS cannot do, but stopping a stale one from being invisible.
  */
 import test from "node:test";
+import { temp } from "./support/temp.mjs";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
@@ -28,7 +29,7 @@ import { checkCorpus } from "../dist/v2/check.js";
  * failed for a reason that had nothing to do with what it was testing.
  */
 function corpus({ sources, codeAt }) {
-  const repo = fs.mkdtempSync(path.join(os.tmpdir(), "productos-stale-"));
+  const repo = temp("productos-stale-");
   const at = path.join(repo, "v2");
   fs.cpSync("v2-seed", at, { recursive: true });
   /** ⛔ Nested under `style:` — that is the shape the loader reads, and a flat one loads as nothing. */

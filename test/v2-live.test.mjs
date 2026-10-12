@@ -11,6 +11,7 @@
  * is indistinguishable from one that never did — and the reader cannot tell which they are holding.
  */
 import { test } from "node:test";
+import { temp } from "./support/temp.mjs";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
@@ -23,7 +24,7 @@ const { v2Route } = await import(path.resolve("dist/v2/serve.js"));
 const { renderScopePage } = await import(path.resolve("dist/v2/page.js"));
 const { loadCorpus } = await import(path.resolve("dist/v2/load.js"));
 
-const root = fs.mkdtempSync(path.join(os.tmpdir(), "productos-live-"));
+const root = temp("productos-live-");
 const dir = path.join(root, "v2");
 execFileSync("node", [CLI, "v2", "reset", "--at", dir], { stdio: "pipe" });
 const SCOPE = loadCorpus(dir).scopes.find((s) => !s.scope.in).scope.id;

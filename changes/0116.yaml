@@ -1,0 +1,27 @@
+id: "0116"
+said: why do we need an endpoint to write a corpus doc?
+at: 2026-10-08
+kind: surface
+reaches:
+  surface: 'name: "document"'
+  pin: a document written through the one door reaches the store and loads as a corpus
+waived: {}
+closed: 2026-10-08
+# ⛔ WE DID NOT, AND THE ANSWER WAS ALREADY TRUE BEFORE HE ASKED.
+#
+# I had said authoring against a hosted corpus needed a new endpoint. That was answered before the
+# single door existed, and I never revisited it. Once `/api/v2/in` landed, every piece was here:
+#
+#   · the door — one input, routed by a named intent
+#   · the authority — the `author` gate, this principal's own words, claiming nothing about consent
+#   · the persistence — `writeBack` already diffs `corpusFiles(dir)` against what the request was
+#     handed and stores whatever moved, with a 409 if somebody else moved it underneath
+#
+# So it cost fifteen lines in `INTENTS`. That is the test of the thing he was asking for two turns
+# earlier: a new capability should cost an intent, and if it costs a route the door is not working.
+#
+# ⛔ The pin drives it over HTTP against a real store rather than calling the intent, because
+# `writeBack` is the half I was wrong about and a unit test of the fifteen lines would have skipped
+# it. Five assertions: it reaches the store intact and loads as a corpus; it is NOT accepted by
+# having been written; a key outside the corpus is refused rather than written and silently dropped;
+# every corpus directory is writable; and it announces, because `writeBack` synthesizes nothing.

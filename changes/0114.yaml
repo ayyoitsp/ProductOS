@@ -1,0 +1,33 @@
+id: "0114"
+said: let's do it - let's do the decomposer across a corpus. this should be extendable to view state analysis, product analysis, etc.
+at: 2026-10-08
+kind: concept
+reaches:
+  model: ANALYSES
+  derive: outstanding
+  surface: productos v2 analyse <name> --refs
+  instruct: sweep this corpus
+  pin: every analysis declares a real role, a grain, and units with a state and a reason
+waived:
+  generate: >
+    Nothing new generates, and the boundary is the point of this change rather than an accident of
+    it. A sweep answers which units of work are outstanding and writes nothing — ProductOS cannot
+    spawn a role, the host does through the skill, and a command that produced the analysis itself
+    would be the hand-authoring trap with a bigger engine behind it. That is asserted rather than
+    trusted: the pin reads `analyse.ts`'s imports and fails if any `node:` module appears, so the
+    module cannot reach a filesystem or a process. The route and the skill both regenerated from
+    `jobs.ts` with the generators untouched. ⛔ Arguable the day a sweep RUNS the roles instead of
+    naming them, which would make it the generator this deliberately is not.
+  check: >
+    ⛔ This was briefly claimed as reached, and the claim was false — `check` matched the string
+    "analyse" against the word "analysed" in an unrelated comment on line 3531. Caught by looking,
+    which is what `change check` is for; a verifier that matches a substring will always accept a
+    word that happens to contain it.
+    Nothing here is reached, and nothing should be. What a sweep reports is which units of work are
+    outstanding, and the corpus-level versions of exactly that already exist as findings:
+    `behaviours-no-subsystem-answers` and `requirements-nobody-worked-out`. Adding a third saying
+    the same thing from a different module is the second hand-maintained list of one fact this
+    project refuses everywhere else. ⛔ Arguable if an analysis is ever added whose outstanding work
+    is not already visible to `check` — the honest test being whether `check` would still catch it
+    with the sweep deleted.
+closed: 2026-10-08

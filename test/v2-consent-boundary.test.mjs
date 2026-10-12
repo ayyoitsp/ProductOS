@@ -13,6 +13,7 @@
  * and adding a scope that grants it fails the build.
  */
 import assert from "node:assert/strict";
+import { temp } from "./support/temp.mjs";
 import { test } from "node:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -27,7 +28,7 @@ import { readLog } from "../dist/v2/log.js";
 const CLI = path.resolve("dist/cli/index.js");
 
 function instance() {
-  const dir = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "productos-boundary-")), "v2");
+  const dir = path.join(temp("productos-boundary-"), "v2");
   execFileSync("node", [CLI, "v2", "reset", "--at", dir], { stdio: "pipe" });
   return dir;
 }
@@ -110,7 +111,7 @@ test("over HTTP, a token claiming `via: page` is refused and writes nothing", as
   Object.assign(process.env, token(["read", "author", "relay"]));
   try {
     const scope = loadCorpus(dir).scopes.find((s) => !s.scope.in).scope.id;
-    const r = await post(port, "/api/v2/act", { act: "read", ref: scope, via: "page", buildable: false, by: "peter" }, "t-secret");
+    const r = await post(port, "/api/v2/in", { intent: "read", ref: scope, via: "page", buildable: false, by: "peter" }, "t-secret");
     assert.equal(r.status, 403, `expected a refusal, got ${r.status}: ${JSON.stringify(r.body)}`);
     assert.equal(loadCorpus(dir).verdicts.length, before, "the refusal still wrote a verdict");
     assert.equal(readLog(dir).length, logBefore, "the refusal announced an event, so a session was woken for nothing");
@@ -128,8 +129,8 @@ test("a carried press keeps the presser's name and records who carried it", asyn
     const scope = loadCorpus(dir).scopes.find((s) => !s.scope.in).scope.id;
     const r = await post(
       port,
-      "/api/v2/carry",
-      { act: "read", ref: scope, by: "peter", via: "page", buildable: false, note: "pressed on a published page" },
+      "/api/v2/in",
+      { intent: "carry", act: "read", ref: scope, by: "peter", via: "page", buildable: false, note: "pressed on a published page" },
       "t-secret"
     );
     assert.equal(r.status, 200, JSON.stringify(r.body));
@@ -149,7 +150,7 @@ test("carrying needs the relay scope", async () => {
   Object.assign(process.env, token(["read", "author"]));
   try {
     const scope = loadCorpus(dir).scopes.find((s) => !s.scope.in).scope.id;
-    const r = await post(port, "/api/v2/carry", { act: "read", ref: scope, by: "peter", via: "page", buildable: false }, "t-secret");
+    const r = await post(port, "/api/v2/in", { intent: "carry", act: "read", ref: scope, by: "peter", via: "page", buildable: false }, "t-secret");
     assert.equal(r.status, 403);
   } finally {
     delete process.env.PRODUCTOS_TOKENS;
@@ -169,7 +170,7 @@ test("a browser press is recorded as the account, not as a name the request aske
   const { server, port } = await serve(dir);
   try {
     const scope = loadCorpus(dir).scopes.find((s) => !s.scope.in).scope.id;
-    await post(port, "/api/v2/act", { act: "read", ref: scope, via: "page", buildable: false, by: "somebody-else" });
+    await post(port, "/api/v2/in", { intent: "read", ref: scope, via: "page", buildable: false, by: "somebody-else" });
     const v = loadCorpus(dir).verdicts.at(-1);
     assert.notEqual(v.by, "somebody-else", "the last forgeable thing on this path is still forgeable");
     assert.equal(v.by, os.userInfo().username || "whoever-is-at-this-machine");

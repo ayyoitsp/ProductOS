@@ -12,6 +12,7 @@
  * from the prose, differently each time.
  */
 import assert from "node:assert/strict";
+import { temp } from "./support/temp.mjs";
 import { test } from "node:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -21,7 +22,7 @@ const { fileNote, replyToNote, closeNote, POS } = await import(path.resolve("dis
 const { loadCorpus } = await import(path.resolve("dist/v2/load.js"));
 
 const corpus = () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "notes-"));
+  const dir = temp("notes-");
   fs.mkdirSync(path.join(dir, "truth"), { recursive: true });
   fs.writeFileSync(path.join(dir, "truth", "a.md"), "---\nid: a\ntitle: A\nviews: []\nexchanges: []\n---\n\nProse.\n");
   return dir;

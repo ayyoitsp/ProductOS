@@ -10,6 +10,7 @@
  * none is the defect: it is what somebody reads as "safe to move".
  */
 import assert from "node:assert/strict";
+import { temp } from "./support/temp.mjs";
 import { test } from "node:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -19,7 +20,7 @@ import { resolvePathsOrThrow } from "../dist/core/paths.js";
 
 /** A corpus where one feature points at another by every reference kind that exists. */
 function corpus() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "move-refs-"));
+  const dir = temp("move-refs-");
   const P = path.join(dir, "productos");
   fs.mkdirSync(path.join(P, "products", "shop", "papers"), { recursive: true });
   fs.writeFileSync(path.join(P, "config.yaml"), "product:\n  name: Shop\n");

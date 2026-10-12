@@ -77,6 +77,39 @@ const ROLE: Record<string, string> = {
 };
 
 const flat = (s: unknown): string => String(s ?? "").replace(/\s+/g, " ").trim();
+
+/**
+ * A claim or a question turned into a title — a whole sentence where one fits, and never a word
+ * cut in half.
+ *
+ * ⛔ THIS WAS `.slice(0, 70)` AND IT MANGLED A REAL CORPUS END TO END.
+ *
+ * Measured on Bilrost, 36 scopes migrated from v1: `title: "Each value read carries whether it was
+ * located in the file at all and "` — cut mid-clause, with a trailing space that forced YAML to
+ * quote it. `title: A total the file declares about itself is kept as the file's own decla` — cut
+ * mid-word. A title is the heading a promise is READ under: it is on the feature page, on the
+ * behaviour card, in the grid, in the packet a builder implements, and on every line that cites
+ * the promise from somewhere else. Mangling it mangles all of them at once, and nothing in the
+ * suite looked at a migrated title.
+ *
+ * ⛔ FIRST SENTENCE FIRST, because a claim's opening sentence is almost always the title somebody
+ * would have written. `Each value read carries whether it was located in the file at all and how
+ * confidently it was read.` is one sentence and says the whole thing; the old cut lost the half
+ * that mattered. Only when no sentence fits does this fall back to a word-boundary cut with an
+ * ellipsis — which at least reads as abbreviated rather than as a typo.
+ */
+function titleFrom(claim: unknown, fallback: string, limit = 90): string {
+  const whole = flat(claim);
+  if (!whole) return fallback;
+  if (whole.length <= limit) return whole;
+  /** The first sentence, where there is one and it fits. */
+  const first = /^(.+?[.!?])(\s|$)/.exec(whole)?.[1];
+  if (first && first.length <= limit) return first;
+  /** ⛔ Last word boundary BEFORE the limit, so nothing is ever cut mid-word. */
+  const cut = whole.slice(0, limit);
+  const at = cut.lastIndexOf(" ");
+  return (at > limit / 2 ? cut.slice(0, at) : cut).replace(/[,;:\s]+$/, "") + "…";
+}
 const seg = (s: string): string =>
   s
     .toLowerCase()
@@ -450,7 +483,7 @@ export function migrate(v1Root: string, outDir: string, at: string): Migration {
         return [
           {
             id: seg(b.id),
-            title: flat(b.claim).slice(0, 70) || seg(b.id).replace(/-/g, " "),
+            title: titleFrom(b.claim, seg(b.id).replace(/-/g, " ")),
             asked_by: "system",
             when: {
               /**
@@ -482,7 +515,7 @@ export function migrate(v1Root: string, outDir: string, at: string): Migration {
       }
       if (key.startsWith("?")) {
         const b = group[0]!;
-        const title = flat(b.question).slice(0, 70);
+        const title = titleFrom(b.question, seg(b.id).replace(/-/g, " "));
         /**
          * ⛔ AN ASK NEEDS SOMEWHERE TO ARRIVE, AND A CONTROL TO ARRIVE AT.
          *

@@ -14,6 +14,7 @@
  * session as writing the rest of that file. This is the forcing function.
  */
 import assert from "node:assert/strict";
+import { temp } from "./support/temp.mjs";
 import { test } from "node:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -22,7 +23,7 @@ import path from "node:path";
 const { checkCorpus } = await import(path.resolve("dist/v2/check.js"));
 
 const withProse = (prose) => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mach-"));
+  const dir = temp("mach-");
   fs.mkdirSync(path.join(dir, "truth"), { recursive: true });
   fs.writeFileSync(
     path.join(dir, "truth", "a.md"),

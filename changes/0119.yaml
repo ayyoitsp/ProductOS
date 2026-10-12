@@ -1,0 +1,9 @@
+id: "0119"
+said: let's make sure we have a re-usable way to send messages to product OS, and appropriate context/routing hints. eventually i'd like to be able to send mcp commands or have a slack channel monitor that would take commands and route to the appropriate place. how's our architecture?
+at: 2026-10-09
+kind: surface
+reaches:
+  surface: THE DOOR DESCRIBES ITSELF, ON THE SAME PATH IT TAKES ORDERS ON
+  pin: every field a run() reads is declared, so no caller can be refused for a field nothing offered
+waived: {}
+closed: 2026-10-09

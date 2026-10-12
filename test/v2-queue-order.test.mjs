@@ -11,6 +11,7 @@
  * thing it may never do.
  */
 import assert from "node:assert/strict";
+import { temp } from "./support/temp.mjs";
 import { test } from "node:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -21,7 +22,7 @@ const { questionsFor, orderByAttention } = await import("../dist/v2/settle.js");
 const { confidenceOf } = await import("../dist/v2/confidence.js");
 
 const seeded = () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "v2queue-"));
+  const dir = temp("v2queue-");
   fs.cpSync("v2-seed", dir, { recursive: true });
   return { dir, corpus: loadCorpus(dir) };
 };

@@ -18,6 +18,7 @@
  * Every one of those is a silent failure, so every one is pinned.
  */
 import assert from "node:assert/strict";
+import { temp } from "./support/temp.mjs";
 import { test } from "node:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -35,7 +36,7 @@ const CLI = path.resolve("dist/cli/index.js");
 
 /** A pristine corpus per test, so no test can pass because of what another one left behind. */
 function corpus() {
-  const dir = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "productos-loop-")), "v2");
+  const dir = path.join(temp("productos-loop-"), "v2");
   execFileSync("node", [CLI, "v2", "reset", "--at", dir], { stdio: "pipe" });
   return dir;
 }

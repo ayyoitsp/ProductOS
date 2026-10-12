@@ -17,6 +17,7 @@
  * go stale when the thing they are about changes. A document gives a sentence none of the three.
  */
 import assert from "node:assert/strict";
+import { temp } from "./support/temp.mjs";
 import { test } from "node:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -26,7 +27,7 @@ import { loadCorpus } from "../dist/v2/load.js";
 import { DOCUMENTS, NOT_A_DOCUMENT } from "../dist/v2/schema.js";
 
 function corpus(docs) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "v2chart-"));
+  const dir = temp("v2chart-");
   fs.mkdirSync(path.join(dir, "charter"), { recursive: true });
   fs.mkdirSync(path.join(dir, "truth"), { recursive: true });
   for (const [id, sections] of Object.entries(docs))
@@ -108,7 +109,7 @@ test("a dated choice inside a surviving document is still reported", () => {
  * list said they should. Four hardcoded names would be the same mistake with a shorter list.
  */
 test("a project may add a document of its own and nothing objects", () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "v2own-"));
+  const dir = temp("v2own-");
   fs.mkdirSync(path.join(dir, "charter"), { recursive: true });
   fs.writeFileSync(path.join(dir, "charter", "compliance.md"),
     `---\nid: compliance\ntitle: Compliance\nsections:\n${SEC("retain-seven-years", "Every document a borrower supplies is kept for seven years after the loan closes.")}---\n`);

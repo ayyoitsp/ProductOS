@@ -11,6 +11,7 @@
  * must fire on it, and nothing may fire on the pristine seed.
  */
 import assert from "node:assert/strict";
+import { temp } from "./support/temp.mjs";
 import { test } from "node:test";
 import { checkCorpus } from "../dist/v2/check.js";
 import { loadCorpus } from "../dist/v2/load.js";
@@ -169,9 +170,33 @@ test("the seed's queue stays small enough to work", () => {
    * a count. What they owe is either a reading or a confirmation on each statement, which this test
    * already counts through the findings that name those statements individually.
    */
+  /**
+   * ⛔ THE SAME REASONING AS THE PARAGRAPH ABOVE, APPLIED TWICE MORE — and it caught this test
+   * failing for the documented reason rather than for a real one.
+   *
+   * `requirements-nobody-worked-out` reports "25 of 25" once for the whole corpus, and
+   * `behaviours-no-subsystem-answers` reports "n of m". Both are summary lines by construction,
+   * for exactly the reason recorded above: emitted per item they fire on everything a corpus has,
+   * which this project shipped and had to unwind three times in one day. Nobody owes a decision on
+   * a count — what they owe is a requirement worked out per claim and a subsystem named per
+   * behaviour, and neither is a review act.
+   */
+  /**
+   * ⛔ `no-picture-of-this-screen-contains-this-control` IS THE SAME SHAPE AS
+   * `nothing-to-compare-this-against`, and it took this ratchet to notice.
+   *
+   * It says a derived state is about a control no drawing of that screen holds, so the state
+   * renders as the ordinary screen — real, and worth saying, because the failure is silent. But the
+   * only way to act on it is to draw the screen in a state where that control is on it, which is
+   * generation work and not a decision anybody owes. Counted as a question it took the seed from 14
+   * to 17 against 14 reviewable things, and this assertion failed — correctly by its own logic, and
+   * wrongly about the thing, exactly as the three paragraphs above describe.
+   */
   const INFORMATIONAL = new Set([
     "leans-on-an-example", "parked-by-a-person", "one-word-defined-twice", "nothing-to-compare-this-against",
     "behaviours-with-nothing-behind-them", "nothing-in-this-corpus-rests-on-anything",
+    "requirements-nobody-worked-out", "behaviours-no-subsystem-answers",
+    "no-picture-of-this-screen-contains-this-control",
   ]);
   const questions = findings.filter((f) => f.severity === "note" && !INFORMATIONAL.has(f.kind));
   const exchanges = corpus.scopes.reduce((n, s) => n + s.scope.exchanges.length, 0);
@@ -210,7 +235,7 @@ test("the seed's queue stays small enough to work", () => {
  * Both halves passed every check. Pinned by building the shape rather than by reading the renderer.
  */
 test("a behaviour arriving on another scope's screen is whole in both packets", () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "v2xs-"));
+  const dir = temp("v2xs-");
   fs.cpSync("v2-seed", dir, { recursive: true });
   const f = path.join(dir, "truth", "money.md");
   const before = fs.readFileSync(f, "utf-8");

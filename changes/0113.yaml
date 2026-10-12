@@ -1,0 +1,21 @@
+id: "0113"
+said: why should capabilities depend on acceptance? capabilities should be generated based on current truth, have the accepted state feed in. test cases should be generated too. they should just carry an invalidated state
+at: 2026-10-08
+kind: concept
+reaches:
+  model: "`from` HASHES WHAT IT SERVES"
+  derive: servesHash
+  surface: on a sentence nobody has agreed to yet
+  check: a-part-older-than-what-it-serves
+  instruct: whether or not anybody has agreed to it yet
+  pin: the two derived authors run during specification, not behind sign-off
+waived:
+  generate: >
+    Nothing new generates, and the one thing that moved was a ROUTE — which is data in
+    `src/core/jobs.ts`, walked by `agents-doc.ts` to produce the skill and the agent tree. Both
+    regenerated with the generators untouched, and the two drift tests went green on the
+    regenerated files, so this is demonstrated rather than argued. ⛔ Arguable the day the
+    decomposer or the demonstrator is run BY a generator instead of spawned as a role — which is
+    exactly what a single "re-index every capability" command would be, and the thing Peter asked
+    about that does not exist yet.
+closed: 2026-10-08

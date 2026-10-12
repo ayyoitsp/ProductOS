@@ -17,6 +17,7 @@
  * So this asserts the round trip AND that it runs on the real log.
  */
 import assert from "node:assert/strict";
+import { temp } from "./support/temp.mjs";
 import { test } from "node:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -39,7 +40,7 @@ import { worthWaking } from "../dist/mcp/server.js";
 const CLI = path.resolve("dist/cli/index.js");
 
 function corpusOnDisk() {
-  const dir = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "productos-loop-")), "v2");
+  const dir = path.join(temp("productos-loop-"), "v2");
   execFileSync("node", [CLI, "v2", "reset", "--at", dir], { stdio: "pipe" });
   return dir;
 }
@@ -134,8 +135,8 @@ test("what a request appends to the log survives the request", async () => {
 
     const pressed = await post(
       base,
-      "/p/prj-loop/api/v2/act",
-      { act: "read", ref: scope, via: "page", buildable: false },
+      "/p/prj-loop/api/v2/in",
+      { intent: "read", ref: scope, via: "page", buildable: false },
       { session },
     );
     assert.equal(pressed.status, 200, JSON.stringify(pressed.body).slice(0, 200));
@@ -166,8 +167,8 @@ test("a note a person files reaches a session, which claims it", async () => {
     // 1. A person asks for a change, on the page.
     const filed = await post(
       base,
-      "/p/prj-loop/api/v2/note",
-      { about: scope, says: "pos: this reads thin" },
+      "/p/prj-loop/api/v2/in",
+      { intent: "note", about: scope, says: "pos: this reads thin" },
       { session },
     );
     assert.equal(filed.status, 200, JSON.stringify(filed.body).slice(0, 200));
@@ -210,7 +211,7 @@ test("a second session sees the note as held rather than taking it twice", async
   const { base, server, store, session, token } = await hosted();
   try {
     const scope = (await loadFromStore(store)).scopes.find((s) => !s.scope.in).scope.id;
-    await post(base, "/p/prj-loop/api/v2/note", { about: scope, says: "please reword this" }, { session });
+    await post(base, "/p/prj-loop/api/v2/in", { intent: "note", about: scope, says: "please reword this" }, { session });
 
     const first = await callTool(base, token, "productos_exchange_inbox", { since: 0, claim: "session-a" });
     assert.ok((first.parsed.events ?? []).some((e) => e.work), "the first session got nothing");
@@ -234,7 +235,7 @@ test("closing a note is what lets the cursor past it", async () => {
   const { base, server, store, session, token } = await hosted();
   try {
     const scope = (await loadFromStore(store)).scopes.find((s) => !s.scope.in).scope.id;
-    await post(base, "/p/prj-loop/api/v2/note", { about: scope, says: "pos: fix the generator" }, { session });
+    await post(base, "/p/prj-loop/api/v2/in", { intent: "note", about: scope, says: "pos: fix the generator" }, { session });
 
     const claimed = await callTool(base, token, "productos_exchange_inbox", { since: 0, claim: "session-a" });
     const noteId = (claimed.parsed.events ?? []).find((e) => e.work).work;
@@ -280,7 +281,7 @@ test("a lease that expires returns the note rather than stranding it", async () 
   const { base, server, store, session, token } = await hosted();
   try {
     const scope = (await loadFromStore(store)).scopes.find((s) => !s.scope.in).scope.id;
-    await post(base, "/p/prj-loop/api/v2/note", { about: scope, says: "needs a rewrite" }, { session });
+    await post(base, "/p/prj-loop/api/v2/in", { intent: "note", about: scope, says: "needs a rewrite" }, { session });
 
     const claimed = await callTool(base, token, "productos_exchange_inbox", {
       since: 0,

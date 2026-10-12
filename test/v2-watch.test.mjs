@@ -9,6 +9,7 @@
  * so it can be waited on instead — and then the cost is one call, when something actually happened.
  */
 import assert from "node:assert/strict";
+import { temp } from "./support/temp.mjs";
 import { test } from "node:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -20,7 +21,7 @@ import { perform } from "../dist/v2/acts.js";
 const settle = (ms) => new Promise((r) => setTimeout(r, ms));
 
 test("it says nothing until something is recorded, then says what", async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "v2watch-"));
+  const dir = temp("v2watch-");
   fs.cpSync("v2-seed", dir, { recursive: true });
   const lines = [];
   const { stop } = watchCorpus(dir, { quietMs: 20, emit: (l) => lines.push(l) });
@@ -67,7 +68,7 @@ test("it says nothing until something is recorded, then says what", async () => 
 });
 
 test("--replay is opt-in, and prints what is there", async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "v2watch2-"));
+  const dir = temp("v2watch2-");
   fs.cpSync("v2-seed", dir, { recursive: true });
   fileNote(dir, { about: "money", says: "something recorded before anyone watched", by: "peter", via: "chat", at: "2026-09-01" });
 

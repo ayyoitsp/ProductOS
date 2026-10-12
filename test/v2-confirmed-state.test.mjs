@@ -18,6 +18,7 @@
  * and the packet printed "accepted separately" for rules with no verdict at all.
  */
 import assert from "node:assert/strict";
+import { temp } from "./support/temp.mjs";
 import { test } from "node:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -27,7 +28,7 @@ import { loadCorpus } from "../dist/v2/load.js";
 import { renderScopePage } from "../dist/v2/page.js";
 
 function seed() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "v2conf-"));
+  const dir = temp("v2conf-");
   fs.cpSync("v2-seed", dir, { recursive: true });
   return dir;
 }

@@ -37,6 +37,9 @@ import { perform, preview, VIA, type Act, type Payload } from "../v2/acts.js";
 import { inbox, DEFAULT_LEASE_MS } from "../v2/inbox.js";
 import { closeNote, releaseNote, replyToNote } from "../v2/notes.js";
 import { howYouWillBeTold } from "./push-state.js";
+/** ⛔ The door's own registry, so MCP cannot disagree with the route about what may be asked. */
+import { INTENTS, intentNamed, refuseIntent, incomplete, theIntents, describeIntents } from "../v2/intents.js";
+import { localAccount, type Principal } from "../v2/identity.js";
 
 export interface McpTool {
   name: string;
@@ -428,6 +431,97 @@ const releaseNoteTool = tool(
   }
 );
 
+/**
+ * ⛔ MCP SPEAKS THE DOOR'S VOCABULARY — one tool mirroring `/api/v2/in`, generated from `INTENTS`.
+ *
+ * Peter: *"eventually i'd like to be able to send mcp commands or have a slack channel monitor that
+ * would take commands and route to the appropriate place"*.
+ *
+ * Before this there were two vocabularies for one system: HTTP had a single door taking eleven
+ * named intents, and MCP had eighteen operation-shaped tools. Nothing was WRONG with either, and
+ * that is the problem — a third transport would have picked one, or invented a third, and the
+ * authority rules only hold where they are asked. `refuseIntent` is asked here, exactly as the
+ * route asks it, so a Slack relay or an MCP client cannot reach an authority the page cannot.
+ *
+ * ⛔ ONE TOOL, NOT ELEVEN. A generated tool per intent would be eleven more names beside the
+ * eighteen already here, overlapping them, and a model choosing between `productos_exchange_agree_to`
+ * and `productos_accept` has been handed a decision with no right answer. The intent is a named
+ * argument because that is what it is on the wire.
+ *
+ * ⛔ AND THE DESCRIPTION IS GENERATED, so a new intent or a new field reaches this surface without
+ * anybody remembering it. That is the whole claim of this change: the contract has one home.
+ */
+const theDoor = tool(
+  "productos_in",
+  [
+    "Say something to a corpus through its single input — the same door `/api/v2/in` takes, with the same authority rules.",
+    "⛔ THE INTENT IS NAMED, NEVER INFERRED FROM A SENTENCE. A classifier reading prose as `accept` would mint consent nobody gave.",
+    "⛔ AND NEITHER IS `about`/`ref`. If you do not know what a request is about, ask — do not pick a plausible scope.",
+    "Call productos_intents first if you do not know what a field means. What each intent takes:",
+    ...INTENTS.map(
+      (i) =>
+        `  ${i.name} (${i.gate}) — ${i.does}. takes: ${i.takes
+          .map((f) => (f.required ? f.name : `${f.name}?`))
+          .join(", ")}`
+    ),
+  ].join("\n"),
+  AtDir.extend({
+    intent: z.string().describe(`which of: ${theIntents().join(" | ")}`),
+    fields: z
+      .record(z.string(), z.unknown())
+      .describe("the intent's own fields, as productos_intents describes them")
+      .default({}),
+  }),
+  (a, paths) => {
+    const intent = intentNamed(a.intent);
+    if (!intent)
+      return {
+        ok: false,
+        why: a.intent ? `"${a.intent}" is not something you can ask for` : "say which intent you mean",
+        detail: [theIntents().join(" · "), "⛔ nothing here guesses an intent from a sentence"],
+      };
+    /**
+     * ⛔ THE AUTHORITY IS THE SAME OBJECT THE ROUTE ASKS, NOT A SECOND OPINION.
+     *
+     * An MCP server runs on somebody's machine against a directory, so the principal is the person
+     * at it — a browser-shaped principal, which is what the local route already builds for a local
+     * press. Writing a looser one here would make MCP the way round every refusal the page obeys.
+     */
+    const who: Principal = { kind: "browser", actor: localAccount(), scopes: ["read", "author"] };
+    const asking = { dir: dirOf(a, paths), who, pressing: localAccount() };
+    const body = a.fields as Record<string, unknown>;
+    /** ⛔ Both questions, in the route's order, so MCP cannot be the way round a refusal. */
+    const refused = refuseIntent(intent, asking, body);
+    if (refused) return refused;
+    const short = incomplete(intent, body);
+    if (short) return short;
+    return intent.run(asking, body);
+  }
+);
+
+/**
+ * ⛔ WHAT THE DOOR WILL TAKE, ASKED RATHER THAN HARDCODED.
+ *
+ * The same answer `GET /api/v2/in` gives, from the same generator. A relay that has to be taught
+ * the contract out of band is a relay that is wrong the first time a field changes.
+ */
+const theManual = tool(
+  "productos_intents",
+  "What this corpus will accept through its single input: every intent, what it does, the authority it needs, and each field with what it means. Ask this before productos_in when you are unsure — it is generated from the registry, so it cannot be out of date.",
+  z.object({}),
+  () => ({
+    door: "productos_in",
+    gates: {
+      consent: "a person agreed — ⛔ a token can never claim this",
+      relay: "carrying a press somebody else made, keeping whose it was",
+      author: "this principal's own words, claiming nothing about what anybody agreed to",
+      open: "anybody may",
+    },
+    intents: describeIntents(),
+    never: "nothing here guesses an intent, or what a request is about, from a sentence",
+  })
+);
+
 /** ⛔ Named so the act tools are identifiable as a group by anything auditing this surface. */
 export const EXCHANGE_ACT_TOOLS: McpTool[] = [agreeAct, settleAct, latitudeAct, parkAct, readThroughAct];
 
@@ -453,4 +547,13 @@ export const EXCHANGE_READ_TOOLS: McpTool[] = [
   gateTool,
 ];
 
-export const exchangeTools: McpTool[] = [...EXCHANGE_READ_TOOLS, ...EXCHANGE_ACT_TOOLS, ...EXCHANGE_LOOP_TOOLS];
+/**
+ * ⛔ THE DOOR AND ITS MANUAL ARE THEIR OWN FAMILY, not reads and not acts.
+ *
+ * `productos_in` can perform any intent, including one behind the consent gate, so filing it with
+ * the reads would put a writing tool in the group a judge is allowed. The capability derivation at
+ * install reads these groups.
+ */
+export const EXCHANGE_DOOR_TOOLS: McpTool[] = [theManual, theDoor];
+
+export const exchangeTools: McpTool[] = [...EXCHANGE_READ_TOOLS, ...EXCHANGE_ACT_TOOLS, ...EXCHANGE_LOOP_TOOLS, ...EXCHANGE_DOOR_TOOLS];

@@ -502,3 +502,66 @@ test("engineering and QA do not read truth nobody has agreed to", () => {
     "nothing picks the feature up after somebody agrees — the engineering and QA reads have been dropped rather than deferred"
   );
 });
+
+/**
+ * ⛔ THE INSTALLED ROLES ARE COMMITTED, AND NOTHING CHECKED THEM — SO THEY DRIFTED THROUGH THREE
+ * COMMITS IN ONE DAY.
+ *
+ * `.claude/agents/*.md` is tracked in git, which is the whole reason a session in this repo picks
+ * up a prompt change from a commit rather than from anybody running an install. That only works if
+ * the committed copies are regenerated before the commit — and across `capabilities`,
+ * `requirements` and the Bilrost fixes they were not: 19 installed against 21 sources, both new
+ * roles missing entirely, and the scoper carrying the body it had before its criteria section was
+ * removed.
+ *
+ * Peter, on being told sessions would need to run an install: *"why does anything need to run
+ * init? can't we just run a command to re-index all capabilities?"* — and he is right twice. The
+ * command exists (`productos init claude --update`, which is a re-derivation and not a copy: the
+ * frontmatter's `tools` comes from the role's declared capabilities and its `description` from its
+ * `asks`). What was missing is the thing that makes running it unnecessary to remember.
+ *
+ * ⛔ AGENTS.md AND SKILL.md BOTH HAD THIS TEST AND THE ROLES DID NOT, which is the whole gap: the
+ * two generated documents nobody reads were guarded, and the generated files that decide what every
+ * future session is told were not.
+ */
+test("every role's installed definition is committed, and matches its source", () => {
+  const roles = [...AGENTS, ...AUTHORS].filter((r) => r.prompt);
+  assert.ok(roles.length > 15, `only ${roles.length} roles have prompts — the registry walk is wrong`);
+
+  const missing = [];
+  const stale = [];
+  for (const r of roles) {
+    /**
+     * ⛔ `basename(prompt)`, NOT the role name — which is what the installer uses, and the
+     * difference is real: the role is `architecture` and its prompt is `productos-architect.md`.
+     * Deriving the filename instead of reading it reported that role missing on a correct install.
+     */
+    const installed = `.claude/agents/${r.prompt.split("/").pop()}`;
+    if (!fs.existsSync(installed)) {
+      missing.push(r.name);
+      continue;
+    }
+    /** The body after the generated frontmatter, which is what the source owns. */
+    const body = fs.readFileSync(installed, "utf-8").replace(/^---\n[\s\S]*?\n---\n/, "");
+    const source = fs.readFileSync(r.prompt, "utf-8");
+    if (body.trim() !== source.trim()) stale.push(r.name);
+  }
+
+  assert.deepEqual(
+    missing,
+    [],
+    "these roles are declared and their installed definition is not committed — run `productos init claude --update` and commit what it writes"
+  );
+  assert.deepEqual(
+    stale,
+    [],
+    "these installed definitions disagree with their source prompt — run `productos init claude --update` rather than editing .claude/agents by hand"
+  );
+
+  /** ⛔ And nothing installed that no role declares — a renamed role leaves its old file behind. */
+  const declared = new Set(roles.map((r) => r.prompt.split("/").pop()));
+  const orphans = fs
+    .readdirSync(".claude/agents")
+    .filter((f) => f.startsWith("productos-") && f.endsWith(".md") && !declared.has(f));
+  assert.deepEqual(orphans, [], "these are installed and no role declares them — a rename left them behind");
+});

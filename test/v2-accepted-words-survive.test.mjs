@@ -16,6 +16,7 @@
  * not to touch before they touch it.
  */
 import assert from "node:assert/strict";
+import { temp } from "./support/temp.mjs";
 import { test } from "node:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -29,7 +30,7 @@ const { perform } = await import("../dist/v2/acts.js");
 const REF = "money#see-a-balance#with";
 
 const accepted = () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "v2words-"));
+  const dir = temp("v2words-");
   fs.cpSync("v2-seed", dir, { recursive: true });
   const r = perform(dir, "accept", { target: REF }, {
     by: "peter",

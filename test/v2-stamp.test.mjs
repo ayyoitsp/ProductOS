@@ -10,6 +10,7 @@
  * changes the slot hash. A field added later is covered the moment it exists, or this fails.
  */
 import assert from "node:assert/strict";
+import { temp } from "./support/temp.mjs";
 import { test } from "node:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -75,7 +76,7 @@ test("rewriting an exception's reasoning under an acceptance breaks the stamp", 
    * The property it was testing is the real one and survives: a sentence the packet prints as
    * truth cannot be rewritten under an acceptance without breaking it.
    */
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "v2stamp-"));
+  const dir = temp("v2stamp-");
   fs.cpSync(SEED, dir, { recursive: true });
   const file = path.join(dir, "truth", "money.md");
   const before = coveredBy(loadCorpus(dir), TARGET);

@@ -15,6 +15,7 @@
  * the rule so no surface can show it as a direct acceptance.
  */
 import assert from "node:assert/strict";
+import { temp } from "./support/temp.mjs";
 import { test } from "node:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -28,7 +29,7 @@ const RULE = "only-a-parent-moves-money";
 
 /** The seed, with one rule accepted and nothing else. */
 function withRuleAccepted(ruleId = RULE, tamper) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "v2rule-"));
+  const dir = temp("v2rule-");
   fs.cpSync("v2-seed", dir, { recursive: true });
   const cov = coveredBy(loadCorpus(dir), ruleId);
   assert.ok(cov, `${ruleId} is not a rule in the seed any more`);
@@ -85,7 +86,7 @@ test("⛔ a reworded rule stops reaching, exactly as a reworded claim stops coun
 });
 
 test("an unconfirmed rule reaches nothing", () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "v2norule-"));
+  const dir = temp("v2norule-");
   fs.cpSync("v2-seed", dir, { recursive: true });
   const corpus = loadCorpus(dir);
   const { inherited } = resolveRules(corpus);
@@ -115,7 +116,7 @@ test("⛔ what it changes, measured — and the queue is NOT one of the things",
    * exchanges, it is forty.
    */
   const { questionsFor } = await import("../dist/v2/settle.js");
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "v2rq-"));
+  const dir = temp("v2rq-");
   fs.cpSync("v2-seed", dir, { recursive: true });
 
   const slotRefs = (c) =>

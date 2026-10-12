@@ -11,6 +11,7 @@
  * builds". No diff carries that.
  */
 import assert from "node:assert/strict";
+import { temp } from "./support/temp.mjs";
 import { test } from "node:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -23,7 +24,7 @@ const git = (dir, ...args) => execFileSync("git", ["-C", dir, ...args], { encodi
 
 /** A tiny repo with a component, and a corpus whose drawing records where it came from. */
 function scene() {
-  const repo = fs.mkdtempSync(path.join(os.tmpdir(), "moved-repo-"));
+  const repo = temp("moved-repo-");
   git(repo, "init", "-q", "-b", "main");
   git(repo, "config", "user.email", "t@t");
   git(repo, "config", "user.name", "t");
@@ -33,7 +34,7 @@ function scene() {
   git(repo, "commit", "-q", "-m", "first");
   const drawnAt = git(repo, "rev-parse", "HEAD");
 
-  const corpus = fs.mkdtempSync(path.join(os.tmpdir(), "moved-corpus-"));
+  const corpus = temp("moved-corpus-");
   for (const d of ["truth", "rules", "readings", "verdicts"]) fs.mkdirSync(path.join(corpus, d), { recursive: true });
   const write = (at) =>
     fs.writeFileSync(

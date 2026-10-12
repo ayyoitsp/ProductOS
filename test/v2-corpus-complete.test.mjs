@@ -17,6 +17,7 @@
  * reproduce all of it — a new kind of document is covered the day it is added, by nobody.
  */
 import assert from "node:assert/strict";
+import { temp } from "./support/temp.mjs";
 import { test } from "node:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -33,7 +34,7 @@ const CLI = path.resolve("dist/cli/index.js");
  * would compare empty lists and pass while losing every one of them.
  */
 function fullCorpus() {
-  const dir = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "productos-complete-")), "v2");
+  const dir = path.join(temp("productos-complete-"), "v2");
   execFileSync("node", [CLI, "v2", "reset", "--at", dir], { stdio: "pipe" });
 
   fs.mkdirSync(path.join(dir, "steers"), { recursive: true });

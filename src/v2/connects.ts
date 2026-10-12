@@ -427,7 +427,8 @@ export function landingsFor(scope: Scope, view: View): Landing[] {
     if (!mine.size) continue;
 
     const scored = states.map((st, i) => {
-      const w = stateWeights(st.label, st.when);
+      /** ⛔ `when` is optional now — a state of a screen nobody has built has no code condition. */
+      const w = stateWeights(st.label, st.when ?? "");
       const score = [...mine].reduce((n, x) => n + (w.get(x) ?? 0), 0);
       /**
        * ⛔ AND HOW MUCH OF THE STATE'S OWN NAME THE SENTENCE ACCOUNTS FOR. "Folder" and "Folder

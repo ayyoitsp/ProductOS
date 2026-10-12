@@ -18,8 +18,8 @@
  */
 import { spawn } from "node:child_process";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
+import { temp } from "./temp.mjs";
 
 /**
  * Where a browser might be, in order of preference.
@@ -118,7 +118,12 @@ const until = async (fn, what, ms = 15000) => {
  */
 export async function openPage(html, { exe = findBrowser() } = {}) {
   if (!exe) throw new Error("no browser");
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "productos-dom-"));
+  /**
+   * ⛔ `temp()` RATHER THAN `mkdtempSync`, EVEN THOUGH THE TEARDOWN BELOW ALREADY REMOVES THIS. The
+   * teardown is reached when a test finishes; the exit hook is reached when it throws, which is the
+   * run that litters hardest. Both, because they cover different exits.
+   */
+  const dir = temp("productos-dom-");
   const file = path.join(dir, "page.html");
   fs.writeFileSync(file, html);
 

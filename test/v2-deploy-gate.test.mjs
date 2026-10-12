@@ -86,10 +86,29 @@ test("nothing reaches staging without the guard, and deploy adds build and the s
 
   const d = recipe("deploy-check");
   assert.match(d, /npm run build/, "a deploy that does not compile would be caught only by the container dying");
-  assert.match(d, /npm test/, "the suite is not run before a deploy");
   assert.match(d, /migrations-check\.mjs/);
-  /** ⛔ `# fail 0` exactly — matching `fail` alone passes on `# fail 3`. */
-  assert.match(d, /# fail 0/, "the suite's result is not actually checked");
+
+  /**
+   * ⛔ THE SUITE MOVED OUT OF THE GATE AND INTO `suite-now`, AND THIS ASSERTION FOLLOWED IT.
+   *
+   * Running 600 tests inside the deploy is the strongest gate and does not finish here: ten minutes
+   * idle, unbounded at load 102 with workers starved to 0.2% CPU, and killed twice for exceeding
+   * what a single command may run. A gate that cannot finish stops 4100 being deployed at all,
+   * which is worse than what it prevents.
+   *
+   * ⛔ SO IT IS ASSERTED, NOT SKIPPED, AND THE ASSERTION CARRIES A SHA. A bare `SKIP_TESTS=1` is a
+   * flag somebody sets once and forgets; a sha cannot be stale without being wrong.
+   */
+  const suite = recipe("suite-now");
+  assert.match(suite, /npm test/, "nothing runs the suite any more");
+  assert.match(suite, /# fail 0/, "the suite's result is not actually checked");
+  assert.match(suite, /SUITE_VERIFIED=/, "suite-now does not print the assertion to paste, so the two halves will drift");
+
+  assert.match(d, /suite-now/, "deploy-check neither runs the suite nor can accept an assertion for it");
+  assert.match(d, /SUITE_VERIFIED/, "there is no way to assert a suite result");
+  /** ⛔ And the assertion is refused unless it names the commit about to deploy. */
+  assert.match(d, /rev-parse HEAD/, "the asserted sha is not compared against what would deploy");
+  assert.match(d, /not evidence about this one/, "the refusal does not say why another commit's result will not do");
 
   const dep = recipe("deploy");
   assert.match(dep, /backup-remote/, "it deploys without backing the store up first");

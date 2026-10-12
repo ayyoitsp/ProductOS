@@ -341,6 +341,32 @@ have passed on all three — a green test asserting the opposite of the truth.
 defect back and watching the test go red. Do that for any new one: a renderer test that has
 never failed has not been shown to test anything.
 
+### ⛔ A test never calls `mkdtempSync` — it calls `temp()`
+
+```js
+import { temp } from "./support/temp.mjs";
+const dir = temp("productos-thing-");   // removed when this file's process exits
+```
+
+**The suite left 58,932 directories in the system temp root — 95% of everything in it.** One
+throwaway corpus per `fs.mkdtempSync`, over ten days, because 45 of 74 test files never removed
+what they made.
+
+It was not merely untidy. `drawFromRoute` indexes a route's neighbourhood to resolve `<Wizard/>`,
+and a route in `/var/folders/…/T/draw5-x/` has the temp **root** one level up — so the suite's own
+litter became the suite's input: 61,520 directories given a recursive descent to yield four `.tsx`
+files, 52 seconds a call, 216 seconds in one test, 13 minutes for the run.
+
+⛔ **And a trailing `rmSync` is not the fix — that is what the 29 well-behaved files already did.**
+It sits at the end of the test, so it is not reached when an assertion fails, and a red run litters
+exactly like an unfixed one. `temp()` reaps at process exit, which does not care how the process
+got there.
+
+⛔ **It is a test, not a convention** — `v2-tests-clean-up-after-themselves` fails if any file under
+`test/` calls `mkdtempSync` itself. Every one of those 74 files was written by somebody who could
+have cleaned up; 45 did not. Same reason `framework-not-just-output` exists: prose with a ⛔ on it
+did not stop this.
+
 ---
 
 ## Versions stay at 0.1.0
@@ -351,11 +377,33 @@ unless Peter says so explicitly.
 ## After changing `src/` or `skills/`
 
 ```bash
-npm run build && productos init claude --update
+npm run build && productos init claude --update       # from the main checkout
+npm run build && node bin/productos.js init claude --update   # ⛔ from a worktree
 ```
 
 So Peter's other sessions pick the change up immediately. Never ask him to run install
 commands.
+
+### ⛔ From a worktree, `productos` is the wrong binary
+
+The global `productos` is an `npm link`: `lib/node_modules/productos` is a **symlink to the main
+checkout**. So it runs whatever branch that one checkout happens to be on, no matter which directory
+you invoke it from — and its registry, not yours, decides which roles exist.
+
+What that cost: an `init claude --update` run from a worktree, served by a main checkout sitting on
+an unrelated feature branch, **deleted `productos-decomposer` and `productos-demonstrator`** from the
+worktree (the stale registry has no such roles, so pruning read them as renamed) and **reverted
+`productos-scoper.md`** to the `criteria` section removed after *"a product person doesn't write a
+criterion - what even is this? this is old shit."* Silently, inside the normal path, reported as a
+successful install. It looked exactly like somebody deleting two files by hand.
+
+⛔ **This is now refused rather than written** — installing one ProductOS checkout's roles into a
+different ProductOS checkout throws before anything is written or removed, and the message names both
+trees. `node bin/productos.js` runs *this* worktree's build, which is what you want anyway. Installing
+into a **consumer repo** is unaffected: that is what the installer is for, and such a repo has no
+`agents/` of its own to lose.
+
+---
 
 ## Planning docs are private
 

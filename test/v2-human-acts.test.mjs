@@ -6,6 +6,7 @@
  * Tenet 1 is "a human has validated this"; these are the paths that made the stamp cheap.
  */
 import assert from "node:assert/strict";
+import { temp } from "./support/temp.mjs";
 import { test } from "node:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -19,7 +20,7 @@ const REASON =
   "A reason long enough to carry the argument, which is the whole price of the strongest act in the schema.";
 
 function seed() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "v2acts-"));
+  const dir = temp("v2acts-");
   fs.cpSync("v2-seed", dir, { recursive: true });
   return dir;
 }

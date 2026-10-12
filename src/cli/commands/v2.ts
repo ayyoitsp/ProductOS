@@ -3,7 +3,10 @@ import path from "node:path";
 import { Command } from "commander";
 import pc from "picocolors";
 import { checkCorpus, summarise } from "../../v2/check.js";
-import { stampFor } from "../../v2/stamp.js";
+import { stampFor, claimHash } from "../../v2/stamp.js";
+import { servesHash } from "../../v2/demonstrate.js";
+import { ANALYSES, sweep, sweeps, outstanding } from "../../v2/analyse.js";
+import { resolveRef } from "../../v2/ref.js";
 import { loadCorpus } from "../../v2/load.js";
 import { SLOTS, SLOT_ASKS_SHORT, Steer, type Note as NoteT, type SlotName, type View, statements } from "../../v2/schema.js";
 import YAML from "yaml";
@@ -382,6 +385,142 @@ export function v2Command(): Command {
           console.log(`  ${"".padEnd(16)} ${pc.dim(`back when: ${d.until}`)}`);
         }
       }
+    });
+
+  /**
+   * ⛔ WHAT A REQUIREMENT IS WORKED OUT AGAINST, so the role that works it out can record it.
+   *
+   * `Criterion.derived.from` is the whole of "keep them idempotent as truth changes": with it, a
+   * re-derivation can tell which requirements are still current and leave them alone; without it,
+   * every run throws the previous answer away and a corpus never accumulates a test set.
+   *
+   * ⛔ IT EXISTS BECAUSE THE PROMPT NAMES IT. `productos-demonstrator.md` tells the role to run
+   * this, and an instruction naming a command that does not exist is the defect class found twice
+   * this morning in the scoper — a documented shape nobody could follow, with no reason to doubt
+   * it. Writing the prompt first and the verb second is how that happens.
+   */
+  cmd
+    .command("claim")
+    .description("The hash of what a claim says, for a requirement worked out against it")
+    .argument("<ref>", "<scope>#<exchange>#<slot>[#<statement>], or several comma-separated for a part")
+    .option("--at <dir>", "corpus directory", "v2")
+    .action(async (ref: string, o: { at?: string }) => {
+      const corpus = loadCorpus(await openAt(o));
+      /**
+       * ⛔ A LIST OF REFS HASHES AS A SET, AND IT IS CHECKED FIRST — a comma-joined argument is not
+       * a ref, so resolving it before splitting fails on the whole string.
+       *
+       * This is what a capability is worked out from: a part serves several promises at once, so
+       * `derived.from` covers all of them. The role needs one call that answers for the set, rather
+       * than N calls it has to combine in a way nothing else would agree with.
+       */
+      if (ref.includes(",")) {
+        const parts = ref.split(",").map((x) => x.trim()).filter(Boolean);
+        for (const p of parts) {
+          const one = resolveRef(corpus, p);
+          if ("error" in one) {
+            console.error(pc.red("✗"), one.error);
+            process.exit(1);
+          }
+        }
+        console.log(servesHash(corpus, parts));
+        return;
+      }
+      const resolved = resolveRef(corpus, ref);
+      if ("error" in resolved) {
+        console.error(pc.red("✗"), resolved.error);
+        process.exit(1);
+      }
+      if (resolved.ref.kind !== "slot" && resolved.ref.kind !== "statement") {
+        console.error(
+          pc.red("✗"),
+          `${ref} is not a claim — it resolves to ${resolved.ref.kind}, and a requirement is worked out against a slot or one of its statements`
+        );
+        console.error(pc.dim("  <scope>#<exchange>#<slot>[#<statement>]"));
+        process.exit(1);
+      }
+      const hash = claimHash(corpus, ref);
+      if (!hash) {
+        console.error(pc.red("✗"), `nothing here hashes ${ref}`);
+        process.exit(1);
+      }
+      /** ⛔ The hash alone on stdout, so it can be read by whatever is writing the criterion. */
+      console.log(hash);
+    });
+
+  /**
+   * ⛔ WHAT WORK AN ANALYSIS HAS LEFT ACROSS A WHOLE CORPUS — and it spawns nothing.
+   *
+   * Peter: *"let's do the decomposer across a corpus. this should be extendable to view state
+   * analysis, product analysis, etc."*
+   *
+   * A role landed with a grain (`each: "feature"`) and no way to ask which features still needed
+   * it, so indexing a corpus meant listing its features by eye and spawning one role per name —
+   * tedious on 36 scopes and silently incomplete, because nothing said which were already done and
+   * nothing said which were done against truth that has since moved.
+   *
+   * ⛔ IT WRITES NOTHING AND SPAWNS NOTHING, deliberately. ProductOS cannot spawn a role; the host
+   * does, through the skill. A command that produced the analysis itself would be the hand-authoring
+   * trap with a bigger engine. This answers one question and the session acts on it.
+   */
+  cmd
+    .command("analyse")
+    .alias("analyze")
+    .description("What work an analysis has left across a corpus — and which of it is stale")
+    .argument("[name]", "capabilities · requirements · drawings. Omitted lists every analysis")
+    .option("--at <dir>", "corpus directory", "v2")
+    .option("--refs", "just the refs still needing work, one per line, for a session to fan over")
+    .action(async (name: string | undefined, o: { at?: string; refs?: boolean }) => {
+      const corpus = loadCorpus(await openAt(o));
+      if (!name) {
+        /** ⛔ The listing is the discovery surface: a person should not have to read the registry. */
+        for (const s of sweeps(corpus)) {
+          const left = s.stale + s.missing;
+          console.log(
+            `${pc.bold(s.analysis.name.padEnd(14))} ${
+              left ? pc.yellow(`${left} to do`) : pc.green("nothing to do")
+            }${s.stale ? pc.red(`  ${s.stale} stale`) : ""}  ${pc.dim(`${s.done} done · per ${s.analysis.grain} · ${s.analysis.role}`)}`
+          );
+          console.log(pc.dim(`               ${s.analysis.does}`));
+        }
+        console.log("");
+        console.log(pc.dim("  productos v2 analyse <name>          what is left, and why"));
+        console.log(pc.dim("  productos v2 analyse <name> --refs   just the refs, to fan a role over"));
+        return;
+      }
+      const s = sweep(corpus, name);
+      if (!s) {
+        console.error(pc.red("✗"), `no analysis called "${name}"`);
+        console.error(pc.dim(`  ${ANALYSES.map((a) => a.name).join(" · ")}`));
+        process.exit(1);
+      }
+      const left = outstanding(s);
+      /** ⛔ Machine-readable on request, so a session can fan without parsing a report. */
+      if (o.refs) {
+        for (const u of left) console.log(u.ref);
+        return;
+      }
+      console.log(
+        `${pc.bold(s.analysis.name)} — ${s.analysis.does}`,
+        pc.dim(`\n  one per ${s.analysis.grain}, worked out by ${s.analysis.role}`)
+      );
+      console.log("");
+      if (!left.length) {
+        console.log(pc.green("✓"), `nothing to do — ${s.done} ${s.analysis.grain}s, none stale`);
+        return;
+      }
+      for (const u of left) {
+        const tag = u.state === "stale" ? pc.red("stale  ") : pc.yellow("missing");
+        console.log(`  ${tag} ${pc.bold(u.ref)}  ${pc.dim(u.title)}`);
+        console.log(`          ${u.why}`);
+      }
+      console.log("");
+      console.log(
+        pc.dim(
+          `  ${s.stale} stale · ${s.missing} never done · ${s.done} done. ⛔ Stale first: a unit that was done and now answers an older wording looks finished to everybody reading it.`
+        )
+      );
+      console.log(pc.dim(`  Spawn one ${s.analysis.role} per ref above. Nothing here writes anything.`));
     });
 
   cmd

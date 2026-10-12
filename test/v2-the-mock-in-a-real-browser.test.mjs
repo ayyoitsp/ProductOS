@@ -20,6 +20,7 @@
  * exactly why they survived. The only question worth asking of a drawing is what it renders as.
  */
 import test from "node:test";
+import { temp } from "./support/temp.mjs";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
@@ -61,7 +62,7 @@ const SKETCH = `<div class="min-h-screen bg-page p-6">
 
 /** The seed corpus, wearing the stylesheet above, rendered by the same code that serves it. */
 function pageHtml() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "productos-browser-"));
+  const dir = temp("productos-browser-");
   fs.cpSync("v2-seed", dir, { recursive: true });
 
   const tasks = path.join(dir, "truth", "tasks.md");

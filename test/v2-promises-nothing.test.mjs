@@ -17,6 +17,7 @@
  * is *which* door, and a number cannot answer that.
  */
 import assert from "node:assert/strict";
+import { temp } from "./support/temp.mjs";
 import { test } from "node:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -24,7 +25,7 @@ import os from "node:os";
 import { checkCorpus } from "../dist/v2/check.js";
 
 function corpus(parts, exchanges) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "v2prom-"));
+  const dir = temp("v2prom-");
   fs.mkdirSync(path.join(dir, "truth"), { recursive: true });
   fs.writeFileSync(path.join(dir, "truth", "pay.md"), `---
 id: pay

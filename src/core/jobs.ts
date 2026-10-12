@@ -228,6 +228,19 @@ export const AREAS: Area[] = [
       "src/v2/grid.ts",
       "src/v2/stamp.ts",
       /**
+       * ⛔ `derive` AND NOT `generate`, WHICH IS THE WHOLE DISTINCTION. It does not decide what to
+       * demonstrate — a role does, reading the claim. This computes whether each worked-out
+       * requirement is still current with the words it came from, which is inherited state over
+       * existing content: the same kind of thing `stamp.ts` and `confidence.ts` do.
+       */
+      "src/v2/demonstrate.ts",
+      /**
+       * ⛔ `derive` for the same reason `demonstrate.ts` is: it computes what work an analysis has
+       * left from state the corpus already holds, and writes nothing. A sweep that produced the
+       * analysis would belong to `generate`; this one names the units and stops.
+       */
+      "src/v2/analyse.ts",
+      /**
        * ⛔ A DERIVATION, NOT A MODEL CONCEPT, AND THE DISTINCTION IS LOAD-BEARING. How
        * well-supported a statement is comes from counting readings and asking `stampFor`; a stored
        * confidence is a number that was true when it was written and unfalsifiable afterwards.
@@ -239,6 +252,15 @@ export const AREAS: Area[] = [
       "src/v2/record.ts",
       "src/v2/spoken.ts",
       "src/v2/connects.ts",
+      /**
+       * ⛔ A DERIVATION, AND DELIBERATELY NOT BESIDE `states.ts`. That file is surface — it composes
+       * a picture and owns what a condition looks like. This one reads sentences: `refuses` carries
+       * a condition and the words an asker is told, `fails` what they are left with, `again` the
+       * in-flight moment. The states a screen has follow from those, so they are computed rather
+       * than written — and the split matters, because a reviewer asked whether a state is right
+       * goes to one and whether it renders goes to the other.
+       */
+      "src/v2/derive-states.ts",
       /**
        * ⛔ WHAT HOLDS WHAT AND WHAT LEADS WHERE — beside `connects.ts`, because it is the same kind
        * of fact about the truth and renders none of it. Filed under `generate` first, which is
@@ -284,6 +306,18 @@ export const AREAS: Area[] = [
       "src/v2/draw-write.ts",
       "src/v2/routes.ts",
       "src/v2/propose.ts",
+      /**
+       * ⛔ `generate` BESIDE `propose.ts`, AND NOT `derive`. It reads the application's own
+       * components — a source outside the corpus — and produces sentences that were not there
+       * before. `derive` is the other thing: computing over content the corpus already holds.
+       *
+       * ⛔ AND IT IS THE GENERATOR MOST ABLE TO DO HARM, so it is the one most needing a reviewer:
+       * `told` is copy a user reads, and a sentence this file invents is indistinguishable on the
+       * page from one a person agreed to. Its whole design is about refusing to write words —
+       * every message is lifted verbatim, every trigger is read off the check that states it, and
+       * where neither is available it raises the question with no answer.
+       */
+      "src/v2/propose-slots.ts",
       "src/v2/appcss.ts",
       /** ⛔ Glyphs read out of the product's own icon package — a generator source, same as draw. */
       "src/v2/icons.ts",
@@ -345,6 +379,13 @@ export const AREAS: Area[] = [
       "src/v2/prototype.ts",
       "src/v2/serve.ts",
       /**
+       * ⛔ `surface`, because it IS the instance's input. Five write routes became one, routed by a
+       * named intent, and this is where each intent declares the authority it needs — so the
+       * surface a client speaks to and the gate it passes are one file rather than five copies of a
+       * check in five handlers' first ten lines.
+       */
+      "src/v2/intents.ts",
+      /**
        * ⛔ THE PROCESS THAT HOSTS EVERY SURFACE, AND IT WAS ON NO AREA. `v2Route` is mounted here,
        * the port is bound here, and the one line that told anybody where the page was reachable is
        * here — which is how a corpus naming a real client came to answer the whole network while
@@ -403,6 +444,14 @@ export const AREAS: Area[] = [
       "src/v2/client.ts",
       "src/v2/write.ts",
       "src/v2/wire.ts",
+      /**
+       * ⛔ BESIDE `wire.ts`, BECAUSE IT IS THE SAME JOB ONE STEP ON. `wire` puts `data-part` on an
+       * element; this puts `data-in="invalid"` on the same element and carries the one stylesheet
+       * that says what that looks like. A state is composed onto a screen's own drawing rather than
+       * stored as a second copy of it, so what a condition RENDERS AS is the whole of what this
+       * decides — which is a surface question, not a derivation.
+       */
+      "src/v2/states.ts",
       "src/v2/moved.ts",
       "src/cli/commands/v2.ts",
       "src/mcp/v2-tools.ts",
@@ -1085,6 +1134,121 @@ export const AUTHORS: Author[] = [
     authors: true,
     prompt: "agents/productos-machinist.md",
   },
+  /**
+   * ⛔ THE HALF `0090` MISSED, AND THE REASON THE CAPABILITY TREE STAYED DELETED FOR A DAY LONGER.
+   *
+   * Peter asked for engineering authors — *"let's add some engineering authors! they should be
+   * authoring the capabilities anyways"* — and what landed was `machinist` and `instrumenter`,
+   * who write system-asked exchanges and instruments. Both are real roles and neither writes a
+   * capability, because there was no capability to write: a Claude session had dropped the tree
+   * from v2 eight days earlier. So the request was satisfied in form and the named artefact was
+   * still authored by nobody.
+   *
+   * ⛔ AND A JUDGE WAS ALREADY WAITING FOR IT. `architecture` asks *"are these the right
+   * subsystems, do their boundaries hold"* and its prompt says the site has two halves. One of
+   * them did not exist. A reviewer for a layer with no author is the shape this registry has now
+   * produced twice — the other is `test-design`, judging criteria nobody derives.
+   *
+   * Peter: *"we have an engineering role that shoudl be mapping product feature into subsystems
+   * and figure out where they belong"*.
+   */
+  {
+    name: "decomposer",
+    discipline: "engineering",
+    asks: "Which parts of the system does this feature need, and where do they belong?",
+    because:
+      "The capability tree was deleted from the model by a session nobody asked, and the only " +
+      "trace was a comment calling it deleted. `architecture` went on being dispatched against " +
+      "*\"the subsystems beneath them\"* and finding none — a judge reviewing half a site that did " +
+      "not exist, which is how a whole layer goes missing with every check green.",
+    reads: [
+      "what this feature promises, which is what the machinery is required to answer",
+      "the subsystems that already exist, because a new part for work an existing one does is the most expensive thing this role can produce",
+      "the code where there is code, to name the parts that are really there rather than the ones a diagram would have",
+    ],
+    writes: [
+      "subsystems — roughly what each does, and which area it is filed inside",
+      "`offers` — the capabilities a subsystem provides, each in a sentence",
+      /**
+       * ⛔ THE LOAD-BEARING ONE. Peter: *"those should flow from the product design"*. A capability
+       * with no `serves` is an engineer inventing scope, and the schema refuses it outright.
+       */
+      "`serves` — the product statement each capability exists for, or the capability that needs it",
+      "`uses` — what a subsystem leans on across the tree, where containment cannot say it",
+    ],
+    never: [
+      "write or reword product truth — a capability answers a promise and never changes one. ⛔ A decomposition that needed the promise to be different is a note, not an edit",
+      "invent a capability nothing serves: if no statement requires it, say so rather than filing it, because a part nobody asked for is indistinguishable from layering one level up",
+      "name infrastructure — a queue, a table, a topic or a framework is how a part is built, not what it is",
+      "write a given/when/then here: precision about behaviour belongs to product truth, and this layer is a sketch of the parts",
+      "stamp anything walked, validated or accepted. ⛔ Capabilities become agreeable by engineers later; nothing agrees to one today",
+    ],
+    needs: ["read-files", "search-files", "run-commands", "write-corpus"],
+    each: "feature",
+    authors: true,
+    prompt: "agents/productos-decomposer.md",
+  },
+  /**
+   * ⛔ THE AUTHOR `test-design` HAS BEEN JUDGING SINCE BEFORE IT EXISTED.
+   *
+   * Peter: *"a product person doesn't write a criterion - what even is this? this is old shit. the
+   * agents decide what kind of tests need to exist."*
+   *
+   * Until this landed, a `criteria:` block was hand-authored YAML and the SCOPER was the only role
+   * that wrote one — a product person producing the artefact a builder implements, as a side-effect
+   * of describing a feature. Meanwhile `test-design` asks *"would this criterion show its claim
+   * holding, or would it just pass"* and is explicitly forbidden from writing: *"⛔ Naming the
+   * defect is the output."*
+   *
+   * So the test set was written by whoever was least equipped to design it and reviewed by a role
+   * that could not fix what it found. Second time this registry has shipped that shape — the other
+   * was `architecture`, judging a capability tree that had been deleted from the model.
+   *
+   * ⛔ QUALITY, NOT ENGINEERING, and the discipline is the argument. What has to be demonstrated
+   * for a claim to be believed is a question about evidence, not about how the thing is built; an
+   * engineering author would reach for the altitudes the codebase makes convenient, which is how a
+   * refusal ends up demonstrated only where it is cheap to observe.
+   */
+  {
+    name: "demonstrator",
+    discipline: "quality",
+    asks: "What would have to be demonstrated for this claim to be believed?",
+    because:
+      "A criterion was authored, by the scoper, as a side-effect of scoping — so the artefact a " +
+      "builder implements was produced by the role least equipped to design it. `test-design` has " +
+      "asked whether each one would show its claim holding since before anything could act on the " +
+      "answer, because naming the defect is its only output. A judge with no author is how the " +
+      "whole layer stayed as thin as whoever happened to be describing the feature.",
+    reads: [
+      "the claim as it now reads — ⛔ agreed or not, and whether it is agreed is reported beside each requirement rather than deciding whether there is one",
+      "what the claim refuses and what it fails at, because those are the cases a happy-path demonstration never reaches",
+      "what the slot says statement by statement, where it says several things, so each one is demonstrated rather than the first",
+      "the rules resolved into the slot, because a requirement has to hold under them and not only under the local sentence",
+    ],
+    writes: [
+      "criteria — what must be demonstrated for each claim, as given/when/then",
+      /**
+       * ⛔ THE FIELD THAT MAKES RE-DERIVATION IDEMPOTENT, and the one thing a human could never
+       * have supplied. Without it a re-run is a fresh unrelated set of tests and nothing can be
+       * kept; with it, unchanged truth yields the same set and a reworded sentence leaves exactly
+       * its own requirements pointing at a hash nothing matches.
+       */
+      "`derived` — the role, the date, and the hash of the claim it was worked out against",
+      "`of` — which statement, wherever the slot says more than one thing",
+      "`level` — where somebody would have to stand to observe it, where that is knowable from the claim",
+    ],
+    never: [
+      "write or reword a claim. ⛔ A requirement that needs the sentence to be different is a note addressed to whoever owns the sentence — changing it would be the test deciding the product",
+      "assert anything the claim does not say: an engineer implements the `then`, so a word invented here becomes product truth nobody agreed to",
+      "demonstrate a claim about refusing with a case that succeeds — the whole content of the claim is in the part a happy path never reaches",
+      "work anything out from a claim nobody has accepted yet",
+      "stamp anything walked, validated or accepted",
+    ],
+    needs: ["read-files", "search-files", "run-commands", "write-corpus"],
+    each: "feature",
+    authors: true,
+    prompt: "agents/productos-demonstrator.md",
+  },
   {
     name: "instrumenter",
     discipline: "engineering",
@@ -1278,6 +1442,19 @@ export const COMMANDS: Verb[] = [
   { name: "v2 accepted", does: "The exact wording somebody has agreed to, before anybody rewrites it", owns: "surface", who: "claude", track: "exchange" },
   { name: "v2 acts", does: "How many acts of human judgement this corpus carries", owns: "derive", who: "claude", track: "exchange" },
   { name: "v2 packet", does: "Compile the execution packet for one scope", owns: "generate", who: "claude", track: "exchange" },
+  /**
+   * ⛔ `claude`, not `person`. Nobody types this: it is how the role working out a test set records
+   * which wording it worked from, which is the whole of keeping a derived set idempotent as truth
+   * changes.
+   */
+  { name: "v2 claim", does: "The hash of what a claim says, for a requirement worked out against it", owns: "derive", who: "claude", track: "exchange" },
+  /**
+   * ⛔ `derive`, NOT `generate`, AND THE DISTINCTION IS THE WHOLE BOUNDARY. It computes what work
+   * an analysis has left and writes nothing — ProductOS cannot spawn a role, the host does. A
+   * command that produced the analysis itself would be the hand-authoring trap with a bigger
+   * engine.
+   */
+  { name: "v2 analyse", does: "What work an analysis has left across a corpus, and which of it is stale", owns: "derive", who: "claude", track: "exchange" },
   { name: "v2 next", does: "What to ask somebody next about one feature", owns: "derive", who: "claude", track: "exchange" },
   { name: "v2 page", does: "Render one scope as a page a person can review", owns: "surface", who: "claude", track: "exchange" },
   { name: "v2 publishable", does: "Emit the interactive page for publishing, if the corpus allows it", owns: "surface", who: "claude", track: "exchange" },
@@ -1473,6 +1650,27 @@ export const SHIMS: Shim[] = [
        */
       { role: "machinist", why: "the half of this feature nobody presses — what runs by itself, and what sets it off" },
       { role: "instrumenter", why: "what has to be recorded for any of this feature's measures to be knowable" },
+      /**
+       * ⛔ THE TWO DERIVED LAYERS, GENERATED FROM TRUTH AS IT NOW READS — not gated on anybody
+       * having agreed to it.
+       *
+       * Peter: *"capabilities should be generated based on current truth, have the accepted state
+       * feed in. test cases should be generated too. they should just carry an invalidated state"*.
+       *
+       * Both were briefly on `hand it to the builders`, behind sign-off, on the reasoning that
+       * deriving over a draft means deriving twice. That reasoning is wrong twice over: it put two
+       * AUTHORS on the judges' side of the line the comment above draws, and it meant the person
+       * deciding whether to sign off could not see what the promise costs — because the
+       * decomposition and the test set only existed after they had signed.
+       *
+       * Deriving twice is not a cost worth a gate. Each derived thing records the hash of the truth
+       * it came from, so a reword leaves it INVALIDATED and nameable rather than silently wrong,
+       * and re-deriving over unchanged truth is a no-op. ⛔ The accepted state feeds in as
+       * information — a requirement worked out from a sentence nobody has agreed to says so — which
+       * is strictly more than a gate could tell anybody, because a gate's output is absence.
+       */
+      { role: "decomposer", fan: true, why: "which parts of the system this feature needs, from the truth as it now reads" },
+      { role: "demonstrator", fan: true, why: "what would have to be demonstrated for each claim to be believed, invalidated when the claim moves" },
       { role: "designer", fan: true, why: "screens the product should have and nothing renders yet" },
       /**
        * ⛔ PRODUCT AND DESIGN ONLY, AND IT STOPS. Peter: *"we need to a rough scope, nail down human
@@ -1524,6 +1722,41 @@ export const SHIMS: Shim[] = [
     ],
   },
   /**
+   * ⛔ ONE ANALYSIS, ACROSS EVERYTHING, OVER ONLY WHAT IS ACTUALLY OUTSTANDING.
+   *
+   * Peter: *"let's do it - let's do the decomposer across a corpus. this should be extendable to
+   * view state analysis, product analysis, etc."*
+   *
+   * `decomposer` landed with a grain and no way to run it over a whole corpus, so indexing meant
+   * listing features by eye — tedious on 36 scopes, and silently incomplete, because nothing said
+   * which were already done or which were done against truth that has since moved.
+   *
+   * ⛔ THE FIRST STEP IS A COMMAND, NOT A ROLE, and that is the load-bearing part of this route.
+   * `productos v2 analyse <name>` says which units are outstanding; the fan goes over those refs
+   * and no others. Fanning over every feature is how a sweep costs thirty role runs to redo
+   * twenty-nine finished ones, and it is what makes re-running this safe rather than expensive.
+   *
+   * ⛔ Extendable by a row in `ANALYSES`, not by a step here. A new analysis — view states, the
+   * product as a whole — appears in `analyse` and in this route's worklist the moment it is
+   * declared, because both walk the registry.
+   */
+  {
+    route: "index a corpus",
+    does: "Run one analysis across everything, over only what is outstanding",
+    when: "index the capabilities · re-derive the test cases · analyse the whole corpus · what is left to work out · sweep this corpus",
+    steps: [
+      { role: "decomposer", fan: true, why: "the parts each feature needs — one per ref `analyse capabilities` names, never one per feature in the corpus" },
+      { role: "demonstrator", fan: true, why: "what would show each claim holding — one per ref `analyse requirements` names" },
+      { role: "designer", fan: true, why: "a picture for each screen `analyse drawings` names, including the appearances a screen falls into" },
+    ],
+    keeps: [
+      "⛔ running `productos v2 analyse <name>` FIRST and fanning only over the refs it returns — a sweep that runs over everything redoes finished work and stops being something anybody runs twice",
+      "deciding which analysis to run: this route does one at a time, because thirty roles of three kinds at once is a diff nobody reviews",
+      "⛔ reading the stale ones before the missing ones — a unit that was done and now answers an older wording looks finished to everybody reading it",
+      "every act of judgement. Nothing swept is validated by having been swept, and none of these roles may stamp",
+    ],
+  },
+  /**
    * ⛔ THE HALF THAT WAITS. Peter: *"nail down human truth before we need to involve
    * engineers/qa"* — so this is where they get involved, and `after` is what makes that more than
    * an intention.
@@ -1538,6 +1771,31 @@ export const SHIMS: Shim[] = [
     when: "ready for review · is this buildable · can we start on this · engineering review · would these tests prove anything",
     at: "ready for review",
     steps: [
+      /**
+       * ⛔ THE TWO DERIVED LAYERS USED TO RUN HERE, AND GATING THEM ON SIGN-OFF WAS WRONG.
+       *
+       * `decomposer` and `demonstrator` were placed on this route on the reasoning that a
+       * capability and a test set both flow from agreed truth, so deriving either over a draft
+       * means doing it twice. Peter: *"why should capabilities depend on acceptance?"* and then
+       * *"capabilities should be generated based on current truth, have the accepted state feed in.
+       * test cases should be generated too. they should just carry an invalidated state"*.
+       *
+       * He is right, and this file already said so twelve lines above: **engineering authors run
+       * during specification; engineering judges wait.** `machinist` and `instrumenter` write
+       * before anybody agrees. Both of these are authors and both were put on the judges' side.
+       *
+       * ⛔ AND THE GATE INVERTED THE POINT OF THE STAGE. `buildability` asks whether somebody could
+       * start on Monday and `architecture` asks whether these are the right subsystems — both at
+       * THIS stage. With the decomposition written only here, the person deciding whether to sign
+       * off had no idea what the promise costs, and the one review that could have shown a promise
+       * to be expensive arrived after the promise was agreed.
+       *
+       * What replaces the gate is a STATE: each derived thing records the truth it came from, so a
+       * reword invalidates it rather than blocking it, and whether that truth is accepted is
+       * reported alongside rather than required. The judges stay here, which is where a judge
+       * belongs.
+       */
+      { role: "architecture", why: "whether those are the right subsystems, with boundaries that hold" },
       { role: "buildability", why: "whether somebody could start on Monday — the second tenet, read from a builder's seat" },
       { role: "test-design", why: "whether each criterion would show its claim holding, rather than merely pass" },
     ],

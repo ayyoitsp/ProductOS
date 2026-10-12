@@ -18,6 +18,7 @@
  * QUESTION and never a verdict about the corpus.
  */
 import assert from "node:assert/strict";
+import { temp } from "./support/temp.mjs";
 import { test } from "node:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -32,7 +33,7 @@ const REF = "money#see-a-balance#answer";
 
 /** A corpus with a confirmation on a known date, and readings around it. */
 function built(readings) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "v2disc-"));
+  const dir = temp("v2disc-");
   fs.cpSync("v2-seed", dir, { recursive: true });
   const now = coveredBy(loadCorpus(dir), REF);
   assert.ok(now, `${REF} no longer resolves in the seed`);

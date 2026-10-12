@@ -11,6 +11,7 @@
  * handed over. Prose could not fix that. Three assertions can.
  */
 import { test } from "node:test";
+import { temp } from "./support/temp.mjs";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
@@ -21,7 +22,7 @@ const { writeSketchHtml } = await import(path.resolve("dist/v2/draw-write.js"));
 
 /** A tiny repo: two components, one of which really renders the screen. */
 function fixture() {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "productos-draws-"));
+  const root = temp("productos-draws-");
   fs.mkdirSync(path.join(root, "src/components"), { recursive: true });
   fs.writeFileSync(
     path.join(root, "src/components/DealsList.tsx"),
@@ -190,7 +191,7 @@ test("one command regenerates everything generable, and every layer points at it
  * and people write them second — so the ordinary order of work is the one that triggers it.
  */
 test("redrawing a screen that has parts replaces the drawing rather than adding one", () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "productos-redraw-"));
+  const root = temp("productos-redraw-");
   fs.mkdirSync(path.join(root, "truth"), { recursive: true });
   const file = path.join(root, "truth", "thing.md");
 

@@ -20,6 +20,7 @@
  * to re-run is a browser.
  */
 import assert from "node:assert/strict";
+import { temp } from "./support/temp.mjs";
 import { test } from "node:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -28,7 +29,7 @@ import { loadCorpus } from "../dist/v2/load.js";
 import { renderScopePage } from "../dist/v2/page.js";
 
 function page() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "v2live-"));
+  const dir = temp("v2live-");
   fs.cpSync("v2-seed", dir, { recursive: true });
   const corpus = loadCorpus(dir);
   assert.deepEqual(corpus.broken, [], "the fixture did not parse, so nothing below is evidence");

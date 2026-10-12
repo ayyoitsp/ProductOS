@@ -19,6 +19,7 @@
  * property of actual SQL; a fake that returns what it was told would pass while leaking.
  */
 import assert from "node:assert/strict";
+import { temp } from "./support/temp.mjs";
 import { test } from "node:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -43,7 +44,7 @@ const CLI = path.resolve("dist/cli/index.js");
  * perfectly here while being dropped, because there was nothing of either kind to lose.
  */
 function corpusOnDisk() {
-  const dir = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "productos-store-")), "v2");
+  const dir = path.join(temp("productos-store-"), "v2");
   execFileSync("node", [CLI, "v2", "reset", "--at", dir], { stdio: "pipe" });
 
   fs.mkdirSync(path.join(dir, "steers"), { recursive: true });
@@ -110,7 +111,7 @@ test("a corpus round-trips through the store byte-for-byte", async () => {
   const { imported } = await importFromDisk(store, dir);
   assert.ok(imported.length > 0, "an empty import would pass every assertion below vacuously");
 
-  const out = fs.mkdtempSync(path.join(os.tmpdir(), "productos-export-"));
+  const out = temp("productos-export-");
   await exportToDisk(store, out);
 
   /**

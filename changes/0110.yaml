@@ -1,14 +1,23 @@
 id: "0110"
-said: we can have different prototypes for differnet prototypes.. like 'unauthenticated' could be a flow, and CRE vs private lending
-at: 2026-10-12
+said: there's no longer a standalone 'packet'. the packet is what we've defined in the product truth, the capabilities, and the test cases. a product person doesn't write a criterion - what even is this? this is old shit. the agents decide what kind of tests need to exist.
+at: 2026-10-07
 kind: concept
 reaches:
-  model: A PRODUCT HAS SEVERAL, AND ASSUMING ONE WAS THE MISTAKE
-  derive: A PROTOTYPE'S WALK STARTS WHERE THE PROTOTYPE SAYS
-  generate: ONE SHELL PER PROTOTYPE, NOT ONE PER PRODUCT
-  surface: EVERY PROTOTYPE TRAVELS WITH THE PAGE
-  instruct: Say what a screen appears INSIDE
-  pin: a screen says which screen it appears inside, and the walk holds it there
+  model: "derived"
+  derive: claimHash
+  surface: "DO NOT IMPLEMENT THIS YET"
+  check: a-requirement-older-than-its-claim
+  instruct: Criteria — you do not write these
+  pin: a derived requirement cannot stale a human's acceptance
 waived:
-  check: Nothing is refused yet. A prototype naming a start that is not a screen, or a shell_from that is not there, is reported where it happens — `v2 prototypes` says so per prototype as it draws, which is the moment an author can act. A check would repeat it one surface later; worth adding when a second author is writing these, not before one exists.
-closed: 2026-10-12
+  generate: >
+    Nothing in `generate` is reached, and the one candidate was examined and rejected on the
+    merits. `migrate.ts` carries v1 `test_cases` into v2 criteria, and the question is whether it
+    should mark them `derived`. It must not: a v1 test case was typed by a person, so marking it
+    derived would claim a role worked it out from a claim hash that was never computed — and would
+    then exempt it from staling the stamp of whoever accepted it. Carrying them as `authored` is
+    the true thing, it needed no code change, and `requirements-nobody-worked-out` counts them so a
+    migrated corpus reads honestly as having derived none of its set. ⛔ Arguable the day the
+    demonstrator is run by a generator rather than spawned as a role, which is the shape
+    `productos v2 draw` has and this deliberately does not.
+closed: 2026-10-07

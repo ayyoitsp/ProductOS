@@ -19,7 +19,7 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { eq, sql } from "drizzle-orm";
 import { type Db, isRefusal, storeFor } from "./access.js";
-import { applyMigrations } from "./migrate.js";
+import { applyMigrations, SchemaAheadError } from "./migrate.js";
 import { migrateAllDocuments } from "./doc-migrations.js";
 import { projects } from "./schema.js";
 import { instanceRoute } from "./instance.js";
@@ -73,6 +73,30 @@ export function openStore(databaseUrl: string): { db: Db; close: () => Promise<v
   let n = 0;
   const client = postgres(databaseUrl, {
     max: 10,
+    /**
+     * ⛔ THE SCHEMA IS NAMED HERE, BECAUSE A POOLED CONNECTION'S SESSION STATE IS NOT OURS.
+     *
+     * This took staging down. `make deploy` runs `backup-remote` and then recreates the container
+     * about forty seconds later. Every dump pg_dump writes begins with
+     *
+     *     SELECT pg_catalog.set_config('search_path', '', false);
+     *
+     * and that third argument `false` means SESSION-scoped, not transaction-scoped. Against Neon's
+     * transaction pooler the server connection returns to the pool still carrying an EMPTY
+     * search_path, and the next client to draw it inherits it. The next client was the booting
+     * container, whose first statement is `create table if not exists _productos_migrations` —
+     * which failed with 3F000, no schema has been selected to create in.
+     *
+     * ⛔ So it is not transient and waiting does not fix it. Our own backup step creates the hazard,
+     * deterministically, immediately before we restart the app against the pool it poisoned. The
+     * deploy before it survived only by drawing a different connection.
+     *
+     * Sent as a startup parameter rather than a `SET`: a `SET` would leak back into the pool the
+     * same way pg_dump's does, which is the disease and not the cure. ⛔ And NOT as
+     * `?options=-c search_path=public` on the URL — Neon refuses that outright with
+     * `08P01 unsupported startup parameter in options: search_path`.
+     */
+    connection: { search_path: "public" },
     ...(debug
       ? {
           debug: (_conn: number, query: string) => {
@@ -166,6 +190,57 @@ export function sweepScratch(
   return removed;
 }
 
+/**
+ * The schema step, retried — because the first connection out of a pool is the one that can be bad.
+ *
+ * ⛔ A CONNECTION-SHAPED FAULT IS NOT A REASON TO STAY DOWN. Boot used to treat any throw here as
+ * fatal, with nothing bringing it back, so one poisoned pooled connection took the review surface
+ * down until a person happened to notice — which is how it was in fact noticed.
+ *
+ * ⛔ AND IT MUST NOT RETRY A REFUSAL. `SchemaAheadError` is the ledger reporting a store migrated by
+ * newer code; that is a true answer and retrying it four times would turn a clear refusal into a
+ * slow one. Same for anything with no error code at all, which is our own logic rather than the
+ * wire. Only the codes below, which are the pool and the connection talking:
+ *
+ *   3F000  no schema has been selected to create in   — the empty search_path this is written for
+ *   42P01  relation does not exist                    — the same cause, one statement later
+ *   08xxx  connection exception, SQLSTATE class 08
+ *   57P01  admin shutdown · 57P03 cannot connect now  — a store that is coming back up
+ */
+const WORTH_RETRYING = new Set(["3F000", "42P01", "57P01", "57P03"]);
+
+const transientCode = (e: unknown): string | null => {
+  const seen = new Set<unknown>();
+  let cur: unknown = e;
+  while (cur && typeof cur === "object" && !seen.has(cur)) {
+    seen.add(cur);
+    const code = (cur as { code?: unknown }).code;
+    if (typeof code === "string" && (WORTH_RETRYING.has(code) || code.startsWith("08"))) return code;
+    cur = (cur as { cause?: unknown }).cause;
+  }
+  return null;
+};
+
+export async function migrateWithRetries(
+  db: Db,
+  attempts: number = 4,
+  wait: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)),
+): Promise<Awaited<ReturnType<typeof migrateStore>>> {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await migrateStore(db);
+    } catch (e) {
+      const code = transientCode(e);
+      if (!code || e instanceof SchemaAheadError || attempt >= attempts) throw e;
+      const pause = 500 * 2 ** (attempt - 1);
+      process.stderr.write(
+        `[productos] schema step failed with ${code} (attempt ${attempt} of ${attempts}) — retrying in ${pause}ms\n`,
+      );
+      await wait(pause);
+    }
+  }
+}
+
 export async function startHosted(
   config: HostedConfig = configFromEnv(),
 ): Promise<{ server: http.Server; url: string; close: () => Promise<void> }> {
@@ -174,7 +249,7 @@ export async function startHosted(
 
   const { db, close } = openStore(config.databaseUrl);
 
-  const migrated = await migrateStore(db);
+  const migrated = await migrateWithRetries(db);
   /**
    * ⛔ SAID OUT LOUD, BECAUSE SILENCE HERE IS INDISTINGUISHABLE FROM NOTHING HAVING HAPPENED. A
    * migration recognised under a name a merge changed was applied by a branch, not by this boot;

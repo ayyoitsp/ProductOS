@@ -18,6 +18,7 @@
  * at 414px, dragged to 264px, hidden to 0px, and still hidden after a reload.
  */
 import assert from "node:assert/strict";
+import { temp } from "./support/temp.mjs";
 import { test } from "node:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -26,7 +27,7 @@ import { loadCorpus } from "../dist/v2/load.js";
 import { renderScopePage } from "../dist/v2/page.js";
 
 function page() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "v2ux-"));
+  const dir = temp("v2ux-");
   fs.cpSync("v2-seed", dir, { recursive: true });
   return renderScopePage(loadCorpus(dir), "tasks", { interactive: true, by: "a-person", mode: "http" });
 }
@@ -61,7 +62,7 @@ test("the feature title is small and carries no stage line", () => {
  */
 test("the stage is still derived, even though nothing shows it here", async () => {
   const { stageOf } = await import("../dist/v2/grid.js");
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "v2ux2-"));
+  const dir = temp("v2ux2-");
   fs.cpSync("v2-seed", dir, { recursive: true });
   const st = stageOf(loadCorpus(dir), "tasks");
   assert.ok(st, "the derivation went with the line that displayed it");
@@ -159,7 +160,7 @@ test("the frame does not waste space above the drawing", () => {
    * the server, so the markup either carries the heading or it does not. The first version of this
    * matched the source pattern against the output and failed, which is the right failure.
    */
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "v2head-"));
+  const dir = temp("v2head-");
   fs.cpSync("v2-seed", dir, { recursive: true });
   const c = loadCorpus(dir);
   const screensIn = (id) => c.scopes.find((x) => x.scope.id === id).scope.views.filter((v) => v.exists !== "withdrawn").length;
@@ -226,7 +227,7 @@ test("the edit box can always be escaped, wherever focus went", () => {
  * happens to take is verified nowhere. 32 views and the landing are now driven, every one by URL.
  */
 test("a group with screens of its own is framed like a feature", () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "v2grp-"));
+  const dir = temp("v2grp-");
   fs.cpSync("v2-seed", dir, { recursive: true });
   const c = loadCorpus(dir);
   const group = c.scopes.find((x) => c.scopes.some((k) => k.scope.in === x.scope.id) && x.scope.views.length);
