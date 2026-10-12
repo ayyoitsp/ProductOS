@@ -2608,13 +2608,6 @@ function renderNav(
      */
     { id: "prototype", label: "Prototype", toRead: protoScreens.length },
     /**
-     * ⛔ BESIDE THE BOARD, NOT INSTEAD OF IT. They answer different questions: the board is "what
-     * is there", one glance, everything at once; the walk is "how does a person get through it",
-     * one screen at a time. Replacing the board with the walk would lose the only surface that
-     * shows a whole product's worth of screens together, which is what the board was built for.
-     */
-    { id: "walk", label: "Walk", toRead: theWalk.reachable.size },
-    /**
      * ⛔ ITS OWN PLACE, AND DELIBERATELY NOT THE CHARTER. Peter, asked where a learned habit gets
      * reviewed: *"A settings surface on the page"*.
      *
@@ -2886,8 +2879,7 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
          * under seven open questions and nobody reads them. A second row of items, at the level
          * they belong to.
          */
-        renderPrototype(protoScreens, protoPromises) +
-        renderWalk(theWalk) +
+        renderPrototype(protoScreens, protoPromises, theWalk) +
         renderSettings(corpus) +
         `<section class="view" id="view-overview" data-view="overview" data-ref="${esc(scopeId)}" data-label="Overview">
            <div class="sub-view" data-tabs="product" data-sub-view="queue" data-ref="queue" data-label="Queue">
@@ -6461,6 +6453,13 @@ export const STYLE = `<style>
   /* ⛔ The width goes to the SCREENS. A surface whose job is being visual cannot spend it on nav. */
   .pboard { display: grid; grid-template-columns: repeat(auto-fill, minmax(22rem, 1fr)); gap: 1.1rem; margin-top: .8rem; }
   /* The walk: one screen, where you are, and every way out of it. */
+  /* The board, one fold down — see the comment in the prototype section. */
+  .pall { margin-top: 1.4rem; border-top: 1px solid var(--line); padding-top: .8rem; }
+  .pall > summary { cursor: pointer; font-size: .8rem; color: var(--dim); list-style: none; }
+  .pall > summary::-webkit-details-marker { display: none; }
+  .pall > summary::before { content: "▸ "; }
+  .pall[open] > summary::before { content: "▾ "; }
+  .pall > summary:hover { color: var(--ink); }
   .wbar { display: flex; align-items: baseline; gap: .8rem; margin: .9rem 0 .5rem; }
   .wwhere { font-size: .82rem; color: var(--dim); letter-spacing: .01em; }
   .wback { font: inherit; font-size: .78rem; background: none; border: 1px solid var(--line); border-radius: 999px;
@@ -6834,7 +6833,7 @@ function renderSettings(corpus: Corpus): string {
  * ⛔ AND IT NAMES THE SCREENS WITH NO DOOR. A walk that silently skipped them would read as a
  * complete product with part of itself missing, which is the opposite of what this is for.
  */
-function renderWalk(walk: Walk): string {
+function walkInside(walk: Walk): string {
   if (!walk.steps.size) return "";
 
   const data = {
@@ -6874,8 +6873,7 @@ function renderWalk(walk: Walk): string {
         .join(", ")}${walk.unreachable.length > 6 ? `, and ${walk.unreachable.length - 6} more` : ""}</p>`
     : "";
 
-  return `<section class="view" id="view-walk" data-view="walk" data-ref="walk" data-label="Walk">
-    <script type="application/json" id="walk-data">${JSON.stringify(data).replace(/</g, "\\u003c")}</script>
+  return `<script type="application/json" id="walk-data">${JSON.stringify(data).replace(/</g, "\\u003c")}</script>
     <p class="lede">The product as one thing, walked from what the truth says. <strong>Inside</strong> is a screen shown within this one; <strong>goes to</strong> is a control the truth says leads somewhere.</p>
     <div class="wbar"><span class="wwhere" id="walk-where"></span><button type="button" class="wback" id="walk-back" hidden>◀ back</button></div>
     <div class="wrap-walk">
@@ -6887,11 +6885,10 @@ function renderWalk(walk: Walk): string {
       </aside>
     </div>
     <div class="wdoors"><h4>Start somewhere else</h4>${doors}</div>
-    ${stranded}
-  </section>`;
+    ${stranded}`;
 }
 
-function renderPrototype(screens: ProtoScreen[], promises: ProtoPromise[]): string {
+function renderPrototype(screens: ProtoScreen[], promises: ProtoPromise[], walk?: Walk): string {
   if (!screens.length && !promises.length) return "";
 
   /**
@@ -6960,10 +6957,26 @@ function renderPrototype(screens: ProtoScreen[], promises: ProtoPromise[]): stri
   return `<script type="application/json" id="proto-says">${JSON.stringify(index).replace(/</g, "\\u003c")}</script>
   <script type="application/json" id="proto-titles">${JSON.stringify(titles).replace(/</g, "\\u003c")}</script>
   <section class="view" id="view-prototype" data-view="prototype" data-ref="prototype" data-label="Prototype">
-    <p class="lede">${withPictures.length} screen${withPictures.length === 1 ? "" : "s"} of this product, as it looks. Open one to press its controls and read what the truth says about each.</p>
-    <div class="pboard">${withPictures.map(tile).join("")}</div>
-    ${blanks}
-    ${unseen}
+    ${walk ? walkInside(walk) : ""}
+    <!--
+      ⛔ ONE PROTOTYPE, NOT TWO TABS.
+
+      The walk shipped beside the board as its own tab, with a comment here arguing they answered
+      different questions. Peter: *"why does 'prototype' exist if it was replaced with 'walk'? how
+      does that make sense?"* — and he had asked for *"a central 'prototype only' section where they
+      can drive through the product as a whole"*, singular, in the message that started this. Two
+      top-level tabs covering the same ground is the reviewer doing the reconciling.
+
+      The board's one real strength — a whole product's screens in a glance — is kept, one fold
+      down, where it costs nobody a decision about which tab to open.
+    -->
+    <details class="pall">
+      <summary>All ${withPictures.length} screen${withPictures.length === 1 ? "" : "s"} at once</summary>
+      <p class="lede">Every screen of this product, as it looks. Open one to press its controls and read what the truth says about each.</p>
+      <div class="pboard">${withPictures.map(tile).join("")}</div>
+      ${blanks}
+      ${unseen}
+    </details>
     <div class="pbig" hidden>
       <div class="pbig-bar"><strong class="pbig-t"></strong><span class="pbig-esc">Esc, or click outside</span><button type="button" class="pbig-x">Close</button></div>
       <div class="pbig-body"><div class="pbig-stage"></div><aside class="pbig-truth"><p class="none">Press a control on the screen.</p></aside></div>
