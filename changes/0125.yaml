@@ -1,0 +1,11 @@
+id: "0125"
+said: I went to get 4100 up and get all of Bill Russ indexed, from product features to capabilities to test cases
+at: 2026-10-12
+kind: derivation
+reaches:
+  surface: HASHABLE
+  pin: an exchange hashes too — the grain a capability's `serves` is allowed to use
+waived:
+  derive: 'Nothing in the derivation changed, and that is the finding rather than an excuse. `claimHash` already hashed every grain this needed — demonstrated before touching anything: `claimHash(corpus, "price-a-deal#pull-a-source")` returned `sha256:fce4f992872b4eeb` at the same moment the CLI exited 1 on that exact ref. The whole defect was one guard list in a surface file, so a derive-layer change here would have been a second implementation of something already correct. Arguable the day a `serves` entry is allowed to name something `coveredBy` does not cover, because then the grain really is a derivation question.'
+  check: "`check` already reports `a-part-older-than-what-it-serves` and names which parts went stale — that is the check this mechanism feeds, and it needed no change. What was broken was the ability to WRITE the field it reads. Arguable if a capability can be written with no `derived.from` at all; the schema marks it required and I have not driven that refusal, so I am not claiming it."
+closed: 2026-10-12

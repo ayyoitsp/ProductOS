@@ -25,6 +25,7 @@ import {
   existsOf,
   selectsFor,
   type Corpus,
+  viewOfAsk,
 } from "./load.js";
 import { confidenceOf, containerOf } from "./confidence.js";
 import { stampFor, staleReason, coveredBy, whatChangedSince } from "./stamp.js";
@@ -533,7 +534,7 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
       // `resolveView` — restricting this to the declaring scope forced grouping by screen, and
       // the workaround reviewers found was duplicating the view, which escaped the
       // one-control-one-answer refusal entirely.
-      const found = resolveView(corpus, scope, ex.at.view);
+      const found = viewOfAsk(corpus, scope, ex.at);
       const v = found?.view;
       if (!v) {
         add({
@@ -1428,7 +1429,7 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
         if (p.role === "commits" && !p.decorative) {
           const asked = scope.exchanges.some((e) => {
             if (e.at?.part !== p.id) return false;
-            const at = resolveView(corpus, scope, e.at.view);
+            const at = viewOfAsk(corpus, scope, e.at);
             return at?.view.id === v.id && at.scope === scope.id;
           });
           if (!asked)
@@ -2689,7 +2690,7 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
     for (const { scope } of corpus.scopes)
       for (const ex of scope.exchanges) {
         if (!ex.at?.part) continue;
-        const found = resolveView(corpus, scope, ex.at.view);
+        const found = viewOfAsk(corpus, scope, ex.at);
         if (!found) continue;
         const key = `${found.scope}#${found.view.id}#${ex.at.part}`;
         byControl.set(key, [...(byControl.get(key) ?? []), `${scope.id}#${ex.id}`]);

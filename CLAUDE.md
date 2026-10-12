@@ -384,7 +384,7 @@ npm run build && node bin/productos.js init claude --update   # ⛔ from a workt
 So Peter's other sessions pick the change up immediately. Never ask him to run install
 commands.
 
-### ⛔ From a worktree, `productos` is the wrong binary
+### ⛔ From a worktree, `productos` is the wrong binary — for every verb, not just installs
 
 The global `productos` is an `npm link`: `lib/node_modules/productos` is a **symlink to the main
 checkout**. So it runs whatever branch that one checkout happens to be on, no matter which directory
@@ -402,6 +402,16 @@ different ProductOS checkout throws before anything is written or removed, and t
 trees. `node bin/productos.js` runs *this* worktree's build, which is what you want anyway. Installing
 into a **consumer repo** is unaffected: that is what the installer is for, and such a repo has no
 `agents/` of its own to lose.
+
+⛔ **And it is not only `init`. `productos v2 change check` gave a false ✗** on a layer that had been
+reached: the global binary runs the main checkout's registry, and on that branch `src/v2/analyse.ts`
+was not yet listed as a `derive` file — so the layer that owns it was never searched. Same command
+through `node dist/cli/index.js` reported every layer reached.
+
+A false ✗ is the *safe* direction and it still cost time. The unsafe direction is the same mechanism:
+a layer this build knows about, verified against a registry that does not, reports **✓ for a file the
+running code never reads**. So from a worktree, reach for the local build for anything that reads the
+registry or the source — `change`, `check`, `analyse`, `agents`, `init`.
 
 ---
 

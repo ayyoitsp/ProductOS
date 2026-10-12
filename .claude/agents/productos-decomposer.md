@@ -69,8 +69,23 @@ Get it by asking for everything this part serves, in one call, comma-separated a
 wrote them:
 
 ```bash
-productos v2 claim "money#record-earning#after,money#record-spending#after"
+productos v2 claim "money#record-earning#after,money#record-spending#after" --serves
 ```
+
+⛔ **`--serves` ALWAYS, even when the set has exactly one ref.** A capability's `derived.from` is
+compared against `servesHash`, which hashes the *set* — so it wraps, and never equals the bare hash
+of a single ref:
+
+```
+productos v2 claim "<one ref>"            sha256:4be20645a387522f   ← a requirement's grain
+productos v2 claim "<one ref>" --serves   sha256:a51da286359160ae   ← what YOUR staleness compares
+```
+
+Without the flag, a part serving one promise is stale the moment you write it. This is not
+hypothetical: the first decomposer to run on a real corpus hit it and said so — *"any offering with
+exactly one `serves` entry reads stale immediately. Two of mine did until I computed `servesHash`
+directly."* The verb used to decide which hash you meant by **looking for a comma**, which is
+punctuation and not an intent; now you say which you want.
 
 One hash for the whole `serves` set, because a part is coarse — "roughly what they do" — and the
 useful grain is the part, not the individual promise. A `serves` entry pointing at another part
@@ -94,8 +109,27 @@ Peter: *"those should flow from the product design."* That sentence is this fiel
 with no `serves` is an engineer inventing scope, and the model refuses it rather than leaving it
 for a reviewer to notice.
 
-Point it at **a product statement** — `<scope>#<exchange>`, or a slot
-(`money#record-earning#after`) where only part of the promise needs this part.
+Point it at **a product statement**, and ⛔ **at the finest grain that exists**, because the grain
+you choose is the grain at which your part goes stale:
+
+| what the slot says | point at | why |
+| --- | --- | --- |
+| several sentences, each with an id | `<scope>#<exchange>#<slot>#<says>` | each sentence hashes on its own |
+| one sentence | `<scope>#<exchange>#<slot>` | there is nothing finer |
+| the whole promise is needed | `<scope>#<exchange>` | coarse on purpose |
+
+⛔ **Slot grain on a slot that says nine things is the mistake to avoid, and it is silent.** The
+first real run of this role hit it: `deal-pricing#deal-pricing-grid#answer` holds **nine** distinct
+`says`, and every one of them hashes to the same `sha256:333d0cbb…` at slot grain. So every part in
+the feature would carry one identical `derived.from`, and rewording any one of the nine sentences
+would mark **all** of them invalidated — which is the same as marking none, because nobody can tell
+which part actually answered the sentence that moved. At says grain the three parts that run
+hashed to three different values and each stales only when its own sentence does.
+
+The decomposer who found this put it plainly: *"at slot grain every part in the feature would have
+carried the same `derived.from` and a reword of any one sentence would have invalidated all of
+them."* `check` already treats a says-level ref as answering the exchange it sits in, so nothing
+downstream needs to change.
 
 ⛔ **Or at another capability**, because a general subsystem is often two levels from a feature:
 the clock serves the ledger and the ledger serves the money. Use `<subsystem>#offers#<id>`. What

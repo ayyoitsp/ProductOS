@@ -1087,8 +1087,32 @@ export const Exchange = z
      * states, where which one the sentence means is a fact only the author has.
      */
     at: z
-      .object({ view: z.string(), part: z.string().optional(), state: z.string().optional() })
+      .object({
+        view: z.string().optional(),
+        part: z.string().optional(),
+        state: z.string().optional(),
+        /**
+         * ⛔ THE SCREEN THIS ASK ARRIVES AT BELONGS TO ANOTHER SCOPE — `<scope>#<view>`.
+         *
+         * A person-asked exchange owes a view. But a scoper may not read another feature's scope,
+         * and a migrated corpus is full of reader actions whose screen was written somewhere else.
+         * With only `view:` available, the author's three moves were: name a view this scope does
+         * not have, invent one, or leave the behaviour filed as machinery. All three are wrong, and
+         * the third is what happened — `pin-a-version` kept "pinning a source" and "releasing a
+         * pin" as `asked_by: system` with a prose `triggered_by`, and `happy_path.through` stayed
+         * empty, because `asked_by: person` demanded a view it could not honestly name.
+         *
+         * Recorded as framework gap fg-0005 by the scoper that hit it: *"There is no way to say
+         * 'this is a person's ask and the screen it arrives at belongs to another scope'."* Now
+         * there is. `check` resolves it like any other ref, so a wrong one is caught rather than
+         * believed.
+         */
+        view_in: z.string().optional(),
+      })
       .strict()
+      .refine((a) => !(a.view && a.view_in), {
+        message: "say `view` or `view_in`, not both — one ask arrives at one screen",
+      })
       .optional(),
     exists: z.enum(["intended", "kept", "withdrawn"]).optional(),
     /**
@@ -1172,11 +1196,17 @@ export const Exchange = z
      * A view with no interactive parts is a legitimate arrival point; a view that has them and
      * an ask that names none is an ask nobody can find.
      */
-    if (e.asked_by === "person" && !e.at?.view) {
+    /**
+     * ⛔ `view_in` SATISFIES THIS, AND THAT IS THE WHOLE OF fg-0005. The guarantee is "an ask a
+     * person makes arrives somewhere nameable", not "arrives in this file" — and insisting on the
+     * latter is what pushed reader actions back into machinery.
+     */
+    if (e.asked_by === "person" && !e.at?.view && !e.at?.view_in) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["at"],
-        message: "a person-asked exchange must say which view the ask arrives at",
+        message:
+          "a person-asked exchange must say which view the ask arrives at — `view` for a screen in this scope, or `view_in: <scope>#<view>` when the screen belongs to another",
       });
     }
     if (e.asked_by !== "person" && !e.when?.triggered_by) {
@@ -2330,6 +2360,31 @@ export const Scope = z.object({
           closed: z.boolean().optional(),
           members: z.array(z.string()).optional(),
           /**
+           * ⛔ THIS WORD IS CONTESTED, AND NOBODY HAS RULED WHICH SENSE WINS.
+           *
+           * A slot can hold an open question. A word could not — `Term` carried
+           * `means`/`closed`/`members` and nothing else, so "three names in this corpus point at
+           * related-but-different objects" had nowhere to live at the grain of the word.
+           *
+           * What that cost, recorded as fg-0004 by the scoper that hit it: Bilrost uses *version
+           * selection*, *model revision*, *master model version* and *input version* across four
+           * places for three distinct objects. The scoper declared the one word it owned, and
+           * **deliberately left the collision out of truth entirely** — reporting it in prose to its
+           * caller instead — because defining the contested word would have settled a collision
+           * nobody had ruled on, and a guessed definition reads exactly like a decided one.
+           *
+           * ⛔ `with` NAMES THE OTHER WORDS, because "this is contested" without saying against
+           * what is a feeling. The question goes to a person; nothing here resolves it.
+           */
+          contested: z
+            .object({
+              question: z.string().min(10),
+              /** The other words it collides with — bare words, or `<scope>` where one is defined. */
+              with: z.array(z.string()).min(1),
+            })
+            .strict()
+            .optional(),
+          /**
            * ⛔ THE ANSWER `check` ASKED FOR AND THE SCHEMA COULD NOT HOLD.
            *
            * `nothing-in-this-product-sets-this` offers three exits: a behaviour is missing, the
@@ -2379,6 +2434,19 @@ export const Scope = z.object({
    */
   depends_on: z.array(z.string()).default([]),
   views: z.array(View).default([]),
+  /**
+   * ⛔ THIS FEATURE HAS NO SCREEN OF ITS OWN, SAID RATHER THAN INFERRED — the reason, in one line.
+   *
+   * `views: []` cannot be told from "nobody has drawn them yet", and the difference matters to every
+   * reader: one is a capability reached only from other features, the other is unfinished work.
+   * With no way to say it, the fact was written as a clause inside the `may` sentence of **all eight
+   * exchanges** of `limit-resolution` — "It has no screen of its own." eight times — which is the
+   * duplication this model exists to prevent. Recorded as fg-0003 by the scoper that hit it.
+   *
+   * ⛔ A REASON, NOT A BOOLEAN. "Reached only from other features, never opened directly" is
+   * checkable against the exchanges; `true` is an assertion with nothing behind it.
+   */
+  no_screen: z.string().min(10).optional(),
   exchanges: z.array(Exchange).default([]),
   /** ⛔ Why this is worth building — what is wrong today. See `Reason`. */
   why: z.array(Reason).default([]),

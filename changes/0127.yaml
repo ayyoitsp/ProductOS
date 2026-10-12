@@ -1,0 +1,14 @@
+id: "0127"
+said: go ahead and fix them - then merge the PR
+at: 2026-10-12
+kind: concept
+reaches:
+  model: no_screen
+  surface: no-screen-why
+  instruct: Three things authors before you could not say
+  pin: a word can be recorded as contested, naming what it collides with
+waived:
+  derive: 'Nothing new is computed. Two of the three fields are read where they are met — the page reads `no_screen`, `viewOfAsk` reads `at.view_in` — and neither is a derivation: no state is inferred, nothing is hashed, nothing goes stale. `contested` is deliberately inert, which is the whole point of it: a contested word records that nobody has ruled, and software that derived a winner from it would be settling the thing the field exists to leave open. Arguable the day `check` counts contested words toward whether a corpus may be handed over, because then "how many disputed words is too many" becomes a computed judgement.'
+  generate: Nothing generates differently. The three fields are authored, and the only generated artefact that touches them is the page, which is the surface layer above. A generator change here would mean a drawing or a packet changing shape, and none does.
+  check: 'No new refusal, and I want to be exact about why rather than claim coverage. `at.view_in` is checked — it resolves through `resolveView` like every other view ref, so a wrong one is caught today. `no_screen` and `contested` are both DECLARATIONS THAT SOMETHING IS DELIBERATE, and a check that refused them would be refusing the answer it asked for. What is genuinely missing is the other direction: `check` could note a feature with no views AND no `no_screen`, which is the "unfinished or machinery?" question nobody can currently answer by looking. I did not build it because it would fire on every scope in the shipped seed that has no screens for honest reasons, and a refusal that fires everywhere teaches people to run with it off — the reasoning `behaviours-with-nothing-behind-them` already records. Arguable, and the first corpus to finish scoping is where the threshold becomes knowable.'
+closed: 2026-10-12
