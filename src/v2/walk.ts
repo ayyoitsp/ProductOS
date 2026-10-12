@@ -85,7 +85,14 @@ function resolveWithin(raw: string, scope: Scope, byRef: Map<Ref, unknown>): Ref
   return undefined;
 }
 
-export function walkOf(corpus: Corpus): Walk {
+/**
+ * ⛔ A PROTOTYPE'S WALK STARTS WHERE THE PROTOTYPE SAYS, NOT WHERE THE SORT LANDS.
+ *
+ * Without one this ordered every door by "has exits, has holds, is drawn, then alphabetically" and
+ * opened on whichever came first. Peter: *"and it just starts at 'sizing results' ?? hahahah"*.
+ * Sorting is not a product decision and must never be dressed as one.
+ */
+export function walkOf(corpus: Corpus, startAt?: string): Walk {
   const steps = new Map<Ref, Step>();
 
   /** Every view first, so containment and links can both be resolved against a complete set. */
@@ -190,5 +197,11 @@ export function walkOf(corpus: Corpus): Walk {
   }
 
   const unreachable = [...steps.keys()].filter((r) => !reachable.has(r)).sort();
-  return { steps, entries, reachable, unreachable };
+  /**
+   * ⛔ THE NAMED START COMES FIRST AND STAYS A DOOR. It may well be a screen something leads to —
+   * a deals list is reached from half the product — and dropping it from the doors because of that
+   * would leave the prototype with no front door at all.
+   */
+  const ordered = startAt && steps.has(startAt) ? [startAt, ...entries.filter((e) => e !== startAt)] : entries;
+  return { steps, entries: ordered, reachable, unreachable };
 }

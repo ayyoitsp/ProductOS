@@ -64,12 +64,45 @@ function iconDirNear(from: string): string | null {
  * read rather than evaluated. `key` is React bookkeeping and is dropped.
  */
 function childrenOf(source: string): string | undefined {
-  const start = source.indexOf("__iconNode");
-  if (start < 0) return undefined;
-  const open = source.indexOf("[", start);
-  const end = source.indexOf("];", open);
-  if (open < 0 || end < 0) return undefined;
-  const body = source.slice(open, end);
+  /**
+   * ⛔ TWO SHAPES, BECAUSE THE PACKAGE CHANGED ONE UNDER US.
+   *
+   * lucide v1.34 wrote `const __iconNode = [["path", {…}]]`. v1.50 writes
+   * `const __iconData = { name, size, node: [["path", {…}]] }`. The upgrade landed in the
+   * application's node_modules between one session and the next, and every icon in the corpus went
+   * silently back to a grey square — the exact defect this file was written to end, reintroduced by
+   * a dependency bump nobody here made.
+   *
+   * ⛔ IT READS THE DATA, NOT THE VERSION. Branching on a version string in the header would be a
+   * second thing to keep current; finding whichever array is actually there is not.
+   */
+  const at = (() => {
+    const data = source.indexOf("__iconData");
+    if (data >= 0) {
+      const node = source.indexOf("node:", data);
+      if (node >= 0) return source.indexOf("[", node);
+    }
+    const legacy = source.indexOf("__iconNode");
+    return legacy >= 0 ? source.indexOf("[", legacy) : -1;
+  })();
+  if (at < 0) return undefined;
+
+  /** The matching close, counted rather than guessed — an icon's attrs hold no brackets. */
+  let depth = 0;
+  let end = -1;
+  for (let i = at; i < source.length; i++) {
+    if (source[i] === "[") depth++;
+    else if (source[i] === "]") {
+      depth--;
+      if (depth === 0) {
+        end = i;
+        break;
+      }
+    }
+  }
+  if (end < 0) return undefined;
+
+  const body = source.slice(at, end);
   const parts: string[] = [];
   for (const m of body.matchAll(/\[\s*"([a-zA-Z]+)"\s*,\s*\{([^}]*)\}\s*\]/g)) {
     const el = m[1]!;

@@ -29,6 +29,7 @@ import { inEffect, readSteers, declined, wouldReach, reaches, learnFrom } from "
 import { indexDesignSystem } from "../../v2/design.js";
 import { inferConnections, type Connection } from "../../v2/connects.js";
 import { DOC_MIGRATIONS } from "../../v2/store/doc-migrations.js";
+import { drawShellFrom, aimNav } from "../../v2/shell.js";
 import { writeLeadsTo } from "../../v2/draw-write.js";
 import { AGENTS, AUTHORS, CASCADE, KINDS, SHIMS, SKILL, byDiscipline } from "../../core/jobs.js";
 
@@ -2146,6 +2147,95 @@ export function v2Command(): Command {
      * Same rules as the store: the list is append-only, each rule reports what it touched, and a
      * file no rule matches is not rewritten.
      */
+    /**
+     * ⛔ A PROTOTYPE IS A WAY THROUGH THE PRODUCT, AND A PRODUCT HAS SEVERAL.
+     *
+     * Peter: *"we can have different prototypes for differnet prototypes.. like 'unauthenticated'
+     * could be a flow, and CRE vs private lending"*. An unauthenticated flow has no application
+     * menu at all, so one shell for the whole product would put the signed-in navigation around a
+     * sign-in screen.
+     *
+     * This draws each prototype's chrome from the LAYOUTS around the route it names, and points
+     * each menu item at the screen it names where that is unambiguous. Everything it writes is
+     * output: `shell_html`, `nav[].to` and `from`. What a person writes is the id, the title, the
+     * start and which route the chrome comes from.
+     */
+    .command("prototypes")
+    .description("Draw each prototype's chrome, and aim its menu at the screens it names")
+    .option("--into <dir>", "the corpus", ".")
+    .option("-n, --dry-run", "say what it would draw and change nothing")
+    .action((o: { into?: string; dryRun?: boolean }) => {
+      const into = path.resolve(o.into ?? ".");
+      const corpus = loadCorpus(into);
+      if (!corpus.prototypes.length) {
+        console.log(pc.yellow("?"), "no prototypes declared — write them in prototypes.yaml:");
+        console.log(
+          pc.dim(
+            "  prototypes:\n" +
+              "    - id: cre\n" +
+              "      title: CRE\n" +
+              "      starts_at: deal-list#deals-list\n" +
+              "      shell_from: frontend/app/(app)/cre-deals/page.tsx"
+          )
+        );
+        return;
+      }
+
+      let repoRoot = into;
+      let componentsDir: string | undefined;
+      try {
+        const paths = resolvePathsOrThrow(into);
+        repoRoot = path.dirname(path.dirname(paths.configFile));
+        componentsDir = readConfig(paths).web.components_dir;
+      } catch {
+        /* a corpus with no config still draws — it just has no components index */
+      }
+
+      /** Every screen, so a menu item can be pointed at the one it names. */
+      const screens: Array<{ ref: string; title: string }> = [];
+      for (const entry of corpus.scopes)
+        for (const view of entry.scope.views ?? [])
+          screens.push({ ref: `${entry.scope.id}#${view.id}`, title: view.title ?? view.id });
+
+      const out = corpus.prototypes.map((proto) => {
+        if (!proto.shell_from) {
+          console.log(pc.yellow("?"), `${proto.id} — names no route for its chrome, so it has none`);
+          return proto;
+        }
+        const route = path.resolve(repoRoot, proto.shell_from);
+        if (!fs.existsSync(route)) {
+          console.log(pc.yellow("?"), `${proto.id} — ${proto.shell_from} is not there`);
+          return proto;
+        }
+        const shell = drawShellFrom(route, {
+          componentsDir: componentsDir ? path.resolve(repoRoot, componentsDir) : undefined,
+        });
+        if (!shell) {
+          console.log(pc.yellow("?"), `${proto.id} — nothing wraps that route, so this prototype has no chrome`);
+          return proto;
+        }
+        const nav = aimNav(shell.nav, screens);
+        const aimed = nav.filter((n) => n.to).length;
+        console.log(
+          pc.green("✓"),
+          `${proto.id} — chrome from ${shell.from.length} layout(s), ${nav.length} menu item(s), ${aimed} of them aimed`
+        );
+        for (const n of nav)
+          console.log(pc.dim(`    ${n.label}${n.to ? `  →  ${n.to}` : "  —  names no screen here"}`));
+        return { ...proto, shell_html: shell.html, nav, from: shell.from.map((f) => path.relative(repoRoot, f)) };
+      });
+
+      if (o.dryRun) {
+        console.log(pc.dim("  nothing was written — drop -n to apply"));
+        return;
+      }
+      const file = path.join(into, "prototypes.yaml");
+      fs.writeFileSync(file, YAML.stringify({ prototypes: out }));
+      console.log(pc.green("✓"), `written into ${path.relative(process.cwd(), file)}`);
+      console.log(pc.dim("  re-run this after the layouts change — the chrome is output, not a document"));
+    })
+
+  cmd
     /** ⛔ Not `migrate` — that verb is taken by the v1→Exchange conversion, which is a different act. */
     .command("forward")
     .description("Bring a corpus on disk forward to this build's schema")
