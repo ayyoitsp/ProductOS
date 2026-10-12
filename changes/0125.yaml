@@ -1,14 +1,11 @@
 id: "0125"
-said: the stronger one, if you want it, is a test that fails when ANY glyph in the corpus falls back, because that survives lucide changing shape a third time without anybody predicting the shape
+said: I went to get 4100 up and get all of Bill Russ indexed, from product features to capabilities to test cases
 at: 2026-10-12
 kind: derivation
 reaches:
-  check: ASSERT THE CONDITION, NOT THE SHAPE SOMEBODY HAPPENED TO FIX
-  pin: a corpus says so when its glyphs drew as grey squares
+  surface: HASHABLE
+  pin: an exchange hashes too — the grain a capability's `serves` is allowed to use
 waived:
-  model: Nothing new can be said. A fallback is already recorded in the drawing as `class="productos-icon"` with the name it could not resolve — the condition was always expressible, nothing was ever asking it.
-  derive: No state is computed. Two counts over drawings the corpus already holds.
-  generate: The generator is unchanged and deliberately so. This exists because a FUTURE generator change — or a dependency moving under it — can silently stop resolving glyphs; wiring it into the generator would tie the question to the thing it is meant to outlive.
-  surface: "`v2 check` is the surface for conditions a corpus must meet. A second home would be a second copy."
-  instruct: No author writes or decides anything here. The note tells them the likely cause is the package rather than their names, which is the only judgement involved and it is in the finding.
+  derive: 'Nothing in the derivation changed, and that is the finding rather than an excuse. `claimHash` already hashed every grain this needed — demonstrated before touching anything: `claimHash(corpus, "price-a-deal#pull-a-source")` returned `sha256:fce4f992872b4eeb` at the same moment the CLI exited 1 on that exact ref. The whole defect was one guard list in a surface file, so a derive-layer change here would have been a second implementation of something already correct. Arguable the day a `serves` entry is allowed to name something `coveredBy` does not cover, because then the grain really is a derivation question.'
+  check: "`check` already reports `a-part-older-than-what-it-serves` and names which parts went stale — that is the check this mechanism feeds, and it needed no change. What was broken was the ability to WRITE the field it reads. Arguable if a capability can be written with no `derived.from` at all; the schema marks it required and I have not driven that refusal, so I am not claiming it."
 closed: 2026-10-12
