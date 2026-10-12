@@ -416,3 +416,63 @@ test("a cell drawn by a formatter reads the formatter and its arguments", () => 
   /** ⛔ And something that names nothing a reader could use still draws a bar rather than a guess. */
   assert.equal(sampleValue("qq(zz, ww)", 0), undefined, "an unreadable call was given a value anyway");
 });
+
+test("a sentence built by concatenation keeps its words", () => {
+  /**
+   * ⛔ ONE ELLIPSIS WAS EATING A WHOLE PARAGRAPH. The longest sentences in a product are written as
+   * a template plus a string:
+   *
+   *     {`${plural(affected, 'priced option')} ${affected === 1 ? 'was' : 'were'} ` +
+   *       'approved against your policy.'}
+   *
+   * The node is a binary expression, so the template branch never saw it and every literal word in
+   * both halves was thrown away for the one part that could not be read. Peter, on the deployed
+   * page: *"lots of '...'s in the rendered 4100"*.
+   *
+   * ⛔ AND THE OPERANDS ARE WRAPPED BEFORE THEY ARE DRAWN. `emit` takes a JSX expression, not a
+   * bare node; handed the operand directly it returns nothing, so the branch fires and produces an
+   * empty string — indistinguishable from the branch never running, which is how it was missed.
+   */
+  const root = temp("productos-concat-");
+  fs.writeFileSync(
+    path.join(root, "Page.tsx"),
+    "export default function P(){ return (<p>{`${plural(a, 'priced option')} ${a === 1 ? 'was' : 'were'} ` + 'approved against your policy.'}</p>) }"
+  );
+  const out = drawFromRoute(path.join(root, "Page.tsx"), {});
+  assert.match(out.html, /were approved against your policy\./, "the literal halves of the sentence were thrown away");
+  assert.doesNotMatch(out.html, /productos-unknown[^>]*plural/, "the whole sentence still draws as one ellipsis");
+  /** ⛔ A count is a count: `plural` says so, whatever its arguments mention. "priced" is not money. */
+  assert.match(out.html, /productos-sample[^>]*>184</, "a counting function did not read as a count");
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test("a form control draws as the control it is", () => {
+  /**
+   * ⛔ 972 OF THEM IN ONE CORPUS, ALL THE SAME COMPONENT.
+   *
+   * `<Select>` is a design-system component the drawing cannot read, so it came out as an empty
+   * marked div — a hatched grey box — on every stage filter, every picker, every dropdown. It was
+   * by a long way the most common thing wrong with a drawing, and Peter reported it three times in
+   * different words before anyone counted it.
+   *
+   * Same structural guess as the table rule, with the same justification: a component whose name IS
+   * a form primitive almost certainly renders that primitive, and the alternative is a screen with
+   * no controls on it at all.
+   */
+  const root = temp("productos-form-");
+  fs.writeFileSync(
+    path.join(root, "Page.tsx"),
+    `export default function P(){ return (<div>
+       <Select className="w-48" value="In review" />
+       <Checkbox className="h-4" />
+       <Toggle label="Show archived" />
+     </div>) }`
+  );
+  const out = drawFromRoute(path.join(root, "Page.tsx"), {});
+  assert.match(out.html, /<select class="w-48"><option>In review<\/option><\/select>/, "a select drew as a hatched box");
+  assert.match(out.html, /<input type="checkbox" class="h-4" \/>/, "a checkbox drew as a hatched box");
+  assert.match(out.html, /role="switch"/, "a toggle drew as a hatched box");
+  /** ⛔ Still recorded as unresolved: the shape is right, the contents are a guess at a shape. */
+  assert.ok(out.unresolved.some((u) => /Select/.test(u)), "drawing it as a select silently claimed it was read");
+  fs.rmSync(root, { recursive: true, force: true });
+});

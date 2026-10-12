@@ -1,0 +1,9 @@
+id: "0126"
+said: lots of '...'s in the rendered 4100
+at: 2026-10-12
+kind: generator
+reaches:
+  generate: A SENTENCE BUILT WITH `+` IS STILL A SENTENCE
+  pin: a sentence built by concatenation keeps its words
+waived: {}
+closed: 2026-10-12
