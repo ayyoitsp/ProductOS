@@ -404,7 +404,26 @@ export function v2Command(): Command {
     .description("The hash of what a claim says, for a requirement worked out against it")
     .argument("<ref>", "<scope>#<exchange>#<slot>[#<statement>], or several comma-separated for a part")
     .option("--at <dir>", "corpus directory", "v2")
-    .action(async (ref: string, o: { at?: string }) => {
+    /**
+     * ⛔ BECAUSE A COMMA IS NOT AN INTENT, AND BRANCHING ON ONE MADE EVERY ONE-REF PART STALE.
+     *
+     * `derived.from` is compared against two different functions depending on who wrote it:
+     * a requirement's is `claimHash(oneRef)`, a capability's is `servesHash(theWholeSet)` — and
+     * `servesHash` WRAPS, so it never equals the bare hash even for a single-element set:
+     *
+     *     claimHash (printed)  sha256:4be20645a387522f
+     *     servesHash (compared) sha256:a51da286359160ae
+     *
+     * The old code chose between them by asking whether the argument contained a comma. So a
+     * capability serving exactly one promise — which is common and correct — got the requirement's
+     * hash and read `a-part-older-than-what-it-serves` from the moment it was written. Found by a
+     * decomposer on a real corpus: *"any offering with exactly one `serves` entry reads stale
+     * immediately. Two of mine did until I computed `servesHash` directly."*
+     *
+     * The count of refs cannot carry that distinction. The caller says which it is.
+     */
+    .option("--serves", "hash as a capability's `serves` SET — wrapped even for a single ref")
+    .action(async (ref: string, o: { at?: string; serves?: boolean }) => {
       const corpus = loadCorpus(await openAt(o));
       /**
        * ⛔ A LIST OF REFS HASHES AS A SET, AND IT IS CHECKED FIRST — a comma-joined argument is not
@@ -414,7 +433,7 @@ export function v2Command(): Command {
        * `derived.from` covers all of them. The role needs one call that answers for the set, rather
        * than N calls it has to combine in a way nothing else would agree with.
        */
-      if (ref.includes(",")) {
+      if (o.serves || ref.includes(",")) {
         const parts = ref.split(",").map((x) => x.trim()).filter(Boolean);
         for (const p of parts) {
           const one = resolveRef(corpus, p);
@@ -431,12 +450,37 @@ export function v2Command(): Command {
         console.error(pc.red("✗"), resolved.error);
         process.exit(1);
       }
-      if (resolved.ref.kind !== "slot" && resolved.ref.kind !== "statement") {
+      /**
+       * ⛔ TWO ROLES USE THIS VERB AT TWO GRAINS, AND THE GUARD ONLY KNEW ABOUT ONE.
+       *
+       * `demonstrator` hashes a SLOT, because a requirement is worked out against one sentence.
+       * `decomposer` hashes whatever a capability's `serves` set points at, and that is coarser on
+       * purpose — its own instructions say to point `serves` at `<scope>#<exchange>` or at another
+       * part (`<subsystem>#offers#<id>`), because "a part is coarse — roughly what they do".
+       *
+       * This guard allowed only `slot` and `statement`, so the decomposer could not compute
+       * `derived.from` for the very forms it is told to write. That is not cosmetic: `derived.from`
+       * is the entire reason capabilities may be generated before anybody agrees to the truth — it
+       * is what leaves a part *invalidated and named* when a promise is reworded, instead of
+       * silently answering something nobody said. Without it the layer cannot be re-run, which was
+       * the requirement it was built for: *"capabilities should be generated based on current
+       * truth … they should just carry an invalidated state"*.
+       *
+       * ⛔ `claimHash` ALREADY HANDLED THE WIDER SET — `coveredBy` is documented as taking an
+       * exchange ref and returns one for it. Only this guard refused. Demonstrated before changing
+       * it: `claimHash(corpus, "price-a-deal#pull-a-source")` → `sha256:fce4f992872b4eeb`.
+       *
+       * So the list is the kinds that can carry a hash, and the message names both uses rather
+       * than only the one whoever wrote it had in mind.
+       */
+      const HASHABLE = ["slot", "statement", "exchange", "capability"] as const;
+      if (!(HASHABLE as readonly string[]).includes(resolved.ref.kind)) {
         console.error(
           pc.red("✗"),
-          `${ref} is not a claim — it resolves to ${resolved.ref.kind}, and a requirement is worked out against a slot or one of its statements`
+          `${ref} is not a claim — it resolves to ${resolved.ref.kind}, and nothing at that grain has wording to hash`
         );
-        console.error(pc.dim("  <scope>#<exchange>#<slot>[#<statement>]"));
+        console.error(pc.dim("  a requirement is worked out against   <scope>#<exchange>#<slot>[#<statement>]"));
+        console.error(pc.dim("  a capability's `serves` may be coarser  <scope>#<exchange>  ·  <subsystem>#offers#<id>"));
         process.exit(1);
       }
       const hash = claimHash(corpus, ref);
@@ -482,6 +526,13 @@ export function v2Command(): Command {
             }${s.stale ? pc.red(`  ${s.stale} stale`) : ""}  ${pc.dim(`${s.done} done · per ${s.analysis.grain} · ${s.analysis.role}`)}`
           );
           console.log(pc.dim(`               ${s.analysis.does}`));
+          /**
+           * ⛔ ON THE LISTING, NOT ONLY ON THE DETAIL. This line is where somebody decides how to
+           * run the work, and "per feature · decomposer" reads as permission to fan twenty.
+           */
+          if (s.analysis.settleFirst) {
+            console.log(pc.yellow(`               ⛔ not fannable. First settle: ${s.analysis.settleFirst.what}`));
+          }
         }
         console.log("");
         console.log(pc.dim("  productos v2 analyse <name>          what is left, and why"));
@@ -497,6 +548,19 @@ export function v2Command(): Command {
       const left = outstanding(s);
       /** ⛔ Machine-readable on request, so a session can fan without parsing a report. */
       if (o.refs) {
+        /**
+         * ⛔ THE WARNING GOES TO STDERR, AND THAT IS THE WHOLE POINT OF PUTTING IT HERE.
+         *
+         * `--refs` exists to be piped — one ref per line, fanned over. So stdout must stay exactly
+         * that. But this is the surface where fanning actually happens, and an analysis that cannot
+         * be fanned has to say so at the moment somebody does it, not only on a listing they may
+         * never have read. stderr reaches the person and not the pipe.
+         */
+        if (s.analysis.settleFirst) {
+          console.error(pc.yellow("⛔"), `${s.analysis.name} cannot be fanned one-per-${s.analysis.grain}.`);
+          console.error(pc.dim(`   settle first: ${s.analysis.settleFirst.what}`));
+          console.error(pc.dim(`   because: ${s.analysis.settleFirst.because}`));
+        }
         for (const u of left) console.log(u.ref);
         return;
       }
@@ -504,6 +568,11 @@ export function v2Command(): Command {
         `${pc.bold(s.analysis.name)} — ${s.analysis.does}`,
         pc.dim(`\n  one per ${s.analysis.grain}, worked out by ${s.analysis.role}`)
       );
+      if (s.analysis.settleFirst) {
+        console.log(pc.yellow("  ⛔ counted per " + s.analysis.grain + ", but NOT worked that way."));
+        console.log(pc.dim(`     settle first: ${s.analysis.settleFirst.what}`));
+        console.log(pc.dim(`     because: ${s.analysis.settleFirst.because}`));
+      }
       console.log("");
       if (!left.length) {
         console.log(pc.green("✓"), `nothing to do — ${s.done} ${s.analysis.grain}s, none stale`);

@@ -783,7 +783,26 @@ function renderScreens(scope: Scope, ctx: Ctx, scopeId: string, opts: PageOption
    */
   void opts;
   const shown = scope.views.filter((v) => v.exists !== "withdrawn");
-  if (!shown.length) return "";
+  /**
+   * ⛔ NO SCREENS IS TWO DIFFERENT FACTS, AND A BLANK SPACE SAYS NEITHER.
+   *
+   * A feature reached only from other features has no screen because it never had one; a feature
+   * whose screens nobody has drawn yet has none because the work is unfinished. Both rendered as
+   * the same nothing, so the reader had to guess — and an author with no way to say which wrote
+   * "It has no screen of its own." into the `may` slot of all eight exchanges of one feature
+   * instead (framework gap fg-0003).
+   *
+   * So when the scope says why, the page says why. When it does not, the blank still means
+   * "nobody has drawn these", which is the reading it always had.
+   */
+  if (!shown.length) {
+    return scope.no_screen
+      ? `
+    <section class="screens no-screen">
+      <p class="no-screen-why">No screen of its own — ${esc(scope.no_screen)}</p>
+    </section>`
+      : "";
+  }
   return `
     <section class="screens">
       <!--
