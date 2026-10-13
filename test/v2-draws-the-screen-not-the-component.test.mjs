@@ -476,3 +476,35 @@ test("a form control draws as the control it is", () => {
   assert.ok(out.unresolved.some((u) => /Select/.test(u)), "drawing it as a select silently claimed it was read");
   fs.rmSync(root, { recursive: true, force: true });
 });
+
+test("a control shows what it says, not an empty box", () => {
+  /**
+   * ⛔ THE DEFECT SURVIVED ITS OWN FIX, AND THE NUMBERS SAID IT WAS GONE.
+   *
+   * `<Select>` used to arrive unresolved and draw as a hatched marker; a form-primitive rule turned
+   * those into real `<select>` elements and the count went 1005 → 33. Then component resolution
+   * improved on main, `Select` began resolving into its own internals, and the form rule stopped
+   * firing — so the corpus had ZERO selects again and the deploying session found zero on the page
+   * while I was quoting 972 from a sweep that no longer happens that way.
+   *
+   * What it resolves to is `<button role="combobox"><span>{displayLabel}</span></button>`, and the
+   * lone identifier was being blanked as a caller's slot — so the marker went away and the
+   * emptiness did not. A control with no words in it is unreviewable, which this file already says
+   * about icon-only buttons.
+   */
+  const root = temp("productos-control-");
+  fs.writeFileSync(
+    path.join(root, "Page.tsx"),
+    `export default function P(){ return (<div>
+       <button type="button" role="combobox"><span className="truncate">{displayLabel}</span></button>
+       <section>{children}</section>
+     </div>) }`
+  );
+  const out = drawFromRoute(path.join(root, "Page.tsx"), {});
+  assert.match(out.html, /role="combobox"[\s\S]*productos-sample/, "a control drew with nothing in it");
+  assert.doesNotMatch(out.html, /<span class="truncate">\s*<\/span>/, "the control's own words were thrown away");
+  /** ⛔ And a lone identifier OUTSIDE a control is still a caller's slot — that rule is what keeps
+   *     twenty hatched ellipses off a screen whose real text is four words. */
+  assert.doesNotMatch(out.html, /<section>\s*<span class="productos-(slot|sample|unknown)"/, "a caller's slot was filled in");
+  fs.rmSync(root, { recursive: true, force: true });
+});
