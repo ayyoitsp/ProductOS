@@ -12,6 +12,7 @@
  */
 import { SLOTS, SLOT_ASKS, DEMONSTRABLE_SLOTS, owesDemonstration, statements, saysText, NOT_A_DOCUMENT, type SlotName, type Says } from "./schema.js";
 import { walkOf } from "./walk.js";
+import { holdsOn } from "./held.js";
 import {
   DOWNSTREAM_OF_ANSWER,
   answerIsUnknown,
@@ -321,6 +322,41 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
           fellBack.size === 1 ? "" : "s"
         } drew as a grey square rather than a glyph${names.size ? ` — ${[...names].slice(0, 6).join(", ")}` : ""}`,
         fix: "⛔ Usually not an authoring mistake. Either the icon package moved — it has changed its on-disk shape before, and every glyph in a corpus went grey without a commit on either side — or these names are not ones it exports. Re-draw and see whether the count goes to zero; if it does not, the names are the question.",
+      });
+  }
+
+  /**
+   * ⛔ A SCREEN SOMEBODY HAS WORKED ON THAT THE SWEEP CAN NO LONGER TOUCH.
+   *
+   * Peter: *"once they have been operated on, they should stay locked. from there, only direct user
+   * input changes things."* That is right, and it has a cost nobody would otherwise see: the
+   * drawing stops following the code. A held screen whose component has moved on since it was drawn
+   * is a picture of a product that has changed, and `draw --all` will now walk straight past it
+   * forever.
+   *
+   * ⛔ REPORTED, NOT REFUSED, AND NOT FIXED FOR ANYBODY. The remedy is to redraw it by name, which
+   * is a person's decision about whose work gets replaced — exactly the decision the hold exists to
+   * put in front of a person. A check that quietly redrew it would be the lock with extra steps.
+   */
+  {
+    const behind: string[] = [];
+    for (const entry of corpus.scopes)
+      for (const view of entry.scope.views ?? []) {
+        if (!view.drawn_from || !view.drawn_at) continue;
+        if (!holdsOn(corpus, entry.scope.id, view).length) continue;
+        behind.push(`${entry.scope.id}#${view.id}`);
+      }
+    if (behind.length)
+      add({
+        severity: "note",
+        kind: "held-and-the-code-moved",
+        where: behind.slice(0, 3).join(", ") + (behind.length > 3 ? `, and ${behind.length - 3} more` : ""),
+        what: `${behind.length} screen${behind.length === 1 ? " has" : "s have"} been worked on, so a sweep leaves ${
+          behind.length === 1 ? "it" : "them"
+        } alone — ${behind.length === 1 ? "its" : "their"} drawing no longer follows the component${
+          behind.length === 1 ? "" : "s"
+        } ${behind.length === 1 ? "it was" : "they were"} drawn from`,
+        fix: 'Nothing to correct here — this is what being worked on means. When one of these screens really has moved on in code, redraw it by name: `productos v2 draw "<scope>#<view>" --route <file> --into <corpus>`, which says whose work it is replacing before it does it. `v2 moved` says which components changed since each drawing was taken.',
       });
   }
 

@@ -11,6 +11,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
+import { THE_GENERATOR } from "./held.js";
 
 const INDENT = "    ";
 
@@ -278,6 +279,15 @@ export function writeDrawnReading(root: string, scopeId: string, viewId: string,
     "      kind: screen",
     `      ref: ${JSON.stringify(prov.from)}`,
     ...(prov.at ? [`      quote: ${JSON.stringify(`at commit ${prov.at}`)}`] : []),
+    /**
+     * ⛔ WHO OBSERVED IT, BECAUSE IT WAS NOT A PERSON — and a corpus had no way to tell.
+     *
+     * A reading is an observation somebody made by looking, and that is what makes one evidence
+     * that a screen has been worked on. These are not: the generator writes one per run, so a hold
+     * derived from readings would have had the first sweep locking the corpus against the second
+     * and `--all` going inert for no stated reason. Saying so here is the whole distinction.
+     */
+    `      by: ${THE_GENERATOR}`,
     "",
   ];
   fs.writeFileSync(file, lines.join("\n"));

@@ -458,6 +458,40 @@ Then **check a number on the live page that would be different if it had not wor
 page returns 200. A corpus was once reported deployed while every drawing on it still came from the
 previous generator, and the tick was true.
 
+### ⛔ A screen somebody has worked on is not the sweep's to rewrite
+
+Peter: *"we should add some internal tracking to screens - when screens haven't had review yet
+(including product truth), we can freely regenerate. once they have been operated on, they should
+stay locked. from there, only direct user input changes things."*
+
+`draw --all` rewrites every screen it can resolve, which is right while a screen is a first guess —
+the sweep is the whole reason sixty screens were drawn at all. It stops being right the moment
+somebody reads one and says something, because from then on the corpus holds a judgement the
+generator never heard of and cannot reproduce.
+
+**So the sweep skips them and says so**, and the count it prints is of what it left alone:
+
+```
+✓ 19 of 33 screens drawn from the code
+
+3 left alone — somebody has worked on them:
+  ·  create-deal#folder-picker  (a note by peter and 2 other acts)
+```
+
+⛔ **Nothing to set. It is derived from the acts already recorded**, and there are three — a **note**
+about the screen, a **verdict** on truth the screen `shows` (his *"including product truth"*), or a
+**reading** a person recorded about it. A `locked:` field would be a second record of what the
+corpus already knows, with nothing keeping the two in step.
+
+⛔ **Naming the screen still redraws it.** That is the direct user input the rule turns on, so
+`v2 draw "<scope>#<view>" --route <file>` goes through — and prints whose work it is replacing
+first. Never reach for it to make a sweep look complete; a held screen is held because the cheapest
+thing in the corpus is about to overwrite the most expensive.
+
+⛔ **And a held screen's drawing stops following the code.** That is the cost of the lock, not a
+defect, and `v2 check` reports it as `held-and-the-code-moved` rather than fixing it — whose work
+gets replaced is a person's call.
+
 ### ⛔ Say what a screen appears INSIDE — `within`
 
 A product is not a pile of screens, and for a long time that is all a corpus could say. Scopes nest,
