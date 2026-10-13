@@ -554,6 +554,24 @@ deploy: deploy-check
 	@node scripts/live-scripts-parse.mjs --from http://localhost:$(STAGING_PORT) | sed 's/^/  /' || { \
 		echo "✗ a served page has a dead live script — every button on it is broken, and it answers 200"; \
 		exit 1; }
+	@# ⛔ AND NO PAGE SHOWS A READER THE NAME OF A FIELD — "keep the substrate out of it".
+	@#
+	@# This shipped: the Prototype tab carried a complaint reading `state it with \`splits_on\``. A
+	@# test asserting no field name appeared HAD been written, and it rendered a corpus that had
+	@# dimensions — so the gap that prints the name, which only fires when nothing names one, never
+	@# ran. A page with the field name on it, asserted not to have the field name, by a fixture that
+	@# could not reach the line.
+	@#
+	@# ⛔ Which is why it belongs here and not in the suite: a fixture checks the states its author
+	@#    imagined, and the one that leaked was the one nobody imagined. This checks what went out.
+	@#
+	@# ⛔ Vocabulary DERIVED from the schema, and restricted to names with an underscore — `is`, `in`,
+	@#    `title` and `kind` are schema keys and ordinary English, so matching them would fail correct
+	@#    pages. An underscore is a property of the name rather than of what else is on the page.
+	@echo "→ no page shows a reader a field name"
+	@node scripts/no-field-names-on-a-page.mjs --from http://localhost:$(STAGING_PORT) | sed 's/^/  /' || { \
+		echo "✗ a served page is talking about the tool instead of the product"; \
+		exit 1; }
 	@echo "✓ $$(git rev-parse --short HEAD) is live on $(STAGING_PORT)"
 
 rebuild-remote: staging-guard build
