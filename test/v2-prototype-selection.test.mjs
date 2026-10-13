@@ -33,6 +33,7 @@ import { execFileSync } from "node:child_process";
 const { loadCorpus } = await import("../dist/v2/load.js");
 const { selectionOf, gapsIn } = await import("../dist/v2/selection.js");
 const { renderScopePage } = await import("../dist/v2/page.js");
+const { checkCorpus } = await import("../dist/v2/check.js");
 
 const cli = (args) => execFileSync("node", ["dist/cli/index.js", ...args], { encoding: "utf8" });
 
@@ -135,6 +136,56 @@ test("⛔ the drawing sweep carries the axis through rather than deleting it", (
   const raw = YAML.parse(fs.readFileSync(path.join(dir, "prototypes.yaml"), "utf-8"));
   assert.equal(raw.splits_on, "Which role is this for?", "the sweep deleted what it splits on");
   assert.equal(raw.prototypes[0].is, "admin", "the sweep deleted a prototype's answer");
+});
+
+test("⛔ handover and the page agree about what a door opens on — one predicate, not two", () => {
+  /**
+   * ⛔ THEY HAD ALREADY DIVERGED, WITHIN AN HOUR, IN THE DIRECTION THAT TEACHES PEOPLE TO IGNORE
+   * THE PAGE.
+   *
+   * `check` resolved a front door with `resolveView`, which accepts a bare view id inside a scope
+   * as well as `<scope>#<view>`. `gapsIn` tested a map keyed only as `<scope>#<view>`. So
+   * `starts_at: balance` — a perfectly good door — passed handover and was REPORTED BROKEN on the
+   * page a reviewer reads:
+   *
+   *     check  → passes, the ref resolves
+   *     gapsIn → "Fine" opens on balance, which is not a screen in this corpus
+   *
+   * One condition with two implementations, diverging by one clause. This asserts the two agree on
+   * BOTH spellings and on a genuinely broken door, which is the only form of the assertion that
+   * cannot pass by both sides being wrong together.
+   */
+  const dir = corpus();
+  const qualified = views(dir)[0];
+  const bare = qualified.split("#").pop();
+
+  const verdicts = (startsAt) => {
+    fs.writeFileSync(
+      path.join(dir, "prototypes.yaml"),
+      `prototypes:\n  - id: p\n    title: A way\n    starts_at: ${startsAt}\n`
+    );
+    const c = loadCorpus(dir);
+    const sel = selectionOf(c);
+    return {
+      page: gapsIn(sel).some((g) => /opens on/.test(g)),
+      handover: checkCorpus(dir).findings.some((f) => f.kind === "a-prototype-opens-on-nothing"),
+      names: sel.options[0].opensOn,
+    };
+  };
+
+  const q = verdicts(qualified);
+  assert.deepEqual([q.page, q.handover], [false, false], `a ${qualified} door was called broken`);
+  assert.ok(q.names, "the chooser cannot name the screen a qualified door opens on");
+
+  /** ⛔ The bare id — the case that was a false positive on the page and silent at handover. */
+  const b = verdicts(bare);
+  assert.deepEqual([b.page, b.handover], [false, false], `a bare "${bare}" door was called broken`);
+  assert.equal(b.names, q.names, "the two spellings name different screens");
+
+  /** ⛔ And a door that really opens on nothing is caught by BOTH, or this test proves only silence. */
+  const broken = verdicts("no-scope#no-such-screen");
+  assert.deepEqual([broken.page, broken.handover], [true, true], "a door onto nothing was missed by one of them");
+  assert.equal(broken.names, undefined);
 });
 
 test("the selection reaches the page, with its question on it", () => {

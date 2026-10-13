@@ -13,7 +13,7 @@
 import { SLOTS, SLOT_ASKS, DEMONSTRABLE_SLOTS, owesDemonstration, statements, saysText, NOT_A_DOCUMENT, type SlotName, type Says } from "./schema.js";
 import { walkOf } from "./walk.js";
 import { holdsOn } from "./held.js";
-import { selectionOf, gapsIn } from "./selection.js";
+import { selectionOf, gapsIn, doorOpensOn } from "./selection.js";
 import {
   DOWNSTREAM_OF_ANSWER,
   answerIsUnknown,
@@ -438,14 +438,21 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
       const at = (p as { starts_at?: string }).starts_at ?? "";
       if (!at) continue;
       /**
-       * ⛔ `resolveView`, NOT `resolveRef`. The first version used `resolveRefSafely`, which
-       * resolves EXCHANGES — so `money#balance`, a perfectly good screen, came back
-       * `no exchange "balance" in money` and every prototype was refused. A check that refuses
-       * correct corpora is worse than no check, and it only showed up because the fixture had one
-       * valid door beside the broken one.
+       * ⛔ `doorOpensOn`, WHICH IS THE ONE PREDICATE — this had its own copy and the two diverged
+       * within the hour.
+       *
+       * It resolved with `resolveView` here, which accepts a bare view id inside a scope, while the
+       * page's `gapsIn` tested a map keyed only as `<scope>#<view>`. So `starts_at: balance`, a
+       * perfectly good door, passed handover and was REPORTED BROKEN on the page a reviewer reads —
+       * the direction that teaches people to ignore the page.
+       *
+       * ⛔ And before that, the first version used `resolveRefSafely`, which resolves EXCHANGES — so
+       * `money#balance` came back `no exchange "balance" in money` and every prototype was refused.
+       * A check that refuses correct corpora is worse than no check, and it only showed up because
+       * the fixture had one valid door beside the broken one. Both of those are one condition with
+       * two implementations; now there is one, exported, and both callers use it.
        */
-      const resolved = corpus.scopes.some((e) => resolveView(corpus, e.scope, at));
-      if (resolved) continue;
+      if (doorOpensOn(corpus, at)) continue;
       add({
         severity: "refuse",
         kind: "a-prototype-opens-on-nothing",

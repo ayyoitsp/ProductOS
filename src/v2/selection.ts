@@ -24,8 +24,42 @@
  * through the product or a single screen somebody filed hopefully — and it is a fact about the
  * truth, so nobody types it.
  */
-import type { Corpus } from "./load.js";
+import { resolveView, type Corpus } from "./load.js";
 import { walkOf } from "./walk.js";
+
+/**
+ * The screen a prototype's front door names, or nothing.
+ *
+ * ⛔ ONE PREDICATE, BECAUSE TWO OF THEM HAD ALREADY DISAGREED — within an hour of being written,
+ * and in the direction that teaches people to ignore the page.
+ *
+ * `check` refuses a door onto nothing by resolving with `resolveView`, which accepts a bare view id
+ * inside a scope as well as `<scope>#<view>`. `gapsIn` tested a map keyed only as
+ * `${scope}#${view}`. So `starts_at: balance` — a perfectly good door — passed handover and was
+ * REPORTED BROKEN on the page a reviewer reads:
+ *
+ *     check  → passes, the ref resolves
+ *     gapsIn → "Fine" opens on balance, which is not a screen in this corpus
+ *
+ * That is the shape this repo already carries a scar from: one condition, two implementations,
+ * diverging by one clause. A false positive on the surface is the worse direction — it tells
+ * somebody their correct corpus is broken, and the lesson they take is that the page is noise.
+ *
+ * ⛔ SO BOTH CALL THIS, and neither owns a copy of the rule. It returns the view rather than a
+ * boolean so the chooser can name the screen it opens on using the same resolution that decided it
+ * exists — a title looked up a second way is the same divergence with a smaller blast radius.
+ */
+export function doorOpensOn(
+  c: Corpus,
+  startsAt: string
+): { scope: string; title: string } | undefined {
+  if (!startsAt) return undefined;
+  for (const entry of c.scopes) {
+    const hit = resolveView(c, entry.scope, startsAt);
+    if (hit) return { scope: hit.scope, title: hit.view.title ?? hit.view.id };
+  }
+  return undefined;
+}
 
 export interface Option {
   id: string;
@@ -59,13 +93,18 @@ export interface Selection {
 
 export function selectionOf(c: Corpus): Selection {
   const protos = c.prototypes ?? [];
-  const titles = new Map<string, string>();
   const drawn = new Set<string>();
   for (const entry of c.scopes)
     for (const v of entry.scope.views ?? []) {
-      const ref = `${entry.scope.id}#${v.id}`;
-      titles.set(ref, v.title ?? v.id);
-      if (v.sketch_html || v.sketch) drawn.add(ref);
+      /**
+       * ⛔ BOTH SPELLINGS, FOR THE SAME REASON `doorOpensOn` EXISTS. A door may name a screen as
+       * `<scope>#<view>` or by its bare id where that is unambiguous, and a set keyed only one way
+       * said a valid door's screen had no picture.
+       */
+      if (v.sketch_html || v.sketch) {
+        drawn.add(`${entry.scope.id}#${v.id}`);
+        drawn.add(v.id);
+      }
     }
 
   const options = protos.map((p): Option => {
@@ -80,7 +119,7 @@ export function selectionOf(c: Corpus): Selection {
       title: p.title,
       is: p.is,
       startsAt: p.starts_at,
-      opensOn: titles.get(p.starts_at),
+      opensOn: doorOpensOn(c, p.starts_at)?.title,
       reaches: walk.reachable.size,
       drawn: drawn.has(p.starts_at),
       chrome: Boolean(p.shell_html),
