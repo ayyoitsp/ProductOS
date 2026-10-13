@@ -42,7 +42,14 @@ function corpus() {
       "splits_on:",
       "  - id: role",
       "    asks: Role",
-      "    values: [admin, loan processor]",
+      /**
+       * ⛔ A THIRD VALUE NOTHING COVERS, ON PURPOSE. The dimming assertion below used to say only
+       * that nothing WAS dimmed — which proves the marker is not too wide and never proves it
+       * fires. The deploying session's fixture happened to contain an uncovered combination and
+       * produced the firing side by accident, which is the cheap way: a fixture where everything is
+       * covered cannot test the uncovered path at all.
+       */
+      "    values: [admin, loan processor, auditor]",
       "  - id: line",
       "    asks: Product line",
       "    values: [CRE, private lending]",
@@ -242,7 +249,7 @@ test("⛔ pressing the values brings up the right prototype", async (t) => {
   `);
   const seen = JSON.parse(out);
   assert.equal(seen.rows, 2, `expected one row per dimension, got ${seen.rows}`);
-  assert.deepEqual(seen.chips, [2, 2], "the values are not all on the page");
+  assert.deepEqual(seen.chips, [3, 2], "the values are not all on the page");
   assert.equal(seen.creAdmin, "CRE admin");
   assert.equal(seen.plProc, "Private lending processor");
   assert.match(seen.uncovered, /nothing covers this/i, "an uncovered combination left the last prototype on screen");
@@ -250,26 +257,36 @@ test("⛔ pressing the values brings up the right prototype", async (t) => {
   assert.deepEqual(seen.onPerRow, [1, 1], "a dimension ended up with two values chosen at once");
 });
 
-test("⛔ a value nothing covers is visible before it is pressed", async (t) => {
+test("⛔ a value nothing covers is visible before it is pressed — and only that one", async (t) => {
   if (skip) return t.skip(skip);
   /**
-   * With dropdowns the only way to learn that a combination does not exist was to select it and be
+   * With dropdowns the only way to learn that a combination did not exist was to select it and be
    * told. The whole reason for showing the values is that the hole in the product is on the page.
    *
-   * ⛔ THE FIXTURE HAS NO DEAD VALUE, DELIBERATELY: every value here appears in some prototype, so a
-   * marker on any of them would be wrong. That is the assertion — a detector that dimmed everything
-   * would pass a test that only looked for dimming somewhere.
+   * ⛔ THIS ASSERTED ONLY THE ABSENCE, WHICH IS HALF A TEST. It said no chip was dimmed — true, and
+   * equally true of a build where the dimming does not work at all. The deploying session's own
+   * fixture happened to contain an uncovered combination and produced the firing side by accident,
+   * which is how I noticed: a fixture where everything is covered cannot test the uncovered path.
+   *
+   * So the fixture now carries a third Role value, `auditor`, that no prototype uses — and the
+   * assertion names WHICH chip is dimmed rather than counting them. Both directions, in one place:
+   * the marker fires where nothing is covered and nowhere else.
    */
   const out = await inThePage(`
     const chips = [...document.querySelectorAll('.wval')];
     return JSON.stringify({
       total: chips.length,
       empty: chips.filter((c) => c.classList.contains('empty')).map((c) => c.getAttribute('data-walk-val')),
+      titled: chips
+        .filter((c) => c.classList.contains('empty'))
+        .map((c) => c.getAttribute('title') || ''),
     });
   `);
-  const { total, empty } = JSON.parse(out);
-  assert.equal(total, 4, `expected four values across two dimensions, got ${total}`);
-  assert.deepEqual(empty, [], "a value that some prototype covers was marked as covering nothing");
+  const { total, empty, titled } = JSON.parse(out);
+  assert.equal(total, 5, `expected five values across two dimensions, got ${total}`);
+  /** ⛔ Exactly the one nothing covers — not none, and not every chip. */
+  assert.deepEqual(empty, ["auditor"], "the wrong values are marked as covering nothing");
+  assert.match(titled[0] ?? "", /no prototype covers this/, "a dimmed value does not say why");
 });
 
 test("⛔ the detail is shut until asked for — one decision, not five blocks of text", async (t) => {
@@ -313,6 +330,8 @@ test("⛔ the dimensions and their values save from where they are shown", async
   const added = sent[0].body.axes[2];
   assert.equal(added.asks, "Signed in?");
   assert.deepEqual(added.values, ["yes", "no"], "the values did not travel");
-  /** ⛔ And the ones already there keep their values rather than being re-sent empty. */
-  assert.deepEqual(sent[0].body.axes[0].values, ["admin", "loan processor"]);
+  /** ⛔ And the ones already there keep their values rather than being re-sent empty — including
+   *     `auditor`, which no prototype uses: a save must not quietly drop a value for being unused.
+   *     That would make the uncovered combination disappear on the next save, which is the finding. */
+  assert.deepEqual(sent[0].body.axes[0].values, ["admin", "loan processor", "auditor"]);
 });
