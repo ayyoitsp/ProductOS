@@ -25,7 +25,7 @@
  * truth, so nobody types it.
  */
 import { resolveView, type Corpus } from "./load.js";
-import { axesOf, answersOf } from "./schema.js";
+import { axesOf, answersOf, type Axis } from "./schema.js";
 import { walkOf } from "./walk.js";
 
 /**
@@ -80,14 +80,26 @@ export interface Option {
 
 export interface Selection {
   /**
-   * The axes, in order — each with the question a reader is shown.
+   * The dimensions, in order — each with its name and the values it can take.
    *
    * ⛔ SEVERAL, BECAUSE ONE WAS WRONG THE DAY IT SHIPPED. Peter: *"It's going to split on different
    * products - CRE vs private lending, then also on roles"*. A single question could hold one of
    * those and the other would have had to be folded into the same string.
+   *
+   * ⛔ AND THE VALUES ARE WHAT MAKE THIS A SELECTOR. *"they should be able to select the appropriate
+   * dimensions and that will bring up the right prototype"* — without values a reader gets one
+   * button per thing that exists, which is a list and not a choice.
    */
-  axes: Array<{ id: string; asks: string }>;
-  /** The first axis's question, where there is one. */
+  axes: Axis[];
+  /**
+   * Every combination the dimensions allow, each with the prototype that covers it — or nothing.
+   *
+   * ⛔ THE UNCOVERED ONES ARE THE POINT. Two dimensions with two values each is four products a
+   * reader can ask for; three prototypes means one of those four does not exist, and that was
+   * invisible while the surface could only list what had been declared.
+   */
+  at: Array<{ values: Record<string, string>; option?: Option }>;
+  /** The first dimension's name, where there is one. */
   question?: string;
   options: Option[];
   /**
@@ -116,7 +128,7 @@ export function selectionOf(c: Corpus): Selection {
       }
     }
 
-  const axes = axesOf(c.splitsOn);
+  const axes = axesOf(c.splitsOn, protos);
   const options = protos.map((p): Option => {
     /**
      * ⛔ THE WALK FROM THIS DOOR, NOT THE WHOLE CORPUS. The point of several prototypes is that each
@@ -136,7 +148,28 @@ export function selectionOf(c: Corpus): Selection {
     };
   });
 
-  return { axes, question: axes[0]?.asks, options, lands: options[0]?.id };
+  /**
+   * ⛔ THE CROSS PRODUCT, CAPPED. A product splitting on three dimensions of five values is 125
+   * combinations, which is a page nobody reads — and the cap is stated rather than silent, because a
+   * surface that quietly stopped at some number would be lying about what the dimensions allow.
+   */
+  const at: Selection["at"] = [];
+  const CEILING = 60;
+  const build = (i: number, picked: Record<string, string>): void => {
+    if (at.length >= CEILING) return;
+    if (i === axes.length) {
+      const option = options.find((o) => axes.every((ax) => o.is[ax.id] === picked[ax.id]));
+      at.push({ values: { ...picked }, ...(option ? { option } : {}) });
+      return;
+    }
+    const ax = axes[i]!;
+    /** A dimension with no values contributes nothing to choose, and must not erase the rest. */
+    if (!ax.values.length) return build(i + 1, picked);
+    for (const v of ax.values) build(i + 1, { ...picked, [ax.id]: v });
+  };
+  if (axes.length) build(0, {});
+
+  return { axes, at, question: axes[0]?.asks, options, lands: options[0]?.id };
 }
 
 /**
@@ -155,7 +188,8 @@ export type GapKind =
   | "prototypes-split-on-nothing"
   | "prototype-answers-nothing"
   | "two-prototypes-one-answer"
-  | "prototype-opens-on-nothing";
+  | "prototype-opens-on-nothing"
+  | "nothing-covers-this";
 
 export interface Gap {
   kind: GapKind;
@@ -219,6 +253,32 @@ export function gapsIn(s: Selection): Gap[] {
   for (const [where, which] of at)
     if (which.length > 1)
       gaps.push({ kind: "two-prototypes-one-answer", says: `${which.join(" and ")} are both "${where}"` });
+  /**
+   * ⛔ AN ANSWER THAT IS NOT ONE OF THE DIMENSION'S VALUES. Once a dimension says what it can be, a
+   * prototype claiming something else is unreachable from the selector — a reader can never pick the
+   * combination that would show it, so it is declared and invisible.
+   */
+  for (const ax of s.axes)
+    if (ax.values.length)
+      for (const o of s.options) {
+        const said = o.is[ax.id];
+        if (said && !ax.values.includes(said))
+          gaps.push({
+            kind: "prototype-answers-nothing",
+            says: `"${o.title}" says ${ax.asks} is "${said}", which is not one of ${ax.values.join(", ")} — nobody can select it`,
+          });
+      }
+  /**
+   * ⛔ A COMBINATION NOTHING COVERS, which is the question the whole surface exists to raise. Said
+   * as a fact rather than a fault: a product may legitimately have no admin view of one line, and
+   * the point is that somebody can now SEE that and decide.
+   */
+  for (const cell of s.at)
+    if (!cell.option && Object.keys(cell.values).length)
+      gaps.push({
+        kind: "nothing-covers-this",
+        says: `nothing covers ${s.axes.map((ax) => cell.values[ax.id]).filter(Boolean).join(" · ")}`,
+      });
   for (const o of s.options)
     if (!o.opensOn)
       gaps.push({

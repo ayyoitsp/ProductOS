@@ -2428,7 +2428,7 @@ export function v2Command(): Command {
           id,
           title,
           starts_at: o.startsAt,
-          ...(o.is ? { is: axesOf(corpus.splitsOn)[0] ? { [axesOf(corpus.splitsOn)[0]!.id]: o.is } : o.is } : {}),
+          ...(o.is ? { is: axesOf(corpus.splitsOn, corpus.prototypes)[0] ? { [axesOf(corpus.splitsOn, corpus.prototypes)[0]!.id]: o.is } : o.is } : {}),
           ...(o.shellFrom ? { shell_from: o.shellFrom } : {}),
           nav: [],
           from: [],

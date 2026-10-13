@@ -3572,31 +3572,86 @@ export type Prototype = z.infer<typeof Prototype>;
 export const PrototypeFile = z
   .object({
     /**
-     * The axes this product's prototypes split on, in the project's own words — in order.
+     * The dimensions this product's prototypes split on, named by the project — in order.
      *
      * ⛔ A LIST, NOT A SENTENCE. Peter: *"It's going to split on different products - CRE vs private
      * lending, then also on roles"*. Two independent facts about a prototype, and one string could
      * hold only one of them.
      *
-     * Each axis has an `id` a prototype's `is` keys on, and `asks` — the question a reader is shown.
-     * ⛔ `asks` IS NEVER DERIVED FROM `id`: "line" is not a question, and a surface that
-     * title-cased it into one would be putting words in the project's mouth.
+     * ⛔ AND EACH ONE CARRIES ITS VALUES, WHICH IS WHAT MAKES THE SURFACE A SELECTOR.
+     *
+     * Peter: *"let's allow users to specify their own dimensions for the prototype - 'role', as an
+     * example, and 'product line' as another, and let them specify the values"*, then *"they should
+     * be able to select the appropriate dimensions and that will bring up the right prototype"*.
+     *
+     * Without values there is nothing to choose BETWEEN: a reader got one button per declared
+     * prototype, which is a list of what exists rather than a way of asking for what they want. He
+     * looked at it and said *"wtf is this? this doesn't seem like a selector of any kind, seems like
+     * a barf of information"* — correctly. With values, the surface is one control per dimension,
+     * and the combination picks the prototype.
+     *
+     * ⛔ AND A COMBINATION NOTHING COVERS IS THE MOST USEFUL THING IT CAN SHOW. Four values across
+     * two dimensions is four possible products; three prototypes means one of them does not exist,
+     * and that was invisible when the surface could only list what had been declared.
+     *
+     * `asks` is the dimension's NAME, shown as a label — "Role", "Product line". ⛔ Never derived
+     * from `id`: a surface that title-cased `line` into a label would be putting words in the
+     * project's mouth, and the id is a handle rather than a name.
      */
     splits_on: z
       .union([
-        /** ⛔ One sentence still parses, and means a single axis. See `Prototype.is`. */
+        /** ⛔ One sentence still parses, and means a single dimension. See `Prototype.is`. */
         z.string(),
-        z.array(z.object({ id: z.string().min(1), asks: z.string().min(1) }).strict()),
+        z.array(
+          z
+            .object({
+              id: z.string().min(1),
+              asks: z.string().min(1),
+              /**
+               * What this dimension can be. ⛔ Empty is honest — a dimension somebody has named and
+               * not filled in — and `check` says so rather than this refusing a half-authored file.
+               */
+              values: z.array(z.string().min(1)).default([]),
+            })
+            .strict()
+        ),
       ])
       .optional(),
     prototypes: z.array(Prototype).default([]),
   })
   .strict();
 
-/** The axes, however the file spelled them. One shape for every reader. */
-export function axesOf(splitsOn: string | Array<{ id: string; asks: string }> | undefined): Array<{ id: string; asks: string }> {
+/** A dimension, however the file spelled it. One shape for every reader. */
+export interface Axis {
+  id: string;
+  asks: string;
+  values: string[];
+}
+
+/**
+ * The dimensions, however the file spelled them.
+ *
+ * ⛔ VALUES FALL BACK TO WHAT THE PROTOTYPES ACTUALLY SAY, so a corpus written before dimensions had
+ * values still gets a working selector instead of empty dropdowns. Declared values win where they
+ * exist: the point of declaring them is to be able to name a combination NOTHING covers, which is
+ * invisible if the list is only ever read back off what has been declared.
+ */
+export function axesOf(
+  splitsOn: string | Array<{ id: string; asks: string; values?: string[] }> | undefined,
+  prototypes: Array<{ is?: string | Record<string, string> }> = []
+): Axis[] {
   if (!splitsOn) return [];
-  return typeof splitsOn === "string" ? [{ id: "split", asks: splitsOn }] : splitsOn;
+  const listed = typeof splitsOn === "string" ? [{ id: "split", asks: splitsOn }] : splitsOn;
+  return listed.map((ax, i) => {
+    const declared = (ax as { values?: string[] }).values ?? [];
+    if (declared.length) return { id: ax.id, asks: ax.asks, values: declared };
+    const seen: string[] = [];
+    for (const p of prototypes) {
+      const said = typeof p.is === "string" ? (i === 0 ? p.is : undefined) : p.is?.[ax.id];
+      if (said && !seen.includes(said)) seen.push(said);
+    }
+    return { id: ax.id, asks: ax.asks, values: seen };
+  });
 }
 
 /** A prototype's answers, however its `is` was spelled, keyed by axis id. */
