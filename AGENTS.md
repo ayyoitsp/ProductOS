@@ -844,7 +844,7 @@ Held three ways rather than one: no author declares `ask-the-human`, so no host 
 
 What `--help` cannot tell you, and why this exists: **who** types it, and **which track** it belongs to. *Never hand a human a flag* is a rule the skills state and nothing enforced — a command marked `claude` appearing in instructions addressed to a person is now a visible contradiction. And two parallel models have been running for months with nothing saying which commands belong to which.
 
-### Current — 51 commands
+### Current — 52 commands
 
 | command | does | layer | typed by |
 |---|---|---|---|
@@ -869,6 +869,7 @@ What `--help` cannot tell you, and why this exists: **who** types it, and **whic
 | `productos v2 check` | What this corpus refuses, and what it merely reports | check | the model |
 | `productos v2 forward` | Bring a corpus on disk forward to this build's schema | derive | the model |
 | `productos v2 prototypes` | Draw each prototype's chrome, and aim its menu at the screens it names | generate | the model |
+| `productos v2 inside` | Say which screen a screen appears inside — the relation a walk is built from | generate | the model |
 | `productos v2 grid` | The behaviours a scope states, and where each one stands | derive | the model |
 | `productos v2 accepted` | The exact wording somebody has agreed to, before anybody rewrites it | surface | the model |
 | `productos v2 acts` | How many acts of human judgement this corpus carries | derive | the model |

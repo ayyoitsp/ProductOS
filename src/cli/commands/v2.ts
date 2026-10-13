@@ -23,8 +23,10 @@ import { looksLikeInstance, instanceOf, mirror, act as remoteAct, note as remote
 import { lineFor } from "../../v2/log.js";
 import { drawFromRoute } from "../../v2/draw.js";
 import { holdsOn, whyHeld } from "../../v2/held.js";
-import { selectionOf, gapsIn } from "../../v2/selection.js";
-import { writePrototypes } from "../../v2/draw-write.js";
+import { selectionOf, gapsIn, doorOpensOn } from "../../v2/selection.js";
+import { walkOf } from "../../v2/walk.js";
+import { axesOf } from "../../v2/schema.js";
+import { writePrototypes, writeWithin } from "../../v2/draw-write.js";
 import { everyView, everyViewV1, isResolved, resolveRoute } from "../../v2/routes.js";
 import { spokenFor } from "../../v2/spoken.js";
 import { idiomOf, proposeScreen } from "../../v2/propose.js";
@@ -2346,7 +2348,7 @@ export function v2Command(): Command {
       console.log(sel.question ? pc.dim(`  splits on: ${sel.question}`) : pc.yellow("!") + " nothing says what these prototypes are alternatives about");
       for (const o of sel.options)
         console.log(pc.dim(`    ${o.is ? `${o.is} — ` : ""}${o.title}  ·  reaches ${o.reaches} screen${o.reaches === 1 ? "" : "s"}`));
-      for (const g of gapsIn(sel)) console.log(pc.yellow(`  ! ${g}`));
+      for (const g of gapsIn(sel)) console.log(pc.yellow(`  ! ${g.says}`));
     });
 
   /**
@@ -2414,7 +2416,23 @@ export function v2Command(): Command {
       }
       const next = [
         ...corpus.prototypes,
-        { id, title, starts_at: o.startsAt, ...(o.is ? { is: o.is } : {}), ...(o.shellFrom ? { shell_from: o.shellFrom } : {}), nav: [], from: [] },
+        /**
+         * ⛔ KEYED BY THE FIRST AXIS WHERE ONE IS STATED, a bare string where none is.
+         *
+         * `--is` is one value, and once a product splits on two things a bare string cannot say
+         * which of them it answers. Writing it keyed means the second axis can be added later
+         * without rewriting what is already there; writing it bare before any axis exists keeps the
+         * corpus readable rather than inventing a key nobody chose.
+         */
+        {
+          id,
+          title,
+          starts_at: o.startsAt,
+          ...(o.is ? { is: axesOf(corpus.splitsOn)[0] ? { [axesOf(corpus.splitsOn)[0]!.id]: o.is } : o.is } : {}),
+          ...(o.shellFrom ? { shell_from: o.shellFrom } : {}),
+          nav: [],
+          from: [],
+        },
       ];
       writePrototypes(into, next, corpus.splitsOn);
       console.log(pc.green("✓"), `${id} — ${title}, opening on ${o.startsAt}`);
@@ -2449,6 +2467,121 @@ export function v2Command(): Command {
           `${without.length} of ${corpus.prototypes.length} give no answer to it: ${without.map((p) => p.title).join(", ")}`
         );
     })
+
+  cmd
+    /**
+     * ⛔ `within` HAD NO WRITER AT ALL, SO THE ONLY WAY TO SAY IT WAS TO TYPE YAML.
+     *
+     * Peter: *"we should be able to know the true navigation, leverage screens within screens, like
+     * really a walkable single prototype that can link out to the different areas"*. The field has
+     * existed since the walk did; no command, no tool, nothing. So the one relation that turns a
+     * pile of screens into a product was reachable only by hand-editing a truth file — the trap this
+     * project opens its own instructions with — and the corpus it was built for shows exactly that:
+     * `within` on 0 of 17 screens, fifteen front doors, a walk that reads as a heap.
+     *
+     * ⛔ IT DOES NOT INFER CONTAINMENT, and must not. Which screen appears inside which is a product
+     * decision; a tab that looks like a child of a shell may be a route of its own. What the command
+     * removes is the typing and the unchecked reference, not the judgement.
+     *
+     * ⛔ RUN WITH NO ARGUMENTS IT PROPOSES NOTHING AND REPORTS. The screens with no `within` and no
+     * way in are the candidates a person should look at, and naming them is the whole difference
+     * between a field somebody could use and a field somebody knows about.
+     */
+    .command("inside")
+    .description("Say which screen a screen appears inside — the relation a walk is built from")
+    .argument("[view]", "the screen that appears inside another, as <scope>#<view>")
+    .option("--of <ref>", "the screen it appears inside, as <scope>#<view>")
+    .option("--at <dir>", "the corpus", "v2")
+    .action((ref: string | undefined, o: { of?: string; at?: string }) => {
+      const dir = at(o);
+      const corpus = loadCorpus(dir);
+
+      /** No arguments: say what has no way in and no stated container. Nothing is written. */
+      if (!ref) {
+        const walk = walkOf(corpus);
+        const loose = corpus.scopes.flatMap((e) =>
+          (e.scope.views ?? [])
+            .filter((v) => !v.within && v.exists !== "withdrawn")
+            .map((v) => ({ ref: `${e.scope.id}#${v.id}`, title: v.title ?? v.id, scope: e.scope.title || e.scope.id }))
+        );
+        const said = corpus.scopes.flatMap((e) => (e.scope.views ?? []).filter((v) => v.within)).length;
+        const total = corpus.scopes.flatMap((e) => e.scope.views ?? []).length;
+        console.log(pc.bold(`${said} of ${total} screens say what they appear inside`), pc.dim(`· ${walk.entries.length} front doors`));
+        if (!loose.length) return;
+        console.log("");
+        console.log(pc.dim("these say nothing, and each is its own way into the product:"));
+        /** Grouped by feature, because several views in one scope is where containment usually is. */
+        const byScope = new Map<string, typeof loose>();
+        for (const l of loose) byScope.set(l.scope, [...(byScope.get(l.scope) ?? []), l]);
+        for (const [scope, views] of byScope) {
+          console.log(`  ${pc.bold(scope)}${views.length > 1 ? pc.dim(`  (${views.length} screens — one of these may hold the others)`) : ""}`);
+          for (const v of views) console.log(pc.dim(`    ${v.ref}  ${v.title}`));
+        }
+        console.log("");
+        console.log(pc.dim('  say one with: productos v2 inside "<scope>#<view>" --of "<scope>#<view>" --at <corpus>'));
+        return;
+      }
+
+      if (!o.of) {
+        console.error(pc.red("✗"), "say which screen it appears inside, with --of <scope>#<view>");
+        process.exit(1);
+      }
+      const [scopeId, viewId] = ref.split("#");
+      if (!scopeId || !viewId) {
+        console.error(pc.red("✗"), "name the screen as <scope>#<view>");
+        process.exit(1);
+      }
+      /**
+       * ⛔ BOTH ENDS RESOLVED THROUGH `doorOpensOn`, WHICH IS THE ONE PREDICATE FOR "IS THIS A
+       * SCREEN". Two sessions wrote two copies of that question last week and the copies disagreed
+       * within the hour; a third copy here would be the same mistake with a longer fuse.
+       */
+      const here = doorOpensOn(corpus, ref);
+      if (!here) {
+        console.error(pc.red("✗"), `no screen "${ref}" in this corpus`);
+        process.exit(1);
+      }
+      const holder = doorOpensOn(corpus, o.of);
+      if (!holder) {
+        console.error(pc.red("✗"), `no screen "${o.of}" in this corpus, so nothing can appear inside it`);
+        process.exit(1);
+      }
+      if (`${scopeId}#${viewId}` === o.of || viewId === o.of) {
+        console.error(pc.red("✗"), "a screen cannot appear inside itself");
+        process.exit(1);
+      }
+      /**
+       * ⛔ A CYCLE IS REFUSED HERE RATHER THAN DISCOVERED BY THE WALK. Two screens each inside the
+       * other is not a product, and a walk given one either loops or silently drops a step — which
+       * is the state nobody can read their way out of.
+       */
+      const chain = new Set<string>([`${scopeId}#${viewId}`]);
+      let up: string | undefined = o.of;
+      while (up) {
+        if (chain.has(up)) {
+          console.error(pc.red("✗"), `that would make a loop: ${[...chain].join(" inside ")} inside ${up}`);
+          process.exit(1);
+        }
+        chain.add(up);
+        const step: string = up;
+        const qualified: boolean = step.includes("#");
+        const scopePart: string | undefined = qualified ? step.split("#")[0] : undefined;
+        const viewPart: string | undefined = qualified ? step.split("#")[1] : step;
+        const found = corpus.scopes
+          .flatMap((e) => (e.scope.views ?? []).map((x) => ({ scope: e.scope.id, view: x })))
+          .find((x) => (scopePart ? x.scope === scopePart && x.view.id === viewPart : x.view.id === viewPart));
+        up = found?.view.within;
+      }
+
+      const written = writeWithin(dir, scopeId, viewId, o.of);
+      if (!written) {
+        console.error(pc.red("✗"), `could not find "${viewId}" under "${scopeId}" to write it into`);
+        process.exit(1);
+      }
+      console.log(pc.green("✓"), `${here.title} appears inside ${holder.title}`);
+      const after = walkOf(loadCorpus(dir));
+      console.log(pc.dim(`  ${after.entries.length} front doors now, was ${walkOf(corpus).entries.length}`));
+    });
 
   cmd
     /** ⛔ Not `migrate` — that verb is taken by the v1→Exchange conversion, which is a different act. */

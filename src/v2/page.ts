@@ -4233,6 +4233,105 @@ if (noteBar) {
   });
 }
 
+/*
+ * ⛔ THE SPLIT AND EACH PROTOTYPE'S PLACEMENT, SET FROM THE PAGE.
+ *
+ * Peter: *"I should be able to drive this from the listener/input, right??? why could you possibly
+ * need this?"* — about my asking him what his prototypes split on. The capability was there and
+ * reachable only from a terminal in a checkout, so I turned a missing door into a question for him.
+ *
+ * ⛔ TWO INTENTS THROUGH THE ONE DOOR, no new routes: "splits-on" and "prototype", both on the
+ * author gate. Writing product truth is not agreeing to it, and nothing here stamps.
+ *
+ * ⛔ THIS IS PLAIN JS INSIDE A TEMPLATE STRING, NOT TYPESCRIPT. I wrote the first version with type
+ * annotations, which the compiler never sees — it is a string — so it would have shipped a syntax
+ * error that killed every script on the page, including the walk and the composer. Caught by
+ * reading where the function sits rather than by trusting that it compiled.
+ */
+function wireSelectionEditor() {
+  var sendIntent = function (intent, payload) {
+    return fetch("/api/v2/in", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(Object.assign({ intent: intent }, payload)),
+    })
+      .then(function (res) { return res.json().then(function (b) { return { res: res, body: b }; }); })
+      .then(function (r) {
+        if (!r.res.ok || r.body.ok === false) throw new Error(r.body.why || r.res.statusText);
+        return [r.body.said].concat(r.body.detail || []).filter(Boolean).join(" — ");
+      });
+  };
+
+  var form = document.querySelector("form[data-sel-axes]");
+  if (form) {
+    var fstatus = form.querySelector(".status");
+    form.addEventListener("submit", function (e) {
+      e.preventDefault();
+      var box = form.querySelector("textarea");
+      /*
+       * ⛔ ONE QUESTION PER LINE — the shape somebody types without being taught a syntax.
+       *
+       * ⛔ AND THE SPLIT ARGUMENT IS DOUBLE-ESCAPED ON PURPOSE. This whole function lives inside a
+       * template literal, so a single-escaped newline is consumed by TypeScript and the browser
+       * receives a string literal broken across two lines: "Invalid or unexpected token", and the
+       * WHOLE live script dies with it — the composer, the walk, every act button. Compile-clean,
+       * test-clean, page-dead. The only thing that found it was parsing the emitted script the way
+       * a browser would. Backticks are out of this comment for the same reason: one would close
+       * the literal.
+       */
+      var asks = (box.value || "").split("\\n").map(function (l) { return l.trim(); }).filter(Boolean);
+      if (!asks.length) { fstatus.textContent = "Say what they split on."; fstatus.className = "status bad"; return; }
+      fstatus.textContent = "saving…"; fstatus.className = "status";
+      sendIntent("splits-on", { axes: asks })
+        .then(function (said) {
+          fstatus.textContent = said; fstatus.className = "status ok";
+          /* ⛔ Reloaded, because every option is now asked about differently. */
+          setTimeout(function () { location.reload(); }, 900);
+        })
+        .catch(function (err) {
+          fstatus.textContent = "Not saved: " + (err && err.message ? err.message : String(err));
+          fstatus.className = "status bad";
+        });
+    });
+  }
+
+  var save = document.querySelector("[data-sel-save]");
+  if (!save) return;
+  var pstatus = document.querySelector("[data-sel-status]");
+  save.addEventListener("click", function () {
+    var rows = Array.prototype.slice.call(document.querySelectorAll("[data-sel-proto]"));
+    pstatus.textContent = "saving…"; pstatus.className = "status";
+    /*
+     * ⛔ ONE REQUEST PER PROTOTYPE, IN SEQUENCE. Each writes the whole prototypes file, so two in
+     * flight would have the second overwrite the first's placement with what it read beforehand.
+     */
+    var last = "";
+    var chain = rows.reduce(function (p, row) {
+      return p.then(function () {
+        var id = row.getAttribute("data-sel-proto") || "";
+        var is = {};
+        var startsAt = "";
+        Array.prototype.slice.call(row.querySelectorAll("input")).forEach(function (input) {
+          var name = input.getAttribute("name") || "";
+          if (name === "startsAt") startsAt = input.value.trim();
+          else is[name] = input.value.trim();
+        });
+        return sendIntent("prototype", { id: id, is: is, startsAt: startsAt }).then(function (said) { last = said; });
+      });
+    }, Promise.resolve());
+    chain
+      .then(function () {
+        pstatus.textContent = last || "saved"; pstatus.className = "status ok";
+        setTimeout(function () { location.reload(); }, 900);
+      })
+      .catch(function (err) {
+        pstatus.textContent = "Not saved: " + (err && err.message ? err.message : String(err));
+        pstatus.className = "status bad";
+      });
+  });
+}
+wireSelectionEditor();
+
 /**
  * ⛔ EDIT THE SENTENCE WHERE IT IS. Peter: *"they should also be able to just edit the text
  * directly."*
@@ -7248,19 +7347,76 @@ function selectionAtTheRoot(sel: Selection): string {
           ? "1 screen"
           : /** ⛔ Said plainly. Zero is a real answer and the most useful one on this surface. */
             "nothing beyond its front door";
+    /**
+     * ⛔ EVERY AXIS, because a prototype sits at a POINT and not on a side. Peter: *"It's going to
+     * split on different products - CRE vs private lending, then also on roles"* — "CRE" alone does
+     * not identify an option once roles exist, and an unanswered axis has to look unanswered rather
+     * than simply be absent.
+     */
+    const where = sel.axes.length
+      ? sel.axes.map((ax) => (o.is[ax.id] ? line(o.is[ax.id]!) : `<em>—</em>`)).join(" · ")
+      : Object.values(o.is).map((v) => line(v)).join(" · ");
     return `<button type="button" class="wpick${i === 0 ? " on" : ""}" data-walk-proto="${esc(o.id)}"
       title="${esc(`opens on ${o.opensOn ?? o.startsAt}`)}">
-      ${o.is ? `<span class="wpick-is">${line(o.is)}</span>` : ""}
+      ${where ? `<span class="wpick-is">${where}</span>` : ""}
       <span class="wpick-t">${line(o.title)}</span>
       <span class="wpick-m">${esc(reach)}${o.chrome ? "" : " · no chrome of its own"}${
         o.drawn ? "" : " · its first screen has no picture"
       }</span>
     </button>`;
   };
+  /**
+   * ⛔ SET FROM HERE, NOT BY A COMMAND SOMEBODY ELSE RUNS.
+   *
+   * Peter: *"again, why do you fucking need to know this? I need you to make framework changes. I
+   * should be able to drive this from the listener/input, right??? why could you possibly need
+   * this?"*
+   *
+   * He was right, and the mistake was mine in a specific way: `splits_on` and each prototype's
+   * placement were reachable only from a terminal in a checkout, and he reviews in a browser. So the
+   * capability existed and he could not reach it — and I turned that into a question for him rather
+   * than a door, which is the shape of thing this project exists to stop.
+   *
+   * ⛔ IT WRITES TRUTH AND STAMPS NOTHING. The `author` gate, same as editing a sentence in place:
+   * the axes are what somebody says their product splits on, and nobody has agreed to anything by
+   * typing them.
+   */
+  const editor = `<details class="wsel-edit">
+    <summary>${sel.axes.length ? "Change what these split on" : "Say what these split on"}</summary>
+    <form class="wsel-form" data-sel-axes>
+      <p class="wsel-hint">One question per line. A product that splits on more than one thing gets
+      more than one line — <em>Which product line?</em> then <em>Which role?</em></p>
+      <textarea name="axes" rows="${Math.max(2, sel.axes.length + 1)}" spellcheck="false"
+        placeholder="Which product line?&#10;Which role?">${sel.axes.map((ax) => esc(ax.asks)).join("\n")}</textarea>
+      <div class="wsel-actions"><button type="submit">Save</button><span class="status"></span></div>
+    </form>
+    ${
+      sel.axes.length
+        ? `<table class="wsel-grid">
+            <thead><tr><th>Prototype</th>${sel.axes.map((ax) => `<th>${line(ax.asks)}</th>`).join("")}<th>Opens on</th></tr></thead>
+            <tbody>${sel.options
+              .map(
+                (o) => `<tr data-sel-proto="${esc(o.id)}">
+                  <th scope="row">${line(o.title)}</th>
+                  ${sel.axes
+                    .map(
+                      (ax) =>
+                        `<td><input name="${esc(ax.id)}" value="${esc(o.is[ax.id] ?? "")}" placeholder="—" spellcheck="false"></td>`
+                    )
+                    .join("")}
+                  <td><input name="startsAt" value="${esc(o.startsAt)}" spellcheck="false" class="${o.opensOn ? "" : "bad"}"></td>
+                </tr>`
+              )
+              .join("")}</tbody>
+          </table>
+          <div class="wsel-actions"><button type="button" data-sel-save>Save placements</button><span class="status" data-sel-status></span></div>`
+        : ""
+    }
+  </details>`;
   return `<div class="wsel">
     ${
-      sel.question
-        ? `<p class="wsel-q">${line(sel.question)}</p>`
+      sel.axes.length
+        ? `<p class="wsel-q">${sel.axes.map((ax) => line(ax.asks)).join(pc_sep)}</p>`
         : sel.options.length > 1
           ? `<p class="wsel-q none">These are alternatives — but nothing says what they are alternatives about.</p>`
           : ""
@@ -7268,11 +7424,15 @@ function selectionAtTheRoot(sel: Selection): string {
     <div class="wpicks">${sel.options.map(option).join("")}</div>
     ${
       gaps.length
-        ? `<ul class="wsel-gaps">${gaps.map((g) => `<li>${line(g)}</li>`).join("")}</ul>`
+        ? `<ul class="wsel-gaps">${gaps.map((g) => `<li data-gap="${esc(g.kind)}">${line(g.says)}</li>`).join("")}</ul>`
         : ""
     }
+    ${editor}
   </div>`;
 }
+
+/** Between two axis questions on one line. */
+const pc_sep = ' <span class="wsel-and">then</span> ';
 
 function walkInside(walk: Walk, protos: Prototype[], sel: Selection): string {
   if (!walk.steps.size) return "";
@@ -7411,7 +7571,7 @@ function renderPrototype(screens: ProtoScreen[], promises: ProtoPromise[], walk?
   return `<script type="application/json" id="proto-says">${JSON.stringify(index).replace(/</g, "\\u003c")}</script>
   <script type="application/json" id="proto-titles">${JSON.stringify(titles).replace(/</g, "\\u003c")}</script>
   <section class="view" id="view-prototype" data-view="prototype" data-ref="prototype" data-label="Prototype">
-    ${walk ? walkInside(walk, protos ?? [], sel ?? { options: [], lands: undefined }) : ""}
+    ${walk ? walkInside(walk, protos ?? [], sel ?? { axes: [], options: [], lands: undefined }) : ""}
     <!--
       ⛔ ONE PROTOTYPE, NOT TWO TABS.
 
