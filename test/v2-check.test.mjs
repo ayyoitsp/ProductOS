@@ -78,7 +78,14 @@ const MUST_FIRE = {
   "prototypes-split-on-nothing": "a reader shown a choice and never told what they are choosing between",
   "two-prototypes-one-answer": "the worst of them, because it looks finished — the split it claims to be is not the split it is",
   "prototype-answers-nothing": "a half-authored set, which is when somebody is actually looking at it",
-  "prototype-opens-on-nothing": "an option whose front door is not a screen, which the page can only report after a click",
+  /**
+   * ⛔ THE REFUSAL, NOT THE NOTE I FIRST WROTE. Two sessions detected a door onto nothing within an
+   * hour of each other — one as a note derived from the selection's gaps, one as a refusal beside
+   * the other references that must resolve. `starts_at` is a reference exactly like `depends_on`
+   * and `within` and was simply not among them, so the refusal is the home and the note is gone.
+   * Keeping both would be one fact with two severities, and a reader could not tell which governed.
+   */
+  "a-prototype-opens-on-nothing": "a door naming a screen that does not exist, which the page offers and nobody can land on",
 };
 
 /**

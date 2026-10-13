@@ -341,21 +341,35 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
    * shows two rows, both say "admin", and the split it claims to be is not the split it is.
    */
   {
-    const gaps = gapsIn(selectionOf(corpus));
-    for (const g of gaps)
+    /**
+     * ⛔ A DOOR ONTO NOTHING IS NOT REPORTED HERE — IT IS REFUSED, BELOW, ONCE.
+     *
+     * Two sessions landed a detector for the same fact within an hour: this one as a note derived
+     * from `gapsIn`, and `a-prototype-opens-on-nothing` as a refusal beside the other references
+     * that must resolve. Theirs is the right home and the right severity — `starts_at` is a
+     * reference exactly like `depends_on`, `affected_by`, `leads_to` and `within`, and it was simply
+     * not among them. Keeping both would put one fact in two homes with two severities, which is
+     * the thing this project spends most of its rules preventing.
+     *
+     * ⛔ `gapsIn` STILL REPORTS IT, and that is not a second home. The page asks "what is wrong with
+     * this selection as I look at it" and answers for every gap at once; `check` asks "may this
+     * corpus be handed over". Two renders of one source answering different questions are
+     * projections. What would be a second home is two findings.
+     */
+    for (const g of gapsIn(selectionOf(corpus))) {
+      if (/opens on/.test(g)) continue;
       add({
         severity: "note",
-        kind: /opens on/.test(g)
-          ? "prototype-opens-on-nothing"
-          : /both answer/.test(g)
-            ? "two-prototypes-one-answer"
-            : /alternatives about/.test(g)
-              ? "prototypes-split-on-nothing"
-              : "prototype-answers-nothing",
+        kind: /both answer/.test(g)
+          ? "two-prototypes-one-answer"
+          : /alternatives about/.test(g)
+            ? "prototypes-split-on-nothing"
+            : "prototype-answers-nothing",
         where: "the prototype selection",
         what: g,
         fix: 'The question belongs to the set and each prototype answers it: `productos v2 prototypes splits-on "<the question>"`, then `--is "<this one\'s answer>"` on each. Nothing infers either — a classifier reading two titles and concluding "role" would be a guess wearing a decision\'s clothes.',
       });
+    }
   }
 
   /**
