@@ -32,7 +32,7 @@ import { inferConnections, type Connection } from "../../v2/connects.js";
 import { DOC_MIGRATIONS } from "../../v2/store/doc-migrations.js";
 import { drawShellFrom, aimNav } from "../../v2/shell.js";
 import { writeLeadsTo } from "../../v2/draw-write.js";
-import { AGENTS, AUTHORS, CASCADE, KINDS, SHIMS, SKILL, byDiscipline } from "../../core/jobs.js";
+import { AGENTS, AUTHORS, CASCADE, KINDS, SHIMS, shippedRoutes, SKILL, byDiscipline } from "../../core/jobs.js";
 
 /** ⛔ Plain text for a terminal and for JSON — never HTML-escaped, which is the page's business. */
 const plain = (x: unknown): string => String(x ?? "").replace(/\s+/g, " ").trim();
@@ -2007,7 +2007,12 @@ export function v2Command(): Command {
           console.log(pc.yellow("!"), `there is no skill at ${f} — the routes have nowhere to be written`);
         } else {
           const was = fs.readFileSync(f, "utf-8");
-          const now = withPreset(was, SHIMS);
+          /**
+           * ⛔ WHAT SHIPS, NOT EVERY ROUTE. The skill is installed into a consumer's machine, so a
+           * route about ProductOS, or a step that opens this repository's source, has no business
+           * in it. `shippedRoutes` is the one place that decides.
+           */
+          const now = withPreset(was, shippedRoutes());
           if (now === was) console.log(pc.dim(`  ${SKILL} — current`));
           else {
             fs.writeFileSync(f, now);
