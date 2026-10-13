@@ -440,7 +440,12 @@ looking at it is the whole loop.
 
 ⛔ **A deploy is not finished when the code ships.** `sketch_html` is persisted truth, so new
 drawing code changes nothing already stored — deploying new generators cannot alter a drawing that
-already exists. Finish it:
+already exists.
+
+⛔ **The two halves have different owners.** A deploy session ships code and reads a number off the
+page; it does **not** redraw, because redrawing is an act on product truth and a session doing that
+without a person is the one thing the corpus is careful to prevent. The drawings are the author's
+half, and the author finishes them:
 
 ```bash
 productos v2 draw --all --into <corpus>     # the drawings are output; redraw them
