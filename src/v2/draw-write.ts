@@ -11,6 +11,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
+import YAML from "yaml";
 import { THE_GENERATOR } from "./held.js";
 
 const INDENT = "    ";
@@ -291,5 +292,32 @@ export function writeDrawnReading(root: string, scopeId: string, viewId: string,
     "",
   ];
   fs.writeFileSync(file, lines.join("\n"));
+  return file;
+}
+
+/**
+ * Write the prototypes file — one writer, so the axis cannot be dropped by one caller.
+ *
+ * ⛔ THREE COMMANDS WRITE THIS FILE AND ONLY ONE OF THEM HAD HEARD OF `splits_on`.
+ *
+ * The chrome sweep wrote `YAML.stringify({ prototypes: out })`, which is right up until the file
+ * gains a field the sweep does not know about — and then the first redraw after somebody states what
+ * their prototypes split on silently deletes it. A generator throwing away the one thing on that
+ * file only a person can write.
+ *
+ * Patching the single caller would have left the same hole open for the next command to write
+ * prototypes, so the shape lives here beside the other corpus writers and every caller goes through
+ * it.
+ *
+ * ⛔ AND IT OMITS THE KEY RATHER THAN WRITING AN EMPTY ONE. `splits_on: ""` is a question somebody
+ * asked and left blank; absent is nobody having said yet. Those are different states and every
+ * surface distinguishes them.
+ */
+export function writePrototypes(root: string, protos: unknown[], splitsOn?: string): string {
+  const file = path.join(root, "prototypes.yaml");
+  fs.writeFileSync(
+    file,
+    YAML.stringify(splitsOn ? { splits_on: splitsOn, prototypes: protos } : { prototypes: protos })
+  );
   return file;
 }

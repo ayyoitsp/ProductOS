@@ -276,6 +276,13 @@ export const AREAS: Area[] = [
        * skipped ten screens is asking about a derivation, not about the generator.
        */
       "src/v2/held.ts",
+      /**
+       * ⛔ THE CHOICE BEFORE THE WALK — which prototype a reader is in, and what the set splits on.
+       * A derivation because everything about an option except the author's own question is read off
+       * the truth: which screen it opens on, how much of the product it reaches, whether it has
+       * chrome. A reviewer asked why one option says it reaches two screens is asking about this.
+       */
+      "src/v2/selection.ts",
       "src/v2/steers.ts",
       /**
        * ⛔ AUTHORIZATION IS A GATE, AND THESE ARE WHERE IT IS DECIDED. `storeFor(db, who).project(id)`

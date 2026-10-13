@@ -31,6 +31,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import fs from "node:fs";
+
+import { intact } from "./support/intact.mjs";
 import path from "node:path";
 import { installClaudeSkills } from "../dist/adapters/claude.js";
 import { temp } from "./support/temp.mjs";
@@ -108,7 +110,9 @@ test("installing into the checkout the code came from still works", () => {
    * repo — so passing `process.cwd()` is passing the same tree, which is the case that must not
    * regress. This is how Peter's own `npm run build && productos init claude --update` runs.
    */
-  const r = installClaudeSkills({ update: true, configRoot: process.cwd(), home });
+  const r = intact([".claude/agents", ".claude/skills"], () =>
+    installClaudeSkills({ update: true, configRoot: process.cwd(), home }),
+  );
 
   assert.ok(r.installed.length > 0, "installing into its own checkout stopped installing skills");
   assert.ok(

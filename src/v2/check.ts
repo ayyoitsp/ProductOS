@@ -13,6 +13,7 @@
 import { SLOTS, SLOT_ASKS, DEMONSTRABLE_SLOTS, owesDemonstration, statements, saysText, NOT_A_DOCUMENT, type SlotName, type Says } from "./schema.js";
 import { walkOf } from "./walk.js";
 import { holdsOn } from "./held.js";
+import { selectionOf, gapsIn } from "./selection.js";
 import {
   DOWNSTREAM_OF_ANSWER,
   answerIsUnknown,
@@ -326,6 +327,52 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
   }
 
   /**
+   * ⛔ A SET OF PROTOTYPES WITH NOTHING SAYING WHAT THEY ARE ALTERNATIVES ABOUT.
+   *
+   * Peter: *"we should have a first class "prototype selection' at the root of prototypes … what it
+   * splits on should be up to the project/user driving it"*.
+   *
+   * Two prototypes and no stated axis is the state the surface cannot render its way out of: a
+   * reader is shown a choice and not told what they are choosing between. Reported rather than
+   * refused, because the axis is a product decision and a corpus mid-authoring is allowed to have
+   * one prototype and no question — which is why the finding is keyed on there being several.
+   *
+   * ⛔ AND TWO OPTIONS WITH THE SAME ANSWER IS THE WORSE ONE, because it looks finished. The chooser
+   * shows two rows, both say "admin", and the split it claims to be is not the split it is.
+   */
+  {
+    /**
+     * ⛔ A DOOR ONTO NOTHING IS NOT REPORTED HERE — IT IS REFUSED, BELOW, ONCE.
+     *
+     * Two sessions landed a detector for the same fact within an hour: this one as a note derived
+     * from `gapsIn`, and `a-prototype-opens-on-nothing` as a refusal beside the other references
+     * that must resolve. Theirs is the right home and the right severity — `starts_at` is a
+     * reference exactly like `depends_on`, `affected_by`, `leads_to` and `within`, and it was simply
+     * not among them. Keeping both would put one fact in two homes with two severities, which is
+     * the thing this project spends most of its rules preventing.
+     *
+     * ⛔ `gapsIn` STILL REPORTS IT, and that is not a second home. The page asks "what is wrong with
+     * this selection as I look at it" and answers for every gap at once; `check` asks "may this
+     * corpus be handed over". Two renders of one source answering different questions are
+     * projections. What would be a second home is two findings.
+     */
+    for (const g of gapsIn(selectionOf(corpus))) {
+      if (/opens on/.test(g)) continue;
+      add({
+        severity: "note",
+        kind: /both answer/.test(g)
+          ? "two-prototypes-one-answer"
+          : /alternatives about/.test(g)
+            ? "prototypes-split-on-nothing"
+            : "prototype-answers-nothing",
+        where: "the prototype selection",
+        what: g,
+        fix: 'The question belongs to the set and each prototype answers it: `productos v2 prototypes splits-on "<the question>"`, then `--is "<this one\'s answer>"` on each. Nothing infers either — a classifier reading two titles and concluding "role" would be a guess wearing a decision\'s clothes.',
+      });
+    }
+  }
+
+  /**
    * ⛔ A SCREEN SOMEBODY HAS WORKED ON THAT THE SWEEP CAN NO LONGER TOUCH.
    *
    * Peter: *"once they have been operated on, they should stay locked. from there, only direct user
@@ -369,6 +416,45 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
    * in is a fact about the product and is reported.
    */
   {
+    /**
+     * ⛔ A PROTOTYPE OPENS ON A SCREEN, AND ONE THAT DOES NOT IS A DOOR INTO NOTHING.
+     *
+     * `check` refuses a `depends_on`, an `affected_by`, a `leads_to` and a `within` that resolve to
+     * nothing. `starts_at` is a reference of exactly that kind and was not among them, so a
+     * prototype could name a view that does not exist and pass handover in silence.
+     *
+     * Found on the deployed Bilrost corpus: the **Admin** option opened on
+     * `org-loan-terms#org-loan-terms`, and that scope's views are `fannie-program-settings`,
+     * `program-control`, `conventions-section` … — no view of that id. The option had been leading
+     * nowhere on the page that corpus is reviewed on, and nothing said so.
+     *
+     * ⛔ REFUSED, NOT REPORTED, and that is the opposite call to the one three lines down. A screen
+     * with no way in is a fact about a product nobody has finished wiring; a DOOR naming a screen
+     * that does not exist is an authoring mistake — the author typed a ref and got it wrong, and
+     * every reader who clicks it lands on nothing. Target state does not require the view to be
+     * BUILT; it does require it to EXIST in the truth.
+     */
+    for (const p of corpus.prototypes ?? []) {
+      const at = (p as { starts_at?: string }).starts_at ?? "";
+      if (!at) continue;
+      /**
+       * ⛔ `resolveView`, NOT `resolveRef`. The first version used `resolveRefSafely`, which
+       * resolves EXCHANGES — so `money#balance`, a perfectly good screen, came back
+       * `no exchange "balance" in money` and every prototype was refused. A check that refuses
+       * correct corpora is worse than no check, and it only showed up because the fixture had one
+       * valid door beside the broken one.
+       */
+      const resolved = corpus.scopes.some((e) => resolveView(corpus, e.scope, at));
+      if (resolved) continue;
+      add({
+        severity: "refuse",
+        kind: "a-prototype-opens-on-nothing",
+        where: (p as { id?: string }).id ?? at,
+        what: `opens on \`${at}\`, and there is no such screen here`,
+        fix: "name a screen that exists as `<scope>#<view>` — a prototype is a door, and a door onto nothing is worse than no door, because the page offers it",
+      });
+    }
+
     const walk = walkOf(corpus);
     for (const entry of corpus.scopes)
       for (const view of entry.scope.views ?? []) {

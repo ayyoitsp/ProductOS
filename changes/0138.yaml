@@ -1,14 +1,14 @@
 id: "0138"
-said: go ahead and iterate on all framework gaps. don't stop until everything is resolved
+said: "we should have a first class \"prototype selection' at the root of prototypes.  the multiple prototypes should be supported by the framework - what it splits on should be up to the project/user driving it"
 at: 2026-10-13
 kind: concept
 reaches:
-  model: rests_on
-  derive: rests on ${ref}
-  surface: rest on, rather than restate
-  check: rests-on-nothing
-  instruct: cite the charter, do not restate it
-  pin: a citation that points at nothing is refused
-waived:
-  generate: "Nothing generates differently. `rests_on` is authored, and the only generated artefact that touches it is the packet — which is the surface layer above. A generator change here would mean a drawing or a packet changing SHAPE, and neither does: the packet gains a line listing citations, which is rendering, not generation. Arguable the day a citation is derived from the words of a slot rather than written by its author, which would be the model guessing at a principle and is exactly what this field exists to avoid."
+  model: splits_on
+  derive: selectionOf
+  generate: writePrototypes
+  surface: selectionAtTheRoot
+  check: prototypes-split-on-nothing
+  instruct: what they are alternatives ABOUT
+  pin: nothing infers the axis
+waived: {}
 closed: 2026-10-13
