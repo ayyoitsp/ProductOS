@@ -29,6 +29,7 @@ import { inEffect, readSteers, declined, wouldReach, reaches, learnFrom } from "
 import { indexDesignSystem } from "../../v2/design.js";
 import { inferConnections, type Connection } from "../../v2/connects.js";
 import { DOC_MIGRATIONS } from "../../v2/store/doc-migrations.js";
+import { drawShellFrom, aimNav } from "../../v2/shell.js";
 import { writeLeadsTo } from "../../v2/draw-write.js";
 import { AGENTS, AUTHORS, CASCADE, KINDS, SHIMS, SKILL, byDiscipline } from "../../core/jobs.js";
 
@@ -403,7 +404,26 @@ export function v2Command(): Command {
     .description("The hash of what a claim says, for a requirement worked out against it")
     .argument("<ref>", "<scope>#<exchange>#<slot>[#<statement>], or several comma-separated for a part")
     .option("--at <dir>", "corpus directory", "v2")
-    .action(async (ref: string, o: { at?: string }) => {
+    /**
+     * ⛔ BECAUSE A COMMA IS NOT AN INTENT, AND BRANCHING ON ONE MADE EVERY ONE-REF PART STALE.
+     *
+     * `derived.from` is compared against two different functions depending on who wrote it:
+     * a requirement's is `claimHash(oneRef)`, a capability's is `servesHash(theWholeSet)` — and
+     * `servesHash` WRAPS, so it never equals the bare hash even for a single-element set:
+     *
+     *     claimHash (printed)  sha256:4be20645a387522f
+     *     servesHash (compared) sha256:a51da286359160ae
+     *
+     * The old code chose between them by asking whether the argument contained a comma. So a
+     * capability serving exactly one promise — which is common and correct — got the requirement's
+     * hash and read `a-part-older-than-what-it-serves` from the moment it was written. Found by a
+     * decomposer on a real corpus: *"any offering with exactly one `serves` entry reads stale
+     * immediately. Two of mine did until I computed `servesHash` directly."*
+     *
+     * The count of refs cannot carry that distinction. The caller says which it is.
+     */
+    .option("--serves", "hash as a capability's `serves` SET — wrapped even for a single ref")
+    .action(async (ref: string, o: { at?: string; serves?: boolean }) => {
       const corpus = loadCorpus(await openAt(o));
       /**
        * ⛔ A LIST OF REFS HASHES AS A SET, AND IT IS CHECKED FIRST — a comma-joined argument is not
@@ -413,7 +433,7 @@ export function v2Command(): Command {
        * `derived.from` covers all of them. The role needs one call that answers for the set, rather
        * than N calls it has to combine in a way nothing else would agree with.
        */
-      if (ref.includes(",")) {
+      if (o.serves || ref.includes(",")) {
         const parts = ref.split(",").map((x) => x.trim()).filter(Boolean);
         for (const p of parts) {
           const one = resolveRef(corpus, p);
@@ -430,12 +450,37 @@ export function v2Command(): Command {
         console.error(pc.red("✗"), resolved.error);
         process.exit(1);
       }
-      if (resolved.ref.kind !== "slot" && resolved.ref.kind !== "statement") {
+      /**
+       * ⛔ TWO ROLES USE THIS VERB AT TWO GRAINS, AND THE GUARD ONLY KNEW ABOUT ONE.
+       *
+       * `demonstrator` hashes a SLOT, because a requirement is worked out against one sentence.
+       * `decomposer` hashes whatever a capability's `serves` set points at, and that is coarser on
+       * purpose — its own instructions say to point `serves` at `<scope>#<exchange>` or at another
+       * part (`<subsystem>#offers#<id>`), because "a part is coarse — roughly what they do".
+       *
+       * This guard allowed only `slot` and `statement`, so the decomposer could not compute
+       * `derived.from` for the very forms it is told to write. That is not cosmetic: `derived.from`
+       * is the entire reason capabilities may be generated before anybody agrees to the truth — it
+       * is what leaves a part *invalidated and named* when a promise is reworded, instead of
+       * silently answering something nobody said. Without it the layer cannot be re-run, which was
+       * the requirement it was built for: *"capabilities should be generated based on current
+       * truth … they should just carry an invalidated state"*.
+       *
+       * ⛔ `claimHash` ALREADY HANDLED THE WIDER SET — `coveredBy` is documented as taking an
+       * exchange ref and returns one for it. Only this guard refused. Demonstrated before changing
+       * it: `claimHash(corpus, "price-a-deal#pull-a-source")` → `sha256:fce4f992872b4eeb`.
+       *
+       * So the list is the kinds that can carry a hash, and the message names both uses rather
+       * than only the one whoever wrote it had in mind.
+       */
+      const HASHABLE = ["slot", "statement", "exchange", "capability"] as const;
+      if (!(HASHABLE as readonly string[]).includes(resolved.ref.kind)) {
         console.error(
           pc.red("✗"),
-          `${ref} is not a claim — it resolves to ${resolved.ref.kind}, and a requirement is worked out against a slot or one of its statements`
+          `${ref} is not a claim — it resolves to ${resolved.ref.kind}, and nothing at that grain has wording to hash`
         );
-        console.error(pc.dim("  <scope>#<exchange>#<slot>[#<statement>]"));
+        console.error(pc.dim("  a requirement is worked out against   <scope>#<exchange>#<slot>[#<statement>]"));
+        console.error(pc.dim("  a capability's `serves` may be coarser  <scope>#<exchange>  ·  <subsystem>#offers#<id>"));
         process.exit(1);
       }
       const hash = claimHash(corpus, ref);
@@ -481,6 +526,13 @@ export function v2Command(): Command {
             }${s.stale ? pc.red(`  ${s.stale} stale`) : ""}  ${pc.dim(`${s.done} done · per ${s.analysis.grain} · ${s.analysis.role}`)}`
           );
           console.log(pc.dim(`               ${s.analysis.does}`));
+          /**
+           * ⛔ ON THE LISTING, NOT ONLY ON THE DETAIL. This line is where somebody decides how to
+           * run the work, and "per feature · decomposer" reads as permission to fan twenty.
+           */
+          if (s.analysis.settleFirst) {
+            console.log(pc.yellow(`               ⛔ not fannable. First settle: ${s.analysis.settleFirst.what}`));
+          }
         }
         console.log("");
         console.log(pc.dim("  productos v2 analyse <name>          what is left, and why"));
@@ -496,6 +548,19 @@ export function v2Command(): Command {
       const left = outstanding(s);
       /** ⛔ Machine-readable on request, so a session can fan without parsing a report. */
       if (o.refs) {
+        /**
+         * ⛔ THE WARNING GOES TO STDERR, AND THAT IS THE WHOLE POINT OF PUTTING IT HERE.
+         *
+         * `--refs` exists to be piped — one ref per line, fanned over. So stdout must stay exactly
+         * that. But this is the surface where fanning actually happens, and an analysis that cannot
+         * be fanned has to say so at the moment somebody does it, not only on a listing they may
+         * never have read. stderr reaches the person and not the pipe.
+         */
+        if (s.analysis.settleFirst) {
+          console.error(pc.yellow("⛔"), `${s.analysis.name} cannot be fanned one-per-${s.analysis.grain}.`);
+          console.error(pc.dim(`   settle first: ${s.analysis.settleFirst.what}`));
+          console.error(pc.dim(`   because: ${s.analysis.settleFirst.because}`));
+        }
         for (const u of left) console.log(u.ref);
         return;
       }
@@ -503,6 +568,11 @@ export function v2Command(): Command {
         `${pc.bold(s.analysis.name)} — ${s.analysis.does}`,
         pc.dim(`\n  one per ${s.analysis.grain}, worked out by ${s.analysis.role}`)
       );
+      if (s.analysis.settleFirst) {
+        console.log(pc.yellow("  ⛔ counted per " + s.analysis.grain + ", but NOT worked that way."));
+        console.log(pc.dim(`     settle first: ${s.analysis.settleFirst.what}`));
+        console.log(pc.dim(`     because: ${s.analysis.settleFirst.because}`));
+      }
       console.log("");
       if (!left.length) {
         console.log(pc.green("✓"), `nothing to do — ${s.done} ${s.analysis.grain}s, none stale`);
@@ -2146,6 +2216,116 @@ export function v2Command(): Command {
      * Same rules as the store: the list is append-only, each rule reports what it touched, and a
      * file no rule matches is not rewritten.
      */
+    /**
+     * ⛔ A PROTOTYPE IS A WAY THROUGH THE PRODUCT, AND A PRODUCT HAS SEVERAL.
+     *
+     * Peter: *"we can have different prototypes for differnet prototypes.. like 'unauthenticated'
+     * could be a flow, and CRE vs private lending"*. An unauthenticated flow has no application
+     * menu at all, so one shell for the whole product would put the signed-in navigation around a
+     * sign-in screen.
+     *
+     * This draws each prototype's chrome from the LAYOUTS around the route it names, and points
+     * each menu item at the screen it names where that is unambiguous. Everything it writes is
+     * output: `shell_html`, `nav[].to` and `from`. What a person writes is the id, the title, the
+     * start and which route the chrome comes from.
+     */
+    .command("prototypes")
+    .description("Draw each prototype's chrome, and aim its menu at the screens it names")
+    .option("--into <dir>", "the corpus", ".")
+    .option("-n, --dry-run", "say what it would draw and change nothing")
+    .option("--renav", "take the product's own menu again, discarding a prototype's edits to it")
+    .action((o: { into?: string; dryRun?: boolean; renav?: boolean }) => {
+      const into = path.resolve(o.into ?? ".");
+      const corpus = loadCorpus(into);
+      if (!corpus.prototypes.length) {
+        console.log(pc.yellow("?"), "no prototypes declared — write them in prototypes.yaml:");
+        console.log(
+          pc.dim(
+            "  prototypes:\n" +
+              "    - id: cre\n" +
+              "      title: CRE\n" +
+              "      starts_at: deal-list#deals-list\n" +
+              "      shell_from: frontend/app/(app)/cre-deals/page.tsx"
+          )
+        );
+        return;
+      }
+
+      let repoRoot = into;
+      let componentsDir: string | undefined;
+      try {
+        const paths = resolvePathsOrThrow(into);
+        repoRoot = path.dirname(path.dirname(paths.configFile));
+        componentsDir = readConfig(paths).web.components_dir;
+      } catch {
+        /* a corpus with no config still draws — it just has no components index */
+      }
+
+      /** Every screen, so a menu item can be pointed at the one it names. */
+      const screens: Array<{ ref: string; title: string }> = [];
+      for (const entry of corpus.scopes)
+        for (const view of entry.scope.views ?? [])
+          screens.push({ ref: `${entry.scope.id}#${view.id}`, title: view.title ?? view.id });
+
+      const out = corpus.prototypes.map((proto) => {
+        if (!proto.shell_from) {
+          console.log(pc.yellow("?"), `${proto.id} — names no route for its chrome, so it has none`);
+          return proto;
+        }
+        const route = path.resolve(repoRoot, proto.shell_from);
+        if (!fs.existsSync(route)) {
+          console.log(pc.yellow("?"), `${proto.id} — ${proto.shell_from} is not there`);
+          return proto;
+        }
+        const shell = drawShellFrom(route, {
+          componentsDir: componentsDir ? path.resolve(repoRoot, componentsDir) : undefined,
+        });
+        if (!shell) {
+          console.log(pc.yellow("?"), `${proto.id} — nothing wraps that route, so this prototype has no chrome`);
+          return proto;
+        }
+        /**
+         * ⛔ A PROTOTYPE'S MENU IS THE AUTHOR'S, ONCE THEY HAVE TOUCHED IT.
+         *
+         * Peter: *"one thing I want to allow users to do is change high level navigation ... say a
+         * user just wanted to do something like 'oh, I want 3 main prototypes, prototype 1 is for
+         * the admin role, 2 is for the loan processor role'"*.
+         *
+         * Several prototypes was already expressible. Editing one's menu was not: this replaced
+         * `nav` wholesale on every run, so an author who removed four items from the admin walk got
+         * them back the next time anybody drew. A role's navigation is a product decision — it is
+         * precisely the thing somebody wants to try in a prototype — and a generator that overwrites
+         * it makes the surface read-only in the one place it should not be.
+         *
+         * So: a nav that is already there is kept, in the author's order, with its `to` refreshed
+         * against the screens that exist now. `--renav` takes the product's own menu again and
+         * discards the edits, which is the only way back and should be asked for explicitly.
+         */
+        const authored = (proto.nav ?? []).length > 0 && !o.renav;
+        const nav = aimNav(authored ? proto.nav : shell.nav, screens);
+        const aimed = nav.filter((n) => n.to).length;
+        console.log(
+          pc.green("✓"),
+          `${proto.id} — chrome from ${shell.from.length} layout(s), ${nav.length} menu item(s)${
+            authored ? " (this prototype's own, kept)" : ""
+          }, ${aimed} of them aimed`
+        );
+        for (const n of nav)
+          console.log(pc.dim(`    ${n.label}${n.to ? `  →  ${n.to}` : "  —  names no screen here"}`));
+        return { ...proto, shell_html: shell.html, nav, from: shell.from.map((f) => path.relative(repoRoot, f)) };
+      });
+
+      if (o.dryRun) {
+        console.log(pc.dim("  nothing was written — drop -n to apply"));
+        return;
+      }
+      const file = path.join(into, "prototypes.yaml");
+      fs.writeFileSync(file, YAML.stringify({ prototypes: out }));
+      console.log(pc.green("✓"), `written into ${path.relative(process.cwd(), file)}`);
+      console.log(pc.dim("  re-run this after the layouts change — the chrome is output, not a document"));
+    })
+
+  cmd
     /** ⛔ Not `migrate` — that verb is taken by the v1→Exchange conversion, which is a different act. */
     .command("forward")
     .description("Bring a corpus on disk forward to this build's schema")
@@ -2258,7 +2438,13 @@ export function v2Command(): Command {
     .option("--all", "every screen in the corpus, finding each one's component from what it declares")
     .option("--into <dir>", "the corpus to write into — a v1 products tree or a v2 truth tree", ".")
     .option("-n, --dry-run", "print what would be written and change nothing")
-    .action((ref: string | undefined, o: { route?: string; into?: string; dryRun?: boolean; all?: boolean }) => {
+    /**
+     * ⛔ THE ESCAPE FROM THE REFUSAL BELOW, so a screen that really did get simpler is one flag
+     * away rather than impossible. The refusal exists because a redraw with no `components_dir`
+     * replaced an 11,780-byte drawing with 4,231 bytes of placeholders and reported success.
+     */
+    .option("--anyway", "replace an existing drawing even if this run inlined no components")
+    .action((ref: string | undefined, o: { route?: string; into?: string; dryRun?: boolean; all?: boolean; anyway?: boolean }) => {
       if (o.all) return drawEverything(path.resolve(o.into ?? "."), Boolean(o.dryRun));
       if (!ref) {
         console.error(pc.red("✗"), "name a screen as <scope>#<view>, or pass --all");
@@ -2282,7 +2468,15 @@ export function v2Command(): Command {
         const cfg = readConfig(paths);
         componentsDir = cfg.web.components_dir ? path.resolve(root, cfg.web.components_dir) : undefined;
       } catch {
+        /**
+         * ⛔ SAID, NOT SWALLOWED. With no config there is no `components_dir`, so nothing is
+         * inlined and the drawing comes out as placeholders — which looked identical to success.
+         */
         componentsDir = undefined;
+        console.log(
+          pc.yellow("!"),
+          "no config for this corpus, so no components can be inlined — this drawing will be placeholders"
+        );
       }
       const route = path.resolve(o.route!);
       if (!fs.existsSync(route)) {
@@ -2410,6 +2604,46 @@ export function v2Command(): Command {
        * is why nothing could say a screen had moved on — and a feature describing a screen somebody
        * had deleted that morning was invisible until two people read the source by hand.
        */
+      /**
+       * ⛔ A WORSE DRAWING DOES NOT WIN, and this is the guard for a real loss.
+       *
+       * A scoper redrawing a Bilrost screen with no `components_dir` configured replaced an
+       * 11,780-byte drawing with 4,231 bytes of placeholders, and `draw` reported success. Its own
+       * words: *"Anybody who runs `v2 draw --all --into` this corpus will flatten every screen."*
+       *
+       * ⛔ THE TEST IS "NOTHING INLINED **AND** MUCH SMALLER", never size alone. A screen genuinely
+       * simplified in code SHOULD shrink, and refusing that would break the generator the first
+       * time somebody deletes a panel. The conjunction is what separates a real change from a
+       * degraded run.
+       *
+       * ⛔ AND IT STOPS RATHER THAN WARNING, because `--all` prints a line per screen and nobody
+       * reads twenty lines of yellow. `--anyway` keeps a deliberate replacement one flag away.
+       */
+      const already = (() => {
+        try {
+          const c = loadCorpus(into);
+          const v = c.scopes.find((x) => x.scope.id === scopeId)?.scope.views.find((x) => x.id === viewId);
+          return v?.sketch_html ?? "";
+        } catch {
+          return "";
+        }
+      })();
+      /**
+       * ⛔ `from` INCLUDES THE ROUTE ITSELF, so `=== 0` never fires — my first version of this
+       * guard tested that and silently never ran. The signal is that NOTHING BEYOND the entry
+       * component was inlined: the Bilrost case went from 1 (just the route) to 12 once the corpus
+       * was pointed at its components, and 11,780 bytes to 4,231 without them.
+       */
+      const nothingBeyondTheRoute = drawn.from.length <= 1;
+      if (nothingBeyondTheRoute && already.length > 0 && drawn.html.length < already.length * 0.7 && !o.anyway) {
+        console.error(
+          pc.red("✗"),
+          `this would replace a ${already.length}-byte drawing with ${drawn.html.length} bytes and no component inlined`
+        );
+        console.error(pc.dim("  that is what a missing `components_dir` looks like — the new drawing is placeholders"));
+        console.error(pc.dim("  point the corpus at its components, or pass --anyway if the screen really did get simpler"));
+        process.exit(1);
+      }
       const origin = repoOf(route);
       if (!origin) console.log(pc.yellow("!"), "the component is not in a git repository, so nothing records where this came from");
       const prov = origin ? { from: path.relative(origin.root, route), at: origin.head } : undefined;

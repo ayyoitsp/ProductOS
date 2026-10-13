@@ -377,11 +377,43 @@ unless Peter says so explicitly.
 ## After changing `src/` or `skills/`
 
 ```bash
-npm run build && productos init claude --update
+npm run build && productos init claude --update       # from the main checkout
+npm run build && node bin/productos.js init claude --update   # ⛔ from a worktree
 ```
 
 So Peter's other sessions pick the change up immediately. Never ask him to run install
 commands.
+
+### ⛔ From a worktree, `productos` is the wrong binary — for every verb, not just installs
+
+The global `productos` is an `npm link`: `lib/node_modules/productos` is a **symlink to the main
+checkout**. So it runs whatever branch that one checkout happens to be on, no matter which directory
+you invoke it from — and its registry, not yours, decides which roles exist.
+
+What that cost: an `init claude --update` run from a worktree, served by a main checkout sitting on
+an unrelated feature branch, **deleted `productos-decomposer` and `productos-demonstrator`** from the
+worktree (the stale registry has no such roles, so pruning read them as renamed) and **reverted
+`productos-scoper.md`** to the `criteria` section removed after *"a product person doesn't write a
+criterion - what even is this? this is old shit."* Silently, inside the normal path, reported as a
+successful install. It looked exactly like somebody deleting two files by hand.
+
+⛔ **This is now refused rather than written** — installing one ProductOS checkout's roles into a
+different ProductOS checkout throws before anything is written or removed, and the message names both
+trees. `node bin/productos.js` runs *this* worktree's build, which is what you want anyway. Installing
+into a **consumer repo** is unaffected: that is what the installer is for, and such a repo has no
+`agents/` of its own to lose.
+
+⛔ **And it is not only `init`. `productos v2 change check` gave a false ✗** on a layer that had been
+reached: the global binary runs the main checkout's registry, and on that branch `src/v2/analyse.ts`
+was not yet listed as a `derive` file — so the layer that owns it was never searched. Same command
+through `node dist/cli/index.js` reported every layer reached.
+
+A false ✗ is the *safe* direction and it still cost time. The unsafe direction is the same mechanism:
+a layer this build knows about, verified against a registry that does not, reports **✓ for a file the
+running code never reads**. So from a worktree, reach for the local build for anything that reads the
+registry or the source — `change`, `check`, `analyse`, `agents`, `init`.
+
+---
 
 ## Planning docs are private
 

@@ -366,7 +366,16 @@ export function coveredBy(corpus: Corpus, target: string): Covered | null {
       // ⛔ And what follows this ask, so a sentence appearing after acceptance breaks the stamp
       // on the exchange that sets it off — the two have to be read together or not at all.
       setsOff: corpus.scopes
-        .flatMap((s) => s.scope.exchanges.filter((x) => x.when?.follows?.startsWith(target)).map((x) => `${s.scope.id}#${x.id}:${norm(saysText(x.slots.answer?.says))}`))
+        .flatMap((s) =>
+          s.scope.exchanges
+            /**
+             * ⛔ ANY of them, since fg-0007. And note what this does NOT do: an exchange gaining a
+             * `follows` ref that points somewhere else must not move this stamp, or accepting one
+             * feature would be invalidated by an unrelated one declaring a trigger.
+             */
+            .filter((x) => (x.when?.follows ?? []).some((f) => f.startsWith(target)))
+            .map((x) => `${s.scope.id}#${x.id}:${norm(saysText(x.slots.answer?.says))}`)
+        )
         .sort(),
       exists: ex.exists,
       reads: [...ex.reads].sort(),

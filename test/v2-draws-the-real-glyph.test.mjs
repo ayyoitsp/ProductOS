@@ -11,6 +11,7 @@
  */
 import test from "node:test";
 import { temp } from "./support/temp.mjs";
+import { checkCorpus } from "../dist/v2/check.js";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
@@ -117,4 +118,87 @@ test("an icon carries its own size, or it fills whatever holds it", () => {
   /** ⛔ And a class still wins, because a CSS declaration outranks a presentation attribute. */
   assert.match(lucideSvg("Folder", page, "h-4 w-4"), /class="h-4 w-4"/, "the call site lost its sizing");
   fs.rmSync(root, { recursive: true, force: true });
+});
+
+test("the package's newer icon shape is read too", () => {
+  /**
+   * ⛔ A DEPENDENCY BUMP PUT EVERY ICON BACK TO A GREY SQUARE, SILENTLY.
+   *
+   * lucide v1.34 wrote `const __iconNode = [["path", {…}]]`; v1.50 writes
+   * `const __iconData = { name, size, node: [["path", {…}]] }`. The upgrade landed in the
+   * application's node_modules between one session and the next — nobody here chose it — and every
+   * glyph in the corpus reverted to the exact defect this file exists to end. Caught by checking
+   * before a deploy rather than by a screenshot afterwards.
+   *
+   * Both shapes are read, and neither is chosen by sniffing a version string: the data is found
+   * wherever it actually is.
+   */
+  const root = temp("productos-icons-v2-");
+  const icons = path.join(root, "node_modules/lucide-react/dist/esm/icons");
+  fs.mkdirSync(icons, { recursive: true });
+  fs.writeFileSync(
+    path.join(icons, "folder.mjs"),
+    `import createLucideIcon from '../createLucideIcon.mjs';\n` +
+      `const __iconData = {\n  name: "folder",\n  size: 24,\n  node: [\n    ["path", { d: "M20 20a2 2 0 0 0 2-2V8Z", key: "1kt360" }]\n  ]\n};\n` +
+      `const Folder = createLucideIcon(__iconData);\nexport { __iconData, Folder as default };`
+  );
+  fs.writeFileSync(
+    path.join(icons, "..", "lucide-react.mjs"),
+    `export { default as Folder } from './icons/folder.mjs';`
+  );
+  const page = path.join(root, "app/page.tsx");
+  fs.mkdirSync(path.dirname(page), { recursive: true });
+  fs.writeFileSync(page, "x");
+
+  const svg = lucideSvg("Folder", page);
+  assert.ok(svg, "the newer icon shape was not read, so every glyph is a grey square again");
+  assert.match(svg, /M20 20a2 2 0 0 0 2-2V8Z/, "the path drawn is not the one the package holds");
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+/**
+ * ⛔ THE CONDITION, NOT THE TWO SHAPES SOMEBODY ALREADY FIXED.
+ *
+ * The tests above pin `__iconNode` and `__iconData`, and that is the weaker instrument: a pin is
+ * anchored to a shape somebody already knew about, so a THIRD shape passes every one of them and
+ * fails every drawing. lucide has now changed its on-disk format once, in a product's node_modules,
+ * with no commit on either side, and every glyph in a corpus became a grey square.
+ *
+ * So the corpus is asked the question directly — did anything fall back — which survives the
+ * package changing shape again without anybody predicting how. Proposed by the session that
+ * deployed the fix, after it checked the glyphs on 4100 rather than checking that the page loaded.
+ */
+function corpusWithDrawing(sketch) {
+  const dir = temp("productos-fellback-");
+  fs.cpSync("v2-seed", dir, { recursive: true });
+  const tasks = path.join(dir, "truth", "tasks.md");
+  const before = fs.readFileSync(tasks, "utf-8");
+  const start = before.indexOf("    sketch_html: |\n");
+  assert.ok(start >= 0, "the seed's sketch moved — re-aim this fixture");
+  const end = before.indexOf("    parts:", start);
+  assert.ok(end > start, "the seed's sketch moved — re-aim this fixture");
+  const indented = sketch.split("\n").map((l) => `      ${l}`).join("\n");
+  fs.writeFileSync(tasks, `${before.slice(0, start)}    sketch_html: |\n${indented}\n${before.slice(end)}`);
+  return dir;
+}
+
+const fellBack = (dir) => checkCorpus(dir).findings.find((f) => f.kind === "glyphs-fell-back");
+
+test("a corpus says so when its glyphs drew as grey squares", () => {
+  const dir = corpusWithDrawing(
+    '<div><span class="productos-icon" role="img" aria-label="Folder"></span>' +
+      '<span class="productos-icon" role="img" aria-label="TriangleAlert"></span></div>'
+  );
+  const f = fellBack(dir);
+  assert.ok(f, "two glyphs fell back to grey squares and the corpus said nothing");
+  assert.match(f.what, /2 icons/, "the finding does not say how many fell back");
+  assert.match(f.what, /Folder/, "the finding does not name what could not be drawn");
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test("a corpus whose glyphs all resolved says nothing", () => {
+  /** ⛔ Or the note is noise on every corpus, and a noisy check is one people scroll past. */
+  const dir = corpusWithDrawing('<div><svg viewBox="0 0 24 24" aria-label="Folder"><path d="M1 1Z" /></svg></div>');
+  assert.equal(fellBack(dir), undefined, "a corpus drawing real glyphs was told it had fallbacks");
+  fs.rmSync(dir, { recursive: true, force: true });
 });

@@ -118,6 +118,25 @@ export const REF_MESSAGE =
  * ⛔ Ids are what a stamp and a criterion point at, so they are stable: renaming one is a new
  * statement and the old stamp stops covering anything.
  */
+/**
+ * What `none: true` MEANS on the slot it is written on.
+ *
+ * ⛔ THREE DIFFERENT FACTS, ONE FIELD, AND EVERY SURFACE PRINTED THE FIRST. `refuses` says there is
+ * nothing to refuse; `after` says nothing is different afterwards; `again` says nothing further
+ * happens on a second press. The `ANSWERS` table below has carried all three in its `means` text —
+ * and four call sites across `packet.ts` and `page.ts` each hardcoded "nothing to refuse", so the
+ * slot whose entire job is to say *whether the world changed* printed a sentence about refusals,
+ * to a builder.
+ *
+ * Reported as fg-0015 by an author reading its own packet back. ⛔ Here rather than in each
+ * surface, because four copies of one string is how they drifted from the schema together.
+ */
+export function nothingHere(slot: string): string {
+  if (slot === "after") return "nothing is different afterwards";
+  if (slot === "again") return "nothing further happens on a second press";
+  return "nothing to refuse";
+}
+
 export const Statement = z
   .object({
     id: z.string().regex(new RegExp(`^${SEGMENT}$`), "a statement id is one segment, kebab-case"),
@@ -389,6 +408,25 @@ export const Standing = z
      * Enforced on the SlotFill, which is the only place that can see both at once.
      */
     about: z.string().min(10).optional(),
+    /**
+     * ⛔ WHICH STATEMENT, WHEN THE SLOT SAYS SEVERAL AND ONE OF THEM IS UNRULED (fg-0008).
+     *
+     * `about` is prose — it tells a reader which part is in question. It does not tell `--pick`
+     * anything, so ruling one sentence of four meant every candidate had to be either the WHOLE
+     * merged paragraph (destroying the per-statement review grain) or "only the part in question"
+     * (un-pickable, sending the reviewer to retype the three agreed statements at a prompt).
+     *
+     * That is exactly the clause-loss `--pick` exists to prevent, re-achieved through the list
+     * spelling — reported by the author who hit it rather than theorised.
+     *
+     * ⛔ `of`, THE SAME WORD A CRITERION USES for the same job, because a reader who has learnt
+     * `criteria.of` has learnt this. A ruling on a standing with `of` replaces that statement and
+     * leaves its siblings exactly as they were agreed.
+     */
+    of: z
+      .string()
+      .regex(new RegExp(`^${SEGMENT}$`), "a statement id is one segment, kebab-case")
+      .optional(),
     /**
      * For a standing on a named refusal: which part of it is in question.
      *
@@ -1048,11 +1086,28 @@ export const Exchange = z
          * `follows` is also what its own detector has always been called (`follows-nothing`), so
          * the field and the check that guards it now agree.
          */
+        /**
+         * ⛔ SEVERAL, BECAUSE MACHINERY WITH FIVE CALLERS COULD NAME ONE (fg-0007).
+         *
+         * This was a single ref, so an exchange set off by five different features had nowhere to
+         * put the other four — and `follows-nothing` then read as though nobody triggered it.
+         * `read-a-supplied-file` is asked by mapping a statement, publishing a statement, reading
+         * the exception log, publishing a rent roll and reviewing the rows; all five lived in the
+         * prose of `triggered_by`, where nothing resolved them and no surface read them as edges.
+         *
+         * ⛔ ONE REF STILL PARSES, deliberately. A corpus written `follows: a#b` is correct and
+         * stays correct — the transform lifts it into a list, so every reader sees one shape and no
+         * author has to write a list of one. Changing this to an array-only field would have
+         * invalidated every corpus on disk to express "sometimes there are five".
+         */
         follows: z
-          .string()
-          .regex(REF_PATTERN, REF_MESSAGE)
+          .union([
+            z.string().regex(REF_PATTERN, REF_MESSAGE),
+            z.array(z.string().regex(REF_PATTERN, REF_MESSAGE)).min(1),
+          ])
+          .transform((v) => (Array.isArray(v) ? v : [v]))
           .optional()
-          .describe("<scope>#<exchange> — the ask this one follows"),
+          .describe("<scope>#<exchange>, or several — the asks this one follows"),
         /** `repeating` vs `once` is the difference between a cron and a script. */
         cadence: z.enum(["repeating", "on-an-event", "once"]),
         /** For `once` — what made it necessary, so it can be retired when it is done. */
@@ -1087,8 +1142,32 @@ export const Exchange = z
      * states, where which one the sentence means is a fact only the author has.
      */
     at: z
-      .object({ view: z.string(), part: z.string().optional(), state: z.string().optional() })
+      .object({
+        view: z.string().optional(),
+        part: z.string().optional(),
+        state: z.string().optional(),
+        /**
+         * ⛔ THE SCREEN THIS ASK ARRIVES AT BELONGS TO ANOTHER SCOPE — `<scope>#<view>`.
+         *
+         * A person-asked exchange owes a view. But a scoper may not read another feature's scope,
+         * and a migrated corpus is full of reader actions whose screen was written somewhere else.
+         * With only `view:` available, the author's three moves were: name a view this scope does
+         * not have, invent one, or leave the behaviour filed as machinery. All three are wrong, and
+         * the third is what happened — `pin-a-version` kept "pinning a source" and "releasing a
+         * pin" as `asked_by: system` with a prose `triggered_by`, and `happy_path.through` stayed
+         * empty, because `asked_by: person` demanded a view it could not honestly name.
+         *
+         * Recorded as framework gap fg-0005 by the scoper that hit it: *"There is no way to say
+         * 'this is a person's ask and the screen it arrives at belongs to another scope'."* Now
+         * there is. `check` resolves it like any other ref, so a wrong one is caught rather than
+         * believed.
+         */
+        view_in: z.string().optional(),
+      })
       .strict()
+      .refine((a) => !(a.view && a.view_in), {
+        message: "say `view` or `view_in`, not both — one ask arrives at one screen",
+      })
       .optional(),
     exists: z.enum(["intended", "kept", "withdrawn"]).optional(),
     /**
@@ -1172,11 +1251,17 @@ export const Exchange = z
      * A view with no interactive parts is a legitimate arrival point; a view that has them and
      * an ask that names none is an ask nobody can find.
      */
-    if (e.asked_by === "person" && !e.at?.view) {
+    /**
+     * ⛔ `view_in` SATISFIES THIS, AND THAT IS THE WHOLE OF fg-0005. The guarantee is "an ask a
+     * person makes arrives somewhere nameable", not "arrives in this file" — and insisting on the
+     * latter is what pushed reader actions back into machinery.
+     */
+    if (e.asked_by === "person" && !e.at?.view && !e.at?.view_in) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["at"],
-        message: "a person-asked exchange must say which view the ask arrives at",
+        message:
+          "a person-asked exchange must say which view the ask arrives at — `view` for a screen in this scope, or `view_in: <scope>#<view>` when the screen belongs to another",
       });
     }
     if (e.asked_by !== "person" && !e.when?.triggered_by) {
@@ -1274,7 +1359,22 @@ export const Exchange = z
        * which is the honest answer for every exchange that only reads, and the model must accept
        * it or an author will invent a state change to fill the cell.
        */
-      { field: "none", slots: ["refuses", "after"], means: "there is nothing to refuse, or nothing is different afterwards" },
+      /**
+       * ⛔ `again` TOO, BECAUSE THE INSTRUCTIONS ALREADY SAID SO AND THE SCHEMA REFUSED IT.
+       *
+       * The scoper role shows `again: none: true` as the way to write "asked twice, nothing
+       * further happens" — and `none` was keyed to `refuses` and `after` only, so following the
+       * instructions produced truth that would not load. Reported as fg-0011.
+       *
+       * It is also plainly the same fact: "nothing is different afterwards" and "nothing further
+       * happens on a second press" are the same shape of answer, and a slot that can only say it
+       * by writing a sentence says it in prose where every other slot says it in a field.
+       */
+      {
+        field: "none",
+        slots: ["refuses", "after", "again"],
+        means: "there is nothing to refuse, nothing is different afterwards, or nothing further happens on a second press",
+      },
       { field: "cannot_fail", slots: ["fails"], means: "it cannot fail" },
       { field: "outcomes", slots: ["refuses"], means: "the named ways it refuses" },
     ];
@@ -1506,6 +1606,25 @@ export const Part = z
     id: z.string(),
     role: PartRole,
     label: z.string().optional(),
+    /**
+     * ⛔ ONE CONTROL THAT APPEARS ONCE PER SOMETHING — what it repeats over (fg-0009).
+     *
+     * A part is one control and an exchange arrives at one part, so five sortable column headings
+     * on one table — all doing the same thing, each its own element with its own words — could only
+     * be declared as a single part. Its `label` then had to be **one column's** words for the
+     * drawing's wiring to bind it, so the part read as being about that column and the behaviour
+     * read as being about one heading. The pager's two chevrons are the same shape: one ask, two
+     * controls.
+     *
+     * Reported by a scoper that hit it on a real table, not theorised.
+     *
+     * ⛔ WHAT IT VARIES OVER, NOT A COUNT. "once per sortable column" is checkable against the
+     * screen and tells a builder what to render; `repeats: true` or `count: 5` says neither, and a
+     * number goes stale the moment a column is added. With this set, `label` is free to be the
+     * generic words — "a column heading" — because the specific words are no longer load-bearing
+     * for identifying the control.
+     */
+    repeats: z.string().min(5).optional(),
     leads_to: z.string().optional(),
     /**
      * The conditions this part can be in. ⛔ Empty means nobody has said — never means it has none.
@@ -2330,6 +2449,31 @@ export const Scope = z.object({
           closed: z.boolean().optional(),
           members: z.array(z.string()).optional(),
           /**
+           * ⛔ THIS WORD IS CONTESTED, AND NOBODY HAS RULED WHICH SENSE WINS.
+           *
+           * A slot can hold an open question. A word could not — `Term` carried
+           * `means`/`closed`/`members` and nothing else, so "three names in this corpus point at
+           * related-but-different objects" had nowhere to live at the grain of the word.
+           *
+           * What that cost, recorded as fg-0004 by the scoper that hit it: Bilrost uses *version
+           * selection*, *model revision*, *master model version* and *input version* across four
+           * places for three distinct objects. The scoper declared the one word it owned, and
+           * **deliberately left the collision out of truth entirely** — reporting it in prose to its
+           * caller instead — because defining the contested word would have settled a collision
+           * nobody had ruled on, and a guessed definition reads exactly like a decided one.
+           *
+           * ⛔ `with` NAMES THE OTHER WORDS, because "this is contested" without saying against
+           * what is a feeling. The question goes to a person; nothing here resolves it.
+           */
+          contested: z
+            .object({
+              question: z.string().min(10),
+              /** The other words it collides with — bare words, or `<scope>` where one is defined. */
+              with: z.array(z.string()).min(1),
+            })
+            .strict()
+            .optional(),
+          /**
            * ⛔ THE ANSWER `check` ASKED FOR AND THE SCHEMA COULD NOT HOLD.
            *
            * `nothing-in-this-product-sets-this` offers three exits: a behaviour is missing, the
@@ -2365,6 +2509,41 @@ export const Scope = z.object({
             })
             .strict()
             .optional(),
+          /**
+           * ⛔ A SIBLING FEATURE IN THIS CORPUS SETS OR READS THIS WORD — the fourth answer, and
+           * the one `nothing-in-this-product-sets-this` and `nothing-reads-what-this-sets` both
+           * offered no way to give.
+           *
+           * Each finding offered two exits: a behaviour is missing, or the word crosses the
+           * product's edge (`set_outside` / `read_outside`). Neither is true when the other half
+           * is **another feature in the same corpus** — and a scoper is forbidden from reading a
+           * sibling's scope, so it cannot clear the finding truthfully even when it knows the
+           * answer. Both directions were filed as framework gaps by authors who hit them:
+           *
+           *   fg-0001  `limit-resolution` reads a resolved limit, an answering layer, a tier grid
+           *            cell and a held policy version, and could declare NONE of them — so every
+           *            exchange carries `reads: []` and no org-wide rule can select on `term:`.
+           *   fg-0006  `read-a-supplied-file` SETS `confidence` and `the file's own declaration`;
+           *            the features that read them are siblings it may not open.
+           *
+           * ⛔ A DECLARATION, NOT A CHANGE TO VOCABULARY REACH, and that distinction is the whole
+           * reason this is safe. fg-0001 was left open for a session precisely because widening
+           * `vocabularyReach` to follow the reverse `depends_on` edge would change which org-wide
+           * rules select which exchanges in every corpus — its own text warns it would "silently
+           * change which org-wide rules reach the exchange while reporting a clean corpus". This
+           * changes nothing about reach: it records who the other half is, and `check` resolves the
+           * ref like any other, so a wrong one is caught rather than believed.
+           */
+          set_by: z
+            .array(z.string())
+            .min(1)
+            .optional()
+            .describe("<scope> or <scope>#<exchange> — the sibling that sets this word"),
+          read_by: z
+            .array(z.string())
+            .min(1)
+            .optional()
+            .describe("<scope> or <scope>#<exchange> — the sibling that reads this word"),
         })
         .strict()
     )
@@ -2379,6 +2558,19 @@ export const Scope = z.object({
    */
   depends_on: z.array(z.string()).default([]),
   views: z.array(View).default([]),
+  /**
+   * ⛔ THIS FEATURE HAS NO SCREEN OF ITS OWN, SAID RATHER THAN INFERRED — the reason, in one line.
+   *
+   * `views: []` cannot be told from "nobody has drawn them yet", and the difference matters to every
+   * reader: one is a capability reached only from other features, the other is unfinished work.
+   * With no way to say it, the fact was written as a clause inside the `may` sentence of **all eight
+   * exchanges** of `limit-resolution` — "It has no screen of its own." eight times — which is the
+   * duplication this model exists to prevent. Recorded as fg-0003 by the scoper that hit it.
+   *
+   * ⛔ A REASON, NOT A BOOLEAN. "Reached only from other features, never opened directly" is
+   * checkable against the exchanges; `true` is an assertion with nothing behind it.
+   */
+  no_screen: z.string().min(10).optional(),
   exchanges: z.array(Exchange).default([]),
   /** ⛔ Why this is worth building — what is wrong today. See `Reason`. */
   why: z.array(Reason).default([]),
@@ -3268,6 +3460,59 @@ export const AccessFile = z.object({ access: z.array(Access).default([]) }).stri
  * that read disk where it could and the corpus where it could not would be two products that look
  * the same until somebody publishes one.
  */
+/**
+ * One way through the product, with its own front door and its own chrome.
+ *
+ * ⛔ A PRODUCT HAS SEVERAL, AND ASSUMING ONE WAS THE MISTAKE. The walk was built as "the product,
+ * walked" — one start, one shell. Peter: *"we can have different prototypes for differnet
+ * prototypes.. like 'unauthenticated' could be a flow, and CRE vs private lending"*.
+ *
+ * He is right, and the clearest case proves it: an unauthenticated flow has no application menu at
+ * all. A single shell for the whole product would put the signed-in navigation around a sign-in
+ * screen, which is not a drawing of anything. Two lending businesses that share a codebase are the
+ * same argument one level up — they are different products to the person using them, and a
+ * prototype that mixes their screens is a walk nobody takes.
+ *
+ * ⛔ IT NAMES A START, BECAUSE A PROTOTYPE OPENS SOMEWHERE. Without one the walk sorted its screens
+ * and opened on whichever came first — Peter: *"and it just starts at 'sizing results' ?? hahahah"*.
+ * Sorting is not a product decision and should never look like one.
+ */
+export const Prototype = z
+  .object({
+    id: z.string(),
+    title: z.string(),
+    /** `<scope>#<view>` — the screen a person comes in on. */
+    starts_at: z.string(),
+    /**
+     * A route whose LAYOUTS are this prototype's chrome.
+     *
+     * ⛔ THE LAYOUTS, NOT THE PAGE. Composing a page and cutting its content out afterwards bakes
+     * one screen's markup into the frame every other screen then wears.
+     */
+    shell_from: z.string().optional(),
+    /** The drawn chrome, with `<!--screen-->` where the screen goes. Output — never hand-written. */
+    shell_html: z.string().optional(),
+    /**
+     * The chrome's own menu, each item pointed at the screen it names where one is unambiguous.
+     *
+     * ⛔ THIS IS THE PRODUCT'S OWN STATEMENT OF HOW TO GET AROUND ITSELF, and it is a far better
+     * source than inference: `connect` reads a control's sentence and guesses, and on the corpus
+     * this was built against it found four links across seventeen screens. A menu names its areas
+     * outright, in one place, in the product's own words.
+     */
+    nav: z
+      .array(z.object({ label: z.string(), to: z.string().optional() }).strict())
+      .default([]),
+    /** Which layout files it was drawn from, so a reader can go and look. */
+    from: z.array(z.string()).default([]),
+    drawn_at: z.string().optional(),
+  })
+  .strict();
+export type Prototype = z.infer<typeof Prototype>;
+
+/** The file a corpus keeps its prototypes in — one home, beside `style.yaml`. */
+export const PrototypeFile = z.object({ prototypes: z.array(Prototype).default([]) }).strict();
+
 export const Style = z
   .object({
     /**

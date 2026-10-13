@@ -16,7 +16,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { parseFrontmatter } from "../core/frontmatter.js";
 import YAML from "yaml";
-import { Scope, Rule, Capability, Reading, Verdict, Charter, type SlotName , saysText, type Says, Note, Steer, Access, Style} from "./schema.js";
+import { Scope, Rule, Capability, Reading, Verdict, Charter, type SlotName , saysText, type Says, Note, Steer, Access, Style, Prototype, PrototypeFile } from "./schema.js";
 
 export interface V2Paths {
   root: string;
@@ -75,6 +75,13 @@ export interface Corpus {
    * missing one if this is widened to a default.
    */
   style?: Style;
+  /**
+   * The ways through this product — each with its own front door and its own chrome.
+   *
+   * ⛔ SEVERAL, NOT ONE. An unauthenticated flow and a signed-in one do not share a menu; two
+   * lending businesses in one codebase do not share a walk. See `Prototype`.
+   */
+  prototypes: Prototype[];
   rules: Array<{ rule: Rule; body: string; file: string }>;
   /**
    * The subsystems beneath the product, and roughly what each does.
@@ -335,6 +342,15 @@ export function loadCorpus(root: string, store: Store = diskStore): Corpus {
    * product rather than one per scope, and a root file is what `corpusFiles` enumerates, so it
    * reaches the store, a packet and an export with nothing else to keep in step.
    */
+  let prototypes: Prototype[] = [];
+  for (const file of readDir(paths.root, [".yaml", ".yml"]).filter((f) => /prototypes\.ya?ml$/.test(f))) {
+    try {
+      const raw = YAML.parse(fs.readFileSync(file, "utf-8")) ?? {};
+      if (raw.prototypes) prototypes = PrototypeFile.parse(raw).prototypes;
+    } catch {
+      /* a corpus with an unreadable prototypes file still loads — `check` reports it */
+    }
+  }
   let style: Style | undefined;
   for (const file of readDir(paths.root, [".yaml", ".yml"]).filter((f) => /style\.ya?ml$/.test(f))) {
     try {
@@ -353,7 +369,7 @@ export function loadCorpus(root: string, store: Store = diskStore): Corpus {
       broken.push({ file, why: why(e) });
     }
   }
-  return { paths, scopes, rules, capabilities, charter, notes, readings, verdicts, steers, access, style, broken };
+  return { paths, scopes, rules, capabilities, charter, notes, readings, verdicts, steers, access, style, prototypes, broken };
 }
 
 // ---------------------------------------------------------------------------
@@ -613,7 +629,7 @@ function selects(
   // ⛔ Through the same resolver the rest of the corpus uses. A behaviour arriving on another
   // area's screen must be governed by the rules that screen's controls attract, or the
   // selector says one thing and the picture says another.
-  const at = ex.at ? resolveView(c, scope, ex.at.view) : undefined;
+  const at = viewOfAsk(c, scope, ex.at);
   if (s.view_kind) {
     if (!at || at.view.view_kind !== s.view_kind) return false;
   }
@@ -844,6 +860,29 @@ export function disputeIndex(c: Corpus): Map<string, Array<{ from: string; becau
  * `<scope>#<view>` is the qualified form. A bare id still resolves locally first, so nothing
  * already written changes meaning.
  */
+/**
+ * The view an ask arrives at, whichever way it was written.
+ *
+ * ⛔ ONE PLACE, BECAUSE `at.view` AND `at.view_in` ARE ONE QUESTION. A person-asked exchange names
+ * either a view in its own scope or `<scope>#<view>` in another (fg-0005 — a scoper may not read
+ * the sibling scope that owns the screen, so insisting on a local view pushed reader actions back
+ * into machinery). Four call sites read `at.view` as a definite string; without this they would
+ * each have had to know about the second form, and three of them would have been written to ignore
+ * it.
+ *
+ * ⛔ `resolveView` ALREADY RESOLVED THE CROSS-SCOPE FORM — it has handled `<scope>#<view>` since
+ * before this existed. Only choosing between the two fields was missing, so this is deliberately
+ * the whole of the change rather than a second resolver.
+ */
+export function viewOfAsk(
+  c: Corpus,
+  scope: Scope,
+  at: { view?: string; view_in?: string } | undefined
+): { scope: string; view: Scope["views"][number] } | undefined {
+  const ref = at?.view ?? at?.view_in;
+  return ref ? resolveView(c, scope, ref) : undefined;
+}
+
 export function resolveView(
   c: Corpus,
   scope: Scope,
