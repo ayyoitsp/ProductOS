@@ -169,6 +169,12 @@ test("nothing reaches staging without the guard, and deploy adds build and the s
   const dep = recipe("deploy");
   assert.match(dep, /backup-remote/, "it deploys without backing the store up first");
   assert.match(dep, /live-scripts-parse/, "a deploy never asks whether the page's scripts parse");
+  /**
+   * ⛔ AND WHETHER THE PAGE IS TALKING ABOUT THE PRODUCT OR ABOUT THE TOOL. `state it with
+   * \`splits_on\`` reached a reviewer. The suite had an assertion against exactly that and could not
+   * reach the line — so this one runs against the page that went out.
+   */
+  assert.match(dep, /no-field-names-on-a-page/, "a deploy never asks whether a field name reached a reader");
   /** ⛔ `--from`, so the page list is the instance's own answer rather than one somebody maintains. */
   assert.match(dep, /--from/, "the script check runs against a hand-written page list, which goes stale");
   assert.match(dep, /remote-doctor/, "nothing reads the store after the deploy");
