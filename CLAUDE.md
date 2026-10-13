@@ -374,6 +374,21 @@ did not stop this.
 Skill `version:`, `package.json`, anything stamped. No increments during the design phase
 unless Peter says so explicitly.
 
+## ⛔ Deploy every time. Deploys are cheap; batching them is not
+
+Peter: *"don't ever do this again --> 'the code for it still needs a deploy, which I've not
+re-requested since they've just done one.' deploys are cheap, why would you waste my time not
+deploying"*.
+
+**Every merge to main gets deployed, immediately, without being asked.** Not batched, not held
+back because one went out an hour ago, not deferred to spare anybody the trouble. A merged change
+that is not live is a change he cannot look at, and the whole point of the loop is that he can.
+
+⛔ **And a deploy is not finished when the code ships.** `sketch_html` is persisted truth, so new
+drawing code changes nothing already stored — see `fg-0002`. Deploying means: merge, deploy the
+code, **re-run `v2 draw --all` and `v2 prototypes`, re-take the style, re-import the corpus**, and
+check a number on the live page that would be different if it had not worked.
+
 ## After changing `src/` or `skills/`
 
 ```bash

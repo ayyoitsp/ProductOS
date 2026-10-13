@@ -328,12 +328,25 @@ export const AREAS: Area[] = [
       /** ⛔ The design system index: a generator source like `draw`, reading a product's own vocabulary. */
       "src/v2/design.ts",
       /**
+       * ⛔ The one lazy loader for the TypeScript compiler, which `draw` and `design` both need and
+       * neither may import eagerly: `typescript` is a devDependency, so an import at module scope
+       * breaks every CLI verb in an install without dev dependencies. One home, because the fix was
+       * applied to `draw` alone, shipped, deployed — and `v2 analyse` still died on `design`.
+       */
+      "src/v2/compiler.ts",
+      /**
        * ⛔ MOVING A CORPUS AND MOVING IT FORWARD ARE BOTH GENERATION. `corpus.ts` turns a directory
        * into rows and back byte-identically; `doc-migrations.ts` rewrites stored documents when the
        * corpus schema moves, which is the one thing in the system that edits truth without a person
        * — it leaves a record for exactly that reason, and a layer nobody reviews is the worst place
        * for that to live. `migrate.ts` and `boot.ts` move the store's own shape forward.
        */
+      /**
+       * ⛔ The one reader of `error.cause`, used by boot AND by the request path. It is here because
+       * 4100 failed every corpus read for nearly two hours and wrote 2037 identical log lines doing
+       * it, not one of them carrying a sqlstate — the outage recovered with its diagnosis gone.
+       */
+      "src/v2/store/because.ts",
       "src/v2/store/corpus.ts",
       "src/v2/store/doc-migrations.ts",
       "src/v2/store/migrate.ts",

@@ -502,11 +502,25 @@ deploy-check: staging-guard
 # The slow half, on its own, so a ten-minute step is not inside a command that dies at ten minutes.
 suite-now:
 	@echo "→ the suite (this is the slow one)"
+	@# ⛔ `# fail 0` IS NOT SUFFICIENT, AND BELIEVING IT WOULD HAVE PASSED A RED SUITE.
+	@#
+	@# A test that TIMES OUT is reported `not ok` and is counted in neither `# pass` nor `# fail`:
+	@#
+	@#     not ok 1 - a test that never finishes
+	@#     # tests 1   # pass 0   # fail 0
+	@#
+	@# So the old condition — grep for exactly `# fail 0` — was satisfied by a suite containing a
+	@# timed-out test, and the gate would have reported green and deployed. Found by writing a test
+	@# that hangs on purpose, to check that the new `--test-timeout` turns a hang into a verdict; it
+	@# does, and the verdict was one this gate could not read.
+	@#
+	@# Both conditions now: `# fail 0` AND no `not ok` line anywhere. Either alone has a hole.
 	@out=$$(npm test 2>&1); \
-	echo "$$out" | grep -E '^# (tests|pass|fail)' | sed 's/^/  /'; \
-	echo "$$out" | grep -qE '^# fail 0$$' || { \
+	echo "$$out" | grep -E '^# (tests|pass|fail|skipped)' | sed 's/^/  /'; \
+	if ! echo "$$out" | grep -qE '^# fail 0$$' || echo "$$out" | grep -qE '^not ok'; then \
 		echo "✗ tests fail — not deploying. The failures:"; \
-		echo "$$out" | grep '^not ok' | head -10 | sed 's/^/    /'; exit 1; }
+		echo "$$out" | grep '^not ok' | head -10 | sed 's/^/    /'; exit 1; \
+	fi
 	@echo "  ✓ green at $$(git rev-parse --short HEAD) — pass this to deploy:"
 	@echo "      make deploy SUITE_VERIFIED=$$(git rev-parse HEAD)"
 

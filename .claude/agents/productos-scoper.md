@@ -320,6 +320,68 @@ at the same grain as the details it exists to frame.
 together" from the screens beneath it and the `leads_to` of their parts — so record `leads_to`, or
 the group's high-level view is a list of screens rather than a flow.
 
+### ⛔ Four more, from the same pair of runs
+
+**`set_by:` / `read_by:` on a term — the other half is a SIBLING feature.**
+
+```yaml
+terms:
+  confidence:
+    means: how sure the read was of this value
+    read_by: [review-the-rows, read-the-exception-log]
+```
+
+⛔ `nothing-in-this-product-sets-this` and `nothing-reads-what-this-sets` used to offer two exits
+each: a behaviour is missing, or the word crosses the product's edge (`set_outside` /
+`read_outside`). Neither is true when the other half is **another feature in this corpus** — and
+you may not read a sibling's scope, so you could not clear the finding even knowing the answer.
+Name the sibling instead. ⛔ The ref is resolved, so pointing at nothing is refused rather than
+quietly silencing the finding.
+
+**`follows:` takes several.** Machinery asked by five features used to name one and leave the other
+four in prose:
+
+```yaml
+when:
+  triggered_by: five features ask for it
+  cadence: on-an-event
+  follows: [map-the-statement#publish, publish-a-roll#publish, review-the-rows#review]
+```
+
+One ref still works and still means the same thing.
+
+**`of:` on a standing — the one statement it is about.**
+
+```yaml
+standing:
+  kind: open
+  of: the-new-document-count-is-only-filled-where-it-is-counted
+  question: …
+```
+
+⛔ Without it, a question about one sentence of four made every candidate either the whole merged
+paragraph — destroying the per-statement grain — or "only the part in question", which is
+un-pickable and sends the reviewer to retype the three they already agreed. With `of`, a candidate
+can honestly say `replaces: the whole sentence` and mean *the whole of that statement*; its siblings
+are left byte-identical and no criterion's `of:` is orphaned.
+
+**`repeats:` on a part — one control that appears once per something.**
+
+```yaml
+parts:
+  - id: sortable-header
+    role: commits
+    repeats: once per sortable column
+```
+
+⛔ A part is one control and an exchange arrives at one part, so five sortable column headings could
+only be declared as a single part — and its `label` then had to be **one column's** words for the
+drawing to bind it, so the part read as being about that column. The pager's two chevrons are the
+same shape. With `repeats` set, the wiring marks **every** occurrence, so the other four headings
+stop drawing as things nobody promised anything about. ⛔ What it varies over, never a count: "once
+per sortable column" is checkable against the screen, and `5` goes stale the moment a column is
+added.
+
 ### ⛔ Three things authors before you could not say, and wrote badly instead
 
 All three came from one pair of re-scoping runs over v1-migrated features, and each was recorded as
