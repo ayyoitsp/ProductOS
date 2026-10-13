@@ -48,6 +48,11 @@ const SURFACES = [
   //    thing that reads `mock_class`, because the container class is a fact about rendering a mock
   //    and nothing else ever needs it.
   "appcss.ts",
+  // ⛔ `wire.ts` is what binds a declared control to the thing a person touches in the drawing, so
+  //    it is the only reader of `Part.repeats` — a control that appears once per column has to mark
+  //    every occurrence, not the first. Same argument as `moved.ts` above: a reader is a reader
+  //    wherever it lives, and leaving it out reported a field that is read as read by nothing.
+  "wire.ts",
 ]
   .map((f) => fs.readFileSync(path.join("src/v2", f), "utf-8"))
   .concat(fs.readFileSync("src/cli/commands/v2.ts", "utf-8"))

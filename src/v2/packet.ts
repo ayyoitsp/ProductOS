@@ -11,7 +11,7 @@
  * — `refuses: none`, `cannot_fail`, `out_of_scope` are statements a builder can rely on,
  * where silence would have been something they had to guess about.
  */
-import { SLOTS, DEMONSTRABLE_SLOTS, owesDemonstration, type SlotName , statements, saysText} from "./schema.js";
+import { SLOTS, DEMONSTRABLE_SLOTS, owesDemonstration, type SlotName , statements, saysText, nothingHere} from "./schema.js";
 import { resolveRules, disputeIndex, vocabularyReach, resolveView, DOWNSTREAM_OF_ANSWER, answerIsUnknown, type Corpus } from "./load.js";
 import { descendants } from "./settle.js";
 import { existsOf } from "./load.js";
@@ -405,7 +405,7 @@ function compileOne(corpus: Corpus, scopeId: string): string | null {
         continue;
       }
       if (k === "stated") {
-        if (fill.none) out.push(`- ${label} — nothing to refuse. Stated, not omitted.`);
+        if (fill.none) out.push(`- ${label} — ${nothingHere(slot)}. Stated, not omitted.`);
         else if (fill.cannot_fail) out.push(`- ${label} — cannot fail: ${fill.cannot_fail}`);
         // ⛔ A `refuses` slot carries its content in `outcomes`, not in `says`, so a bare
         // template printed the word "undefined" into the artifact a builder works from.
@@ -466,7 +466,7 @@ function compileOne(corpus: Corpus, scopeId: string): string | null {
          */
         const stated: string[] = [];
         if (fill.says) stated.push(saysText(fill.says).replace(/\s+/g, " ").trim());
-        if (fill.none) stated.push("nothing to refuse. Stated, not omitted.");
+        if (fill.none) stated.push(`${nothingHere(slot)}. Stated, not omitted.`);
         if (fill.cannot_fail) stated.push(`cannot fail: ${fill.cannot_fail}`);
         if (stated.length) {
           out.push(`- ${label} — ${stated.join(" ")}`);
@@ -547,7 +547,8 @@ function compileOne(corpus: Corpus, scopeId: string): string | null {
      */
     const setsOff = corpus.scopes.flatMap((s) =>
       s.scope.exchanges
-        .filter((x) => x.when?.follows === ref || x.when?.follows?.startsWith(`${ref}#`))
+        /** ⛔ ANY of them, since fg-0007 — an exchange may follow several asks. */
+        .filter((x) => (x.when?.follows ?? []).some((f) => f === ref || f.startsWith(`${ref}#`)))
         .map((x) => ({ id: `${s.scope.id}#${x.id}`, title: x.title, says: x.slots.answer?.says }))
     );
     if (setsOff.length) {
