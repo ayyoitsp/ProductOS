@@ -3741,15 +3741,75 @@ if (typeof EventSource !== "undefined") {
   /** ⛔ Same boundary as the card filler: the acts script records a press and needs to refresh. */
   window.refreshNow = apply;
 
-  const es = new EventSource("/api/v2/live");
-  es.addEventListener("changed", () => {
+  /**
+   * ⛔ THE CONNECTION IS REOPENABLE, BECAUSE IT DIED ONCE AND COULD NOT COME BACK.
+   *
+   * On 2026-10-13, 11:22 → 13:29, every read 500'd. This page detected it and said so truthfully —
+   * and then had no way to un-break itself: no 'error' handler, no 'readyState' check, nothing on
+   * tab focus. The banner's elapsed time climbed for hours with a working stream one reload away.
+   *
+   * ⛔ AND "EventSource RETRIES BY ITSELF" IS NOT TRUE OF WHAT HAPPENED. Its automatic retry covers
+   * a DROPPED connection. A non-2xx response is a different thing: the spec fails the connection,
+   * sets readyState to CLOSED and fires 'error' with no retry. So the FIRST 500 killed it, and
+   * the remaining two hours of outage changed nothing.
+   */
+  let es = null;
+  let reopenIn = 2000;
+  let reopenTimer = null;
+  /** ⛔ So the staleness timer cannot turn a long outage into a reconnect every 15 seconds. */
+  let reopening = false;
+
+  const onChanged = () => {
     heard = Date.now();
     stale.hidden = true;
     // ⛔ Straight away, not on the next tick: filing a request is exactly when they want to know.
     askWho();
     pending++;
     if (!unsent()) apply();
+  };
+
+  const connect = () => {
+    if (reopenTimer) clearTimeout(reopenTimer);
+    reopenTimer = null;
+    reopening = false;
+    try {
+      if (es) es.close();
+    } catch (e) {}
+    es = new EventSource("/api/v2/live");
+    es.addEventListener("changed", onChanged);
+    es.addEventListener("beat", onBeat);
+    /** A stream that opened is a stream that works — start the next backoff from the floor. */
+    es.addEventListener("open", () => {
+      reopenIn = 2000;
+    });
+    es.addEventListener("error", () => {
+      /**
+       * ⛔ ONLY WHEN IT IS CLOSED. readyState 0 is CONNECTING, which means the browser IS
+       * retrying — opening a second stream alongside it would double every beat and leak a
+       * connection per blip.
+       */
+      if (!es || es.readyState !== 2) return;
+      reopenAfter(reopenIn);
+      reopenIn = Math.min(reopenIn * 2, 60000);
+    });
+  };
+
+  const reopenAfter = (ms) => {
+    if (reopening) return;
+    reopening = true;
+    if (reopenTimer) clearTimeout(reopenTimer);
+    reopenTimer = setTimeout(connect, ms);
+  };
+
+  /** ⛔ Dead OR never opened. A first connection that 500'd leaves es CLOSED, not absent. */
+  const healIfDead = () => {
+    if (!es || es.readyState === 2) connect();
+  };
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) healIfDead();
   });
+  window.addEventListener("online", healIfDead);
+
   /**
    * ⛔ A PAGE THAT HAS SILENTLY STOPPED FOLLOWING IS THE ONE FAILURE A READER CANNOT DETECT.
    *
@@ -3758,11 +3818,13 @@ if (typeof EventSource !== "undefined") {
    * says so out loud when it stops hearing it. How long since it last heard, because "disconnected"
    * with no duration does not tell a reader whether to trust what is on the screen.
    */
-  es.addEventListener("beat", () => {
+  const onBeat = () => {
     heard = Date.now();
     stale.hidden = true;
     fit();
-  });
+  };
+  /** ⛔ After the handlers exist, or connect attaches undefined. */
+  connect();
   /**
    * ⛔ THE HELD CHANGE IS NOT DROPPED. Without this, a change that arrives while somebody is typing
    * waits forever — and that is the old failure exactly: a page showing truth that moved, with
@@ -3776,10 +3838,17 @@ if (typeof EventSource !== "undefined") {
     // Two missed beats, not one — a single late beat is a slow network, not a dead stream.
     if (since < 60) return;
     fit();
+    /**
+     * ⛔ THE ONLY THING THAT CAN SEE A HALF-OPEN CONNECTION. A TCP connection dropped without a
+     * FIN leaves readyState reporting OPEN forever while nothing arrives — so 'error' never
+     * fires and healIfDead sees a healthy stream. The missing beat is the sole evidence, which
+     * is what this timer already noticed and did nothing about.
+     */
+    reopenAfter(0);
     stale.textContent =
       "Not following any more — nothing heard for " +
       (since < 120 ? since + "s" : Math.round(since / 60) + " min") +
-      ". What is on this page may already be out of date.";
+      ". Trying to reconnect. What is on this page may already be out of date.";
     stale.hidden = false;
     fit();
   }, 15000);
