@@ -57,6 +57,10 @@ test("a prototype is declared by a command, not typed into a file", () => {
   const c = loadCorpus(dir);
   assert.equal(c.prototypes.length, 1);
   assert.equal(c.prototypes[0].title, "CRE — loan processor");
+  /**
+   * ⛔ BARE, BECAUSE THIS CORPUS HAS NO AXIS YET. `--is` keys by the first axis where one is stated;
+   * before any is, inventing a key nobody chose would be the guess this model refuses elsewhere.
+   */
   assert.equal(c.prototypes[0].is, "loan processor");
   assert.equal(c.prototypes[0].starts_at, ref);
 });
@@ -87,7 +91,8 @@ test("the axis is the project's own sentence, and the set carries it", () => {
 
   const sel = selectionOf(loadCorpus(dir));
   assert.equal(sel.question, "Which role is this for?");
-  assert.equal(sel.options[0].is, "admin");
+  assert.deepEqual(sel.axes.length, 1, "one question is one axis");
+  assert.equal(sel.options[0].is[sel.axes[0].id], "admin");
   assert.equal(sel.lands, "admin", "nothing says which option a reader lands in");
   assert.ok(b);
 });
@@ -104,7 +109,7 @@ test("⛔ nothing infers the axis — a corpus that never said it has no questio
   cli(["v2", "prototypes", "new", "Loan processor", "--starts-at", ref, "--is", "processor", "--into", dir]);
   const sel = selectionOf(loadCorpus(dir));
   assert.equal(sel.question, undefined, "something invented a question nobody wrote");
-  assert.match(gapsIn(sel).join("\n"), /nothing saying what they are alternatives about/);
+  assert.match(gapsIn(sel).map((g) => g.says).join("\n"), /nothing saying what they are alternatives about/);
 });
 
 test("how much of the product each one reaches is derived, not typed", () => {
@@ -167,7 +172,7 @@ test("⛔ handover and the page agree about what a door opens on — one predica
     const c = loadCorpus(dir);
     const sel = selectionOf(c);
     return {
-      page: gapsIn(sel).some((g) => /opens on/.test(g)),
+      page: gapsIn(sel).some((g) => g.kind === "prototype-opens-on-nothing"),
       handover: checkCorpus(dir).findings.some((f) => f.kind === "a-prototype-opens-on-nothing"),
       names: sel.options[0].opensOn,
     };

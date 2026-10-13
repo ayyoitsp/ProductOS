@@ -356,18 +356,21 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
      * corpus be handed over". Two renders of one source answering different questions are
      * projections. What would be a second home is two findings.
      */
+    /**
+     * ⛔ THE GAP SAYS ITS OWN KIND. This classified them by regex against the sentence —
+     * `/both answer/`, `/opens on/` — and rewording one silently reclassified it. That happened
+     * within the hour: "both answer X" became "are both X" when the model gained a second axis, the
+     * regex stopped matching, and `two-prototypes-one-answer` reported itself as
+     * `prototype-answers-nothing`. Only the foil's MUST_FIRE caught it.
+     */
     for (const g of gapsIn(selectionOf(corpus))) {
-      if (/opens on/.test(g)) continue;
+      if (g.kind === "prototype-opens-on-nothing") continue;
       add({
         severity: "note",
-        kind: /both answer/.test(g)
-          ? "two-prototypes-one-answer"
-          : /alternatives about/.test(g)
-            ? "prototypes-split-on-nothing"
-            : "prototype-answers-nothing",
+        kind: g.kind,
         where: "the prototype selection",
-        what: g,
-        fix: 'The question belongs to the set and each prototype answers it: `productos v2 prototypes splits-on "<the question>"`, then `--is "<this one\'s answer>"` on each. Nothing infers either — a classifier reading two titles and concluding "role" would be a guess wearing a decision\'s clothes.',
+        what: g.says,
+        fix: 'The axes belong to the set and each prototype says where it sits — settable from the page, or `productos v2 prototypes splits-on "<the question>"` then `--is`. Nothing infers either: a classifier reading two titles and concluding "role" would be a guess wearing a decision\'s clothes.',
       });
     }
   }

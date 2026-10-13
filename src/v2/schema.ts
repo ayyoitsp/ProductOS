@@ -3523,14 +3523,26 @@ export const Prototype = z
       .array(z.object({ label: z.string(), to: z.string().optional() }).strict())
       .default([]),
     /**
-     * This prototype's answer to the question the set splits on — `splits_on` below.
+     * This prototype's answer on each axis the set splits on — `{ <axis id>: <answer> }`.
+     *
+     * ⛔ SEVERAL AXES, BECAUSE ONE WAS WRONG THE DAY IT SHIPPED.
+     *
+     * Peter: *"It's going to split on different products - CRE vs private lending, then also on
+     * roles"*. A single `is:` could say "CRE" or "admin" and never both, so the first real use of
+     * this model would have had to fold two independent facts into one string — "CRE admin" — and
+     * from there nothing can answer *which prototypes cover private lending* or *is there an admin
+     * view of every product line*, which are the only questions a split like that is for.
      *
      * ⛔ THE ANSWER, NOT THE NAME. "CRE — loan processor" is a title somebody wrote for a reader;
-     * `is: loan processor` is which side of the split this one is, and those are different strings
-     * on purpose. A chooser built from titles alone cannot tell you that two of five prototypes are
-     * both the admin, or that nothing covers the signed-out case.
+     * `is: { line: CRE, role: loan processor }` is where this one sits. A chooser built from titles
+     * alone cannot tell you that two of five prototypes are the same combination, or that nothing
+     * covers signed-out.
+     *
+     * ⛔ A PLAIN STRING IS STILL ACCEPTED, and means the first axis. Corpora were written against
+     * the single-axis form within the hour, and a schema that refuses them turns an improvement
+     * into a migration somebody has to be told about.
      */
-    is: z.string().optional(),
+    is: z.union([z.string(), z.record(z.string())]).optional(),
     /** Which layout files it was drawn from, so a reader can go and look. */
     from: z.array(z.string()).default([]),
     drawn_at: z.string().optional(),
@@ -3559,11 +3571,43 @@ export type Prototype = z.infer<typeof Prototype>;
  */
 export const PrototypeFile = z
   .object({
-    /** The question the selection asks, in the project's own words. */
-    splits_on: z.string().optional(),
+    /**
+     * The axes this product's prototypes split on, in the project's own words — in order.
+     *
+     * ⛔ A LIST, NOT A SENTENCE. Peter: *"It's going to split on different products - CRE vs private
+     * lending, then also on roles"*. Two independent facts about a prototype, and one string could
+     * hold only one of them.
+     *
+     * Each axis has an `id` a prototype's `is` keys on, and `asks` — the question a reader is shown.
+     * ⛔ `asks` IS NEVER DERIVED FROM `id`: "line" is not a question, and a surface that
+     * title-cased it into one would be putting words in the project's mouth.
+     */
+    splits_on: z
+      .union([
+        /** ⛔ One sentence still parses, and means a single axis. See `Prototype.is`. */
+        z.string(),
+        z.array(z.object({ id: z.string().min(1), asks: z.string().min(1) }).strict()),
+      ])
+      .optional(),
     prototypes: z.array(Prototype).default([]),
   })
   .strict();
+
+/** The axes, however the file spelled them. One shape for every reader. */
+export function axesOf(splitsOn: string | Array<{ id: string; asks: string }> | undefined): Array<{ id: string; asks: string }> {
+  if (!splitsOn) return [];
+  return typeof splitsOn === "string" ? [{ id: "split", asks: splitsOn }] : splitsOn;
+}
+
+/** A prototype's answers, however its `is` was spelled, keyed by axis id. */
+export function answersOf(
+  is: string | Record<string, string> | undefined,
+  axes: Array<{ id: string; asks: string }>
+): Record<string, string> {
+  if (!is) return {};
+  if (typeof is === "string") return axes[0] ? { [axes[0].id]: is } : { split: is };
+  return is;
+}
 
 export const Style = z
   .object({

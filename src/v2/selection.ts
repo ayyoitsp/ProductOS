@@ -25,6 +25,7 @@
  * truth, so nobody types it.
  */
 import { resolveView, type Corpus } from "./load.js";
+import { axesOf, answersOf } from "./schema.js";
 import { walkOf } from "./walk.js";
 
 /**
@@ -64,8 +65,8 @@ export function doorOpensOn(
 export interface Option {
   id: string;
   title: string;
-  /** This one's answer to the question — absent until somebody says it. */
-  is?: string;
+  /** This one's answer on each axis, keyed by axis id. Empty until somebody says. */
+  is: Record<string, string>;
   startsAt: string;
   /** The screen it opens on, by name, or absent where `starts_at` reaches nothing. */
   opensOn?: string;
@@ -78,7 +79,15 @@ export interface Option {
 }
 
 export interface Selection {
-  /** The question, in the project's own words. Absent until stated. */
+  /**
+   * The axes, in order — each with the question a reader is shown.
+   *
+   * ⛔ SEVERAL, BECAUSE ONE WAS WRONG THE DAY IT SHIPPED. Peter: *"It's going to split on different
+   * products - CRE vs private lending, then also on roles"*. A single question could hold one of
+   * those and the other would have had to be folded into the same string.
+   */
+  axes: Array<{ id: string; asks: string }>;
+  /** The first axis's question, where there is one. */
   question?: string;
   options: Option[];
   /**
@@ -107,6 +116,7 @@ export function selectionOf(c: Corpus): Selection {
       }
     }
 
+  const axes = axesOf(c.splitsOn);
   const options = protos.map((p): Option => {
     /**
      * ⛔ THE WALK FROM THIS DOOR, NOT THE WHOLE CORPUS. The point of several prototypes is that each
@@ -117,7 +127,7 @@ export function selectionOf(c: Corpus): Selection {
     return {
       id: p.id,
       title: p.title,
-      is: p.is,
+      is: answersOf(p.is, axes),
       startsAt: p.starts_at,
       opensOn: doorOpensOn(c, p.starts_at)?.title,
       reaches: walk.reachable.size,
@@ -126,7 +136,30 @@ export function selectionOf(c: Corpus): Selection {
     };
   });
 
-  return { question: c.splitsOn, options, lands: options[0]?.id };
+  return { axes, question: axes[0]?.asks, options, lands: options[0]?.id };
+}
+
+/**
+ * ⛔ A GAP CARRIES ITS KIND, RATHER THAN A CHECK MATCHING MY PROSE.
+ *
+ * `check` classified these by regex against the sentence — `/both answer/`, `/opens on/` — so
+ * rewording a message silently reclassified a finding. It happened within the hour: "both answer
+ * X" became "are both X" when the model gained a second axis, the regex stopped matching, and
+ * `two-prototypes-one-answer` was reported as `prototype-answers-nothing`. The foil's MUST_FIRE
+ * caught it, which is the only reason it is not still true.
+ *
+ * ⛔ THE PROSE IS STILL THE PROSE. A reader gets the sentence; a check gets the kind. What is gone
+ * is a second place that has to agree with the first about what a sentence means.
+ */
+export type GapKind =
+  | "prototypes-split-on-nothing"
+  | "prototype-answers-nothing"
+  | "two-prototypes-one-answer"
+  | "prototype-opens-on-nothing";
+
+export interface Gap {
+  kind: GapKind;
+  says: string;
 }
 
 /**
@@ -135,38 +168,63 @@ export function selectionOf(c: Corpus): Selection {
  * ⛔ SEPARATE FROM THE DERIVATION, so a surface can show the selection and a check can report the
  * gaps without either one deciding what the other says. Both read the same list.
  */
-export function gapsIn(s: Selection): string[] {
-  const gaps: string[] = [];
+export function gapsIn(s: Selection): Gap[] {
+  const gaps: Gap[] = [];
   if (s.options.length > 1 && !s.question)
-    gaps.push(
-      `${s.options.length} prototypes with nothing saying what they are alternatives about — state it with \`splits_on\``
-    );
+    gaps.push({
+      kind: "prototypes-split-on-nothing",
+      says: `${s.options.length} prototypes with nothing saying what they are alternatives about — state it with \`splits_on\``,
+    });
   /**
    * ⛔ A MISSING ANSWER COUNTS WHETHER OR NOT THE QUESTION HAS BEEN WRITTEN DOWN YET.
    *
    * Keyed on `question` alone, this fired for nobody in the one corpus built to provoke it: no
    * question stated, so no answer was owed, so three prototypes answering an axis and a fourth
-   * answering nothing read as entirely consistent. If any option says which side of the split it is
-   * then a split is in play, and the one that says nothing is the hole — exactly the state a
-   * half-authored set is in, which is when somebody is looking.
+   * answering nothing read as entirely consistent. If any option says where it sits then a split is
+   * in play, and the one that says nothing is the hole — exactly the state a half-authored set is
+   * in, which is when somebody is looking.
+   *
+   * ⛔ PER AXIS, so a prototype that says which product line it is and nothing about role is HALF
+   * answered rather than answered. With one axis folded into one string that state could not exist,
+   * which is most of why one axis was wrong.
    */
-  const anyAnswers = s.options.some((o) => o.is);
+  const axes = s.axes.length ? s.axes : [{ id: "split", asks: "" }];
+  const anyAnswers = s.options.some((o) => Object.keys(o.is).length);
   if (s.question || anyAnswers)
     for (const o of s.options)
-      if (!o.is)
-        gaps.push(
-          s.question
-            ? `"${o.title}" gives no answer to "${s.question}" — say which one it is with \`is\``
-            : `"${o.title}" says nothing about which side of the split it is, while others do`
-        );
+      for (const ax of axes)
+        if (!o.is[ax.id])
+          gaps.push({
+            kind: "prototype-answers-nothing",
+            says: ax.asks
+              ? `"${o.title}" gives no answer to "${ax.asks}" — say which one it is`
+              : `"${o.title}" says nothing about where it sits, while others do`,
+          });
   /**
-   * ⛔ TWO OPTIONS WITH THE SAME ANSWER IS THE ONE A READER CANNOT SEE PAST. The chooser shows two
-   * rows and both say "admin", so the split it claims to be is not the split it is.
+   * ⛔ TWO OPTIONS AT THE SAME POINT IS THE ONE A READER CANNOT SEE PAST. The chooser shows two rows,
+   * both say "CRE · admin", and the split it claims to be is not the split it is.
+   *
+   * ⛔ THE WHOLE COMBINATION, NOT ONE AXIS. Two prototypes both answering "CRE" is exactly right
+   * when one is the admin and one the processor — comparing axis by axis would report every
+   * correctly-crossed set as a duplicate, which is the false-positive direction that teaches people
+   * to ignore the page.
    */
-  const seen = new Map<string, string[]>();
-  for (const o of s.options) if (o.is) seen.set(o.is, [...(seen.get(o.is) ?? []), o.title]);
-  for (const [is, which] of seen) if (which.length > 1) gaps.push(`${which.join(" and ")} both answer "${is}"`);
+  const at = new Map<string, string[]>();
+  for (const o of s.options) {
+    const answered = axes.map((ax) => o.is[ax.id]).filter(Boolean);
+    if (answered.length !== axes.length) continue;
+    const key = answered.join(" · ");
+    at.set(key, [...(at.get(key) ?? []), o.title]);
+  }
+  for (const [where, which] of at)
+    if (which.length > 1)
+      gaps.push({ kind: "two-prototypes-one-answer", says: `${which.join(" and ")} are both "${where}"` });
   for (const o of s.options)
-    if (!o.opensOn) gaps.push(`"${o.title}" opens on ${o.startsAt}, which is not a screen in this corpus`);
+    if (!o.opensOn)
+      gaps.push({
+        kind: "prototype-opens-on-nothing",
+        says: `"${o.title}" opens on ${o.startsAt}, which is not a screen in this corpus`,
+      });
   return gaps;
 }
+

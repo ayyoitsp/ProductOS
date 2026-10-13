@@ -29,8 +29,15 @@ import { closeNote, fileNote, replyToNote } from "./notes.js";
 import { mayRecord, mayRelay, type Principal } from "./identity.js";
 import fs from "node:fs";
 import path from "node:path";
-import { CORPUS_DIRS } from "./load.js";
+import { CORPUS_DIRS, loadCorpus } from "./load.js";
 import { append } from "./log.js";
+import { writePrototypes } from "./draw-write.js";
+import { axesOf, answersOf } from "./schema.js";
+import { doorOpensOn } from "./selection.js";
+
+/** An axis id from its question, so nobody is asked to invent a slug for a sentence they just wrote. */
+const slugify = (s: string): string =>
+  s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 24) || "split";
 
 export interface Outcome {
   ok: boolean;
@@ -262,6 +269,169 @@ export const INTENTS: Intent[] = [
         says: `wrote ${key}`,
       });
       return { ok: true, said: `wrote ${key}` };
+    },
+  },
+  /**
+   * ⛔ THE SPLIT IS SET FROM WHERE HE IS STANDING, NOT BY A COMMAND SOMEBODY ELSE RUNS.
+   *
+   * Peter, after I asked him what his prototypes split on and where a door went: *"again, why do you
+   * fucking need to know this? I need you to make framework changes. I should be able to drive this
+   * from the listener/input, right??? why could you possibly need this?"*
+   *
+   * He is right and the mistake was mine in a specific way: I built `v2 prototypes splits-on` and
+   * `v2 prototypes new`, which require a session at a terminal in a checkout. He reviews in a
+   * browser. So the capability existed and he could not reach it, and I turned that into a question
+   * for him instead of a door — which is the whole shape of thing this project exists to stop.
+   *
+   * ⛔ `author`, NOT `consent`. Saying what a product's prototypes split on is somebody writing
+   * product truth, not agreeing to it. Nothing here stamps.
+   */
+  {
+    name: "splits-on",
+    gate: "author",
+    does: "Say what this product's prototypes are alternatives about — one axis, or several",
+    takes: [
+      {
+        name: "axes",
+        says: '⛔ The questions, in order. Either one sentence, or a list of `{id, asks}` — e.g. [{"id":"line","asks":"Which product line?"},{"id":"role","asks":"Which role?"}]. A product splits on more than one thing and one sentence could only hold the first',
+        required: true,
+      },
+    ],
+    run: (a, body) => {
+      const raw = body.axes;
+      /**
+       * ⛔ ONE SENTENCE AND A LIST BOTH ARRIVE HERE, because a single axis is the common case and
+       * making somebody write JSON for it would be a door nobody uses.
+       */
+      const axes: Array<{ id: string; asks: string }> = [];
+      const parse = (v: unknown): void => {
+        if (typeof v === "string") {
+          const asks = v.trim();
+          if (asks) axes.push({ id: slugify(asks), asks });
+          return;
+        }
+        if (v && typeof v === "object" && !Array.isArray(v)) {
+          const o = v as { id?: unknown; asks?: unknown };
+          const asks = str(o.asks).trim();
+          if (!asks) return;
+          axes.push({ id: str(o.id).trim() || slugify(asks), asks });
+        }
+      };
+      if (Array.isArray(raw)) for (const v of raw) parse(v);
+      else parse(raw);
+      if (!axes.length)
+        return { ok: false, why: "say what they are alternatives about, in your own words", detail: ['e.g. "Which product line?"'] };
+      /** ⛔ Two axes with one id would make a prototype's answers unaddressable. */
+      const ids = new Set<string>();
+      for (const ax of axes) {
+        if (ids.has(ax.id))
+          return { ok: false, why: `two axes called "${ax.id}"`, detail: ["each needs its own id — that is what a prototype's answers key on"] };
+        ids.add(ax.id);
+      }
+      const corpus = loadCorpus(a.dir);
+      writePrototypes(a.dir, corpus.prototypes, axes);
+      append(a.dir, {
+        kind: "corpus-changed",
+        at: new Date().toISOString(),
+        by: a.who.actor,
+        via: "page",
+        ref: "prototypes",
+        says: `prototypes split on ${axes.map((x) => x.asks).join(" and ")}`,
+      });
+      const owed = corpus.prototypes.filter((p) => {
+        const answers = answersOf(p.is, axes);
+        return axes.some((ax) => !answers[ax.id]);
+      });
+      return {
+        ok: true,
+        said: `they split on ${axes.map((x) => x.asks).join(" and ")}`,
+        detail: owed.length ? [`${owed.length} of ${corpus.prototypes.length} do not say where they sit yet: ${owed.map((p) => p.title).join(", ")}`] : [],
+      };
+    },
+  },
+  /**
+   * ⛔ AND A PROTOTYPE ITSELF — declared, moved, or placed on the axes, from the page.
+   *
+   * Same reason as above. The door that was missing is not "run a command for me"; it is being able
+   * to say *this one is the private-lending admin, and it opens here* while looking at the thing.
+   */
+  {
+    name: "prototype",
+    gate: "author",
+    does: "Declare a way through the product, or say where an existing one sits",
+    takes: [
+      { name: "id", says: "Which prototype. A new id declares one; an existing id changes that one", required: true },
+      { name: "title", says: "What to call it, in the words a reader would use. Required when declaring", required: false },
+      { name: "startsAt", says: "The screen somebody comes in on, as <scope>#<view>", required: false },
+      { name: "is", says: 'Where it sits, keyed by axis id — e.g. {"line":"private lending","role":"admin"}', required: false },
+      { name: "shellFrom", says: "A route whose layouts are its chrome, where the codebase is reachable", required: false },
+    ],
+    run: (a, body) => {
+      const id = str(body.id).trim();
+      if (!id) return { ok: false, why: "say which prototype" };
+      const corpus = loadCorpus(a.dir);
+      const axes = axesOf(corpus.splitsOn);
+      const existing = corpus.prototypes.find((p) => p.id === id);
+      const title = str(body.title).trim() || existing?.title;
+      if (!title) return { ok: false, why: `"${id}" is new, so say what to call it`, detail: ["title"] };
+      const startsAt = str(body.startsAt).trim() || existing?.starts_at;
+      if (!startsAt) return { ok: false, why: `"${title}" needs a front door`, detail: ["startsAt, as <scope>#<view>"] };
+      /**
+       * ⛔ THE DOOR IS RESOLVED BEFORE ANYTHING IS WRITTEN, through the same predicate `check` uses.
+       * A door onto nothing is refused at handover anyway; catching it here means the person who
+       * typed it hears about it instead of the next reader who clicks it.
+       */
+      if (!doorOpensOn(corpus, startsAt))
+        return {
+          ok: false,
+          why: `no screen "${startsAt}" in this corpus, so nothing can open on it`,
+          detail: ["name it as <scope>#<view>"],
+        };
+      /** Answers merge, so saying the role does not wipe the product line. */
+      const answers: Record<string, string> = { ...answersOf(existing?.is, axes) };
+      const given = body.is;
+      if (given && typeof given === "object" && !Array.isArray(given))
+        for (const [k, v] of Object.entries(given as Record<string, unknown>)) {
+          const value = str(v).trim();
+          if (value) answers[k] = value;
+          else delete answers[k];
+        }
+      else if (typeof given === "string" && given.trim() && axes[0]) answers[axes[0].id] = given.trim();
+
+      const next = {
+        id,
+        title,
+        starts_at: startsAt,
+        ...(Object.keys(answers).length ? { is: answers } : {}),
+        ...(str(body.shellFrom).trim() || existing?.shell_from ? { shell_from: str(body.shellFrom).trim() || existing?.shell_from } : {}),
+        /** ⛔ The chrome and the menu are output, and they are kept — a placement is not a redraw. */
+        ...(existing?.shell_html ? { shell_html: existing.shell_html } : {}),
+        nav: existing?.nav ?? [],
+        from: existing?.from ?? [],
+      };
+      const protos = existing
+        ? corpus.prototypes.map((p) => (p.id === id ? next : p))
+        : [...corpus.prototypes, next];
+      writePrototypes(a.dir, protos, corpus.splitsOn);
+      append(a.dir, {
+        kind: "corpus-changed",
+        at: new Date().toISOString(),
+        by: a.who.actor,
+        via: "page",
+        ref: `prototype:${id}`,
+        says: existing ? `moved ${title}` : `declared ${title}`,
+      });
+      const owed = axes.filter((ax) => !answers[ax.id]);
+      return {
+        ok: true,
+        said: `${existing ? "changed" : "declared"} ${title}, opening on ${startsAt}`,
+        detail: [
+          ...(Object.keys(answers).length ? [axes.map((ax) => `${ax.asks} ${answers[ax.id] ?? "—"}`).join(" · ")] : []),
+          ...(owed.length ? [`still says nothing about: ${owed.map((ax) => ax.asks).join(", ")}`] : []),
+          /** ⛔ Said out loud: the chrome is drawn from a repository an instance does not have. */
+          ...(next.shell_from && !next.shell_html ? ["its chrome is not drawn yet — that needs a checkout"] : []),
+        ],
+      };
     },
   },
   {
