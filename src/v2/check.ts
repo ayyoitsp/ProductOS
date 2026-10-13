@@ -402,6 +402,45 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
    * in is a fact about the product and is reported.
    */
   {
+    /**
+     * ⛔ A PROTOTYPE OPENS ON A SCREEN, AND ONE THAT DOES NOT IS A DOOR INTO NOTHING.
+     *
+     * `check` refuses a `depends_on`, an `affected_by`, a `leads_to` and a `within` that resolve to
+     * nothing. `starts_at` is a reference of exactly that kind and was not among them, so a
+     * prototype could name a view that does not exist and pass handover in silence.
+     *
+     * Found on the deployed Bilrost corpus: the **Admin** option opened on
+     * `org-loan-terms#org-loan-terms`, and that scope's views are `fannie-program-settings`,
+     * `program-control`, `conventions-section` … — no view of that id. The option had been leading
+     * nowhere on the page that corpus is reviewed on, and nothing said so.
+     *
+     * ⛔ REFUSED, NOT REPORTED, and that is the opposite call to the one three lines down. A screen
+     * with no way in is a fact about a product nobody has finished wiring; a DOOR naming a screen
+     * that does not exist is an authoring mistake — the author typed a ref and got it wrong, and
+     * every reader who clicks it lands on nothing. Target state does not require the view to be
+     * BUILT; it does require it to EXIST in the truth.
+     */
+    for (const p of corpus.prototypes ?? []) {
+      const at = (p as { starts_at?: string }).starts_at ?? "";
+      if (!at) continue;
+      /**
+       * ⛔ `resolveView`, NOT `resolveRef`. The first version used `resolveRefSafely`, which
+       * resolves EXCHANGES — so `money#balance`, a perfectly good screen, came back
+       * `no exchange "balance" in money` and every prototype was refused. A check that refuses
+       * correct corpora is worse than no check, and it only showed up because the fixture had one
+       * valid door beside the broken one.
+       */
+      const resolved = corpus.scopes.some((e) => resolveView(corpus, e.scope, at));
+      if (resolved) continue;
+      add({
+        severity: "refuse",
+        kind: "a-prototype-opens-on-nothing",
+        where: (p as { id?: string }).id ?? at,
+        what: `opens on \`${at}\`, and there is no such screen here`,
+        fix: "name a screen that exists as `<scope>#<view>` — a prototype is a door, and a door onto nothing is worse than no door, because the page offers it",
+      });
+    }
+
     const walk = walkOf(corpus);
     for (const entry of corpus.scopes)
       for (const view of entry.scope.views ?? []) {
