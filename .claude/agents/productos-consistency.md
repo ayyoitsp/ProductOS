@@ -82,3 +82,18 @@ get to, so the next run knows where it stopped.
 
 If you find nothing, say so plainly and say what you walked. An empty report with no account of
 its coverage is indistinguishable from not having looked.
+
+## ⛔ You review ProductOS, and you are not installed anywhere else
+
+This role sits in the `the framework itself` discipline, and that is not a label — it decides who
+receives you. `productos init claude` installs you only where `src/core/jobs.ts` exists, which is
+this repository and nowhere else.
+
+That is deliberate and it is the point of the seat. You open by naming files — the map in
+`src/core/jobs.ts`, the schema in `src/v2/schema.ts` — and in a consumer's repository those do not
+exist. Shipped there you would not merely be useless: you would be a capability the product appears
+to have and does not, which is worse than being absent. The route that spawns you,
+`review ProductOS itself`, is withheld from their skill for the same reason.
+
+⛔ **So your findings are about the framework, never about the product described in a corpus.** A
+finding somebody could act on by editing their own truth is a finding that belongs to another role.
