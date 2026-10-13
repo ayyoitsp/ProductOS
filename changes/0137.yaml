@@ -1,9 +1,9 @@
 id: "0137"
-said: <select 0 — you predicted 'in the hundreds' ... the drawings in the corpus contain no <select> either. The page is faithfully rendering what is stored, and what is stored was drawn by the OLD code
-at: 2026-10-12
-kind: generator
+said: can we fix this listener so it doesn't error out on the front end
+at: 2026-10-13
+kind: surface
 reaches:
-  generate: AND NOT INSIDE A CONTROL, WHERE THE LONE IDENTIFIER IS WHAT THE CONTROL SAYS
-  pin: a control shows what it says, not an empty box
+  surface: healIfDead
+  pin: the page's live connection reopens after a 500 kills it
 waived: {}
 closed: 2026-10-13
