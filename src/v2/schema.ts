@@ -757,6 +757,25 @@ export const SlotFill = z
           .strict()
       )
       .default([]),
+    /**
+     * ⛔ THE CHARTER SECTION THIS SENTENCE RESTS ON — `<charter>#<section>`.
+     *
+     * An author resting two slots on one product-wide principle had nowhere to point, so it
+     * restated the substance of the charter's "an unreadable value is said, not shown as absent"
+     * in BOTH of them. That is the duplication the first rule of this repo forbids — every fact
+     * has exactly one home — and there was no alternative available. Reported as fg-0013.
+     *
+     * ⛔ `rests_on`, NOT `defers_to`, AND THE DIFFERENCE IS LOAD-BEARING. A rule SUPPLIES or
+     * CONSTRAINS a slot: it reaches in and changes what the slot promises, which is why
+     * `defers_to` names something the machinery resolves and weighs. A charter section settles a
+     * design argument and governs nothing mechanically — so this is a CITATION. `check` resolves
+     * it, so a wrong one is caught; nothing derives a promise from it, and nothing should.
+     */
+    rests_on: z
+      .array(z.string())
+      .min(1)
+      .optional()
+      .describe("<charter>#<section> — the principle this sentence follows from, cited not restated"),
     /** `refuses: none` and `cannot_fail` are real, distinct, statable answers — which is how
      *  latitude reaches a builder by declaration rather than by absence. */
     none: z.boolean().optional(),

@@ -42,6 +42,13 @@ const SAMPLE = {
    * would have survived the sentence becoming "anybody may".
    */
   held_by: ["somebody-else-entirely"],
+  /**
+   * ⛔ A CITATION IS PART OF WHAT SOMEBODY AGREED TO. A reviewer reads a sentence presented as
+   * resting on a charter principle; remove the citation and the sentence is unchanged while its
+   * stated basis is gone, point it elsewhere and what they read has changed. Same argument this
+   * file already makes about `held_by`.
+   */
+  rests_on: ["decisions#something-else-entirely"],
 };
 
 test("every key of SlotFill changes the canonical form the hash is taken over", () => {

@@ -443,6 +443,20 @@ export function coveredBy(corpus: Corpus, target: string): Covered | null {
         reads.push(`    ⊗ ${x.rule} does NOT hold here — ${norm(x.because)}`);
       for (const x of fill.defers_to ?? [])
         reads.push(`    ≥ ${x.rule} still holds here — ${norm(x.because)}`);
+      /**
+       * ⛔ A CITATION IS PART OF WHAT SOMEBODY AGREED TO, which is the same argument this file
+       * already makes about `held_by` and `instead_of`.
+       *
+       * A reviewer reads "the read is reported as unreadable, not shown as absent" presented as
+       * resting on a charter principle. Remove the citation and the sentence is unchanged while its
+       * stated basis is gone; point it at a different principle and what they read has changed. So
+       * a stamp taken before that must stop reading as current.
+       *
+       * Caught by `v2-stamp`'s own coverage test the moment `rests_on` existed — the test whose
+       * comment records `held_by` having been invisible to this hash, and calls that a tenet-one
+       * hole.
+       */
+      for (const ref of fill.rests_on ?? []) reads.push(`    rests on ${ref}`);
       parts.push(
         `${slot}: ${
           k === "stated"

@@ -853,6 +853,31 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
             fix: "write a given/when/then whose `then` is the new state — the clause with no criterion is the one that goes missing without a trace",
           });
       }
+      /**
+       * ⛔ A CITATION THAT POINTS AT NOTHING IS WORSE THAN A RESTATEMENT (fg-0013).
+       *
+       * `rests_on` lets a slot name the charter section it follows from instead of restating it.
+       * That only helps if the ref resolves — a dangling one tells a reader the sentence has a
+       * principle behind it and gives them no way to read it, which is strictly worse than the
+       * duplication it replaced.
+       *
+       * ⛔ AND IT IS NOT `defers_to`. A rule reaches in and changes what a slot promises; a charter
+       * section settles a design argument and governs nothing mechanically. So this resolves the
+       * ref and stops — nothing derives a promise from it.
+       */
+      for (const slot of SLOTS) {
+        for (const ref of ex.slots[slot]?.rests_on ?? []) {
+          const got = resolveRefSafely(corpus, ref);
+          if (!got || got.ref.kind !== "section")
+            add({
+              severity: "refuse",
+              kind: "rests-on-nothing",
+              where: `${scope.id}#${ex.id}#${slot}`,
+              what: `says it rests on "${ref}", which is not a charter section here`,
+              fix: "name the section as <charter>#<section>, or drop the citation — a reader told a sentence has a principle behind it needs to be able to read it",
+            });
+        }
+      }
       const e = existsOf(corpus, scope.id, ex.exists);
       if (e === "withdrawn")
         add({

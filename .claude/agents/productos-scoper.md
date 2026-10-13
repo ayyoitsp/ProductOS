@@ -320,6 +320,24 @@ at the same grain as the details it exists to frame.
 together" from the screens beneath it and the `leads_to` of their parts — so record `leads_to`, or
 the group's high-level view is a list of screens rather than a flow.
 
+### ⛔ `rests_on:` — cite the charter, do not restate it
+
+```yaml
+fails:
+  says: The read is reported as unreadable, not shown as absent.
+  rests_on: [decisions#an-unreadable-value-is-said-not-shown-as-absent]
+```
+
+⛔ **An author with nowhere to point restated one charter section in two slots** — the duplication
+the first rule of this repo forbids, with no alternative available (fg-0013). If your sentence
+follows from a product-wide principle, cite the section and let the reader go read it.
+
+⛔ **`rests_on` is not `defers_to`, and the difference decides which you want.** A rule SUPPLIES or
+CONSTRAINS a slot — it reaches in and changes what the slot promises, which is why `defers_to`
+names something the machinery resolves and weighs. A charter section settles a design argument and
+governs nothing mechanically, so this is a **citation**: `check` resolves it, the packet prints it
+under *"What these sentences rest on, rather than restate"*, and nothing derives a promise from it.
+
 ### ⛔ Four more, from the same pair of runs
 
 **`set_by:` / `read_by:` on a term — the other half is a SIBLING feature.**
