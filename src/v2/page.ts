@@ -7042,6 +7042,20 @@ export const STYLE = `<style>
   .wsel-more { font: inherit; font-size: .72rem; background: none; border: none; padding: 0;
     color: var(--accent); cursor: pointer; text-decoration: underline; }
   .wsel-detail { margin: 0 0 .9rem; padding: .6rem .7rem; border: 1px solid var(--line); border-radius: 10px; background: var(--card); }
+  /*
+   * The empty state, which is the one that has to explain itself.
+   *
+   * ⛔ OPEN, NOT BEHIND A DISCLOSURE — "why is it just two buttons again???" was asked of a page
+   * whose instructions were inside the thing a link called "show" was hiding.
+   */
+  .wstart { margin: 0 0 .9rem; padding: .6rem .7rem; border: 1px dashed var(--line); border-radius: 10px; }
+  .wstart-q { margin: 0 0 .45rem; font-size: .8rem; font-weight: 600; }
+  .wstart-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: .5rem; }
+  .wstart-row label { display: flex; flex-direction: column; gap: .1rem; }
+  .wstart-row label span { font-size: .65rem; text-transform: uppercase; letter-spacing: .07em; color: var(--dim); font-weight: 600; }
+  .wstart-row input { font: inherit; font-size: .8rem; padding: .25rem .4rem; border: 1px solid var(--line);
+    border-radius: 8px; background: var(--card); color: var(--ink); min-width: 11rem; }
+  .wstart-eg { margin: .45rem 0 0; font-size: .72rem; color: var(--dim); }
   .wdims { width: 100%; border-collapse: collapse; font-size: .78rem; }
   .wdims th, .wdims td { text-align: left; padding: .2rem .35rem; border-bottom: 1px solid var(--line); }
   .wdims thead th { font-size: .65rem; text-transform: uppercase; letter-spacing: .06em; color: var(--dim); font-weight: 600; }
@@ -7640,7 +7654,45 @@ function selectionAtTheRoot(sel: Selection): string {
 
   /** One line, not a list. The count, and where the detail is. */
   const quiet = gaps.length
-    ? `<span class="wsel-note">${gaps.length} thing${gaps.length === 1 ? "" : "s"} unsettled about this · <button type="button" class="wsel-more" data-sel-more>show</button></span>`
+    ? `<span class="wsel-note">${gaps.length} thing${gaps.length === 1 ? "" : "s"} unsettled about this · <button type="button" class="wsel-more" data-sel-more>${
+        dimensions.length ? "show" : "the rest"
+      }</button></span>`
+    : "";
+
+  /**
+   * ⛔ THE STATE WITH NOTHING SET UP WAS THE STATE I HID THE SET-UP IN.
+   *
+   * Peter, looking at his own product: *"i don't get it. why is it just two buttons again???"*
+   *
+   * Because no dimension is named, so there is nothing to choose between and the surface falls back
+   * to one button per prototype — which is honest and useless. The way IN was a link labelled
+   * "show", and the sentence telling him what to do was INSIDE the thing that link hides: "name a
+   * dimension below", below a collapsed element. I built the feature, hid its entrance, and then
+   * told him in chat three times that it was his to type.
+   *
+   * ⛔ SO THE EMPTY STATE IS THE AFFORDANCE. Two fields, open, on the bar, in the words of the
+   * question they answer — and they vanish the moment a dimension exists, because then the chips
+   * are the surface and this would be clutter. An empty state that explains itself is worth more
+   * than any amount of prose elsewhere, and a surface whose instructions are behind a disclosure is
+   * a surface with no instructions.
+   */
+  const invite = !dimensions.length
+    ? `<div class="wstart">
+        <p class="wstart-q">${
+          sel.options.length > 1
+            ? `These ${sel.options.length} are alternatives — of what?`
+            : "What will this product's prototypes be alternatives about?"
+        }</p>
+        <div class="wstart-row" data-dim-row="">
+          <label><span>Dimension</span><input name="asks" placeholder="Role" spellcheck="false"></label>
+          <label><span>Its values</span><input name="values" placeholder="admin, loan processor" spellcheck="false"></label>
+          <button type="button" data-dims-save>Add</button>
+          <span class="status" data-dims-status></span>
+        </div>
+        <p class="wstart-eg">Add another for a second dimension — a product split by line of business
+        <em>and</em> by role has one row each, and every combination of their values is a prototype
+        somebody can ask for.</p>
+      </div>`
     : "";
 
   return `<div class="wsel">
@@ -7650,6 +7702,7 @@ function selectionAtTheRoot(sel: Selection): string {
       <span class="wsel-now" data-walk-now>${line(landing.title)}</span>
       ${quiet}
     </div>
+    ${invite}
     <div class="wsel-detail" hidden data-sel-detail>
       ${gaps.length ? `<ul class="wsel-gaps">${gaps.map((g) => `<li data-gap="${esc(g.kind)}">${line(g.says)}</li>`).join("")}</ul>` : ""}
       ${selectionEditor(sel)}
