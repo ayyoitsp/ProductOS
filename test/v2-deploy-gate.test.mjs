@@ -99,9 +99,57 @@ test("nothing reaches staging without the guard, and deploy adds build and the s
    * ⛔ SO IT IS ASSERTED, NOT SKIPPED, AND THE ASSERTION CARRIES A SHA. A bare `SKIP_TESTS=1` is a
    * flag somebody sets once and forgets; a sha cannot be stale without being wrong.
    */
+  /**
+   * ⛔ THE SUITE MUST BE BOUNDED, OR THE GATE DIES WITH NO OUTPUT AND NO VERDICT.
+   *
+   * `npm test` was `node --test test/*.test.mjs` with no per-test timeout, so a single test that
+   * hangs takes the whole run with it — and because `suite-now` captures the output, a killed run
+   * prints NOTHING. That ate four gate attempts in one session: killed, zero bytes, no failing test
+   * named, nothing to act on. `v2-watch` was the one hanging, under load, and it took isolating it
+   * file by file to find out.
+   *
+   * ⛔ A HANG AND A FAILURE ARE NOT THE SAME EVENT AND MUST NOT LOOK THE SAME. With a bound, the
+   * same test reports `not ok - it says nothing until something is recorded, then says what` and
+   * the run completes. Without one, the gate looks like infrastructure trouble and gets re-run.
+   *
+   * 300s per test against a slowest observed test of ~24s — roughly twelve times headroom, so load
+   * does not turn a slow test into a red one, while a true hang is unbounded and still caught.
+   */
+  const pkg = JSON.parse(fs.readFileSync("package.json", "utf-8"));
+  assert.match(
+    pkg.scripts.test,
+    /--test-timeout=\d+/,
+    "npm test has no per-test timeout, so one hanging test kills the gate run with no output at all",
+  );
+  assert.ok(
+    Number(/--test-timeout=(\d+)/.exec(pkg.scripts.test)[1]) >= 60000,
+    "the bound is tight enough that a slow test on a loaded machine would read as a failure",
+  );
+
   const suite = recipe("suite-now");
   assert.match(suite, /npm test/, "nothing runs the suite any more");
   assert.match(suite, /# fail 0/, "the suite's result is not actually checked");
+  /**
+   * ⛔ AND `# fail 0` ALONE IS A HOLE, BECAUSE A TIMEOUT IS COUNTED IN NEITHER TALLY.
+   *
+   *     not ok 1 - a test that never finishes
+   *     # tests 1   # pass 0   # fail 0
+   *
+   * So the gate's original condition was satisfied by a suite containing a timed-out test, and it
+   * would have reported green and deployed. Found while proving that the new `--test-timeout` turns
+   * a hang into a verdict: it does, and the verdict was one the gate could not read.
+   */
+  /**
+   * ⛔ ASSERTED ON THE CONDITION, NOT ON THE WORDS. A first attempt matched `/not ok/`, which the
+   * recipe has always contained — the line that PRINTS the failures. It passed with the guard
+   * removed, i.e. it tested nothing. The guard is the `grep -q` used as a test.
+   */
+  assert.match(
+    suite,
+    /grep -qE '\^not ok'/,
+    "suite-now trusts the fail tally alone, which a timed-out test does not appear in",
+  );
+
   assert.match(suite, /SUITE_VERIFIED=/, "suite-now does not print the assertion to paste, so the two halves will drift");
 
   assert.match(d, /suite-now/, "deploy-check neither runs the suite nor can accept an assertion for it");
