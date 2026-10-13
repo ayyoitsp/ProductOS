@@ -54,6 +54,37 @@ export interface Analysis {
   /** What one unit of work is — the grain the role declares. */
   grain: string;
   units: (corpus: Corpus) => Unit[];
+  /**
+   * ⛔ WHETHER THE UNITS CAN BE WORKED INDEPENDENTLY, AND IT IS NOT THE SAME QUESTION AS THE GRAIN.
+   *
+   * `grain` says what one unit IS, so a sweep can count what is left. It says nothing about whether
+   * twenty of them can be handed to twenty roles at once — and every session read it as if it did,
+   * because "per feature · decomposer" is an instruction in everything but name.
+   *
+   * ⛔ MEASURED, NOT ARGUED. Three decomposers were fanned over three pricing features that
+   * obviously share machinery:
+   *
+   *     3 runs, 15 distinct subsystem ids
+   *     proposed by MORE THAN ONE run:          0
+   *     parts leaning on another run's tree:    0
+   *
+   * Three disjoint trees, with the same concepts under different names — the workbook boundary as
+   * `master-worksheet` and as `cre-templates`, the template's fields as `template-sources` and as
+   * `reported-figures`. Not disagreement about the product: they cannot see each other. Each run
+   * predicted it of the others and was right.
+   *
+   * So `capabilities` is counted per feature and cannot be WORKED per feature, because "one
+   * subsystem serves many features" is a whole-corpus judgement and the role's own definition says
+   * a one-to-one mirror has recorded nothing. `requirements` and `drawings` are genuinely
+   * independent — a requirement belongs to one claim and a drawing to one screen, and neither needs
+   * to know what another unit decided.
+   */
+  settleFirst?: {
+    /** What has to be agreed across the corpus before any unit is handed out. */
+    what: string;
+    /** ⛔ Why fanning without it fails, in one line somebody could argue with. */
+    because: string;
+  };
 }
 
 /** Features in reading order, skipping containers — a container has no behaviours of its own. */
@@ -77,6 +108,14 @@ export const ANALYSES: Analysis[] = [
     role: "decomposer",
     does: "Which parts of the system each feature needs, and where they belong",
     grain: "feature",
+    settleFirst: {
+      what: "one subsystem tree for the whole product — the names, the areas, and what nests in what",
+      because:
+        "a subsystem serves many features, so which parts exist is not a per-feature question. " +
+        "Fanned cold over three pricing features, three runs produced three disjoint trees and zero " +
+        "shared parts — the same machinery under different names, which is worse than a mirror of the " +
+        "feature list because duplicates are harder to see",
+    },
     units: (corpus) => {
       /** Every part, grouped by the feature whose promises it serves. */
       const parts = derivedCapabilities(corpus);

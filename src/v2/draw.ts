@@ -21,50 +21,13 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-/**
- * ⛔ THE COMPILER IS LOADED WHEN A SCREEN IS DRAWN, NOT WHEN THIS MODULE IS IMPORTED.
- *
- * `typescript` is a devDependency, and `import ts from "typescript"` at the top of this file meant
- * that in any install without dev dependencies — the runtime image, notably — **every CLI verb died
- * on module resolution**, including the ones that never draw anything. The hosted service escaped
- * only because it boots `store/boot.js` and never reaches here.
- *
- * ⛔ AND NOT BY MOVING IT TO `dependencies`, which was the other obvious fix. That ships a whole
- * compiler in the runtime image to serve a path the service never takes.
- *
- * ⛔ A PROXY RATHER THAN `await import`, BECAUSE EVERY ONE OF THE 206 USES IS SYNCHRONOUS. Making
- * them async would mean rewriting `emit`, `returnedJsx`, `falseAtFirst` and everything that calls
- * them for a module-loading concern — a large change to working code, in exchange for nothing a
- * reader of those functions would understand. `createRequire` is synchronous, so the first property
- * access resolves it and every call site stays exactly as it was. Type positions (`ts.Node`,
- * `ts.Identifier`) never touch the proxy at all; TypeScript elides them.
- */
-import { createRequire } from "node:module";
 import type * as TS from "typescript";
 
-let compiler: typeof TS | undefined;
+import { compilerFor } from "./compiler.js";
 
-const ts: typeof TS = new Proxy({} as typeof TS, {
-  get(_target, prop) {
-    if (!compiler) {
-      try {
-        compiler = createRequire(import.meta.url)("typescript") as typeof TS;
-      } catch {
-        /**
-         * ⛔ Named, because the failure this replaces was `Cannot find module 'typescript'` from a
-         * verb that had nothing to do with drawing, and that sent somebody looking in the wrong
-         * place for an hour.
-         */
-        throw new Error(
-          "drawing a screen from code needs the TypeScript compiler, which is a development " +
-            "dependency and is not installed here. Run `npm install` in a checkout, or draw from " +
-            "the truth and the design system instead of from a component."
-        );
-      }
-    }
-    return (compiler as unknown as Record<string | symbol, unknown>)[prop];
-  },
-});
+/** ⛔ Lazy, and the loader lives in `compiler.ts` — one copy, because the fix missed a module once. */
+const ts: typeof TS = compilerFor("drawing a screen from code");
+
 import { lucideSvg } from "./icons.js";
 import { wireParts, type WireablePart } from "./wire.js";
 
@@ -752,6 +715,49 @@ function emit(node: TS.Node, ctx: Ctx): string {
      * for the three. The static halves are the author's words; each hole is resolved on its own, so
      * a count stays a marked sample and the sentence around it survives.
      */
+    /**
+     * ⛔ A SENTENCE BUILT WITH `+` IS STILL A SENTENCE, and this is how the longest ones are written:
+     *
+     *     {`${plural(affectedOptions, 'priced option')} ${affectedOptions === 1 ? 'was' : 'were'} ` +
+     *       'approved against your policy.'}
+     *
+     * The node is a binary expression, so the template branch below never saw it and the whole
+     * paragraph — both halves, every literal word in them — drew as one ellipsis. Twenty-five of
+     * the corpus's remaining ellipses were this shape.
+     *
+     * ⛔ ONLY WHERE A SIDE IS PLAINLY TEXT. `a + b` is also arithmetic, and emitting both sides of a
+     * sum would print one number jammed against another.
+     */
+    if (ts.isBinaryExpression(e) && e.operatorToken.kind === ts.SyntaxKind.PlusToken) {
+      const textish = (n: TS.Node): boolean =>
+        ts.isStringLiteral(n) ||
+        ts.isTemplateExpression(n) ||
+        ts.isNoSubstitutionTemplateLiteral(n) ||
+        (ts.isBinaryExpression(n) && n.operatorToken.kind === ts.SyntaxKind.PlusToken && (textish(n.left) || textish(n.right)));
+      if (textish(e.left) || textish(e.right)) {
+        /**
+         * ⛔ WRAPPED, BECAUSE `emit` TAKES A JSX EXPRESSION AND NOT A BARE NODE. Handed the operand
+         * directly it falls through to "this is not an element" and returns nothing, so the branch
+         * fired and produced an empty string — which looks exactly like the branch never running.
+         * The `??` handler above already does this; I did not copy it.
+         */
+        const asChild = (n: TS.Expression): string => emit(ts.factory.createJsxExpression(undefined, n), ctx);
+        const joined = asChild(e.left) + asChild(e.right);
+        if (joined.trim()) return joined;
+      }
+    }
+
+    /**
+     * ⛔ A TERNARY IN A SENTENCE SHOWS ONE OF ITS ARMS, NOT A HOLE. `x === 1 ? 'was' : 'were'` is
+     * the product choosing a word; marking it unreadable loses the word AND tells a reviewer
+     * nothing they can act on. The resting arm is the one the rest of this file already prefers.
+     */
+    if (ts.isConditionalExpression(e)) {
+      const armOf = (n: TS.Expression): string => emit(ts.factory.createJsxExpression(undefined, n), ctx);
+      const arm = armOf(e.whenTrue) || armOf(e.whenFalse);
+      if (arm.trim()) return arm;
+    }
+
     if (ts.isTemplateExpression(e)) {
       let out = text(e.head.text);
       for (const sp of e.templateSpans) {
@@ -843,6 +849,37 @@ function emit(node: TS.Node, ctx: Ctx): string {
      * figure teaches a reviewer something the product does not do, and they cannot tell which
      * numbers were real.
      */
+    /**
+     * ⛔ A TEMPLATE LITERAL IS MOSTLY THE PRODUCT'S OWN WORDS, AND IT WAS DRAWING AS ONE ELLIPSIS.
+     *
+     * `` `${plural(affected, 'priced option')} affected` `` is a sentence with a hole in it. Marked
+     * whole, the screen loses " affected" as well — the literal halves are text the product
+     * certainly shows, and they were being thrown away with the part that could not be read.
+     *
+     * Each hole goes back through this same function, so a hole that samples gets a value and one
+     * that cannot still marks only itself.
+     */
+    if (ts.isTemplateExpression(e)) {
+      let out = text(e.head.text);
+      for (const span of e.templateSpans) {
+        out += emit(ts.factory.createJsxExpression(undefined, span.expression), ctx);
+        out += text(span.literal.text);
+      }
+      if (out.trim()) return out;
+    }
+
+    /**
+     * ⛔ A PORTAL IS SOMEWHERE ELSE ON THE PAGE, AND USUALLY SOMETHING THAT IS NOT OPEN.
+     *
+     * `createPortal(<ul role="listbox" …>)` is a dropdown's options, rendered out of the tree. It
+     * was the single most common unreadable expression in the corpus — 44 of 170 — and drawing it
+     * would show every select on every screen hanging open. Recorded as a state, the way a modal is.
+     */
+    if (ts.isCallExpression(e) && /(^|\.)createPortal$/.test(e.expression.getText())) {
+      ctx.states.push(`a portal is open: ${e.getText().replace(/\s+/g, " ").slice(0, 60)}`);
+      return "";
+    }
+
     const hint = e.getText().replace(/\s+/g, " ").slice(0, 40);
     /**
      * ⛔ `{children}` IS THE SLOT, AND NOTHING EVER EMITTED THE MARKER FOR IT.
@@ -1193,6 +1230,75 @@ function emit(node: TS.Node, ctx: Ctx): string {
     if (asTable) {
       ctx.unresolved.push(`<${tag}> (drawn as <${asTable}>)`);
       return `<${asTable}>${children}</${asTable}>`;
+    }
+
+    /**
+     * ⛔ A FORM CONTROL DRAWS AS THE CONTROL IT IS, FOR THE REASON THE TABLE RULE ABOVE EXISTS.
+     *
+     * `<Select>` is a design-system component the drawing cannot read, so it came out as an empty
+     * marked div — a hatched grey box. There are **972 of them in one corpus**: every stage filter,
+     * every picker, every dropdown on every screen. Peter has now reported it three times in
+     * different words, most recently *"lots of '...'s in the rendered 4100"*, and it is by a long
+     * way the most common thing wrong with a drawing.
+     *
+     * A component whose name IS a form primitive almost certainly renders that primitive, and the
+     * alternative is a screen whose controls are all missing. Same structural guess as the table
+     * rule, with the same justification: the markup is otherwise not a drawing of anything.
+     *
+     * ⛔ IT KEEPS THE CALL SITE'S CLASSES, so a control the product sized and placed stays sized and
+     * placed — the lesson from a toolbar that became a column when its classes were thrown away.
+     *
+     * ⛔ AND IT IS STILL RECORDED AS UNRESOLVED. The shape is right; the contents are a guess at a
+     * shape, not a reading of one.
+     */
+    const FORM_PART: Record<string, string> = {
+      select: "select", dropdown: "select", combobox: "select", listbox: "select", picker: "select",
+      checkbox: "checkbox", radio: "radio", switch: "switch", toggle: "switch",
+      textarea: "textarea", slider: "range", range: "range",
+    };
+    const asForm = FORM_PART[tag.toLowerCase()];
+    if (asForm) {
+      ctx.unresolved.push(`<${tag}> (drawn as a ${asForm})`);
+      const own = classOf(
+        open.attributes.properties.find(
+          (a): a is TS.JsxAttribute => ts.isJsxAttribute(a) && a.name.getText() === "className"
+        )?.initializer
+      );
+      const cls = own ? ` class="${text(own)}"` : "";
+      /**
+       * What it is showing: a literal the call site passed, else the words already inside it, else
+       * a sample for the field it is bound to. A select with nothing in it is the hatched box again.
+       */
+      const literal = (name: string): string | undefined => {
+        const a = open.attributes.properties.find(
+          (x): x is TS.JsxAttribute => ts.isJsxAttribute(x) && x.name.getText() === name
+        );
+        if (!a?.initializer) return undefined;
+        if (ts.isStringLiteral(a.initializer)) return a.initializer.text;
+        if (ts.isJsxExpression(a.initializer) && a.initializer.expression) {
+          const v = a.initializer.expression;
+          if (ts.isStringLiteral(v) || ts.isNoSubstitutionTemplateLiteral(v)) return v.text;
+          if (ts.isIdentifier(v) && ctx.props.has(v.text)) return ctx.props.get(v.text);
+          const made = sampleValue(v.getText().replace(/\s+/g, " ").slice(0, 40), ctx.row ?? 0);
+          if (made) return made;
+        }
+        return undefined;
+      };
+      const shown =
+        literal("value") ??
+        literal("placeholder") ??
+        literal("label") ??
+        (children.replace(/<[^>]*>/g, "").trim() || undefined);
+
+      if (asForm === "select")
+        return `<select${cls}><option>${text(shown ?? "Choose one")}</option></select>`;
+      if (asForm === "checkbox" || asForm === "radio")
+        return `<input type="${asForm}"${cls} />`;
+      if (asForm === "switch")
+        return `<button type="button" role="switch" aria-checked="false"${cls}>${text(shown ?? "")}</button>`;
+      if (asForm === "textarea")
+        return `<textarea${cls}>${text(shown ?? "")}</textarea>`;
+      return `<input type="range"${cls} />`;
     }
     /**
      * ⛔ AN ICON IN THE FILE THAT IMPORTED IT, NOT EVERYWHERE ON THE SCREEN.
@@ -1689,11 +1795,45 @@ const SHAPES: Array<[RegExp, string[]]> = [
 ];
 
 export function sampleValue(hint: string, row: number): string | undefined {
+  /**
+   * ⛔ THE FUNCTION'S OWN NAME, FIRST, WHATEVER SHAPE THE CALL IS.
+   *
+   * `num(unanchoredCells)` passes the "value-shaped" gate below — parentheses are in its character
+   * class — so it never reached the formatter branch that reads a callee, and asked only about
+   * "cells", which names nothing. Fourteen of them drew as ellipses. The multi-argument branch had
+   * always read the callee; the single-argument path quietly did not, and the fix for it was
+   * written into the branch that does not run.
+   *
+   * ⛔ AND A COUNTING FUNCTION BEATS ITS ARGUMENTS. `plural(options, 'priced option')` sampled as
+   * $12,400.00, because "priced" is in the money rule — a count of options rendered as money, which
+   * is the legible-and-wrong this file keeps having to relearn. What `plural` returns is a count,
+   * and the callee says so before any argument gets a say.
+   */
+  const call = /^([A-Za-z_$][\w$.]*)\s*\(/.exec(hint.trim());
+  if (call) {
+    const fn = call[1]!.split(".").pop()!;
+    const spaced = fn.replace(/([a-z0-9])([A-Z])/g, "$1 $2").toLowerCase();
+    if (/\b(num|count|total|qty|quantity|length|size|plural|tally)\b/.test(spaced)) return countOf(spaced);
+    for (const [re, values] of SHAPES) if (re.test(fn)) return values[row % values.length];
+  }
+
   /** Only a value-shaped expression. A ternary is structure, not a field. */
   if (!/^[A-Za-z_$][\w$.?\[\]'"()]*$/.test(hint.trim())) {
     /** …unless it is a formatter around one field, which is how most cells are written. */
-    const m = /^[A-Za-z_$][\w$]*\(\s*([A-Za-z_$][\w$.]*)\s*\)$/.exec(hint.trim());
-    if (m) hint = m[1]!;
+    const m = /^([A-Za-z_$][\w$]*)\(\s*([A-Za-z_$][\w$.]*)\s*\)$/.exec(hint.trim());
+    if (m) {
+      /**
+       * ⛔ THE FUNCTION'S OWN NAME COUNTS HERE TOO, and this branch was throwing it away. A
+       * multi-argument call tries the callee first; a single-argument one replaced the hint with
+       * its field and never looked back — so `num(unanchoredCells)` asked only about "cells",
+       * matched nothing, and drew an ellipsis. `num` says the answer is a number.
+       */
+      const fn = m[1]!;
+      const counted = fn.replace(/([a-z0-9])([A-Z])/g, "$1 $2").toLowerCase();
+      if (/\b(num|count|total|qty|quantity|length|size)\b/.test(counted)) return countOf(counted);
+      for (const [re, values] of SHAPES) if (re.test(fn)) return values[row % values.length];
+      hint = m[2]!;
+    }
     else {
       /**
        * ⛔ A CALL WITH SEVERAL ARGUMENTS IS STILL SHOWING ONE VALUE, and refusing to look inside it

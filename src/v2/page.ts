@@ -24,7 +24,7 @@ import { deriveStates } from "./derive-states.js";
 import { walkOf, type Walk } from "./walk.js";
 import { inEffect, declined as declinedSteers, reaches } from "./steers.js";
 import { AUTHORS } from "../core/jobs.js";
-import { SLOTS, SLOT_ASKS_SHORT, statements, saysText, type SlotName, type Scope, type Steer, type View, type Part, type Says } from "./schema.js";
+import { SLOTS, SLOT_ASKS_SHORT, statements, saysText, nothingHere, type SlotName, type Scope, type Steer, type View, type Part, type Says, type Prototype } from "./schema.js";
 import { gridFor, gateFor, actsFor, ruleHomes, stageOf, reachOf, type Grid, type Cell } from "./grid.js";
 import { stampFor, decidedFor, whatChangedSince } from "./stamp.js";
 /** ⛔ The one table of what an act owes. It lived here and no other surface could read it. */
@@ -783,7 +783,26 @@ function renderScreens(scope: Scope, ctx: Ctx, scopeId: string, opts: PageOption
    */
   void opts;
   const shown = scope.views.filter((v) => v.exists !== "withdrawn");
-  if (!shown.length) return "";
+  /**
+   * ⛔ NO SCREENS IS TWO DIFFERENT FACTS, AND A BLANK SPACE SAYS NEITHER.
+   *
+   * A feature reached only from other features has no screen because it never had one; a feature
+   * whose screens nobody has drawn yet has none because the work is unfinished. Both rendered as
+   * the same nothing, so the reader had to guess — and an author with no way to say which wrote
+   * "It has no screen of its own." into the `may` slot of all eight exchanges of one feature
+   * instead (framework gap fg-0003).
+   *
+   * So when the scope says why, the page says why. When it does not, the blank still means
+   * "nobody has drawn these", which is the reading it always had.
+   */
+  if (!shown.length) {
+    return scope.no_screen
+      ? `
+    <section class="screens no-screen">
+      <p class="no-screen-why">No screen of its own — ${esc(scope.no_screen)}</p>
+    </section>`
+      : "";
+  }
   return `
     <section class="screens">
       <!--
@@ -1368,7 +1387,8 @@ function renderBehaviours(
       const says = fill?.says
         ? line(saysText(fill.says as Says))
         : fill?.none
-          ? `<em>nothing to refuse</em>`
+          ? /** ⛔ What `none` means HERE — `after` and `again` are not refusals (fg-0015). */
+            `<em>${nothingHere(slot)}</em>`
           : fill?.cannot_fail
             ? `<em>cannot fail</em>`
             : (fill?.outcomes as Array<{ name: string; when: string; told: string }> | undefined)?.length
@@ -1437,7 +1457,7 @@ function renderBehaviours(
             : fill?.says
               ? saysText(fill.says as Says)
               : fill?.none
-                ? "nothing to refuse"
+                ? nothingHere(slot)
                 : fill?.cannot_fail
                   ? "cannot fail"
                   : plain(ex.title)
@@ -2250,7 +2270,7 @@ function renderGrid(g: Grid, ctx: Ctx): string {
           <dt>≥Rn</dt><dd>a rule still holds here, and this sentence only narrows it</dd>
           <dt>⊗Rn</dt><dd>a rule deliberately does not apply here, with a reason</dd>
           <dt>∅</dt><dd>deliberately not answered — the builder's latitude</dd>
-          <dt>–</dt><dd>nothing to refuse — or, on <code>after</code>, nothing is different afterwards</dd>
+          <dt>–</dt><dd>nothing to refuse — on <code>after</code>, nothing is different afterwards; on <code>again</code>, nothing further happens on a second press</dd>
           <dt>⊘</dt><dd>cannot fail</dd>
           <dt>○</dt><dd>open — nobody has ruled</dd>
           <dt>✗</dt><dd>disputed</dd>
@@ -2317,7 +2337,8 @@ function renderExchanges(corpus: Corpus, scopeIds: string[], cellOf: Map<string,
           x?.says
             ? line(x.says)
             : x?.none
-              ? "<em>nothing to refuse</em>"
+              ? /** ⛔ `s` is this slot's name, so `none` can say which of the three it means. */
+                `<em>${nothingHere(s)}</em>`
               : x?.cannot_fail
                 ? "<em>cannot fail</em>"
                 : outcomesOf(x).length
@@ -2672,7 +2693,7 @@ function renderNav(
    */
   const rootId = corpus.scopes.find((x) => !x.scope.in)?.scope.id;
   const protoScreens = screensOf(corpus);
-  const theWalk = walkOf(corpus);
+  const theWalk = walkOf(corpus, corpus.prototypes?.[0]?.starts_at);
   const protoPromises = promisesOf(corpus);
   /**
    * ⛔ WHERE A CONTROL GOES, WORKED OUT FROM THE TRUTH AT RENDER TIME.
@@ -2693,13 +2714,6 @@ function renderNav(
      * screen in a column too narrow to judge.
      */
     { id: "prototype", label: "Prototype", toRead: protoScreens.length },
-    /**
-     * ⛔ BESIDE THE BOARD, NOT INSTEAD OF IT. They answer different questions: the board is "what
-     * is there", one glance, everything at once; the walk is "how does a person get through it",
-     * one screen at a time. Replacing the board with the walk would lose the only surface that
-     * shows a whole product's worth of screens together, which is what the board was built for.
-     */
-    { id: "walk", label: "Walk", toRead: theWalk.reachable.size },
     /**
      * ⛔ ITS OWN PLACE, AND DELIBERATELY NOT THE CHARTER. Peter, asked where a learned habit gets
      * reviewed: *"A settings surface on the page"*.
@@ -2864,7 +2878,7 @@ function renderNav(
  */
 export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptions = {}): string | null {
   const protoScreens = screensOf(corpus);
-  const theWalk = walkOf(corpus);
+  const theWalk = walkOf(corpus, corpus.prototypes?.[0]?.starts_at);
   const protoPromises = promisesOf(corpus);
   const entry = corpus.scopes.find((s) => s.scope.id === scopeId);
   if (!entry) return null;
@@ -2990,8 +3004,7 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
          * under seven open questions and nobody reads them. A second row of items, at the level
          * they belong to.
          */
-        renderPrototype(protoScreens, protoPromises) +
-        renderWalk(theWalk) +
+        renderPrototype(protoScreens, protoPromises, theWalk, (corpus.prototypes ?? [])) +
         renderSettings(corpus) +
         renderSubsystems(corpus) +
         `<section class="view" id="view-overview" data-view="overview" data-ref="${esc(scopeId)}" data-label="Overview">
@@ -5314,6 +5327,23 @@ const DRIVE = `<script>
       dangling: document.getElementById("walk-dangling"),
     };
     const trail = [];
+    /** Which way through the product is being walked. The first is the one it opens on. */
+    let current = (walk.prototypes || [])[0] || null;
+
+    function choose(id) {
+      const next = (walk.prototypes || []).find((p) => p.id === id);
+      if (!next) return;
+      current = next;
+      trail.length = 0;
+      for (const b of document.querySelectorAll("[data-walk-proto]"))
+        b.classList.toggle("on", b.dataset.walkProto === id);
+      go(next.startsAt, false);
+    }
+
+    document.addEventListener("click", (ev) => {
+      const b = ev.target instanceof Element ? ev.target.closest("[data-walk-proto]") : null;
+      if (b) { ev.preventDefault(); choose(b.dataset.walkProto); }
+    });
 
     function moveButton(ref, label, sub) {
       const b = document.createElement("button");
@@ -5349,10 +5379,36 @@ const DRIVE = `<script>
         const host = document.createElement("div");
         host.className = "proto-mock";
         const tpl = document.createElement("template");
-        tpl.innerHTML = src.innerHTML;
+        /**
+         * ⛔ THE SCREEN INSIDE THE PRODUCT'S OWN CHROME.
+         *
+         * Drawings carry no shell on purpose — a screen under review wants the room, and the same
+         * menu on all seventeen says nothing. A WALK is the opposite case: the menu is how you get
+         * around, so with no shell there was nothing to press and "Back to CRE Deals" did nothing.
+         * The chrome is the prototype's, not the product's: an unauthenticated flow has none.
+         */
+        const shell = (current && current.shell) || "";
+        tpl.innerHTML = shell.includes("<!--screen-->")
+          ? shell.replace("<!--screen-->", src.innerHTML)
+          : src.innerHTML;
         host.appendChild(tpl);
         stage.appendChild(host);
-        hydrate(host);
+        const root = hydrate(host);
+        /**
+         * ⛔ THE MENU MOVES THE WALK. Each item was aimed at the screen it names when the chrome was
+         * drawn; here the press is caught inside the shadow root and turned into a step. A nav item
+         * nothing resolved is left alone — it is real chrome, and pretending it navigates would be
+         * a prototype lying about the product.
+         */
+        if (root && current && current.nav)
+          root.addEventListener("click", (ev) => {
+            for (const el of ev.composedPath()) {
+              if (!(el instanceof Element) || !el.textContent) continue;
+              const label = el.textContent.replace(/\s+/g, " ").trim();
+              const hit = current.nav.find((n) => n.to && n.label === label);
+              if (hit) { ev.preventDefault(); go(hit.to, true); return; }
+            }
+          });
       } else {
         /** ⛔ Said plainly. A blank stage reads as broken; "no picture" is a fact about the corpus. */
         const p = document.createElement("p");
@@ -5386,7 +5442,9 @@ const DRIVE = `<script>
       backBtn.hidden = trail.length === 0;
     });
 
-    if (walk.entries && walk.entries.length) go(walk.entries[0], false);
+    const opensOn = (current && current.startsAt && walk.steps[current.startsAt] && current.startsAt)
+      || (walk.entries && walk.entries[0]);
+    if (opensOn) go(opensOn, false);
   })();
 
 })();
@@ -6556,6 +6614,13 @@ export const STYLE = `<style>
   /* ⛔ The width goes to the SCREENS. A surface whose job is being visual cannot spend it on nav. */
   .pboard { display: grid; grid-template-columns: repeat(auto-fill, minmax(22rem, 1fr)); gap: 1.1rem; margin-top: .8rem; }
   /* The walk: one screen, where you are, and every way out of it. */
+  /* The board, one fold down — see the comment in the prototype section. */
+  .pall { margin-top: 1.4rem; border-top: 1px solid var(--line); padding-top: .8rem; }
+  .pall > summary { cursor: pointer; font-size: .8rem; color: var(--dim); list-style: none; }
+  .pall > summary::-webkit-details-marker { display: none; }
+  .pall > summary::before { content: "▸ "; }
+  .pall[open] > summary::before { content: "▾ "; }
+  .pall > summary:hover { color: var(--ink); }
   .wbar { display: flex; align-items: baseline; gap: .8rem; margin: .9rem 0 .5rem; }
   .wwhere { font-size: .82rem; color: var(--dim); letter-spacing: .01em; }
   .wback { font: inherit; font-size: .78rem; background: none; border: 1px solid var(--line); border-radius: 999px;
@@ -7039,10 +7104,22 @@ function renderSubsystems(corpus: Corpus): string {
  * ⛔ AND IT NAMES THE SCREENS WITH NO DOOR. A walk that silently skipped them would read as a
  * complete product with part of itself missing, which is the opposite of what this is for.
  */
-function renderWalk(walk: Walk): string {
+function walkInside(walk: Walk, protos: Prototype[]): string {
   if (!walk.steps.size) return "";
 
   const data = {
+    /**
+     * ⛔ EVERY PROTOTYPE TRAVELS WITH THE PAGE. The chrome is drawn from layouts in a repository the
+     * hosted instance does not have, so it rides in the corpus or it does not exist — the same
+     * argument `style.yaml` travels on.
+     */
+    prototypes: protos.map((p) => ({
+      id: p.id,
+      title: p.title,
+      startsAt: p.starts_at,
+      shell: p.shell_html ?? "",
+      nav: p.nav ?? [],
+    })),
     steps: Object.fromEntries(
       [...walk.steps.entries()].map(([ref, st]) => [
         ref,
@@ -7079,9 +7156,18 @@ function renderWalk(walk: Walk): string {
         .join(", ")}${walk.unreachable.length > 6 ? `, and ${walk.unreachable.length - 6} more` : ""}</p>`
     : "";
 
-  return `<section class="view" id="view-walk" data-view="walk" data-ref="walk" data-label="Walk">
-    <script type="application/json" id="walk-data">${JSON.stringify(data).replace(/</g, "\\u003c")}</script>
+  return `<script type="application/json" id="walk-data">${JSON.stringify(data).replace(/</g, "\\u003c")}</script>
     <p class="lede">The product as one thing, walked from what the truth says. <strong>Inside</strong> is a screen shown within this one; <strong>goes to</strong> is a control the truth says leads somewhere.</p>
+    ${
+      protos.length > 1
+        ? `<div class="wpicks">${protos
+            .map(
+              (p, i) =>
+                `<button type="button" class="wpick${i === 0 ? " on" : ""}" data-walk-proto="${esc(p.id)}">${line(p.title)}</button>`
+            )
+            .join("")}</div>`
+        : ""
+    }
     <div class="wbar"><span class="wwhere" id="walk-where"></span><button type="button" class="wback" id="walk-back" hidden>◀ back</button></div>
     <div class="wrap-walk">
       <div class="wstage" id="walk-stage"></div>
@@ -7092,11 +7178,10 @@ function renderWalk(walk: Walk): string {
       </aside>
     </div>
     <div class="wdoors"><h4>Start somewhere else</h4>${doors}</div>
-    ${stranded}
-  </section>`;
+    ${stranded}`;
 }
 
-function renderPrototype(screens: ProtoScreen[], promises: ProtoPromise[]): string {
+function renderPrototype(screens: ProtoScreen[], promises: ProtoPromise[], walk?: Walk, protos?: Prototype[]): string {
   if (!screens.length && !promises.length) return "";
 
   /**
@@ -7165,10 +7250,26 @@ function renderPrototype(screens: ProtoScreen[], promises: ProtoPromise[]): stri
   return `<script type="application/json" id="proto-says">${JSON.stringify(index).replace(/</g, "\\u003c")}</script>
   <script type="application/json" id="proto-titles">${JSON.stringify(titles).replace(/</g, "\\u003c")}</script>
   <section class="view" id="view-prototype" data-view="prototype" data-ref="prototype" data-label="Prototype">
-    <p class="lede">${withPictures.length} screen${withPictures.length === 1 ? "" : "s"} of this product, as it looks. Open one to press its controls and read what the truth says about each.</p>
-    <div class="pboard">${withPictures.map(tile).join("")}</div>
-    ${blanks}
-    ${unseen}
+    ${walk ? walkInside(walk, protos ?? []) : ""}
+    <!--
+      ⛔ ONE PROTOTYPE, NOT TWO TABS.
+
+      The walk shipped beside the board as its own tab, with a comment here arguing they answered
+      different questions. Peter: *"why does 'prototype' exist if it was replaced with 'walk'? how
+      does that make sense?"* — and he had asked for *"a central 'prototype only' section where they
+      can drive through the product as a whole"*, singular, in the message that started this. Two
+      top-level tabs covering the same ground is the reviewer doing the reconciling.
+
+      The board's one real strength — a whole product's screens in a glance — is kept, one fold
+      down, where it costs nobody a decision about which tab to open.
+    -->
+    <details class="pall">
+      <summary>All ${withPictures.length} screen${withPictures.length === 1 ? "" : "s"} at once</summary>
+      <p class="lede">Every screen of this product, as it looks. Open one to press its controls and read what the truth says about each.</p>
+      <div class="pboard">${withPictures.map(tile).join("")}</div>
+      ${blanks}
+      ${unseen}
+    </details>
     <div class="pbig" hidden>
       <div class="pbig-bar"><strong class="pbig-t"></strong><span class="pbig-esc">Esc, or click outside</span><button type="button" class="pbig-x">Close</button></div>
       <div class="pbig-body"><div class="pbig-stage"></div><aside class="pbig-truth"><p class="none">Press a control on the screen.</p></aside></div>

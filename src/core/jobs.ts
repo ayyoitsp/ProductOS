@@ -321,10 +321,19 @@ export const AREAS: Area[] = [
       "src/v2/appcss.ts",
       /** ⛔ Glyphs read out of the product's own icon package — a generator source, same as draw. */
       "src/v2/icons.ts",
+      /** ⛔ A prototype's chrome, drawn from the layouts around a route — generated, never written. */
+      "src/v2/shell.ts",
 
       "src/core/agents-doc.ts",
       /** ⛔ The design system index: a generator source like `draw`, reading a product's own vocabulary. */
       "src/v2/design.ts",
+      /**
+       * ⛔ The one lazy loader for the TypeScript compiler, which `draw` and `design` both need and
+       * neither may import eagerly: `typescript` is a devDependency, so an import at module scope
+       * breaks every CLI verb in an install without dev dependencies. One home, because the fix was
+       * applied to `draw` alone, shipped, deployed — and `v2 analyse` still died on `design`.
+       */
+      "src/v2/compiler.ts",
       /**
        * ⛔ MOVING A CORPUS AND MOVING IT FORWARD ARE BOTH GENERATION. `corpus.ts` turns a directory
        * into rows and back byte-identically; `doc-migrations.ts` rewrites stored documents when the
@@ -1435,6 +1444,7 @@ export const COMMANDS: Verb[] = [
   { name: "v2", does: "The Exchange model — the tree every verb below it hangs from", owns: "surface", who: "both", track: "exchange" },
   { name: "v2 check", does: "What this corpus refuses, and what it merely reports", owns: "check", who: "claude", track: "exchange" },
   { name: "v2 forward", does: "Bring a corpus on disk forward to this build's schema", owns: "derive", who: "claude", track: "exchange" },
+  { name: "v2 prototypes", does: "Draw each prototype's chrome, and aim its menu at the screens it names", owns: "generate", who: "claude", track: "exchange" },
   { name: "v2 grid", does: "The behaviours a scope states, and where each one stands", owns: "derive", who: "claude", track: "exchange" },
   { name: "v2 accepted", does: "The exact wording somebody has agreed to, before anybody rewrites it", owns: "surface", who: "claude", track: "exchange" },
   { name: "v2 acts", does: "How many acts of human judgement this corpus carries", owns: "derive", who: "claude", track: "exchange" },

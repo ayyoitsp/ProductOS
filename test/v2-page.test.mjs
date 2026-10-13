@@ -342,8 +342,13 @@ test("the frame has tabs for each half, and Overview carries the queue", () => {
    * prototype"*, and it sits second because it is the way in: a person can tell a screen is wrong.
    */
   assert.equal(tabs[1], "prototype", "the prototype is not offered beside Overview");
-  /** ⛔ And the walk beside it, because the two are read together: what is there, and how to get through it. */
-  assert.equal(tabs[2], "walk", "the walk is not offered beside the prototype");
+  /**
+   * ⛔ AND THERE IS NO SECOND TAB FOR IT. The walk shipped beside the board briefly; Peter: *"why
+   * does 'prototype' exist if it was replaced with 'walk'? how does that make sense?"* — and the
+   * message that asked for it said "a central 'prototype only' section", singular. The prototype IS
+   * the walk now, with the board one fold down inside it.
+   */
+  assert.ok(!tabs.includes("walk"), "the walk is a second top-level tab again — it belongs inside the prototype");
   for (const half of corpus.scopes.filter((s) => s.scope.in === root))
     assert.ok(tabs.includes(half.scope.id), `${half.scope.id} is a half of the product and has no tab`);
 
@@ -359,7 +364,7 @@ test("the frame has tabs for each half, and Overview carries the queue", () => {
    * "what is there". Left out of this set it was read as a half with no screens and sorted itself
    * into the middle of the product.
    */
-  const FIXED = new Set(["overview", "prototype", "walk"]);
+  const FIXED = new Set(["overview", "prototype"]);
   const halves = tabs.filter((t) => !FIXED.has(t));
   for (let i = 1; i < halves.length; i++)
     assert.ok(

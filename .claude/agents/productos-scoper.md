@@ -320,6 +320,116 @@ at the same grain as the details it exists to frame.
 together" from the screens beneath it and the `leads_to` of their parts — so record `leads_to`, or
 the group's high-level view is a list of screens rather than a flow.
 
+### ⛔ Four more, from the same pair of runs
+
+**`set_by:` / `read_by:` on a term — the other half is a SIBLING feature.**
+
+```yaml
+terms:
+  confidence:
+    means: how sure the read was of this value
+    read_by: [review-the-rows, read-the-exception-log]
+```
+
+⛔ `nothing-in-this-product-sets-this` and `nothing-reads-what-this-sets` used to offer two exits
+each: a behaviour is missing, or the word crosses the product's edge (`set_outside` /
+`read_outside`). Neither is true when the other half is **another feature in this corpus** — and
+you may not read a sibling's scope, so you could not clear the finding even knowing the answer.
+Name the sibling instead. ⛔ The ref is resolved, so pointing at nothing is refused rather than
+quietly silencing the finding.
+
+**`follows:` takes several.** Machinery asked by five features used to name one and leave the other
+four in prose:
+
+```yaml
+when:
+  triggered_by: five features ask for it
+  cadence: on-an-event
+  follows: [map-the-statement#publish, publish-a-roll#publish, review-the-rows#review]
+```
+
+One ref still works and still means the same thing.
+
+**`of:` on a standing — the one statement it is about.**
+
+```yaml
+standing:
+  kind: open
+  of: the-new-document-count-is-only-filled-where-it-is-counted
+  question: …
+```
+
+⛔ Without it, a question about one sentence of four made every candidate either the whole merged
+paragraph — destroying the per-statement grain — or "only the part in question", which is
+un-pickable and sends the reviewer to retype the three they already agreed. With `of`, a candidate
+can honestly say `replaces: the whole sentence` and mean *the whole of that statement*; its siblings
+are left byte-identical and no criterion's `of:` is orphaned.
+
+**`repeats:` on a part — one control that appears once per something.**
+
+```yaml
+parts:
+  - id: sortable-header
+    role: commits
+    repeats: once per sortable column
+```
+
+⛔ A part is one control and an exchange arrives at one part, so five sortable column headings could
+only be declared as a single part — and its `label` then had to be **one column's** words for the
+drawing to bind it, so the part read as being about that column. The pager's two chevrons are the
+same shape. With `repeats` set, the wiring marks **every** occurrence, so the other four headings
+stop drawing as things nobody promised anything about. ⛔ What it varies over, never a count: "once
+per sortable column" is checkable against the screen, and `5` goes stale the moment a column is
+added.
+
+### ⛔ Three things authors before you could not say, and wrote badly instead
+
+All three came from one pair of re-scoping runs over v1-migrated features, and each was recorded as
+a framework gap with `forced_into` naming the damage. They exist now. Use them.
+
+**`no_screen:` — this feature has no screen of its own.** A one-line reason, on the scope:
+
+```yaml
+no_screen: reached only from other features, never opened directly
+```
+
+⛔ `views: []` cannot be told from *"nobody has drawn them yet"*, and the difference matters to every
+reader: one is machinery, the other is unfinished work. An author with no way to say it appended
+*"It has no screen of its own."* to the `may` slot of **all eight exchanges** of `limit-resolution`.
+A reason, never `true` — a sentence is checkable against the exchanges, a boolean is an assertion
+with nothing behind it. The page reads this and says it where the screens would be.
+
+**`contested:` on a term — this word is disputed and nobody has ruled it.**
+
+```yaml
+terms:
+  version selection:
+    means: the one version choice held at a deal
+    contested:
+      question: Does `model revision` name the same object as `master model version`, or a different one?
+      with: [model revision, master model version, input version]
+```
+
+⛔ A slot can hold an open question; before this, a word could not. So a scoper that found **four
+names for three objects** in one corpus left the collision out of truth entirely and reported it in
+prose to its caller — because defining the contested word would have settled a collision nobody had
+ruled on, and a guessed definition reads exactly like a decided one. `with` is required: "this word
+is contested" without naming what it collides with is a feeling rather than a finding.
+
+**`at.view_in:` — a person's ask whose screen belongs to another scope.**
+
+```yaml
+at:
+  view_in: deal-workspace#model-history      # <scope>#<view>
+```
+
+⛔ You may not read another feature's scope, and a migrated corpus is full of reader actions whose
+screen was written somewhere else. With only `view:` available the honest moves were all bad, and
+what happened was the third: two plainly person-asked behaviours stayed filed as `asked_by: system`
+with a prose `triggered_by`, and `happy_path.through` stayed empty. Say `view` **or** `view_in`,
+never both — one ask arrives at one screen. `check` resolves it like any other ref, so a wrong one
+is caught rather than believed.
+
 ### The eight slots, all required
 
 | | asks |
@@ -399,7 +509,7 @@ any part of it, which is how a stamp stops meaning anything.
 
 | | it does | it owes |
 |---|---|---|
-| `Rule` | supplies or constrains a named slot | a conformance criterion — it is checkable |
+| `Rule` | supplies or constrains a named slot | a conformance criterion eventually — ⛔ written by `demonstrator`, never by you; author it with `criteria: []` |
 | Charter section | settles a design argument, or says what the product is for | nothing demonstrable |
 
 A goal is what the product is *for*. A principle settles an argument without being demonstrable on
@@ -524,8 +634,30 @@ still means it.
 is copy-onto-every-feature wearing a selector's clothes, which `check` flags. Reach for a dimension
 that describes WHY those exchanges are alike (`term:`, `part_role:`, `asked_by:`) before naming them.
 
-⛔ **A rule owes at least one conformance criterion** — see below. Without one the schema refuses
-it outright, and a rule with no demonstration is an aspiration that fills a slot and shows nothing.
+### ⛔ Write the rule. You do NOT owe it a criterion, and believing otherwise costs real duplication
+
+A rule is eventually demonstrated by a conformance criterion, and **you do not write that** — the
+`demonstrator` does, after sign-off, like every other criterion. Write the rule with
+`criteria: []`.
+
+⛔ **This paragraph used to say the schema refuses a rule with no conformance criterion. That was
+true once and is not true now**, and the stale sentence did measurable damage. The refusal moved to
+`check` as `a-rule-that-demonstrates-nothing` for exactly this reason: nobody authors criteria any
+more, so between scoping and sign-off *every* rule in a corpus has none — as a load refusal it made
+the corpus unreadable in that interval, including to the role whose job is to fix it.
+
+What the stale sentence cost, measured: a scoper re-scoping `limit-resolution` read it next to
+*"write no `criteria:` at all"*, correctly concluded it could not author a rule, and wrote the one
+shared entry test **by hand onto all eight exchanges** — then filed a framework gap saying the model
+could not express a shared rule. The model could. The instruction said it couldn't.
+
+So: when one sentence is true of several exchanges — who may ask, the named refusals, what is true
+at once — **that is one rule**, not N copies. `may` and `refuses` written identically on eight
+exchanges is the signal you should have reached for one.
+
+⛔ **A rule with no criterion is still unfinished, and `check` says so** — it just says it at
+handover rather than refusing to parse. That is the protection that matters: no packet compiles over
+it, and `check` must pass before anybody reviews.
 
 `mode` has no default on purpose. A `supplies` rule read as `constrains` bolts a requirement
 onto stated answers; a `constrains` rule read as `supplies` governs almost nothing, because
