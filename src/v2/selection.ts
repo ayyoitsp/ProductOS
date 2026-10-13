@@ -207,7 +207,18 @@ export function gapsIn(s: Selection): Gap[] {
   if (s.options.length > 1 && !s.question)
     gaps.push({
       kind: "prototypes-split-on-nothing",
-      says: `${s.options.length} prototypes with nothing saying what they are alternatives about — state it with \`splits_on\``,
+      /**
+       * ⛔ NO FIELD NAME. This said "state it with `splits_on`" and shipped onto a reader's page —
+       * the exact thing Peter was objecting to when he called the surface a barf, and the exact
+       * thing CLAUDE.md forbids: nothing a reader sees names the storage. A reader does not type
+       * keys; they open the dimensions and name one. So the sentence says what to do.
+       *
+       * ⛔ AND MY TEST FOR IT PASSED. It asserted `splits_on` was absent from a page rendered from a
+       * corpus that HAD dimensions — so this gap never fired and the assertion was about a case the
+       * fixture could not reach. Caught on the live page by the deploying session, which is the
+       * fixture-with-one-state hole I have been naming all week, in the test I wrote to close it.
+       */
+      says: `${s.options.length} prototypes, and nothing says what they are alternatives about — name a dimension below`,
     });
   /**
    * ⛔ A MISSING ANSWER COUNTS WHETHER OR NOT THE QUESTION HAS BEEN WRITTEN DOWN YET.
@@ -231,7 +242,7 @@ export function gapsIn(s: Selection): Gap[] {
           gaps.push({
             kind: "prototype-answers-nothing",
             says: ax.asks
-              ? `"${o.title}" gives no answer to "${ax.asks}" — say which one it is`
+              ? `"${o.title}" does not say its ${ax.asks.toLowerCase()}`
               : `"${o.title}" says nothing about where it sits, while others do`,
           });
   /**
