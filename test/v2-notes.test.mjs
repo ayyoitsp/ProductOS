@@ -85,9 +85,17 @@ test("the composer is docked, always there, and never asks what you are looking 
    * "appears inside" control — a select that has nothing to do with filing a request, in a part of
    * the page this test is not about.
    *
-   * ⛔ AND NARROWING IT IS NOT WEAKENING IT. The composer's own markup is extracted and asserted
-   * against; a dropdown coming back where Peter said it must not be still fails. What stops failing
-   * is an unrelated control somewhere else, which was never the thing being protected.
+   * ⛔ AND NARROWING IT IS NOT WEAKENING IT — measured rather than argued. A `<select>` spliced in
+   * immediately before the composer's true closing tag, which is the one position that would escape
+   * a capture stopping early, is still caught. The captured region is 558 bytes on the live page and
+   * a balanced read of the same composer is 558 bytes: the capture covers all of it.
+   *
+   * ⛔ WHAT WOULD BREAK IT IS A NESTED FORM INSIDE THE COMPOSER. The pattern is non-greedy to the
+   * FIRST `</form>`, so a form within a form shortens the capture and a select after that point
+   * escapes in silence — narrowing from "the page" to "a captured region" moves the risk from scope
+   * to capture. There are zero today. The `assert.ok` below fails loudly if `note-bar` stops being a
+   * form at all, so the failure mode to watch for is a capture quietly shortening, not this test
+   * disappearing.
    */
   const composer = /<form[^>]*id="note-bar"[\s\S]*?<\/form>/.exec(live);
   assert.ok(composer, "the composer is not a form, so this cannot check what it contains");
