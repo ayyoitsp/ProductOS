@@ -26,6 +26,14 @@ import { browserOrSkip, openPage } from "./support/chrome.mjs";
 
 const { exe, skip } = browserOrSkip();
 
+/** Any screen that actually exists, whichever scope holds it. */
+const aScreen = (dir) => {
+  const c = loadCorpus(dir);
+  const ref = c.scopes.flatMap((e) => (e.scope.views ?? []).map((v) => `${e.scope.id}#${v.id}`))[0];
+  assert.ok(ref, "the seed has no screens, so a prototype could not open on one");
+  return ref;
+};
+
 function corpus() {
   const dir = path.join(temp("v2seleditor-"), "corpus");
   fs.cpSync("v2-seed", dir, { recursive: true });
@@ -334,4 +342,95 @@ test("⛔ the dimensions and their values save from where they are shown", async
    *     `auditor`, which no prototype uses: a save must not quietly drop a value for being unused.
    *     That would make the uncovered combination disappear on the next save, which is the finding. */
   assert.deepEqual(sent[0].body.axes[0].values, ["admin", "loan processor", "auditor"]);
+});
+
+test("⛔ with no dimensions named, the page asks — open, on the bar", async (t) => {
+  if (skip) return t.skip(skip);
+  /**
+   * Peter, looking at his own product: *"i don't get it. why is it just two buttons again???"* and
+   * then *"do we not have any dimensions defined?"*
+   *
+   * No. And the way to define one was a link labelled "show", with the sentence telling him what to
+   * do INSIDE the thing that link hides. I built the feature, hid its entrance, and told him in chat
+   * that it was his to type. The state with nothing set up is the state that most needs the
+   * affordance, and it was the one where I had made it least reachable.
+   *
+   * ⛔ AND IT GOES AWAY ONCE A DIMENSION EXISTS, which the second half of this asserts — an
+   * invitation that stayed after it was accepted would be the clutter the chips replaced.
+   */
+  const dir = corpus();
+  /** The same corpus, with the dimensions removed: two prototypes, nothing naming an axis. */
+  fs.writeFileSync(
+    path.join(dir, "prototypes.yaml"),
+    [
+      "prototypes:",
+      "  - id: cre",
+      "    title: CRE — loan processor",
+      `    starts_at: ${aScreen(dir)}`,
+      "  - id: admin",
+      "    title: Admin",
+      `    starts_at: ${aScreen(dir)}`,
+      "",
+    ].join("\n")
+  );
+  /** ⛔ The first scope in the seed has no screens — a door onto nothing would be refused, and the
+   *     empty state is not what this test would then be looking at. */
+  const c = loadCorpus(dir);
+  const page = await openPage(
+    standalone("empty", renderScopePage(c, c.scopes[0].scope.id, { interactive: true, by: "peter" }) ?? ""),
+    { exe }
+  );
+  try {
+    await page.waitFor("!!document.querySelector('.wstart')", "the empty state to be on the page");
+    const out = await page.evaluate(`(async () => {
+      window.__sent = [];
+      window.fetch = (url, opts) => {
+        window.__sent.push({ url, body: JSON.parse(opts.body) });
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, said: "saved" }) });
+      };
+      window.location.reload = () => {};
+      const start = document.querySelector('.wstart');
+      const seen = {
+        /*
+         * ⛔ NOT INSIDE THE COLLAPSIBLE — which is the defect, and is NOT the same as "no hidden
+         * ancestor". The whole Prototype tab is hidden until a reader opens it, so asserting no
+         * hidden ancestor fails on a correct page and says "hidden again" about the wrong element.
+         * A matcher stricter than the thing it matches accuses the code, which is the shape both of
+         * us produced a number from today.
+         */
+        visible: !start.closest('[data-sel-detail]'),
+        inDetail: !!start.closest('[data-sel-detail]'),
+        asks: start.querySelector('.wstart-q').textContent.trim(),
+        fields: [...start.querySelectorAll('input')].map((i) => i.getAttribute('name')),
+      };
+      start.querySelector('input[name="asks"]').value = 'Role';
+      start.querySelector('input[name="values"]').value = 'admin, loan processor';
+      start.querySelector('[data-dims-save]').click();
+      await new Promise((r) => setTimeout(r, 400));
+      seen.sent = window.__sent;
+      return JSON.stringify(seen);
+    })()`);
+    const seen = JSON.parse(out);
+    /** ⛔ Not inside anything collapsed — that was the whole defect. */
+    assert.equal(seen.inDetail, false, "the way to name a dimension is back inside the collapsible");
+    assert.equal(seen.visible, true, "the way to name a dimension is hidden again");
+    assert.match(seen.asks, /alternatives — of what\?/, "it does not say what it is asking");
+    assert.deepEqual(seen.fields, ["asks", "values"], "it asks for the wrong things");
+    assert.equal(seen.sent.length, 1, "Add sent nothing");
+    assert.equal(seen.sent[0].body.intent, "splits-on");
+    assert.deepEqual(seen.sent[0].body.axes, [{ id: "", asks: "Role", values: ["admin", "loan processor"] }]);
+  } finally {
+    await page.close();
+  }
+});
+
+test("⛔ and the invitation is gone once a dimension exists", async (t) => {
+  if (skip) return t.skip(skip);
+  /** The default fixture HAS dimensions, so the prompt must not be on it. */
+  const out = await inThePage(`
+    return JSON.stringify({ start: !!document.querySelector('.wstart'), chips: document.querySelectorAll('.wval').length });
+  `);
+  const { start, chips } = JSON.parse(out);
+  assert.equal(start, false, "the empty-state prompt is still there after a dimension was named");
+  assert.ok(chips > 0, "there are no chips, so this is not the state being asserted");
 });
