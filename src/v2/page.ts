@@ -4277,35 +4277,103 @@ function wireSelectionEditor() {
       });
   };
 
-  var form = document.querySelector("form[data-sel-axes]");
-  if (form) {
-    var fstatus = form.querySelector(".status");
-    form.addEventListener("submit", function (e) {
-      e.preventDefault();
-      var box = form.querySelector("textarea");
-      /*
-       * ⛔ ONE QUESTION PER LINE — the shape somebody types without being taught a syntax.
-       *
-       * ⛔ AND THE SPLIT ARGUMENT IS DOUBLE-ESCAPED ON PURPOSE. This whole function lives inside a
-       * template literal, so a single-escaped newline is consumed by TypeScript and the browser
-       * receives a string literal broken across two lines: "Invalid or unexpected token", and the
-       * WHOLE live script dies with it — the composer, the walk, every act button. Compile-clean,
-       * test-clean, page-dead. The only thing that found it was parsing the emitted script the way
-       * a browser would. Backticks are out of this comment for the same reason: one would close
-       * the literal.
-       */
-      var asks = (box.value || "").split("\\n").map(function (l) { return l.trim(); }).filter(Boolean);
-      if (!asks.length) { fstatus.textContent = "Say what they split on."; fstatus.className = "status bad"; return; }
-      fstatus.textContent = "saving…"; fstatus.className = "status";
-      sendIntent("splits-on", { axes: asks })
+  /*
+   * ⛔ SHOW THE DETAIL ONLY WHEN ASKED. The gaps and the dimension table used to sit open under the
+   * selector, which is what made one decision look like five blocks of text.
+   */
+  var more = document.querySelector("[data-sel-more]");
+  var detail = document.querySelector("[data-sel-detail]");
+  if (more && detail) {
+    more.addEventListener("click", function () {
+      detail.hidden = !detail.hidden;
+      more.textContent = detail.hidden ? "show" : "hide";
+    });
+  }
+
+  /*
+   * ⛔ PICKING THE VALUES BRINGS UP THE PROTOTYPE. Peter: "they should be able to select the
+   * appropriate dimensions and that will bring up the right prototype."
+   *
+   * The combinations travel with the page, so this is a lookup rather than a request — and a
+   * combination nothing covers SAYS SO instead of leaving the last prototype on screen, which would
+   * be the selector quietly lying about what you had asked for.
+   */
+  var combosEl = document.getElementById("walk-combos");
+  var combos = combosEl ? JSON.parse(combosEl.textContent) : [];
+  var dims = Array.prototype.slice.call(document.querySelectorAll("[data-walk-dim]"));
+  var nowEl = document.querySelector("[data-walk-now]");
+  function chosen() {
+    var want = {};
+    dims.forEach(function (d) { want[d.getAttribute("data-walk-dim")] = d.value; });
+    for (var i = 0; i < combos.length; i++) {
+      var c = combos[i];
+      var all = true;
+      for (var k in want) if (c.values[k] !== want[k]) { all = false; break; }
+      if (all) return c;
+    }
+    return null;
+  }
+  function land() {
+    var c = chosen();
+    if (!c) return;
+    if (!c.proto) {
+      if (nowEl) { nowEl.textContent = "nothing covers this yet"; nowEl.className = "wsel-now none"; }
+      return;
+    }
+    if (nowEl) { nowEl.textContent = c.title || c.proto; nowEl.className = "wsel-now"; }
+    /* The walk already knows how to put a prototype on the stage; this just asks it to. */
+    var btn = document.querySelector('[data-walk-proto="' + CSS.escape(c.proto) + '"]');
+    if (btn) btn.click();
+    else if (typeof window.__walkProto === "function") window.__walkProto(c.proto);
+  }
+  dims.forEach(function (d) { d.addEventListener("change", land); });
+
+  /* With no dimensions named yet, the prototypes themselves are the choice. */
+  var bare = document.querySelector("[data-walk-pick]");
+  if (bare) {
+    bare.addEventListener("change", function () {
+      var btn = document.querySelector('[data-walk-proto="' + CSS.escape(bare.value) + '"]');
+      if (btn) btn.click();
+      if (nowEl) {
+        var opt = bare.options[bare.selectedIndex];
+        nowEl.textContent = opt ? opt.textContent : bare.value;
+      }
+    });
+  }
+
+  /*
+   * ⛔ THE DIMENSIONS, AS THE TEXT THEY ALREADY ARE — not a separate input. Peter: "why is there a
+   * separate input for 'say what these split on'? why doesn't this route through the main
+   * interface?" A name and its values, read off the same rows they are displayed in.
+   */
+  var dimsSave = document.querySelector("[data-dims-save]");
+  if (dimsSave) {
+    var dimsStatus = document.querySelector("[data-dims-status]");
+    dimsSave.addEventListener("click", function () {
+      var axes = [];
+      Array.prototype.slice.call(document.querySelectorAll("[data-dim-row]")).forEach(function (row) {
+        var asks = row.querySelector('input[name="asks"]').value.trim();
+        if (!asks) return;
+        var values = row
+          .querySelector('input[name="values"]')
+          .value.split(",")
+          .map(function (v) { return v.trim(); })
+          .filter(Boolean);
+        axes.push({ id: row.getAttribute("data-dim-row") || "", asks: asks, values: values });
+      });
+      if (!axes.length) {
+        dimsStatus.textContent = "Name a dimension first."; dimsStatus.className = "status bad";
+        return;
+      }
+      dimsStatus.textContent = "saving…"; dimsStatus.className = "status";
+      sendIntent("splits-on", { axes: axes })
         .then(function (said) {
-          fstatus.textContent = said; fstatus.className = "status ok";
-          /* ⛔ Reloaded, because every option is now asked about differently. */
+          dimsStatus.textContent = said; dimsStatus.className = "status ok";
           setTimeout(function () { location.reload(); }, 900);
         })
         .catch(function (err) {
-          fstatus.textContent = "Not saved: " + (err && err.message ? err.message : String(err));
-          fstatus.className = "status bad";
+          dimsStatus.textContent = "Not saved: " + (err && err.message ? err.message : String(err));
+          dimsStatus.className = "status bad";
         });
     });
   }
@@ -4370,10 +4438,16 @@ function wireSelectionEditor() {
         var id = row.getAttribute("data-sel-proto") || "";
         var is = {};
         var startsAt = "";
-        Array.prototype.slice.call(row.querySelectorAll("input")).forEach(function (input) {
-          var name = input.getAttribute("name") || "";
-          if (name === "startsAt") startsAt = input.value.trim();
-          else is[name] = input.value.trim();
+        /*
+         * ⛔ SELECTS AND INPUTS BOTH. A placement is a select now — a dimension that says what it
+         * can be leaves nothing to type, and typing is how a prototype came to claim a value
+         * nobody could select. Reading only inputs sent every placement as empty, which looked
+         * exactly like somebody clearing them on purpose.
+         */
+        Array.prototype.slice.call(row.querySelectorAll("input, select")).forEach(function (field) {
+          var name = field.getAttribute("name") || "";
+          if (name === "startsAt") startsAt = field.value.trim();
+          else if (name) is[name] = field.value.trim();
         });
         return sendIntent("prototype", { id: id, is: is, startsAt: startsAt }).then(function (said) { last = said; });
       });
@@ -6919,6 +6993,31 @@ export const STYLE = `<style>
   .wpick-m { font-size: .7rem; color: var(--dim); }
   .wsel-gaps { margin: .5rem 0 0; padding: 0 0 0 1rem; font-size: .75rem; color: var(--warn); }
   .wsel-and { color: var(--dim); font-weight: 400; }
+  /*
+   * The selector: one row, one control per dimension, the current prototype named beside them.
+   *
+   * ⛔ ONE ROW, BECAUSE FIVE BLOCKS OF TEXT FOR ONE DECISION IS WHAT HE WAS LOOKING AT. A lede, a
+   * warning, two unlabelled boxes, a bulleted list and a disclosure — "a barf of information", and
+   * the complaint list named a schema field on a reader's page.
+   */
+  .wsel-bar { display: flex; flex-wrap: wrap; align-items: flex-end; gap: .6rem; margin: 0 0 .8rem; }
+  .wdim { display: flex; flex-direction: column; gap: .1rem; }
+  .wdim-n { font-size: .65rem; text-transform: uppercase; letter-spacing: .07em; color: var(--dim); font-weight: 600; }
+  .wdim select { font: inherit; font-size: .85rem; padding: .25rem .4rem; border: 1px solid var(--line);
+    border-radius: 8px; background: var(--card); color: var(--ink); }
+  .wsel-now { font-size: .85rem; font-weight: 600; padding-bottom: .3rem; }
+  .wsel-now.none { font-weight: 400; color: var(--warn); }
+  .wsel-note { font-size: .72rem; color: var(--dim); padding-bottom: .35rem; margin-left: auto; }
+  .wsel-more { font: inherit; font-size: .72rem; background: none; border: none; padding: 0;
+    color: var(--accent); cursor: pointer; text-decoration: underline; }
+  .wsel-detail { margin: 0 0 .9rem; padding: .6rem .7rem; border: 1px solid var(--line); border-radius: 10px; background: var(--card); }
+  .wdims { width: 100%; border-collapse: collapse; font-size: .78rem; }
+  .wdims th, .wdims td { text-align: left; padding: .2rem .35rem; border-bottom: 1px solid var(--line); }
+  .wdims thead th { font-size: .65rem; text-transform: uppercase; letter-spacing: .06em; color: var(--dim); font-weight: 600; }
+  .wdims input { width: 100%; font: inherit; font-size: .78rem; padding: .2rem .35rem; border: 1px solid var(--line);
+    border-radius: 6px; background: var(--bg); color: var(--ink); }
+  .wsel-grid select { font: inherit; font-size: .78rem; padding: .15rem .3rem; border: 1px solid var(--line);
+    border-radius: 6px; background: var(--bg); color: var(--ink); width: 100%; }
   .wsel-edit { margin-top: .6rem; font-size: .8rem; }
   .wsel-edit > summary { cursor: pointer; color: var(--dim); }
   .wsel-hint { margin: .5rem 0 .35rem; font-size: .75rem; color: var(--dim); }
@@ -7422,57 +7521,116 @@ function renderSubsystems(corpus: Corpus): string {
 function selectionAtTheRoot(sel: Selection): string {
   if (!sel.options.length) return "";
   const gaps = gapsIn(sel);
-  const option = (o: Option, i: number): string => {
-    const reach =
-      o.reaches > 1
-        ? `${o.reaches} screens`
-        : o.reaches === 1
-          ? "1 screen"
-          : /** ⛔ Said plainly. Zero is a real answer and the most useful one on this surface. */
-            "nothing beyond its front door";
-    /**
-     * ⛔ EVERY AXIS, because a prototype sits at a POINT and not on a side. Peter: *"It's going to
-     * split on different products - CRE vs private lending, then also on roles"* — "CRE" alone does
-     * not identify an option once roles exist, and an unanswered axis has to look unanswered rather
-     * than simply be absent.
-     */
-    const where = sel.axes.length
-      ? sel.axes.map((ax) => (o.is[ax.id] ? line(o.is[ax.id]!) : `<em>—</em>`)).join(" · ")
-      : Object.values(o.is).map((v) => line(v)).join(" · ");
-    return `<button type="button" class="wpick${i === 0 ? " on" : ""}" data-walk-proto="${esc(o.id)}"
-      title="${esc(`opens on ${o.opensOn ?? o.startsAt}`)}">
-      ${where ? `<span class="wpick-is">${where}</span>` : ""}
-      <span class="wpick-t">${line(o.title)}</span>
-      <span class="wpick-m">${esc(reach)}${o.chrome ? "" : " · no chrome of its own"}${
-        o.drawn ? "" : " · its first screen has no picture"
-      }</span>
-    </button>`;
-  };
+
   /**
-   * ⛔ SET FROM HERE, NOT BY A COMMAND SOMEBODY ELSE RUNS.
+   * ⛔ WHAT WAS HERE WAS NOT A SELECTOR, AND HE SAID SO.
    *
-   * Peter: *"again, why do you fucking need to know this? I need you to make framework changes. I
-   * should be able to drive this from the listener/input, right??? why could you possibly need
-   * this?"*
+   * Peter: *"i still don't see a prototype selection from the /prototype page.. it's just 1
+   * prototype. what's going on?"* and then *"like wtf is this? this doesn't seem like a selector of
+   * any kind, seems like a barf of information"*.
    *
-   * He was right, and the mistake was mine in a specific way: `splits_on` and each prototype's
-   * placement were reachable only from a terminal in a checkout, and he reviews in a browser. So the
-   * capability existed and he could not reach it — and I turned that into a question for him rather
-   * than a door, which is the shape of thing this project exists to stop.
+   * Both prototypes were on the page. What was wrong is that nothing about it read as a choice: a
+   * paragraph of jargon, a warning sentence, two unlabelled boxes, a bulleted list of complaints and
+   * a disclosure holding a textarea. Five blocks of text for one decision — and the complaint list
+   * named `splits_on`, a FIELD NAME, on a reader's page, which CLAUDE.md forbids outright.
    *
-   * ⛔ IT WRITES TRUTH AND STAMPS NOTHING. The `author` gate, same as editing a sentence in place:
-   * the axes are what somebody says their product splits on, and nobody has agreed to anything by
-   * typing them.
+   * ⛔ SO IT IS ONE CONTROL PER DIMENSION, AND THE COMBINATION FINDS THE PROTOTYPE. *"let's allow
+   * users to specify their own dimensions ... and let them specify the values"*, *"they should be
+   * able to select the appropriate dimensions and that will bring up the right prototype"*. That is
+   * what a selector is, and it is why dimensions needed values: a list of what exists is not a way
+   * of asking for what you want.
+   *
+   * ⛔ AND THE GAPS ARE NOT A BULLETED ESSAY IN THE MIDDLE OF THE PRODUCT. One quiet line, and the
+   * detail where somebody is already editing. `check` is where the full account belongs.
    */
-  const editor = `<details class="wsel-edit">
-    <summary>${sel.axes.length ? "Change what these split on" : "Say what these split on"}</summary>
-    <form class="wsel-form" data-sel-axes>
-      <p class="wsel-hint">One question per line. A product that splits on more than one thing gets
-      more than one line — <em>Which product line?</em> then <em>Which role?</em></p>
-      <textarea name="axes" rows="${Math.max(2, sel.axes.length + 1)}" spellcheck="false"
-        placeholder="Which product line?&#10;Which role?">${sel.axes.map((ax) => esc(ax.asks)).join("\n")}</textarea>
-      <div class="wsel-actions"><button type="submit">Save</button><span class="status"></span></div>
-    </form>
+  const dimensions = sel.axes.filter((ax) => ax.values.length);
+
+  /** The chosen combination: wherever the reader lands, which is the first declared prototype. */
+  const landing = sel.options.find((o) => o.id === sel.lands) ?? sel.options[0]!;
+
+  const picker = dimensions
+    .map(
+      (ax) => `<label class="wdim">
+        <span class="wdim-n">${line(ax.asks)}</span>
+        <select data-walk-dim="${esc(ax.id)}">
+          ${ax.values
+            .map((v) => `<option value="${esc(v)}"${landing.is[ax.id] === v ? " selected" : ""}>${line(v)}</option>`)
+            .join("")}
+        </select>
+      </label>`
+    )
+    .join("");
+
+  /**
+   * ⛔ EVERY COMBINATION TRAVELS WITH THE PAGE, so choosing is instant and an uncovered one can say
+   * so rather than looking like a broken control. The client reads this, not the DOM.
+   */
+  const map = JSON.stringify(
+    sel.at.map((c) => ({ values: c.values, proto: c.option?.id ?? null, title: c.option?.title ?? null }))
+  ).replace(/</g, "\\u003c");
+
+  /**
+   * ⛔ WITH NO DIMENSIONS IT IS STILL A CHOICE, just a shorter one — the prototypes themselves. A
+   * surface that vanished until somebody had named a dimension is how this went unnoticed: a corpus
+   * with two prototypes and no dimensions showed two boxes nobody read as a chooser.
+   */
+  const bare =
+    !dimensions.length && sel.options.length > 1
+      ? `<label class="wdim">
+          <span class="wdim-n">Prototype</span>
+          <select data-walk-pick>
+            ${sel.options
+              .map((o) => `<option value="${esc(o.id)}"${o.id === landing.id ? " selected" : ""}>${line(o.title)}</option>`)
+              .join("")}
+          </select>
+        </label>`
+      : "";
+
+  /** One line, not a list. The count, and where the detail is. */
+  const quiet = gaps.length
+    ? `<span class="wsel-note">${gaps.length} thing${gaps.length === 1 ? "" : "s"} unsettled about this · <button type="button" class="wsel-more" data-sel-more>show</button></span>`
+    : "";
+
+  return `<div class="wsel">
+    <script type="application/json" id="walk-combos">${map}</script>
+    <div class="wsel-bar">
+      ${picker}${bare}
+      <span class="wsel-now" data-walk-now>${line(landing.title)}</span>
+      ${quiet}
+    </div>
+    <div class="wsel-detail" hidden data-sel-detail>
+      ${gaps.length ? `<ul class="wsel-gaps">${gaps.map((g) => `<li data-gap="${esc(g.kind)}">${line(g.says)}</li>`).join("")}</ul>` : ""}
+      ${selectionEditor(sel)}
+    </div>
+  </div>`;
+}
+
+/**
+ * Naming the dimensions and their values, where the choosing happens.
+ *
+ * ⛔ NOT A SECOND INPUT. Peter: *"why is there a separate input for 'say what these split on'? why
+ * doesn't this route through the main interface? what is happening?"* — and he was right: a textarea
+ * under the selector is a second place to type on a page whose whole design is one composer plus
+ * editing things where they are.
+ *
+ * So this is the dimensions themselves, as the text they already are: a name and its values, each a
+ * field sitting where the label sits, behind the same disclosure as the rest of the detail. Nothing
+ * new to find, nothing to fill in before the page is usable.
+ */
+function selectionEditor(sel: Selection): string {
+  const row = (ax: { id: string; asks: string; values: string[] }): string =>
+    `<tr data-dim-row="${esc(ax.id)}">
+      <td><input name="asks" value="${esc(ax.asks)}" placeholder="Role" spellcheck="false"></td>
+      <td><input name="values" value="${esc(ax.values.join(", "))}" placeholder="admin, loan processor" spellcheck="false"></td>
+    </tr>`;
+  return `<table class="wdims">
+      <thead><tr><th>Dimension</th><th>Its values</th></tr></thead>
+      <tbody>
+        ${sel.axes.map(row).join("")}
+        ${row({ id: "", asks: "", values: [] })}
+      </tbody>
+    </table>
+    <div class="wsel-actions"><button type="button" data-dims-save>Save dimensions</button><span class="status" data-dims-status></span></div>
     ${
       sel.axes.length
         ? `<table class="wsel-grid">
@@ -7484,41 +7642,23 @@ function selectionAtTheRoot(sel: Selection): string {
                   ${sel.axes
                     .map(
                       (ax) =>
-                        `<td><input name="${esc(ax.id)}" value="${esc(o.is[ax.id] ?? "")}" placeholder="—" spellcheck="false"></td>`
+                        `<td><select name="${esc(ax.id)}">
+                          <option value=""${o.is[ax.id] ? "" : " selected"}>—</option>
+                          ${ax.values
+                            .map((v) => `<option value="${esc(v)}"${o.is[ax.id] === v ? " selected" : ""}>${line(v)}</option>`)
+                            .join("")}
+                        </select></td>`
                     )
                     .join("")}
                   <td><input name="startsAt" value="${esc(o.startsAt)}" spellcheck="false" class="${o.opensOn ? "" : "bad"}"></td>
-                  <!--
-                    ⛔ A WAY BACK. Declaring without removing is a one-way door: somebody who adds a
-                    prototype by mistake from a browser had no route to undo it, which is the same
-                    hole the containment field had. Found by the check for capabilities a reviewer
-                    cannot reach, on its first run. No backticks in here: one closes the literal.
-                  -->
-                  <td><button type="button" class="wsel-drop" data-sel-drop="${esc(o.id)}" title="${esc(`take ${plain(o.title)} back`)}">take back</button></td>
+                  <td><button type="button" class="wsel-drop" data-sel-drop="${esc(o.id)}">take back</button></td>
                 </tr>`
               )
               .join("")}</tbody>
           </table>
           <div class="wsel-actions"><button type="button" data-sel-save>Save placements</button><span class="status" data-sel-status></span></div>`
         : ""
-    }
-  </details>`;
-  return `<div class="wsel">
-    ${
-      sel.axes.length
-        ? `<p class="wsel-q">${sel.axes.map((ax) => line(ax.asks)).join(pc_sep)}</p>`
-        : sel.options.length > 1
-          ? `<p class="wsel-q none">These are alternatives — but nothing says what they are alternatives about.</p>`
-          : ""
-    }
-    <div class="wpicks">${sel.options.map(option).join("")}</div>
-    ${
-      gaps.length
-        ? `<ul class="wsel-gaps">${gaps.map((g) => `<li data-gap="${esc(g.kind)}">${line(g.says)}</li>`).join("")}</ul>`
-        : ""
-    }
-    ${editor}
-  </div>`;
+    }`;
 }
 
 /** Between two axis questions on one line. */
@@ -7699,7 +7839,7 @@ function renderPrototype(screens: ProtoScreen[], promises: ProtoPromise[], walk?
   return `<script type="application/json" id="proto-says">${JSON.stringify(index).replace(/</g, "\\u003c")}</script>
   <script type="application/json" id="proto-titles">${JSON.stringify(titles).replace(/</g, "\\u003c")}</script>
   <section class="view" id="view-prototype" data-view="prototype" data-ref="prototype" data-label="Prototype">
-    ${walk ? walkInside(walk, protos ?? [], sel ?? { axes: [], options: [], lands: undefined }) : ""}
+    ${walk ? walkInside(walk, protos ?? [], sel ?? { axes: [], at: [], options: [], lands: undefined }) : ""}
     <!--
       ⛔ ONE PROTOTYPE, NOT TWO TABS.
 

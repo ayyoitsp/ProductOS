@@ -30,25 +30,34 @@ function corpus() {
   const dir = path.join(temp("v2seleditor-"), "corpus");
   fs.cpSync("v2-seed", dir, { recursive: true });
   const views = loadCorpus(dir).scopes.flatMap((e) => (e.scope.views ?? []).map((v) => `${e.scope.id}#${v.id}`));
+  /**
+   * ⛔ TWO DIMENSIONS WITH VALUES, AND ONE COMBINATION DELIBERATELY UNCOVERED. Peter: *"they should
+   * be able to select the appropriate dimensions and that will bring up the right prototype"* — so
+   * the fixture has to contain a combination that brings up NOTHING, or the selector could be wrong
+   * about that case and every assertion would still pass.
+   */
   fs.writeFileSync(
     path.join(dir, "prototypes.yaml"),
     [
       "splits_on:",
-      "  - id: line",
-      "    asks: Which product line?",
       "  - id: role",
-      "    asks: Which role?",
+      "    asks: Role",
+      "    values: [admin, loan processor]",
+      "  - id: line",
+      "    asks: Product line",
+      "    values: [CRE, private lending]",
       "prototypes:",
       "  - id: cre-admin",
-      "    title: CRE — admin",
+      "    title: CRE admin",
       `    starts_at: ${views[0]}`,
       "    is:",
-      "      line: CRE",
       "      role: admin",
+      "      line: CRE",
       "  - id: pl-proc",
-      "    title: Private lending — processor",
+      "    title: Private lending processor",
       `    starts_at: ${views[1] ?? views[0]}`,
       "    is:",
+      "      role: loan processor",
       "      line: private lending",
       "",
     ].join("\n")
@@ -69,7 +78,7 @@ function pageHtml() {
 async function inThePage(ask) {
   const page = await openPage(pageHtml(), { exe });
   try {
-    await page.waitFor("!!document.querySelector('[data-sel-save]')", "the selection editor to be on the page");
+    await page.waitFor("!!document.querySelector('[data-walk-dim]')", "the selector to be on the page");
     await page.evaluate(`(() => {
       window.__sent = [];
       window.fetch = (url, opts) => {
@@ -86,9 +95,19 @@ async function inThePage(ask) {
   }
 }
 
-test("⛔ pressing Save placements sends one prototype intent per row, with every axis", async (t) => {
+test("⛔ pressing Save placements sends one prototype intent per row, with every dimension", async (t) => {
   if (skip) return t.skip(skip);
+  /**
+   * ⛔ THE DETAIL IS OPENED FIRST, because the grid is no longer on screen by default — that is the
+   * change Peter asked for: *"wtf is this? ... seems like a barf of information"*. A test that
+   * clicked blind would pass or fail for reasons unrelated to what it is about.
+   *
+   * ⛔ AND THE PLACEMENTS ARE SELECTS NOW, not text fields. A dimension that says what it can be
+   * leaves nothing to type, and typing was how a prototype came to claim a value nobody could
+   * select.
+   */
   const sent = await inThePage(`
+    document.querySelector('[data-sel-more]').click();
     document.querySelector('[data-sel-save]').click();
     await new Promise((r) => setTimeout(r, 400));
     return JSON.stringify(window.__sent);
@@ -100,62 +119,41 @@ test("⛔ pressing Save placements sends one prototype intent per row, with ever
     assert.equal(p.body.intent, "prototype");
     assert.ok(p.body.startsAt, "no front door was sent");
   }
-  /** ⛔ Both axes travel, which is the whole reason one axis was wrong. */
+  /** ⛔ Both dimensions travel, which is the whole reason one axis was wrong. */
   const admin = posts.find((p) => p.body.id === "cre-admin");
   assert.ok(admin, "the first prototype was not sent");
-  assert.deepEqual(admin.body.is, { line: "CRE", role: "admin" });
-  /** ⛔ And the half-placed one sends its empty axis as empty rather than omitting it. */
+  assert.deepEqual(admin.body.is, { role: "admin", line: "CRE" });
   const proc = posts.find((p) => p.body.id === "pl-proc");
-  assert.deepEqual(proc.body.is, { line: "private lending", role: "" });
+  assert.deepEqual(proc.body.is, { role: "loan processor", line: "private lending" });
 });
 
-test("⛔ a typed answer reaches the request — the inputs are the source, not the render", async (t) => {
+test("⛔ a changed placement reaches the request — the controls are the source, not the render", async (t) => {
   if (skip) return t.skip(skip);
   const sent = await inThePage(`
+    document.querySelector('[data-sel-more]').click();
     const row = document.querySelector('[data-sel-proto="pl-proc"]');
-    const roleInput = [...row.querySelectorAll('input')].find((i) => i.getAttribute('name') === 'role');
-    roleInput.value = 'loan processor';
+    const role = [...row.querySelectorAll('select')].find((i) => i.getAttribute('name') === 'role');
+    role.value = 'admin';
     document.querySelector('[data-sel-save]').click();
     await new Promise((r) => setTimeout(r, 400));
     return JSON.stringify(window.__sent);
   `);
   const proc = JSON.parse(sent).find((p) => p.body.id === "pl-proc");
-  assert.deepEqual(proc.body.is, { line: "private lending", role: "loan processor" });
+  assert.deepEqual(proc.body.is, { role: "admin", line: "private lending" });
 });
 
-test("⛔ saving the axes sends them as a list, one per line", async (t) => {
-  if (skip) return t.skip(skip);
-  const sent = await inThePage(`
-    const form = document.querySelector('form[data-sel-axes]');
-    form.querySelector('textarea').value = 'Which product line?\\nWhich role?\\n\\nSigned in?';
-    form.requestSubmit();
-    await new Promise((r) => setTimeout(r, 400));
-    return JSON.stringify(window.__sent);
-  `);
-  const posts = JSON.parse(sent);
-  assert.equal(posts.length, 1);
-  assert.equal(posts[0].body.intent, "splits-on");
-  /**
-   * ⛔ THE BLANK LINE IS DROPPED AND THE THIRD SURVIVES. This is the assertion the `\n` bug would
-   * have failed: with the escape eaten, the string literal broke and the whole script died, so
-   * nothing was sent at all.
-   */
-  assert.deepEqual(posts[0].body.axes, ["Which product line?", "Which role?", "Signed in?"]);
-});
-
-test("an empty axes box refuses locally and sends nothing", async (t) => {
-  if (skip) return t.skip(skip);
-  const sent = await inThePage(`
-    const form = document.querySelector('form[data-sel-axes]');
-    form.querySelector('textarea').value = '   \\n  ';
-    form.requestSubmit();
-    await new Promise((r) => setTimeout(r, 300));
-    return JSON.stringify({ sent: window.__sent, said: form.querySelector('.status').textContent });
-  `);
-  const { sent: posts, said } = JSON.parse(sent);
-  assert.deepEqual(posts, [], "it posted an empty split");
-  assert.match(said, /Say what they split on/);
-});
+/**
+ * ⛔ TWO TESTS REMOVED HERE, DELIBERATELY, AND THIS NOTE IS WHY.
+ *
+ * They drove a textarea that took one dimension per line and asserted it refused an empty box.
+ * Peter: *"why is there a separate input for 'say what these split on'? why doesn't this route
+ * through the main interface? what is happening?"* — the textarea was a second place to type on a
+ * page whose whole design is one composer plus editing things where they are. It is gone, so the
+ * tests of it would now be testing a surface this project decided against.
+ *
+ * What replaced them, and is asserted below: the dimension's name and its values are the rows they
+ * are displayed in, saved through the same one door, and the empty-row case is covered there.
+ */
 
 test("⛔ containment is said on the screen itself, through the same door", async (t) => {
   if (skip) return t.skip(skip);
@@ -203,4 +201,96 @@ test("⛔ the empty option takes a containment back, rather than sending nothing
   assert.equal(posts.length, 1, "clearing it sent nothing");
   assert.equal(posts[0].body.intent, "inside");
   assert.equal(posts[0].body.of, "", "it did not send the clearing");
+});
+
+test("⛔ picking the dimension values brings up the right prototype", async (t) => {
+  if (skip) return t.skip(skip);
+  /**
+   * Peter: *"they should be able to select the appropriate dimensions and that will bring up the
+   * right prototype"*, after *"wtf is this? this doesn't seem like a selector of any kind, seems
+   * like a barf of information"* — both prototypes were on the page as two unlabelled boxes under a
+   * paragraph of jargon, a warning and a bulleted list.
+   *
+   * ⛔ THE UNCOVERED COMBINATION IS THE ASSERTION THAT MATTERS. A selector that left the previous
+   * prototype on screen when you asked for one that does not exist would be quietly lying about
+   * what you had asked for, and every other assertion here would still pass.
+   */
+  const out = await inThePage(`
+    const dims = [...document.querySelectorAll('[data-walk-dim]')];
+    const role = dims.find((d) => d.getAttribute('data-walk-dim') === 'role');
+    const line = dims.find((d) => d.getAttribute('data-walk-dim') === 'line');
+    const now = () => document.querySelector('[data-walk-now]').textContent.trim();
+    const seen = { dims: dims.length, start: now() };
+
+    /* admin · CRE — declared */
+    role.value = 'admin'; line.value = 'CRE';
+    role.dispatchEvent(new Event('change'));
+    await new Promise((r) => setTimeout(r, 120));
+    seen.creAdmin = now();
+
+    /* loan processor · private lending — declared */
+    role.value = 'loan processor'; line.value = 'private lending';
+    role.dispatchEvent(new Event('change'));
+    await new Promise((r) => setTimeout(r, 120));
+    seen.plProc = now();
+
+    /* loan processor · CRE — nothing covers it */
+    line.value = 'CRE';
+    line.dispatchEvent(new Event('change'));
+    await new Promise((r) => setTimeout(r, 120));
+    seen.uncovered = now();
+    seen.uncoveredClass = document.querySelector('[data-walk-now]').className;
+    return JSON.stringify(seen);
+  `);
+  const seen = JSON.parse(out);
+  assert.equal(seen.dims, 2, `expected one control per dimension, got ${seen.dims}`);
+  assert.equal(seen.creAdmin, "CRE admin");
+  assert.equal(seen.plProc, "Private lending processor");
+  assert.match(seen.uncovered, /nothing covers this/i, "an uncovered combination left the last prototype on screen");
+  assert.match(seen.uncoveredClass, /none/, "an uncovered combination is not marked as one");
+});
+
+test("⛔ the detail is shut until asked for — one decision, not five blocks of text", async (t) => {
+  if (skip) return t.skip(skip);
+  const out = await inThePage(`
+    const detail = document.querySelector('[data-sel-detail]');
+    const more = document.querySelector('[data-sel-more]');
+    const before = detail.hidden;
+    if (more) { more.click(); await new Promise((r) => setTimeout(r, 60)); }
+    return JSON.stringify({ before, after: detail.hidden, hasMore: !!more, label: more ? more.textContent : "" });
+  `);
+  const { before, after, hasMore, label } = JSON.parse(out);
+  assert.equal(before, true, "the gaps and the dimension table are open by default");
+  assert.ok(hasMore, "there is no way to see the detail");
+  assert.equal(after, false, "asking for the detail did not open it");
+  assert.match(label, /hide/, "the control does not say it will close again");
+});
+
+test("⛔ the dimensions and their values save from where they are shown", async (t) => {
+  if (skip) return t.skip(skip);
+  /**
+   * Peter: *"why is there a separate input for 'say what these split on'? why doesn't this route
+   * through the main interface?"* — so there is no textarea. The dimension's name and its values are
+   * the rows they are displayed in, and they go through the same one door.
+   */
+  const out = await inThePage(`
+    document.querySelector('[data-sel-more]').click();
+    const rows = [...document.querySelectorAll('[data-dim-row]')];
+    const last = rows[rows.length - 1];
+    last.querySelector('input[name="asks"]').value = 'Signed in?';
+    last.querySelector('input[name="values"]').value = 'yes, no';
+    document.querySelector('[data-dims-save]').click();
+    await new Promise((r) => setTimeout(r, 400));
+    return JSON.stringify({ sent: window.__sent, rows: rows.length });
+  `);
+  const { sent, rows } = JSON.parse(out);
+  assert.equal(rows, 3, "there is no blank row to add a dimension in");
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].body.intent, "splits-on");
+  assert.equal(sent[0].body.axes.length, 3, "the existing dimensions were dropped");
+  const added = sent[0].body.axes[2];
+  assert.equal(added.asks, "Signed in?");
+  assert.deepEqual(added.values, ["yes", "no"], "the values did not travel");
+  /** ⛔ And the ones already there keep their values rather than being re-sent empty. */
+  assert.deepEqual(sent[0].body.axes[0].values, ["admin", "loan processor"]);
 });

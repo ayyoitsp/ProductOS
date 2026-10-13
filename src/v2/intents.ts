@@ -294,7 +294,7 @@ export const INTENTS: Intent[] = [
     takes: [
       {
         name: "axes",
-        says: '⛔ The questions, in order. Either one sentence, or a list of `{id, asks}` — e.g. [{"id":"line","asks":"Which product line?"},{"id":"role","asks":"Which role?"}]. A product splits on more than one thing and one sentence could only hold the first',
+        says: '⛔ The dimensions, in order, each with its values — e.g. [{"asks":"Role","values":["admin","loan processor"]},{"asks":"Product line","values":["CRE","private lending"]}]. A bare sentence still works and means one dimension with no values, which is a label rather than a selector',
         required: true,
       },
     ],
@@ -304,18 +304,32 @@ export const INTENTS: Intent[] = [
        * ⛔ ONE SENTENCE AND A LIST BOTH ARRIVE HERE, because a single axis is the common case and
        * making somebody write JSON for it would be a door nobody uses.
        */
-      const axes: Array<{ id: string; asks: string }> = [];
+      const axes: Array<{ id: string; asks: string; values: string[] }> = [];
       const parse = (v: unknown): void => {
         if (typeof v === "string") {
           const asks = v.trim();
-          if (asks) axes.push({ id: slugify(asks), asks });
+          if (asks) axes.push({ id: slugify(asks), asks, values: [] });
           return;
         }
         if (v && typeof v === "object" && !Array.isArray(v)) {
-          const o = v as { id?: unknown; asks?: unknown };
+          const o = v as { id?: unknown; asks?: unknown; values?: unknown };
           const asks = str(o.asks).trim();
           if (!asks) return;
-          axes.push({ id: str(o.id).trim() || slugify(asks), asks });
+          /**
+           * ⛔ THE VALUES COME WITH THE DIMENSION, because without them there is nothing to choose
+           * between and the surface is a list of what exists rather than a selector. Peter: *"let's
+           * allow users to specify their own dimensions ... and let them specify the values"*.
+           *
+           * ⛔ DEDUPED AND ORDER-KEPT. Two identical values make one dropdown entry unreachable,
+           * and sorting them would reorder somebody's own list for no reason.
+           */
+          const values: string[] = [];
+          if (Array.isArray(o.values))
+            for (const raw of o.values) {
+              const value = str(raw).trim();
+              if (value && !values.includes(value)) values.push(value);
+            }
+          axes.push({ id: str(o.id).trim() || slugify(asks), asks, values });
         }
       };
       if (Array.isArray(raw)) for (const v of raw) parse(v);
@@ -412,7 +426,7 @@ export const INTENTS: Intent[] = [
           ],
         };
       }
-      const axes = axesOf(corpus.splitsOn);
+      const axes = axesOf(corpus.splitsOn, corpus.prototypes);
       const existing = corpus.prototypes.find((p) => p.id === id);
       const title = str(body.title).trim() || existing?.title;
       if (!title) return { ok: false, why: `"${id}" is new, so say what to call it`, detail: ["title"] };

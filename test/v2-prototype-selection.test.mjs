@@ -194,17 +194,38 @@ test("⛔ handover and the page agree about what a door opens on — one predica
   assert.equal(broken.names, undefined);
 });
 
-test("the selection reaches the page, with its question on it", () => {
+test("the selection reaches the page as a control per dimension", () => {
+  /**
+   * ⛔ WHAT THIS ASSERTED BEFORE WAS THE BARF. It checked the question was somewhere on the page and
+   * that an option carried a label — both true of the thing Peter looked at and said *"wtf is this?
+   * this doesn't seem like a selector of any kind, seems like a barf of information"*. A row of
+   * labelled boxes satisfies "the selection reaches the page" and is not a selector.
+   *
+   * So the assertion is now the shape: one control per dimension, its values as the options, and
+   * the combinations carried so that choosing finds the prototype.
+   */
   const dir = corpus();
   const ref = views(dir)[0];
-  cli(["v2", "prototypes", "new", "Admin only", "--starts-at", ref, "--is", "admin", "--into", dir]);
-  cli(["v2", "prototypes", "splits-on", "Which role is this for?", "--into", dir]);
+  cli(["v2", "prototypes", "new", "Admin only", "--starts-at", ref, "--into", dir]);
+  const intent = intentNamed("splits-on");
+  const put = intent.run({ dir, who: { kind: "cli", actor: "peter" }, pressing: "peter" }, {
+    axes: [{ asks: "Role", values: ["admin", "loan processor"] }],
+  });
+  assert.equal(put.ok, true, put.why);
+
   const c = loadCorpus(dir);
+  const sel = selectionOf(c);
+  assert.deepEqual(sel.axes[0].values, ["admin", "loan processor"], "the values did not land");
+  assert.equal(sel.at.length, 2, "the combinations were not derived from the values");
+
   const html = renderScopePage(c, c.scopes[0].scope.id) ?? "";
-  assert.match(html, /Which role is this for\?/, "the question is not on the page");
-  assert.match(html, /class="wpick-is">admin/, "an option does not say which side of the split it is");
-  /** ⛔ And with ONE prototype it is still there — that is the state where a reader most needs it. */
-  assert.match(html, /class="wsel"/, "the selection disappeared because there was only one option");
+  assert.match(html, /data-walk-dim="role"/, "there is no control for the dimension");
+  assert.match(html, /<span class="wdim-n">Role<\/span>/, "the control is not labelled with the dimension's name");
+  assert.match(html, /id="walk-combos"/, "the combinations do not travel with the page");
+  /** ⛔ And a value nothing covers is named rather than silently absent. */
+  assert.match(gapsIn(sel).map((g) => g.says).join("\n"), /nothing covers loan processor/);
+  /** ⛔ A field name must never reach a reader — this listed `splits_on` in a bulleted complaint. */
+  assert.doesNotMatch(html, /splits_on/, "a schema field name is on a reader's page");
 });
 
 test("⛔ a prototype can be taken back — declaring without removing is a one-way door", () => {
