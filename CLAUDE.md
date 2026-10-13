@@ -385,9 +385,21 @@ back because one went out an hour ago, not deferred to spare anybody the trouble
 that is not live is a change he cannot look at, and the whole point of the loop is that he can.
 
 ⛔ **And a deploy is not finished when the code ships.** `sketch_html` is persisted truth, so new
-drawing code changes nothing already stored — see `fg-0002`. Deploying means: merge, deploy the
-code, **re-run `v2 draw --all` and `v2 prototypes`, re-take the style, re-import the corpus**, and
-check a number on the live page that would be different if it had not worked.
+drawing code changes nothing already stored — see `fg-0002`. Shipping the code and stopping leaves
+every drawing exactly as the previous generator left it, and the tick is true.
+
+⛔ **But the two halves have different owners, and they must not blur.** The deploy session said it
+plainly, about this rule: *"I DO NOT REDRAW. Those are an author's acts on product truth, and this
+session deploys code. Otherwise a deploy session is rewriting truth without a person, which is the
+one thing the corpus is careful not to do."* Right, and the wording here used to imply otherwise.
+
+| | who | what finishes it |
+| --- | --- | --- |
+| **the code** | the deploy session | it is live, and here is a number read off the page |
+| **the drawings** | the author — you | `v2 draw --all`, `v2 prototypes`, `v2 style`, `hosted import` |
+
+**Do your half in the same breath as the merge**, and then check a number on the live page that
+would be different if it had not worked — not that the page returns 200.
 
 ## After changing `src/` or `skills/`
 
