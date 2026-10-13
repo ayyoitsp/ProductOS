@@ -1,14 +1,9 @@
 id: "0137"
-said: "we should have a first class \"prototype selection' at the root of prototypes.  the multiple prototypes should be supported by the framework - what it splits on should be up to the project/user driving it"
+said: can we fix this listener so it doesn't error out on the front end
 at: 2026-10-13
-kind: concept
+kind: surface
 reaches:
-  model: splits_on
-  derive: selectionOf
-  generate: writePrototypes
-  surface: selectionAtTheRoot
-  check: prototypes-split-on-nothing
-  instruct: what they are alternatives ABOUT
-  pin: nothing infers the axis
+  surface: healIfDead
+  pin: the page's live connection reopens after a 500 kills it
 waived: {}
 closed: 2026-10-13
