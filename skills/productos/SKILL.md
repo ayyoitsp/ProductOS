@@ -458,6 +458,42 @@ Then **check a number on the live page that would be different if it had not wor
 page returns 200. A corpus was once reported deployed while every drawing on it still came from the
 previous generator, and the tick was true.
 
+### ⛔ Several ways through one product — and say what they are alternatives ABOUT
+
+Peter: *"we should have a first class "prototype selection' at the root of prototypes. the multiple
+prototypes should be supported by the framework - what it splits on should be up to the project/user
+driving it"*, and earlier: *"we can have different prototypes for differnet prototypes.. like
+'unauthenticated' could be a flow, and CRE vs private lending"*.
+
+An unauthenticated flow and a signed-in one do not share a menu; two lending businesses in one
+codebase do not share a walk. So a product has **prototypes**, each with its own front door and its
+own chrome — and the set has a **question at its root** that the project writes:
+
+```bash
+productos v2 prototypes splits-on "Which role is this for?" --into <corpus>
+productos v2 prototypes new "CRE — loan processor" --starts-at deal-list#deals-list \
+  --is "loan processor" --shell-from frontend/app/\(app\)/cre-deals/page.tsx --into <corpus>
+productos v2 prototypes --into <corpus>        # draw each one's chrome and aim its menu
+```
+
+⛔ **Never hand-write `prototypes.yaml`.** The id comes from the title, the front door is checked
+against the corpus before anything is written, and `shell_html`, `nav[].to` and `from` are all
+output. What a person writes is the title, which screen it opens on, and `--is`.
+
+⛔ **`splits_on` is a sentence somebody wrote, and nothing infers it.** A classifier reading two
+titles and concluding "role" would be a guess wearing a decision's clothes — the same objection as
+`Note.kind`. Absent is absent, and every surface says so rather than labelling it.
+
+⛔ **`title` and `is` are different strings on purpose.** "CRE — loan processor" is for a reader;
+`is: loan processor` is which side of the split this one is. A chooser built from titles alone cannot
+tell you that two of five options are both the admin, or that nothing covers the signed-out case —
+and `check` reports exactly those: `prototypes-split-on-nothing`, `two-prototypes-one-answer`,
+`prototype-answers-nothing`, `prototype-opens-on-nothing`.
+
+⛔ **How much of the product each one reaches is derived, never typed.** It is what separates a
+second way through the product from one screen somebody filed hopefully, and it is a fact about the
+truth. The first prototype in the file is where a reader lands — ordering, not a `default:` flag.
+
 ### ⛔ A screen somebody has worked on is not the sweep's to rewrite
 
 Peter: *"we should add some internal tracking to screens - when screens haven't had review yet

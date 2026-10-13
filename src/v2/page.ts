@@ -36,6 +36,7 @@ import { resolveRef } from "./ref.js";
 import { demonstrationOf } from "./demonstrate.js";
 import { decisionsOn, decisionsUnder, howItWasDecided, type Decision } from "./record.js";
 import { holdsOn, whyHeld } from "./held.js";
+import { selectionOf, gapsIn, type Selection, type Option } from "./selection.js";
 
 const esc = (s: unknown): string =>
   String(s ?? "")
@@ -3022,7 +3023,7 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
          * under seven open questions and nobody reads them. A second row of items, at the level
          * they belong to.
          */
-        renderPrototype(protoScreens, protoPromises, theWalk, (corpus.prototypes ?? [])) +
+        renderPrototype(protoScreens, protoPromises, theWalk, (corpus.prototypes ?? []), selectionOf(corpus)) +
         renderSettings(corpus) +
         renderSubsystems(corpus) +
         `<section class="view" id="view-overview" data-view="overview" data-ref="${esc(scopeId)}" data-label="Overview">
@@ -6667,6 +6668,29 @@ export const STYLE = `<style>
   .wdoor:hover { border-color: var(--accent); color: var(--accent); }
   .wdoor-m { color: var(--dim); font-size: .7rem; margin-left: .4rem; }
   .wnote { margin-top: .9rem; font-size: .8rem; color: var(--warn); background: var(--warn-bg); border-radius: 8px; padding: .5rem .7rem; }
+  /**
+   * The prototype selection — the choice before the walk.
+   *
+   * ⛔ CARDS RATHER THAN A ROW OF PILLS, because each option carries three facts a pill cannot hold:
+   * which side of the split it is, what it is called, and how much of the product it reaches. The
+   * row of pills is what was here, and it was the reason nobody could tell what the split was about.
+   *
+   * ⛔ AND TIGHT. Peter: *"WE DON'T HAVE THAT MUCH SCREEN REAL ESTATE to begin with"* — the question
+   * is one line, the cards wrap, and nothing here grows with the number of prototypes except the
+   * wrap.
+   */
+  .wsel { margin: 0 0 .9rem; }
+  .wsel-q { margin: 0 0 .45rem; font-size: .8rem; font-weight: 600; color: var(--ink); }
+  .wsel-q.none { font-weight: 400; color: var(--warn); }
+  .wpicks { display: flex; flex-wrap: wrap; gap: .4rem; }
+  .wpick { font: inherit; text-align: left; display: flex; flex-direction: column; gap: .1rem; cursor: pointer;
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: .4rem .65rem; color: var(--ink); }
+  .wpick:hover { border-color: var(--accent); }
+  .wpick.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+  .wpick-is { font-size: .65rem; text-transform: uppercase; letter-spacing: .07em; color: var(--accent); font-weight: 600; }
+  .wpick-t { font-size: .85rem; font-weight: 600; }
+  .wpick-m { font-size: .7rem; color: var(--dim); }
+  .wsel-gaps { margin: .5rem 0 0; padding: 0 0 0 1rem; font-size: .75rem; color: var(--warn); }
   .ptile { margin: 0; cursor: pointer; }
   /**
    * A drawing is a whole page of markup. Shown at its own size it is one screen per scroll, so each
@@ -7122,7 +7146,66 @@ function renderSubsystems(corpus: Corpus): string {
  * ⛔ AND IT NAMES THE SCREENS WITH NO DOOR. A walk that silently skipped them would read as a
  * complete product with part of itself missing, which is the opposite of what this is for.
  */
-function walkInside(walk: Walk, protos: Prototype[]): string {
+/**
+ * The choice a reader makes before they walk anything.
+ *
+ * ⛔ FIRST CLASS, AT THE ROOT, AND IT SAYS WHAT IT IS ASKING.
+ *
+ * Peter: *"we should have a first class "prototype selection' at the root of prototypes. the
+ * multiple prototypes should be supported by the framework - what it splits on should be up to the
+ * project/user driving it"*.
+ *
+ * What was here was a row of bare buttons that appeared only when a corpus happened to have more
+ * than one prototype — so the question a reader has first, *these are versions of WHAT?*, had no
+ * answer anywhere on the page. And with one prototype the row vanished entirely, which is the state
+ * where a reader most needs to be told that choosing is a thing this product's truth can express.
+ *
+ * ⛔ IT SHOWS HOW MUCH EACH ONE REACHES, because that is what separates a second way through the
+ * product from a single screen somebody filed hopefully. An option that opens on a screen with no
+ * drawing says so rather than leading somewhere blank.
+ *
+ * ⛔ AND THE GAPS ARE ON THE PAGE, not only in `check`. This is the surface where somebody decides
+ * what the prototypes are; a split whose question is unstated, or two options answering it
+ * identically, is exactly the thing they are here to fix.
+ */
+function selectionAtTheRoot(sel: Selection): string {
+  if (!sel.options.length) return "";
+  const gaps = gapsIn(sel);
+  const option = (o: Option, i: number): string => {
+    const reach =
+      o.reaches > 1
+        ? `${o.reaches} screens`
+        : o.reaches === 1
+          ? "1 screen"
+          : /** ⛔ Said plainly. Zero is a real answer and the most useful one on this surface. */
+            "nothing beyond its front door";
+    return `<button type="button" class="wpick${i === 0 ? " on" : ""}" data-walk-proto="${esc(o.id)}"
+      title="${esc(`opens on ${o.opensOn ?? o.startsAt}`)}">
+      ${o.is ? `<span class="wpick-is">${line(o.is)}</span>` : ""}
+      <span class="wpick-t">${line(o.title)}</span>
+      <span class="wpick-m">${esc(reach)}${o.chrome ? "" : " · no chrome of its own"}${
+        o.drawn ? "" : " · its first screen has no picture"
+      }</span>
+    </button>`;
+  };
+  return `<div class="wsel">
+    ${
+      sel.question
+        ? `<p class="wsel-q">${line(sel.question)}</p>`
+        : sel.options.length > 1
+          ? `<p class="wsel-q none">These are alternatives — but nothing says what they are alternatives about.</p>`
+          : ""
+    }
+    <div class="wpicks">${sel.options.map(option).join("")}</div>
+    ${
+      gaps.length
+        ? `<ul class="wsel-gaps">${gaps.map((g) => `<li>${line(g)}</li>`).join("")}</ul>`
+        : ""
+    }
+  </div>`;
+}
+
+function walkInside(walk: Walk, protos: Prototype[], sel: Selection): string {
   if (!walk.steps.size) return "";
 
   const data = {
@@ -7176,16 +7259,7 @@ function walkInside(walk: Walk, protos: Prototype[]): string {
 
   return `<script type="application/json" id="walk-data">${JSON.stringify(data).replace(/</g, "\\u003c")}</script>
     <p class="lede">The product as one thing, walked from what the truth says. <strong>Inside</strong> is a screen shown within this one; <strong>goes to</strong> is a control the truth says leads somewhere.</p>
-    ${
-      protos.length > 1
-        ? `<div class="wpicks">${protos
-            .map(
-              (p, i) =>
-                `<button type="button" class="wpick${i === 0 ? " on" : ""}" data-walk-proto="${esc(p.id)}">${line(p.title)}</button>`
-            )
-            .join("")}</div>`
-        : ""
-    }
+    ${selectionAtTheRoot(sel)}
     <div class="wbar"><span class="wwhere" id="walk-where"></span><button type="button" class="wback" id="walk-back" hidden>◀ back</button></div>
     <div class="wrap-walk">
       <div class="wstage" id="walk-stage"></div>
@@ -7199,7 +7273,7 @@ function walkInside(walk: Walk, protos: Prototype[]): string {
     ${stranded}`;
 }
 
-function renderPrototype(screens: ProtoScreen[], promises: ProtoPromise[], walk?: Walk, protos?: Prototype[]): string {
+function renderPrototype(screens: ProtoScreen[], promises: ProtoPromise[], walk?: Walk, protos?: Prototype[], sel?: Selection): string {
   if (!screens.length && !promises.length) return "";
 
   /**
@@ -7268,7 +7342,7 @@ function renderPrototype(screens: ProtoScreen[], promises: ProtoPromise[], walk?
   return `<script type="application/json" id="proto-says">${JSON.stringify(index).replace(/</g, "\\u003c")}</script>
   <script type="application/json" id="proto-titles">${JSON.stringify(titles).replace(/</g, "\\u003c")}</script>
   <section class="view" id="view-prototype" data-view="prototype" data-ref="prototype" data-label="Prototype">
-    ${walk ? walkInside(walk, protos ?? []) : ""}
+    ${walk ? walkInside(walk, protos ?? [], sel ?? { options: [], lands: undefined }) : ""}
     <!--
       ⛔ ONE PROTOTYPE, NOT TWO TABS.
 

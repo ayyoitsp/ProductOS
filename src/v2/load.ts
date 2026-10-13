@@ -82,6 +82,8 @@ export interface Corpus {
    * lending businesses in one codebase do not share a walk. See `Prototype`.
    */
   prototypes: Prototype[];
+  /** The question the prototype selection asks, in the project own words. Absent until stated. */
+  splitsOn?: string;
   rules: Array<{ rule: Rule; body: string; file: string }>;
   /**
    * The subsystems beneath the product, and roughly what each does.
@@ -343,10 +345,20 @@ export function loadCorpus(root: string, store: Store = diskStore): Corpus {
    * reaches the store, a packet and an export with nothing else to keep in step.
    */
   let prototypes: Prototype[] = [];
+  /**
+   * ⛔ CARRIED SEPARATELY, BECAUSE IT IS A FACT ABOUT THE SET AND NOT ABOUT ANY ONE OF THEM. The
+   * question the selection asks belongs to the collection — putting it on each prototype would be
+   * the same sentence stored four times with nothing keeping them equal.
+   */
+  let splitsOn: string | undefined;
   for (const file of readDir(paths.root, [".yaml", ".yml"]).filter((f) => /prototypes\.ya?ml$/.test(f))) {
     try {
       const raw = YAML.parse(fs.readFileSync(file, "utf-8")) ?? {};
-      if (raw.prototypes) prototypes = PrototypeFile.parse(raw).prototypes;
+      if (raw.prototypes) {
+        const parsed = PrototypeFile.parse(raw);
+        prototypes = parsed.prototypes;
+        splitsOn = parsed.splits_on;
+      }
     } catch {
       /* a corpus with an unreadable prototypes file still loads — `check` reports it */
     }
@@ -369,7 +381,7 @@ export function loadCorpus(root: string, store: Store = diskStore): Corpus {
       broken.push({ file, why: why(e) });
     }
   }
-  return { paths, scopes, rules, capabilities, charter, notes, readings, verdicts, steers, access, style, prototypes, broken };
+  return { paths, scopes, rules, capabilities, charter, notes, readings, verdicts, steers, access, style, prototypes, splitsOn, broken };
 }
 
 // ---------------------------------------------------------------------------

@@ -3503,6 +3503,15 @@ export const Prototype = z
     nav: z
       .array(z.object({ label: z.string(), to: z.string().optional() }).strict())
       .default([]),
+    /**
+     * This prototype's answer to the question the set splits on — `splits_on` below.
+     *
+     * ⛔ THE ANSWER, NOT THE NAME. "CRE — loan processor" is a title somebody wrote for a reader;
+     * `is: loan processor` is which side of the split this one is, and those are different strings
+     * on purpose. A chooser built from titles alone cannot tell you that two of five prototypes are
+     * both the admin, or that nothing covers the signed-out case.
+     */
+    is: z.string().optional(),
     /** Which layout files it was drawn from, so a reader can go and look. */
     from: z.array(z.string()).default([]),
     drawn_at: z.string().optional(),
@@ -3510,8 +3519,32 @@ export const Prototype = z
   .strict();
 export type Prototype = z.infer<typeof Prototype>;
 
-/** The file a corpus keeps its prototypes in — one home, beside `style.yaml`. */
-export const PrototypeFile = z.object({ prototypes: z.array(Prototype).default([]) }).strict();
+/**
+ * The file a corpus keeps its prototypes in — one home, beside `style.yaml`.
+ *
+ * ⛔ THE SET HAS A QUESTION AT ITS ROOT, AND THE PROJECT CHOOSES WHAT IT IS.
+ *
+ * Peter: *"we should have a first class "prototype selection' at the root of prototypes. the
+ * multiple prototypes should be supported by the framework - what it splits on should be up to the
+ * project/user driving it"*.
+ *
+ * Several prototypes were already expressible, and the surface rendered them as a row of unlabelled
+ * buttons that appeared only when there was more than one — so the one thing a reader needed was the
+ * one thing nothing recorded: what these are alternatives ABOUT. A product split by role, a product
+ * split by whether you have signed in, and a product split by line of business are three different
+ * claims, and all three looked identical.
+ *
+ * ⛔ AND IT IS NEVER INFERRED. A classifier reading two titles and guessing "role" would be a guess
+ * wearing a decision's clothes — the same objection as `Note.kind`. The axis is a product decision,
+ * so it is stated in the project's own words or it is absent, and `check` says which.
+ */
+export const PrototypeFile = z
+  .object({
+    /** The question the selection asks, in the project's own words. */
+    splits_on: z.string().optional(),
+    prototypes: z.array(Prototype).default([]),
+  })
+  .strict();
 
 export const Style = z
   .object({

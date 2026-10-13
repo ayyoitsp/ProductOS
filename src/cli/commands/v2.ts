@@ -23,6 +23,7 @@ import { looksLikeInstance, instanceOf, mirror, act as remoteAct, note as remote
 import { lineFor } from "../../v2/log.js";
 import { drawFromRoute } from "../../v2/draw.js";
 import { holdsOn, whyHeld } from "../../v2/held.js";
+import { selectionOf, gapsIn } from "../../v2/selection.js";
 import { everyView, everyViewV1, isResolved, resolveRoute } from "../../v2/routes.js";
 import { spokenFor } from "../../v2/spoken.js";
 import { idiomOf, proposeScreen } from "../../v2/propose.js";
@@ -2321,9 +2322,128 @@ export function v2Command(): Command {
         return;
       }
       const file = path.join(into, "prototypes.yaml");
-      fs.writeFileSync(file, YAML.stringify({ prototypes: out }));
+      /**
+       * ⛔ `splits_on` IS CARRIED THROUGH. This wrote `{ prototypes: out }` and nothing else, so the
+       * first run after somebody stated what the set splits on would have silently deleted it — a
+       * generator throwing away the one field on this file that only a person can write.
+       */
+      fs.writeFileSync(file, YAML.stringify(corpus.splitsOn ? { splits_on: corpus.splitsOn, prototypes: out } : { prototypes: out }));
       console.log(pc.green("✓"), `written into ${path.relative(process.cwd(), file)}`);
       console.log(pc.dim("  re-run this after the layouts change — the chrome is output, not a document"));
+
+      /**
+       * ⛔ AND THE SELECTION IS REPORTED, because a sweep that says nothing about it is how the set
+       * drifted into two unlabelled buttons in the first place.
+       */
+      const sel = selectionOf(loadCorpus(into));
+      console.log("");
+      console.log(sel.question ? pc.dim(`  splits on: ${sel.question}`) : pc.yellow("!") + " nothing says what these prototypes are alternatives about");
+      for (const o of sel.options)
+        console.log(pc.dim(`    ${o.is ? `${o.is} — ` : ""}${o.title}  ·  reaches ${o.reaches} screen${o.reaches === 1 ? "" : "s"}`));
+      for (const g of gapsIn(sel)) console.log(pc.yellow(`  ! ${g}`));
+    });
+
+  /**
+   * ⛔ THE SUBCOMMANDS READ THE PARENT'S `--into`, AND MUST NOT DECLARE THEIR OWN.
+   *
+   * Declaring it on both looked obviously right and silently did not work: `prototypes` carries an
+   * action of its own, so its known options are parsed out of the whole argv before dispatch — and
+   * `v2 prototypes new "CRE" --starts-at … --into <dir>` arrived with `startsAt` set from the
+   * subcommand and `into` still at its default ".", while the parent held the real value. So the
+   * corpus being written to was the working directory, which in a repo with no corpus reads as
+   * "that screen does not exist" and in a repo WITH one would have written to the wrong corpus.
+   */
+  const protos = cmd.commands.find((c) => c.name() === "prototypes")!;
+  const protoDir = (): string => path.resolve((protos.opts() as { into?: string }).into ?? ".");
+
+  protos
+    /**
+     * ⛔ A PROTOTYPE IS DECLARED BY A COMMAND NOW, NOT TYPED INTO A FILE.
+     *
+     * Peter: *"the multiple prototypes should be supported by the framework"*. It was expressible
+     * and entirely unsupported: `prototypes.yaml` was hand-authored, and the only thing the CLI did
+     * with it was refuse to find one and print a YAML snippet for somebody to copy. CLAUDE.md's
+     * rule — if it can be generated, generate it — applies to the id, the ordering and the
+     * validation of the reference, all of which a person was doing by eye.
+     *
+     * What stays the author's: the title, which screen it opens on, and which side of the split it
+     * is. Those are product decisions and nothing can derive them.
+     */
+    .command("new")
+    .description("Declare a prototype — a way through the product with its own front door")
+    .argument("<title>", "what to call it, in the words a reader would use")
+    .requiredOption("--starts-at <ref>", "the screen somebody comes in on, as <scope>#<view>")
+    .option("--is <answer>", "which side of the split this one is — its answer to what the set splits on")
+    .option("--shell-from <route>", "a route whose layouts are this prototype's chrome")
+    .action((title: string, o: { startsAt: string; is?: string; shellFrom?: string }) => {
+      const into = protoDir();
+      const corpus = loadCorpus(into);
+      /**
+       * ⛔ THE FRONT DOOR IS CHECKED BEFORE ANYTHING IS WRITTEN. A prototype starting at a screen
+       * that does not exist renders as an option that opens on nothing, and the page cannot say
+       * anything more useful about it than that — whereas here the corpus is in hand and the near
+       * misses can be named.
+       */
+      const screens = corpus.scopes.flatMap((e) => (e.scope.views ?? []).map((v) => `${e.scope.id}#${v.id}`));
+      if (!screens.includes(o.startsAt)) {
+        console.error(pc.red("✗"), `no screen "${o.startsAt}" in this corpus`);
+        const near = screens.filter((s) => s.split("#").pop() === o.startsAt.split("#").pop());
+        for (const n of near.slice(0, 5)) console.error(pc.dim(`  did you mean ${n}?`));
+        process.exit(1);
+      }
+      /**
+       * ⛔ DERIVED FROM THE TITLE, SO NOBODY IS ASKED FOR AN ID. A person naming a way through their
+       * product should not also be inventing a slug for it, and an id somebody typed is an id that
+       * disagrees with the title the first time the title is reworded.
+       */
+      const id =
+        title
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-|-$/g, "")
+          .slice(0, 40) || "prototype";
+      if (corpus.prototypes.some((p) => p.id === id)) {
+        console.error(pc.red("✗"), `a prototype called "${id}" is already here — pick another title, or edit that one`);
+        process.exit(1);
+      }
+      const next = [
+        ...corpus.prototypes,
+        { id, title, starts_at: o.startsAt, ...(o.is ? { is: o.is } : {}), ...(o.shellFrom ? { shell_from: o.shellFrom } : {}), nav: [], from: [] },
+      ];
+      const file = path.join(into, "prototypes.yaml");
+      fs.writeFileSync(file, YAML.stringify(corpus.splitsOn ? { splits_on: corpus.splitsOn, prototypes: next } : { prototypes: next }));
+      console.log(pc.green("✓"), `${id} — ${title}, opening on ${o.startsAt}`);
+      if (!o.is && corpus.splitsOn)
+        console.log(pc.yellow("!"), `this set splits on "${corpus.splitsOn}" and this one gives no answer — add --is`);
+      if (!corpus.splitsOn && next.length > 1)
+        console.log(pc.yellow("!"), `${next.length} prototypes now, and nothing says what they are alternatives about — productos v2 prototypes splits-on "<the question>"`);
+      if (o.shellFrom) console.log(pc.dim("  draw its chrome with: productos v2 prototypes --into <corpus>"));
+    });
+
+  protos
+    /**
+     * ⛔ THE AXIS IS A SENTENCE SOMEBODY WRITES, AND NOTHING INFERS IT.
+     *
+     * Peter: *"what it splits on should be up to the project/user driving it"*. A classifier reading
+     * two titles and concluding "role" would be a guess wearing a decision's clothes — the same
+     * objection as `Note.kind`. So it is stated here, in the project's own words, or it is absent
+     * and every surface says so.
+     */
+    .command("splits-on")
+    .description("Say what this product's prototypes are alternatives about")
+    .argument("<question>", "the question the selection asks, in the project's own words")
+    .action((question: string) => {
+      const into = protoDir();
+      const corpus = loadCorpus(into);
+      const file = path.join(into, "prototypes.yaml");
+      fs.writeFileSync(file, YAML.stringify({ splits_on: question, prototypes: corpus.prototypes }));
+      console.log(pc.green("✓"), `splits on: ${question}`);
+      const without = corpus.prototypes.filter((p) => !p.is);
+      if (without.length)
+        console.log(
+          pc.yellow("!"),
+          `${without.length} of ${corpus.prototypes.length} give no answer to it: ${without.map((p) => p.title).join(", ")}`
+        );
     })
 
   cmd
