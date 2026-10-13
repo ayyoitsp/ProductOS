@@ -16,6 +16,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import fs from "node:fs";
+
+import { intact } from "./support/intact.mjs";
 import path from "node:path";
 import { temp } from "./support/temp.mjs";
 import { AGENTS, AUTHORS, SHIMS, aboutProductOS, frameworkRoles, shippedRoutes } from "../dist/core/jobs.js";
@@ -66,9 +68,12 @@ test("⛔ a consumer receives no reviewer of ProductOS, and loses nothing else",
 
 test("this repository still gets them, because this is where the files they read are", () => {
   /** Withholding them everywhere would be a simpler rule and would delete the review of ProductOS. */
-  installClaudeSkills({ update: true, configRoot: process.cwd() });
-  const got = fs.readdirSync(path.join(process.cwd(), ".claude", "agents"));
-  for (const n of DEV) assert.ok(got.includes(`productos-${n}.md`), `${n} is gone from its own repo`);
+  /** ⛔ Read INSIDE the block: `intact` removes what the install added, so after it is too late. */
+  intact([".claude/agents", ".claude/skills"], () => {
+    installClaudeSkills({ update: true, configRoot: process.cwd() });
+    const got = fs.readdirSync(path.join(process.cwd(), ".claude", "agents"));
+    for (const n of DEV) assert.ok(got.includes(`productos-${n}.md`), `${n} is gone from its own repo`);
+  });
 });
 
 test("⛔ the predicate is about the destination, and names the file it is about", () => {
@@ -124,4 +129,37 @@ test("⛔ and the registries themselves are untouched — this withholds, it doe
   assert.ok(SHIMS.some((r) => r.route === "review ProductOS itself"));
   const doc = fs.readFileSync(path.join(process.cwd(), "AGENTS.md"), "utf-8");
   for (const n of DEV) assert.ok(doc.includes(n), `${n} vanished from the generated map`);
+});
+
+/**
+ * ⛔ NO TEST MAY INSTALL INTO THIS CHECKOUT WITHOUT PUTTING IT BACK.
+ *
+ * `6c36230` changed two roles' prompts in `src/core/jobs.ts` and did not regenerate their committed
+ * copies, so the drift test correctly went red. Then a LATER test installed into `process.cwd()`,
+ * rewrote those two files to match, and the second full run passed — the failure healed itself and
+ * took the evidence with it. Verified by injecting a stale marker: without the wrapper the run
+ * rewrites it, with the wrapper it survives.
+ *
+ * ⛔ And it breaks the deploy gate's premise: `staging-guard` refuses unless the tree is clean,
+ * because the image is built from the WORKING TREE — so "I ran the tests" and "I may deploy" were
+ * in conflict, and the honest guard looked broken.
+ *
+ * A test rather than a convention: the generated-copies hazard is invisible while the copies happen
+ * to be current, which is most of the time.
+ */
+test("no test installs into this checkout without restoring it", () => {
+  const offenders = [];
+  for (const f of fs.readdirSync("test").filter((n) => n.endsWith(".test.mjs"))) {
+    const text = fs.readFileSync(path.join("test", f), "utf-8");
+    /** Every call that targets the real tree, and whether `intact` is the thing wrapping it. */
+    for (const m of text.matchAll(/configRoot:\s*process\.cwd\(\)/g)) {
+      const window = text.slice(Math.max(0, m.index - 400), m.index);
+      if (!/intact\(\s*\[/.test(window)) offenders.push(`test/${f}`);
+    }
+  }
+  assert.deepEqual(
+    [...new Set(offenders)],
+    [],
+    "these install into this checkout and leave it modified, which heals a red main and dirties the deploy gate's tree",
+  );
 });
