@@ -1,0 +1,32 @@
+# ⛔ THE ATTACK: a choice with nothing saying what is being chosen between.
+#
+# Peter: "we should have a first class 'prototype selection' at the root of prototypes … what it
+# splits on should be up to the project/user driving it."
+#
+# Four prototypes, no `splits_on`, two of them answering nothing, two answering the SAME thing, and
+# one opening on a screen that is not in this corpus. Every one of those renders as a perfectly
+# confident row in a chooser:
+#
+#   · no question      — a reader is shown a choice and never told what they are choosing between
+#   · two the same     — the worst, because it looks finished: the split it claims to be is not the
+#                        split it is, and nothing on the surface would say so
+#   · opens on nothing — an option that leads to a blank, which the page can only report after the
+#                        fact when a person has already clicked it
+#
+# None of this is a parse error. A corpus in exactly this state loaded, rendered and read as a
+# product with four ways through it.
+prototypes:
+  - id: one
+    title: The first way
+    starts_at: foil#a-screen
+    is: admin
+  - id: two
+    title: The second way
+    starts_at: foil-two#a-screen
+    is: admin
+  - id: three
+    title: The third way
+    starts_at: foil#a-screen
+  - id: four
+    title: The way to nowhere
+    starts_at: foil#no-such-screen

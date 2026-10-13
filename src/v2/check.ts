@@ -13,6 +13,7 @@
 import { SLOTS, SLOT_ASKS, DEMONSTRABLE_SLOTS, owesDemonstration, statements, saysText, NOT_A_DOCUMENT, type SlotName, type Says } from "./schema.js";
 import { walkOf } from "./walk.js";
 import { holdsOn } from "./held.js";
+import { selectionOf, gapsIn } from "./selection.js";
 import {
   DOWNSTREAM_OF_ANSWER,
   answerIsUnknown,
@@ -322,6 +323,38 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
           fellBack.size === 1 ? "" : "s"
         } drew as a grey square rather than a glyph${names.size ? ` — ${[...names].slice(0, 6).join(", ")}` : ""}`,
         fix: "⛔ Usually not an authoring mistake. Either the icon package moved — it has changed its on-disk shape before, and every glyph in a corpus went grey without a commit on either side — or these names are not ones it exports. Re-draw and see whether the count goes to zero; if it does not, the names are the question.",
+      });
+  }
+
+  /**
+   * ⛔ A SET OF PROTOTYPES WITH NOTHING SAYING WHAT THEY ARE ALTERNATIVES ABOUT.
+   *
+   * Peter: *"we should have a first class "prototype selection' at the root of prototypes … what it
+   * splits on should be up to the project/user driving it"*.
+   *
+   * Two prototypes and no stated axis is the state the surface cannot render its way out of: a
+   * reader is shown a choice and not told what they are choosing between. Reported rather than
+   * refused, because the axis is a product decision and a corpus mid-authoring is allowed to have
+   * one prototype and no question — which is why the finding is keyed on there being several.
+   *
+   * ⛔ AND TWO OPTIONS WITH THE SAME ANSWER IS THE WORSE ONE, because it looks finished. The chooser
+   * shows two rows, both say "admin", and the split it claims to be is not the split it is.
+   */
+  {
+    const gaps = gapsIn(selectionOf(corpus));
+    for (const g of gaps)
+      add({
+        severity: "note",
+        kind: /opens on/.test(g)
+          ? "prototype-opens-on-nothing"
+          : /both answer/.test(g)
+            ? "two-prototypes-one-answer"
+            : /alternatives about/.test(g)
+              ? "prototypes-split-on-nothing"
+              : "prototype-answers-nothing",
+        where: "the prototype selection",
+        what: g,
+        fix: 'The question belongs to the set and each prototype answers it: `productos v2 prototypes splits-on "<the question>"`, then `--is "<this one\'s answer>"` on each. Nothing infers either — a classifier reading two titles and concluding "role" would be a guess wearing a decision\'s clothes.',
       });
   }
 

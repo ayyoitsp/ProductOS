@@ -69,6 +69,16 @@ const MUST_FIRE = {
   "names-no-rule": "a declaration naming a rule that does not exist, printed to the builder as considered",
   "declares-against-nothing": "a formal exemption from a rule that was never there",
   "says-nothing-sets-this-and-something-does": "an unverified claim that silenced requirement 3's detector and printed to the builder",
+  /**
+   * ⛔ THE PROTOTYPE SELECTION — four ways a choice can be confidently wrong, none of them a parse
+   * error. Peter: *"we should have a first class 'prototype selection' at the root of prototypes …
+   * what it splits on should be up to the project/user driving it"*. A corpus in exactly the foil's
+   * state loaded, rendered, and read as a product with four ways through it.
+   */
+  "prototypes-split-on-nothing": "a reader shown a choice and never told what they are choosing between",
+  "two-prototypes-one-answer": "the worst of them, because it looks finished — the split it claims to be is not the split it is",
+  "prototype-answers-nothing": "a half-authored set, which is when somebody is actually looking at it",
+  "prototype-opens-on-nothing": "an option whose front door is not a screen, which the page can only report after a click",
 };
 
 /**
