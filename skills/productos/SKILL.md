@@ -428,6 +428,31 @@ line of code kept working locally.
 So the snapshot is taken **where the repository is**, by `v2 style` or by `v2 generate`, which runs
 it first. Everything downstream — a hosted instance, a packet, a published page — reads the corpus.
 
+### ⛔ Deploy every time. Deploys are cheap; batching them is not
+
+Peter: *"don't ever do this again --> 'the code for it still needs a deploy, which I've not
+re-requested since they've just done one.' deploys are cheap, why would you waste my time not
+deploying"*.
+
+**Every merge to main gets deployed, immediately, without being asked.** Not batched, not held back
+because one went out an hour ago. A merged change that is not live is one nobody can look at, and
+looking at it is the whole loop.
+
+⛔ **A deploy is not finished when the code ships.** `sketch_html` is persisted truth, so new
+drawing code changes nothing already stored — deploying new generators cannot alter a drawing that
+already exists. Finish it:
+
+```bash
+productos v2 draw --all --into <corpus>     # the drawings are output; redraw them
+productos v2 prototypes --into <corpus>     # and the chrome
+productos v2 style --into <corpus>          # and the stylesheet snapshot
+productos hosted import <corpus> --into <projectId>
+```
+
+Then **check a number on the live page that would be different if it had not worked** — not that the
+page returns 200. A corpus was once reported deployed while every drawing on it still came from the
+previous generator, and the tick was true.
+
 ### ⛔ Say what a screen appears INSIDE — `within`
 
 A product is not a pile of screens, and for a long time that is all a corpus could say. Scopes nest,

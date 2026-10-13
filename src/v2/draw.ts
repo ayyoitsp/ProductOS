@@ -1007,7 +1007,29 @@ function emit(node: TS.Node, ctx: Ctx): string {
      * value once. Moving this rule above the sampler — correct for the `{icon}` case — emptied
      * every single-expression cell in the corpus, so the STAGE column went blank.
      */
-    if (ts.isIdentifier(e) && !amongWords && !ctx.inRow) return "";
+    /**
+     * ⛔ AND NOT INSIDE A CONTROL, WHERE THE LONE IDENTIFIER IS WHAT THE CONTROL SAYS.
+     *
+     * `<button role="combobox"><span className="block truncate">{displayLabel}</span></button>` is
+     * a select showing its current value. Blanked, every dropdown in the product draws as an empty
+     * box — which is what Peter has been reporting as a hatched box all along, and what it still
+     * was after the component started resolving: the marker went away and the emptiness did not.
+     *
+     * A control with no words in it is unreviewable, which this file already says elsewhere about
+     * icon-only buttons. The same is true when the words were thrown away for being a bare name.
+     */
+    const inAControl = (() => {
+      let up: TS.Node | undefined = n.parent;
+      for (let i = 0; i < 4 && up; i++) {
+        if (ts.isJsxElement(up)) {
+          const tag = up.openingElement.tagName.getText().toLowerCase();
+          if (/^(button|a|option|label|summary|legend)$/.test(tag)) return true;
+        }
+        up = up.parent;
+      }
+      return false;
+    })();
+    if (ts.isIdentifier(e) && !amongWords && !ctx.inRow && !inAControl) return "";
 
     ctx.unresolved.push(hint);
 
