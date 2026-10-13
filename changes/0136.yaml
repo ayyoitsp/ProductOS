@@ -3,11 +3,12 @@ said: we should have a first class "prototype selection' at the root of prototyp
 at: 2026-10-13
 kind: concept
 reaches:
-  model: ""
-  derive: ""
-  generate: ""
-  surface: ""
-  check: ""
-  instruct: ""
-  pin: ""
+  model: splits_on
+  derive: selectionOf
+  generate: writePrototypes
+  surface: selectionAtTheRoot
+  check: prototypes-split-on-nothing
+  instruct: what they are alternatives ABOUT
+  pin: nothing infers the axis
 waived: {}
+closed: 2026-10-13

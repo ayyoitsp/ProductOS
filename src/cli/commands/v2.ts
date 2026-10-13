@@ -24,6 +24,7 @@ import { lineFor } from "../../v2/log.js";
 import { drawFromRoute } from "../../v2/draw.js";
 import { holdsOn, whyHeld } from "../../v2/held.js";
 import { selectionOf, gapsIn } from "../../v2/selection.js";
+import { writePrototypes } from "../../v2/draw-write.js";
 import { everyView, everyViewV1, isResolved, resolveRoute } from "../../v2/routes.js";
 import { spokenFor } from "../../v2/spoken.js";
 import { idiomOf, proposeScreen } from "../../v2/propose.js";
@@ -2327,7 +2328,7 @@ export function v2Command(): Command {
        * first run after somebody stated what the set splits on would have silently deleted it — a
        * generator throwing away the one field on this file that only a person can write.
        */
-      fs.writeFileSync(file, YAML.stringify(corpus.splitsOn ? { splits_on: corpus.splitsOn, prototypes: out } : { prototypes: out }));
+      writePrototypes(into, out, corpus.splitsOn);
       console.log(pc.green("✓"), `written into ${path.relative(process.cwd(), file)}`);
       console.log(pc.dim("  re-run this after the layouts change — the chrome is output, not a document"));
 
@@ -2410,8 +2411,7 @@ export function v2Command(): Command {
         ...corpus.prototypes,
         { id, title, starts_at: o.startsAt, ...(o.is ? { is: o.is } : {}), ...(o.shellFrom ? { shell_from: o.shellFrom } : {}), nav: [], from: [] },
       ];
-      const file = path.join(into, "prototypes.yaml");
-      fs.writeFileSync(file, YAML.stringify(corpus.splitsOn ? { splits_on: corpus.splitsOn, prototypes: next } : { prototypes: next }));
+      writePrototypes(into, next, corpus.splitsOn);
       console.log(pc.green("✓"), `${id} — ${title}, opening on ${o.startsAt}`);
       if (!o.is && corpus.splitsOn)
         console.log(pc.yellow("!"), `this set splits on "${corpus.splitsOn}" and this one gives no answer — add --is`);
@@ -2435,8 +2435,7 @@ export function v2Command(): Command {
     .action((question: string) => {
       const into = protoDir();
       const corpus = loadCorpus(into);
-      const file = path.join(into, "prototypes.yaml");
-      fs.writeFileSync(file, YAML.stringify({ splits_on: question, prototypes: corpus.prototypes }));
+      writePrototypes(into, corpus.prototypes, question);
       console.log(pc.green("✓"), `splits on: ${question}`);
       const without = corpus.prototypes.filter((p) => !p.is);
       if (without.length)
