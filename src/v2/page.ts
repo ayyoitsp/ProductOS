@@ -4331,6 +4331,29 @@ function wireSelectionEditor() {
     });
   });
 
+  /*
+   * ⛔ ONE PRESS, NO CONFIRM DIALOG. A prototype is a way through the product rather than a claim
+   * anybody agreed to, and it can be declared again in one call — so a modal here would be ceremony
+   * over something cheap. What it does get is the count it left behind, said out loud.
+   */
+  Array.prototype.slice.call(document.querySelectorAll("[data-sel-drop]")).forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var where = document.querySelector("[data-sel-status]");
+      if (where) { where.textContent = "taking it back…"; where.className = "status"; }
+      sendIntent("prototype", { id: btn.getAttribute("data-sel-drop"), remove: true })
+        .then(function (said) {
+          if (where) { where.textContent = said; where.className = "status ok"; }
+          setTimeout(function () { location.reload(); }, 900);
+        })
+        .catch(function (err) {
+          if (where) {
+            where.textContent = "Not taken back: " + (err && err.message ? err.message : String(err));
+            where.className = "status bad";
+          }
+        });
+    });
+  });
+
   var save = document.querySelector("[data-sel-save]");
   if (!save) return;
   var pstatus = document.querySelector("[data-sel-status]");
@@ -6908,6 +6931,9 @@ export const STYLE = `<style>
   .wsel-grid input { width: 100%; font: inherit; font-size: .78rem; padding: .2rem .35rem; border: 1px solid var(--line);
     border-radius: 6px; background: var(--card); color: var(--ink); }
   .wsel-grid input.bad { border-color: var(--warn); }
+  .wsel-drop { font: inherit; font-size: .7rem; background: none; border: 1px solid var(--line); border-radius: 6px;
+    padding: .1rem .4rem; color: var(--dim); cursor: pointer; white-space: nowrap; }
+  .wsel-drop:hover { border-color: var(--bad); color: var(--bad); }
   /*
    * ⛔ ON THE SCREEN, AT THE SIZE OF A CAPTION. Peter: *"WE DON'T HAVE THAT MUCH SCREEN REAL ESTATE
    * to begin with"* — this is one line under a heading on every screen, so it is the smallest thing
@@ -7450,7 +7476,7 @@ function selectionAtTheRoot(sel: Selection): string {
     ${
       sel.axes.length
         ? `<table class="wsel-grid">
-            <thead><tr><th>Prototype</th>${sel.axes.map((ax) => `<th>${line(ax.asks)}</th>`).join("")}<th>Opens on</th></tr></thead>
+            <thead><tr><th>Prototype</th>${sel.axes.map((ax) => `<th>${line(ax.asks)}</th>`).join("")}<th>Opens on</th><th></th></tr></thead>
             <tbody>${sel.options
               .map(
                 (o) => `<tr data-sel-proto="${esc(o.id)}">
@@ -7462,6 +7488,13 @@ function selectionAtTheRoot(sel: Selection): string {
                     )
                     .join("")}
                   <td><input name="startsAt" value="${esc(o.startsAt)}" spellcheck="false" class="${o.opensOn ? "" : "bad"}"></td>
+                  <!--
+                    ⛔ A WAY BACK. Declaring without removing is a one-way door: somebody who adds a
+                    prototype by mistake from a browser had no route to undo it, which is the same
+                    hole the containment field had. Found by the check for capabilities a reviewer
+                    cannot reach, on its first run. No backticks in here: one closes the literal.
+                  -->
+                  <td><button type="button" class="wsel-drop" data-sel-drop="${esc(o.id)}" title="${esc(`take ${plain(o.title)} back`)}">take back</button></td>
                 </tr>`
               )
               .join("")}</tbody>

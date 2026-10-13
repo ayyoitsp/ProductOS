@@ -34,6 +34,7 @@ const { loadCorpus } = await import("../dist/v2/load.js");
 const { selectionOf, gapsIn } = await import("../dist/v2/selection.js");
 const { renderScopePage } = await import("../dist/v2/page.js");
 const { checkCorpus } = await import("../dist/v2/check.js");
+const { intentNamed } = await import("../dist/v2/intents.js");
 
 const cli = (args) => execFileSync("node", ["dist/cli/index.js", ...args], { encoding: "utf8" });
 
@@ -204,4 +205,38 @@ test("the selection reaches the page, with its question on it", () => {
   assert.match(html, /class="wpick-is">admin/, "an option does not say which side of the split it is");
   /** ⛔ And with ONE prototype it is still there — that is the state where a reader most needs it. */
   assert.match(html, /class="wsel"/, "the selection disappeared because there was only one option");
+});
+
+test("⛔ a prototype can be taken back — declaring without removing is a one-way door", () => {
+  /**
+   * Found by `v2-a-capability-a-reviewer-cannot-reach` on its first run: `prototype` could declare
+   * and change, and nothing could remove. Somebody who added one by mistake from a browser, with no
+   * terminal, had no route back at all — the same hole `within` had until the same day.
+   *
+   * ⛔ NO TOMBSTONE, DELIBERATELY. A prototype is a way through the product, not a claim anybody
+   * agreed to: nothing points at its id, so there is nothing to strand. Compare `exists: withdrawn`
+   * on a screen, which exists precisely because statements DO point at it.
+   */
+  const dir = corpus();
+  const ref = views(dir)[0];
+  cli(["v2", "prototypes", "new", "Admin", "--starts-at", ref, "--into", dir]);
+  cli(["v2", "prototypes", "new", "Processor", "--starts-at", ref, "--into", dir]);
+  cli(["v2", "prototypes", "splits-on", "Which role is this for?", "--into", dir]);
+
+  const intent = intentNamed("prototype");
+  const ask = { dir, who: { kind: "cli", actor: "peter" }, pressing: "peter" };
+
+  const gone = intent.run(ask, { id: "admin", remove: true });
+  assert.equal(gone.ok, true, gone.why);
+  assert.match(gone.said, /took back Admin/);
+  assert.match(gone.detail.join(" "), /1 way through this product left/);
+
+  const c = loadCorpus(dir);
+  assert.deepEqual(c.broken, [], "the removal left a file that will not load");
+  assert.deepEqual(c.prototypes.map((p) => p.id), ["processor"], "it removed the wrong one, or none");
+  /** ⛔ The axis survives a removal — it belongs to the set, not to any member of it. */
+  assert.equal(c.splitsOn?.[0]?.asks ?? c.splitsOn, "Which role is this for?");
+
+  /** ⛔ And removing one that is not there is refused rather than silently fine. */
+  assert.equal(intent.run(ask, { id: "admin", remove: true }).ok, false, "removing a prototype twice reported success");
 });

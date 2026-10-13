@@ -366,11 +366,52 @@ export const INTENTS: Intent[] = [
       { name: "startsAt", says: "The screen somebody comes in on, as <scope>#<view>", required: false },
       { name: "is", says: 'Where it sits, keyed by axis id — e.g. {"line":"private lending","role":"admin"}', required: false },
       { name: "shellFrom", says: "A route whose layouts are its chrome, where the codebase is reachable", required: false },
+      {
+        name: "remove",
+        says: "⛔ Take this prototype back. A reviewer who declared one by mistake could otherwise never undo it — the one-way hole `within` had",
+        required: false,
+      },
     ],
     run: (a, body) => {
       const id = str(body.id).trim();
       if (!id) return { ok: false, why: "say which prototype" };
       const corpus = loadCorpus(a.dir);
+
+      /**
+       * ⛔ TAKING ONE BACK, BECAUSE DECLARING WITHOUT REMOVING IS A ONE-WAY DOOR.
+       *
+       * Found by the check for capabilities a reviewer cannot reach, on its first run — the same
+       * class as `within` having a writer and no way to unsay it. Somebody who declares a prototype
+       * by mistake, from a browser, with no terminal, had no route back at all.
+       *
+       * ⛔ IT IS NOT A TOMBSTONE, AND THAT IS NOT AN INCONSISTENCY. A prototype is a way through the
+       * product, not a claim somebody agreed to: nothing points at its id, so there is nothing to
+       * strand. Compare `exists: withdrawn` on a screen, which exists precisely because statements
+       * DO point at it.
+       */
+      if (body.remove === true || str(body.remove) === "true") {
+        const going = corpus.prototypes.find((p) => p.id === id);
+        if (!going) return { ok: false, why: `no prototype "${id}" here` };
+        writePrototypes(a.dir, corpus.prototypes.filter((p) => p.id !== id), corpus.splitsOn);
+        append(a.dir, {
+          kind: "corpus-changed",
+          at: new Date().toISOString(),
+          by: a.who.actor,
+          via: "page",
+          ref: `prototype:${id}`,
+          says: `took back ${going.title}`,
+        });
+        const left = corpus.prototypes.length - 1;
+        return {
+          ok: true,
+          said: `took back ${going.title}`,
+          detail: [
+            left
+              ? `${left} way${left === 1 ? "" : "s"} through this product left`
+              : "no prototypes left — nothing declares a front door now",
+          ],
+        };
+      }
       const axes = axesOf(corpus.splitsOn);
       const existing = corpus.prototypes.find((p) => p.id === id);
       const title = str(body.title).trim() || existing?.title;
