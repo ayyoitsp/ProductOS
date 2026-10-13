@@ -341,6 +341,12 @@ export const AREAS: Area[] = [
        * — it leaves a record for exactly that reason, and a layer nobody reviews is the worst place
        * for that to live. `migrate.ts` and `boot.ts` move the store's own shape forward.
        */
+      /**
+       * ⛔ The one reader of `error.cause`, used by boot AND by the request path. It is here because
+       * 4100 failed every corpus read for nearly two hours and wrote 2037 identical log lines doing
+       * it, not one of them carrying a sqlstate — the outage recovered with its diagnosis gone.
+       */
+      "src/v2/store/because.ts",
       "src/v2/store/corpus.ts",
       "src/v2/store/doc-migrations.ts",
       "src/v2/store/migrate.ts",
