@@ -267,6 +267,15 @@ export const AREAS: Area[] = [
        * where a reviewer asked about navigation would not have looked.
        */
       "src/v2/walk.ts",
+      /**
+       * ⛔ WHETHER A PERSON HAS WORKED ON A SCREEN, WHICH IS READ OFF THE ACTS AND NEVER TICKED.
+       *
+       * Filed as a derivation because that is the whole design: a `locked:` field would be a second
+       * record of something the corpus already knows, so this reads the notes, the verdicts on truth
+       * a screen `shows`, and the readings a person recorded. A reviewer asked why `draw --all`
+       * skipped ten screens is asking about a derivation, not about the generator.
+       */
+      "src/v2/held.ts",
       "src/v2/steers.ts",
       /**
        * ⛔ AUTHORIZATION IS A GATE, AND THESE ARE WHERE IT IS DECIDED. `storeFor(db, who).project(id)`
