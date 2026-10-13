@@ -308,6 +308,43 @@ It refuses: a product, area or capability system with no description; a containe
 wrong depth; any high audit finding; a `depends_on`, `affected_by` or `leads_to` that
 resolves to nothing.
 
+## ⛔ A zero proves nothing unless you can say what a failing zero looks like
+
+Peter: *"why aren't you just looking at all variable substituion? are you just searching for 'n"?
+what the heck?"* — a count that measured the wrong thing and agreed with what I wanted to be true.
+
+**Six times in one week, two sessions, the same shape: the measurement agreed with the hypothesis,
+so it was never checked.** The ones that cost time:
+
+| the number | why it was meaningless |
+| --- | --- |
+| `grep -c` read as occurrences | it counts **lines**, so 300 placeholders on one line read as 1 |
+| 972 unresolved selects | from a sweep that had stopped happening that way two days earlier |
+| a clean deploy log | `--since` matched nothing and silently printed an empty 2037-line outage |
+| 0 grey icon squares | the CSS rule that would have drawn them had been renamed |
+| 0 `data-held` on the page | the attribute is **omitted** when absent — so 0 is also what shipping nothing produces |
+
+The last one is worse in kind than the other four, and it is the rule: **for a feature whose correct
+answer today is zero, a zero is not a weak check, it is not a check.** There is no failing state in
+that observation at all. Same family as the guard in #95, which passed at the commit where its own
+defect was live.
+
+**So produce a non-zero somewhere.** Exercise the shipped module until it answers differently for
+cases that differ:
+
+```
+no acts at all              held: false
+a reading by a person       held: true     ← the one that cannot happen by accident
+a reading by the generator  held: false
+```
+
+Three distinguishable outcomes, out of the deployed build. That probe also independently caught the
+real bug in the feature it was verifying — the generator holding a screen against its own reading.
+
+⛔ **And when the numbers are mutually impossible, stop counting and look at one instance.** Every
+one of the six survived because the next step was another aggregate. Reading a single combobox is
+what found `Blue Harbour`; reading a single `.yaml` is what found eight screens held by nobody.
+
 ## Verify by running, not by reasoning
 
 A rendering claim that was never rendered is a guess. **For renderer changes, there is a
@@ -373,6 +410,33 @@ did not stop this.
 
 Skill `version:`, `package.json`, anything stamped. No increments during the design phase
 unless Peter says so explicitly.
+
+## ⛔ Deploy every time. Deploys are cheap; batching them is not
+
+Peter: *"don't ever do this again --> 'the code for it still needs a deploy, which I've not
+re-requested since they've just done one.' deploys are cheap, why would you waste my time not
+deploying"*.
+
+**Every merge to main gets deployed, immediately, without being asked.** Not batched, not held
+back because one went out an hour ago, not deferred to spare anybody the trouble. A merged change
+that is not live is a change he cannot look at, and the whole point of the loop is that he can.
+
+⛔ **And a deploy is not finished when the code ships.** `sketch_html` is persisted truth, so new
+drawing code changes nothing already stored — see `fg-0002`. Shipping the code and stopping leaves
+every drawing exactly as the previous generator left it, and the tick is true.
+
+⛔ **But the two halves have different owners, and they must not blur.** The deploy session said it
+plainly, about this rule: *"I DO NOT REDRAW. Those are an author's acts on product truth, and this
+session deploys code. Otherwise a deploy session is rewriting truth without a person, which is the
+one thing the corpus is careful not to do."* Right, and the wording here used to imply otherwise.
+
+| | who | what finishes it |
+| --- | --- | --- |
+| **the code** | the deploy session | it is live, and here is a number read off the page |
+| **the drawings** | the author — you | `v2 draw --all`, `v2 prototypes`, `v2 style`, `hosted import` |
+
+**Do your half in the same breath as the merge**, and then check a number on the live page that
+would be different if it had not worked — not that the page returns 200.
 
 ## After changing `src/` or `skills/`
 

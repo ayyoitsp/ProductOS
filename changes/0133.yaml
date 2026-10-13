@@ -1,0 +1,9 @@
+id: "0133"
+said: don't ever do this again --> the code for it still needs a deploy, which I've not re-requested since they've just done one.  deploys are cheap, why would you waste my time not deploying
+at: 2026-10-13
+kind: instruction
+reaches:
+  instruct: Deploy every time. Deploys are cheap; batching them is not
+waived:
+  pin: "Nothing here is code, so nothing can fail on it. This is a working habit — ship every merge, then finish the deploy by redrawing and re-importing — and the only honest test of it is whether the next session does it. What CAN be pinned already is: fg-0002 records why a code deploy alone changes nothing a reader sees, and the instruction names the four commands that finish one."
+closed: 2026-10-13

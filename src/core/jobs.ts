@@ -267,6 +267,15 @@ export const AREAS: Area[] = [
        * where a reviewer asked about navigation would not have looked.
        */
       "src/v2/walk.ts",
+      /**
+       * ⛔ WHETHER A PERSON HAS WORKED ON A SCREEN, WHICH IS READ OFF THE ACTS AND NEVER TICKED.
+       *
+       * Filed as a derivation because that is the whole design: a `locked:` field would be a second
+       * record of something the corpus already knows, so this reads the notes, the verdicts on truth
+       * a screen `shows`, and the readings a person recorded. A reviewer asked why `draw --all`
+       * skipped ten screens is asking about a derivation, not about the generator.
+       */
+      "src/v2/held.ts",
       "src/v2/steers.ts",
       /**
        * ⛔ AUTHORIZATION IS A GATE, AND THESE ARE WHERE IT IS DECIDED. `storeFor(db, who).project(id)`
@@ -328,12 +337,25 @@ export const AREAS: Area[] = [
       /** ⛔ The design system index: a generator source like `draw`, reading a product's own vocabulary. */
       "src/v2/design.ts",
       /**
+       * ⛔ The one lazy loader for the TypeScript compiler, which `draw` and `design` both need and
+       * neither may import eagerly: `typescript` is a devDependency, so an import at module scope
+       * breaks every CLI verb in an install without dev dependencies. One home, because the fix was
+       * applied to `draw` alone, shipped, deployed — and `v2 analyse` still died on `design`.
+       */
+      "src/v2/compiler.ts",
+      /**
        * ⛔ MOVING A CORPUS AND MOVING IT FORWARD ARE BOTH GENERATION. `corpus.ts` turns a directory
        * into rows and back byte-identically; `doc-migrations.ts` rewrites stored documents when the
        * corpus schema moves, which is the one thing in the system that edits truth without a person
        * — it leaves a record for exactly that reason, and a layer nobody reviews is the worst place
        * for that to live. `migrate.ts` and `boot.ts` move the store's own shape forward.
        */
+      /**
+       * ⛔ The one reader of `error.cause`, used by boot AND by the request path. It is here because
+       * 4100 failed every corpus read for nearly two hours and wrote 2037 identical log lines doing
+       * it, not one of them carrying a sqlstate — the outage recovered with its diagnosis gone.
+       */
+      "src/v2/store/because.ts",
       "src/v2/store/corpus.ts",
       "src/v2/store/doc-migrations.ts",
       "src/v2/store/migrate.ts",
@@ -1596,6 +1618,18 @@ export interface Shim {
   /** What somebody types or says to mean this route. */
   when: string;
   /**
+   * ⛔ THIS ROUTE IS ABOUT PRODUCTOS, NOT ABOUT ANYBODY'S PRODUCT — SO IT IS NOT INSTALLED.
+   *
+   * Peter: *"let's separate our 'dev' agent/skill from the product os framework agent/skills"*.
+   *
+   * ⛔ DECLARED, NOT INFERRED FROM THE STEPS. `review ProductOS itself` spawns `architecture` and
+   * `coverage`, which are ordinary product reviewers — so a rule like "dev if any role is dev"
+   * would ship it, and the opposite rule would withhold `check it communicates`, which a consumer
+   * genuinely wants. A route's audience is not derivable from who it spawns; it is a fact about the
+   * route, and the only honest place for it is here.
+   */
+  about?: "the framework";
+  /**
    * The roles it spawns, in order. `fan` = one per unit of its role's axis; otherwise one.
    *
    * ⛔ REVIEWERS BELONG HERE TOO, AND FOUR ROUTES USED TO HAVE NONE.
@@ -1626,6 +1660,55 @@ export interface Shim {
    */
   at?: Stage;
 }
+
+/**
+ * ⛔ WHICH ROLES AND ROUTES ARE ABOUT PRODUCTOS RATHER THAN ABOUT A PRODUCT.
+ *
+ * Peter: *"let's separate our 'dev' agent/skill from the product os framework agent/skills"*.
+ *
+ * It was a label and nothing more. `installClaudeAgents` walked `AGENTS` with no filter, so every
+ * consumer received `consistency` and `can-the-model-say-it` — two reviewers whose prompts open by
+ * telling the reader to open `src/core/jobs.ts` and `src/v2/schema.ts`, files that exist only in
+ * this repository. A reviewer that cannot run is worse than an absent one: it reads as a capability
+ * the product has.
+ *
+ * The same leak was fixed for skills once already — the migrations skill was being shipped to
+ * consumers and moved to `.claude/skills/`, which is project-scoped. Agents and routes never got
+ * the same treatment, because nothing enforced the distinction the registry was already recording.
+ *
+ * ⛔ `discipline` IS THE DECLARATION FOR A ROLE, and adding a second field beside it would be two
+ * ways to say one thing — which is how they come to disagree.
+ */
+export const aboutProductOS = (r: { discipline: Discipline }): boolean =>
+  r.discipline === "the framework itself";
+
+/** Every role a consumer should receive. */
+export const shippedRoles = (): Array<Agent | Author> =>
+  [...AGENTS, ...AUTHORS].filter((r) => !aboutProductOS(r));
+
+/** The roles that review ProductOS, which only a ProductOS checkout has any use for. */
+export const frameworkRoles = (): Array<Agent | Author> =>
+  [...AGENTS, ...AUTHORS].filter(aboutProductOS);
+
+/**
+ * The routes a consumer's skill should carry, with any framework reviewer taken out of their steps.
+ *
+ * ⛔ TWO FILTERS, BECAUSE THEY ANSWER DIFFERENT QUESTIONS. A whole route can be about ProductOS —
+ * `review ProductOS itself` — and a route a consumer genuinely wants can spawn one role that is
+ * not theirs: `check it communicates` is `newcomer` plus `can-the-model-say-it`, and the first half
+ * is the point of it. Dropping the route would take a useful route away; keeping the step would
+ * tell somebody to run a reviewer that opens `src/v2/schema.ts`.
+ *
+ * ⛔ AND A CONSUMER IS NOT LEFT WITHOUT A WAY TO REPORT A MODEL GAP. That is what
+ * `productos todo add` is for — "the model cannot express this" — and it has always been the right
+ * channel, because a consumer cannot act on a framework reviewer's findings anyway.
+ */
+export const shippedRoutes = (): Shim[] => {
+  const dev = new Set(frameworkRoles().map((r) => r.name));
+  return SHIMS.filter((r) => r.about !== "the framework").map((r) =>
+    r.steps.some((s) => dev.has(s.role)) ? { ...r, steps: r.steps.filter((s) => !dev.has(s.role)) } : r
+  );
+};
 
 export const SHIMS: Shim[] = [
   {
@@ -1894,6 +1977,8 @@ export const SHIMS: Shim[] = [
    */
   {
     route: "review ProductOS itself",
+    /** ⛔ The route this whole distinction is named after — it reviews the framework, not a product. */
+    about: "the framework",
     does: "Review the framework, not anybody's product",
     when: "review the framework · did we skip a layer · is this the right architecture · can the model say this",
     steps: [

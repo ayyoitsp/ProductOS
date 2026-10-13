@@ -118,7 +118,6 @@ You are the **orchestrator**, and you are the session — not a subagent. That i
 **Spawn, in order:**
 
 - `newcomer` *(product · judges, writes nothing)* — **one per unit, in parallel** — a product manager handed a URL, who has never seen ProductOS and may not read its source
-- `can-the-model-say-it` *(the framework itself · judges, writes nothing)* — whether a confusion is the corpus's fault or ours — the routing this whole route exists to get right
 
 **⛔ You keep these yourself:**
 
@@ -153,23 +152,6 @@ You are the **orchestrator**, and you are the session — not a subagent. That i
 - deciding which route each request belongs to, and running it
 - replying where they asked — ⛔ a `pos:` is answered concisely, and the framework is what changes
 - every act of judgement
-
-### Review the framework, not anybody's product
-
-*They say:* review the framework · did we skip a layer · is this the right architecture · can the model say this
-
-**Spawn, in order:**
-
-- `consistency` *(the framework itself · judges, writes nothing)* — whether a concept reached every layer, or stopped at the one that was convenient
-- `architecture` *(engineering · judges, writes nothing)* — whether these are the right subsystems with the right boundaries, and whether it would work
-- `coverage` *(quality · judges, writes nothing)* — whether each defect we fixed is pinned by something that fails on its own
-- `can-the-model-say-it` *(the framework itself · judges, writes nothing)* — whether the model can express a real product, and whether a person can review what it produces
-
-**⛔ You keep these yourself:**
-
-- ⛔ deciding what to change — these four judge the framework and may not touch it
-- running it after a change to `src/` or `skills/`, which is when a layer gets skipped
-- recording what came back with `productos v2 change`, in the words it came back in
 
 ### A surgical change to truth somebody already agreed to
 
@@ -428,6 +410,70 @@ line of code kept working locally.
 So the snapshot is taken **where the repository is**, by `v2 style` or by `v2 generate`, which runs
 it first. Everything downstream — a hosted instance, a packet, a published page — reads the corpus.
 
+### ⛔ Deploy every time. Deploys are cheap; batching them is not
+
+Peter: *"don't ever do this again --> 'the code for it still needs a deploy, which I've not
+re-requested since they've just done one.' deploys are cheap, why would you waste my time not
+deploying"*.
+
+**Every merge to main gets deployed, immediately, without being asked.** Not batched, not held back
+because one went out an hour ago. A merged change that is not live is one nobody can look at, and
+looking at it is the whole loop.
+
+⛔ **A deploy is not finished when the code ships.** `sketch_html` is persisted truth, so new
+drawing code changes nothing already stored — deploying new generators cannot alter a drawing that
+already exists.
+
+⛔ **The two halves have different owners.** A deploy session ships code and reads a number off the
+page; it does **not** redraw, because redrawing is an act on product truth and a session doing that
+without a person is the one thing the corpus is careful to prevent. The drawings are the author's
+half, and the author finishes them:
+
+```bash
+productos v2 draw --all --into <corpus>     # the drawings are output; redraw them
+productos v2 prototypes --into <corpus>     # and the chrome
+productos v2 style --into <corpus>          # and the stylesheet snapshot
+productos hosted import <corpus> --into <projectId>
+```
+
+Then **check a number on the live page that would be different if it had not worked** — not that the
+page returns 200. A corpus was once reported deployed while every drawing on it still came from the
+previous generator, and the tick was true.
+
+### ⛔ A screen somebody has worked on is not the sweep's to rewrite
+
+Peter: *"we should add some internal tracking to screens - when screens haven't had review yet
+(including product truth), we can freely regenerate. once they have been operated on, they should
+stay locked. from there, only direct user input changes things."*
+
+`draw --all` rewrites every screen it can resolve, which is right while a screen is a first guess —
+the sweep is the whole reason sixty screens were drawn at all. It stops being right the moment
+somebody reads one and says something, because from then on the corpus holds a judgement the
+generator never heard of and cannot reproduce.
+
+**So the sweep skips them and says so**, and the count it prints is of what it left alone:
+
+```
+✓ 19 of 33 screens drawn from the code
+
+3 left alone — somebody has worked on them:
+  ·  create-deal#folder-picker  (a note by peter and 2 other acts)
+```
+
+⛔ **Nothing to set. It is derived from the acts already recorded**, and there are three — a **note**
+about the screen, a **verdict** on truth the screen `shows` (his *"including product truth"*), or a
+**reading** a person recorded about it. A `locked:` field would be a second record of what the
+corpus already knows, with nothing keeping the two in step.
+
+⛔ **Naming the screen still redraws it.** That is the direct user input the rule turns on, so
+`v2 draw "<scope>#<view>" --route <file>` goes through — and prints whose work it is replacing
+first. Never reach for it to make a sweep look complete; a held screen is held because the cheapest
+thing in the corpus is about to overwrite the most expensive.
+
+⛔ **And a held screen's drawing stops following the code.** That is the cost of the lock, not a
+defect, and `v2 check` reports it as `held-and-the-code-moved` rather than fixing it — whose work
+gets replaced is a person's call.
+
 ### ⛔ Say what a screen appears INSIDE — `within`
 
 A product is not a pile of screens, and for a long time that is all a corpus could say. Scopes nest,
@@ -480,6 +526,28 @@ answered `cannot-judge-this-corpus`: not one finding, about anything, until some
 
 ⛔ **Run it when `check` says a key is unrecognized.** That is what it looks like from the outside: a
 corpus written by an older build, read by a newer one.
+
+### ⛔ A zero proves nothing unless you can say what a failing zero looks like
+
+Peter: *"why aren't you just looking at all variable substituion? are you just searching for 'n"?
+what the heck?"*
+
+**Six times in one week the measurement agreed with the hypothesis, so it was never checked.**
+`grep -c` counts *lines*, so three hundred placeholders on one line read as 1. A sweep's number was
+quoted for two days after the sweep had stopped happening that way. A deploy log looked clean
+because `--since` matched nothing and printed an empty 2037-line outage.
+
+The worst of the six is the one to learn: an attribute that is **omitted** when the condition is
+absent, counted as 0 and reported as working. A zero there is not a weak check, it is not a check —
+there is no failing state in the observation at all.
+
+**So produce a non-zero.** Exercise the shipped code until it answers differently for cases that
+differ: no acts → `false`, a person's reading → `true`, the generator's own reading → `false`. That
+probe found a real bug in the feature it was verifying.
+
+⛔ **And when two numbers are mutually impossible, stop counting and look at one instance.** Reading
+a single control is what found a sample value nobody had noticed was wrong; reading one recorded act
+is what found eight screens held by nobody.
 
 ⛔ **A drawing is only right if it RENDERS right, and there is a test harness that renders in a
 real browser.** `test/support/chrome.mjs`, used by `test/v2-the-mock-in-a-real-browser.test.mjs`:

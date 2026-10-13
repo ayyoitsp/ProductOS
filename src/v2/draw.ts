@@ -21,50 +21,13 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-/**
- * ⛔ THE COMPILER IS LOADED WHEN A SCREEN IS DRAWN, NOT WHEN THIS MODULE IS IMPORTED.
- *
- * `typescript` is a devDependency, and `import ts from "typescript"` at the top of this file meant
- * that in any install without dev dependencies — the runtime image, notably — **every CLI verb died
- * on module resolution**, including the ones that never draw anything. The hosted service escaped
- * only because it boots `store/boot.js` and never reaches here.
- *
- * ⛔ AND NOT BY MOVING IT TO `dependencies`, which was the other obvious fix. That ships a whole
- * compiler in the runtime image to serve a path the service never takes.
- *
- * ⛔ A PROXY RATHER THAN `await import`, BECAUSE EVERY ONE OF THE 206 USES IS SYNCHRONOUS. Making
- * them async would mean rewriting `emit`, `returnedJsx`, `falseAtFirst` and everything that calls
- * them for a module-loading concern — a large change to working code, in exchange for nothing a
- * reader of those functions would understand. `createRequire` is synchronous, so the first property
- * access resolves it and every call site stays exactly as it was. Type positions (`ts.Node`,
- * `ts.Identifier`) never touch the proxy at all; TypeScript elides them.
- */
-import { createRequire } from "node:module";
 import type * as TS from "typescript";
 
-let compiler: typeof TS | undefined;
+import { compilerFor } from "./compiler.js";
 
-const ts: typeof TS = new Proxy({} as typeof TS, {
-  get(_target, prop) {
-    if (!compiler) {
-      try {
-        compiler = createRequire(import.meta.url)("typescript") as typeof TS;
-      } catch {
-        /**
-         * ⛔ Named, because the failure this replaces was `Cannot find module 'typescript'` from a
-         * verb that had nothing to do with drawing, and that sent somebody looking in the wrong
-         * place for an hour.
-         */
-        throw new Error(
-          "drawing a screen from code needs the TypeScript compiler, which is a development " +
-            "dependency and is not installed here. Run `npm install` in a checkout, or draw from " +
-            "the truth and the design system instead of from a component."
-        );
-      }
-    }
-    return (compiler as unknown as Record<string | symbol, unknown>)[prop];
-  },
-});
+/** ⛔ Lazy, and the loader lives in `compiler.ts` — one copy, because the fix missed a module once. */
+const ts: typeof TS = compilerFor("drawing a screen from code");
+
 import { lucideSvg } from "./icons.js";
 import { wireParts, type WireablePart } from "./wire.js";
 
@@ -1044,7 +1007,29 @@ function emit(node: TS.Node, ctx: Ctx): string {
      * value once. Moving this rule above the sampler — correct for the `{icon}` case — emptied
      * every single-expression cell in the corpus, so the STAGE column went blank.
      */
-    if (ts.isIdentifier(e) && !amongWords && !ctx.inRow) return "";
+    /**
+     * ⛔ AND NOT INSIDE A CONTROL, WHERE THE LONE IDENTIFIER IS WHAT THE CONTROL SAYS.
+     *
+     * `<button role="combobox"><span className="block truncate">{displayLabel}</span></button>` is
+     * a select showing its current value. Blanked, every dropdown in the product draws as an empty
+     * box — which is what Peter has been reporting as a hatched box all along, and what it still
+     * was after the component started resolving: the marker went away and the emptiness did not.
+     *
+     * A control with no words in it is unreviewable, which this file already says elsewhere about
+     * icon-only buttons. The same is true when the words were thrown away for being a bare name.
+     */
+    const inAControl = (() => {
+      let up: TS.Node | undefined = n.parent;
+      for (let i = 0; i < 4 && up; i++) {
+        if (ts.isJsxElement(up)) {
+          const tag = up.openingElement.tagName.getText().toLowerCase();
+          if (/^(button|a|option|label|summary|legend)$/.test(tag)) return true;
+        }
+        up = up.parent;
+      }
+      return false;
+    })();
+    if (ts.isIdentifier(e) && !amongWords && !ctx.inRow && !inAControl) return "";
 
     ctx.unresolved.push(hint);
 

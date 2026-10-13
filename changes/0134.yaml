@@ -1,0 +1,14 @@
+id: "0134"
+said: we should add some internal tracking to screens - when screens haven't had review yet (including product truth), we can freely regenerate.  once they have been operated on, they should stay locked.  from there, only direct user input changes things.
+at: 2026-10-13
+kind: concept
+reaches:
+  model: src/v2/held.ts
+  derive: holdsOn
+  generate: THE_GENERATOR
+  surface: data-held
+  check: held-and-the-code-moved
+  instruct: not the sweep's to rewrite
+  pin: the lock did not kill the sweep
+waived: {}
+closed: 2026-10-13

@@ -35,6 +35,7 @@ import { questionsFor, descendants, type Question } from "./settle.js";
 import { resolveRef } from "./ref.js";
 import { demonstrationOf } from "./demonstrate.js";
 import { decisionsOn, decisionsUnder, howItWasDecided, type Decision } from "./record.js";
+import { holdsOn, whyHeld } from "./held.js";
 
 const esc = (s: unknown): string =>
   String(s ?? "")
@@ -1085,8 +1086,25 @@ function renderScreens(scope: Scope, ctx: Ctx, scopeId: string, opts: PageOption
               : `<p class="owes">Nobody has drawn this screen, so there is nothing here to point at.</p>`;
           const undrawn = v.parts.filter((pt) => !matched.get(pt.id) && !pt.decorative);
           const loose = statedAt(scope, v.id, undefined);
+          /**
+           * ⛔ WHETHER A SWEEP MAY STILL REWRITE THIS SCREEN, WHICH IS A FACT ABOUT IT A READER
+           * CANNOT OTHERWISE GET AT.
+           *
+           * Peter: *"once they have been operated on, they should stay locked."* A reader looking
+           * at two screens has no way to tell which one is a first guess the generator will replace
+           * on its next run and which one carries somebody's judgement — and that is the difference
+           * between a picture worth arguing with and a picture worth ignoring.
+           *
+           * ⛔ A CHIP, NOT A LINE OF ITS OWN. *"WE DON'T HAVE THAT MUCH SCREEN REAL ESTATE to begin
+           * with"* — it rides the heading where there is one, and only costs a row where a
+           * single-screen feature has no heading to ride.
+           */
+          const held = holdsOn(corpus, scopeId, v);
+          const heldChip = held.length
+            ? `<span class="chip ok" title="${esc(`${whyHeld(held)} — a sweep leaves this alone; only naming it redraws it`)}">worked on</span>`
+            : "";
           return `<article class="screen" id="${anchorOf(`${scopeId}#view#${v.id}`)}" data-screen="${esc(v.id)}"
-            data-ref="${esc(scopeId)}" data-label="${esc(`screen: ${plain(v.title)}`)}">
+            data-ref="${esc(scopeId)}"${held.length ? ' data-held="1"' : ""} data-label="${esc(`screen: ${plain(v.title)}`)}">
             ${
               /**
                * ⛔ NO HEADING WHERE THERE IS ONLY ONE SCREEN. Peter: *"there's white space above the
@@ -1099,8 +1117,8 @@ function renderScreens(scope: Scope, ctx: Ctx, scopeId: string, opts: PageOption
                * and that is not waste, it is the label doing its job.
                */
               scope.views.filter((x) => x.exists !== "withdrawn").length > 1
-                ? `<h4>${line(v.title)}${v.view_kind ? ` <span class="n">${esc(v.view_kind)}</span>` : ""}</h4>`
-                : ""
+                ? `<h4>${line(v.title)}${v.view_kind ? ` <span class="n">${esc(v.view_kind)}</span>` : ""}${heldChip}</h4>`
+                : heldChip && `<p class="chips">${heldChip}</p>`
             }
             ${
               v.exists === "intended"

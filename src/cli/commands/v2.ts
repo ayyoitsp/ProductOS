@@ -22,6 +22,7 @@ import { inbox } from "../../v2/inbox.js";
 import { looksLikeInstance, instanceOf, mirror, act as remoteAct, note as remoteNote, inbox as remoteInbox, preview as remotePreview, whoami as remoteWhoami, presence as remotePresence, say as remoteSay, close as remoteClose, thread as remoteThread } from "../../v2/client.js";
 import { lineFor } from "../../v2/log.js";
 import { drawFromRoute } from "../../v2/draw.js";
+import { holdsOn, whyHeld } from "../../v2/held.js";
 import { everyView, everyViewV1, isResolved, resolveRoute } from "../../v2/routes.js";
 import { spokenFor } from "../../v2/spoken.js";
 import { idiomOf, proposeScreen } from "../../v2/propose.js";
@@ -31,7 +32,7 @@ import { inferConnections, type Connection } from "../../v2/connects.js";
 import { DOC_MIGRATIONS } from "../../v2/store/doc-migrations.js";
 import { drawShellFrom, aimNav } from "../../v2/shell.js";
 import { writeLeadsTo } from "../../v2/draw-write.js";
-import { AGENTS, AUTHORS, CASCADE, KINDS, SHIMS, SKILL, byDiscipline } from "../../core/jobs.js";
+import { AGENTS, AUTHORS, CASCADE, KINDS, SHIMS, shippedRoutes, SKILL, byDiscipline } from "../../core/jobs.js";
 
 /** ⛔ Plain text for a terminal and for JSON — never HTML-escaped, which is the page's business. */
 const plain = (x: unknown): string => String(x ?? "").replace(/\s+/g, " ").trim();
@@ -2006,7 +2007,12 @@ export function v2Command(): Command {
           console.log(pc.yellow("!"), `there is no skill at ${f} — the routes have nowhere to be written`);
         } else {
           const was = fs.readFileSync(f, "utf-8");
-          const now = withPreset(was, SHIMS);
+          /**
+           * ⛔ WHAT SHIPS, NOT EVERY ROUTE. The skill is installed into a consumer's machine, so a
+           * route about ProductOS, or a step that opens this repository's source, has no business
+           * in it. `shippedRoutes` is the one place that decides.
+           */
+          const now = withPreset(was, shippedRoutes());
           if (now === was) console.log(pc.dim(`  ${SKILL} — current`));
           else {
             fs.writeFileSync(f, now);
@@ -2497,6 +2503,22 @@ export function v2Command(): Command {
         const v = sc?.views.find((x) => x.id === viewId);
         parts = v?.parts ?? [];
         hasAscii = Boolean(v?.sketch);
+        /**
+         * ⛔ IT GOES THROUGH, AND IT SAYS WHOSE WORK IT IS REPLACING.
+         *
+         * Naming the screen IS the direct user input the rule turns on: *"from there, only direct
+         * user input changes things"*. Refusing here would leave a reviewed screen unredrawable
+         * after its component changed, which is worse than the overwrite. What a person is owed is
+         * knowing, at the moment of the command, that somebody had been here.
+         */
+        if (v) {
+          const held = holdsOn(c, sc?.id ?? scopeId, v);
+          if (held.length)
+            console.log(
+              pc.yellow("!"),
+              `somebody has worked on this screen — ${whyHeld(held)} — and this redraws it`
+            );
+        }
       } catch {
         parts = [];
       }
@@ -3130,6 +3152,8 @@ function drawEverything(into: string, dryRun: boolean): void {
   const drew: string[] = [];
   const redrew: string[] = [];
   const stuck: Array<{ ref: string; why: string; detail: string; candidates?: Array<{ file: string; matched: number }> }> = [];
+  /** Screens a person has worked on, which this run leaves exactly as they are. */
+  const kept: Array<{ ref: string; why: string }> = [];
 
   for (const { scope, view, root: viewRoot } of views) {
     const ref = `${scope}#${view.id}`;
@@ -3139,6 +3163,22 @@ function drawEverything(into: string, dryRun: boolean): void {
      * describing a screen before it exists is a model that gets described after the fact.
      */
     if (view.exists === "intended" || view.exists === "withdrawn") continue;
+
+    /**
+     * ⛔ AND A SCREEN SOMEBODY HAS WORKED ON IS NOT THE SWEEP'S TO REWRITE.
+     *
+     * Peter: *"once they have been operated on, they should stay locked. from there, only direct
+     * user input changes things."* Naming the screen is direct user input, so `v2 draw <ref>` still
+     * goes through — what stops here is the run nobody aimed at this screen in particular. See
+     * `held.ts` for what counts as having been worked on, and why none of it is a flag.
+     */
+    if (corpus) {
+      const held = holdsOn(corpus, scope, view);
+      if (held.length) {
+        kept.push({ ref, why: whyHeld(held) });
+        continue;
+      }
+    }
 
     /** Already knows where it comes from: redraw it, so a sweep keeps the corpus current. */
     let route: string | undefined;
@@ -3199,10 +3239,20 @@ function drawEverything(into: string, dryRun: boolean): void {
     (view.drawn_from ? redrew : drew).push(line);
   }
 
-  const total = drew.length + redrew.length + stuck.length;
+  const total = drew.length + redrew.length + stuck.length + kept.length;
   console.log(pc.green("✓"), `${drew.length + redrew.length} of ${total} screens drawn from the code${dryRun ? pc.dim(" (nothing written)") : ""}`);
   for (const l of drew) console.log(pc.dim("  new    ") + l);
   for (const l of redrew) console.log(pc.dim("  redrew ") + l);
+  /**
+   * ⛔ SAID OUT LOUD, NOT QUIETLY SKIPPED. A sweep that silently leaves ten screens alone looks
+   * identical to one that redrew them, and the difference is the entire point of holding them.
+   */
+  if (kept.length) {
+    console.log("");
+    console.log(pc.dim(`${kept.length} left alone — somebody has worked on ${kept.length === 1 ? "it" : "them"}:`));
+    for (const k of kept) console.log(pc.dim(`  ·  ${k.ref}  (${k.why})`));
+    console.log(pc.dim('\n  redraw one deliberately with: productos v2 draw "<scope>#<view>" --route <file> --into <corpus>'));
+  }
   if (stuck.length) {
     console.log("");
     console.log(pc.yellow(`${stuck.length} could not be resolved — each one says why, and none was guessed:`));

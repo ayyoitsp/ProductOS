@@ -3,7 +3,7 @@ import path from "node:path";
 import os from "node:os";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { AGENTS, AUTHORS, type Capability } from "../core/jobs.js";
+import { AGENTS, AUTHORS, aboutProductOS, type Capability } from "../core/jobs.js";
 import { addendum } from "../v2/steers.js";
 import type { Steer } from "../v2/schema.js";
 import type { ProductosConfig } from "../core/config.js";
@@ -237,9 +237,32 @@ function installClaudeAgents(dev: boolean, update?: boolean, cfg?: ProductosConf
   const models = cfg?.agents.model ?? {};
   const dflt = cfg?.agents.default_model;
 
+  /**
+   * ⛔ WHETHER THE REPOSITORY BEING INSTALLED INTO IS PRODUCTOS ITSELF.
+   *
+   * ⛔ AND IT IS THE TARGET, NOT THE SOURCE — WHICH THE FIRST VERSION OF THIS GOT WRONG AND A RUN
+   * CAUGHT. It used `isDevInstall`, which asks whether the BUNDLED code has a sibling `src/`: true
+   * for anybody installing from a checkout, including this checkout installing into somebody
+   * else's project. So a consumer served by a linked dev build still received both framework
+   * reviewers, which is the exact case the whole change is about. Installing into a scratch
+   * consumer and counting the files is what showed it; the predicate read plausibly either way.
+   *
+   * The honest question is about the destination: does `src/core/jobs.ts` exist there? That is the
+   * very file `consistency` opens by naming, so this installs the framework reviewers exactly where
+   * the things they read are — and nowhere else. No config flag, nothing to set, nothing to drift.
+   */
+  const ownRepo = cfgRoot !== undefined && fs.existsSync(path.join(cfgRoot, "src", "core", "jobs.ts"));
+
   for (const agent of AGENTS) {
     if (!agent.prompt) continue; // named in the registry, prompt not written — said out loud elsewhere
     if (off[agent.name]) continue; // turned off for this project, with a recorded reason
+    /**
+     * ⛔ A REVIEWER OF PRODUCTOS IS NOT PART OF ANYBODY'S PRODUCT. Both of these open by telling the
+     * reader to go and read `src/core/jobs.ts` or `src/v2/schema.ts`. Installed into a consumer's
+     * repository they are not merely useless — they are a capability the product appears to have
+     * and does not, which is worse than their absence.
+     */
+    if (aboutProductOS(agent) && !ownRepo) continue;
     const src = path.join(root, path.basename(agent.prompt));
     if (!fs.existsSync(src)) continue;
 

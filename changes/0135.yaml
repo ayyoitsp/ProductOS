@@ -1,0 +1,9 @@
+id: "0135"
+said: why aren't you just looking at all variable substituion? are you just searching for 'n"? what the heck?
+at: 2026-10-13
+kind: instruction
+reaches:
+  instruct: A zero proves nothing unless you can say what a failing zero looks like
+  pin: a verification with no possible failing state
+waived: {}
+closed: 2026-10-13
