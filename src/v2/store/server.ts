@@ -19,6 +19,7 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { eq, sql } from "drizzle-orm";
 import { type Db, isRefusal, storeFor } from "./access.js";
+import { becauseOf } from "./because.js";
 import { applyMigrations, SchemaAheadError } from "./migrate.js";
 import { migrateAllDocuments } from "./doc-migrations.js";
 import { projects } from "./schema.js";
@@ -137,6 +138,31 @@ export function openStore(databaseUrl: string): { db: Db; close: () => Promise<v
  */
 export const rowsOf = <T>(result: unknown): T[] =>
   Array.isArray(result) ? (result as T[]) : (((result as { rows?: T[] })?.rows ?? []) as T[]);
+
+/**
+ * Can this process read its store right now.
+ *
+ * ⛔ A READ, NOT `select 1`. The outage was `select "id" from "accounts" where email = $1` failing
+ * while the connection itself was fine enough to answer trivia — so a liveness probe that proves
+ * only "a packet went out and came back" can still be green while nothing can be served. This
+ * reads a real table, which is what every request does first.
+ *
+ * ⛔ AND IT MUST NOT HANG. The Dockerfile gives the healthcheck 3s; a probe that waits forever
+ * turns a broken store into a timed-out healthcheck with no reason attached, which is most of what
+ * went wrong here. Bounded, so the answer is always a verdict with a cause.
+ */
+export async function storeReachable(db: Db, ms: number = 2000): Promise<{ ok: true } | { ok: false; why: string }> {
+  try {
+    await Promise.race([
+      db.execute(sql.raw("select count(*) from accounts")),
+      new Promise((_, reject) => setTimeout(() => reject(new Error(`no answer from the store in ${ms}ms`)), ms)),
+    ]);
+    return { ok: true };
+  } catch (e) {
+    const why = becauseOf(e);
+    return { ok: false, why: why ? `${(e as Error).message} · ${why}` : (e as Error).message };
+  }
+}
 
 /** Bring the schema up to the checked-in migrations. ⛔ Idempotent — a container boots more than once. */
 export async function migrateStore(
@@ -350,8 +376,35 @@ export async function startHosted(
        * unauthenticated route.
        */
       if (pathname === "/health") {
-        res.writeHead(200, { "content-type": "application/json" });
-        res.end(JSON.stringify({ ok: true, service: "productos", version: "0.1.0" }));
+        /**
+         * ⛔ IT HAS TO REACH THE STORE, BECAUSE A PROCESS THAT IS LISTENING IS NOT A SERVICE.
+         *
+         * This answered `{ok:true}` from the fact that the handler ran. It touched no store and
+         * read no corpus — so when every corpus read failed for nearly two hours, this said
+         * healthy the whole time, Docker's HEALTHCHECK polls it and never restarted, and the
+         * deploy gate's own "waiting for health" would have passed a container that could not
+         * serve a single page. A human noticing was the only thing that worked.
+         *
+         * ⛔ THE SAME SHAPE THIS CODEBASE KEEPS LEGISLATING AGAINST, in the one place nobody put a
+         * guard: a surface reporting itself healthy while being broken. `/api/v2/live` had it, the
+         * presence banner had it, and the health check had it.
+         *
+         * ⛔ TOLERANCE BELONGS TO THE CALLER, NOT HERE. A debounce would make this lie for a while
+         * on purpose, which is the defect again. It answers for right now; the Dockerfile's
+         * `--retries=3 --interval=30s` is what keeps one blip from restarting anything.
+         */
+        const probe = await storeReachable(db);
+        const code = probe.ok ? 200 : 503;
+        res.writeHead(code, { "content-type": "application/json" });
+        res.end(
+          JSON.stringify({
+            ok: probe.ok,
+            service: "productos",
+            version: "0.1.0",
+            store: probe.ok ? "reachable" : "unreachable",
+            ...(probe.ok ? {} : { because: probe.why }),
+          }),
+        );
         return;
       }
 
@@ -372,6 +425,14 @@ export async function startHosted(
     } catch (e) {
       /** ⛔ A thrown error must not take the process down and restart every open connection. */
       process.stderr.write(`[productos] ${(e as Error).stack ?? (e as Error).message}\n`);
+      /**
+       * ⛔ AND WHAT IT WAS, NOT ONLY WHAT WAS ASKED. The stack above names the query and the call
+       * path, which is the part anybody could guess. 4100 failed every corpus read for nearly two
+       * hours and wrote 2037 of these, all identical, none carrying a sqlstate — so the outage
+       * recovered with its diagnosis unrecoverable. See `because.ts`.
+       */
+      const why = becauseOf(e);
+      if (why) process.stderr.write(`[productos]   because: ${why}\n`);
       if (!res.headersSent) {
         res.writeHead(500, { "content-type": "application/json" });
         res.end(JSON.stringify({ error: "internal_error", message: (e as Error).message }));

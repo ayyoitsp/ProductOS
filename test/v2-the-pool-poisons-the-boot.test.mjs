@@ -75,11 +75,40 @@ test("the dump goes through the direct endpoint, so it never poisons a pool", ()
   );
 });
 
-test("boot prints the cause, because the wrapper message is the part anybody could guess", () => {
-  const boot = code("src/v2/store/boot.ts");
-  assert.match(boot, /because/, "boot says nothing beyond drizzle's own wrapper message");
-  assert.match(boot, /\bcause\b/, "boot never walks .cause, where the sqlstate actually is");
-  assert.match(boot, /\bcode\b/, "boot does not report the error code — the whole diagnosis is the code");
+/**
+ * ⛔ REWRITTEN, BECAUSE IT ASSERTED WHERE THE CODE SAT RATHER THAN WHAT IT DID.
+ *
+ * This matched the words `because`, `cause` and `code` in `boot.ts`. The walker then moved to
+ * `because.ts` so the REQUEST path could use it too — a strict improvement, which turned this red.
+ * A test that fails when correct code is relocated is pinned to a location, and the same family as
+ * the guard that asked "does importing the DRAWING module load the compiler" and so could not see
+ * the eager import in the module next door.
+ *
+ * It now runs the thing and reads the answer, which survives the next move.
+ */
+test("the cause is reported, because the wrapper message is the part anybody could guess", async () => {
+  const { becauseOf } = await import("../dist/v2/store/because.js");
+
+  /** The exact shape of the outage: drizzle's wrapper outside, the sqlstate on `.cause`. */
+  const wrapped = new Error('Failed query: select "id" from "accounts" where "accounts"."email" = $1');
+  wrapped.cause = Object.assign(new Error("no schema has been selected to create in"), { code: "3F000" });
+
+  const why = becauseOf(wrapped);
+  assert.match(why, /3F000/, "the sqlstate is not reported, and it is the whole diagnosis");
+  assert.match(why, /no schema has been selected/, "the underlying message is not reported");
+  /** ⛔ Not the wrapper's own text — the caller already printed that; this is the part that is new. */
+  assert.doesNotMatch(why, /Failed query/, "it repeats the wrapper message instead of adding to it");
+
+  /** A cycle must not hang it, and a plain error must not invent a cause. */
+  const loop = new Error("outer");
+  loop.cause = loop;
+  assert.equal(becauseOf(loop), "");
+  assert.equal(becauseOf(new Error("just an error")), "");
+
+  /** And both paths that report to a human reach it. */
+  for (const f of ["src/v2/store/boot.ts", "src/v2/store/server.ts"]) {
+    assert.match(code(f), /becauseOf/, `${f} does not report the underlying cause`);
+  }
 });
 
 test("the schema step retries a connection-shaped fault, and refuses to retry a refusal", async () => {
