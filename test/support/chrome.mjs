@@ -116,7 +116,16 @@ const until = async (fn, what, ms = 15000) => {
  * Served from a file rather than a `data:` URL, because a data: document is opaque-origin and the
  * things being tested here — constructable stylesheets, shadow roots — behave differently there.
  */
-export async function openPage(html, { exe = findBrowser() } = {}) {
+/**
+ * Open a page in the real browser.
+ *
+ * Pass HTML and it is written to a temp file and loaded over `file://`. Pass `{ url }` instead —
+ * with `html` as `null` — and the browser navigates there, which is the only way to test anything
+ * that needs an ORIGIN: an `EventSource` on a relative path, a fetch, a cookie. A `file://` page
+ * cannot resolve `/api/v2/live` at all, so the behaviour under test never occurs and the test
+ * passes over nothing.
+ */
+export async function openPage(html, { exe = findBrowser(), url } = {}) {
   if (!exe) throw new Error("no browser");
   /**
    * ⛔ `temp()` RATHER THAN `mkdtempSync`, EVEN THOUGH THE TEARDOWN BELOW ALREADY REMOVES THIS. The
@@ -125,7 +134,8 @@ export async function openPage(html, { exe = findBrowser() } = {}) {
    */
   const dir = temp("productos-dom-");
   const file = path.join(dir, "page.html");
-  fs.writeFileSync(file, html);
+  if (html != null) fs.writeFileSync(file, html);
+  const target = url ?? `file://${file}`;
 
   const proc = spawn(
     exe,
@@ -167,7 +177,7 @@ export async function openPage(html, { exe = findBrowser() } = {}) {
   });
   const cdp = new Cdp(ws);
 
-  const { targetId } = await cdp.send("Target.createTarget", { url: `file://${file}` });
+  const { targetId } = await cdp.send("Target.createTarget", { url: target });
   const { sessionId } = await cdp.send("Target.attachToTarget", { targetId, flatten: true });
   await cdp.send("Runtime.enable", {}, sessionId);
 
