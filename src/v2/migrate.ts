@@ -732,6 +732,33 @@ export function migrate(v1Root: string, outDir: string, at: string): Migration {
   const keptContainers = new Set<string>();
   for (const x of pending) x.parents.forEach((p) => keptContainers.add(p));
   carried.scopes++;
+  /**
+   * ⛔ A PLACEHOLDER TITLE IS NOT CARRIED FORWARD AS THE PRODUCT'S NAME.
+   *
+   * `init` seeds `products/README.md` titled "Product Truth" with "replace me" in the body, and v1
+   * `check` refuses while the BODY is unreplaced — but this read the TITLE, so a corpus that had
+   * replaced the prose and left the heading arrived in v2 with the tool's name as the product's. On
+   * the corpus this was found in, every page a reviewer opened was titled "Product Truth".
+   *
+   * ⛔ REPORTED, AND THE TITLE IS STILL WRITTEN — because my first version of this wrote an empty
+   * one, and `Scope.title` has a floor of two characters, so the migrated corpus would not LOAD. A
+   * fix that trades a visible wrong name for an invisible unparseable file is worse than the defect:
+   * every command on that corpus fails with a schema message about a title, which says nothing about
+   * what happened. So the placeholder is carried, named in the refusals, and refused by `check`
+   * every time anybody tries to hand the corpus over.
+   *
+   * Nothing here invents a name. It does not know what the product is called, and guessing would be
+   * the thing this model refuses everywhere else.
+   */
+  const placeholder = /^(product truth|productos|the product|replace this page|untitled)$/i.test(
+    (productReadme?.title ?? "").trim()
+  );
+  if (placeholder)
+    refused.push({
+      what: PRODUCT,
+      from: path.join(v1Root, "products", "README.md"),
+      why: `the product's name is "${productReadme?.title}", which is this tool's placeholder and not a product's name — it would have become the title of every page`,
+    });
   write(
     PRODUCT,
     { id: PRODUCT, title: productReadme?.title || "The product", exists: "kept" },

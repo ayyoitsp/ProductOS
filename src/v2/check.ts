@@ -924,6 +924,50 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
     }
   }
 
+  /**
+   * ⛔ THE PRODUCT'S NAME IS THE FRAMEWORK'S PLACEHOLDER, AND IT IS THE MOST VISIBLE STRING THERE IS.
+   *
+   * The Bilrost corpus titles its root scope **"Product Truth"**, so every page a reviewer opens is
+   * titled after the tool rather than the product — and nothing anywhere said so. I reported it to
+   * Peter twice as a thing to fix and never traced it, which is the actual failure: it is not his
+   * corpus being untidy, it is a chain of four framework steps.
+   *
+   *   1. `init` seeds `products/README.md` titled "Product Truth", with "replace me" in the body
+   *   2. v1 `check` refuses while the BODY is unreplaced — the guard exists, for the body
+   *   3. the v1→v2 migration takes the root scope's title from that README's TITLE
+   *   4. v2 `check` has no equivalent guard, so the placeholder name becomes the product's name
+   *
+   * CLAUDE.md: *"Nothing a reader sees should mention the storage."* A product named after the
+   * documentation tool is the same leak with the substrate swapped for the tool, in the one string
+   * that appears in every browser tab.
+   *
+   * ⛔ REFUSED, NOT REPORTED. A product with no name of its own cannot be reviewed as a product —
+   * three fresh readers landed on the v1 version of this page and concluded the product WAS the
+   * documentation tool. That is why step 2 is a refusal, and this is the same claim about the same
+   * string.
+   */
+  {
+    const OURS = new Map([
+      ["product truth", "the name of this tool"],
+      ["the product", "the migration's stand-in when nothing said what the product was"],
+      ["productos", "the name of this tool"],
+      ["replace this page", "the scaffold, which says so"],
+      ["untitled", "nothing chose it"],
+    ]);
+    for (const { scope } of corpus.scopes) {
+      if (scope.in) continue;
+      const why = OURS.get((scope.title ?? "").trim().toLowerCase());
+      if (!why) continue;
+      add({
+        severity: "refuse",
+        kind: "the-product-has-no-name-of-its-own",
+        where: scope.id,
+        what: `this product is called "${scope.title}", which is ${why} — so every page a reviewer opens is titled after the tool rather than the product`,
+        fix: "give it the product's own name. ⛔ It is the title of the root scope, and it reaches the browser tab, the walk and every packet — a reader meeting it learns what this is before they read a word.",
+      });
+    }
+  }
+
   let blanks = 0;
   let statedSlots = 0;
   let inheritedSlots = 0;
