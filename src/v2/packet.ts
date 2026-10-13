@@ -539,6 +539,20 @@ function compileOne(corpus: Corpus, scopeId: string): string | null {
         out.push(`- **${x.rule}** still holds at \`${x.slot}\` — ${x.because.replace(/\s+/g, " ").trim()}`);
     }
     /**
+     * ⛔ THE PRINCIPLE A SENTENCE FOLLOWS FROM, cited rather than restated (fg-0013).
+     *
+     * An author resting two slots on one charter section had nowhere to point and restated its
+     * substance in both — the duplication this model exists to prevent. A builder reading the slot
+     * needs to know the sentence is not local invention, and a reviewer needs to know that
+     * changing the principle reaches here.
+     */
+    const rests = SLOTS.flatMap((s) => (ex.slots[s]?.rests_on ?? []).map((ref) => ({ ref, slot: s })));
+    if (rests.length) {
+      out.push("");
+      out.push("What these sentences rest on, rather than restate:");
+      for (const x of rests) out.push(`- \`${x.slot}\` follows from **${x.ref}**`);
+    }
+    /**
      * ⛔ What this ask sets off, printed on the ask that sets it off.
      *
      * The relation existed in prose on the follower only, so an author writing the triggering
