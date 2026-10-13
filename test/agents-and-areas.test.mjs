@@ -18,6 +18,7 @@ import {
   AREAS,
   AUTHORS,
   SHIMS,
+  shippedRoutes,
   LAYERS,
   CASCADE,
   KINDS,
@@ -380,8 +381,18 @@ test("the skill carries every route, generated, and has not drifted", () => {
   const f = `skills/${SKILL}/SKILL.md`;
   const body = fs.readFileSync(f, "utf-8");
   assert.match(body, /<!-- productos:preset -->/, `${f} carries no routes`);
-  assert.equal(body, withPreset(body, SHIMS), `${f} has drifted — regenerate: productos v2 agents --presets`);
-  for (const sh of SHIMS) assert.ok(body.includes(sh.does), `the route "${sh.route}" is not in the skill`);
+  /**
+   * ⛔ AGAINST WHAT SHIPS, NOT AGAINST EVERY ROUTE. The skill is installed on a consumer's machine,
+   * so a route about ProductOS is deliberately absent from it — `shippedRoutes` is the one place
+   * that decides, and comparing against `SHIMS` here would demand the skill carry a route whose
+   * whole point is that it does not.
+   */
+  const ships = shippedRoutes();
+  assert.equal(body, withPreset(body, ships), `${f} has drifted — regenerate: productos v2 agents --presets`);
+  for (const sh of ships) assert.ok(body.includes(sh.does), `the route "${sh.route}" is not in the skill`);
+  /** ⛔ And the withheld ones are withheld, or this test would pass on a skill that leaked them. */
+  for (const sh of SHIMS.filter((x) => x.about === "the framework"))
+    assert.ok(!body.includes(sh.does), `"${sh.route}" reviews the framework and is in a consumer's skill`);
   /** ⛔ The part outside the markers is hand-authored and must survive regeneration. */
   assert.ok(body.split("<!-- /productos:preset -->")[1].trim().length > 200, `${f} lost its authored body`);
 });

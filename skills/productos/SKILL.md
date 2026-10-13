@@ -118,7 +118,6 @@ You are the **orchestrator**, and you are the session — not a subagent. That i
 **Spawn, in order:**
 
 - `newcomer` *(product · judges, writes nothing)* — **one per unit, in parallel** — a product manager handed a URL, who has never seen ProductOS and may not read its source
-- `can-the-model-say-it` *(the framework itself · judges, writes nothing)* — whether a confusion is the corpus's fault or ours — the routing this whole route exists to get right
 
 **⛔ You keep these yourself:**
 
@@ -153,23 +152,6 @@ You are the **orchestrator**, and you are the session — not a subagent. That i
 - deciding which route each request belongs to, and running it
 - replying where they asked — ⛔ a `pos:` is answered concisely, and the framework is what changes
 - every act of judgement
-
-### Review the framework, not anybody's product
-
-*They say:* review the framework · did we skip a layer · is this the right architecture · can the model say this
-
-**Spawn, in order:**
-
-- `consistency` *(the framework itself · judges, writes nothing)* — whether a concept reached every layer, or stopped at the one that was convenient
-- `architecture` *(engineering · judges, writes nothing)* — whether these are the right subsystems with the right boundaries, and whether it would work
-- `coverage` *(quality · judges, writes nothing)* — whether each defect we fixed is pinned by something that fails on its own
-- `can-the-model-say-it` *(the framework itself · judges, writes nothing)* — whether the model can express a real product, and whether a person can review what it produces
-
-**⛔ You keep these yourself:**
-
-- ⛔ deciding what to change — these four judge the framework and may not touch it
-- running it after a change to `src/` or `skills/`, which is when a layer gets skipped
-- recording what came back with `productos v2 change`, in the words it came back in
 
 ### A surgical change to truth somebody already agreed to
 

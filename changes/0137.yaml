@@ -1,0 +1,14 @@
+id: "0137"
+said: "we should have a first class \"prototype selection' at the root of prototypes.  the multiple prototypes should be supported by the framework - what it splits on should be up to the project/user driving it"
+at: 2026-10-13
+kind: concept
+reaches:
+  model: splits_on
+  derive: selectionOf
+  generate: writePrototypes
+  surface: selectionAtTheRoot
+  check: prototypes-split-on-nothing
+  instruct: what they are alternatives ABOUT
+  pin: nothing infers the axis
+waived: {}
+closed: 2026-10-13

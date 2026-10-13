@@ -1,14 +1,13 @@
 id: "0136"
-said: we should have a first class "prototype selection' at the root of prototypes.  the multiple prototypes should be supported by the framework - what it splits on should be up to the project/user driving it
+said: ok, re-sync from main - let's review our current agent tree.  let's separate our 'dev' agent/skill from the product os framework agent/skills
 at: 2026-10-13
 kind: concept
 reaches:
-  model: splits_on
-  derive: selectionOf
-  generate: writePrototypes
-  surface: selectionAtTheRoot
-  check: prototypes-split-on-nothing
-  instruct: what they are alternatives ABOUT
-  pin: nothing infers the axis
-waived: {}
-closed: 2026-10-13
+  model: aboutProductOS
+  derive: ownRepo
+  surface: shippedRoutes()
+  instruct: You review ProductOS, and you are not installed anywhere else
+  pin: a consumer receives no reviewer of ProductOS
+waived:
+  generate: "Nothing new generates. The skill writer and the agent-doc writer both take a list of routes and render it; what changed is which list they are handed, and that decision is `shippedRoutes` in the model. Demonstrated: regenerating with `v2 agents --presets` produced a skill with the framework route and step gone, from a generator this change does not touch a line of. Arguable the day a withheld route has to be rendered DIFFERENTLY rather than simply absent."
+  check: "A corpus cannot be wrong about this. Who receives a role is a property of an INSTALL, not of anybody's product truth, so `v2 check` reads the one artefact that has nothing to say here. The equivalent guard exists and is a test rather than a refusal: an install is performed into a scratch consumer directory and the files that land are counted — which is the only form of the question that can be wrong, and is exactly how the first version of the predicate was caught shipping both reviewers anyway."

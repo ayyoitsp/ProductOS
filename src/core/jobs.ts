@@ -1625,6 +1625,18 @@ export interface Shim {
   /** What somebody types or says to mean this route. */
   when: string;
   /**
+   * ⛔ THIS ROUTE IS ABOUT PRODUCTOS, NOT ABOUT ANYBODY'S PRODUCT — SO IT IS NOT INSTALLED.
+   *
+   * Peter: *"let's separate our 'dev' agent/skill from the product os framework agent/skills"*.
+   *
+   * ⛔ DECLARED, NOT INFERRED FROM THE STEPS. `review ProductOS itself` spawns `architecture` and
+   * `coverage`, which are ordinary product reviewers — so a rule like "dev if any role is dev"
+   * would ship it, and the opposite rule would withhold `check it communicates`, which a consumer
+   * genuinely wants. A route's audience is not derivable from who it spawns; it is a fact about the
+   * route, and the only honest place for it is here.
+   */
+  about?: "the framework";
+  /**
    * The roles it spawns, in order. `fan` = one per unit of its role's axis; otherwise one.
    *
    * ⛔ REVIEWERS BELONG HERE TOO, AND FOUR ROUTES USED TO HAVE NONE.
@@ -1655,6 +1667,55 @@ export interface Shim {
    */
   at?: Stage;
 }
+
+/**
+ * ⛔ WHICH ROLES AND ROUTES ARE ABOUT PRODUCTOS RATHER THAN ABOUT A PRODUCT.
+ *
+ * Peter: *"let's separate our 'dev' agent/skill from the product os framework agent/skills"*.
+ *
+ * It was a label and nothing more. `installClaudeAgents` walked `AGENTS` with no filter, so every
+ * consumer received `consistency` and `can-the-model-say-it` — two reviewers whose prompts open by
+ * telling the reader to open `src/core/jobs.ts` and `src/v2/schema.ts`, files that exist only in
+ * this repository. A reviewer that cannot run is worse than an absent one: it reads as a capability
+ * the product has.
+ *
+ * The same leak was fixed for skills once already — the migrations skill was being shipped to
+ * consumers and moved to `.claude/skills/`, which is project-scoped. Agents and routes never got
+ * the same treatment, because nothing enforced the distinction the registry was already recording.
+ *
+ * ⛔ `discipline` IS THE DECLARATION FOR A ROLE, and adding a second field beside it would be two
+ * ways to say one thing — which is how they come to disagree.
+ */
+export const aboutProductOS = (r: { discipline: Discipline }): boolean =>
+  r.discipline === "the framework itself";
+
+/** Every role a consumer should receive. */
+export const shippedRoles = (): Array<Agent | Author> =>
+  [...AGENTS, ...AUTHORS].filter((r) => !aboutProductOS(r));
+
+/** The roles that review ProductOS, which only a ProductOS checkout has any use for. */
+export const frameworkRoles = (): Array<Agent | Author> =>
+  [...AGENTS, ...AUTHORS].filter(aboutProductOS);
+
+/**
+ * The routes a consumer's skill should carry, with any framework reviewer taken out of their steps.
+ *
+ * ⛔ TWO FILTERS, BECAUSE THEY ANSWER DIFFERENT QUESTIONS. A whole route can be about ProductOS —
+ * `review ProductOS itself` — and a route a consumer genuinely wants can spawn one role that is
+ * not theirs: `check it communicates` is `newcomer` plus `can-the-model-say-it`, and the first half
+ * is the point of it. Dropping the route would take a useful route away; keeping the step would
+ * tell somebody to run a reviewer that opens `src/v2/schema.ts`.
+ *
+ * ⛔ AND A CONSUMER IS NOT LEFT WITHOUT A WAY TO REPORT A MODEL GAP. That is what
+ * `productos todo add` is for — "the model cannot express this" — and it has always been the right
+ * channel, because a consumer cannot act on a framework reviewer's findings anyway.
+ */
+export const shippedRoutes = (): Shim[] => {
+  const dev = new Set(frameworkRoles().map((r) => r.name));
+  return SHIMS.filter((r) => r.about !== "the framework").map((r) =>
+    r.steps.some((s) => dev.has(s.role)) ? { ...r, steps: r.steps.filter((s) => !dev.has(s.role)) } : r
+  );
+};
 
 export const SHIMS: Shim[] = [
   {
@@ -1923,6 +1984,8 @@ export const SHIMS: Shim[] = [
    */
   {
     route: "review ProductOS itself",
+    /** ⛔ The route this whole distinction is named after — it reviews the framework, not a product. */
+    about: "the framework",
     does: "Review the framework, not anybody's product",
     when: "review the framework · did we skip a layer · is this the right architecture · can the model say this",
     steps: [
