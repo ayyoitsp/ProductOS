@@ -131,6 +131,19 @@ export function writeWithin(root: string, scopeId: string, viewId: string, withi
   })();
   /** Replace an existing one rather than adding a second — a view with two is a view that will not parse. */
   const at = lines.findIndex((l, i) => i > start && i < end && /^\s*within:/.test(l));
+  /**
+   * ⛔ EMPTY REMOVES THE LINE, it does not write an empty one. `within: ""` is a reference that
+   * resolves to nothing, which `check` refuses — so taking a containment back through the obvious
+   * call would have left the corpus in a state the author could not have intended and could not see
+   * the cause of.
+   */
+  if (!within) {
+    if (at >= 0) {
+      lines.splice(at, 1);
+      fs.writeFileSync(file, lines.join("\n"));
+    }
+    return file;
+  }
   const line = `${indent}within: ${JSON.stringify(within)}`;
   if (at >= 0) lines[at] = line;
   else lines.splice(start + 1, 0, line);

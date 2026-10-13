@@ -31,7 +31,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { CORPUS_DIRS, loadCorpus } from "./load.js";
 import { append } from "./log.js";
-import { writePrototypes } from "./draw-write.js";
+import { writePrototypes, writeWithin } from "./draw-write.js";
+import { walkOf } from "./walk.js";
 import { axesOf, answersOf } from "./schema.js";
 import { doorOpensOn } from "./selection.js";
 
@@ -431,6 +432,85 @@ export const INTENTS: Intent[] = [
           /** ⛔ Said out loud: the chrome is drawn from a repository an instance does not have. */
           ...(next.shell_from && !next.shell_html ? ["its chrome is not drawn yet — that needs a checkout"] : []),
         ],
+      };
+    },
+  },
+  /**
+   * ⛔ CONTAINMENT, FROM THE PAGE — THE SAME DEFECT AS THE SPLIT, ONE COMMAND LATER.
+   *
+   * `v2 inside` landed an hour after Peter said *"I should be able to drive this from the
+   * listener/input, right??? why could you possibly need this?"*, and it is a CLI command: a
+   * terminal, in a checkout, for a fact a person states while looking at the screen it is about.
+   * Exactly the thing he had just corrected, written again.
+   *
+   * ⛔ WHICH SCREEN HOLDS WHICH IS THE RELATION A WALK IS BUILT FROM, so being unable to say it from
+   * the page is what leaves a corpus at 15 front doors. A capability that cannot be reached from
+   * where the person is standing is not a capability — the deploying session's words, and they are
+   * right: it is a door onto nothing one level up.
+   */
+  {
+    name: "inside",
+    gate: "author",
+    does: "Say which screen a screen appears inside — or take that back",
+    takes: [
+      { name: "view", says: "The screen that appears inside another, as <scope>#<view>", required: true },
+      {
+        name: "of",
+        says: "The screen it appears inside, as <scope>#<view>. ⛔ Empty takes it back — the screen becomes its own way in again",
+        required: false,
+      },
+    ],
+    run: (a, body) => {
+      const ref = str(body.view).trim();
+      const of = str(body.of).trim();
+      if (!ref) return { ok: false, why: "say which screen" };
+      const corpus = loadCorpus(a.dir);
+      const here = doorOpensOn(corpus, ref);
+      if (!here) return { ok: false, why: `no screen "${ref}" in this corpus` };
+      /** The scope that actually holds it, so a bare id still writes to the right file. */
+      const holder = corpus.scopes
+        .flatMap((e) => (e.scope.views ?? []).map((v) => ({ scope: e.scope.id, view: v })))
+        .find((x) => `${x.scope}#${x.view.id}` === ref || x.view.id === ref);
+      if (!holder) return { ok: false, why: `no screen "${ref}" in this corpus` };
+
+      if (!of) {
+        const file = writeWithin(a.dir, holder.scope, holder.view.id, "");
+        if (!file) return { ok: false, why: `could not find "${ref}" to change` };
+        append(a.dir, { kind: "corpus-changed", at: new Date().toISOString(), by: a.who.actor, via: "page", ref, says: `${here.title} is no longer inside anything` });
+        return { ok: true, said: `${here.title} is its own way in again` };
+      }
+
+      if (!doorOpensOn(corpus, of)) return { ok: false, why: `no screen "${of}" in this corpus, so nothing can appear inside it` };
+      if (of === ref || of === holder.view.id || `${holder.scope}#${holder.view.id}` === of)
+        return { ok: false, why: "a screen cannot appear inside itself" };
+      /**
+       * ⛔ A LOOP IS REFUSED HERE, not discovered by the walk. Two screens each inside the other is
+       * not a product, and a walk given one either loops or silently drops a step.
+       */
+      const chain = new Set<string>([`${holder.scope}#${holder.view.id}`, holder.view.id]);
+      let up: string | undefined = of;
+      while (up) {
+        if (chain.has(up)) return { ok: false, why: `that would make a loop, through ${up}` };
+        chain.add(up);
+        const step: string = up;
+        const qualified = step.includes("#");
+        const scopePart = qualified ? step.split("#")[0] : undefined;
+        const viewPart = qualified ? step.split("#")[1] : step;
+        const found = corpus.scopes
+          .flatMap((e) => (e.scope.views ?? []).map((x) => ({ scope: e.scope.id, view: x })))
+          .find((x) => (scopePart ? x.scope === scopePart && x.view.id === viewPart : x.view.id === viewPart));
+        up = found?.view.within;
+      }
+
+      const file = writeWithin(a.dir, holder.scope, holder.view.id, of);
+      if (!file) return { ok: false, why: `could not find "${ref}" to write it into` };
+      append(a.dir, { kind: "corpus-changed", at: new Date().toISOString(), by: a.who.actor, via: "page", ref, says: `${here.title} appears inside ${of}` });
+      /** ⛔ The number that changed, because it is the point: a contained screen is not a front door. */
+      const after = walkOf(loadCorpus(a.dir));
+      return {
+        ok: true,
+        said: `${here.title} appears inside ${doorOpensOn(corpus, of)?.title ?? of}`,
+        detail: [`${after.entries.length} way${after.entries.length === 1 ? "" : "s"} into this product now`],
       };
     },
   },

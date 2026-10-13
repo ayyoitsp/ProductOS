@@ -1128,6 +1128,21 @@ function renderScreens(scope: Scope, ctx: Ctx, scopeId: string, opts: PageOption
             }
             ${
               /**
+               * ⛔ WHICH SCREEN THIS ONE APPEARS INSIDE — SAID HERE, NOT IN A TERMINAL.
+               *
+               * `v2 inside` shipped an hour after Peter said *"I should be able to drive this from
+               * the listener/input, right??? why could you possibly need this?"* — and it is a CLI
+               * command, for a fact a person states while looking at the screen it is about. The
+               * same defect he had just corrected, written again.
+               *
+               * ⛔ A SELECT, NOT A REF FIELD. The screens are known, so typing `<scope>#<view>` by
+               * hand is a chance to get it wrong at the one surface that can simply list them. The
+               * empty option takes the containment back, which is the other half nobody could do.
+               */
+              insideControl(corpus, scopeId, v)
+            }
+            ${
+              /**
                * ⛔ A SCREEN SHOWING FIVE APPEARANCES UNDER ONE SENTENCE, SAYING SO WHERE IT SHOWS.
                *
                * Peter, the moment create-a-deal finally drew its wizard: *"and there's a single
@@ -4295,6 +4310,27 @@ function wireSelectionEditor() {
     });
   }
 
+  /*
+   * ⛔ WHICH SCREEN HOLDS WHICH, SAID ON THE SCREEN ITSELF. Same intent door; one request per change
+   * rather than a save button, because a containment is one decision and there is nothing to batch.
+   */
+  Array.prototype.slice.call(document.querySelectorAll("[data-inside]")).forEach(function (row) {
+    var sel = row.querySelector("select");
+    var istatus = row.querySelector(".status");
+    sel.addEventListener("change", function () {
+      istatus.textContent = "saving…"; istatus.className = "status";
+      sendIntent("inside", { view: row.getAttribute("data-inside"), of: sel.value })
+        .then(function (said) {
+          istatus.textContent = said; istatus.className = "status ok";
+          setTimeout(function () { location.reload(); }, 900);
+        })
+        .catch(function (err) {
+          istatus.textContent = "Not saved: " + (err && err.message ? err.message : String(err));
+          istatus.className = "status bad";
+        });
+    });
+  });
+
   var save = document.querySelector("[data-sel-save]");
   if (!save) return;
   var pstatus = document.querySelector("[data-sel-status]");
@@ -6859,6 +6895,27 @@ export const STYLE = `<style>
   .wpick-t { font-size: .85rem; font-weight: 600; }
   .wpick-m { font-size: .7rem; color: var(--dim); }
   .wsel-gaps { margin: .5rem 0 0; padding: 0 0 0 1rem; font-size: .75rem; color: var(--warn); }
+  .wsel-and { color: var(--dim); font-weight: 400; }
+  .wsel-edit { margin-top: .6rem; font-size: .8rem; }
+  .wsel-edit > summary { cursor: pointer; color: var(--dim); }
+  .wsel-hint { margin: .5rem 0 .35rem; font-size: .75rem; color: var(--dim); }
+  .wsel-form textarea { width: 100%; font: inherit; font-size: .8rem; padding: .4rem .5rem; border: 1px solid var(--line);
+    border-radius: 8px; background: var(--card); color: var(--ink); resize: vertical; }
+  .wsel-actions { display: flex; align-items: center; gap: .5rem; margin-top: .4rem; }
+  .wsel-grid { width: 100%; border-collapse: collapse; margin-top: .7rem; font-size: .78rem; }
+  .wsel-grid th, .wsel-grid td { text-align: left; padding: .25rem .4rem; border-bottom: 1px solid var(--line); }
+  .wsel-grid thead th { font-size: .7rem; text-transform: uppercase; letter-spacing: .06em; color: var(--dim); font-weight: 600; }
+  .wsel-grid input { width: 100%; font: inherit; font-size: .78rem; padding: .2rem .35rem; border: 1px solid var(--line);
+    border-radius: 6px; background: var(--card); color: var(--ink); }
+  .wsel-grid input.bad { border-color: var(--warn); }
+  /*
+   * ⛔ ON THE SCREEN, AT THE SIZE OF A CAPTION. Peter: *"WE DON'T HAVE THAT MUCH SCREEN REAL ESTATE
+   * to begin with"* — this is one line under a heading on every screen, so it is the smallest thing
+   * that can still be used, and it says nothing extra when a screen is its own way in.
+   */
+  .inside { margin: .15rem 0 .5rem; font-size: .72rem; color: var(--dim); display: flex; align-items: center; gap: .4rem; }
+  .inside select { font: inherit; font-size: .72rem; padding: .1rem .25rem; border: 1px solid var(--line);
+    border-radius: 6px; background: var(--card); color: var(--ink); max-width: 22rem; }
   .ptile { margin: 0; cursor: pointer; }
   /**
    * A drawing is a whole page of markup. Shown at its own size it is one screen per scroll, so each
@@ -7433,6 +7490,44 @@ function selectionAtTheRoot(sel: Selection): string {
 
 /** Between two axis questions on one line. */
 const pc_sep = ' <span class="wsel-and">then</span> ';
+
+/**
+ * Where this screen appears, settable here.
+ *
+ * ⛔ THE RELATION A WALK IS BUILT FROM, AND IT HAD NO SURFACE AT ALL. `within` has existed since the
+ * walk did; the only ways to state it were hand-editing a truth file and, an hour ago, a CLI
+ * command. On the corpus this was built for that left 0 of 17 screens placed and fifteen front
+ * doors — a product rendering as a heap, with the fix reachable only from a terminal.
+ *
+ * ⛔ EVERY OTHER SCREEN IS OFFERED, including ones in other features. A screen can be filed under
+ * one feature and appear inside a screen owned by another; that is a normal product, and a list
+ * limited to siblings would quietly make it unsayable.
+ */
+function insideControl(corpus: Corpus, scopeId: string, v: View): string {
+  const me = `${scopeId}#${v.id}`;
+  const others = corpus.scopes.flatMap((e) =>
+    (e.scope.views ?? [])
+      .filter((x) => x.exists !== "withdrawn" && `${e.scope.id}#${x.id}` !== me)
+      .map((x) => ({ ref: `${e.scope.id}#${x.id}`, title: x.title ?? x.id, scope: e.scope.title || e.scope.id }))
+  );
+  if (!others.length) return "";
+  /** ⛔ Matched on both spellings, because `within` may be a bare view id. */
+  const chosen = others.find((o) => o.ref === v.within || o.ref.endsWith(`#${v.within ?? " "}`));
+  return `<p class="inside" data-inside="${esc(me)}">
+    <label>Appears inside
+      <select>
+        <option value=""${chosen ? "" : " selected"}>— nothing; this is its own way in</option>
+        ${others
+          .map(
+            (o) =>
+              `<option value="${esc(o.ref)}"${chosen && chosen.ref === o.ref ? " selected" : ""}>${line(o.title)} · ${line(o.scope)}</option>`
+          )
+          .join("")}
+      </select>
+    </label>
+    <span class="status"></span>
+  </p>`;
+}
 
 function walkInside(walk: Walk, protos: Prototype[], sel: Selection): string {
   if (!walk.steps.size) return "";
