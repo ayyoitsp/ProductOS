@@ -1,0 +1,9 @@
+id: "0131"
+said: one thing I want to allow users to do is change high level navigation - do we support this.  say a user just wanted to do something like 'oh, I want 3 main prototypes, prototype 1 is for the admin role, 2 is for the loan processor role, etc?
+at: 2026-10-12
+kind: generator
+reaches:
+  generate: it only ever fills in `to`
+  pin: an author's order is the order, and aiming does not reshuffle it
+waived: {}
+closed: 2026-10-12

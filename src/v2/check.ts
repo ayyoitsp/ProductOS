@@ -278,6 +278,53 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
    * finding that fires only when an unrelated thing is configured is worse than no finding.
    */
   /**
+   * ⛔ ASSERT THE CONDITION, NOT THE SHAPE SOMEBODY HAPPENED TO FIX.
+   *
+   * lucide was upgraded in a product's node_modules — nobody committed to either repository — and
+   * its on-disk format changed from `__iconNode = [...]` to `__iconData = { node: [...] }`. Every
+   * glyph in the corpus silently became a grey square: the exact defect `icons.ts` exists to end,
+   * reintroduced by a dependency bump. It was caught because a node_modules diff happened to
+   * surface before a deploy, which is luck rather than a mechanism.
+   *
+   * Both shapes are now pinned by tests, and that is the weaker move: a pin is anchored to a shape
+   * somebody already knew about, so a THIRD shape passes every test and fails every drawing. The
+   * deploying session put it exactly right — the load-bearing instrument is one that fails when
+   * any glyph falls back, because it survives the package changing shape again without anyone
+   * predicting how.
+   *
+   * ⛔ IT IS A NOTE, NOT A REFUSAL. A product that uses no icon package has no glyphs to resolve and
+   * is not wrong; neither is a screen whose drawing genuinely contains a name the package does not
+   * export. What this says is "these drew as grey squares", which is a fact a reviewer can act on.
+   */
+  {
+    const fellBack = new Map<string, number>();
+    const names = new Set<string>();
+    for (const entry of corpus.scopes)
+      for (const view of entry.scope.views ?? []) {
+        const drawings = [view.sketch_html ?? "", ...(view.states ?? []).map((st) => st.sketch_html ?? "")];
+        let here = 0;
+        for (const html of drawings) {
+          for (const m of html.matchAll(/class="productos-icon"[^>]*aria-label="([^"]*)"/g)) {
+            here++;
+            if (m[1]) names.add(m[1]);
+          }
+        }
+        if (here) fellBack.set(`${entry.scope.id}#${view.id}`, here);
+      }
+    const total = [...fellBack.values()].reduce((a, b) => a + b, 0);
+    if (total)
+      add({
+        severity: "note",
+        kind: "glyphs-fell-back",
+        where: [...fellBack.keys()].slice(0, 3).join(", ") + (fellBack.size > 3 ? `, and ${fellBack.size - 3} more` : ""),
+        what: `${total} icon${total === 1 ? "" : "s"} across ${fellBack.size} screen${
+          fellBack.size === 1 ? "" : "s"
+        } drew as a grey square rather than a glyph${names.size ? ` — ${[...names].slice(0, 6).join(", ")}` : ""}`,
+        fix: "⛔ Usually not an authoring mistake. Either the icon package moved — it has changed its on-disk shape before, and every glyph in a corpus went grey without a commit on either side — or these names are not ones it exports. Re-draw and see whether the count goes to zero; if it does not, the names are the question.",
+      });
+  }
+
+  /**
    * ⛔ WHAT HOLDS WHAT, AND WHAT NOBODY CAN GET TO.
    *
    * Peter: *"we should be able to know the true navigation, leverage screens within screens"*. Two
