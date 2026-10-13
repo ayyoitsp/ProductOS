@@ -308,6 +308,43 @@ It refuses: a product, area or capability system with no description; a containe
 wrong depth; any high audit finding; a `depends_on`, `affected_by` or `leads_to` that
 resolves to nothing.
 
+## ⛔ A zero proves nothing unless you can say what a failing zero looks like
+
+Peter: *"why aren't you just looking at all variable substituion? are you just searching for 'n"?
+what the heck?"* — a count that measured the wrong thing and agreed with what I wanted to be true.
+
+**Six times in one week, two sessions, the same shape: the measurement agreed with the hypothesis,
+so it was never checked.** The ones that cost time:
+
+| the number | why it was meaningless |
+| --- | --- |
+| `grep -c` read as occurrences | it counts **lines**, so 300 placeholders on one line read as 1 |
+| 972 unresolved selects | from a sweep that had stopped happening that way two days earlier |
+| a clean deploy log | `--since` matched nothing and silently printed an empty 2037-line outage |
+| 0 grey icon squares | the CSS rule that would have drawn them had been renamed |
+| 0 `data-held` on the page | the attribute is **omitted** when absent — so 0 is also what shipping nothing produces |
+
+The last one is worse in kind than the other four, and it is the rule: **for a feature whose correct
+answer today is zero, a zero is not a weak check, it is not a check.** There is no failing state in
+that observation at all. Same family as the guard in #95, which passed at the commit where its own
+defect was live.
+
+**So produce a non-zero somewhere.** Exercise the shipped module until it answers differently for
+cases that differ:
+
+```
+no acts at all              held: false
+a reading by a person       held: true     ← the one that cannot happen by accident
+a reading by the generator  held: false
+```
+
+Three distinguishable outcomes, out of the deployed build. That probe also independently caught the
+real bug in the feature it was verifying — the generator holding a screen against its own reading.
+
+⛔ **And when the numbers are mutually impossible, stop counting and look at one instance.** Every
+one of the six survived because the next step was another aggregate. Reading a single combobox is
+what found `Blue Harbour`; reading a single `.yaml` is what found eight screens held by nobody.
+
 ## Verify by running, not by reasoning
 
 A rendering claim that was never rendered is a guess. **For renderer changes, there is a

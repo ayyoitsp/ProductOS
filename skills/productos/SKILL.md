@@ -545,6 +545,28 @@ answered `cannot-judge-this-corpus`: not one finding, about anything, until some
 ⛔ **Run it when `check` says a key is unrecognized.** That is what it looks like from the outside: a
 corpus written by an older build, read by a newer one.
 
+### ⛔ A zero proves nothing unless you can say what a failing zero looks like
+
+Peter: *"why aren't you just looking at all variable substituion? are you just searching for 'n"?
+what the heck?"*
+
+**Six times in one week the measurement agreed with the hypothesis, so it was never checked.**
+`grep -c` counts *lines*, so three hundred placeholders on one line read as 1. A sweep's number was
+quoted for two days after the sweep had stopped happening that way. A deploy log looked clean
+because `--since` matched nothing and printed an empty 2037-line outage.
+
+The worst of the six is the one to learn: an attribute that is **omitted** when the condition is
+absent, counted as 0 and reported as working. A zero there is not a weak check, it is not a check —
+there is no failing state in the observation at all.
+
+**So produce a non-zero.** Exercise the shipped code until it answers differently for cases that
+differ: no acts → `false`, a person's reading → `true`, the generator's own reading → `false`. That
+probe found a real bug in the feature it was verifying.
+
+⛔ **And when two numbers are mutually impossible, stop counting and look at one instance.** Reading
+a single control is what found a sample value nobody had noticed was wrong; reading one recorded act
+is what found eight screens held by nobody.
+
 ⛔ **A drawing is only right if it RENDERS right, and there is a test harness that renders in a
 real browser.** `test/support/chrome.mjs`, used by `test/v2-the-mock-in-a-real-browser.test.mjs`:
 
