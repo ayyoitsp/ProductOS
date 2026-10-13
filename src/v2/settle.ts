@@ -547,6 +547,8 @@ export function settle(
    * used to destroy truth nobody had questioned.
    */
   const beforeSlot = { ...slot };
+  /** ⛔ The standing as the author wrote it — `slot.standing` is replaced further down. */
+  const asked = beforeSlot.standing as { of?: string } | undefined;
   // ⛔ Recorded, so the corpus keeps the sentence that used to be there. A ruling that
   // revises an agreed sentence is legitimate; losing the old one without trace is not.
   const wasSaying = typeof slot.says === "string" ? (slot.says as string).replace(/\s+/g, " ").trim() : undefined;
@@ -639,7 +641,34 @@ export function settle(
   }
   if (about.outcomes) slot.outcomes = about.outcomes;
   else if (about.none) slot.none = true;
-  else slot.says = says;
+  else if (asked?.of && Array.isArray(slot.says)) {
+    /**
+     * ⛔ ONE STATEMENT, NOT THE WHOLE SLOT (fg-0008).
+     *
+     * A slot that says four things, one of them unruled, used to have no way to rule just that
+     * one: the standing sat on the slot, so `--says` replaced all four and the reviewer had to
+     * retype the three already agreed. That is precisely the clause loss `--pick` exists to
+     * prevent, re-achieved through the list spelling — reported by the author who hit it, not
+     * theorised.
+     *
+     * So when the standing names `of`, the ruling replaces that statement's `says` and leaves its
+     * siblings byte-identical. Their ids do not move either, so no criterion's `of:` is orphaned.
+     *
+     * ⛔ AND IF THE NAMED STATEMENT IS GONE, THIS REFUSES rather than appending a new one. A
+     * ruling that silently adds a fifth sentence while claiming to settle the fourth is worse than
+     * one that stops.
+     */
+    const statements = slot.says as Array<{ id: string; says: string }>;
+    const target = statements.find((x) => x.id === asked.of);
+    if (!target)
+      return {
+        ok: false,
+        why:
+          `this standing is about the statement "${asked.of}", and ${ref} no longer says it — ` +
+          `it says: ${statements.map((x) => x.id).join(", ")}. Re-point the standing, or rule the whole slot`,
+      };
+    target.says = says;
+  } else slot.says = says;
   // ⛔ Cleared, then re-derived only from what the person declared in THIS act — the comment
   // above has claimed this since the field existed and the code did not do it, so an
   // `instead_of` authored beside an open slot survived the ruling that replaced its sentence.

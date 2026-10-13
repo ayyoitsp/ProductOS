@@ -24,7 +24,7 @@ import { deriveStates } from "./derive-states.js";
 import { walkOf, type Walk } from "./walk.js";
 import { inEffect, declined as declinedSteers, reaches } from "./steers.js";
 import { AUTHORS } from "../core/jobs.js";
-import { SLOTS, SLOT_ASKS_SHORT, statements, saysText, type SlotName, type Scope, type Steer, type View, type Part, type Says, type Prototype } from "./schema.js";
+import { SLOTS, SLOT_ASKS_SHORT, statements, saysText, nothingHere, type SlotName, type Scope, type Steer, type View, type Part, type Says, type Prototype } from "./schema.js";
 import { gridFor, gateFor, actsFor, ruleHomes, stageOf, reachOf, type Grid, type Cell } from "./grid.js";
 import { stampFor, decidedFor, whatChangedSince } from "./stamp.js";
 /** ⛔ The one table of what an act owes. It lived here and no other surface could read it. */
@@ -1387,7 +1387,8 @@ function renderBehaviours(
       const says = fill?.says
         ? line(saysText(fill.says as Says))
         : fill?.none
-          ? `<em>nothing to refuse</em>`
+          ? /** ⛔ What `none` means HERE — `after` and `again` are not refusals (fg-0015). */
+            `<em>${nothingHere(slot)}</em>`
           : fill?.cannot_fail
             ? `<em>cannot fail</em>`
             : (fill?.outcomes as Array<{ name: string; when: string; told: string }> | undefined)?.length
@@ -1456,7 +1457,7 @@ function renderBehaviours(
             : fill?.says
               ? saysText(fill.says as Says)
               : fill?.none
-                ? "nothing to refuse"
+                ? nothingHere(slot)
                 : fill?.cannot_fail
                   ? "cannot fail"
                   : plain(ex.title)
@@ -2269,7 +2270,7 @@ function renderGrid(g: Grid, ctx: Ctx): string {
           <dt>≥Rn</dt><dd>a rule still holds here, and this sentence only narrows it</dd>
           <dt>⊗Rn</dt><dd>a rule deliberately does not apply here, with a reason</dd>
           <dt>∅</dt><dd>deliberately not answered — the builder's latitude</dd>
-          <dt>–</dt><dd>nothing to refuse — or, on <code>after</code>, nothing is different afterwards</dd>
+          <dt>–</dt><dd>nothing to refuse — on <code>after</code>, nothing is different afterwards; on <code>again</code>, nothing further happens on a second press</dd>
           <dt>⊘</dt><dd>cannot fail</dd>
           <dt>○</dt><dd>open — nobody has ruled</dd>
           <dt>✗</dt><dd>disputed</dd>
@@ -2336,7 +2337,8 @@ function renderExchanges(corpus: Corpus, scopeIds: string[], cellOf: Map<string,
           x?.says
             ? line(x.says)
             : x?.none
-              ? "<em>nothing to refuse</em>"
+              ? /** ⛔ `s` is this slot's name, so `none` can say which of the three it means. */
+                `<em>${nothingHere(s)}</em>`
               : x?.cannot_fail
                 ? "<em>cannot fail</em>"
                 : outcomesOf(x).length

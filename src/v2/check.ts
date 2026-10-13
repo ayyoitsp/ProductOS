@@ -578,16 +578,24 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
      * to read them together.
      */
     for (const ex of scope.exchanges) {
-      if (!ex.when?.follows) continue;
-      const r = resolveRefSafely(corpus, ex.when.follows);
-      if (!r || (r.ref.kind !== "exchange" && r.ref.kind !== "slot"))
-        add({
-          severity: "refuse",
-          kind: "follows-nothing",
-          where: `${scope.id}#${ex.id}`,
-          what: `runs after "${ex.when.follows}", which is not an exchange here`,
-          fix: "name the ask this really follows — a builder needs to know what sets this off, and whoever owns that ask needs to see that something follows it",
-        });
+      if (!ex.when?.follows?.length) continue;
+      /**
+       * ⛔ EVERY ONE, AND THE FINDING NAMES THE ONE THAT FAILED. `follows` holds several since
+       * fg-0007 — machinery asked by five features could name one — so checking only the first
+       * would let four unresolvable refs through while reporting a clean corpus, which is the
+       * exact failure mode the gap was filed about.
+       */
+      for (const ref of ex.when.follows) {
+        const r = resolveRefSafely(corpus, ref);
+        if (!r || (r.ref.kind !== "exchange" && r.ref.kind !== "slot"))
+          add({
+            severity: "refuse",
+            kind: "follows-nothing",
+            where: `${scope.id}#${ex.id}`,
+            what: `runs after "${ref}", which is not an exchange here`,
+            fix: "name the ask this really follows — a builder needs to know what sets this off, and whoever owns that ask needs to see that something follows it",
+          });
+      }
     }
 
     /**
@@ -1147,13 +1155,37 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
             fix: "nothing to do if that is right — this is here so a corpus cannot quietly come to rest on examples nobody re-read",
           });
         if (why.length && !c.example) {
-          add({
-            severity: "refuse",
-            kind: "criterion-asserts-more-than-the-slot",
-            where: `${ref}#${c.slot} criterion ${c.id}`,
-            what: `in its \`then\`, ${why.join("; and ")}`,
-            fix: "an engineer implements the `then`, so anything here that the slot does not say becomes product truth nobody agreed to — put it in the slot, declare it as a term, or mark example: true",
-          });
+          /**
+           * ⛔ IS THE SLOT ITSELF UNRULED? Then this criterion is WAITING, not over-asserting.
+           *
+           * All three fixes below assume the slot's wording is settled and the criterion drifted
+           * from it. On a slot carrying an open standing every one of them is wrong: putting the
+           * words in the slot settles a question nobody has ruled, and `example: true` claims they
+           * are illustrative when they are the thing in dispute. The only move left was to delete
+           * what v1 recorded — which is precisely what the migration refused to do.
+           *
+           * ⛔ STILL COUNTED, STILL NAMED. The mismatch is real and matters the moment somebody
+           * rules, so this says which ruling it waits on rather than going quiet.
+           */
+          const unruled = ex.slots[c.slot]?.standing;
+          const waiting = unruled && unruled.kind !== "stated";
+          add(
+            waiting
+              ? {
+                  severity: "note",
+                  kind: "criterion-waiting-on-a-ruling",
+                  where: `${ref}#${c.slot} criterion ${c.id}`,
+                  what: `asserts ${why.join("; and ")} — and \`${c.slot}\` is ${unruled!.kind}, so there is nothing settled for it to match yet`,
+                  fix: "nothing to do until the standing is ruled. ⛔ Do NOT put these words in the slot to clear this: that settles the question by the back door. Re-read this criterion when the ruling lands",
+                }
+              : {
+                  severity: "refuse",
+                  kind: "criterion-asserts-more-than-the-slot",
+                  where: `${ref}#${c.slot} criterion ${c.id}`,
+                  what: `in its \`then\`, ${why.join("; and ")}`,
+                  fix: "an engineer implements the `then`, so anything here that the slot does not say becomes product truth nobody agreed to — put it in the slot, declare it as a term, or mark example: true",
+                }
+          );
         }
       }
       const exampleOnly = SLOTS.filter((s) => {
@@ -2248,7 +2280,23 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
            */
           if (pt.decorative || pt.role === "display" || pt.role === "region") continue;
           if (pt.role === "entry" || pt.role === "navigates") continue;
-          const says = scope.exchanges.find((e) => e.at?.view === v.id && e.at?.part === pt.id);
+          /**
+           * ⛔ ANY SCOPE'S ASK, NOT JUST THIS ONE'S — and this was a regression I introduced.
+           *
+           * `at.view_in` exists so a person's ask can name a screen another scope owns (fg-0005):
+           * a scoper may not read a sibling's file, and a migrated corpus is full of reader actions
+           * whose screen was written elsewhere. But this lookup still searched `scope.exchanges`
+           * only, so the sibling's ask was invisible here and the control read as promising
+           * nothing. The author's two exits were to write the sibling's behaviour into this file —
+           * duplicating it, which is the one thing this repo's rules forbid outright — or to leave
+           * a refusal nobody can clear. Reported as fg-0012 by the author who hit it.
+           */
+          const anchor = `${scope.id}#${v.id}`;
+          const says =
+            scope.exchanges.find((e) => e.at?.view === v.id && e.at?.part === pt.id) ??
+            corpus.scopes
+              .flatMap((x) => x.scope.exchanges)
+              .find((e) => e.at?.view_in === anchor && e.at?.part === pt.id);
           /**
            * ⛔ A CONTROL THAT COMMITS AND PROMISES NOTHING IS NOT ORDINARY INCOMPLETENESS.
            *
@@ -2832,13 +2880,37 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
             fix: "drop the claim, or drop the `changes` that contradict it — as written it silences a finding AND prints to a builder as product truth",
           });
         const declaredOutside = !!outside;
-        if (r.length && !w.length && !declaredOutside)
+        /**
+         * ⛔ THE FOURTH ANSWER: A SIBLING FEATURE SETS IT (fg-0001).
+         *
+         * `limit-resolution` reads a resolved limit, an answering layer, a tier grid cell and a
+         * held policy version, and could declare none of them — the word is set by a sibling the
+         * author may not read, which is neither "a behaviour is missing" nor "outside the product".
+         * So the finding could not be cleared truthfully by anybody scoping one feature.
+         *
+         * ⛔ AND THE REFS MUST RESOLVE, or `set_by: [anything]` becomes a way to silence a finding
+         * by naming nothing. A ref that resolves to nothing is reported instead — the claim is
+         * checked, not taken.
+         */
+        const declaredSetBy = corpus.scopes.find((s) => s.scope.id === home)?.scope.terms[term]?.set_by ?? [];
+        for (const ref of declaredSetBy) {
+          const got = resolveRefSafely(corpus, ref);
+          if (!got)
+            add({
+              severity: "refuse",
+              kind: "says-a-sibling-sets-this-and-it-is-not-there",
+              where: `${scope.id} · ${term}`,
+              what: `says "${ref}" sets "${term}", and that is not a scope or exchange here`,
+              fix: "name the sibling that really sets it, or use `set_outside` if the word crosses the product's edge — as written it silences a finding by pointing at nothing",
+            });
+        }
+        if (r.length && !w.length && !declaredOutside && !declaredSetBy.length)
           add({
             severity: "shape",
             kind: "nothing-in-this-product-sets-this",
             where: `${scope.id} · ${term}`,
             what: `${r.length} exchange${r.length === 1 ? "" : "s"} read "${term}" and none changes it — ${r.slice(0, 4).join(", ")}`,
-            fix: "say which: a behaviour is missing that ought to set it, it comes from outside the product and nothing here ever will, or the word is dead. It is not a subsystem",
+            fix: "say which: a behaviour is missing that ought to set it, a SIBLING feature sets it (`set_by`), it comes from outside the product and nothing here ever will (`set_outside`), or the word is dead. It is not a subsystem",
           });
         const readElsewhere = corpus.scopes.find((s) => s.scope.id === home)?.scope.terms[term]?.read_outside;
         if (readElsewhere && r.length)
@@ -2849,7 +2921,25 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
             what: `declared as read outside this product, and ${r.length} exchange${r.length === 1 ? "" : "s"} here read${r.length === 1 ? "s" : ""} it`,
             fix: "drop the claim, or drop the `reads` that contradict it",
           });
-        if (w.length && !r.length && !readElsewhere)
+        /**
+         * ⛔ AND THE SAME IN THE OTHER DIRECTION (fg-0006). `read-a-supplied-file` SETS
+         * `confidence` and `the file's own declaration`; the features that read them are siblings
+         * it may not open. Reported by the author that hit it, having already been told by
+         * `read_outside` that its only other option was to claim the word leaves the product.
+         */
+        const declaredReadBy = corpus.scopes.find((s) => s.scope.id === home)?.scope.terms[term]?.read_by ?? [];
+        for (const ref of declaredReadBy) {
+          const got = resolveRefSafely(corpus, ref);
+          if (!got)
+            add({
+              severity: "refuse",
+              kind: "says-a-sibling-reads-this-and-it-is-not-there",
+              where: `${scope.id} · ${term}`,
+              what: `says "${ref}" reads "${term}", and that is not a scope or exchange here`,
+              fix: "name the sibling that really reads it, or use `read_outside` if the word crosses the product's edge",
+            });
+        }
+        if (w.length && !r.length && !readElsewhere && !declaredReadBy.length)
           add({
             severity: "shape",
             kind: "nothing-reads-what-this-sets",
@@ -2859,7 +2949,7 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
             // cleared and could not be parked either: `defer family-wallet#completion` → "no
             // exchange \"completion\"". A finding with no true answer is one people learn to
             // scroll past.
-            fix: "either a behaviour is missing that ought to read it, or something outside this product does — say which with `read_outside` on the term, the way `set_outside` answers the other direction",
+            fix: "say which: a behaviour is missing that ought to read it, a SIBLING feature reads it (`read_by`), or something outside this product does (`read_outside`)",
           });
       }
     }
@@ -3553,14 +3643,32 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
       });
       continue;
     }
-    if (!slotRefs.has(r.bears_on) && !exchangeRefs.has(r.bears_on))
+    /**
+     * ⛔ A SCOPE AND A RULE RESOLVE TOO, because every other surface already said they would.
+     *
+     * This tested `slotRefs` and `exchangeRefs` only, while its own `fix` text offered `<scope>`,
+     * the authoring skill offered "the scope or exchange it speaks to", and `settle.ts` reads
+     * readings whose `bears_on` is a rule id — which `v2 decide` then renders under "What has been
+     * observed about this". Four surfaces, three different ideas of what resolves, and the check
+     * was the outlier.
+     *
+     * Three scopers hit it on real corpora and all three repointed a good reading at a narrower
+     * target to satisfy it. A check that teaches people to write something less true than what they
+     * observed is worse than no check.
+     */
+    const bearsOnSomething =
+      slotRefs.has(r.bears_on) ||
+      exchangeRefs.has(r.bears_on) ||
+      corpus.scopes.some((x) => x.scope.id === r.bears_on) ||
+      corpus.rules.some((x) => x.rule.id === r.bears_on);
+    if (!bearsOnSomething)
       add({
         severity: "note",
         kind: "reading-bears-on-nothing",
         where: r.id,
         what: `bears on "${r.bears_on}", which does not exist`,
         fix:
-          "name what was read as <scope> or <scope>#<exchange> — an observation about nothing cannot be weighed against the truth it was meant to test",
+          "name what was read as <scope>, <scope>#<exchange>, <scope>#<exchange>#<slot> or a rule id — an observation about nothing cannot be weighed against the truth it was meant to test",
       });
   }
 

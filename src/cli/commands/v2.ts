@@ -2417,7 +2417,13 @@ export function v2Command(): Command {
     .option("--all", "every screen in the corpus, finding each one's component from what it declares")
     .option("--into <dir>", "the corpus to write into — a v1 products tree or a v2 truth tree", ".")
     .option("-n, --dry-run", "print what would be written and change nothing")
-    .action((ref: string | undefined, o: { route?: string; into?: string; dryRun?: boolean; all?: boolean }) => {
+    /**
+     * ⛔ THE ESCAPE FROM THE REFUSAL BELOW, so a screen that really did get simpler is one flag
+     * away rather than impossible. The refusal exists because a redraw with no `components_dir`
+     * replaced an 11,780-byte drawing with 4,231 bytes of placeholders and reported success.
+     */
+    .option("--anyway", "replace an existing drawing even if this run inlined no components")
+    .action((ref: string | undefined, o: { route?: string; into?: string; dryRun?: boolean; all?: boolean; anyway?: boolean }) => {
       if (o.all) return drawEverything(path.resolve(o.into ?? "."), Boolean(o.dryRun));
       if (!ref) {
         console.error(pc.red("✗"), "name a screen as <scope>#<view>, or pass --all");
@@ -2441,7 +2447,15 @@ export function v2Command(): Command {
         const cfg = readConfig(paths);
         componentsDir = cfg.web.components_dir ? path.resolve(root, cfg.web.components_dir) : undefined;
       } catch {
+        /**
+         * ⛔ SAID, NOT SWALLOWED. With no config there is no `components_dir`, so nothing is
+         * inlined and the drawing comes out as placeholders — which looked identical to success.
+         */
         componentsDir = undefined;
+        console.log(
+          pc.yellow("!"),
+          "no config for this corpus, so no components can be inlined — this drawing will be placeholders"
+        );
       }
       const route = path.resolve(o.route!);
       if (!fs.existsSync(route)) {
@@ -2569,6 +2583,46 @@ export function v2Command(): Command {
        * is why nothing could say a screen had moved on — and a feature describing a screen somebody
        * had deleted that morning was invisible until two people read the source by hand.
        */
+      /**
+       * ⛔ A WORSE DRAWING DOES NOT WIN, and this is the guard for a real loss.
+       *
+       * A scoper redrawing a Bilrost screen with no `components_dir` configured replaced an
+       * 11,780-byte drawing with 4,231 bytes of placeholders, and `draw` reported success. Its own
+       * words: *"Anybody who runs `v2 draw --all --into` this corpus will flatten every screen."*
+       *
+       * ⛔ THE TEST IS "NOTHING INLINED **AND** MUCH SMALLER", never size alone. A screen genuinely
+       * simplified in code SHOULD shrink, and refusing that would break the generator the first
+       * time somebody deletes a panel. The conjunction is what separates a real change from a
+       * degraded run.
+       *
+       * ⛔ AND IT STOPS RATHER THAN WARNING, because `--all` prints a line per screen and nobody
+       * reads twenty lines of yellow. `--anyway` keeps a deliberate replacement one flag away.
+       */
+      const already = (() => {
+        try {
+          const c = loadCorpus(into);
+          const v = c.scopes.find((x) => x.scope.id === scopeId)?.scope.views.find((x) => x.id === viewId);
+          return v?.sketch_html ?? "";
+        } catch {
+          return "";
+        }
+      })();
+      /**
+       * ⛔ `from` INCLUDES THE ROUTE ITSELF, so `=== 0` never fires — my first version of this
+       * guard tested that and silently never ran. The signal is that NOTHING BEYOND the entry
+       * component was inlined: the Bilrost case went from 1 (just the route) to 12 once the corpus
+       * was pointed at its components, and 11,780 bytes to 4,231 without them.
+       */
+      const nothingBeyondTheRoute = drawn.from.length <= 1;
+      if (nothingBeyondTheRoute && already.length > 0 && drawn.html.length < already.length * 0.7 && !o.anyway) {
+        console.error(
+          pc.red("✗"),
+          `this would replace a ${already.length}-byte drawing with ${drawn.html.length} bytes and no component inlined`
+        );
+        console.error(pc.dim("  that is what a missing `components_dir` looks like — the new drawing is placeholders"));
+        console.error(pc.dim("  point the corpus at its components, or pass --anyway if the screen really did get simpler"));
+        process.exit(1);
+      }
       const origin = repoOf(route);
       if (!origin) console.log(pc.yellow("!"), "the component is not in a git repository, so nothing records where this came from");
       const prov = origin ? { from: path.relative(origin.root, route), at: origin.head } : undefined;

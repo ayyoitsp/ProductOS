@@ -18,6 +18,8 @@ export interface WireablePart {
   id: string;
   role: string;
   label?: string;
+  /** ⛔ What this control repeats over, when it appears once per something (fg-0009). */
+  repeats?: string;
   leads_to?: string;
   decorative?: boolean;
 }
@@ -80,6 +82,28 @@ export function wireParts(html: string, parts: WireablePart[]): Wired {
       `<(input|textarea|select|button)\\b([^>]*\\b(?:placeholder|aria-label|title)\\s*=\\s*["'][^"']*${label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[^"']*["'][^>]*)>`,
       "i"
     );
+    /**
+     * ⛔ EVERY OCCURRENCE WHEN THE PART REPEATS, THE FIRST OTHERWISE.
+     *
+     * A part is one control, so this matched once — right for a Save button, wrong for a sortable
+     * column heading that appears once per column. The other four headings then drew as things
+     * nobody had promised anything about, which is the opposite of what marking is for: a reviewer
+     * reads an unmarked control as "the corpus says nothing here".
+     *
+     * ⛔ And the first-match behaviour is kept for a part that does NOT declare `repeats`, because
+     * marking every "Save" on a screen that has two different Saves would bind one promise to two
+     * controls — the mistake this loop's narrowness already exists to avoid.
+     */
+    if (pt.repeats) {
+      const all = new RegExp(re.source, "gi");
+      let any = false;
+      out = out.replace(all, (whole, tag, inner) => {
+        any = true;
+        return `<${tag}${attrs(pt, inner as string)}>`;
+      });
+      if (any) matched.add(pt.id);
+      continue;
+    }
     const hit = re.exec(out);
     if (!hit) continue;
     matched.add(pt.id);
