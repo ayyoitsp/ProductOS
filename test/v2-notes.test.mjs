@@ -78,7 +78,20 @@ test("the composer is docked, always there, and never asks what you are looking 
    */
   assert.doesNotMatch(live, /id="note-open"/, "the floating button came back");
   assert.doesNotMatch(live, /id="note-about"[^-]/, "the attach-it-to dropdown came back");
-  assert.doesNotMatch(live, /<select/, "the composer is asking a question again");
+  /**
+   * ⛔ INSIDE THE COMPOSER, NOT ANYWHERE ON THE PAGE. This read `/<select/` across the whole
+   * document, which is wider than the claim it is making: the rule is that the COMPOSER asks
+   * nothing, not that the page may never offer a choice. It failed the day a screen gained an
+   * "appears inside" control — a select that has nothing to do with filing a request, in a part of
+   * the page this test is not about.
+   *
+   * ⛔ AND NARROWING IT IS NOT WEAKENING IT. The composer's own markup is extracted and asserted
+   * against; a dropdown coming back where Peter said it must not be still fails. What stops failing
+   * is an unrelated control somewhere else, which was never the thing being protected.
+   */
+  const composer = /<form[^>]*id="note-bar"[\s\S]*?<\/form>/.exec(live);
+  assert.ok(composer, "the composer is not a form, so this cannot check what it contains");
+  assert.doesNotMatch(composer[0], /<select/, "the composer is asking a question again");
 
   /**
    * ⛔ THE CAPTURE GOES DOWN TO THE SUBSECTION, AND ITS TRAIL SITS ABOVE THE BOX.

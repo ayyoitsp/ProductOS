@@ -156,3 +156,51 @@ test("an empty axes box refuses locally and sends nothing", async (t) => {
   assert.deepEqual(posts, [], "it posted an empty split");
   assert.match(said, /Say what they split on/);
 });
+
+test("⛔ containment is said on the screen itself, through the same door", async (t) => {
+  if (skip) return t.skip(skip);
+  /**
+   * `v2 inside` shipped as a CLI command one hour after Peter said *"I should be able to drive this
+   * from the listener/input"* — the same defect he had just corrected, written again. This is the
+   * door: a select on each screen, every other screen offered, and the empty option takes it back.
+   */
+  const sent = await inThePage(`
+    const rows = [...document.querySelectorAll('[data-inside]')];
+    const row = rows[1];
+    const sel = row.querySelector('select');
+    /* The first real option — a screen other than this one. */
+    sel.value = [...sel.options].map((o) => o.value).filter(Boolean)[0];
+    sel.dispatchEvent(new Event('change'));
+    await new Promise((r) => setTimeout(r, 400));
+    return JSON.stringify({ sent: window.__sent, controls: rows.length, options: sel.options.length });
+  `);
+  const { sent: posts, controls, options } = JSON.parse(sent);
+  assert.ok(controls > 1, `only ${controls} screens carry the control`);
+  assert.ok(options > 1, "the select offers nothing to be inside");
+  assert.equal(posts.length, 1, "a change sent more or less than one request");
+  assert.equal(posts[0].body.intent, "inside");
+  assert.ok(posts[0].body.view, "it did not say which screen");
+  assert.ok(posts[0].body.of, "it did not say what it is inside");
+  assert.notEqual(posts[0].body.view, posts[0].body.of, "it offered the screen itself");
+});
+
+test("⛔ the empty option takes a containment back, rather than sending nothing", async (t) => {
+  if (skip) return t.skip(skip);
+  /**
+   * The half nobody could do before: `within` had no writer, so there was no way to UNSAY it either.
+   * An empty value has to reach the intent — a handler that skipped it would make the control
+   * one-way, and a reader would be unable to undo their own mistake.
+   */
+  const sent = await inThePage(`
+    const row = [...document.querySelectorAll('[data-inside]')][0];
+    const sel = row.querySelector('select');
+    sel.value = '';
+    sel.dispatchEvent(new Event('change'));
+    await new Promise((r) => setTimeout(r, 400));
+    return JSON.stringify(window.__sent);
+  `);
+  const posts = JSON.parse(sent);
+  assert.equal(posts.length, 1, "clearing it sent nothing");
+  assert.equal(posts[0].body.intent, "inside");
+  assert.equal(posts[0].body.of, "", "it did not send the clearing");
+});

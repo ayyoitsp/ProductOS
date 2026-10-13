@@ -31,6 +31,7 @@ import { execFileSync } from "node:child_process";
 
 const { loadCorpus } = await import("../dist/v2/load.js");
 const { walkOf } = await import("../dist/v2/walk.js");
+const { intentNamed } = await import("../dist/v2/intents.js");
 
 const cli = (args) => execFileSync("node", ["dist/cli/index.js", ...args], { encoding: "utf8" });
 
@@ -144,4 +145,44 @@ test("with no arguments it reports and writes nothing", () => {
   assert.match(out, /front doors/);
   assert.match(out, /productos v2 inside/, "it does not say how to say one");
   assert.equal(fs.readFileSync(path.join(dir, "truth", `${pair(dir).scope}.md`), "utf-8"), before, "the report wrote to the corpus");
+});
+
+test("⛔ the same thing, through the page's door — and the clearing removes the line", () => {
+  /**
+   * `v2 inside` is a CLI command, which is the defect Peter had just corrected one message earlier:
+   * *"I should be able to drive this from the listener/input, right??? why could you possibly need
+   * this?"* So the intent is the real surface and this asserts it against the real writer.
+   *
+   * ⛔ AND CLEARING MUST REMOVE THE LINE, NOT WRITE AN EMPTY ONE. `within: ""` is a reference that
+   * resolves to nothing, which `check` refuses — so the obvious implementation of "take it back"
+   * would leave the corpus refusing handover for a reason the author could not see.
+   */
+  const dir = corpus();
+  const { child, holder } = pair(dir);
+  const who = { kind: "cli", actor: "peter" };
+  const ask = { dir, who, pressing: "peter" };
+  const inside = intentNamed("inside");
+  assert.ok(inside, "there is no `inside` intent, so the page cannot say this");
+  assert.equal(inside.gate, "author", "stating containment must not mint consent");
+
+  const put = inside.run(ask, { view: child, of: holder });
+  assert.equal(put.ok, true, put.why);
+  assert.match(put.detail.join(" "), /ways? into this product now/, "it does not say what changed");
+  let c = loadCorpus(dir);
+  assert.deepEqual(c.broken, []);
+  assert.equal(c.scopes.flatMap((e) => e.scope.views ?? []).filter((v) => v.within).length, 1);
+
+  const back = inside.run(ask, { view: child, of: "" });
+  assert.equal(back.ok, true, back.why);
+  c = loadCorpus(dir);
+  assert.deepEqual(c.broken, [], "clearing left a corpus that will not load");
+  assert.equal(c.scopes.flatMap((e) => e.scope.views ?? []).filter((v) => v.within).length, 0, "the containment was not taken back");
+  const raw = fs.readFileSync(path.join(dir, "truth", `${pair(dir).scope}.md`), "utf-8");
+  assert.doesNotMatch(raw, /^\s{4}within:/m, "it wrote an empty `within` instead of removing the line");
+
+  /** ⛔ And the refusals hold here too, or the page is the way around them. */
+  assert.equal(inside.run(ask, { view: child, of: child }).ok, false, "a screen was allowed inside itself");
+  assert.equal(inside.run(ask, { view: child, of: "no-scope#no-view" }).ok, false, "a containment in nothing was accepted");
+  inside.run(ask, { view: child, of: holder });
+  assert.match(inside.run(ask, { view: holder, of: child }).why ?? "", /loop/, "a loop was accepted through the page");
 });
