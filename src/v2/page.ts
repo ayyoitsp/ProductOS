@@ -4302,9 +4302,14 @@ function wireSelectionEditor() {
   var combos = combosEl ? JSON.parse(combosEl.textContent) : [];
   var dims = Array.prototype.slice.call(document.querySelectorAll("[data-walk-dim]"));
   var nowEl = document.querySelector("[data-walk-now]");
+  /* The chosen value of a dimension is the chip carrying the "on" class — the row IS the control. */
+  function valueOf(row) {
+    var on = row.querySelector(".wval.on");
+    return on ? on.getAttribute("data-walk-val") : "";
+  }
   function chosen() {
     var want = {};
-    dims.forEach(function (d) { want[d.getAttribute("data-walk-dim")] = d.value; });
+    dims.forEach(function (d) { want[d.getAttribute("data-walk-dim")] = valueOf(d); });
     for (var i = 0; i < combos.length; i++) {
       var c = combos[i];
       var all = true;
@@ -4326,18 +4331,34 @@ function wireSelectionEditor() {
     if (btn) btn.click();
     else if (typeof window.__walkProto === "function") window.__walkProto(c.proto);
   }
-  dims.forEach(function (d) { d.addEventListener("change", land); });
+  /*
+   * ⛔ ONE HANDLER ON THE ROW, not one per chip. A dimension's values are a set of alternatives, so
+   * pressing one is the same act whichever it is — and a listener per button is a listener that gets
+   * missed the day the values are re-rendered.
+   */
+  dims.forEach(function (row) {
+    row.addEventListener("click", function (ev) {
+      var chip = ev.target.closest(".wval");
+      if (!chip || chip.classList.contains("on")) return;
+      Array.prototype.slice.call(row.querySelectorAll(".wval")).forEach(function (b) { b.classList.remove("on"); });
+      chip.classList.add("on");
+      land();
+    });
+  });
 
   /* With no dimensions named yet, the prototypes themselves are the choice. */
-  var bare = document.querySelector("[data-walk-pick]");
-  if (bare) {
-    bare.addEventListener("change", function () {
-      var btn = document.querySelector('[data-walk-proto="' + CSS.escape(bare.value) + '"]');
+  var bareRow = document.querySelector("[data-walk-pick]");
+  if (bareRow) {
+    var bareWrap = bareRow.closest(".wdim");
+    bareWrap.addEventListener("click", function (ev) {
+      var chip = ev.target.closest("[data-walk-pick]");
+      if (!chip) return;
+      Array.prototype.slice.call(bareWrap.querySelectorAll(".wval")).forEach(function (b) { b.classList.remove("on"); });
+      chip.classList.add("on");
+      var id = chip.getAttribute("data-walk-pick");
+      var btn = document.querySelector('[data-walk-proto="' + CSS.escape(id) + '"]');
       if (btn) btn.click();
-      if (nowEl) {
-        var opt = bare.options[bare.selectedIndex];
-        nowEl.textContent = opt ? opt.textContent : bare.value;
-      }
+      if (nowEl) nowEl.textContent = chip.textContent.trim();
     });
   }
 
@@ -7003,8 +7024,18 @@ export const STYLE = `<style>
   .wsel-bar { display: flex; flex-wrap: wrap; align-items: flex-end; gap: .6rem; margin: 0 0 .8rem; }
   .wdim { display: flex; flex-direction: column; gap: .1rem; }
   .wdim-n { font-size: .65rem; text-transform: uppercase; letter-spacing: .07em; color: var(--dim); font-weight: 600; }
-  .wdim select { font: inherit; font-size: .85rem; padding: .25rem .4rem; border: 1px solid var(--line);
-    border-radius: 8px; background: var(--card); color: var(--ink); }
+  .wvals { display: flex; flex-wrap: wrap; gap: .25rem; }
+  .wval { font: inherit; font-size: .8rem; padding: .18rem .55rem; cursor: pointer; color: var(--ink);
+    background: var(--card); border: 1px solid var(--line); border-radius: 999px; }
+  .wval:hover { border-color: var(--accent); }
+  .wval.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  /*
+   * ⛔ DIMMED RATHER THAN HIDDEN. A value nothing covers is a real part of the product's shape — the
+   * hole is the finding — so it stays pressable and says why. Removing it would make the space look
+   * complete.
+   */
+  .wval.empty { color: var(--dim); border-style: dashed; }
+  .wval.empty.on { background: var(--warn-bg); border-color: var(--warn); color: var(--warn); }
   .wsel-now { font-size: .85rem; font-weight: 600; padding-bottom: .3rem; }
   .wsel-now.none { font-weight: 400; color: var(--warn); }
   .wsel-note { font-size: .72rem; color: var(--dim); padding-bottom: .35rem; margin-left: auto; }
@@ -7548,16 +7579,36 @@ function selectionAtTheRoot(sel: Selection): string {
   /** The chosen combination: wherever the reader lands, which is the first declared prototype. */
   const landing = sel.options.find((o) => o.id === sel.lands) ?? sel.options[0]!;
 
+  /**
+   * ⛔ THE VALUES ARE VISIBLE, NOT IN A DROPDOWN. Peter: *"why is it a drop down?"*
+   *
+   * No good reason, and it undercut the thing he has been asking for since *"the entire complaint I
+   * had is that this is not VISUAL enough"*: a dropdown hides the options, so a reader cannot see
+   * the shape of their own product without opening two menus and remembering what was in them. Two
+   * dimensions of two values is a four-cell space that fits on two lines.
+   *
+   * ⛔ AND A COMBINATION NOTHING COVERS IS VISIBLE BEFORE IT IS PICKED. With dropdowns the only way
+   * to learn that loan processor × private lending does not exist was to select it and be told. Here
+   * it is dimmed in place, so the hole in the product is on the page rather than discovered.
+   *
+   * ⛔ ONE ROW PER DIMENSION, NOT ONE CONTROL PER VALUE — which is what he was checking: *"do we get
+   * multiple drop downs per dimension?"* No. A dimension is a row of its values, however many.
+   */
+  const reachable = (axId: string, value: string): boolean =>
+    sel.at.some((c) => c.option && c.values[axId] === value);
+
   const picker = dimensions
     .map(
-      (ax) => `<label class="wdim">
+      (ax) => `<div class="wdim" data-walk-dim="${esc(ax.id)}">
         <span class="wdim-n">${line(ax.asks)}</span>
-        <select data-walk-dim="${esc(ax.id)}">
-          ${ax.values
-            .map((v) => `<option value="${esc(v)}"${landing.is[ax.id] === v ? " selected" : ""}>${line(v)}</option>`)
-            .join("")}
-        </select>
-      </label>`
+        <span class="wvals">${ax.values
+          .map(
+            (v) =>
+              `<button type="button" class="wval${landing.is[ax.id] === v ? " on" : ""}${reachable(ax.id, v) ? "" : " empty"}"
+                data-walk-val="${esc(v)}"${reachable(ax.id, v) ? "" : ' title="no prototype covers this yet"'}>${line(v)}</button>`
+          )
+          .join("")}</span>
+      </div>`
     )
     .join("");
 
@@ -7576,14 +7627,15 @@ function selectionAtTheRoot(sel: Selection): string {
    */
   const bare =
     !dimensions.length && sel.options.length > 1
-      ? `<label class="wdim">
+      ? `<div class="wdim">
           <span class="wdim-n">Prototype</span>
-          <select data-walk-pick>
-            ${sel.options
-              .map((o) => `<option value="${esc(o.id)}"${o.id === landing.id ? " selected" : ""}>${line(o.title)}</option>`)
-              .join("")}
-          </select>
-        </label>`
+          <span class="wvals">${sel.options
+            .map(
+              (o) =>
+                `<button type="button" class="wval${o.id === landing.id ? " on" : ""}" data-walk-pick="${esc(o.id)}">${line(o.title)}</button>`
+            )
+            .join("")}</span>
+        </div>`
       : "";
 
   /** One line, not a list. The count, and where the detail is. */

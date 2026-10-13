@@ -203,51 +203,73 @@ test("⛔ the empty option takes a containment back, rather than sending nothing
   assert.equal(posts[0].body.of, "", "it did not send the clearing");
 });
 
-test("⛔ picking the dimension values brings up the right prototype", async (t) => {
+test("⛔ pressing the values brings up the right prototype", async (t) => {
   if (skip) return t.skip(skip);
   /**
    * Peter: *"they should be able to select the appropriate dimensions and that will bring up the
-   * right prototype"*, after *"wtf is this? this doesn't seem like a selector of any kind, seems
-   * like a barf of information"* — both prototypes were on the page as two unlabelled boxes under a
-   * paragraph of jargon, a warning and a bulleted list.
+   * right prototype"*, then *"why is it a drop down?"* — so the values are visible chips, one row
+   * per dimension, and pressing one is the act.
    *
    * ⛔ THE UNCOVERED COMBINATION IS THE ASSERTION THAT MATTERS. A selector that left the previous
-   * prototype on screen when you asked for one that does not exist would be quietly lying about
-   * what you had asked for, and every other assertion here would still pass.
+   * prototype on screen when you asked for one that does not exist would be quietly lying about what
+   * you had asked for, and every other assertion here would still pass.
    */
   const out = await inThePage(`
-    const dims = [...document.querySelectorAll('[data-walk-dim]')];
-    const role = dims.find((d) => d.getAttribute('data-walk-dim') === 'role');
-    const line = dims.find((d) => d.getAttribute('data-walk-dim') === 'line');
+    const rows = [...document.querySelectorAll('[data-walk-dim]')];
+    const press = (dim, value) => {
+      const row = rows.find((r) => r.getAttribute('data-walk-dim') === dim);
+      [...row.querySelectorAll('.wval')].find((b) => b.getAttribute('data-walk-val') === value).click();
+    };
     const now = () => document.querySelector('[data-walk-now]').textContent.trim();
-    const seen = { dims: dims.length, start: now() };
+    const seen = { rows: rows.length, chips: rows.map((r) => r.querySelectorAll('.wval').length), start: now() };
 
-    /* admin · CRE — declared */
-    role.value = 'admin'; line.value = 'CRE';
-    role.dispatchEvent(new Event('change'));
+    press('role', 'admin'); press('line', 'CRE');
     await new Promise((r) => setTimeout(r, 120));
     seen.creAdmin = now();
 
-    /* loan processor · private lending — declared */
-    role.value = 'loan processor'; line.value = 'private lending';
-    role.dispatchEvent(new Event('change'));
+    press('role', 'loan processor'); press('line', 'private lending');
     await new Promise((r) => setTimeout(r, 120));
     seen.plProc = now();
 
     /* loan processor · CRE — nothing covers it */
-    line.value = 'CRE';
-    line.dispatchEvent(new Event('change'));
+    press('line', 'CRE');
     await new Promise((r) => setTimeout(r, 120));
     seen.uncovered = now();
     seen.uncoveredClass = document.querySelector('[data-walk-now]').className;
+    /* ⛔ And exactly one chip chosen per row, never two. */
+    seen.onPerRow = rows.map((r) => r.querySelectorAll('.wval.on').length);
     return JSON.stringify(seen);
   `);
   const seen = JSON.parse(out);
-  assert.equal(seen.dims, 2, `expected one control per dimension, got ${seen.dims}`);
+  assert.equal(seen.rows, 2, `expected one row per dimension, got ${seen.rows}`);
+  assert.deepEqual(seen.chips, [2, 2], "the values are not all on the page");
   assert.equal(seen.creAdmin, "CRE admin");
   assert.equal(seen.plProc, "Private lending processor");
   assert.match(seen.uncovered, /nothing covers this/i, "an uncovered combination left the last prototype on screen");
   assert.match(seen.uncoveredClass, /none/, "an uncovered combination is not marked as one");
+  assert.deepEqual(seen.onPerRow, [1, 1], "a dimension ended up with two values chosen at once");
+});
+
+test("⛔ a value nothing covers is visible before it is pressed", async (t) => {
+  if (skip) return t.skip(skip);
+  /**
+   * With dropdowns the only way to learn that a combination does not exist was to select it and be
+   * told. The whole reason for showing the values is that the hole in the product is on the page.
+   *
+   * ⛔ THE FIXTURE HAS NO DEAD VALUE, DELIBERATELY: every value here appears in some prototype, so a
+   * marker on any of them would be wrong. That is the assertion — a detector that dimmed everything
+   * would pass a test that only looked for dimming somewhere.
+   */
+  const out = await inThePage(`
+    const chips = [...document.querySelectorAll('.wval')];
+    return JSON.stringify({
+      total: chips.length,
+      empty: chips.filter((c) => c.classList.contains('empty')).map((c) => c.getAttribute('data-walk-val')),
+    });
+  `);
+  const { total, empty } = JSON.parse(out);
+  assert.equal(total, 4, `expected four values across two dimensions, got ${total}`);
+  assert.deepEqual(empty, [], "a value that some prototype covers was marked as covering nothing");
 });
 
 test("⛔ the detail is shut until asked for — one decision, not five blocks of text", async (t) => {
