@@ -304,17 +304,17 @@ export const INTENTS: Intent[] = [
        * ⛔ ONE SENTENCE AND A LIST BOTH ARRIVE HERE, because a single axis is the common case and
        * making somebody write JSON for it would be a door nobody uses.
        */
-      const axes: Array<{ id: string; asks: string; values: string[] }> = [];
+      const axes: Array<{ id: string; label: string; values: string[] }> = [];
       const parse = (v: unknown): void => {
         if (typeof v === "string") {
-          const asks = v.trim();
-          if (asks) axes.push({ id: slugify(asks), asks, values: [] });
+          const label = v.trim();
+          if (label) axes.push({ id: slugify(label), label, values: [] });
           return;
         }
         if (v && typeof v === "object" && !Array.isArray(v)) {
-          const o = v as { id?: unknown; asks?: unknown; values?: unknown };
-          const asks = str(o.asks).trim();
-          if (!asks) return;
+          const o = v as { id?: unknown; label?: unknown; values?: unknown };
+          const label = str(o.label).trim();
+          if (!label) return;
           /**
            * ⛔ THE VALUES COME WITH THE DIMENSION, because without them there is nothing to choose
            * between and the surface is a list of what exists rather than a selector. Peter: *"let's
@@ -329,7 +329,7 @@ export const INTENTS: Intent[] = [
               const value = str(raw).trim();
               if (value && !values.includes(value)) values.push(value);
             }
-          axes.push({ id: str(o.id).trim() || slugify(asks), asks, values });
+          axes.push({ id: str(o.id).trim() || slugify(label), label, values });
         }
       };
       if (Array.isArray(raw)) for (const v of raw) parse(v);
@@ -351,7 +351,7 @@ export const INTENTS: Intent[] = [
         by: a.who.actor,
         via: "page",
         ref: "prototypes",
-        says: `prototypes split on ${axes.map((x) => x.asks).join(" and ")}`,
+        says: `prototypes split on ${axes.map((x) => x.label).join(" and ")}`,
       });
       const owed = corpus.prototypes.filter((p) => {
         const answers = answersOf(p.is, axes);
@@ -359,7 +359,7 @@ export const INTENTS: Intent[] = [
       });
       return {
         ok: true,
-        said: `they split on ${axes.map((x) => x.asks).join(" and ")}`,
+        said: `they split on ${axes.map((x) => x.label).join(" and ")}`,
         detail: owed.length ? [`${owed.length} of ${corpus.prototypes.length} do not say where they sit yet: ${owed.map((p) => p.title).join(", ")}`] : [],
       };
     },
@@ -482,8 +482,8 @@ export const INTENTS: Intent[] = [
         ok: true,
         said: `${existing ? "changed" : "declared"} ${title}, opening on ${startsAt}`,
         detail: [
-          ...(Object.keys(answers).length ? [axes.map((ax) => `${ax.asks} ${answers[ax.id] ?? "—"}`).join(" · ")] : []),
-          ...(owed.length ? [`still says nothing about: ${owed.map((ax) => ax.asks).join(", ")}`] : []),
+          ...(Object.keys(answers).length ? [axes.map((ax) => `${ax.label} ${answers[ax.id] ?? "—"}`).join(" · ")] : []),
+          ...(owed.length ? [`still says nothing about: ${owed.map((ax) => ax.label).join(", ")}`] : []),
           /** ⛔ Said out loud: the chrome is drawn from a repository an instance does not have. */
           ...(next.shell_from && !next.shell_html ? ["its chrome is not drawn yet — that needs a checkout"] : []),
         ],

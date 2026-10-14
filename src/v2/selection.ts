@@ -169,7 +169,7 @@ export function selectionOf(c: Corpus): Selection {
   };
   if (axes.length) build(0, {});
 
-  return { axes, at, question: axes[0]?.asks, options, lands: options[0]?.id };
+  return { axes, at, question: axes[0]?.label, options, lands: options[0]?.id };
 }
 
 /**
@@ -233,7 +233,7 @@ export function gapsIn(s: Selection): Gap[] {
    * answered rather than answered. With one axis folded into one string that state could not exist,
    * which is most of why one axis was wrong.
    */
-  const axes = s.axes.length ? s.axes : [{ id: "split", asks: "" }];
+  const axes = s.axes.length ? s.axes : [{ id: "split", label: "" }];
   const anyAnswers = s.options.some((o) => Object.keys(o.is).length);
   if (s.question || anyAnswers)
     for (const o of s.options)
@@ -241,8 +241,8 @@ export function gapsIn(s: Selection): Gap[] {
         if (!o.is[ax.id])
           gaps.push({
             kind: "prototype-answers-nothing",
-            says: ax.asks
-              ? `"${o.title}" does not say its ${ax.asks.toLowerCase()}`
+            says: ax.label
+              ? `"${o.title}" does not say its ${ax.label.toLowerCase()}`
               : `"${o.title}" says nothing about where it sits, while others do`,
           });
   /**
@@ -276,7 +276,7 @@ export function gapsIn(s: Selection): Gap[] {
         if (said && !ax.values.includes(said))
           gaps.push({
             kind: "prototype-answers-nothing",
-            says: `"${o.title}" says ${ax.asks} is "${said}", which is not one of ${ax.values.join(", ")} — nobody can select it`,
+            says: `"${o.title}" says ${ax.label} is "${said}", which is not one of ${ax.values.join(", ")} — nobody can select it`,
           });
       }
   /**

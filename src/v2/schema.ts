@@ -3594,7 +3594,7 @@ export const PrototypeFile = z
      * two dimensions is four possible products; three prototypes means one of them does not exist,
      * and that was invisible when the surface could only list what had been declared.
      *
-     * `asks` is the dimension's NAME, shown as a label — "Role", "Product line". ⛔ Never derived
+     * `label` is the dimension's NAME, shown to a reader — "Role", "Product line". ⛔ Never derived
      * from `id`: a surface that title-cased `line` into a label would be putting words in the
      * project's mouth, and the id is a handle rather than a name.
      */
@@ -3606,7 +3606,7 @@ export const PrototypeFile = z
           z
             .object({
               id: z.string().min(1),
-              asks: z.string().min(1),
+              label: z.string().min(1),
               /**
                * What this dimension can be. ⛔ Empty is honest — a dimension somebody has named and
                * not filled in — and `check` says so rather than this refusing a half-authored file.
@@ -3624,7 +3624,7 @@ export const PrototypeFile = z
 /** A dimension, however the file spelled it. One shape for every reader. */
 export interface Axis {
   id: string;
-  asks: string;
+  label: string;
   values: string[];
 }
 
@@ -3637,27 +3637,27 @@ export interface Axis {
  * invisible if the list is only ever read back off what has been declared.
  */
 export function axesOf(
-  splitsOn: string | Array<{ id: string; asks: string; values?: string[] }> | undefined,
+  splitsOn: string | Array<{ id: string; label: string; values?: string[] }> | undefined,
   prototypes: Array<{ is?: string | Record<string, string> }> = []
 ): Axis[] {
   if (!splitsOn) return [];
-  const listed = typeof splitsOn === "string" ? [{ id: "split", asks: splitsOn }] : splitsOn;
+  const listed = typeof splitsOn === "string" ? [{ id: "split", label: splitsOn }] : splitsOn;
   return listed.map((ax, i) => {
     const declared = (ax as { values?: string[] }).values ?? [];
-    if (declared.length) return { id: ax.id, asks: ax.asks, values: declared };
+    if (declared.length) return { id: ax.id, label: ax.label, values: declared };
     const seen: string[] = [];
     for (const p of prototypes) {
       const said = typeof p.is === "string" ? (i === 0 ? p.is : undefined) : p.is?.[ax.id];
       if (said && !seen.includes(said)) seen.push(said);
     }
-    return { id: ax.id, asks: ax.asks, values: seen };
+    return { id: ax.id, label: ax.label, values: seen };
   });
 }
 
 /** A prototype's answers, however its `is` was spelled, keyed by axis id. */
 export function answersOf(
   is: string | Record<string, string> | undefined,
-  axes: Array<{ id: string; asks: string }>
+  axes: Array<{ id: string; label: string }>
 ): Record<string, string> {
   if (!is) return {};
   if (typeof is === "string") return axes[0] ? { [axes[0].id]: is } : { split: is };

@@ -3913,6 +3913,31 @@ const EXTRA = ${JSON.stringify({
 })};
 const BY = ${JSON.stringify(opts.by ?? "")};
 const MODE = ${JSON.stringify(mode)};
+/*
+ * ⛔ THE ONE DOOR IS NOT AT THE ROOT WHEN A PROJECT IS IN THE PATH, AND EVERY WRITE FROM A HOSTED
+ * PAGE WAS 404ING.
+ *
+ * Peter, trying to add a dimension: "Not saved: Not Found". Measured rather than guessed:
+ *
+ *     POST /p/prj-.../api/v2/in   422   <- the route, answering about the payload
+ *     POST /api/v2/in             404   <- what every handler on this page was posting to
+ *
+ * An instance serves a corpus under /p/<project>/, so a root-relative URL leaves the project behind.
+ * There is no <base> tag, so this was true of FILING A NOTE and RECORDING AN ACT as well — not just
+ * the feature that exposed it. Four call sites, one of them the composer, all silently wrong
+ * wherever the page is not served from the root.
+ *
+ * ⛔ DERIVED FROM THE PAGE'S OWN LOCATION rather than passed in. The page knows where it is; a
+ * constant threaded through the renderer would be a second statement of the same fact, and the
+ * instance that strips the prefix is not the code that renders the page. Everything up to /v2 is the
+ * prefix, and a page served at the root has none.
+ */
+const API = (function () {
+  const path = location.pathname;
+  const at = path.indexOf("/v2");
+  const prefix = at > 0 ? path.slice(0, at) : "";
+  return prefix + "/api/v2/in";
+})();
 /** ⛔ The local server a press calls, and the corpus on that machine it writes into. */
 const MCP_SERVER = ${JSON.stringify(opts.mcpServer ?? "host:productos")};
 const CORPUS = ${JSON.stringify(opts.recordsTo ?? "v2")};
@@ -3975,7 +4000,7 @@ async function record(payload, form, button) {
        * so a backtick closes the string — which is exactly how the first version of this edit broke
        * the build in two places at once.
        */
-      const res = await fetch("/api/v2/in", {
+      const res = await fetch(API, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ intent: payload.act, ...payload }),
@@ -4241,23 +4266,23 @@ if (noteBar) {
      */
     const asDim = /^\s*dim\s*:\s*([^=]+?)\s*=\s*(.+)$/i.exec(says);
     if (asDim && MODE === "http") {
-      const asks = asDim[1].trim();
+      const label = asDim[1].trim();
       const values = asDim[2].split(",").map((v) => v.trim()).filter(Boolean);
       const already = Array.prototype.slice.call(document.querySelectorAll("[data-walk-dim]")).map((sel) => {
-        const label = sel.parentNode.querySelector(".wdim-n");
+        const labelEl = sel.parentNode.querySelector(".wdim-n");
         return {
           id: sel.getAttribute("data-walk-dim"),
-          asks: label ? label.textContent.trim() : sel.getAttribute("data-walk-dim"),
+          label: labelEl ? labelEl.textContent.trim() : sel.getAttribute("data-walk-dim"),
           values: Array.prototype.slice.call(sel.options)
             .map((o) => o.value)
             .filter((v) => v && v !== "__add__"),
         };
       });
-      const mine = already.filter((a) => a.asks.toLowerCase() === asks.toLowerCase())[0];
+      const mine = already.filter((a) => a.label.toLowerCase() === label.toLowerCase())[0];
       if (mine) mine.values = values;
-      else already.push({ id: "", asks, values });
+      else already.push({ id: "", label, values });
       try {
-        const res = await fetch("/api/v2/in", {
+        const res = await fetch(API, {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ intent: "splits-on", axes: already }),
@@ -4277,7 +4302,7 @@ if (noteBar) {
     try {
       if (MODE === "http") {
         /** ⛔ The same one door. Filing a request is the "note" intent. */
-        const res = await fetch("/api/v2/in", {
+        const res = await fetch(API, {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ intent: "note", ...payload }),
@@ -4321,7 +4346,7 @@ if (noteBar) {
  */
 function wireSelectionEditor() {
   var sendIntent = function (intent, payload) {
-    return fetch("/api/v2/in", {
+    return fetch(API, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(Object.assign({ intent: intent }, payload)),
@@ -4387,21 +4412,21 @@ function wireSelectionEditor() {
   function openForm(name, values) {
     if (!formEl) return;
     formEl.hidden = false;
-    formEl.querySelector('input[name="asks"]').value = name || "";
+    formEl.querySelector('input[name="label"]').value = name || "";
     formEl.querySelector('input[name="values"]').value = values || "";
-    formEl.querySelector(values ? 'input[name="values"]' : 'input[name="asks"]').focus();
+    formEl.querySelector(values ? 'input[name="values"]' : 'input[name="label"]').focus();
   }
 
   dimSelects.forEach(function (sel) {
     var last = sel.value;
     sel.addEventListener("change", function () {
       if (sel.value === "__add__") {
-        var label = sel.parentNode.querySelector(".wdim-n");
+        var labelEl = sel.parentNode.querySelector(".wdim-n");
         var existing = Array.prototype.slice.call(sel.options)
           .map(function (o) { return o.value; })
           .filter(function (v) { return v && v !== "__add__"; });
         sel.value = last;
-        openForm(label ? label.textContent.trim() : "", existing.join(", ") + ", ");
+        openForm(labelEl ? labelEl.textContent.trim() : "", existing.join(", ") + ", ");
         return;
       }
       last = sel.value;
@@ -4424,29 +4449,34 @@ function wireSelectionEditor() {
   if (dimSave) {
     var dimStatus = document.querySelector("[data-dims-status]");
     dimSave.addEventListener("click", function () {
-      var asks = formEl.querySelector('input[name="asks"]').value.trim();
+      var label = formEl.querySelector('input[name="label"]').value.trim();
       var values = formEl
         .querySelector('input[name="values"]')
         .value.split(",")
         .map(function (v) { return v.trim(); })
         .filter(Boolean);
-      if (!asks) { dimStatus.textContent = "Name the dimension."; dimStatus.className = "status bad"; return; }
+      if (!label) { dimStatus.textContent = "Name the dimension."; dimStatus.className = "status bad"; return; }
       if (!values.length) { dimStatus.textContent = "Give it at least one value."; dimStatus.className = "status bad"; return; }
 
+      /*
+       * ⛔ labelEl, NOT label — the rename shadowed the name the person had just typed with the DOM
+       * node holding a dimension's heading, so the comparison below ran against an element and the
+       * save sent nothing at all. Caught by the browser test; no compiler can see inside this string.
+       */
       var axes = dimSelects.map(function (sel) {
-        var label = sel.parentNode.querySelector(".wdim-n");
+        var labelEl = sel.parentNode.querySelector(".wdim-n");
         return {
           id: sel.getAttribute("data-walk-dim"),
-          asks: label ? label.textContent.trim() : sel.getAttribute("data-walk-dim"),
+          label: labelEl ? labelEl.textContent.trim() : sel.getAttribute("data-walk-dim"),
           values: Array.prototype.slice.call(sel.options)
             .map(function (o) { return o.value; })
             .filter(function (v) { return v && v !== "__add__"; }),
         };
       });
       /* Naming one that already exists replaces its values rather than adding a second row. */
-      var mine = axes.filter(function (a) { return a.asks.toLowerCase() === asks.toLowerCase(); })[0];
+      var mine = axes.filter(function (a) { return a.label.toLowerCase() === label.toLowerCase(); })[0];
       if (mine) mine.values = values;
-      else axes.push({ id: "", asks: asks, values: values });
+      else axes.push({ id: "", label: label, values: values });
 
       dimStatus.textContent = "saving…"; dimStatus.className = "status";
       sendIntent("splits-on", { axes: axes })
@@ -7700,7 +7730,7 @@ function selectionAtTheRoot(sel: Selection): string {
   const filters = dimensions
     .map(
       (ax) => `<label class="wdim">
-        <span class="wdim-n">${line(ax.asks)}</span>
+        <span class="wdim-n">${line(ax.label)}</span>
         <select data-walk-dim="${esc(ax.id)}">
           <option value="${ANY}" selected>Any</option>
           ${ax.values.map((v) => `<option value="${esc(v)}">${line(v)}</option>`).join("")}
@@ -7719,7 +7749,7 @@ function selectionAtTheRoot(sel: Selection): string {
    * values."* Two fields, so there is exactly one thing to do in it.
    */
   const form = `<div class="wdimform" hidden data-dim-form>
-    <label><span>Dimension</span><input name="asks" placeholder="Role" spellcheck="false"></label>
+    <label><span>Dimension</span><input name="label" placeholder="Role" spellcheck="false"></label>
     <label><span>Its values</span><input name="values" placeholder="admin, loan processor" spellcheck="false"></label>
     <button type="button" data-dim-save>Add</button>
     <button type="button" class="wdimform-x" data-dim-cancel>Cancel</button>
@@ -7737,7 +7767,7 @@ function selectionAtTheRoot(sel: Selection): string {
   const row = (o: Option): string => {
     const chips = sel.axes
       .filter((ax) => o.is[ax.id])
-      .map((ax) => `<span class="pchip">${line(ax.asks.toLowerCase())}:${line(o.is[ax.id]!)}</span>`)
+      .map((ax) => `<span class="pchip">${line(ax.label.toLowerCase())}:${line(o.is[ax.id]!)}</span>`)
       .join("");
     const reach =
       o.reaches > 1 ? `${o.reaches} screens` : o.reaches === 1 ? "1 screen" : "nothing beyond its front door";
@@ -7790,7 +7820,7 @@ function selectionAtTheRoot(sel: Selection): string {
 function selectionEditor(sel: Selection): string {
   if (!sel.axes.length) return "";
   return `<table class="wsel-grid">
-      <thead><tr><th>Prototype</th>${sel.axes.map((ax) => `<th>${line(ax.asks)}</th>`).join("")}<th>Opens on</th><th></th></tr></thead>
+      <thead><tr><th>Prototype</th>${sel.axes.map((ax) => `<th>${line(ax.label)}</th>`).join("")}<th>Opens on</th><th></th></tr></thead>
       <tbody>${sel.options
         .map(
           (o) => `<tr data-sel-proto="${esc(o.id)}">
