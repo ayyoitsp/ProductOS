@@ -334,12 +334,21 @@ ${pc.dim("⛔ Needs DATABASE_URL, not a token: creating the first credential can
       .command("import <dir>")
       .description("Put a corpus directory into a project")
       .requiredOption("--into <projectId>", "the project to import into")
-      .action(async (dir: string, opts: { into: string; db?: string }) => {
+      /**
+       * ⛔ THE ESCAPE FROM A GUARD THAT EXISTS BECAUSE THIS VERB DESTROYED WORK TWICE.
+       *
+       * An import replaced every document unconditionally, and the hosted page is where somebody
+       * authors now — so a routine import after a local redraw silently overwrote whatever they had
+       * done there. It cost a 55KB feature recovered from a backup, and then the dimensions Peter
+       * had just named. `--anyway` is for somebody who knows the disk copy is the one they want.
+       */
+      .option("--anyway", "overwrite documents somebody authored on the page since the disk copy was written")
+      .action(async (dir: string, opts: { into: string; db?: string; anyway?: boolean }) => {
         try {
           await withStore(opts, async (d) => {
             if (!fs.existsSync(dir)) throw new Error(`no directory at ${path.resolve(dir)}`);
             const store = await reach(d, opts.into);
-            const { imported } = await importFromDisk(store, dir);
+            const { imported, kept } = await importFromDisk(store, dir, { anyway: opts.anyway });
             /**
              * ⛔ AND BROUGHT FORWARD BEFORE IT IS REPORTED ON — because the thing this verb warns
              * about is usually the thing a migration already knows how to fix.
@@ -357,6 +366,17 @@ ${pc.dim("⛔ Needs DATABASE_URL, not a token: creating the first credential can
             const brought = await migrateDocuments(d, store);
             const corpus = await loadFromStore(store);
             console.log(pc.green("✓"), `${imported.length} documents into ${opts.into}`);
+            /**
+             * ⛔ SAID OUT LOUD, FIRST. A guard that keeps a document and does not say so is the same
+             * silence it was built to end — the person who authored on the page has to know their
+             * work is still there AND that the checkout does not have it.
+             */
+            if (kept.length) {
+              console.log("");
+              console.log(pc.yellow(`${kept.length} left as ${kept.length === 1 ? "it is" : "they are"} — authored on the page since the disk copy was written:`));
+              for (const k of kept) console.log(pc.yellow(`  ! ${k.key}`) + pc.dim(`  ${k.says} — ${k.by}${k.at ? `, ${k.at.slice(0, 10)}` : ""}`));
+              console.log(pc.dim("\n  export it to disk first (productos hosted export), or --anyway to overwrite it"));
+            }
             for (const a of brought)
               if (a.documents.length)
                 console.log(

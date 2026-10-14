@@ -3,11 +3,12 @@ import pc from "picocolors";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { resolvePathsOrThrow } from "../../core/paths.js";
+import { resolvePathsOrThrow, pathsAtCorpus } from "../../core/paths.js";
 import { listAllContainers } from "../../core/product.js";
 import {
   detectFrameworkGaps,
   readFrameworkGaps,
+  gapsFilePath,
   gapsWhoseFieldShipped,
   recordFrameworkGap,
   settleFrameworkGap,
@@ -56,6 +57,19 @@ function warnAboutGapsThatMayBeClosed(gaps: Parameters<typeof gapsWhoseFieldShip
   );
 }
 
+
+/**
+ * Which record this gap belongs to.
+ *
+ * ⛔ `todo` WAS THE ONE VERB WITH NO `--at`, and it is the verb an author reaches for while
+ * authoring a corpus that is not in the repo they are standing in. So it walked up from `cwd`
+ * and filed the finding against whichever product lived there. Every other v2 command takes
+ * `--at`; the asymmetry WAS the defect, not a missing convenience.
+ */
+function recordFor(opts: { at?: string }) {
+  return opts.at ? pathsAtCorpus(opts.at) : resolvePathsOrThrow();
+}
+
 /**
  * `productos todo` — framework gaps, addressed to ProductOS's developers.
  *
@@ -76,8 +90,9 @@ export function todoCommand(): Command {
     .command("list", { isDefault: true })
     .description("Show recorded framework gaps")
     .option("--all", "Include closed and won't-fix entries")
-    .action((opts: { all?: boolean }) => {
-      const paths = resolvePathsOrThrow();
+    .option("--at <corpus>", "The corpus this gap was found in (defaults to the repo you are standing in)")
+    .action((opts: { all?: boolean; at?: string }) => {
+      const paths = recordFor(opts);
       const gaps = readFrameworkGaps(paths).filter(
         (g) => opts.all || (g.status !== "closed" && g.status !== "wont-fix")
       );
@@ -112,8 +127,9 @@ export function todoCommand(): Command {
   cmd
     .command("scan")
     .description("Look for forced fits in this corpus and record any new ones")
-    .action(() => {
-      const paths = resolvePathsOrThrow();
+    .option("--at <corpus>", "The corpus this gap was found in (defaults to the repo you are standing in)")
+    .action((opts: { at?: string }) => {
+      const paths = recordFor(opts);
       const found = detectFrameworkGaps(listAllContainers(paths));
       let added = 0;
       for (const g of found) {
@@ -139,8 +155,9 @@ export function todoCommand(): Command {
     .option("--question <q>", "The decision we owe")
     .option("--evidence <ids...>", "Container or behavior ids that show it")
     .option("--forced-into <id>", "Where the content had to go meanwhile")
-    .action((what: string, opts: { question?: string; evidence?: string[]; forcedInto?: string }) => {
-      const paths = resolvePathsOrThrow();
+    .option("--at <corpus>", "The corpus this gap was found in (defaults to the repo you are standing in)")
+    .action((what: string, opts: { question?: string; evidence?: string[]; forcedInto?: string; at?: string }) => {
+      const paths = recordFor(opts);
       const g = recordFrameworkGap(paths, {
         detected_at: new Date().toISOString().slice(0, 10),
         detector: "authored",
@@ -149,7 +166,16 @@ export function todoCommand(): Command {
         evidence: opts.evidence ?? [],
         forced_into: opts.forcedInto,
       });
-      console.log(g ? pc.green("✓") + ` Recorded ${g.id}` : pc.dim("Already recorded."));
+      /**
+       * ⛔ IT SAID "Recorded fg-0042" AND NOT WHERE. Thirty-three gaps went into the wrong
+       * product's record and every one of them printed a confident tick. Naming the file is
+       * what makes a misfiling visible in the moment somebody can still fix it.
+       */
+      console.log(
+        g
+          ? pc.green("✓") + ` Recorded ${g.id} in ${pc.dim(gapsFilePath(paths))}`
+          : pc.dim(`Already recorded in ${gapsFilePath(paths)}`)
+      );
     });
 
   /**
@@ -165,8 +191,9 @@ export function todoCommand(): Command {
     .requiredOption("--resolution <why>", "What changed, or why this is not a gap")
     .option("--accepted", "A known limitation we are living with, rather than fixed")
     .option("--wont-fix", "Not going to be addressed")
-    .action((id: string, opts: { resolution: string; accepted?: boolean; wontFix?: boolean }) => {
-      const paths = resolvePathsOrThrow();
+    .option("--at <corpus>", "The corpus this gap was found in (defaults to the repo you are standing in)")
+    .action((id: string, opts: { resolution: string; accepted?: boolean; wontFix?: boolean; at?: string }) => {
+      const paths = recordFor(opts);
       const status = opts.wontFix ? "wont-fix" : opts.accepted ? "accepted" : "closed";
       try {
         const g = settleFrameworkGap(paths, id, status, opts.resolution);
@@ -184,6 +211,7 @@ export function todoCommand(): Command {
         process.exitCode = 1;
       }
     });
+
 
   return cmd;
 }

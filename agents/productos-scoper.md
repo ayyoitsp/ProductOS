@@ -146,8 +146,13 @@ by anything.
 - Every uncertainty is a `question:`, not a hedge inside a sentence.
 - Nothing you wrote restates lifecycle or validation in prose — those are `status:` and a stamp.
 - Nothing mentions a filename, a path, a table or a branch. If something true had nowhere to live,
-  that is a framework gap: record it with `productos todo add`, naming where you were forced to put
-  it instead.
+  that is a framework gap: record it with `productos todo add "<what the model cannot say>" --at
+  <the corpus you were given> --forced-into <where it went instead>`.
+
+  ⛔ **`--at`, always.** Without it the command walks up from wherever the shell is standing and
+  files your finding against whatever product lives there — which is how thirty-three gaps found in
+  one product ended up in another product's record, each one indistinguishable from that product's
+  own. The tick it printed looked identical.
 
 ## What to return
 
@@ -945,8 +950,22 @@ exchanges:
     slots:                                  # the eight, below
       answer:
         says: …
-    criteria: []                            # what would show them holding, above
+    criteria:                               # what would show them holding, above
+      - id: 1                               # ⛔ REQUIRED, and stable. Renaming one is a NEW requirement
+        slot: refuses                       # which of the eight this demonstrates
+        of: not-your-kid                    # which statement, where the slot says several
+        given: a kid signed in, and another kid in the same family
+        when: they open the other kid's money
+        then: they are shown nothing about that kid, and not told the kid exists
+        level: integration                  # where somebody has to stand to observe it
 ```
+
+⛔ **`id` IS REQUIRED ON EVERY CRITERION, AND IT IS WHY THIS EXAMPLE IS FILLED IN RATHER THAN `[]`.**
+An author who had only `criteria: []` to go on invented the shape, left `id` out of all of them, and
+every criterion it wrote was refused at parse — so the feature's criteria did not exist, and the
+scope looked finished. It is the same failure as the `readings` example that left `readings/`
+reading as empty: a required field absent from the only example an author is given is a field that
+only ever appears where somebody happened to know.
 
 And a rule carries `why` beside its statement — the argument, not a restatement of the sentence.
 

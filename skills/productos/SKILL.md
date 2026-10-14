@@ -122,7 +122,7 @@ You are the **orchestrator**, and you are the session — not a subagent. That i
 **⛔ You keep these yourself:**
 
 - running the reviewers, which judge and never write
-- routing what comes back: a framework gap to us, a corpus finding to the author
+- routing what comes back: a framework gap to us with `productos todo add --at <corpus>`, a corpus finding to the author
 - never answering a newcomer's confusion — writing it down is the output
 
 ### Compare the drawings against the product a person actually sees
@@ -165,6 +165,22 @@ You are the **orchestrator**, and you are the session — not a subagent. That i
 
 ⛔ **Every author writes and none may settle.** An author may propose, populate, draw and regenerate; it may never produce a verdict, answer an open question, or mark anything validated. None of them can put a question to a person — deliberately, because consent obtained inside a subagent has no record of how it was obtained. What an author cannot resolve comes back to you as a question, and you put it to the person yourself.
 <!-- /productos:preset -->
+
+## ⛔ A gap is filed against the corpus it was found in
+
+```bash
+productos todo add "<what the model cannot express>" --at <corpus> --forced-into <where it went>
+productos todo --at <corpus>          # what this corpus could not say
+```
+
+**`--at`, always.** Without it the command walks up from wherever the shell is standing and files
+the finding against whatever product lives *there*. That is not a lost gap, which would be
+recoverable — it is a gap recorded as a fact about the wrong product, indistinguishable once filed
+from that product's own, so reading the backlog reports limits the model does not have.
+
+It happened at scale before the flag existed: thirty-three gaps found while authoring one corpus
+went into another product's record, and every one of them printed the same confident tick. `add`
+now names the file it wrote to, which is the only moment somebody can still catch it.
 
 ## ⛔ How confident the corpus is, and the line that cannot move
 
@@ -606,6 +622,24 @@ answered `cannot-judge-this-corpus`: not one finding, about anything, until some
 
 ⛔ **Run it when `check` says a key is unrecognized.** That is what it looks like from the outside: a
 corpus written by an older build, read by a newer one.
+
+### ⛔ The environment convenient to measure in is not the environment the thing lives in
+
+Peter, pressing Add on the live page: *"Not saved: Not Found"*. Three defects in two days, same
+shape — the code right about where it was tested and wrong about where it runs:
+
+- **every page write**, checked against the local stack. Local serves at `/`; hosted serves under
+  `/p/<project>/`. Seven root-relative urls — the composer, the thread, the live connection —
+  404ing on the only page anybody reviews on.
+- **the side menu**, measured in the default headless window. Its rules live inside
+  `@media (min-width: 62rem)`, so a correct page measured as broken.
+- **the config**, read from a corpus directory, which is reachable in a way a temp dir is not.
+
+⛔ **Nothing could see the first one.** A browser test that replaces `fetch` asserts what a handler
+SENDS, so a wrong url passes — it would go green on `/nonsense`.
+
+⛔ **So verify against the shape the thing ships in.** A route checked by curl against a path you
+typed says nothing about a page that builds a different one.
 
 ### ⛔ A zero proves nothing unless you can say what a failing zero looks like
 

@@ -1,0 +1,67 @@
+id: "0144"
+said: let's get this fixed... we should not be dumping everything in a single packet.  we should be loading in the appropriate information, like any other web app.  this is ridiculous
+at: 2026-10-14
+kind: surface
+reaches:
+  surface: data-defer
+  pin: a drawing arrives without anybody pressing for it
+waived: {}
+closed: 2026-10-14
+
+# ⛔ THIS ACCOUNT IS APPENDED AFTER `change close`, BECAUSE close REWRITES THE FILE THROUGH THE
+# SCHEMA AND DROPS EVERY COMMENT IN IT. It silently deleted this record's account and 0140's. Only 3
+# of 141 records carry one, so the loss is narrow — and the verb that finalises a record should not
+# be the verb that deletes the reasoning. Recorded here rather than fixed in this change.
+#
+# ⛔ TWO CAUSES, SEPARATED BEFORE ANYTHING WAS CHANGED, because conflating them optimises the wrong
+# one. Reproduced on a corpus built to Bilrost's shape — 144 scopes, 9.4 MB stored → 57 MB of HTML,
+# the same ~6x expansion as the real 12 MB → 49.8 MB.
+#
+#   1. ONE DRAWING WAS ON THE WIRE FIVE TIMES, VERBATIM. The prototype tile carried a copy, and the
+#      flow map carried one PER ANCESTOR CONTAINER — `renderGroupUx` runs for every container and
+#      lays out every drawing beneath it, so a feature two levels down was emitted twice, three
+#      levels three times. That is the superlinear term: 14.4x the scopes cost 21.4x the render.
+#
+#   2. THE PAGE SHIPPED 144 SECTIONS AND SHOWED ONE. `VIEW_SWITCH`'s `show()` sets `hidden` on every
+#      section but one, so 143 arrived in order to be hidden immediately.
+#
+# ⛔ AND THE STATE FRAMES ARE IN NEITHER CAUSE, which a measurement had to establish. In a fixture
+# whose drawing carries no `data-part`, the base frame and every derived state come out
+# byte-identical — so they counted as duplicates and are not. `pictureOf` composes a different
+# picture per state against a real corpus. Deduplicating those would have deleted product content
+# while the number improved.
+#
+# ⛔ THE REVIEW SURFACE IS THE SAME SURFACE, which was the only real risk here and the thing PT-0007
+# warned about: *a drawing nobody can see until they click is not reviewable*. Settled by reading
+# `VIEW_SWITCH` rather than by arguing about it — reaching another feature was ALREADY a press, so a
+# section that arrives when it is asked for costs a reader nothing. Thumbnails load on scroll, the
+# way any other web app loads images. Pressing a tile or walking to a screen fetches it too.
+#
+#     one document, as it shipped    30.80 MB   2790ms
+#     what a reader now receives      1071 kB   1408ms
+#       one feature, on request        239 kB   1115ms
+#       one drawing, on request         35 kB    242ms
+#
+# ⛔ FOUR BUGS IN THIS CHANGE WERE FOUND BY DRIVING A BROWSER, NOT BY READING IT. Each would have
+# passed a markup assertion, and two left no error anywhere:
+#
+#   · `asMock` wraps every screen in <template shadowrootmode="open"> — DECLARATIVE shadow DOM,
+#     which the parser instantiates and `innerHTML` silently does not. Fetched sections arrived
+#     byte-perfect and inert.
+#   · the bank element was omitted when empty, which on arrival it always is — so every drawing the
+#     client fetched was appended to `null` and dropped. 16 thumbnails fetched and stayed blank.
+#   · `CSS.escape` is for an IDENTIFIER, not the inside of a quoted attribute value, and every ref
+#     here contains a `#`. The bank held the drawing, the host named it, the lookup returned null
+#     every time. Fixed by deleting the selector: compare the attribute.
+#   · ⛔ AND THE ONE THE BUILD CANNOT SEE — `await` inside a function I had not made `async`. These
+#     scripts are template literals, so `tsc` compiles a string and the browser discards the WHOLE
+#     script at parse time. Every mock stayed inert, the prototype would not open, nothing reported
+#     anything. Ten probes. There is now a test that compiles every emitted script.
+#
+# ⛔ AND DEFERRING THE PROTOTYPE BOARD WAS REVERTED, because a browser test caught what it broke.
+# `DRIVE` reads `const board = document.querySelector(".pboard"); if (!board) return;` and
+# everything that HYDRATES A MOCK lives below that line — so taking the board off the page meant no
+# drawing anywhere hydrated. Its tiles go lazy instead, the same mechanism as the map's.
+#
+# Six defects were put back one at a time and each turned the suite red: 3, 3, 1, 2, 2, 1 failures,
+# and zero when restored.

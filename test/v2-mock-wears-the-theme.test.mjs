@@ -27,7 +27,7 @@ import { renderScopePage } from "../dist/v2/page.js";
 import { renderShell } from "../dist/ui/renderer.js";
 import { loadCorpus } from "../dist/v2/load.js";
 import { everyViewV1 } from "../dist/v2/routes.js";
-import { writeSketchHtml } from "../dist/v2/draw-write.js";
+import { writeSketchHtml, diskPages } from "../dist/v2/draw-write.js";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
@@ -284,8 +284,8 @@ test("a sweep finds the screens in both corpus layouts, and writes each into its
   assert.deepEqual(found[0].view.parts, [{ id: "new-deal", label: "New Deal", role: "button" }]);
 
   // The writer, handed each tree's own root, puts each drawing in that tree and not the other.
-  const v1 = writeSketchHtml(root, "cre/deals/deal-list", "deals-list", "<b>one</b>");
-  const v2 = writeSketchHtml(path.join(root, "v2"), "deal-list", "deals-list", "<b>two</b>");
+  const v1 = writeSketchHtml(diskPages(root), "cre/deals/deal-list", "deals-list", "<b>one</b>");
+  const v2 = writeSketchHtml(diskPages(path.join(root, "v2")), "deal-list", "deals-list", "<b>two</b>");
   assert.equal(v1, path.join(root, "productos/products/cre/deals/deal-list.md"));
   assert.equal(v2, path.join(root, "v2/truth/deal-list.md"));
   assert.match(fs.readFileSync(v1, "utf-8"), /<b>one<\/b>/, "the products tree got the other tree's drawing");

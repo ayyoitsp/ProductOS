@@ -7,6 +7,7 @@ import { findRepoRoot, pathsFor } from "../../core/paths.js";
 import { ByokProvider, readConfig, resolveCodeScanningByok, resolveTruthVerificationByok } from "../../core/config.js";
 import { envConfigFile, readEnvConfig } from "../../core/env.js";
 import { readFrameworkGaps } from "../../core/framework-gaps.js";
+import { installedBriefsThatDiffer } from "../../adapters/claude.js";
 import YAML from "yaml";
 import { FeatureTracking, listTrackingFiles } from "../../core/tracking.js";
 import { listAllContainers, listAreas, listFeatures, productsRoot } from "../../core/product.js";
@@ -38,6 +39,21 @@ export function doctorCommand(): Command {
           warn(`Stale skill present: ${old}  (renamed — safe to remove: rm -rf ${p})`);
         }
       }
+
+      /**
+       * ⛔ PRESENT IS NOT CURRENT, and checking only presence is how this stayed invisible. Every
+       * skill above was reported installed while its body was 139 commits behind the binary.
+       */
+      const stale = installedBriefsThatDiffer();
+      if (stale.length) {
+        for (const x of stale)
+          warn(
+            x.why === "orphan"
+              ? `Installed brief no longer exists in this build, and can still be run: ${x.what}  (${x.where})`
+              : `Installed brief is not this build's: ${x.what}  (${x.where})`
+          );
+        warn(`An author reads its instructions from there — run: productos init claude --update`);
+      } else ok(`Installed briefs match this build`);
 
       // 3. MCP registered
       const projSettings = path.join(process.cwd(), ".claude", "settings.json");

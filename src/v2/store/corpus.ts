@@ -36,17 +36,100 @@ export async function loadFromStore(store: ProjectStore, root = store.projectId)
  * counterpart of `memoryStore` and `load.ts` says they must stay that way — a directory this
  * enumerated for itself is a directory the store silently would not have.
  */
+/**
+ * ⛔ AN IMPORT OVERWROTE EVERY DOCUMENT UNCONDITIONALLY, AND IT DESTROYED REAL WORK TWICE.
+ *
+ * This was `for (key of files) await store.put(key, …)` with no comparison of any kind. The hosted
+ * page is now where somebody authors — dimensions, placements, containment, a note's reply — and
+ * every one of those lands in the STORE. So a routine disk import, run after any local redraw,
+ * silently replaced them with whatever the checkout happened to have.
+ *
+ * It cost a 55KB feature earlier in the day — 52 parts and 68 behaviours that existed only in the
+ * store — recovered from a backup. Then it ate the dimensions Peter had just named on the page, and
+ * his reply was *"not that important, i can add it back later"*, which is the generous reading of a
+ * tool deleting his work without a word.
+ *
+ * ⛔ THE GUARD IS NOT "REFUSE IF THEY DIFFER". Every import after a redraw differs — that is what an
+ * import IS — so that refuses everything and gets turned off within a day. The question is narrower:
+ * does the STORE hold a page-authored change that the disk copy cannot know about?
+ *
+ * The log answers it with no new bookkeeping. A page write records `corpus-changed` with the
+ * document it wrote, so: a document is AT RISK when its store copy differs from disk AND the log has
+ * a page-authored write for it dated after the disk file was last written. Both facts are already
+ * recorded; neither side has to remember an import happened.
+ *
+ * ⛔ AND IT REFUSES RATHER THAN MERGING. Merging two versions of product truth is a judgement about
+ * which claim is right, and nothing here may make that. It names the documents, leaves them alone,
+ * imports the rest, and `--anyway` is one flag away for somebody who knows the disk copy is the one
+ * they want.
+ */
+export interface AtRisk {
+  key: string;
+  /** Who authored it on the page, and what they did — so the refusal says what it is protecting. */
+  by: string;
+  says: string;
+  at: string;
+}
+
 export async function importFromDisk(
   store: ProjectStore,
   root: string,
-): Promise<{ imported: string[] }> {
+  opts: { anyway?: boolean } = {},
+): Promise<{ imported: string[]; kept: AtRisk[] }> {
   const files = corpusFiles(root);
+  const already = await store.documents();
+
+  /**
+   * Page-authored writes, newest per document. ⛔ `wrote` NAMES THE DOCUMENT, because `ref` is a
+   * product ref — a scope, a prototype id — and mapping one to a file would be a guess in the one
+   * place a wrong answer deletes somebody's work.
+   */
+  const authored = new Map<string, AtRisk>();
+  if (!opts.anyway) {
+    let cursor = 0;
+    for (;;) {
+      const batch = await store.since(cursor, 500);
+      if (!batch.length) break;
+      for (const e of batch) {
+        cursor = Math.max(cursor, e.seq);
+        const p = (e.payload ?? {}) as { kind?: string; via?: string; wrote?: string; by?: string; says?: string; at?: string };
+        if (p.kind !== "corpus-changed" || p.via !== "page" || !p.wrote) continue;
+        authored.set(p.wrote, { key: p.wrote, by: p.by ?? "somebody", says: p.says ?? "changed it", at: p.at ?? "" });
+      }
+      if (batch.length < 500) break;
+    }
+  }
+
   const imported: string[] = [];
+  const kept: AtRisk[] = [];
   for (const key of Object.keys(files).sort()) {
-    await store.put(key, files[key]!);
+    const mine = files[key]!;
+    const theirs = already[key];
+    const risk = authored.get(key);
+    /**
+     * ⛔ ALL THREE CONDITIONS. Identical content is not a risk however it was authored; a document
+     * nobody touched on the page is not a risk however much it differs; and a page write that
+     * predates the disk file was already carried back, so overwriting it changes nothing.
+     */
+    if (risk && theirs !== undefined && theirs !== mine && newerThanFile(risk.at, path.join(root, key))) {
+      kept.push(risk);
+      continue;
+    }
+    await store.put(key, mine);
     imported.push(key);
   }
-  return { imported };
+  return { imported, kept };
+}
+
+/** Whether a page write happened after the disk file was last written. */
+function newerThanFile(at: string, file: string): boolean {
+  const when = Date.parse(at);
+  if (!when) return true; // ⛔ An undated write is treated as at risk: the safe direction is to keep it.
+  try {
+    return when > fs.statSync(file).mtimeMs;
+  } catch {
+    return true; // ⛔ No file on disk means disk cannot be the newer copy.
+  }
 }
 
 /**
