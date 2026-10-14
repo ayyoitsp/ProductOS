@@ -52,6 +52,105 @@ export interface WrittenState {
   html: string;
 }
 
+/**
+ * Find one view's block in whichever truth file holds its scope.
+ *
+ * ⛔ ONE IMPLEMENTATION, because the two hard parts here have each already cost a corpus and a
+ * second copy of either would cost it again.
+ *
+ * The first is which FILE: the leaf match is what lets one writer serve both corpus layouts, and on
+ * its own it crosses between them. The second is where a view's block ENDS — found by indent, never
+ * by `- id:` alone, because a view's `parts:` are children and every one of them starts `- id:`.
+ * Stopping at the first part declared the view over early, so a generated block sitting after
+ * `parts:` fell outside the window, survived the deletion pass, and got a full second copy spliced
+ * in beside it: two `sketch_html`, "duplicated mapping key at line 107", a corpus that would not
+ * load.
+ *
+ * Extracted when `within` needed to be written by a second caller. A session that copied this logic
+ * instead would be writing the same two bugs again, in a file where nobody would think to look.
+ */
+export function locateView(
+  root: string,
+  scopeId: string,
+  viewId: string
+): { file: string; lines: string[]; start: number; end: number } | undefined {
+  const scopeLeaf = scopeId.split("/").pop()!;
+  const files = candidates(root);
+  const holds = (raw: string, id: string): boolean =>
+    new RegExp(`^id:\\s*["']?${id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}["']?\\s*$`, "m").test(raw);
+  const ordered = [
+    ...files.filter((f) => holds(fs.readFileSync(f, "utf-8"), scopeId)),
+    ...files.filter((f) => !holds(fs.readFileSync(f, "utf-8"), scopeId)),
+  ];
+  for (const file of ordered) {
+    const raw = fs.readFileSync(file, "utf-8");
+    if (!new RegExp(`^id:\\s*["']?[^\\n]*\\b${scopeLeaf}["']?\\s*$`, "m").test(raw)) continue;
+    const lines = raw.split("\n");
+    const start = lines.findIndex((l) => l.trim() === `- id: ${viewId}`);
+    if (start < 0) continue;
+
+    const depth = (l: string): number => (/^(\s*)/.exec(l)![1] ?? "").length;
+    const mine = depth(lines[start]!);
+    let end = lines.length;
+    for (let i = start + 1; i < lines.length; i++) {
+      const l = lines[i]!;
+      if (!l.trim()) continue;
+      /** A top-level key ends every nested block under it. */
+      if (!/^\s/.test(l)) { end = i; break; }
+      /** A sibling list entry: same indent as this view's own dash, and a dash of its own. */
+      if (depth(l) <= mine && /^\s*- /.test(l)) { end = i; break; }
+      /** A key at or above this view's indent is the end of the list this view is in. */
+      if (depth(l) < mine) { end = i; break; }
+    }
+    return { file, lines, start, end };
+  }
+  return undefined;
+}
+
+/**
+ * Record which screen a screen appears inside.
+ *
+ * ⛔ A COMMAND, BECAUSE THE ONLY WAY TO SAY THIS WAS TO HAND-EDIT A TRUTH FILE.
+ *
+ * `within` has existed since the walk did, and nothing could write it. So the one relation that
+ * turns a pile of screens into a product was reachable only by typing YAML — which is the trap this
+ * project names at the top of its own instructions, and it shows: the corpus it was built for has
+ * `within` on 0 of 17 screens and fifteen front doors.
+ *
+ * ⛔ IT IS STILL THE AUTHOR'S FACT. Nothing here infers containment; the command exists so that
+ * stating it is one call with the reference checked, rather than a hand edit that silently points at
+ * nothing.
+ */
+export function writeWithin(root: string, scopeId: string, viewId: string, within: string): string | undefined {
+  const found = locateView(root, scopeId, viewId);
+  if (!found) return undefined;
+  const { file, lines, start, end } = found;
+  const indent = (() => {
+    for (let i = start + 1; i < end; i++) if (lines[i]!.trim()) return /^(\s*)/.exec(lines[i]!)![1] ?? INDENT;
+    return INDENT;
+  })();
+  /** Replace an existing one rather than adding a second — a view with two is a view that will not parse. */
+  const at = lines.findIndex((l, i) => i > start && i < end && /^\s*within:/.test(l));
+  /**
+   * ⛔ EMPTY REMOVES THE LINE, it does not write an empty one. `within: ""` is a reference that
+   * resolves to nothing, which `check` refuses — so taking a containment back through the obvious
+   * call would have left the corpus in a state the author could not have intended and could not see
+   * the cause of.
+   */
+  if (!within) {
+    if (at >= 0) {
+      lines.splice(at, 1);
+      fs.writeFileSync(file, lines.join("\n"));
+    }
+    return file;
+  }
+  const line = `${indent}within: ${JSON.stringify(within)}`;
+  if (at >= 0) lines[at] = line;
+  else lines.splice(start + 1, 0, line);
+  fs.writeFileSync(file, lines.join("\n"));
+  return file;
+}
+
 export function writeSketchHtml(
   root: string,
   scopeId: string,
@@ -313,7 +412,7 @@ export function writeDrawnReading(root: string, scopeId: string, viewId: string,
  * asked and left blank; absent is nobody having said yet. Those are different states and every
  * surface distinguishes them.
  */
-export function writePrototypes(root: string, protos: unknown[], splitsOn?: string): string {
+export function writePrototypes(root: string, protos: unknown[], splitsOn?: string | Array<{ id: string; label: string; values?: string[] }>): string {
   const file = path.join(root, "prototypes.yaml");
   fs.writeFileSync(
     file,

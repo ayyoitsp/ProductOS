@@ -88,14 +88,102 @@ export function projectOf(pathname: string): { id: string; rest: string } | null
  */
 const writing = new Map<string, Promise<unknown>>();
 
-function serialize<T>(key: string, work: () => Promise<T>): Promise<T> {
-  const prior = writing.get(key) ?? Promise.resolve();
-  const next = prior.then(work, work);
+/** When the write currently holding each key started, so a stuck one can be named. */
+const since = new Map<string, number>();
+
+/**
+ * ⛔ HOW LONG A CALLER WILL WAIT FOR THE PROJECT'S CURRENT WRITE, AND WHY IT IS GENEROUS.
+ *
+ * The largest corpus on staging — 151 documents, 127 scopes — answers a write in about 4 seconds.
+ * 120s is thirty times that, so this cannot fire on a slow write; it fires on a write that is never
+ * going to finish.
+ */
+const WAIT_MS = 120_000;
+
+/** Projects whose current write has been running longer than `ms`. Read-only; costs nothing. */
+export function stuckWrites(ms: number = WAIT_MS): Array<{ project: string; seconds: number }> {
+  const now = Date.now();
+  return [...since.entries()]
+    .filter(([, at]) => now - at > ms)
+    .map(([project, at]) => ({ project, seconds: Math.round((now - at) / 1000) }));
+}
+
+/**
+ * ⛔ A WAITER GIVES UP AND REFUSES. IT DOES NOT PROCEED, AND IT DOES NOT WAIT FOREVER.
+ *
+ * This chained promises with no bound. A `work()` that never settles — a client that vanished while
+ * the server was inside `writeBack` — blocked the chain PERMANENTLY, and every later write on that
+ * project queued behind it in silence. Found on staging: GETs answered on all four projects while
+ * POSTs to two of them hung forever, `/health` green, the log silent, Postgres with no open
+ * transaction and no ungranted lock. One abandoned client had made two projects unwritable, and a
+ * restart was the only route back.
+ *
+ * ⛔ REFUSING IS THE FIX, AND PROCEEDING WOULD NOT BE. The lock exists because a read-modify-write
+ * over a materialized corpus loses an update silently when two interleave. A waiter that times out
+ * and goes anyway would trade "this write is refused" for "somebody's work vanished" — a worse
+ * failure, and an invisible one. So the invariant is kept and the caller is told.
+ */
+function serialize<T>(key: string, work: () => Promise<T>, waitMs: number = WAIT_MS): Promise<T> {
+  let abandoned = false;
+
+  /**
+   * ⛔ THE CHAIN IS EXACTLY AS IT WAS, AND THE TIMEOUT IS ON THE CALLER'S PROMISE ONLY.
+   *
+   * A first version installed the timed-out waiter's own REJECTED promise as the new chain. That
+   * settles immediately, so the next caller saw a free key and ran its write WHILE THE STUCK ONE WAS
+   * STILL GOING — losing the serialization this lock exists for, which is a silent lost update: the
+   * worse failure, traded for the one being fixed.
+   *
+   * So ordering is untouched: if the prior write never settles, the key stays blocked and every
+   * caller is REFUSED. That is the honest end state — the instance needs a restart, and now it says
+   * so instead of hanging.
+   */
+  const chain = (writing.get(key) ?? Promise.resolve()).then(
+    () => guarded(),
+    () => guarded(),
+  );
+
+  function guarded(): Promise<T> {
+    /**
+     * ⛔ AND WORK A CALLER HAS GIVEN UP ON MUST NOT RUN LATER. Without this, a request answered 503
+     * could still apply its write minutes afterwards if the stuck one ever finished — a refusal that
+     * silently took effect, which is worse than either outcome on its own.
+     */
+    if (abandoned) return Promise.reject(new Error("this write was refused before it started"));
+    since.set(key, Date.now());
+    return (async () => {
+      try {
+        return await work();
+      } finally {
+        since.delete(key);
+      }
+    })();
+  }
+
   writing.set(
     key,
-    next.catch(() => undefined),
+    chain.catch(() => undefined),
   );
-  return next;
+
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const refusal = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      abandoned = true;
+      const held = since.get(key);
+      const secs = held ? Math.max(1, Math.round((Date.now() - held) / 1000)) : Math.max(1, Math.round(waitMs / 1000));
+      /** ⛔ Named, with the age, because "it hung" sent two sessions to the database first. */
+      const e = new Error(
+        `another write to this project has been running for ${secs}s and has not finished, so this ` +
+          `one was refused rather than queued behind it — the instance needs a restart`,
+      ) as Error & { status?: number };
+      e.status = 503;
+      reject(e);
+    }, waitMs);
+  });
+
+  return Promise.race([chain, refusal]).finally(() => {
+    if (timer) clearTimeout(timer);
+  }) as Promise<T>;
 }
 
 /**
@@ -515,3 +603,9 @@ export async function projectBySlug(
     .where(eq(projects.slug, slug));
   return rows.find((r) => r.owner === owner)?.id ?? null;
 }
+
+/**
+ * ⛔ EXPORTED FOR A TEST, WITH THE CLOCK INJECTABLE. The real wait is two minutes; a test that
+ * waited it would be a test nobody runs. The production path never passes the third argument.
+ */
+export const __serializeForTest = serialize;

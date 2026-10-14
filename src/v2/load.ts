@@ -83,7 +83,7 @@ export interface Corpus {
    */
   prototypes: Prototype[];
   /** The question the prototype selection asks, in the project own words. Absent until stated. */
-  splitsOn?: string;
+  splitsOn?: string | Array<{ id: string; label: string; values?: string[] }>;
   rules: Array<{ rule: Rule; body: string; file: string }>;
   /**
    * The subsystems beneath the product, and roughly what each does.
@@ -350,17 +350,52 @@ export function loadCorpus(root: string, store: Store = diskStore): Corpus {
    * question the selection asks belongs to the collection — putting it on each prototype would be
    * the same sentence stored four times with nothing keeping them equal.
    */
-  let splitsOn: string | undefined;
+  let splitsOn: string | Array<{ id: string; label: string; values?: string[] }> | undefined;
   for (const file of readDir(paths.root, [".yaml", ".yml"]).filter((f) => /prototypes\.ya?ml$/.test(f))) {
     try {
-      const raw = YAML.parse(fs.readFileSync(file, "utf-8")) ?? {};
+      /**
+       * ⛔ `readFile`, NOT `fs.readFileSync` — this was the one loader bypassing the store.
+       *
+       * Every other read here goes through `store.read`, which is the whole reason a corpus on an
+       * instance and a corpus in a directory are parsed by one loader. This one reached for the
+       * filesystem directly, so on any store that is not a directory it would throw ENOENT into the
+       * silent catch below and a product's prototypes would simply not exist — no finding, no
+       * message, an empty selection that looks exactly like a corpus that never declared one.
+       *
+       * ⛔ IT IS NOT BROKEN TODAY AND THAT IS NOT A DEFENCE. The hosted instance materialises the
+       * corpus, so the live page shows both prototypes — I checked before changing it rather than
+       * after. What it means is that the failure is one deployment decision away from being real,
+       * and invisible when it arrives.
+       */
+      const raw = YAML.parse(readFile(file)) ?? {};
       if (raw.prototypes) {
         const parsed = PrototypeFile.parse(raw);
         prototypes = parsed.prototypes;
         splitsOn = parsed.splits_on;
+      } else if (Object.keys(raw).length) {
+        /**
+         * ⛔ A FILE SOMEBODY WROTE, THROWN AWAY WITHOUT A WORD.
+         *
+         * `if (raw.prototypes)` with no else meant a prototypes file whose top-level key was
+         * anything else loaded as EMPTY rather than refusing. The deploying session wrote a fixture
+         * to a shape I had described badly — a `set:` key instead of `prototypes:` — and
+         * `loadCorpus` returned zero prototypes and zero errors, so a malformed file was
+         * indistinguishable from a corpus that had none. They lost a round of work to it.
+         *
+         * `broken` is exactly the channel for this and every sibling loader uses it. An empty file
+         * stays silent: a stub somebody has not filled in yet is not a mistake.
+         */
+        broken.push({
+          file,
+          why: `no \`prototypes:\` at the top level — found ${Object.keys(raw)
+            .slice(0, 3)
+            .map((k) => `\`${k}\``)
+            .join(", ")}, so every prototype in this file was ignored`,
+        });
       }
-    } catch {
-      /* a corpus with an unreadable prototypes file still loads — `check` reports it */
+    } catch (e) {
+      /** ⛔ SAID, NOT SWALLOWED — the only loader here that discarded its own parse errors. */
+      broken.push({ file, why: why(e) });
     }
   }
   let style: Style | undefined;

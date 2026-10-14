@@ -540,6 +540,58 @@ deploy: deploy-check
 	@#    store is the failure worth catching, and `/health` deliberately says nothing about the
 	@#    corpus so an exposed instance leaks no project names.
 	@$(MAKE) --no-print-directory remote-doctor | tail -3 | sed 's/^/  /'
+	@# ⛔ AND EVERY LIVE SCRIPT MUST PARSE, WHICH 200 AND A HEALTHY STORE CANNOT TELL YOU.
+	@#
+	@# A `.split("\n")` inside a TypeScript template literal reaches the browser as a string broken
+	@# across two real lines. The browser answers `Invalid or unexpected token` and abandons the WHOLE
+	@# script — the composer, the walk and every act button die together — while tsc is clean, the
+	@# suite is green, the page serves 200 and the markup is exactly right. That region is a template
+	@# string, so nothing type-checks it, and the only observable is a console error on load.
+	@#
+	@# ⛔ Compiled with V8 rather than pattern-matched, so it catches the next mistake too, and the
+	@#    page list comes from the index rather than from a list somebody maintains.
+	@echo "→ every live script parses"
+	@node scripts/live-scripts-parse.mjs --from http://localhost:$(STAGING_PORT) | sed 's/^/  /' || { \
+		echo "✗ a served page has a dead live script — every button on it is broken, and it answers 200"; \
+		exit 1; }
+	@# ⛔ AND NO PAGE SHOWS A READER THE NAME OF A FIELD — "keep the substrate out of it".
+	@#
+	@# This shipped: the Prototype tab carried a complaint reading `state it with \`splits_on\``. A
+	@# test asserting no field name appeared HAD been written, and it rendered a corpus that had
+	@# dimensions — so the gap that prints the name, which only fires when nothing names one, never
+	@# ran. A page with the field name on it, asserted not to have the field name, by a fixture that
+	@# could not reach the line.
+	@#
+	@# ⛔ Which is why it belongs here and not in the suite: a fixture checks the states its author
+	@#    imagined, and the one that leaked was the one nobody imagined. This checks what went out.
+	@#
+	@# ⛔ Vocabulary DERIVED from the schema, and restricted to names with an underscore — `is`, `in`,
+	@#    `title` and `kind` are schema keys and ordinary English, so matching them would fail correct
+	@#    pages. An underscore is a property of the name rather than of what else is on the page.
+	@echo "→ no page shows a reader a field name"
+	@node scripts/no-field-names-on-a-page.mjs --from http://localhost:$(STAGING_PORT) | sed 's/^/  /' || { \
+		echo "✗ a served page is talking about the tool instead of the product"; \
+		exit 1; }
+	@# ⛔ AND THE PAGE CAN REACH WHAT ITS OWN SCRIPT FETCHES.
+	@#
+	@# An instance serves under `/p/<project>/` and there is no `<base>` tag, so a root-relative url
+	@# leaves the project behind. Every write from a hosted page 404d, including filing a note —
+	@# "Not saved: Not Found" — and so did the acknowledgement thread, presence and the live stream.
+	@# The two-way window was dead for as long as the hosted page has existed.
+	@#
+	@# ⛔ AND THE LOCAL STACK SERVES AT THE ROOT, WHERE THIS CANNOT HAPPEN, so every path anybody
+	@#    develops or tests against is the one that works. Nothing in the suite could see it:
+	@#    browser tests replace `fetch` and assert what the handler SENDS, which passes on
+	@#    `/nonsense`; the script-parse check reads the script, not where it points; tsc cannot look
+	@#    inside a template string.
+	@#
+	@# ⛔ A ROUTE VERIFIED BY A CLIENT THAT BUILDS ITS OWN URL SAYS NOTHING ABOUT A PAGE THAT BUILDS
+	@#    A DIFFERENT ONE. `/api/v2/live` was reported working from curl against the scoped path
+	@#    while the page could not reach it at all.
+	@echo "→ the page can reach what it fetches"
+	@node scripts/page-can-reach-what-it-fetches.mjs --from http://localhost:$(STAGING_PORT) | sed 's/^/  /' || { \
+		echo "✗ a served page fetches a url it cannot reach — it answers 200 and its buttons do nothing"; \
+		exit 1; }
 	@echo "✓ $$(git rev-parse --short HEAD) is live on $(STAGING_PORT)"
 
 rebuild-remote: staging-guard build

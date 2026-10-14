@@ -13,7 +13,7 @@
 import { SLOTS, SLOT_ASKS, DEMONSTRABLE_SLOTS, owesDemonstration, statements, saysText, NOT_A_DOCUMENT, type SlotName, type Says } from "./schema.js";
 import { walkOf } from "./walk.js";
 import { holdsOn } from "./held.js";
-import { selectionOf, gapsIn } from "./selection.js";
+import { selectionOf, gapsIn, doorOpensOn } from "./selection.js";
 import {
   DOWNSTREAM_OF_ANSWER,
   answerIsUnknown,
@@ -200,6 +200,8 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
    * is the right default: a corpus that has never been configured has not claimed to have roles.
    */
   let accessModel: "roles" | "permissions" | "both" | "neither" = "neither";
+  /** ⛔ Whether anybody has actually CONFIGURED one, which is a different question from its value. */
+  let accessWasConfigured = false;
   try {
     const paths = resolvePathsOrThrow(root);
     const cfgRoot = path.dirname(path.dirname(paths.configFile));
@@ -207,11 +209,34 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
     const dir = conf.web.components_dir;
     hasCode = Boolean(dir) && fs.existsSync(path.resolve(cfgRoot, dir!));
     accessModel = conf.exchange.access;
+    accessWasConfigured = true;
   } catch {
     hasCode = false;
   }
 
   const corpus = loadCorpus(root);
+
+  /**
+   * ⛔ A NON-EMPTY ACCESS LIST IS ITSELF THE DECLARATION, AND THE CONFIG CANNOT TRAVEL.
+   *
+   * ⛔ ONLY WHERE NOBODY HAS CONFIGURED ONE, and the suite caught me getting this wrong. A product
+   * may DELIBERATELY be configured `roles` while a permission appears in its list, and being told
+   * that an exchange named the wrong vocabulary is the whole point of the finding. A first version
+   * of this let the list override the config and broke exactly that test. Where a config exists it
+   * is the answer, including when it says `neither`.
+   *
+   * ⛔ AND ON A HOSTED CORPUS THE CONFIG IS UNREACHABLE BY CONSTRUCTION. An instance materializes a
+   * project into a temp directory with no repository above it, so `resolvePathsOrThrow` throws and
+   * the model fell back to `neither` — every `held_by` on every hosted corpus reported
+   * `an-access-model-this-product-does-not-use`, forever, with no way for an author to fix it.
+   * `access.yaml` is carried by `corpusFiles` precisely so it reaches the store; the declaration
+   * that it exists has to travel with it or it says nothing where it is read.
+   */
+  if (!accessWasConfigured && corpus.access.length) {
+    const hasRole = corpus.access.some((a) => a.kind === "role");
+    const hasPermission = corpus.access.some((a) => a.kind === "permission");
+    accessModel = hasRole && hasPermission ? "both" : hasRole ? "roles" : "permissions";
+  }
   /**
    * ⛔ Read from the corpus's own project, not asked for as an argument. A finding that says "render
    * this from the codebase" is only honest where the corpus names a codebase to read; asking every
@@ -356,18 +381,21 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
      * corpus be handed over". Two renders of one source answering different questions are
      * projections. What would be a second home is two findings.
      */
+    /**
+     * ⛔ THE GAP SAYS ITS OWN KIND. This classified them by regex against the sentence —
+     * `/both answer/`, `/opens on/` — and rewording one silently reclassified it. That happened
+     * within the hour: "both answer X" became "are both X" when the model gained a second axis, the
+     * regex stopped matching, and `two-prototypes-one-answer` reported itself as
+     * `prototype-answers-nothing`. Only the foil's MUST_FIRE caught it.
+     */
     for (const g of gapsIn(selectionOf(corpus))) {
-      if (/opens on/.test(g)) continue;
+      if (g.kind === "prototype-opens-on-nothing") continue;
       add({
         severity: "note",
-        kind: /both answer/.test(g)
-          ? "two-prototypes-one-answer"
-          : /alternatives about/.test(g)
-            ? "prototypes-split-on-nothing"
-            : "prototype-answers-nothing",
+        kind: g.kind,
         where: "the prototype selection",
-        what: g,
-        fix: 'The question belongs to the set and each prototype answers it: `productos v2 prototypes splits-on "<the question>"`, then `--is "<this one\'s answer>"` on each. Nothing infers either — a classifier reading two titles and concluding "role" would be a guess wearing a decision\'s clothes.',
+        what: g.says,
+        fix: 'The axes belong to the set and each prototype says where it sits — settable from the page, or `productos v2 prototypes splits-on "<the question>"` then `--is`. Nothing infers either: a classifier reading two titles and concluding "role" would be a guess wearing a decision\'s clothes.',
       });
     }
   }
@@ -438,14 +466,21 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
       const at = (p as { starts_at?: string }).starts_at ?? "";
       if (!at) continue;
       /**
-       * ⛔ `resolveView`, NOT `resolveRef`. The first version used `resolveRefSafely`, which
-       * resolves EXCHANGES — so `money#balance`, a perfectly good screen, came back
-       * `no exchange "balance" in money` and every prototype was refused. A check that refuses
-       * correct corpora is worse than no check, and it only showed up because the fixture had one
-       * valid door beside the broken one.
+       * ⛔ `doorOpensOn`, WHICH IS THE ONE PREDICATE — this had its own copy and the two diverged
+       * within the hour.
+       *
+       * It resolved with `resolveView` here, which accepts a bare view id inside a scope, while the
+       * page's `gapsIn` tested a map keyed only as `<scope>#<view>`. So `starts_at: balance`, a
+       * perfectly good door, passed handover and was REPORTED BROKEN on the page a reviewer reads —
+       * the direction that teaches people to ignore the page.
+       *
+       * ⛔ And before that, the first version used `resolveRefSafely`, which resolves EXCHANGES — so
+       * `money#balance` came back `no exchange "balance" in money` and every prototype was refused.
+       * A check that refuses correct corpora is worse than no check, and it only showed up because
+       * the fixture had one valid door beside the broken one. Both of those are one condition with
+       * two implementations; now there is one, exported, and both callers use it.
        */
-      const resolved = corpus.scopes.some((e) => resolveView(corpus, e.scope, at));
-      if (resolved) continue;
+      if (doorOpensOn(corpus, at)) continue;
       add({
         severity: "refuse",
         kind: "a-prototype-opens-on-nothing",
@@ -911,6 +946,50 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
     for (const ex of scope.exchanges) {
       exchangeRefs.add(`${scope.id}#${ex.id}`);
       for (const s of SLOTS) slotRefs.add(`${scope.id}#${ex.id}#${s}`);
+    }
+  }
+
+  /**
+   * ⛔ THE PRODUCT'S NAME IS THE FRAMEWORK'S PLACEHOLDER, AND IT IS THE MOST VISIBLE STRING THERE IS.
+   *
+   * The Bilrost corpus titles its root scope **"Product Truth"**, so every page a reviewer opens is
+   * titled after the tool rather than the product — and nothing anywhere said so. I reported it to
+   * Peter twice as a thing to fix and never traced it, which is the actual failure: it is not his
+   * corpus being untidy, it is a chain of four framework steps.
+   *
+   *   1. `init` seeds `products/README.md` titled "Product Truth", with "replace me" in the body
+   *   2. v1 `check` refuses while the BODY is unreplaced — the guard exists, for the body
+   *   3. the v1→v2 migration takes the root scope's title from that README's TITLE
+   *   4. v2 `check` has no equivalent guard, so the placeholder name becomes the product's name
+   *
+   * CLAUDE.md: *"Nothing a reader sees should mention the storage."* A product named after the
+   * documentation tool is the same leak with the substrate swapped for the tool, in the one string
+   * that appears in every browser tab.
+   *
+   * ⛔ REFUSED, NOT REPORTED. A product with no name of its own cannot be reviewed as a product —
+   * three fresh readers landed on the v1 version of this page and concluded the product WAS the
+   * documentation tool. That is why step 2 is a refusal, and this is the same claim about the same
+   * string.
+   */
+  {
+    const OURS = new Map([
+      ["product truth", "the name of this tool"],
+      ["the product", "the migration's stand-in when nothing said what the product was"],
+      ["productos", "the name of this tool"],
+      ["replace this page", "the scaffold, which says so"],
+      ["untitled", "nothing chose it"],
+    ]);
+    for (const { scope } of corpus.scopes) {
+      if (scope.in) continue;
+      const why = OURS.get((scope.title ?? "").trim().toLowerCase());
+      if (!why) continue;
+      add({
+        severity: "refuse",
+        kind: "the-product-has-no-name-of-its-own",
+        where: scope.id,
+        what: `this product is called "${scope.title}", which is ${why} — so every page a reviewer opens is titled after the tool rather than the product`,
+        fix: "give it the product's own name. ⛔ It is the title of the root scope, and it reaches the browser tab, the walk and every packet — a reader meeting it learns what this is before they read a word.",
+      });
     }
   }
 
@@ -3854,7 +3933,21 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
       slotRefs.has(r.bears_on) ||
       exchangeRefs.has(r.bears_on) ||
       corpus.scopes.some((x) => x.scope.id === r.bears_on) ||
-      corpus.rules.some((x) => x.rule.id === r.bears_on);
+      corpus.rules.some((x) => x.rule.id === r.bears_on) ||
+      /**
+       * ⛔ A VIEW RESOLVES TOO, AND THE GENERATOR HAS ALWAYS WRITTEN ONE.
+       *
+       * `draw-write.ts` emits `bears_on: <scope>#<view>` on every reading it creates — that is what
+       * a reading ABOUT A DRAWING bears on, and it is the right answer: the observation is about one
+       * screen, not about the whole feature. The resolver accepted slots, exchanges, scopes and
+       * rules and not views, so every generated reading was reported as resolving to nothing.
+       *
+       * ⛔ IT WAS 62 FINDINGS ON ONE CORPUS, reported independently by six authors, and each of them
+       * correctly declined to hand-edit a generated file to silence it. A finding that fires on the
+       * generator's own correct output teaches authors that `check` is noise — which is the one
+       * thing it cannot afford to be.
+       */
+      corpus.scopes.some(({ scope }) => scope.views.some((v) => `${scope.id}#${v.id}` === r.bears_on));
     if (!bearsOnSomething)
       add({
         severity: "note",

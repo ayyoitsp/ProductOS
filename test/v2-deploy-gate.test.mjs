@@ -158,8 +158,32 @@ test("nothing reaches staging without the guard, and deploy adds build and the s
   assert.match(d, /rev-parse HEAD/, "the asserted sha is not compared against what would deploy");
   assert.match(d, /not evidence about this one/, "the refusal does not say why another commit's result will not do");
 
+  /**
+   * ⛔ A DEPLOY MUST ASK WHETHER THE LIVE SCRIPTS PARSE, BECAUSE NOTHING ELSE IT CHECKS CAN SEE IT.
+   *
+   * A string literal broken across two real lines inside a template string reaches the browser as
+   * `Invalid or unexpected token`, and the browser abandons the whole script — every button on the
+   * page dies at once. tsc is clean, the suite is green, `/health` is green, the status is 200 and
+   * the markup is right. The only observable is a console error on load, which nobody watches.
+   */
   const dep = recipe("deploy");
   assert.match(dep, /backup-remote/, "it deploys without backing the store up first");
+  assert.match(dep, /live-scripts-parse/, "a deploy never asks whether the page's scripts parse");
+  /**
+   * ⛔ AND WHETHER THE PAGE IS TALKING ABOUT THE PRODUCT OR ABOUT THE TOOL. `state it with
+   * \`splits_on\`` reached a reviewer. The suite had an assertion against exactly that and could not
+   * reach the line — so this one runs against the page that went out.
+   */
+  assert.match(dep, /no-field-names-on-a-page/, "a deploy never asks whether a field name reached a reader");
+  /**
+   * ⛔ AND WHETHER THE PAGE CAN REACH ITS OWN ENDPOINTS. Every write from a hosted page 404d for as
+   * long as the hosted page existed — a root-relative url loses the project, and the LOCAL stack
+   * serves at the root, where the defect cannot occur. So every path anybody tests against is the
+   * one that works, and only the served page can answer.
+   */
+  assert.match(dep, /page-can-reach-what-it-fetches/, "a deploy never asks whether the page's own urls resolve");
+  /** ⛔ `--from`, so the page list is the instance's own answer rather than one somebody maintains. */
+  assert.match(dep, /--from/, "the script check runs against a hand-written page list, which goes stale");
   assert.match(dep, /remote-doctor/, "nothing reads the store after the deploy");
   /** ⛔ After, not before: a deploy healthy against a half-migrated store is the failure to catch. */
   assert.ok(dep.indexOf("rebuild-remote") < dep.indexOf("remote-doctor"), "the store is read before the deploy lands");

@@ -3523,14 +3523,26 @@ export const Prototype = z
       .array(z.object({ label: z.string(), to: z.string().optional() }).strict())
       .default([]),
     /**
-     * This prototype's answer to the question the set splits on — `splits_on` below.
+     * This prototype's answer on each axis the set splits on — `{ <axis id>: <answer> }`.
+     *
+     * ⛔ SEVERAL AXES, BECAUSE ONE WAS WRONG THE DAY IT SHIPPED.
+     *
+     * Peter: *"It's going to split on different products - CRE vs private lending, then also on
+     * roles"*. A single `is:` could say "CRE" or "admin" and never both, so the first real use of
+     * this model would have had to fold two independent facts into one string — "CRE admin" — and
+     * from there nothing can answer *which prototypes cover private lending* or *is there an admin
+     * view of every product line*, which are the only questions a split like that is for.
      *
      * ⛔ THE ANSWER, NOT THE NAME. "CRE — loan processor" is a title somebody wrote for a reader;
-     * `is: loan processor` is which side of the split this one is, and those are different strings
-     * on purpose. A chooser built from titles alone cannot tell you that two of five prototypes are
-     * both the admin, or that nothing covers the signed-out case.
+     * `is: { line: CRE, role: loan processor }` is where this one sits. A chooser built from titles
+     * alone cannot tell you that two of five prototypes are the same combination, or that nothing
+     * covers signed-out.
+     *
+     * ⛔ A PLAIN STRING IS STILL ACCEPTED, and means the first axis. Corpora were written against
+     * the single-axis form within the hour, and a schema that refuses them turns an improvement
+     * into a migration somebody has to be told about.
      */
-    is: z.string().optional(),
+    is: z.union([z.string(), z.record(z.string())]).optional(),
     /** Which layout files it was drawn from, so a reader can go and look. */
     from: z.array(z.string()).default([]),
     drawn_at: z.string().optional(),
@@ -3559,11 +3571,98 @@ export type Prototype = z.infer<typeof Prototype>;
  */
 export const PrototypeFile = z
   .object({
-    /** The question the selection asks, in the project's own words. */
-    splits_on: z.string().optional(),
+    /**
+     * The dimensions this product's prototypes split on, named by the project — in order.
+     *
+     * ⛔ A LIST, NOT A SENTENCE. Peter: *"It's going to split on different products - CRE vs private
+     * lending, then also on roles"*. Two independent facts about a prototype, and one string could
+     * hold only one of them.
+     *
+     * ⛔ AND EACH ONE CARRIES ITS VALUES, WHICH IS WHAT MAKES THE SURFACE A SELECTOR.
+     *
+     * Peter: *"let's allow users to specify their own dimensions for the prototype - 'role', as an
+     * example, and 'product line' as another, and let them specify the values"*, then *"they should
+     * be able to select the appropriate dimensions and that will bring up the right prototype"*.
+     *
+     * Without values there is nothing to choose BETWEEN: a reader got one button per declared
+     * prototype, which is a list of what exists rather than a way of asking for what they want. He
+     * looked at it and said *"wtf is this? this doesn't seem like a selector of any kind, seems like
+     * a barf of information"* — correctly. With values, the surface is one control per dimension,
+     * and the combination picks the prototype.
+     *
+     * ⛔ AND A COMBINATION NOTHING COVERS IS THE MOST USEFUL THING IT CAN SHOW. Four values across
+     * two dimensions is four possible products; three prototypes means one of them does not exist,
+     * and that was invisible when the surface could only list what had been declared.
+     *
+     * `label` is the dimension's NAME, shown to a reader — "Role", "Product line". ⛔ Never derived
+     * from `id`: a surface that title-cased `line` into a label would be putting words in the
+     * project's mouth, and the id is a handle rather than a name.
+     */
+    splits_on: z
+      .union([
+        /** ⛔ One sentence still parses, and means a single dimension. See `Prototype.is`. */
+        z.string(),
+        z.array(
+          z
+            .object({
+              id: z.string().min(1),
+              label: z.string().min(1),
+              /**
+               * What this dimension can be. ⛔ Empty is honest — a dimension somebody has named and
+               * not filled in — and `check` says so rather than this refusing a half-authored file.
+               */
+              values: z.array(z.string().min(1)).default([]),
+            })
+            .strict()
+        ),
+      ])
+      .optional(),
     prototypes: z.array(Prototype).default([]),
   })
   .strict();
+
+/** A dimension, however the file spelled it. One shape for every reader. */
+export interface Axis {
+  id: string;
+  label: string;
+  values: string[];
+}
+
+/**
+ * The dimensions, however the file spelled them.
+ *
+ * ⛔ VALUES FALL BACK TO WHAT THE PROTOTYPES ACTUALLY SAY, so a corpus written before dimensions had
+ * values still gets a working selector instead of empty dropdowns. Declared values win where they
+ * exist: the point of declaring them is to be able to name a combination NOTHING covers, which is
+ * invisible if the list is only ever read back off what has been declared.
+ */
+export function axesOf(
+  splitsOn: string | Array<{ id: string; label: string; values?: string[] }> | undefined,
+  prototypes: Array<{ is?: string | Record<string, string> }> = []
+): Axis[] {
+  if (!splitsOn) return [];
+  const listed = typeof splitsOn === "string" ? [{ id: "split", label: splitsOn }] : splitsOn;
+  return listed.map((ax, i) => {
+    const declared = (ax as { values?: string[] }).values ?? [];
+    if (declared.length) return { id: ax.id, label: ax.label, values: declared };
+    const seen: string[] = [];
+    for (const p of prototypes) {
+      const said = typeof p.is === "string" ? (i === 0 ? p.is : undefined) : p.is?.[ax.id];
+      if (said && !seen.includes(said)) seen.push(said);
+    }
+    return { id: ax.id, label: ax.label, values: seen };
+  });
+}
+
+/** A prototype's answers, however its `is` was spelled, keyed by axis id. */
+export function answersOf(
+  is: string | Record<string, string> | undefined,
+  axes: Array<{ id: string; label: string }>
+): Record<string, string> {
+  if (!is) return {};
+  if (typeof is === "string") return axes[0] ? { [axes[0].id]: is } : { split: is };
+  return is;
+}
 
 export const Style = z
   .object({
