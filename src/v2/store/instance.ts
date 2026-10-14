@@ -271,22 +271,79 @@ export interface Materialized {
   listening: Array<{ session: string; at: string }>;
 }
 
+/**
+ * The corpus this process last read out of a project, and what it was at when it did.
+ *
+ * ⛔ 19 MB WAS READ OUT OF NEON TO SERVE EVERY PAGE VIEW — `documents()` alone is 1729ms against
+ * the instance for 169 rows, measured. Two page views a second apart read the same 19 MB twice, and
+ * the second one learned nothing the first had not.
+ *
+ * ⛔ KEYED ON A FINGERPRINT, NOT ON TIME. A TTL would serve a corpus somebody has just changed, and
+ * the whole guarantee of this surface is that what you are reviewing is what is there. The
+ * fingerprint covers the document count, the latest write, the latest deprecation and the log's
+ * last `seq` — so a write, a deprecation or an appended event all miss the cache, and nothing else
+ * does.
+ *
+ * ⛔ AND THE DIRECTORY IS STILL BUILT PER REQUEST, deliberately. Handing two requests one directory
+ * would be faster again and would share mutable state between them: `writeBack` diffs the files on
+ * disk against what the request was given, so a stray write by one request would be read as the
+ * other's. The expensive part was the network, not the 51ms of local writes.
+ */
+const READ = new Map<string, { fp: string; documents: Record<string, string>; events: StoredEvent[] }>();
+
+/** ⛔ A bound, because a corpus is ~19 MB in memory and an instance serves many projects. */
+const READ_CEILING = 4;
+
+/**
+ * Forget what this process read, because it has just changed it.
+ *
+ * ⛔ BELT AND BRACES OVER THE FINGERPRINT, AND THE REASON IS A NARROW BUT REAL HOLE IN IT.
+ * `updatedAt` is stamped by whichever node performs the write, not by the database — so two writers
+ * with skewed clocks can leave `max(updated_at)` unmoved while the content changed, and a write
+ * that touches an existing document without appending an event moves neither the count nor `seq`.
+ * The window needs clock skew AND an equal document count AND no logged event, which is why it is
+ * narrow rather than impossible.
+ *
+ * Calling this after a write removes the case entirely for the process that did the writing, which
+ * is every write that goes through this instance. Across processes the fingerprint is still what
+ * decides, and that is worth saying out loud rather than implying it is exact.
+ */
+export function forgetRead(projectId: string): void {
+  READ.delete(projectId);
+}
+
 export async function materializeProject(store: ProjectStore): Promise<Materialized> {
   /**
-   * ⛔ ONE ROUND TRIP, NOT TWO. The documents and the log are independent reads, and
-   * asking for the second only after the first arrived cost a full trip — 90ms against
-   * Neon, on every single request, for nothing. `scripts/bench-store.mjs` is where that
-   * number came from and is how to check it again.
-   *
-   * ⛔ PRESENCE RIDES ALONG IN THE SAME TRIP, for exactly that reason. It is read on every request
-   * because `/api/v2/presence` is a GET like any other, and a third serial round trip to answer
-   * "is anybody listening" would have made the cheapest question on the instance the slowest.
+   * ⛔ PRESENCE IS NEVER CACHED, AND IT IS THE REASON THIS IS NOT ONE ROUND TRIP ANY MORE.
+   * `/api/v2/presence` is a GET like any other and the answer changes without the corpus changing,
+   * so it is read every time — in parallel with the fingerprint, which is the only other thing
+   * needed to find out whether anything else has to be read at all.
    */
-  const [documents, events, listening] = await Promise.all([
-    store.documents(),
-    store.since(0, LOG_CEILING),
-    store.listening(PRESENCE_MS),
-  ]);
+  const [fp, listening] = await Promise.all([store.fingerprint(), store.listening(PRESENCE_MS)]);
+
+  const had = READ.get(store.projectId);
+  let documents: Record<string, string>;
+  let events: StoredEvent[];
+
+  if (had && had.fp === fp) {
+    documents = had.documents;
+    events = had.events;
+  } else {
+    /**
+     * ⛔ ONE ROUND TRIP, NOT TWO. The documents and the log are independent reads, and
+     * asking for the second only after the first arrived cost a full trip — 90ms against
+     * Neon, on every single request, for nothing. `scripts/bench-store.mjs` is where that
+     * number came from and is how to check it again.
+     */
+    [documents, events] = await Promise.all([store.documents(), store.since(0, LOG_CEILING)]);
+    /** ⛔ Oldest out first, so a busy instance holds a bounded number of corpora. */
+    if (READ.size >= READ_CEILING && !READ.has(store.projectId)) {
+      const oldest = READ.keys().next().value;
+      if (oldest !== undefined) READ.delete(oldest);
+    }
+    READ.set(store.projectId, { fp, documents, events });
+  }
+
   const dir = materialize(documents);
   const logHad = writeLog(dir, events);
   writeSessions(dir, listening);
@@ -378,6 +435,13 @@ export async function writeBack(
   const now = await store.documents();
   const conflict = [...changed, ...removed].filter((k) => (now[k] ?? undefined) !== (before[k] ?? undefined));
   if (conflict.length) return { conflict };
+
+  /**
+   * ⛔ THE CACHED READ GOES BEFORE THE WRITES, NOT AFTER THEM. Dropping it afterwards leaves a
+   * window in which this process has written and another request can still be handed what was read
+   * before — small, and exactly the kind of window that turns into "the page showed me old truth".
+   */
+  forgetRead(store.projectId);
 
   for (const key of changed) await store.put(key, after[key]!);
   /** ⛔ Deprecated, never deleted — the store has no delete path to call. */

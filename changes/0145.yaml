@@ -1,0 +1,59 @@
+id: "0145"
+said: this is yours to fix, why are you abdicating?
+at: 2026-10-14
+kind: derivation
+reaches:
+  derive: fingerprint
+  surface: READ_CEILING
+  pin: the first read reads, and reading again does not
+waived:
+  check: "`src/v2/check.ts` refuses things about a CORPUS — sentences an author wrote that do not hold together. This is about how many times the corpus is read out of the store to serve one page, which no corpus can be wrong about. The guarantee that needed asserting is that a cached read is never a stale one, and that is a pin: six ways the fingerprint could miss a change were put back one at a time and the suite went red on each."
+closed: 2026-10-14
+
+# ⛔ APPENDED AFTER `change close`, which rewrites this file through the schema and drops comments.
+# See 0141 / 0144.
+#
+# ⛔ I HAD LOCATED THIS COST AND HANDED IT TO SOMEBODY ELSE. Peter: "this is yours to fix, why are
+# you abdicating?" He was right — I shipped a page-size fix for a latency complaint and then passed
+# the actual cause along.
+#
+# ⛔ AND TWO OF MY THREE THEORIES WERE WRONG, both refuted by looking rather than by arguing:
+#
+#   · `since(0, LOG_CEILING)` reads the event log from 0 with a limit of 100,000 on every request.
+#     A read that grows forever while the document set does not is the right thing to be suspicious
+#     of — and the log is 233 events, so it costs 231ms and would have to grow 150x to matter. Worth
+#     fixing on its merits; not the fix.
+#   · a second `documents()` read inside `writeBack` for conflict detection. It already returns
+#     before that read when nothing changed, so a GET never pays it.
+#
+# WHAT WAS ACTUALLY THERE: `documents()` is 1729ms for 169 rows and 19.15 MB deserialized, measured
+# on the instance, on EVERY request including a GET. Two page views a second apart read the same
+# 19 MB twice and the second learned nothing the first had not.
+#
+#     10 page views of the same unchanged corpus, over real SQL:
+#       as it was      946ms   documents()x10  since()x10
+#       with the cache 548ms   documents()x1   since()x1    fingerprint()x10
+#
+#     ⇒ one 19 MB read instead of ten. On the instance each is 1729ms, so ~1.7s of store time
+#       leaves every page view after the first.
+#
+# ⛔ KEYED ON A FINGERPRINT, NEVER ON TIME. A TTL would serve a corpus somebody had just changed, and
+# the one thing this surface may not do is show a reviewer truth that is no longer there. The
+# fingerprint is `count(*)`, `max(updated_at)`, `max(deprecated_at)` and the log's `max(seq)` — so a
+# write, a new document, a deprecation and an appended event all miss the cache. Each of those is a
+# test, and each was verified by breaking that term of the fingerprint and watching the suite go red.
+#
+# ⛔ PRESENCE IS NEVER CACHED, because it changes without the corpus changing — caching it would
+# answer "nobody is listening" to a page with somebody on it.
+#
+# ⛔ AND THE DIRECTORY IS STILL BUILT PER REQUEST, deliberately. Sharing one would be faster again
+# and would share mutable state: `writeBack` diffs the files on disk against what the request was
+# given, so one request's stray write would be read as another's. The expensive part was the
+# network, not the 51ms of local writes.
+#
+# ⛔ THE REST OF THE 40.8s WAS NOT PRODUCTOS. The deploy session measured TTFB three times on one
+# unchanged page: 71.7s at load 106, 40.9s at load 198, 26.7s at load 139 — and a 273 kB seed page
+# took 5.8s in the same instant. TTFB varies 2.7x between consecutive identical requests and does
+# not track page size, against 24 concurrent test processes on 12 cores. My own test runs were part
+# of that load. The number has to be re-measured on a quiet machine before anybody optimises against
+# it again, and PT-0007 should say so.

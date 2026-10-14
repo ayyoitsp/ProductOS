@@ -54,6 +54,21 @@ export interface ProjectStore {
    */
   documents(): Promise<Record<string, string>>;
 
+  /**
+   * What the document set is AT, without reading it.
+   *
+   * ⛔ EVERY REQUEST READ 19 MB TO SERVE A PAGE, and `documents()` is 1729ms of it against Neon —
+   * measured on the instance, 169 rows. The page then parses all of it and renders one section.
+   * Nothing about that read changes between two page views a second apart, and this is how a caller
+   * finds that out for the price of one aggregate row.
+   *
+   * ⛔ IT COVERS DEPRECATION AND THE LOG, NOT JUST WRITES. A document deprecated rather than
+   * updated changes what a corpus contains while leaving `max(updated_at)` alone; an appended event
+   * changes what a reader of the log sees while leaving the documents alone. A fingerprint that
+   * missed either would serve a stale corpus, which is worse than a slow one.
+   */
+  fingerprint(): Promise<string>;
+
   put(path: string, source: string, projection?: Record<string, unknown>): Promise<void>;
   /** ⛔ Nothing is deleted. */
   deprecate(path: string): Promise<void>;
@@ -164,6 +179,26 @@ function projectStore(db: Db, projectId: string): ProjectStore {
       const out: Record<string, string> = {};
       for (const r of rows) out[r.path] = r.source;
       return out;
+    },
+
+    /**
+     * ⛔ AGGREGATES, NOT ROWS — the whole point is to not read the documents. Two selects rather
+     * than one because they are different tables, and both are covered by the project index.
+     */
+    async fingerprint() {
+      const [docs] = await db
+        .select({
+          n: sql<number>`count(*)`,
+          updated: sql<string>`coalesce(max(${documents.updatedAt})::text, '')`,
+          gone: sql<string>`coalesce(max(${documents.deprecatedAt})::text, '')`,
+        })
+        .from(documents)
+        .where(eq(documents.projectId, projectId));
+      const [log] = await db
+        .select({ seq: sql<number>`coalesce(max(${events.seq}), 0)` })
+        .from(events)
+        .where(eq(events.projectId, projectId));
+      return [docs?.n ?? 0, docs?.updated ?? "", docs?.gone ?? "", log?.seq ?? 0].join("|");
     },
 
     async put(path, source, projection) {
