@@ -56,6 +56,18 @@ export interface LoggedEvent {
   via?: string;
   /** What it is about: a ref, a scope, a note id. */
   ref: string;
+  /**
+   * ⛔ THE DOCUMENT A PAGE WRITE CHANGED, and it is not `ref`.
+   *
+   * `ref` is a PRODUCT reference — a scope, a prototype id, a statement — which is the right thing
+   * for a reader and useless to anything that has to decide whether a file may be overwritten. An
+   * import that mapped one to the other would be guessing in the one place a wrong answer deletes
+   * somebody's work: a disk import overwrote every document unconditionally and destroyed a 55KB
+   * feature and then a set of dimensions somebody had just named on the page.
+   *
+   * So a write that moves a corpus document says which one, and the importer keeps those.
+   */
+  wrote?: string;
   /** One line a person can read, in the tense of the thing that happened. */
   says: string;
   /**
