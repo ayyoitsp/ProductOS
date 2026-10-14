@@ -547,7 +547,38 @@ export interface Resolved {
   awaiting: Map<string, Rule[]>;
 }
 
+/**
+ * What rule reaches what, worked out once per corpus.
+ *
+ * ⛔ THIS WAS 62.6% OF THE TIME IT TOOK TO SERVE A PAGE, and not because it is slow — because it was
+ * recomputed from scratch for every scope.
+ *
+ * Measured on 17.5 MB of real Bilrost: the page a reader arrives at took **8.1 seconds** to render,
+ * of which `selects` was 6.5s of self time. `resolveRules` walks every scope x every exchange x
+ * every rule, and twelve call sites ask for it — `gridFor` once per scope (127 times on that
+ * corpus), `renderExchanges` once per scope, `stampFor` once per ref. So the whole-corpus walk ran
+ * hundreds of times to render one section.
+ *
+ * ⛔ A `WeakMap` ON THE CORPUS, WHICH IS THE PATTERN THIS CODEBASE ALREADY USES — `goesCache` in
+ * `page.ts` does exactly this for the same reason. Keying on the object rather than on an id is
+ * what makes it correct rather than merely fast: a corpus is produced fresh by `loadCorpus`, so a
+ * changed corpus is a different object and gets its own answer. Nothing has to remember to
+ * invalidate anything, which is the only kind of cache worth having on a derivation.
+ *
+ * ⛔ AND IT IS A PURE FUNCTION OF `c`, asserted by the fact that every one of those twelve callers
+ * passes nothing else. If it ever takes a second argument, this memo is wrong and has to key on it.
+ */
+const resolved = new WeakMap<Corpus, Resolved>();
+
 export function resolveRules(c: Corpus): Resolved {
+  const had = resolved.get(c);
+  if (had) return had;
+  const out = resolveRulesUncached(c);
+  resolved.set(c, out);
+  return out;
+}
+
+function resolveRulesUncached(c: Corpus): Resolved {
   const inherited = new Map<string, Rule>();
   const awaiting = new Map<string, Rule[]>();
   const constrained = new Map<string, Rule[]>();
