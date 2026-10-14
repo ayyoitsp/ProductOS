@@ -8,7 +8,7 @@ import { stampFor, claimHash } from "../../v2/stamp.js";
 import { servesHash } from "../../v2/demonstrate.js";
 import { ANALYSES, sweep, sweeps, outstanding } from "../../v2/analyse.js";
 import { resolveRef } from "../../v2/ref.js";
-import { loadCorpus } from "../../v2/load.js";
+import { loadCorpus, memoryStore } from "../../v2/load.js";
 import { SLOTS, SLOT_ASKS_SHORT, Steer, type Note as NoteT, type SlotName, type View, statements } from "../../v2/schema.js";
 import YAML from "yaml";
 import { gridFor, renderGridText, actsFor, gateFor } from "../../v2/grid.js";
@@ -20,14 +20,14 @@ import { fileNote, closeNote, replyToNote } from "../../v2/notes.js";
 import { snapshotStyle, styleOf, styleDrift, styleAt, wearTheme } from "../../v2/appcss.js";
 import { watchCorpus } from "../../v2/watch.js";
 import { inbox } from "../../v2/inbox.js";
-import { looksLikeInstance, instanceOf, mirror, act as remoteAct, note as remoteNote, inbox as remoteInbox, preview as remotePreview, whoami as remoteWhoami, presence as remotePresence, say as remoteSay, close as remoteClose, thread as remoteThread } from "../../v2/client.js";
+import { looksLikeInstance, instanceOf, mirror, act as remoteAct, note as remoteNote, inbox as remoteInbox, preview as remotePreview, whoami as remoteWhoami, presence as remotePresence, say as remoteSay, close as remoteClose, thread as remoteThread, documents, putDocument } from "../../v2/client.js";
 import { lineFor } from "../../v2/log.js";
 import { drawFromRoute } from "../../v2/draw.js";
 import { holdsOn, whyHeld } from "../../v2/held.js";
 import { selectionOf, gapsIn, doorOpensOn } from "../../v2/selection.js";
 import { walkOf } from "../../v2/walk.js";
 import { axesOf } from "../../v2/schema.js";
-import { writePrototypes, writeWithin } from "../../v2/draw-write.js";
+import { writePrototypes, writeWithin, diskPages, heldPages, type Pages } from "../../v2/draw-write.js";
 import { everyView, everyViewV1, isResolved, resolveRoute } from "../../v2/routes.js";
 import { spokenFor } from "../../v2/spoken.js";
 import { idiomOf, proposeScreen } from "../../v2/propose.js";
@@ -2204,7 +2204,7 @@ export function v2Command(): Command {
       takeStyle(into);
       console.log("");
       console.log(pc.bold("Screens, from the code"));
-      drawEverything(into, false);
+      drawEverything(into, diskPages(into), into, false);
       console.log("");
       console.log(pc.bold("Screens, from the truth — where no code renders them"));
       proposeScreens(into);
@@ -2345,7 +2345,7 @@ export function v2Command(): Command {
        * first run after somebody stated what the set splits on would have silently deleted it — a
        * generator throwing away the one field on this file that only a person can write.
        */
-      writePrototypes(into, out, corpus.splitsOn);
+      writePrototypes(diskPages(into), out, corpus.splitsOn);
       console.log(pc.green("✓"), `written into ${path.relative(process.cwd(), file)}`);
       console.log(pc.dim("  re-run this after the layouts change — the chrome is output, not a document"));
 
@@ -2444,7 +2444,7 @@ export function v2Command(): Command {
           from: [],
         },
       ];
-      writePrototypes(into, next, corpus.splitsOn);
+      writePrototypes(diskPages(into), next, corpus.splitsOn);
       console.log(pc.green("✓"), `${id} — ${title}, opening on ${o.startsAt}`);
       if (!o.is && corpus.splitsOn)
         console.log(pc.yellow("!"), `this set splits on "${corpus.splitsOn}" and this one gives no answer — add --is`);
@@ -2468,7 +2468,7 @@ export function v2Command(): Command {
     .action((question: string) => {
       const into = protoDir();
       const corpus = loadCorpus(into);
-      writePrototypes(into, corpus.prototypes, question);
+      writePrototypes(diskPages(into), corpus.prototypes, question);
       console.log(pc.green("✓"), `splits on: ${question}`);
       const without = corpus.prototypes.filter((p) => !p.is);
       if (without.length)
@@ -2583,7 +2583,7 @@ export function v2Command(): Command {
         up = found?.view.within;
       }
 
-      const written = writeWithin(dir, scopeId, viewId, o.of);
+      const written = writeWithin(diskPages(dir), scopeId, viewId, o.of);
       if (!written) {
         console.error(pc.red("✗"), `could not find "${viewId}" under "${scopeId}" to write it into`);
         process.exit(1);
@@ -2712,8 +2712,23 @@ export function v2Command(): Command {
      * replaced an 11,780-byte drawing with 4,231 bytes of placeholders and reported success.
      */
     .option("--anyway", "replace an existing drawing even if this run inlined no components")
-    .action((ref: string | undefined, o: { route?: string; into?: string; dryRun?: boolean; all?: boolean; anyway?: boolean }) => {
-      if (o.all) return drawEverything(path.resolve(o.into ?? "."), Boolean(o.dryRun));
+    /**
+     * ⛔ THE CODE AND THE TRUTH ARE TWO PLACES. `--into` says where the drawings land — a directory,
+     * or an instance — and this says which checkout to read the components out of. Defaults to the
+     * working directory, which is where `components_dir` is declared.
+     */
+    .option("--code <dir>", "the checkout to read components and stylesheets from", ".")
+    .option("--token <t>", "bearer token for an instance (or $PRODUCTOS_TOKEN)")
+    .action(async (ref: string | undefined, o: { route?: string; into?: string; dryRun?: boolean; all?: boolean; anyway?: boolean; code?: string; token?: string }) => {
+      if (o.all) {
+        /**
+         * ⛔ A URL MEANS THE TRUTH LIVES THERE. The code still comes from a checkout — `--code`, or
+         * the working directory, which is where `components_dir` is declared.
+         */
+        if (looksLikeInstance(o.into)) return drawEverythingOn(o.into!, o.code ?? ".", Boolean(o.dryRun), o.token);
+        const dir = path.resolve(o.into ?? ".");
+        return drawEverything(dir, diskPages(dir), dir, Boolean(o.dryRun));
+      }
       if (!ref) {
         console.error(pc.red("✗"), "name a screen as <scope>#<view>, or pass --all");
         process.exit(1);
@@ -2931,8 +2946,7 @@ export function v2Command(): Command {
       const origin = repoOf(route);
       if (!origin) console.log(pc.yellow("!"), "the component is not in a git repository, so nothing records where this came from");
       const prov = origin ? { from: path.relative(origin.root, route), at: origin.head } : undefined;
-      const written = writeSketchHtml(
-        into,
+      const written = writeSketchHtml(diskPages(into),
         scopeId,
         viewId,
         drawn.html,
@@ -2952,7 +2966,7 @@ export function v2Command(): Command {
        * `readings/` was empty in every corpus. If it can be generated, generate it.
        */
       if (prov) {
-        const recorded = writeDrawnReading(into, scopeId, viewId, prov);
+        const recorded = writeDrawnReading(diskPages(into), scopeId, viewId, prov);
         console.log(pc.dim(`  recorded as a reading in ${path.relative(process.cwd(), recorded)}`));
       }
       console.log(pc.dim("  re-run this after the component changes — the drawing is output, not a document"));
@@ -3376,7 +3390,94 @@ function routeHere(repoRoot: string, recorded: string): string | undefined {
   return undefined;
 }
 
-function drawEverything(into: string, dryRun: boolean): void {
+/**
+ * ⛔ WHERE THE TRUTH LIVES AND WHERE THE CODE LIVES ARE TWO DIFFERENT PLACES, and conflating them is
+ * why the corpus had two writable copies.
+ *
+ * Peter: *"what is a 'disk file' anyways? why aren't we operating this on 4100 where we're supposed
+ * to? what's going on?"* and then *"uh, duh? no idea why it wouldn't do that in the first place"*.
+ *
+ * There is no good reason. Drawing reads a CODEBASE — components for the mock, stylesheets for the
+ * theme — which genuinely lives in a checkout. It writes TRUTH, which lives wherever the corpus
+ * lives, and for a hosted product that is the instance. Those two facts were collapsed into one
+ * `--into <dir>`, so the generator could only write to a directory and the directory then had to be
+ * pushed over the instance wholesale, taking anything authored there with it.
+ *
+ * So: `code` is the checkout to read, `pages` is where documents land, and they are given
+ * separately.
+ */
+/** Every document a `Pages` is holding, as the map `memoryStore` eats. */
+function filesOf(pages: Pages): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const key of pages.list()) out[key] = pages.read(key);
+  return out;
+}
+
+/**
+ * Draw every screen, writing the truth to an instance and reading the code from a checkout.
+ *
+ * ⛔ THE INSTANCE IS THE CORPUS. Peter: *"why aren't we operating this on 4100 where we're supposed
+ * to?"* — the answer was that the generator could only write to a directory, so a hosted corpus had
+ * to be mirrored, drawn over and pushed back, and every page-authored change died in the push.
+ *
+ * ⛔ PULL, DRAW IN MEMORY, PUSH ONLY WHAT MOVED. Sending the whole corpus back is the overwrite this
+ * exists to end; sending the documents the sweep actually changed leaves everything else exactly as
+ * the instance has it, including anything somebody authored there a minute ago.
+ *
+ * ⛔ AND IT GOES THROUGH THE ONE DOOR, not a route of its own. `document` is an `author` intent: it
+ * writes truth and claims nothing about anybody agreeing to it, which is the correct authority for a
+ * generator. A second write path would be a second set of gates to keep in step.
+ */
+async function drawEverythingOn(url: string, code: string, dryRun: boolean, token?: string): Promise<void> {
+  const i = instanceOf(url, token);
+  let files: Record<string, string>;
+  try {
+    files = await documents(i);
+  } catch (e) {
+    console.error(pc.red("✗"), `could not read the corpus at ${url}: ${(e as Error).message}`);
+    process.exit(1);
+  }
+  if (!Object.keys(files).length) {
+    console.error(pc.red("✗"), `${url} holds no corpus documents`);
+    process.exit(1);
+  }
+
+  const pages = heldPages(files);
+  console.log(pc.dim(`reading code from ${path.resolve(code)}, writing truth to ${url}`));
+  drawEverything(path.resolve(code), pages, undefined, dryRun);
+
+  const moved = pages.moved();
+  if (!moved.length) {
+    console.log(pc.dim("\n  nothing moved — no document needed writing back"));
+    return;
+  }
+  if (dryRun) {
+    console.log(pc.dim(`\n  ${moved.length} document(s) would be written back; nothing sent`));
+    for (const key of moved) console.log(pc.dim(`    ${key}`));
+    return;
+  }
+
+  console.log("");
+  let sent = 0;
+  for (const key of moved) {
+    const out = await putDocument(i, key, pages.read(key));
+    if (out.ok) {
+      sent++;
+      console.log(pc.green("✓"), pc.dim(`${key} → ${url}`));
+    } else {
+      /**
+       * ⛔ ONE REFUSAL DOES NOT ABANDON THE REST, AND NONE IS SWALLOWED. A document the instance
+       * will not take is a thing to look at; the other nineteen are still worth writing, and a
+       * sweep that stopped at the first would leave the corpus half drawn with no account of where.
+       */
+      console.error(pc.red("✗"), `${key}: ${out.why ?? "refused"}`);
+    }
+  }
+  console.log(pc.green("✓"), `${sent} of ${moved.length} documents written to ${url}`);
+}
+
+function drawEverything(code: string, pages: Pages, corpusAt: string | undefined, dryRun: boolean): void {
+  const into = code;
   /**
    * ⛔ BOTH TREES, OR THE ONE NOBODY SWEEPS QUIETLY ROTS. A repo can hold an Exchange corpus under
    * `truth/` and a products corpus under `productos/products/`, and this read only the first — so
@@ -3387,7 +3488,22 @@ function drawEverything(into: string, dryRun: boolean): void {
   let corpus;
   let readFailed: string | undefined;
   try {
-    corpus = loadCorpus(into);
+    /**
+     * ⛔ READ FROM WHERE IT IS BEING WRITTEN. Loading the checkout's copy and writing to the
+     * instance would draw against truth the instance does not have — a sweep deciding what to
+     * redraw from the wrong corpus, which is the two-copies problem wearing a hat.
+     */
+    /**
+     * ⛔ BOTH ROOTS ARE THE SAME ROOT, AND I GAVE IT TWO. `loadCorpus(root)` builds `<root>/truth`
+     * and `memoryStore(root, files)` strips `root` to get its keys — so passing the CODE directory
+     * as one and "" as the other asked the map for `/Users/.../truth/x.md` when it is keyed
+     * `truth/x.md`. Every lookup missed, the corpus came back empty, and the sweep silently drew
+     * only the v1 tree it found in the checkout: 16 screens where the instance holds 92.
+     *
+     * ⛔ CAUGHT BY TWO NUMBERS THAT SHOULD HAVE AGREED — 16 against 92 — rather than by an error.
+     * Nothing threw; a corpus of nothing is a valid corpus.
+     */
+    corpus = corpusAt ? loadCorpus(corpusAt) : loadCorpus("", memoryStore("", filesOf(pages)));
   } catch (e) {
     readFailed = (e as Error).message;
   }
@@ -3486,7 +3602,7 @@ function drawEverything(into: string, dryRun: boolean): void {
     const origin = repoOf(route);
     const written = writeSketchHtml(
       // ⛔ The tree this view came out of, which is not always the one the sweep was aimed at.
-      viewRoot ?? into,
+      diskPages(viewRoot ?? into),
       scopeId(scope),
       view.id,
       drawn.html,
@@ -3598,7 +3714,7 @@ function proposeScreens(into: string, ref?: string): void {
           console.log(pc.yellow("?"), `${scope}#${view.id} — declares no parts, so there is nothing to place. Give it its parts.`);
           continue;
         }
-        if (!writeSketchHtml(into, scope, view.id, html)) {
+        if (!writeSketchHtml(diskPages(into), scope, view.id, html)) {
           console.log(pc.red("✗"), `${scope}#${view.id} — the corpus would not take it`);
           continue;
         }
@@ -3653,7 +3769,7 @@ function connectAll(into: string, dryRun: boolean): void {
           ?.scope.views.find((v) => v.id === viewId)
           ?.parts.find((p) => p.id === partId);
         if (part?.role === "navigates") {
-          if (writeLeadsTo(into, c.from, c.to)) wrote++;
+          if (writeLeadsTo(diskPages(into), c.from, c.to)) wrote++;
         } else derived.push(c);
       }
       console.log("");

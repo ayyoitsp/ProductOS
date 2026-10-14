@@ -16,6 +16,84 @@ import { THE_GENERATOR } from "./held.js";
 
 const INDENT = "    ";
 
+/**
+ * Where a writer's bytes come from and go — the counterpart of `Store` in `load.ts`.
+ *
+ * ⛔ TWO WRITABLE COPIES OF ONE CORPUS, AND NOTHING MERGING THEM.
+ *
+ * Peter: *"what is a 'disk file' anyways? why aren't we operating this on 4100 where we're supposed
+ * to? what's going on?"*
+ *
+ * He is right and the answer is embarrassing. Every writer here reached for `fs` directly, so a
+ * generator could only ever write to a DIRECTORY — and the page writes to the INSTANCE. The loop was
+ * therefore: draw into a checkout, push the whole thing to the instance, and lose whatever anybody
+ * had authored there. The guard in `importFromDisk` stops that happening silently; it does not stop
+ * there being two copies.
+ *
+ * ⛔ `load.ts` ALREADY SOLVED THIS AND THE WRITERS IGNORED IT. Its header says it plainly: the
+ * filesystem is *"STORAGE BEHIND THE API, not something a client knows about"*, so there is one
+ * parser and exactly two implementations of "give me these bytes". This is the same seam for the
+ * other direction, so there is one line-surgery implementation and two places it can land.
+ *
+ * ⛔ AND IT IS SYNCHRONOUS, DELIBERATELY. The surgery is the part that has corrupted a corpus twice
+ * by getting block bounds wrong; making it async to suit a network would rewrite all of it for a
+ * reason that has nothing to do with correctness. An instance's documents are fetched up front into
+ * a map, the existing writers run against that, and whatever moved is sent back — which is exactly
+ * what `memoryStore` does for reading.
+ */
+export interface Pages {
+  /** Every file that could hold a scope, as keys this `Pages` can read. */
+  list: () => string[];
+  read: (file: string) => string;
+  write: (file: string, source: string) => void;
+  /**
+   * A document named relative to the corpus root, as a key THIS `Pages` uses.
+   *
+   * ⛔ BECAUSE TWO WRITERS CREATE A DOCUMENT RATHER THAN EDITING ONE — a drawn reading and the
+   * prototypes file. Editing finds its file by looking; creating has to name one, and a name is
+   * where the two implementations genuinely differ: a directory wants an absolute path and a store
+   * wants its own key. Asking the caller to know which would put the filesystem back in its hands.
+   */
+  keyFor: (relative: string) => string;
+}
+
+/** A corpus as a directory. What every local command uses. */
+export function diskPages(root: string): Pages {
+  return {
+    list: () => candidates(root),
+    read: (file) => fs.readFileSync(file, "utf-8"),
+    write: (file, source) => {
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, source);
+    },
+    keyFor: (relative) => path.join(root, relative),
+  };
+}
+
+/**
+ * A corpus somebody already handed us, keyed as the store keys it.
+ *
+ * ⛔ IT RECORDS WHAT MOVED rather than writing anywhere, because the caller is the only thing that
+ * knows how to put a document back — and a writer that posted for itself would be a second client
+ * of the one door.
+ */
+export function heldPages(files: Record<string, string>): Pages & { moved: () => string[] } {
+  const now = { ...files };
+  const touched = new Set<string>();
+  return {
+    list: () => Object.keys(now),
+    read: (file) => now[file] ?? "",
+    write: (file, source) => {
+      now[file] = source;
+      touched.add(file);
+    },
+    /** ⛔ The store's own key, which is the relative path — see `corpusFiles`. */
+    keyFor: (relative) => relative,
+    moved: () => [...touched],
+  };
+}
+
+
 /** Every markdown file that could hold a scope, in either corpus layout. */
 function candidates(root: string): string[] {
   const out: string[] = [];
@@ -70,20 +148,20 @@ export interface WrittenState {
  * instead would be writing the same two bugs again, in a file where nobody would think to look.
  */
 export function locateView(
-  root: string,
+  pages: Pages,
   scopeId: string,
   viewId: string
 ): { file: string; lines: string[]; start: number; end: number } | undefined {
   const scopeLeaf = scopeId.split("/").pop()!;
-  const files = candidates(root);
+  const files = pages.list();
   const holds = (raw: string, id: string): boolean =>
     new RegExp(`^id:\\s*["']?${id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}["']?\\s*$`, "m").test(raw);
   const ordered = [
-    ...files.filter((f) => holds(fs.readFileSync(f, "utf-8"), scopeId)),
-    ...files.filter((f) => !holds(fs.readFileSync(f, "utf-8"), scopeId)),
+    ...files.filter((f) => holds(pages.read(f), scopeId)),
+    ...files.filter((f) => !holds(pages.read(f), scopeId)),
   ];
   for (const file of ordered) {
-    const raw = fs.readFileSync(file, "utf-8");
+    const raw = pages.read(file);
     if (!new RegExp(`^id:\\s*["']?[^\\n]*\\b${scopeLeaf}["']?\\s*$`, "m").test(raw)) continue;
     const lines = raw.split("\n");
     const start = lines.findIndex((l) => l.trim() === `- id: ${viewId}`);
@@ -121,8 +199,8 @@ export function locateView(
  * stating it is one call with the reference checked, rather than a hand edit that silently points at
  * nothing.
  */
-export function writeWithin(root: string, scopeId: string, viewId: string, within: string): string | undefined {
-  const found = locateView(root, scopeId, viewId);
+export function writeWithin(pages: Pages, scopeId: string, viewId: string, within: string): string | undefined {
+  const found = locateView(pages, scopeId, viewId);
   if (!found) return undefined;
   const { file, lines, start, end } = found;
   const indent = (() => {
@@ -140,19 +218,19 @@ export function writeWithin(root: string, scopeId: string, viewId: string, withi
   if (!within) {
     if (at >= 0) {
       lines.splice(at, 1);
-      fs.writeFileSync(file, lines.join("\n"));
+      pages.write(file, lines.join("\n"));
     }
     return file;
   }
   const line = `${indent}within: ${JSON.stringify(within)}`;
   if (at >= 0) lines[at] = line;
   else lines.splice(start + 1, 0, line);
-  fs.writeFileSync(file, lines.join("\n"));
+  pages.write(file, lines.join("\n"));
   return file;
 }
 
 export function writeSketchHtml(
-  root: string,
+  pages: Pages,
   scopeId: string,
   viewId: string,
   html: string,
@@ -171,15 +249,15 @@ export function writeSketchHtml(
    * then held the other tree's screen and the second tree was never written at all — invisible,
    * because both files still parse and both still render.
    */
-  const files = candidates(root);
+  const files = pages.list();
   const holds = (raw: string, id: string): boolean =>
     new RegExp(`^id:\\s*["']?${id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}["']?\\s*$`, "m").test(raw);
   const ordered = [
-    ...files.filter((f) => holds(fs.readFileSync(f, "utf-8"), scopeId)),
-    ...files.filter((f) => !holds(fs.readFileSync(f, "utf-8"), scopeId)),
+    ...files.filter((f) => holds(pages.read(f), scopeId)),
+    ...files.filter((f) => !holds(pages.read(f), scopeId)),
   ];
   for (const file of ordered) {
-    const raw = fs.readFileSync(file, "utf-8");
+    const raw = pages.read(file);
     // The scope this file holds, however its id is spelled in either layout.
     if (!new RegExp(`^id:\\s*["']?[^\\n]*\\b${scopeLeaf}["']?\\s*$`, "m").test(raw)) continue;
     const lines = raw.split("\n");
@@ -298,7 +376,7 @@ export function writeSketchHtml(
         : []),
     ];
     lines.splice(insert, 0, ...block);
-    fs.writeFileSync(file, lines.join("\n"));
+    pages.write(file, lines.join("\n"));
     return file;
   }
   return undefined;
@@ -311,12 +389,12 @@ export function writeSketchHtml(
  * fresh each time is a graph nobody can correct. This is a decision software made; a person
  * overrules it by editing the line, and nothing regenerates it away.
  */
-export function writeLeadsTo(root: string, from: string, to: string): boolean {
+export function writeLeadsTo(pages: Pages, from: string, to: string): boolean {
   const [scopeId, viewId, partId] = from.split("#");
   if (!scopeId || !viewId || !partId) return false;
   const scopeLeaf = scopeId.split("/").pop()!;
-  for (const file of candidates(root)) {
-    const raw = fs.readFileSync(file, "utf-8");
+  for (const file of pages.list()) {
+    const raw = pages.read(file);
     if (!new RegExp(`^id:\\s*["']?[^\\n]*\\b${scopeLeaf}["']?\\s*$`, "m").test(raw)) continue;
     const lines = raw.split("\n");
     const viewAt = lines.findIndex((l) => l.trim() === `- id: ${viewId}`);
@@ -340,7 +418,7 @@ export function writeLeadsTo(root: string, from: string, to: string): boolean {
       if (/^\s*leads_to:/.test(lines[i]!)) return false;
     }
     lines.splice(partAt + 1, 0, `${pad}  leads_to: ${JSON.stringify(to)}`);
-    fs.writeFileSync(file, lines.join("\n"));
+    pages.write(file, lines.join("\n"));
     return true;
   }
   return false;
@@ -364,11 +442,9 @@ export function writeLeadsTo(root: string, from: string, to: string): boolean {
  * ⛔ AND IT NEVER CONFIRMS ANYTHING. It is support, below the line, and the line is crossed only by
  * a person's act. One generated source is a reason to ask a shorter question, never not to ask.
  */
-export function writeDrawnReading(root: string, scopeId: string, viewId: string, prov: Provenance): string {
-  const dir = path.join(root, "readings");
-  fs.mkdirSync(dir, { recursive: true });
+export function writeDrawnReading(pages: Pages, scopeId: string, viewId: string, prov: Provenance): string {
   const id = `drawn-${scopeId}-${viewId}`;
-  const file = path.join(dir, `${id}.yaml`);
+  const file = pages.keyFor(path.join("readings", `${id}.yaml`));
   /** ⛔ `at` is the commit, not a date — so the discrepancy check cannot compare it. Said, not guessed. */
   const lines = [
     "readings:",
@@ -390,7 +466,7 @@ export function writeDrawnReading(root: string, scopeId: string, viewId: string,
     `      by: ${THE_GENERATOR}`,
     "",
   ];
-  fs.writeFileSync(file, lines.join("\n"));
+  pages.write(file, lines.join("\n"));
   return file;
 }
 
@@ -412,9 +488,9 @@ export function writeDrawnReading(root: string, scopeId: string, viewId: string,
  * asked and left blank; absent is nobody having said yet. Those are different states and every
  * surface distinguishes them.
  */
-export function writePrototypes(root: string, protos: unknown[], splitsOn?: string | Array<{ id: string; label: string; values?: string[] }>): string {
-  const file = path.join(root, "prototypes.yaml");
-  fs.writeFileSync(
+export function writePrototypes(pages: Pages, protos: unknown[], splitsOn?: string | Array<{ id: string; label: string; values?: string[] }>): string {
+  const file = pages.keyFor("prototypes.yaml");
+  pages.write(
     file,
     YAML.stringify(splitsOn ? { splits_on: splitsOn, prototypes: protos } : { prototypes: protos })
   );
