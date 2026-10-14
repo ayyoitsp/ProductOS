@@ -125,7 +125,17 @@ const until = async (fn, what, ms = 15000) => {
  * cannot resolve `/api/v2/live` at all, so the behaviour under test never occurs and the test
  * passes over nothing.
  */
-export async function openPage(html, { exe = findBrowser(), url } = {}) {
+/**
+ * ⛔ A WIDTH, BECAUSE SOME LAYOUTS ONLY EXIST AT ONE.
+ *
+ * The side menu lives inside `@media (min-width: 62rem)` — a 19rem column cannot be afforded in a
+ * narrow window, and the control that moves the menu there is itself hidden below that width. So a
+ * test that drove the side menu in the default headless window measured the TOP menu and reported
+ * the side rules as not applying, which reads as the code being broken.
+ *
+ * Default unchanged, so every existing test measures exactly what it measured before.
+ */
+export async function openPage(html, { exe = findBrowser(), url, width, height } = {}) {
   if (!exe) throw new Error("no browser");
   /**
    * ⛔ `temp()` RATHER THAN `mkdtempSync`, EVEN THOUGH THE TEARDOWN BELOW ALREADY REMOVES THIS. The
@@ -146,6 +156,7 @@ export async function openPage(html, { exe = findBrowser(), url } = {}) {
       "--no-default-browser-check",
       "--disable-extensions",
       "--remote-debugging-port=0",
+      ...(width ? [`--window-size=${width},${height ?? 900}`] : []),
       `--user-data-dir=${path.join(dir, "profile")}`,
       "about:blank",
     ],
