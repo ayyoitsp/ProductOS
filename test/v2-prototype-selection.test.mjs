@@ -227,7 +227,15 @@ test("the selection reaches the page as a control per dimension", () => {
   const html = renderScopePage(c, c.scopes[0].scope.id) ?? "";
   assert.match(html, /data-walk-dim="role"/, "there is no control for the dimension");
   assert.match(html, /<span class="wdim-n">Role<\/span>/, "the control is not labelled with the dimension's name");
-  assert.match(html, /id="walk-combos"/, "the combinations do not travel with the page");
+  /**
+   * ⛔ THE COMBINATIONS MAP IS GONE, AND THAT IS THE IMPROVEMENT. It was a second derivation of what
+   * each prototype specifies, carried beside the rows that already said it — and two derivations of
+   * one fact is what this project spends most of its rules on. The dropdowns are filters now, so
+   * every row answers for itself from `data-is` and a combination nothing covers is simply an empty
+   * list rather than a lookup that misses.
+   */
+  assert.doesNotMatch(html, /id="walk-combos"/, "the combinations map came back beside the rows that already say this");
+  assert.match(html, /data-proto-row="[^"]+" data-is=/, "a prototype row does not carry what it specifies");
   /** ⛔ And a value nothing covers is named rather than silently absent. */
   assert.match(gapsIn(sel).map((g) => g.says).join("\n"), /nothing covers loan processor/);
   /** ⛔ A field name must never reach a reader — this listed `splits_on` in a bulleted complaint. */

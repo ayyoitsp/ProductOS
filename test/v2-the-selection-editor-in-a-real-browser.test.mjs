@@ -218,219 +218,262 @@ test("⛔ the empty option takes a containment back, rather than sending nothing
   assert.equal(posts[0].body.of, "", "it did not send the clearing");
 });
 
-test("⛔ pressing the values brings up the right prototype", async (t) => {
+test("⛔ the dropdowns are filters, and the prototypes carry chips", async (t) => {
   if (skip) return t.skip(skip);
   /**
-   * Peter: *"they should be able to select the appropriate dimensions and that will bring up the
-   * right prototype"*, then *"why is it a drop down?"* — so the values are visible chips, one row
-   * per dimension, and pressing one is the act.
+   * Peter, drawing it himself after I built three wrong ones: *"so the prototypes just has chips of
+   * which dimension, e.g. role:admin. and the drop down selectors will be filters"*, and
+   * *"Prototypes are shown by which dimensions they specify, with 'no dimensions' specified - they
+   * can then assign it"*.
    *
-   * ⛔ THE UNCOVERED COMBINATION IS THE ASSERTION THAT MATTERS. A selector that left the previous
-   * prototype on screen when you asked for one that does not exist would be quietly lying about what
-   * you had asked for, and every other assertion here would still pass.
+   * ⛔ FILTERS, NOT A COORDINATE. I had built them as a coordinate resolving to one prototype, so a
+   * combination nothing covered needed a special case and a reader saw one thing at a time. As
+   * filters, "nothing covers this" is just an empty list — the same information with no mechanism.
    */
   const out = await inThePage(`
-    const rows = [...document.querySelectorAll('[data-walk-dim]')];
-    const press = (dim, value) => {
-      const row = rows.find((r) => r.getAttribute('data-walk-dim') === dim);
-      [...row.querySelectorAll('.wval')].find((b) => b.getAttribute('data-walk-val') === value).click();
-    };
-    const now = () => document.querySelector('[data-walk-now]').textContent.trim();
-    const seen = { rows: rows.length, chips: rows.map((r) => r.querySelectorAll('.wval').length), start: now() };
+    const rows = () => [...document.querySelectorAll('[data-proto-row]')].filter((r) => !r.hidden);
+    const sel = (dim) => document.querySelector('[data-walk-dim="' + dim + '"]');
+    const pick = (dim, v) => { const s = sel(dim); s.value = v; s.dispatchEvent(new Event('change')); };
+    const seen = { all: rows().length, dims: document.querySelectorAll('[data-walk-dim]').length };
 
-    press('role', 'admin'); press('line', 'CRE');
-    await new Promise((r) => setTimeout(r, 120));
-    seen.creAdmin = now();
+    /* Every dimension starts on Any, so nothing is filtered out. */
+    seen.anyFirst = [...sel('role').options][0].textContent.trim();
 
-    press('role', 'loan processor'); press('line', 'private lending');
-    await new Promise((r) => setTimeout(r, 120));
-    seen.plProc = now();
+    pick('role', 'admin');
+    await new Promise((r) => setTimeout(r, 80));
+    seen.admin = rows().map((r) => r.getAttribute('data-proto-row'));
 
-    /* loan processor · CRE — nothing covers it */
-    press('line', 'CRE');
-    await new Promise((r) => setTimeout(r, 120));
-    seen.uncovered = now();
-    seen.uncoveredClass = document.querySelector('[data-walk-now]').className;
-    /* ⛔ And exactly one chip chosen per row, never two. */
-    seen.onPerRow = rows.map((r) => r.querySelectorAll('.wval.on').length);
+    pick('line', 'private lending');
+    await new Promise((r) => setTimeout(r, 80));
+    seen.adminPrivate = rows().map((r) => r.getAttribute('data-proto-row'));
+    seen.emptyShown = !document.querySelector('[data-proto-empty]').hidden;
+    seen.count = document.querySelector('[data-proto-count]').textContent.trim();
+
+    /* Back to Any on both — the whole list returns. */
+    pick('role', ''); pick('line', '');
+    await new Promise((r) => setTimeout(r, 80));
+    seen.back = rows().length;
+
+    seen.chips = [...document.querySelectorAll('[data-proto-row] .pchip')].map((c) => c.textContent.trim());
     return JSON.stringify(seen);
   `);
   const seen = JSON.parse(out);
-  assert.equal(seen.rows, 2, `expected one row per dimension, got ${seen.rows}`);
-  assert.deepEqual(seen.chips, [3, 2], "the values are not all on the page");
-  assert.equal(seen.creAdmin, "CRE admin");
-  assert.equal(seen.plProc, "Private lending processor");
-  assert.match(seen.uncovered, /nothing covers this/i, "an uncovered combination left the last prototype on screen");
-  assert.match(seen.uncoveredClass, /none/, "an uncovered combination is not marked as one");
-  assert.deepEqual(seen.onPerRow, [1, 1], "a dimension ended up with two values chosen at once");
+  assert.equal(seen.dims, 2, `expected one dropdown per dimension, got ${seen.dims}`);
+  assert.equal(seen.anyFirst, "Any", "a filter does not default to matching everything");
+  assert.equal(seen.all, 2, "the prototypes are not listed");
+  assert.deepEqual(seen.admin, ["cre-admin"], "filtering by one dimension did not narrow the list");
+  /** ⛔ A combination nothing covers is an EMPTY list, said out loud — no special case. */
+  assert.deepEqual(seen.adminPrivate, [], "a combination nothing covers still listed a prototype");
+  assert.equal(seen.emptyShown, true, "an empty result says nothing about itself");
+  assert.equal(seen.count, "0");
+  assert.equal(seen.back, 2, "clearing the filters did not bring the list back");
+  /** ⛔ The chips say what each one specifies, in his words: role:admin. */
+  assert.ok(seen.chips.includes("role:admin"), `chips were ${JSON.stringify(seen.chips)}`);
+  assert.ok(seen.chips.includes("product line:CRE"), `chips were ${JSON.stringify(seen.chips)}`);
 });
 
-test("⛔ a value nothing covers is visible before it is pressed — and only that one", async (t) => {
+test("⛔ a prototype specifying nothing says so, and can be assigned from the list", async (t) => {
   if (skip) return t.skip(skip);
   /**
-   * With dropdowns the only way to learn that a combination did not exist was to select it and be
-   * told. The whole reason for showing the values is that the hole in the product is on the page.
-   *
-   * ⛔ THIS ASSERTED ONLY THE ABSENCE, WHICH IS HALF A TEST. It said no chip was dimmed — true, and
-   * equally true of a build where the dimming does not work at all. The deploying session's own
-   * fixture happened to contain an uncovered combination and produced the firing side by accident,
-   * which is how I noticed: a fixture where everything is covered cannot test the uncovered path.
-   *
-   * So the fixture now carries a third Role value, `auditor`, that no prototype uses — and the
-   * assertion names WHICH chip is dimmed rather than counting them. Both directions, in one place:
-   * the marker fires where nothing is covered and nowhere else.
-   */
-  const out = await inThePage(`
-    const chips = [...document.querySelectorAll('.wval')];
-    return JSON.stringify({
-      total: chips.length,
-      empty: chips.filter((c) => c.classList.contains('empty')).map((c) => c.getAttribute('data-walk-val')),
-      titled: chips
-        .filter((c) => c.classList.contains('empty'))
-        .map((c) => c.getAttribute('title') || ''),
-    });
-  `);
-  const { total, empty, titled } = JSON.parse(out);
-  assert.equal(total, 5, `expected five values across two dimensions, got ${total}`);
-  /** ⛔ Exactly the one nothing covers — not none, and not every chip. */
-  assert.deepEqual(empty, ["auditor"], "the wrong values are marked as covering nothing");
-  assert.match(titled[0] ?? "", /no prototype covers this/, "a dimmed value does not say why");
-});
-
-test("⛔ the detail is shut until asked for — one decision, not five blocks of text", async (t) => {
-  if (skip) return t.skip(skip);
-  const out = await inThePage(`
-    const detail = document.querySelector('[data-sel-detail]');
-    const more = document.querySelector('[data-sel-more]');
-    const before = detail.hidden;
-    if (more) { more.click(); await new Promise((r) => setTimeout(r, 60)); }
-    return JSON.stringify({ before, after: detail.hidden, hasMore: !!more, label: more ? more.textContent : "" });
-  `);
-  const { before, after, hasMore, label } = JSON.parse(out);
-  assert.equal(before, true, "the gaps and the dimension table are open by default");
-  assert.ok(hasMore, "there is no way to see the detail");
-  assert.equal(after, false, "asking for the detail did not open it");
-  assert.match(label, /hide/, "the control does not say it will close again");
-});
-
-test("⛔ the dimensions and their values save from where they are shown", async (t) => {
-  if (skip) return t.skip(skip);
-  /**
-   * Peter: *"why is there a separate input for 'say what these split on'? why doesn't this route
-   * through the main interface?"* — so there is no textarea. The dimension's name and its values are
-   * the rows they are displayed in, and they go through the same one door.
-   */
-  const out = await inThePage(`
-    document.querySelector('[data-sel-more]').click();
-    const rows = [...document.querySelectorAll('[data-dim-row]')];
-    const last = rows[rows.length - 1];
-    last.querySelector('input[name="asks"]').value = 'Signed in?';
-    last.querySelector('input[name="values"]').value = 'yes, no';
-    document.querySelector('[data-dims-save]').click();
-    await new Promise((r) => setTimeout(r, 400));
-    return JSON.stringify({ sent: window.__sent, rows: rows.length });
-  `);
-  const { sent, rows } = JSON.parse(out);
-  assert.equal(rows, 3, "there is no blank row to add a dimension in");
-  assert.equal(sent.length, 1);
-  assert.equal(sent[0].body.intent, "splits-on");
-  assert.equal(sent[0].body.axes.length, 3, "the existing dimensions were dropped");
-  const added = sent[0].body.axes[2];
-  assert.equal(added.asks, "Signed in?");
-  assert.deepEqual(added.values, ["yes", "no"], "the values did not travel");
-  /** ⛔ And the ones already there keep their values rather than being re-sent empty — including
-   *     `auditor`, which no prototype uses: a save must not quietly drop a value for being unused.
-   *     That would make the uncovered combination disappear on the next save, which is the finding. */
-  assert.deepEqual(sent[0].body.axes[0].values, ["admin", "loan processor", "auditor"]);
-});
-
-test("⛔ with no dimensions named, the page asks — open, on the bar", async (t) => {
-  if (skip) return t.skip(skip);
-  /**
-   * Peter, looking at his own product: *"i don't get it. why is it just two buttons again???"* and
-   * then *"do we not have any dimensions defined?"*
-   *
-   * No. And the way to define one was a link labelled "show", with the sentence telling him what to
-   * do INSIDE the thing that link hides. I built the feature, hid its entrance, and told him in chat
-   * that it was his to type. The state with nothing set up is the state that most needs the
-   * affordance, and it was the one where I had made it least reachable.
-   *
-   * ⛔ AND IT GOES AWAY ONCE A DIMENSION EXISTS, which the second half of this asserts — an
-   * invitation that stayed after it was accepted would be the clutter the chips replaced.
+   * *"with 'no dimensions' specified - they can then assign it"*. Hiding an unplaced prototype until
+   * somebody placed it would hide the thing that needs doing — the same instinct as dimming a value
+   * nothing covers rather than removing it.
    */
   const dir = corpus();
-  /** The same corpus, with the dimensions removed: two prototypes, nothing naming an axis. */
+  const ref = aScreen(dir);
   fs.writeFileSync(
     path.join(dir, "prototypes.yaml"),
     [
+      "splits_on:",
+      "  - id: role",
+      "    asks: Role",
+      "    values: [admin, loan processor]",
       "prototypes:",
-      "  - id: cre",
-      "    title: CRE — loan processor",
-      `    starts_at: ${aScreen(dir)}`,
-      "  - id: admin",
-      "    title: Admin",
-      `    starts_at: ${aScreen(dir)}`,
+      "  - id: placed",
+      "    title: Placed one",
+      `    starts_at: ${ref}`,
+      "    is:",
+      "      role: admin",
+      "  - id: unplaced",
+      "    title: Unplaced one",
+      `    starts_at: ${ref}`,
       "",
     ].join("\n")
   );
-  /** ⛔ The first scope in the seed has no screens — a door onto nothing would be refused, and the
-   *     empty state is not what this test would then be looking at. */
   const c = loadCorpus(dir);
   const page = await openPage(
-    standalone("empty", renderScopePage(c, c.scopes[0].scope.id, { interactive: true, by: "peter" }) ?? ""),
+    standalone("rows", renderScopePage(c, c.scopes[0].scope.id, { interactive: true, by: "peter" }) ?? ""),
     { exe }
   );
   try {
-    await page.waitFor("!!document.querySelector('.wstart')", "the empty state to be on the page");
-    const out = await page.evaluate(`(async () => {
-      window.__sent = [];
-      window.fetch = (url, opts) => {
-        window.__sent.push({ url, body: JSON.parse(opts.body) });
-        return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, said: "saved" }) });
-      };
-      window.location.reload = () => {};
-      const start = document.querySelector('.wstart');
-      const seen = {
-        /*
-         * ⛔ NOT INSIDE THE COLLAPSIBLE — which is the defect, and is NOT the same as "no hidden
-         * ancestor". The whole Prototype tab is hidden until a reader opens it, so asserting no
-         * hidden ancestor fails on a correct page and says "hidden again" about the wrong element.
-         * A matcher stricter than the thing it matches accuses the code, which is the shape both of
-         * us produced a number from today.
-         */
-        visible: !start.closest('[data-sel-detail]'),
-        inDetail: !!start.closest('[data-sel-detail]'),
-        asks: start.querySelector('.wstart-q').textContent.trim(),
-        fields: [...start.querySelectorAll('input')].map((i) => i.getAttribute('name')),
-      };
-      start.querySelector('input[name="asks"]').value = 'Role';
-      start.querySelector('input[name="values"]').value = 'admin, loan processor';
-      start.querySelector('[data-dims-save]').click();
-      await new Promise((r) => setTimeout(r, 400));
-      seen.sent = window.__sent;
-      return JSON.stringify(seen);
+    await page.waitFor("!!document.querySelector('[data-proto-row]')", "the prototype list");
+    const out = await page.evaluate(`(() => {
+      const row = document.querySelector('[data-proto-row="unplaced"]');
+      const placed = document.querySelector('[data-proto-row="placed"]');
+      return JSON.stringify({
+        none: !!row.querySelector('[data-no-dims]'),
+        noneText: row.querySelector('.pchip').textContent.trim(),
+        assign: (row.querySelector('.prow-assign') || {}).textContent,
+        placedChip: placed.querySelector('.pchip').textContent.trim(),
+        placedAction: (placed.querySelector('.prow-assign') || {}).textContent,
+      });
     })()`);
     const seen = JSON.parse(out);
-    /** ⛔ Not inside anything collapsed — that was the whole defect. */
-    assert.equal(seen.inDetail, false, "the way to name a dimension is back inside the collapsible");
-    assert.equal(seen.visible, true, "the way to name a dimension is hidden again");
-    assert.match(seen.asks, /alternatives — of what\?/, "it does not say what it is asking");
-    assert.deepEqual(seen.fields, ["asks", "values"], "it asks for the wrong things");
-    assert.equal(seen.sent.length, 1, "Add sent nothing");
-    assert.equal(seen.sent[0].body.intent, "splits-on");
-    assert.deepEqual(seen.sent[0].body.axes, [{ id: "", asks: "Role", values: ["admin", "loan processor"] }]);
+    assert.equal(seen.none, true, "an unplaced prototype does not say it specifies nothing");
+    assert.equal(seen.noneText, "no dimensions");
+    assert.match(seen.assign ?? "", /assign/, "there is no way to assign it from the list");
+    assert.equal(seen.placedChip, "role:admin");
+    assert.match(seen.placedAction ?? "", /change/, "a placed one offers the same word as an unplaced one");
   } finally {
     await page.close();
   }
 });
 
-test("⛔ and the invitation is gone once a dimension exists", async (t) => {
+test("⛔ the assignment detail is shut until asked for", async (t) => {
   if (skip) return t.skip(skip);
-  /** The default fixture HAS dimensions, so the prompt must not be on it. */
   const out = await inThePage(`
-    return JSON.stringify({ start: !!document.querySelector('.wstart'), chips: document.querySelectorAll('.wval').length });
+    const detail = document.querySelector('[data-sel-detail]');
+    const before = detail.hidden;
+    document.querySelector('[data-sel-more]').click();
+    await new Promise((r) => setTimeout(r, 60));
+    return JSON.stringify({ before, after: detail.hidden });
   `);
-  const { start, chips } = JSON.parse(out);
-  assert.equal(start, false, "the empty-state prompt is still there after a dimension was named");
-  assert.ok(chips > 0, "there are no chips, so this is not the state being asserted");
+  const { before, after } = JSON.parse(out);
+  assert.equal(before, true, "the placement grid is open by default");
+  assert.equal(after, false, "asking for it did not open it");
+});
+
+test("⛔ there is exactly one place to name a dimension", async (t) => {
+  if (skip) return t.skip(skip);
+  /**
+   * The old dimension table was left behind in the detail when the bar gained "Add a dimension",
+   * and a test pointed at it. Two surfaces for one fact is two surfaces that have to agree about
+   * what the dimensions are — a surface nobody removed is a surface somebody will use.
+   */
+  const out = await inThePage(`
+    document.querySelector('[data-sel-more]').click();
+    await new Promise((r) => setTimeout(r, 60));
+    return JSON.stringify({
+      forms: document.querySelectorAll('[data-dim-form]').length,
+      saves: document.querySelectorAll('[data-dim-save]').length,
+      oldTable: document.querySelectorAll('[data-dim-row]').length,
+      oldSave: document.querySelectorAll('[data-dims-save]').length,
+    });
+  `);
+  const seen = JSON.parse(out);
+  assert.equal(seen.forms, 1, "there is not exactly one add-a-dimension form");
+  assert.equal(seen.saves, 1);
+  assert.equal(seen.oldTable, 0, "the old dimension table is still there");
+  assert.equal(seen.oldSave, 0, "a second way to save dimensions is still there");
+});
+
+test("⛔ Add a dimension brings up the form, and saving it keeps the ones already named", async (t) => {
+  if (skip) return t.skip(skip);
+  /**
+   * Peter: *"Add a dimension brings up the form, saying dimension type, and values."*
+   *
+   * ⛔ AND THE EXISTING ONES TRAVEL. The intent replaces the whole list, so sending only the new
+   * dimension would delete every one already named — the same tidying-away this surface has been
+   * bitten by twice.
+   */
+  const out = await inThePage(`
+    const form = document.querySelector('[data-dim-form]');
+    const before = form.hidden;
+    document.querySelector('[data-dim-add]').click();
+    const opened = form.hidden;
+    form.querySelector('input[name="asks"]').value = 'Signed in?';
+    form.querySelector('input[name="values"]').value = 'yes, no';
+    document.querySelector('[data-dim-save]').click();
+    await new Promise((r) => setTimeout(r, 400));
+    return JSON.stringify({ before, opened, sent: window.__sent });
+  `);
+  const { before, opened, sent } = JSON.parse(out);
+  assert.equal(before, true, "the form is open before anybody asks for it");
+  assert.equal(opened, false, "Add a dimension did not bring up the form");
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].body.intent, "splits-on");
+  assert.equal(sent[0].body.axes.length, 3, "saving a new dimension dropped the ones already named");
+  assert.deepEqual(sent[0].body.axes[2], { id: "", asks: "Signed in?", values: ["yes", "no"] });
+  /** ⛔ Including a value nothing uses — a save must not prune it, or the uncovered case vanishes. */
+  assert.deepEqual(sent[0].body.axes[0].values, ["admin", "loan processor", "auditor"]);
+});
+
+test("⛔ choosing + add a value opens the form for that dimension, and does not filter on it", async (t) => {
+  if (skip) return t.skip(skip);
+  /**
+   * *"Each drop down has the ones we already have indexed, otherwise an option to add another."*
+   *
+   * ⛔ AND THE SENTINEL MUST NOT STICK. Leaving it selected would filter the list on a value that
+   * does not exist — an empty list that looks like a finding and is an artefact of the control.
+   */
+  const out = await inThePage(`
+    const sel = document.querySelector('[data-walk-dim="role"]');
+    const was = sel.value;
+    sel.value = '__add__';
+    sel.dispatchEvent(new Event('change'));
+    await new Promise((r) => setTimeout(r, 80));
+    const form = document.querySelector('[data-dim-form]');
+    return JSON.stringify({
+      stuck: sel.value === '__add__',
+      restored: sel.value === was,
+      open: !form.hidden,
+      asks: form.querySelector('input[name="asks"]').value,
+      values: form.querySelector('input[name="values"]').value,
+      rows: [...document.querySelectorAll('[data-proto-row]')].filter((r) => !r.hidden).length,
+    });
+  `);
+  const seen = JSON.parse(out);
+  assert.equal(seen.stuck, false, "the add-a-value sentinel stayed selected and is now filtering");
+  assert.equal(seen.restored, true, "the dropdown did not go back to what it was");
+  assert.equal(seen.open, true, "it did not bring up the form");
+  assert.equal(seen.asks, "Role", "the form does not know which dimension it is adding to");
+  assert.match(seen.values, /admin/, "the values already named were not carried in");
+  assert.ok(seen.rows > 0, "the list is being filtered on a value that does not exist");
+});
+
+test("⛔ a dim: tag in the composer names a dimension — explicit, never inferred", async (t) => {
+  if (skip) return t.skip(skip);
+  /**
+   * Peter: *"Adding dimensions are also available via the text input, right?"*
+   *
+   * Yes, through a TAG. This project already works this way for the pos: tag — *"The tag sets
+   * Note.kind; nothing infers it. A classifier reading the sentence would be a guess wearing a
+   * decision's clothes."* Parsing "add a dimension for role with admin and processor" out of prose
+   * is exactly that classifier, writing product truth on a guess.
+   *
+   * ⛔ ONE SUBMIT PER PAGE, because the handler reloads on success at 700ms and a second submit after
+   * that navigates the page out from under the test — which reports as "Inspected target navigated"
+   * and names no assertion.
+   */
+  const out = await inThePage(`
+    const bar = document.getElementById('note-bar');
+    document.getElementById('note-text').value = 'dim: Signed in = yes, no';
+    bar.requestSubmit();
+    await new Promise((r) => setTimeout(r, 300));
+    return JSON.stringify(window.__sent);
+  `);
+  const sent = JSON.parse(out);
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].body.intent, "splits-on", "a dim: tag did not name a dimension");
+  const added = sent[0].body.axes[sent[0].body.axes.length - 1];
+  assert.equal(added.asks, "Signed in");
+  assert.deepEqual(added.values, ["yes", "no"]);
+  /** ⛔ The ones already named travel, same as from the form. */
+  assert.equal(sent[0].body.axes.length, 3, "the tag replaced the dimensions instead of adding one");
+});
+
+test("⛔ and ordinary prose is still a request, not an act", async (t) => {
+  if (skip) return t.skip(skip);
+  /** The second half of the tag rule: untagged text must not be treated as a command. */
+  const out = await inThePage(`
+    const bar = document.getElementById('note-bar');
+    document.getElementById('note-text').value = 'the admin walk feels thin';
+    bar.requestSubmit();
+    await new Promise((r) => setTimeout(r, 300));
+    return JSON.stringify(window.__sent);
+  `);
+  const sent = JSON.parse(out);
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].body.intent, "note", "an untagged sentence was treated as a command");
+  assert.equal(sent[0].body.says, "the admin walk feels thin");
 });
