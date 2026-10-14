@@ -1,0 +1,10 @@
+id: "0142"
+said: we should have product OS self improve from the get-go. all the feedback it receives we should record and figure out how to improve the agents.
+at: 2026-10-14
+kind: instruction
+reaches:
+  instruct: files your finding against whatever product lives there
+
+  pin: it was filed against the repo cwd was standing in
+
+waived: {}

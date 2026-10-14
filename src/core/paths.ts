@@ -28,8 +28,14 @@ export function findRepoRoot(start: string = process.cwd()): string | null {
   }
 }
 
-export function pathsFor(repoRoot: string): ProductosPaths {
-  const root = path.join(repoRoot, "productos");
+/**
+ * One definition of the layout, so the two roots cannot drift apart.
+ *
+ * ⛔ A SECOND COPY OF THIS WAS THE OBVIOUS WAY TO GIVE `--at` ITS OWN ROOT, and a layout
+ * written twice is a layout that disagrees with itself the first time a directory is added
+ * to one of them.
+ */
+function under(root: string, repoRoot: string): ProductosPaths {
   return {
     repoRoot,
     root,
@@ -50,6 +56,26 @@ export function pathsFor(repoRoot: string): ProductosPaths {
     blobsDir: path.join(root, ".local", "blobs"),
     historyDir: path.join(root, ".local", "history"),
   };
+}
+
+export function pathsFor(repoRoot: string): ProductosPaths {
+  return under(path.join(repoRoot, "productos"), repoRoot);
+}
+
+/**
+ * A corpus addressed by `--at` is its own root.
+ *
+ * ⛔ A GAP FILED WHILE AUTHORING A CORPUS SOMEWHERE ELSE LANDED IN WHATEVER REPO THE SHELL
+ * HAPPENED TO BE STANDING IN. `todo` was the one verb with no `--at`, so it walked up from
+ * `cwd` like a v1 command — and 33 gaps found in one product were recorded against another
+ * product's, every `forced_into` naming a scope that root has never contained. Filed against
+ * the wrong product they are worse than lost: they are indistinguishable from that product's
+ * own, so reading the backlog tells you the model cannot express things it expresses fine.
+ */
+export function pathsAtCorpus(corpusDir: string): ProductosPaths {
+  const root = path.resolve(corpusDir);
+  if (!fs.existsSync(root)) throw new Error(`No corpus at ${root} — \`--at\` names the corpus directory.`);
+  return under(root, root);
 }
 
 export function ensureDirs(p: ProductosPaths): void {

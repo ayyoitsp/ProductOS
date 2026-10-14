@@ -146,8 +146,13 @@ by anything.
 - Every uncertainty is a `question:`, not a hedge inside a sentence.
 - Nothing you wrote restates lifecycle or validation in prose — those are `status:` and a stamp.
 - Nothing mentions a filename, a path, a table or a branch. If something true had nowhere to live,
-  that is a framework gap: record it with `productos todo add`, naming where you were forced to put
-  it instead.
+  that is a framework gap: record it with `productos todo add "<what the model cannot say>" --at
+  <the corpus you were given> --forced-into <where it went instead>`.
+
+  ⛔ **`--at`, always.** Without it the command walks up from wherever the shell is standing and
+  files your finding against whatever product lives there — which is how thirty-three gaps found in
+  one product ended up in another product's record, each one indistinguishable from that product's
+  own. The tick it printed looked identical.
 
 ## What to return
 

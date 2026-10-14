@@ -1967,7 +1967,7 @@ export const SHIMS: Shim[] = [
      */
     keeps: [
       "running the reviewers, which judge and never write",
-      "routing what comes back: a framework gap to us, a corpus finding to the author",
+      "routing what comes back: a framework gap to us with `productos todo add --at <corpus>`, a corpus finding to the author",
       "never answering a newcomer's confusion — writing it down is the output",
     ],
   },
