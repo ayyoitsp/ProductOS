@@ -1,0 +1,11 @@
+id: "0140"
+said: are all your changes merged? any other framework gaps?
+at: 2026-10-14
+kind: derivation
+reaches:
+  derive: shippedFields
+  surface: todo close
+  pin: a field is found however the formatter broke its line
+waived:
+  check: "`src/v2/check.ts` holds refusals about a CORPUS — things an author wrote that do not hold together. The refusal added here is about the framework's own backlog: closing a gap without a reason is refused in `settleFrameworkGap`, and a framework gap is explicitly not a user-facing concept and deliberately absent from GLOSSARY.md. Putting it in the corpus checker would make `v2 check` fail an author's product truth over the state of OUR todo list. Arguable the day a gap's `forced_into` is resolvable against the corpus it names, which would make a stale `forced_into` a real corpus finding — and that is the open half of this, recorded below."
+closed: 2026-10-14
