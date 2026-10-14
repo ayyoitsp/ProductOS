@@ -212,5 +212,6 @@ export function todoCommand(): Command {
       }
     });
 
+
   return cmd;
 }

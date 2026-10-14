@@ -183,6 +183,13 @@ export async function v2Route(req: http.IncomingMessage, res: http.ServerRespons
      * path at all, and a route added to the body alone is a route nothing routes to.
      */
     "/api/v2/thread",
+    /**
+     * ⛔ WHAT THE PAGE NO LONGER CARRIES. The document used to hold every section and every
+     * drawing — 49.8 MB for Bilrost, 150s before the first byte. These are where the rest of it
+     * comes from: one section, and a batch of drawings for thumbnails being scrolled past.
+     */
+    "/api/v2/section",
+    "/api/v2/mocks",
   ];
   if (p !== "/v2" && !p.startsWith("/v2/") && !OURS.includes(p)) return false;
 
@@ -465,6 +472,67 @@ export async function v2Route(req: http.IncomingMessage, res: http.ServerRespons
   }
 
 
+  /**
+   * One deferred section, rendered on request.
+   *
+   * ⛔ THE SAME RENDER WITH `only` NARROWED, NOT A SECOND RENDERER. A separate code path for
+   * "one section" would be a second answer to what a section looks like, and the two would drift
+   * — which is the failure this repo has paid for most often. The whole page is computed and one
+   * section returned; with `only` holding a single view, every other section's body is never built.
+   */
+  if (req.method === "GET" && p === "/api/v2/section") {
+    const corpus = loadCorpus(dir);
+    const q = new URL(req.url ?? "/", "http://localhost").searchParams;
+    const root = q.get("scope") || corpus.scopes.find((x) => !x.scope.in)?.scope.id || "";
+    const view = q.get("view") || "";
+    if (!view) return json(res, { error: "which view" }, 400), true;
+    const frag = renderScopePage(corpus, root, {
+      interactive: true,
+      records: "http",
+      ...styleOf(corpus),
+      linkBase: "/v2",
+      by: whoIsPressing(req, opts.by),
+      recordsTo: `written into ${dir}`,
+      only: [view],
+      fragment: view,
+    });
+    /**
+     * ⛔ 404 RATHER THAN EMPTY. A view the page has a menu entry for and the server cannot render
+     * is a defect, and answering it with an empty string leaves a reader looking at a blank panel
+     * with no way to know whether the feature is empty or the request failed.
+     */
+    if (!frag) return json(res, { error: `no view "${view}" under "${root}"` }, 404), true;
+    res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
+    res.end(frag);
+    return true;
+  }
+
+  /**
+   * The drawings a batch of thumbnails needs.
+   *
+   * ⛔ ONE REQUEST FOR MANY, because the map on Overview is every screen in the product and a
+   * request each would be 128 of them. The client collects what has come into view and asks once.
+   */
+  if (req.method === "GET" && p === "/api/v2/mocks") {
+    const corpus = loadCorpus(dir);
+    const q = new URL(req.url ?? "/", "http://localhost").searchParams;
+    const want = (q.get("refs") || "")
+      .split(",")
+      .map((r: string) => r.trim())
+      .filter(Boolean);
+    if (!want.length) return json(res, { error: "which drawings" }, 400), true;
+    const out: string[] = [];
+    for (const ref of want.slice(0, 200)) {
+      const [sid, vid] = ref.split("#");
+      const sc = corpus.scopes.find((x) => x.scope.id === sid)?.scope;
+      const v = sc?.views.find((x) => x.id === vid);
+      if (v?.sketch_html) out.push(`<template data-mock="${ref.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;")}">${v.sketch_html}</template>`);
+    }
+    res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
+    res.end(out.join(""));
+    return true;
+  }
+
   if (req.method === "GET") {
     const corpus = loadCorpus(dir);
     const scope = p === "/v2" ? undefined : decodeURIComponent(p.slice("/v2/".length));
@@ -490,6 +558,19 @@ export async function v2Route(req: http.IncomingMessage, res: http.ServerRespons
       linkBase: "/v2",
       by: whoIsPressing(req, opts.by),
       recordsTo: `written into ${dir}`,
+      /**
+       * ⛔ WHAT ARRIVES, AND NOTHING ELSE. Peter: *"we should not be dumping everything in a single
+       * packet … this is ridiculous"*.
+       *
+       * Both names, because there are two ways in and they land on different views: `/v2` has no
+       * hash and lands on Overview, `/v2/<scope>` lands on that scope's own section. Sending one of
+       * the two would leave the other arriving at a stub it then has to fetch — a round trip to
+       * show the thing the reader explicitly asked for.
+       *
+       * ⛔ AND THE STANDALONE RENDER DOES NOT PASS THIS. `v2 page --out` has no server to ask, so a
+       * deferred section in a file is a section that never arrives.
+       */
+      only: [target, "overview"],
     });
     if (!page) {
       const known = corpus.scopes.map((s) => s.scope.id);

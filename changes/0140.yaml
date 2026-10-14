@@ -9,3 +9,30 @@ reaches:
 waived:
   check: "`src/v2/check.ts` holds refusals about a CORPUS — things an author wrote that do not hold together. The refusal added here is about the framework's own backlog: closing a gap without a reason is refused in `settleFrameworkGap`, and a framework gap is explicitly not a user-facing concept and deliberately absent from GLOSSARY.md. Putting it in the corpus checker would make `v2 check` fail an author's product truth over the state of OUR todo list. Arguable the day a gap's `forced_into` is resolvable against the corpus it names, which would make a stale `forced_into` a real corpus finding — and that is the open half of this, recorded below."
 closed: 2026-10-14
+
+# ⛔ APPENDED AFTER `change close`, which rewrites this file through the schema and drops comments —
+# it deleted this record's account once already. See 0141.
+#
+# The answer to "any other framework gaps?" was six, and I had just said five. `rests_on` had
+# shipped and been verified in main; fg-0013 still read `status: open`, because closing a gap had NO
+# COMMAND. All thirteen closed entries were closed by hand-editing YAML with nothing forcing the
+# step; nine got closed in one session and the tenth was reported closed while open.
+#
+# And `gapsWhoseFieldShipped`, which exists because an architect counted five of fifteen open gaps
+# naming already-shipped fields, was finding 37 of the 146 fields in v2/schema.ts: it required
+# exactly two spaces of indent, required `z.` on the same line (so `rests_on: z` + newline was
+# invisible), and was handed core/product.ts — the v1 schema, where no v2 field can appear. Two of
+# those three are FORMATTING. Now 166 fields.
+#
+# Its answer against the real backlog is still zero, so the number proves nothing alone:
+#
+#     a gap naming a field that HAS shipped        1 flagged
+#     a gap naming a field that has NOT shipped    0 flagged
+#     the five real open gaps                      0 flagged   ← a TRUE zero
+#     a closed gap naming a shipped field          0 flagged
+#
+# The real gaps name no shipped field because A GAP DESCRIBES WHAT IS MISSING — fg-0013 said "a slot
+# cannot cite a charter section" and `rests_on` did not exist to write down. Widening the match to
+# unquoted prose would have flagged it for naming `defers_to`: the right answer for the wrong
+# reason. That half stays with a human, who now has one command that refuses to run without a
+# reason — and which prints what is still forced into a corpus.
