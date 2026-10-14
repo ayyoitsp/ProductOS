@@ -280,22 +280,54 @@ function itemsIn(raw: unknown, key: string, file: string, broken: Array<{ file: 
    * blank to whoever opens it; there is no hidden content to lose, so reporting it is noise.
    */
   if (Object.keys(held).length === 0) return [];
-  if (!(key in held)) {
-    /** ⛔ Name what IS there, so the author can see their own fields and spot the missing wrapper. */
-    const got = Object.keys(held).slice(0, 4).join(", ");
-    broken.push({
-      file,
-      why: `no \`${key}:\` at the top level, so nothing in this file was read — it holds ${got ? `\`${got}\`` : "no recognised keys"}. Wrap the entries in \`${key}:\``,
-    });
-    return [];
-  }
-  const v = held[key];
-  if (v === null || v === undefined) return [];
-  if (!Array.isArray(v)) {
-    broken.push({ file, why: `\`${key}:\` is not a list here, so nothing in this file was read` });
-    return [];
-  }
-  return v;
+  /**
+   * ⛔ THE LIST FIRST, AND A BARE ENTRY ONLY AFTER IT — because for one collection the wrapper key
+   * and an entry's own field are the SAME WORD.
+   *
+   * A steer carries `steers: generation`. So a steer written the documented way, as one bare entry,
+   * has `steers:` at its top level and the obvious ordering — "is the key there? then it is a list"
+   * — read the entry's own enum as a malformed wrapper and reported the file broken. My first
+   * version did exactly that, and the test for the four collections a person writes is what caught
+   * it; `readings`, `notes` and `access` all happen not to collide, so nothing else would have.
+   */
+  const v = key in held ? held[key] : undefined;
+  if (Array.isArray(v)) return v;
+  /** `readings:` with nothing under it is a deliberate empty answer, not a malformed file. */
+  if (key in held && (v === null || v === undefined)) return [];
+  /**
+   * ⛔ ONE BARE ENTRY IS THE DOCUMENTED SHAPE, AND IT WAS THE ONE SHAPE THAT DID NOT LOAD.
+   *
+   * `agents/productos-scoper.md` shows a reading as a file of its own, named after it, with the
+   * entry's fields at the top level and no wrapper:
+   *
+   *     # readings/<something>.yaml
+   *     id: analysts-retype-sponsor
+   *     observes: analysts re-type the sponsor name rather than search for it
+   *     bears_on: deal-list#see-the-list
+   *
+   * So an author who followed the instruction EXACTLY wrote a file the loader discarded — 143 of
+   * one corpus's 222 reading files, every one of them correct by the only description of the
+   * format they were given. Reporting those as broken would be telling twenty authors that the
+   * documented shape is a mistake; the loader was the mistake.
+   *
+   * ⛔ `id` IS THE TEST, not "some key I recognise". Accepting any unrecognised mapping would
+   * swallow a genuinely malformed file, which is the silence this whole function exists to end.
+   *
+   * ⛔ AND IT LINES UP EXACTLY WITH WHO WRITES WHAT, which is why it is the right test rather than
+   * a convenient one. `Reading`, `Note`, `Steer` and `Access` all key on `id` — those are the four
+   * a person or an author writes by hand, and the four the documented bare shape applies to.
+   * `Verdict` has no `id`, and a verdict is never hand-authored: it is a stamp, written only
+   * through `accept` or `rule`, by a person, via an intent. So a bare verdict file is still
+   * reported — correctly, because nobody was ever told to write one.
+   */
+  if ("id" in held) return [held];
+  /** ⛔ Name what IS there, so the author can see their own fields and spot the missing wrapper. */
+  const got = Object.keys(held).slice(0, 4).join(", ");
+  broken.push({
+    file,
+    why: `no \`${key}:\` list at the top level and no \`id:\` either, so nothing in this file was read — it holds ${got ? `\`${got}\`` : "no recognised keys"}. Either one entry's own fields, or a \`${key}:\` list`,
+  });
+  return [];
 }
 
 export function loadCorpus(root: string, store: Store = diskStore): Corpus {
