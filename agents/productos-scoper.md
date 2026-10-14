@@ -950,8 +950,22 @@ exchanges:
     slots:                                  # the eight, below
       answer:
         says: …
-    criteria: []                            # what would show them holding, above
+    criteria:                               # what would show them holding, above
+      - id: 1                               # ⛔ REQUIRED, and stable. Renaming one is a NEW requirement
+        slot: refuses                       # which of the eight this demonstrates
+        of: not-your-kid                    # which statement, where the slot says several
+        given: a kid signed in, and another kid in the same family
+        when: they open the other kid's money
+        then: they are shown nothing about that kid, and not told the kid exists
+        level: integration                  # where somebody has to stand to observe it
 ```
+
+⛔ **`id` IS REQUIRED ON EVERY CRITERION, AND IT IS WHY THIS EXAMPLE IS FILLED IN RATHER THAN `[]`.**
+An author who had only `criteria: []` to go on invented the shape, left `id` out of all of them, and
+every criterion it wrote was refused at parse — so the feature's criteria did not exist, and the
+scope looked finished. It is the same failure as the `readings` example that left `readings/`
+reading as empty: a required field absent from the only example an author is given is a field that
+only ever appears where somebody happened to know.
 
 And a rule carries `why` beside its statement — the argument, not a restatement of the sentence.
 

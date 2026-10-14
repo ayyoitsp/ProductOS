@@ -878,3 +878,124 @@ export function uninstallClaudeSkills(): { removed: string[] } {
   }
   return { removed };
 }
+
+/**
+ * The installed briefs and skills that are not the ones this binary carries.
+ *
+ * ⛔ A SESSION CAN RUN A CURRENT BINARY AGAINST 139-COMMIT-OLD INSTRUCTIONS, AND NOTHING SAID SO.
+ *
+ * Peter: *"why don't we just run the correct path and not rely on 'which' anyways?"* — and, of the
+ * dance it took to fix: *"seems ridiculous"*. He is right, and the half a path argument cannot
+ * reach is this one: an author's brief is READ FROM THE INSTALL, not from the checkout. Passing
+ * `dist/cli/index.js` explicitly fixes which code runs and changes nothing about which instructions
+ * the author is following.
+ *
+ * What it cost, measured: an install behind `origin/main` reported two of a corpus's files as
+ * unparseable on schema fields `main` accepts. `cannot-judge-this-corpus` is corpus-wide and
+ * correctly so, so four authors each copied a 270-file corpus aside, patched the two files in the
+ * copy, and checked that — and two of them filed framework gaps asserting the schema refuses what
+ * it accepts. Every one of those hours was spent on a build, not on a product.
+ *
+ * ⛔ BODIES, NOT FILES. An installed agent is `frontmatter + the repo's body`, generated per host,
+ * so comparing whole files would report every correct install as stale.
+ *
+ * ⛔ AND ABSENT IS NOT STALE. A machine that has never installed has nothing to be out of date;
+ * reporting it would fire on every consumer who only ever uses the CLI, and a warning that fires
+ * on everybody is one people learn to scroll past.
+ */
+export interface BriefDivergence {
+  what: string;
+  where: string;
+  /** `stale` — installed, and not this build's. `orphan` — installed, and gone from this build. */
+  why: "stale" | "orphan";
+}
+
+/**
+ * ⛔ THREE FAILURE MODES, AND THE SECOND IS THE WORST ONE.
+ *
+ * Measured in a real consumer repo: 6 ProductOS agents installed against 21 in the build — one
+ * STALE (`productos-consistency`), two ORPHANED (`productos-framework`, `productos-generated`,
+ * which no longer exist here at all and are still invokable), and 17 simply never installed.
+ *
+ * ⛔ NEVER-INSTALLED IS NOT REPORTED. A project's config decides which agents it runs, and the
+ * installer removes the ones it switched off on purpose — so "missing" is usually somebody's
+ * decision. An orphan is the opposite: the installer's own note says turning an agent off has to
+ * REMOVE it, because a file left from a previous install is an agent the config says is gone and
+ * the host will still run.
+ */
+export function installedBriefsThatDiffer(
+  home: string = HOME,
+  cwd: string = process.cwd()
+): BriefDivergence[] {
+  const out: BriefDivergence[] = [];
+  const bodyOf = (text: string): string => text.replace(/^---\n[\s\S]*?\n---\n/, "").trim();
+  const agentsRoot = bundledAgentsRoot();
+  if (!fs.existsSync(agentsRoot)) return out;
+  const mine = fs.readdirSync(agentsRoot).filter((x) => x.endsWith(".md"));
+
+  /**
+   * ⛔ WHERE THE HOST ACTUALLY READS FROM, WHICH IS USUALLY NOT $HOME. `agentsDirFor` puts agents in
+   * the PROJECT's `.claude/agents` whenever there is a project — so a check that looked only at
+   * `~/.claude/agents` found nothing and reported everything fine, which is what my first version
+   * did. Both, de-duplicated, because a session may be standing in either.
+   */
+  const dirs = [...new Set([path.join(findProjectRootFrom(cwd) ?? home, ".claude", "agents"), path.join(home, ".claude", "agents")])];
+
+  for (const dir of dirs) {
+    if (!fs.existsSync(dir)) continue;
+    for (const f of fs.readdirSync(dir).filter((x) => x.startsWith("productos-") && x.endsWith(".md"))) {
+      const dst = path.join(dir, f);
+      if (!mine.includes(f)) {
+        out.push({ what: f.replace(/\.md$/, ""), where: dst, why: "orphan" });
+        continue;
+      }
+      if (bodyOf(fs.readFileSync(dst, "utf-8")) !== bodyOf(fs.readFileSync(path.join(agentsRoot, f), "utf-8")))
+        out.push({ what: f.replace(/\.md$/, ""), where: dst, why: "stale" });
+    }
+  }
+
+  const skillsRoot = bundledSkillsRoot();
+  for (const base of [...new Set([findProjectRootFrom(cwd) ?? home, home])]) {
+    const installedSkills = path.join(base, ".claude", "skills");
+    if (!fs.existsSync(skillsRoot) || !fs.existsSync(installedSkills)) continue;
+    for (const sk of fs.readdirSync(skillsRoot)) {
+      const src = path.join(skillsRoot, sk, "SKILL.md");
+      const dst = path.join(installedSkills, sk, "SKILL.md");
+      if (!fs.existsSync(src) || !fs.existsSync(dst)) continue;
+      if (bodyOf(fs.readFileSync(dst, "utf-8")) !== bodyOf(fs.readFileSync(src, "utf-8")))
+        out.push({ what: `${sk} (skill)`, where: dst, why: "stale" });
+    }
+  }
+  return out;
+}
+
+/** The repo a session is standing in, or undefined. ⛔ Its own walk: `paths.ts` would be a cycle. */
+function findProjectRootFrom(start: string): string | undefined {
+  let dir = path.resolve(start);
+  for (;;) {
+    if (fs.existsSync(path.join(dir, ".claude")) || fs.existsSync(path.join(dir, ".git"))) return dir;
+    const up = path.dirname(dir);
+    if (up === dir) return undefined;
+    dir = up;
+  }
+}
+
+/** One line per divergence, or nothing. ⛔ Shaped for stderr: it is about the machine, not a corpus. */
+export function sayIfInstalledBriefsDiffer(home: string = HOME, cwd: string = process.cwd()): string[] {
+  const bad = installedBriefsThatDiffer(home, cwd);
+  if (!bad.length) return [];
+  const stale = bad.filter((x) => x.why === "stale");
+  const orphans = bad.filter((x) => x.why === "orphan");
+  const lines: string[] = [];
+  if (stale.length) {
+    lines.push(`⛔ ${stale.length} installed brief${stale.length === 1 ? " is" : "s are"} not the one${stale.length === 1 ? "" : "s"} this build carries:`);
+    for (const x of stale) lines.push(`   ${x.what} — ${x.where}`);
+    lines.push(`   An author reads its instructions from there, not from this checkout.`);
+  }
+  if (orphans.length) {
+    lines.push(`⛔ ${orphans.length} installed brief${orphans.length === 1 ? "" : "s"} no longer exist${orphans.length === 1 ? "s" : ""} in this build and can still be run:`);
+    for (const x of orphans) lines.push(`   ${x.what} — ${x.where}`);
+  }
+  lines.push(`   Fix: productos init claude --update`);
+  return lines;
+}
