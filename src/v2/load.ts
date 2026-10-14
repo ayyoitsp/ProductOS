@@ -244,6 +244,92 @@ function why(e: unknown): string {
   return (e as Error).message.split("\n")[0]!;
 }
 
+/**
+ * ⛔ A FILE THE LOADER CANNOT MAKE SENSE OF IS REPORTED, NOT SKIPPED.
+ *
+ * Every one of these collections read `raw.<key> ?? []`, so a file holding a single bare object —
+ * the reading's own fields at the top level, which is what an author writes when they follow the
+ * example rather than the schema — yielded an empty list, looped zero times, and pushed nothing to
+ * `broken`. The file was discarded in total silence.
+ *
+ * Measured on a real corpus mid-index: **129 of 208 reading files dropped**, `loadCorpus` reporting
+ * `0` broken readings, and twenty-odd authors who had each written their evidence with file:line
+ * pointers and had no way to discover none of it was being read. A file that says nothing the
+ * loader understands was indistinguishable from a file that says nothing.
+ *
+ * ⛔ IT IS THE INVERSE OF THE TWO FINDINGS FIXED IN #132 AND STRICTLY WORSE. Those fired on correct
+ * output, which is noisy and self-announcing. This goes quiet on incorrect output, which is the
+ * failure nobody can detect from the outside — the shape `check` exists to prevent and the one
+ * `GLOSSARY.md` warns is costly in both directions.
+ *
+ * ⛔ AN EMPTY OR COMMENT-ONLY FILE IS STILL FINE. `YAML.parse` gives `null` for both, and a blank
+ * file is visibly blank to whoever opens it — there is no hidden content to lose. What is reported
+ * is a file that plainly holds SOMETHING the loader was not asked for.
+ */
+function itemsIn(raw: unknown, key: string, file: string, broken: Array<{ file: string; why: string }>): unknown[] {
+  if (raw === null || raw === undefined) return [];
+  if (typeof raw !== "object" || Array.isArray(raw)) {
+    broken.push({ file, why: `this is not a \`${key}:\` file — the loader expects a mapping with \`${key}:\` in it` });
+    return [];
+  }
+  const held = raw as Record<string, unknown>;
+  /**
+   * ⛔ AN EMPTY OBJECT IS NOTHING, AND THE CALLERS HAND ME ONE. Each does
+   * `YAML.parse(readFile(file)) ?? {}`, so an empty or comment-only file arrives here as `{}`
+   * rather than as null — and my first version reported every one of them. A blank file is visibly
+   * blank to whoever opens it; there is no hidden content to lose, so reporting it is noise.
+   */
+  if (Object.keys(held).length === 0) return [];
+  /**
+   * ⛔ THE LIST FIRST, AND A BARE ENTRY ONLY AFTER IT — because for one collection the wrapper key
+   * and an entry's own field are the SAME WORD.
+   *
+   * A steer carries `steers: generation`. So a steer written the documented way, as one bare entry,
+   * has `steers:` at its top level and the obvious ordering — "is the key there? then it is a list"
+   * — read the entry's own enum as a malformed wrapper and reported the file broken. My first
+   * version did exactly that, and the test for the four collections a person writes is what caught
+   * it; `readings`, `notes` and `access` all happen not to collide, so nothing else would have.
+   */
+  const v = key in held ? held[key] : undefined;
+  if (Array.isArray(v)) return v;
+  /** `readings:` with nothing under it is a deliberate empty answer, not a malformed file. */
+  if (key in held && (v === null || v === undefined)) return [];
+  /**
+   * ⛔ ONE BARE ENTRY IS THE DOCUMENTED SHAPE, AND IT WAS THE ONE SHAPE THAT DID NOT LOAD.
+   *
+   * `agents/productos-scoper.md` shows a reading as a file of its own, named after it, with the
+   * entry's fields at the top level and no wrapper:
+   *
+   *     # readings/<something>.yaml
+   *     id: analysts-retype-sponsor
+   *     observes: analysts re-type the sponsor name rather than search for it
+   *     bears_on: deal-list#see-the-list
+   *
+   * So an author who followed the instruction EXACTLY wrote a file the loader discarded — 143 of
+   * one corpus's 222 reading files, every one of them correct by the only description of the
+   * format they were given. Reporting those as broken would be telling twenty authors that the
+   * documented shape is a mistake; the loader was the mistake.
+   *
+   * ⛔ `id` IS THE TEST, not "some key I recognise". Accepting any unrecognised mapping would
+   * swallow a genuinely malformed file, which is the silence this whole function exists to end.
+   *
+   * ⛔ AND IT LINES UP EXACTLY WITH WHO WRITES WHAT, which is why it is the right test rather than
+   * a convenient one. `Reading`, `Note`, `Steer` and `Access` all key on `id` — those are the four
+   * a person or an author writes by hand, and the four the documented bare shape applies to.
+   * `Verdict` has no `id`, and a verdict is never hand-authored: it is a stamp, written only
+   * through `accept` or `rule`, by a person, via an intent. So a bare verdict file is still
+   * reported — correctly, because nobody was ever told to write one.
+   */
+  if ("id" in held) return [held];
+  /** ⛔ Name what IS there, so the author can see their own fields and spot the missing wrapper. */
+  const got = Object.keys(held).slice(0, 4).join(", ");
+  broken.push({
+    file,
+    why: `no \`${key}:\` list at the top level and no \`id:\` either, so nothing in this file was read — it holds ${got ? `\`${got}\`` : "no recognised keys"}. Either one entry's own fields, or a \`${key}:\` list`,
+  });
+  return [];
+}
+
 export function loadCorpus(root: string, store: Store = diskStore): Corpus {
   const paths = v2Paths(root);
   const readDir = (dir: string, ext: string[]): string[] => store.list(dir, ext);
@@ -296,7 +382,7 @@ export function loadCorpus(root: string, store: Store = diskStore): Corpus {
   for (const file of readDir(paths.readings, [".yaml", ".yml"])) {
     try {
       const raw = YAML.parse(readFile(file)) ?? {};
-      for (const r of raw.readings ?? []) readings.push(Reading.parse(r));
+      for (const r of itemsIn(raw, "readings", file, broken)) readings.push(Reading.parse(r));
     } catch (e) {
       broken.push({ file, why: why(e) });
     }
@@ -305,7 +391,7 @@ export function loadCorpus(root: string, store: Store = diskStore): Corpus {
   for (const file of readDir(path.join(paths.root, "notes"), [".yaml", ".yml"])) {
     try {
       const raw = YAML.parse(readFile(file)) ?? {};
-      for (const n of raw.notes ?? []) notes.push(Note.parse(n));
+      for (const n of itemsIn(raw, "notes", file, broken)) notes.push(Note.parse(n));
     } catch (e) {
       broken.push({ file, why: why(e) });
     }
@@ -318,7 +404,7 @@ export function loadCorpus(root: string, store: Store = diskStore): Corpus {
   for (const file of readDir(path.join(paths.root, "steers"), [".yaml", ".yml"])) {
     try {
       const raw = YAML.parse(readFile(file)) ?? {};
-      for (const x of raw.steers ?? []) steers.push(Steer.parse(x));
+      for (const x of itemsIn(raw, "steers", file, broken)) steers.push(Steer.parse(x));
     } catch (e) {
       broken.push({ file, why: why(e) });
     }
@@ -334,7 +420,7 @@ export function loadCorpus(root: string, store: Store = diskStore): Corpus {
   for (const file of readDir(paths.root, [".yaml", ".yml"]).filter((f) => /access\.ya?ml$/.test(f))) {
     try {
       const raw = YAML.parse(readFile(file)) ?? {};
-      for (const x of raw.access ?? []) access.push(Access.parse(x));
+      for (const x of itemsIn(raw, "access", file, broken)) access.push(Access.parse(x));
     } catch (e) {
       broken.push({ file, why: why(e) });
     }
@@ -411,7 +497,7 @@ export function loadCorpus(root: string, store: Store = diskStore): Corpus {
   for (const file of readDir(paths.verdicts, [".yaml", ".yml"])) {
     try {
       const raw = YAML.parse(readFile(file)) ?? {};
-      for (const v of raw.verdicts ?? []) verdicts.push(Verdict.parse(v));
+      for (const v of itemsIn(raw, "verdicts", file, broken)) verdicts.push(Verdict.parse(v));
     } catch (e) {
       broken.push({ file, why: why(e) });
     }
