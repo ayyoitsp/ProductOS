@@ -1,0 +1,8 @@
+id: "0143"
+said: why don't we just run the correct path and not rely on 'which' anyways?
+at: 2026-10-14
+kind: instruction
+reaches:
+  instruct: REQUIRED, and stable. Renaming one is a NEW requirement
+  pin: an installed brief whose body is not this build's is reported stale
+waived: {}

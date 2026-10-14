@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { sayIfInstalledBriefsDiffer } from "../../adapters/claude.js";
 import path from "node:path";
 import { Command } from "commander";
 import pc from "picocolors";
@@ -170,6 +171,15 @@ export function v2Command(): Command {
     .option("--token <t>", "bearer token for an instance (or $PRODUCTOS_TOKEN)")
     .action(async (o: { at?: string; token?: string }) => {
       const { corpus, findings } = checkCorpus(await openAt(o));
+      /**
+       * ⛔ ON THE VERB AUTHORS ACTUALLY TYPE, and to stderr rather than into the findings.
+       *
+       * It is not a fact about the corpus, so it must not join the refusals — a corpus verdict that
+       * mixes in the state of somebody's machine is a verdict nobody can act on cleanly. But `doctor`
+       * alone would be the same mistake `todo scan` already made once: the warning lands on the verb
+       * nobody runs, and `v2 check` is the one every author runs before handing anything over.
+       */
+      for (const line of sayIfInstalledBriefsDiffer()) process.stderr.write(pc.yellow(line) + "\n");
       const s = summarise(findings);
       const ex = corpus.scopes.reduce((n, x) => n + x.scope.exchanges.length, 0);
       console.log(
