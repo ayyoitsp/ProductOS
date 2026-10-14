@@ -21,6 +21,24 @@ import http from "node:http";
  * had it, and the health check had it.
  */
 
+
+/**
+ * The `/health` route's own source, bounded structurally.
+ *
+ * ⛔ NOT A FIXED NUMBER OF CHARACTERS. Both assertions below used `slice(at, at + 2000)`, and adding
+ * a comment to the route pushed `503` past the window — so a correct route failed with "/health
+ * cannot answer anything but 200". A test pinned to a byte count is a test that breaks when
+ * somebody explains themselves, which is the same family as a matcher stricter than its claim.
+ */
+const healthRoute = () => {
+  const src = fs.readFileSync("src/v2/store/server.ts", "utf-8");
+  const at = src.indexOf('pathname === "/health"');
+  assert.ok(at > 0, "there is no /health route to read");
+  /** To the next route test, which is where this one demonstrably ends. */
+  const next = src.indexOf('pathname ===', at + 10);
+  return src.slice(at, next > at ? next : src.length);
+};
+
 /** A `Db` whose execute fails the way the outage did — wrapper on the outside, sqlstate underneath. */
 const brokenDb = (code = "57P01") => ({
   execute: async () => {
@@ -57,8 +75,7 @@ test("the probe is bounded, so a store that never answers is still a verdict", a
 test("/health is 503 and says why when the store cannot be read", async () => {
   const { startHosted } = await import("../dist/v2/store/server.js");
   /** Not reachable from here without a store; assert the route's shape from the source instead. */
-  const src = fs.readFileSync("src/v2/store/server.ts", "utf-8");
-  const route = src.slice(src.indexOf('pathname === "/health"'), src.indexOf('pathname === "/health"') + 2000);
+  const route = healthRoute();
   assert.match(route, /storeReachable/, "/health does not look at the store at all");
   assert.match(route, /503/, "/health cannot answer anything but 200, so it can never report broken");
   assert.match(route, /because/, "/health reports unhealthy without saying why");
@@ -91,4 +108,37 @@ test("the cause walker has one home, and both paths use it", () => {
     assert.doesNotMatch(text, /const becauseOf\s*=|function becauseOf/, `${name} carries its own copy of the walker`);
   }
   assert.match(strip("src/v2/store/because.ts"), /export function becauseOf/, "the one home has moved");
+});
+
+/**
+ * ⛔ A READABLE STORE IS NOT A WRITABLE ONE, AND THIS ENDPOINT LEARNED THAT THE SECOND TIME.
+ *
+ * It was taught to read the store after it reported healthy through a two-hour outage. Then staging
+ * answered GETs on all four projects while POSTs to two of them hung forever — and it was green
+ * again, because reading was exactly what still worked. One abandoned client held a per-project
+ * write lock; Postgres had no open transaction and no ungranted lock, so there was nothing in the
+ * store to find.
+ */
+test("/health is 503 when a project's write is stuck, and names it", async () => {
+  const { stuckWrites } = await import("../dist/v2/store/instance.js");
+  assert.equal(typeof stuckWrites, "function", "nothing can report a stuck write");
+  /** Nothing in flight in this process, so the honest answer is none. */
+  assert.deepEqual(stuckWrites(0), []);
+
+  const body = healthRoute();
+  assert.match(body, /stuckWrites/, "/health does not ask whether a write is stuck");
+  assert.match(body, /stuck\.length/, "/health computes it and then ignores it");
+  assert.match(body, /writes/, "/health reports unhealthy without saying it is the writes");
+});
+
+/**
+ * ⛔ AND A REFUSAL MUST NOT ARRIVE AS 500. "This server is broken" and "another write on this
+ * project is stuck" are different facts, and the status is the only part a client can act on.
+ */
+test("an error carrying a status gets that status, not 500", () => {
+  const src = fs.readFileSync("src/v2/store/server.ts", "utf-8");
+  const at = src.indexOf("internal_error");
+  const around = src.slice(Math.max(0, at - 900), at + 200);
+  assert.match(around, /status/, "the handler cannot carry a refusal's own status");
+  assert.match(around, /503|code/, "every failure is reported as 500");
 });
