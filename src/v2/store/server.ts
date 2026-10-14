@@ -20,6 +20,7 @@ import postgres from "postgres";
 import { eq, sql } from "drizzle-orm";
 import { type Db, isRefusal, storeFor } from "./access.js";
 import { becauseOf } from "./because.js";
+import { stuckWrites } from "./instance.js";
 import { applyMigrations, SchemaAheadError } from "./migrate.js";
 import { migrateAllDocuments } from "./doc-migrations.js";
 import { projects } from "./schema.js";
@@ -394,15 +395,36 @@ export async function startHosted(
          * `--retries=3 --interval=30s` is what keeps one blip from restarting anything.
          */
         const probe = await storeReachable(db);
-        const code = probe.ok ? 200 : 503;
+        /**
+         * ⛔ AND WHETHER ANY PROJECT'S WRITE IS STUCK, BECAUSE A READABLE STORE IS NOT A WRITABLE ONE.
+         *
+         * Staging answered GETs on all four projects while POSTs to two of them hung forever. This
+         * endpoint was green throughout — it had just been taught to read the store, and reading was
+         * exactly what still worked. One abandoned client held a per-project write lock and nothing
+         * said so; Docker's healthcheck never restarted anything, and a person had to notice.
+         *
+         * ⛔ IN MEMORY, SO IT COSTS NOTHING. It is the age of a lock this process already holds — no
+         * query, no write. A healthcheck that wrote to the store on every poll would be its own
+         * problem.
+         */
+        const stuck = stuckWrites();
+        const code = !probe.ok || stuck.length ? 503 : 200;
         res.writeHead(code, { "content-type": "application/json" });
         res.end(
           JSON.stringify({
-            ok: probe.ok,
+            ok: probe.ok && stuck.length === 0,
             service: "productos",
             version: "0.1.0",
             store: probe.ok ? "reachable" : "unreachable",
             ...(probe.ok ? {} : { because: probe.why }),
+            ...(stuck.length
+              ? {
+                  writes: "stuck",
+                  because: stuck
+                    .map((w) => `${w.project} has had a write running for ${w.seconds}s`)
+                    .join("; "),
+                }
+              : {}),
           }),
         );
         return;
@@ -434,8 +456,15 @@ export async function startHosted(
       const why = becauseOf(e);
       if (why) process.stderr.write(`[productos]   because: ${why}\n`);
       if (!res.headersSent) {
-        res.writeHead(500, { "content-type": "application/json" });
-        res.end(JSON.stringify({ error: "internal_error", message: (e as Error).message }));
+        /**
+         * ⛔ A REFUSAL CARRIES ITS OWN STATUS. 500 says "this server is broken"; a write refused
+         * because another on the same project is stuck is a 503 — the client should not retry
+         * immediately and the difference is the only thing it can act on.
+         */
+        const status = (e as { status?: unknown }).status;
+        const code = typeof status === "number" && status >= 400 && status < 600 ? status : 500;
+        res.writeHead(code, { "content-type": "application/json" });
+        res.end(JSON.stringify({ error: code === 503 ? "busy" : "internal_error", message: (e as Error).message }));
       } else {
         res.end();
       }
