@@ -3642,7 +3642,7 @@ if (typeof EventSource !== "undefined") {
 
   let lastAcks = [];
   const askAcks = () =>
-    fetch("/api/v2/thread")
+    fetch(UNDER + "/api/v2/thread")
       .then((r) => r.json())
       .then((b) => {
         /** ⛔ Newest first, and capped — this is an acknowledgement, not an archive. */
@@ -3662,7 +3662,7 @@ if (typeof EventSource !== "undefined") {
    */
 
   const askWho = () =>
-    fetch("/api/v2/presence")
+    fetch(UNDER + "/api/v2/presence")
       .then((r) => r.json())
       .then((p) => {
         const n = p.waiting || 0;
@@ -3809,7 +3809,7 @@ if (typeof EventSource !== "undefined") {
     try {
       if (es) es.close();
     } catch (e) {}
-    es = new EventSource("/api/v2/live");
+    es = new EventSource(UNDER + "/api/v2/live");
     es.addEventListener("changed", onChanged);
     es.addEventListener("beat", onBeat);
     /** A stream that opened is a stream that works — start the next backoff from the floor. */
@@ -3932,12 +3932,34 @@ const MODE = ${JSON.stringify(mode)};
  * instance that strips the prefix is not the code that renders the page. Everything up to /v2 is the
  * prefix, and a page served at the root has none.
  */
-const API = (function () {
+const UNDER = (function () {
   const path = location.pathname;
   const at = path.indexOf("/v2");
-  const prefix = at > 0 ? path.slice(0, at) : "";
-  return prefix + "/api/v2/in";
+  return at > 0 ? path.slice(0, at) : "";
 })();
+/*
+ * ⛔ EVERY URL THE PAGE BUILDS, NOT THE ONE THAT FAILED IN FRONT OF SOMEBODY.
+ *
+ * My first fix reached four call sites and there are SEVEN. The deploying session built a probe that
+ * takes the urls the page's own script NAMES, resolves each the way a browser will — root-relative
+ * against the origin — and reports any that 404 while the project-scoped form answers:
+ *
+ *     /api/v2/thread     404 at the origin, 200 under the project
+ *     /api/v2/presence   404                200
+ *     /api/v2/live       404                200
+ *
+ * So on the hosted page the acknowledgement thread never loaded, presence never loaded, and the live
+ * connection never opened. The two-way window Peter asked for was dead, and had been.
+ *
+ * ⛔ AND A POST PROBE WOULD HAVE MISSED ALL THREE — which is what I had suggested. Two are GETs and
+ * one is an EventSource. The urls are the thing to enumerate, not the verb.
+ *
+ * ⛔ IT ALSO CHANGES THE STATUS OF AN EARLIER VERIFICATION: /api/v2/live was reported working on the
+ * real instance, by curl against the project-scoped path. The server was fine; the PAGE could not
+ * reach it. A route verified by a client that constructs its own url says nothing about a page that
+ * constructs a different one.
+ */
+const API = UNDER + "/api/v2/in";
 /** ⛔ The local server a press calls, and the corpus on that machine it writes into. */
 const MCP_SERVER = ${JSON.stringify(opts.mcpServer ?? "host:productos")};
 const CORPUS = ${JSON.stringify(opts.recordsTo ?? "v2")};
