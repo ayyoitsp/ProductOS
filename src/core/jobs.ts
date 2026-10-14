@@ -374,6 +374,13 @@ export const AREAS: Area[] = [
        * 4100 failed every corpus read for nearly two hours and wrote 2037 identical log lines doing
        * it, not one of them carrying a sqlstate — the outage recovered with its diagnosis gone.
        */
+      /**
+       * ⛔ Ends the process when a project's write will never finish, so `restart: unless-stopped`
+       * brings it back. It is here rather than in `boot.ts` because an entrypoint runs on import and
+       * therefore cannot be tested — and because detection without a remedy is worse than neither:
+       * `/health` reported a stuck write twice in one day and nothing acted on it.
+       */
+      "src/v2/store/watchdog.ts",
       "src/v2/store/because.ts",
       "src/v2/store/corpus.ts",
       "src/v2/store/doc-migrations.ts",
