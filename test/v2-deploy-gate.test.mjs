@@ -175,6 +175,13 @@ test("nothing reaches staging without the guard, and deploy adds build and the s
    * reach the line — so this one runs against the page that went out.
    */
   assert.match(dep, /no-field-names-on-a-page/, "a deploy never asks whether a field name reached a reader");
+  /**
+   * ⛔ AND WHETHER THE PAGE CAN REACH ITS OWN ENDPOINTS. Every write from a hosted page 404d for as
+   * long as the hosted page existed — a root-relative url loses the project, and the LOCAL stack
+   * serves at the root, where the defect cannot occur. So every path anybody tests against is the
+   * one that works, and only the served page can answer.
+   */
+  assert.match(dep, /page-can-reach-what-it-fetches/, "a deploy never asks whether the page's own urls resolve");
   /** ⛔ `--from`, so the page list is the instance's own answer rather than one somebody maintains. */
   assert.match(dep, /--from/, "the script check runs against a hand-written page list, which goes stale");
   assert.match(dep, /remote-doctor/, "nothing reads the store after the deploy");

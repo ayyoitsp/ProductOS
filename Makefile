@@ -572,6 +572,26 @@ deploy: deploy-check
 	@node scripts/no-field-names-on-a-page.mjs --from http://localhost:$(STAGING_PORT) | sed 's/^/  /' || { \
 		echo "✗ a served page is talking about the tool instead of the product"; \
 		exit 1; }
+	@# ⛔ AND THE PAGE CAN REACH WHAT ITS OWN SCRIPT FETCHES.
+	@#
+	@# An instance serves under `/p/<project>/` and there is no `<base>` tag, so a root-relative url
+	@# leaves the project behind. Every write from a hosted page 404d, including filing a note —
+	@# "Not saved: Not Found" — and so did the acknowledgement thread, presence and the live stream.
+	@# The two-way window was dead for as long as the hosted page has existed.
+	@#
+	@# ⛔ AND THE LOCAL STACK SERVES AT THE ROOT, WHERE THIS CANNOT HAPPEN, so every path anybody
+	@#    develops or tests against is the one that works. Nothing in the suite could see it:
+	@#    browser tests replace `fetch` and assert what the handler SENDS, which passes on
+	@#    `/nonsense`; the script-parse check reads the script, not where it points; tsc cannot look
+	@#    inside a template string.
+	@#
+	@# ⛔ A ROUTE VERIFIED BY A CLIENT THAT BUILDS ITS OWN URL SAYS NOTHING ABOUT A PAGE THAT BUILDS
+	@#    A DIFFERENT ONE. `/api/v2/live` was reported working from curl against the scoped path
+	@#    while the page could not reach it at all.
+	@echo "→ the page can reach what it fetches"
+	@node scripts/page-can-reach-what-it-fetches.mjs --from http://localhost:$(STAGING_PORT) | sed 's/^/  /' || { \
+		echo "✗ a served page fetches a url it cannot reach — it answers 200 and its buttons do nothing"; \
+		exit 1; }
 	@echo "✓ $$(git rev-parse --short HEAD) is live on $(STAGING_PORT)"
 
 rebuild-remote: staging-guard build
