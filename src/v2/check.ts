@@ -200,6 +200,8 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
    * is the right default: a corpus that has never been configured has not claimed to have roles.
    */
   let accessModel: "roles" | "permissions" | "both" | "neither" = "neither";
+  /** ⛔ Whether anybody has actually CONFIGURED one, which is a different question from its value. */
+  let accessWasConfigured = false;
   try {
     const paths = resolvePathsOrThrow(root);
     const cfgRoot = path.dirname(path.dirname(paths.configFile));
@@ -207,11 +209,34 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
     const dir = conf.web.components_dir;
     hasCode = Boolean(dir) && fs.existsSync(path.resolve(cfgRoot, dir!));
     accessModel = conf.exchange.access;
+    accessWasConfigured = true;
   } catch {
     hasCode = false;
   }
 
   const corpus = loadCorpus(root);
+
+  /**
+   * ⛔ A NON-EMPTY ACCESS LIST IS ITSELF THE DECLARATION, AND THE CONFIG CANNOT TRAVEL.
+   *
+   * ⛔ ONLY WHERE NOBODY HAS CONFIGURED ONE, and the suite caught me getting this wrong. A product
+   * may DELIBERATELY be configured `roles` while a permission appears in its list, and being told
+   * that an exchange named the wrong vocabulary is the whole point of the finding. A first version
+   * of this let the list override the config and broke exactly that test. Where a config exists it
+   * is the answer, including when it says `neither`.
+   *
+   * ⛔ AND ON A HOSTED CORPUS THE CONFIG IS UNREACHABLE BY CONSTRUCTION. An instance materializes a
+   * project into a temp directory with no repository above it, so `resolvePathsOrThrow` throws and
+   * the model fell back to `neither` — every `held_by` on every hosted corpus reported
+   * `an-access-model-this-product-does-not-use`, forever, with no way for an author to fix it.
+   * `access.yaml` is carried by `corpusFiles` precisely so it reaches the store; the declaration
+   * that it exists has to travel with it or it says nothing where it is read.
+   */
+  if (!accessWasConfigured && corpus.access.length) {
+    const hasRole = corpus.access.some((a) => a.kind === "role");
+    const hasPermission = corpus.access.some((a) => a.kind === "permission");
+    accessModel = hasRole && hasPermission ? "both" : hasRole ? "roles" : "permissions";
+  }
   /**
    * ⛔ Read from the corpus's own project, not asked for as an argument. A finding that says "render
    * this from the codebase" is only honest where the corpus names a codebase to read; asking every
@@ -3908,7 +3933,21 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
       slotRefs.has(r.bears_on) ||
       exchangeRefs.has(r.bears_on) ||
       corpus.scopes.some((x) => x.scope.id === r.bears_on) ||
-      corpus.rules.some((x) => x.rule.id === r.bears_on);
+      corpus.rules.some((x) => x.rule.id === r.bears_on) ||
+      /**
+       * ⛔ A VIEW RESOLVES TOO, AND THE GENERATOR HAS ALWAYS WRITTEN ONE.
+       *
+       * `draw-write.ts` emits `bears_on: <scope>#<view>` on every reading it creates — that is what
+       * a reading ABOUT A DRAWING bears on, and it is the right answer: the observation is about one
+       * screen, not about the whole feature. The resolver accepted slots, exchanges, scopes and
+       * rules and not views, so every generated reading was reported as resolving to nothing.
+       *
+       * ⛔ IT WAS 62 FINDINGS ON ONE CORPUS, reported independently by six authors, and each of them
+       * correctly declined to hand-edit a generated file to silence it. A finding that fires on the
+       * generator's own correct output teaches authors that `check` is noise — which is the one
+       * thing it cannot afford to be.
+       */
+      corpus.scopes.some(({ scope }) => scope.views.some((v) => `${scope.id}#${v.id}` === r.bears_on));
     if (!bearsOnSomething)
       add({
         severity: "note",
