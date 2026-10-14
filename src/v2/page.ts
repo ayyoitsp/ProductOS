@@ -2832,6 +2832,18 @@ function renderNav(
    * contents competing with the thing being reviewed; the trail alone is the one line worth keeping,
    * and the tree is one press away.
    */
+  /**
+   * Overview's own items. ⛔ Emitted INSIDE the Overview group now rather than as a sibling block —
+   * `data-tabs="product"` is the owner key `showSub` reads and is deliberately unchanged, because
+   * renaming it would be a second edit riding along with a layout change.
+   */
+  const OVERVIEW_STRIP =
+    `<div class="subtabs" data-tabs="product" hidden><button type="button" class="subtab" data-sub="queue">Queue${
+      open ? ` <span class="pill">${open}</span>` : ""
+    }</button><button type="button" class="subtab" data-sub="screens">Screens${
+      screens ? ` <span class="pill quiet">${screens}</span>` : ""
+    }</button><button type="button" class="subtab" data-sub="about">${aboutLabel}</button>${charterTabs}</div>`;
+
   return (
     /**
      * ⛔ DOUBLE-QUOTED, because `esc` escapes `"` and not `'` — and a single-quoted attribute holding
@@ -2843,9 +2855,29 @@ function renderNav(
      */
     NAV_PLACEMENT_BOOT +
     `<div class="topframe" data-trails="${esc(JSON.stringify(trails))}" data-sections="${esc(JSON.stringify(sectionOf))}">` +
+    /**
+     * ⛔ AN AREA'S ITEMS BELONG UNDER THE AREA, NOT IN A SECTION OF THEIR OWN.
+     *
+     * Peter: *"the expanded menu should be grouped under each main area, just like a standard
+     * menu... e.g. product, when selected, should have items under it, not under a new section. And
+     * each container should be collapsible"*.
+     *
+     * Every area was a button in one row and its items were a SIBLING block below the whole row, so
+     * on the side menu the four areas sat together and whatever was open appeared underneath all of
+     * them — attached to nothing. Reading down the menu told you what the areas were and then
+     * showed you a list with no owner.
+     *
+     * So each area is a group holding its own head and its own items.
+     *
+     * ⛔ `display: contents` IN TOP MODE, so the row is laid out exactly as it was — the wrapper
+     * leaves the layout entirely. Nesting is a fact about the DOM; whether it READS as nesting is
+     * the side menu's business, and the top menu must not change at all.
+     */
     `<div class="tabs">${sections
       .map(
         (t) =>
+          `<div class="tabgroup" data-group="${esc(t.id)}">` +
+          `<div class="tabhead">` +
           `<button type="button" class="tab" data-tab="${esc(t.id)}">${t.label}${
             /**
              * ⛔ THE COUNT ON THE TAB TOO. Overview carried one and the halves carried none, so the
@@ -2858,7 +2890,22 @@ function renderNav(
               : t.toRead
                 ? ` <span class="pill quiet">${t.toRead}</span>`
                 : ""
-          }</button>`
+          }</button>` +
+          /**
+           * ⛔ THE TWISTY IS A SEPARATE CONTROL FROM THE AREA, for the reason the chevron beside the
+           * trail is: one control that both navigates and expands means every attempt to collapse a
+           * group moves you into it. ⛔ And only where the group has something to collapse — a
+           * twisty that expands nothing is the thing this project refuses by name elsewhere.
+           */
+          (t.id === "prototype"
+            ? ""
+            : `<button type="button" class="twisty" data-twist="${esc(t.id)}" aria-expanded="true" aria-label="Collapse ${esc(
+                t.label
+              )}">▾</button>`) +
+          `</div>` +
+          /** Overview's own items move inside their area — see the strip below. */
+          (t.id === "overview" ? OVERVIEW_STRIP : "") +
+          `</div>`
       )
       .join("")}${NAV_PLACE_BUTTON}</div>` +
     /**
@@ -2879,11 +2926,7 @@ function renderNav(
      * tab selection — and with them the behaviour table, which simply vanished from every feature
      * page. ⛔ The markup was all present, which is why a test asserting the markup passed it.
      */
-    `<div class="subtabs" data-tabs="product" hidden><button type="button" class="subtab" data-sub="queue">Queue${
-      open ? ` <span class="pill">${open}</span>` : ""
-    }</button><button type="button" class="subtab" data-sub="screens">Screens${
-      screens ? ` <span class="pill quiet">${screens}</span>` : ""
-    }</button><button type="button" class="subtab" data-sub="about">${aboutLabel}</button>${charterTabs}</div>` +
+
     /**
      * ⛔ THE TRAIL NAVIGATES; THE CHEVRON EXPANDS. One control doing both meant every attempt to go
      * up a level dropped the whole tree on you instead, which is the opposite of what a breadcrumb
@@ -6018,6 +6061,25 @@ const VIEW_SWITCH = `<script>
     const cr = document.querySelector(".topframe .crumbs");
     if (sm) sm.hidden = section !== "overview";
     if (cr) cr.hidden = section === "overview";
+    /*
+     * ⛔ THE TREE MOVES UNDER THE AREA IT IS SHOWING, rather than being copied per area.
+     *
+     * Peter: "e.g. product, when selected, should have items under it, not under a new section."
+     *
+     * One tree exists and scopeTree() already filters its rows to the selected section — so a
+     * second tree per area would be two derivations of one fact, which is what this project keeps
+     * being bitten by. Instead the one element is appended into the selected group, so it physically
+     * sits under the area whose features it is listing.
+     *
+     * ⛔ AND IT GOES BACK WHERE IT WAS FOR OVERVIEW, which has no features of its own: left inside
+     * the last area it was moved to, it would read as that area's list while showing nothing.
+     */
+    if (tree) {
+      const group = section === "overview" ? null : document.querySelector('.tabgroup[data-group="' + CSS.escape(section) + '"]');
+      const home = document.querySelector(".topframe");
+      if (group && tree.parentNode !== group) group.appendChild(tree);
+      else if (!group && home && tree.parentNode !== home) home.appendChild(tree);
+    }
     if (collapse || section === "overview") setOpen(false);
     /**
      * ⛔ EACH VIEW IS A PLACE THE BACK BUTTON CAN RETURN TO.
@@ -6152,6 +6214,59 @@ const VIEW_SWITCH = `<script>
     /** ⛔ Each strip opens on its own first tab. Globally, one strip decided for all of them. */
     const first = strip.querySelector(".subtab");
     if (first) showSub(owner, first.dataset.sub);
+  }
+
+  /*
+   * ⛔ EACH CONTAINER COLLAPSIBLE, AND IT REMEMBERS. Peter: "And each container should be
+   * collapsible." A side menu that reopened every group on reload would make collapsing it pointless
+   * — the reason to shut a group is that you are not working in it today.
+   *
+   * ⛔ THE TWISTY DOES NOT NAVIGATE. One control that both selects and collapses means every attempt
+   * to shut a group moves you into it, which is the mistake the chevron beside the trail was built
+   * to avoid.
+   */
+  const SHUT = "productos:nav-shut";
+  const shut = (() => {
+    try { return new Set(JSON.parse(localStorage.getItem(SHUT) || "[]")); } catch (e) { return new Set(); }
+  })();
+  const remember = () => {
+    try { localStorage.setItem(SHUT, JSON.stringify([...shut])); } catch (e) { /* private window: collapse still works, it just forgets */ }
+  };
+  for (const t of document.querySelectorAll(".twisty")) {
+    const name = t.dataset.twist;
+    const group = t.closest(".tabgroup");
+    if (!group) continue;
+    const paint = () => {
+      const closed = shut.has(name);
+      group.classList.toggle("shut", closed);
+      t.setAttribute("aria-expanded", closed ? "false" : "true");
+      t.setAttribute("aria-label", (closed ? "Expand " : "Collapse ") + (group.querySelector(".tab")?.textContent || name).trim());
+    };
+    paint();
+    t.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      if (shut.has(name)) shut.delete(name);
+      else shut.add(name);
+      remember();
+      paint();
+    });
+  }
+  /*
+   * ⛔ CHOOSING AN AREA OPENS IT. Selecting a collapsed group and being shown nothing is the state
+   * where a reader concludes the menu is broken — standard behaviour, and the twisty is still there
+   * to shut it again.
+   */
+  for (const t of document.querySelectorAll(".topframe .tab")) {
+    t.addEventListener("click", () => {
+      const name = t.dataset.tab;
+      if (!shut.has(name)) return;
+      shut.delete(name);
+      remember();
+      const group = t.closest(".tabgroup");
+      if (group) group.classList.remove("shut");
+      const tw = group && group.querySelector(".twisty");
+      if (tw) tw.setAttribute("aria-expanded", "true");
+    });
   }
 
   const opening = location.hash.replace(/^#/, "");
@@ -6734,6 +6849,15 @@ export const STYLE = `<style>
     border-bottom: 1px solid var(--line); }
   .topframe .tabs { display: flex; gap: .15rem; max-width: 100%; margin: 0 auto;
     padding: .55rem 1.25rem 0; }
+  /*
+   * ⛔ THE GROUP LEAVES THE LAYOUT IN TOP MODE. A display of "contents" puts the head and the strip back
+   * in the tabs flex row exactly where they were, so grouping is a fact about the DOM and the top
+   * menu does not change at all. Nesting is the side menu's business.
+   */
+  .topframe .tabgroup { display: contents; }
+  .topframe .tabhead { display: contents; }
+  /* ⛔ Nothing to collapse in a row — the twisty is the side menu's control. */
+  .topframe .twisty { display: none; }
   .topframe .tab { font: inherit; font-size: .92rem; background: none; border: 0;
     border-bottom: 2px solid transparent; color: var(--dim); cursor: pointer;
     padding: .4rem .7rem; border-radius: 4px 4px 0 0; }
@@ -6793,8 +6917,30 @@ export const STYLE = `<style>
     /* First in the column, because the control that moves the menu belongs at the top of it —
        last in a flex row is the right edge, and last in a flex column is the bottom of the page. */
     :root[data-nav="left"] .navplace { order: -1; margin: 0 0 .5rem; align-self: flex-start; }
+    /*
+     * ⛔ DOWN THE SIDE, A GROUP IS A GROUP. Peter: *"the expanded menu should be grouped under each
+     * main area, just like a standard menu... e.g. product, when selected, should have items under
+     * it, not under a new section. And each container should be collapsible"*.
+     */
+    :root[data-nav="left"] .topframe .tabgroup { display: block; }
+    :root[data-nav="left"] .topframe .tabhead { display: flex; align-items: center; gap: .15rem; }
+    :root[data-nav="left"] .topframe .tabhead .tab { flex: 1; }
+    :root[data-nav="left"] .topframe .twisty { display: block; font: inherit; font-size: .7rem;
+      background: none; border: 0; color: var(--dim); cursor: pointer; padding: .2rem .35rem;
+      line-height: 1; border-radius: 4px; }
+    :root[data-nav="left"] .topframe .twisty:hover { color: var(--ink); }
+    /* ⛔ The arrow turns rather than changing character: one glyph, two states, no second string. */
+    :root[data-nav="left"] .topframe .twisty[aria-expanded="false"] { transform: rotate(-90deg); }
+    /*
+     * ⛔ COLLAPSED HIDES THE GROUP'S CONTENTS AND KEEPS ITS HEAD. A collapsed area that hid its own
+     * name would be an area you cannot get back to.
+     */
+    :root[data-nav="left"] .topframe .tabgroup.shut > :not(.tabhead) { display: none; }
+    /* The items sit under their area, indented, so reading down the menu says whose they are. */
+    :root[data-nav="left"] .topframe .tabgroup > .subtabs,
+    :root[data-nav="left"] .topframe .tabgroup > .scopes { padding-left: 1.5rem; }
     :root[data-nav="left"] .topframe .subtabs { flex-direction: column; align-items: stretch;
-      padding: .35rem .9rem .5rem; }
+      padding: .35rem .9rem .5rem; border-top: 0; }
     :root[data-nav="left"] .subtab { text-align: left; border-bottom: 0;
       border-left: 2px solid transparent; padding: .3rem .6rem; }
     :root[data-nav="left"] .subtab.on { border-left-color: var(--accent); }
