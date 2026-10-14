@@ -7,6 +7,7 @@
  */
 import { becauseOf } from "./because.js";
 import { startHosted } from "./server.js";
+import { watchForAStuckWrite } from "./watchdog.js";
 
 async function main(): Promise<void> {
   const { close } = await startHosted();
@@ -26,6 +27,9 @@ async function main(): Promise<void> {
   };
   process.on("SIGTERM", stop("SIGTERM"));
   process.on("SIGINT", stop("SIGINT"));
+
+  /** ⛔ See `watchdog.ts`: a write stuck past ten minutes ends this process so the policy restarts it. */
+  watchForAStuckWrite();
 }
 
 main().catch((e: unknown) => {

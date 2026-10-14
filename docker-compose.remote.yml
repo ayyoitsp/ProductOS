@@ -33,6 +33,19 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    # ⛔ A RESTART POLICY, BECAUSE DETECTION WITHOUT A REMEDY IS WORSE THAN NEITHER.
+    #
+    # `/health` reports a project whose write is stuck. Twice in one day that was true, the container
+    # was marked `unhealthy`, and nothing happened: `RestartPolicy: no`, `RestartCount: 0`, the probe
+    # failing every 30s with nobody acting on it. A signal that looks like it will self-heal and does
+    # not is a worse position than having no signal at all.
+    #
+    # ⛔ AND DOCKER DOES NOT RESTART A CONTAINER FOR FAILING A HEALTHCHECK. An earlier commit here
+    # claimed it does, and that was wrong. A restart policy acts on the process EXITING; a
+    # healthcheck only sets a status that an orchestrator may read, and plain compose reads nothing.
+    # So the remedy is the process ending itself — the watchdog in `src/v2/store/boot.ts` — and this
+    # line is what brings it back.
+    restart: unless-stopped
     environment:
       # ⛔ No default. The instance refuses to start without it, which is the
       #    behaviour wanted here: a remote stack that silently fell back to a
