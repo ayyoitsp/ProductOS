@@ -47,7 +47,7 @@ const liveScript = (html) => {
   const blocks = [...html.matchAll(/<script(?![^>]*\bsrc=)(?![^>]*type="application\/json")[^>]*>([\s\S]*?)<\/script>/g)].map(
     (m) => m[1]
   );
-  const live = blocks.find((b) => b.includes("const API"));
+  const live = blocks.find((b) => b.includes("const UNDER"));
   assert.ok(live, "the live script does not define the door, so this test is not about anything");
   return live;
 };
@@ -61,11 +61,19 @@ const liveScript = (html) => {
  */
 function doorAt(html, pathname) {
   const src = liveScript(html);
-  const def = /const API = \(function \(\) \{[\s\S]*?\}\)\(\);/.exec(src);
-  assert.ok(def, "the door is no longer defined as one expression — this test cannot read it");
+  /**
+   * ⛔ THE PREFIX AND THE DOOR, both read out of the script. They were one expression until the
+   * prefix had to serve seven urls instead of one; a test that kept reading the old shape would have
+   * reported the fix as a regression, which is the matcher-too-narrow failure four times over
+   * between the two sessions today.
+   */
+  const under = /const UNDER = \(function \(\) \{[\s\S]*?\}\)\(\);/.exec(src);
+  const door = /const API = UNDER \+ "[^"]+";/.exec(src);
+  assert.ok(under, "the page no longer derives a prefix — this test cannot read it");
+  assert.ok(door, "the door is no longer built from the prefix");
   const ctx = { location: { pathname }, out: null };
   vm.createContext(ctx);
-  new vm.Script(def[0] + "\nout = API;").runInContext(ctx);
+  new vm.Script(under[0] + "\n" + door[0] + "\nout = API;").runInContext(ctx);
   return ctx.out;
 }
 
@@ -82,14 +90,39 @@ test("the door is at the root when the page is", () => {
   assert.equal(doorAt(html, "/v2/money"), "/api/v2/in");
 });
 
-test("⛔ nothing posts to a hard-coded root path any more", () => {
+test("⛔ NOTHING the page reaches for is root-relative — all seven, not the one that failed", () => {
   /**
-   * The fix is only a fix if every call site uses it. There were four — the composer, two act
-   * paths, and the selection handlers — and three of them were in the same file as the one that
-   * failed, which is how this survived being noticed.
+   * ⛔ MY FIRST FIX REACHED FOUR CALL SITES AND THERE WERE SEVEN.
+   *
+   * The deploying session built a probe that takes the urls the page's own script NAMES and resolves
+   * each the way a browser will. Three were still root-relative:
+   *
+   *     /api/v2/thread     404 at the origin, 200 under the project
+   *     /api/v2/presence   404                200
+   *     /api/v2/live       404                200
+   *
+   * So the acknowledgement thread never loaded on a hosted page, presence never loaded, and the live
+   * connection never opened — the two-way window, dead, and it had been.
+   *
+   * ⛔ AND THE POST PROBE I HAD SUGGESTED WOULD HAVE MISSED ALL THREE. Two are GETs and one is an
+   * EventSource. The thing to enumerate is the URLS, not the verb — which is why this asserts on
+   * every string the script hands to fetch, EventSource or WebSocket rather than on the door alone.
+   *
+   * ⛔ IT IS A PROPERTY OF THE SCRIPT, not a list maintained here. A new endpoint added
+   * root-relative fails this without anybody remembering to add it.
    */
   const src = liveScript(page());
-  assert.doesNotMatch(src, /fetch\("\/api\/v2\/in"/, "a handler still posts to the root, ignoring the project");
-  const uses = [...src.matchAll(/fetch\(API\b/g)].length;
-  assert.ok(uses >= 4, `only ${uses} handlers use the door — one was left behind`);
+  const reaches = [
+    ...src.matchAll(/(?:fetch|new EventSource|new WebSocket)\(\s*"([^"]+)"/g),
+  ].map((m) => m[1]);
+  const rooted = reaches.filter((u) => u.startsWith("/"));
+  assert.deepEqual(
+    rooted,
+    [],
+    `these leave the project behind when the page is served under one:\n  ${rooted.join("\n  ")}`
+  );
+
+  /** ⛔ And every one of them is built from the prefix, or the fix reached some and not others. */
+  const built = [...src.matchAll(/(?:fetch|new EventSource|new WebSocket)\(\s*(API|UNDER \+)/g)].length;
+  assert.ok(built >= 7, `only ${built} of the page's requests are built from the prefix — one was left behind`);
 });
