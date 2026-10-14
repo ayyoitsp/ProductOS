@@ -308,6 +308,33 @@ It refuses: a product, area or capability system with no description; a containe
 wrong depth; any high audit finding; a `depends_on`, `affected_by` or `leads_to` that
 resolves to nothing.
 
+## ⛔ The environment convenient to measure in is not the environment the thing lives in
+
+Peter, pressing Add on the live page: *"Not saved: Not Found"*.
+
+**Three defects in two days, same shape: the code was right about the place it was tested and
+wrong about the place it runs.**
+
+| what was measured | where it was wrong |
+| --- | --- |
+| every page write, against the local stack | local serves at `/`, hosted serves under `/p/<project>/` — seven root-relative urls, including the composer and the live connection, 404ing on the only page he reviews on |
+| the side menu, in the default headless window | its rules live inside `@media (min-width: 62rem)`; the window was narrower, so a correct page measured as broken |
+| the config, from a corpus directory | reachable above a corpus and not above a temp dir, so a fixture behaved unlike a repo |
+
+⛔ **The first one is the expensive one and it is the one nothing could see.** Browser tests replace
+`fetch` and assert on what a handler SENDS, so a wrong url passes — they would go green on
+`/nonsense`. A parse check reads the script. `tsc` cannot see inside a template string. And the
+stack anybody develops against is the one where the bug does not exist.
+
+⛔ **So a measurement carries its conditions.** "A matcher is a claim about the shape of the thing"
+needs the second clause: it is also a claim about the conditions under which that shape exists, and
+a default — a window size, a serving path, a working directory — is a condition nobody wrote down.
+
+**What this costs in practice:** verify against the shape the thing actually ships in. A route
+checked by curl against a path you typed says nothing about a page that builds a different one; a
+layout checked at whatever width a headless browser opens at says nothing about the layout that
+only exists above a breakpoint.
+
 ## ⛔ A zero proves nothing unless you can say what a failing zero looks like
 
 Peter: *"why aren't you just looking at all variable substituion? are you just searching for 'n"?

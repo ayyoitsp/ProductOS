@@ -607,6 +607,24 @@ answered `cannot-judge-this-corpus`: not one finding, about anything, until some
 ⛔ **Run it when `check` says a key is unrecognized.** That is what it looks like from the outside: a
 corpus written by an older build, read by a newer one.
 
+### ⛔ The environment convenient to measure in is not the environment the thing lives in
+
+Peter, pressing Add on the live page: *"Not saved: Not Found"*. Three defects in two days, same
+shape — the code right about where it was tested and wrong about where it runs:
+
+- **every page write**, checked against the local stack. Local serves at `/`; hosted serves under
+  `/p/<project>/`. Seven root-relative urls — the composer, the thread, the live connection —
+  404ing on the only page anybody reviews on.
+- **the side menu**, measured in the default headless window. Its rules live inside
+  `@media (min-width: 62rem)`, so a correct page measured as broken.
+- **the config**, read from a corpus directory, which is reachable in a way a temp dir is not.
+
+⛔ **Nothing could see the first one.** A browser test that replaces `fetch` asserts what a handler
+SENDS, so a wrong url passes — it would go green on `/nonsense`.
+
+⛔ **So verify against the shape the thing ships in.** A route checked by curl against a path you
+typed says nothing about a page that builds a different one.
+
 ### ⛔ A zero proves nothing unless you can say what a failing zero looks like
 
 Peter: *"why aren't you just looking at all variable substituion? are you just searching for 'n"?
