@@ -83,7 +83,7 @@ export interface Corpus {
    */
   prototypes: Prototype[];
   /** The question the prototype selection asks, in the project own words. Absent until stated. */
-  splitsOn?: string | Array<{ id: string; asks: string }>;
+  splitsOn?: string | Array<{ id: string; label: string; values?: string[] }>;
   rules: Array<{ rule: Rule; body: string; file: string }>;
   /**
    * The subsystems beneath the product, and roughly what each does.
@@ -350,7 +350,7 @@ export function loadCorpus(root: string, store: Store = diskStore): Corpus {
    * question the selection asks belongs to the collection — putting it on each prototype would be
    * the same sentence stored four times with nothing keeping them equal.
    */
-  let splitsOn: string | Array<{ id: string; asks: string }> | undefined;
+  let splitsOn: string | Array<{ id: string; label: string; values?: string[] }> | undefined;
   for (const file of readDir(paths.root, [".yaml", ".yml"]).filter((f) => /prototypes\.ya?ml$/.test(f))) {
     try {
       /**

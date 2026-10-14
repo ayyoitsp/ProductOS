@@ -215,7 +215,7 @@ test("the selection reaches the page as a control per dimension", () => {
   cli(["v2", "prototypes", "new", "Admin only", "--starts-at", ref, "--into", dir]);
   const intent = intentNamed("splits-on");
   const put = intent.run({ dir, who: { kind: "cli", actor: "peter" }, pressing: "peter" }, {
-    axes: [{ asks: "Role", values: ["admin", "loan processor"] }],
+    axes: [{ label: "Role", values: ["admin", "loan processor"] }],
   });
   assert.equal(put.ok, true, put.why);
 
@@ -282,7 +282,7 @@ test("⛔ no field name reaches a reader in ANY state — including the one with
         cli(["v2", "prototypes", "new", "Admin", "--starts-at", ref, "--into", dir]);
         cli(["v2", "prototypes", "new", "Processor", "--starts-at", ref, "--into", dir]);
         const ask = { dir, who: { kind: "cli", actor: "p" }, pressing: "p" };
-        intentNamed("splits-on").run(ask, { axes: [{ asks: "Role", values: ["admin", "loan processor"] }] });
+        intentNamed("splits-on").run(ask, { axes: [{ label: "Role", values: ["admin", "loan processor"] }] });
         intentNamed("prototype").run(ask, { id: "admin", is: { role: "admin" } });
       },
     },
@@ -353,7 +353,7 @@ test("⛔ a prototype can be taken back — declaring without removing is a one-
   assert.deepEqual(c.broken, [], "the removal left a file that will not load");
   assert.deepEqual(c.prototypes.map((p) => p.id), ["processor"], "it removed the wrong one, or none");
   /** ⛔ The axis survives a removal — it belongs to the set, not to any member of it. */
-  assert.equal(c.splitsOn?.[0]?.asks ?? c.splitsOn, "Which role is this for?");
+  assert.equal(c.splitsOn?.[0]?.label ?? c.splitsOn, "Which role is this for?");
 
   /** ⛔ And removing one that is not there is refused rather than silently fine. */
   assert.equal(intent.run(ask, { id: "admin", remove: true }).ok, false, "removing a prototype twice reported success");

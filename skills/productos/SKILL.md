@@ -440,41 +440,85 @@ Then **check a number on the live page that would be different if it had not wor
 page returns 200. A corpus was once reported deployed while every drawing on it still came from the
 previous generator, and the tick was true.
 
-### ⛔ Several ways through one product — and say what they are alternatives ABOUT
+### ⛔ Several ways through one product — dimensions, and which one each prototype is
 
-Peter: *"we should have a first class "prototype selection' at the root of prototypes. the multiple
-prototypes should be supported by the framework - what it splits on should be up to the project/user
-driving it"*, and earlier: *"we can have different prototypes for differnet prototypes.. like
-'unauthenticated' could be a flow, and CRE vs private lending"*.
+Peter: *"we can have different prototypes for differnet prototypes.. like 'unauthenticated' could be
+a flow, and CRE vs private lending"*, then *"It's going to split on different products - CRE vs
+private lending, then also on roles"*, then *"let's allow users to specify their own dimensions for
+the prototype - 'role', as an example, and 'product line' as another, and let them specify the
+values"*.
 
 An unauthenticated flow and a signed-in one do not share a menu; two lending businesses in one
-codebase do not share a walk. So a product has **prototypes**, each with its own front door and its
-own chrome — and the set has a **question at its root** that the project writes:
+codebase do not share a walk. So a product has **prototypes**, and the set splits on **dimensions**
+the project names — each with its own values:
 
-```bash
-productos v2 prototypes splits-on "Which role is this for?" --into <corpus>
-productos v2 prototypes new "CRE — loan processor" --starts-at deal-list#deals-list \
-  --is "loan processor" --shell-from frontend/app/\(app\)/cre-deals/page.tsx --into <corpus>
-productos v2 prototypes --into <corpus>        # draw each one's chrome and aim its menu
+```yaml
+splits_on:
+  - label: Role
+    values: [admin, loan processor]
+  - label: Product line
+    values: [CRE, private lending]
+prototypes:
+  - id: cre-admin
+    title: CRE admin
+    starts_at: deal-list#deals-list
+    is:
+      role: admin
+      product-line: CRE
 ```
 
+⛔ **`label`, not `asks`** — and a test caught that, not me. `asks` is already a field in this model:
+an enum of `whether | when | told` on a standing. A dimension carrying `asks: Role` taught a key
+that is a parse refusal three objects away, and a reader meeting `asks:` had to know which object
+they were in. `label` is the word this model already uses for what a reader is shown.
+
+⛔ **The `is:` keys are the dimensions' own ids**, derived from the label where you do not give one,
+so "Product line" becomes `product-line`. They are data rather than schema: this is the one map in
+the model whose KEYS a project chooses.
+
+⛔ **This is set from the page, not from a terminal.** Peter: *"I should be able to drive this from
+the listener/input, right??? why could you possibly need this?"* — the Prototype tab has a dropdown
+per dimension, **Add a dimension**, and a row per prototype you assign from. The commands exist for
+a session working in a checkout and are not the primary surface:
+
+```bash
+productos v2 prototypes --into <corpus>        # draw each one's chrome and aim its menu
+productos v2 prototypes new "<title>" --starts-at <scope>#<view> --into <corpus>
+```
+
+⛔ **Or from the one text input, with a tag** — never from prose:
+
+```
+dim: Role = admin, loan processor
+```
+
+The tag is typed, the way `pos:` is. A classifier reading *"add a dimension for role"* out of a
+sentence would be a guess wearing a decision's clothes, and this one would write product truth on
+the guess. Untagged text files a request, as always.
+
 ⛔ **Never hand-write `prototypes.yaml`.** The id comes from the title, the front door is checked
-against the corpus before anything is written, and `shell_html`, `nav[].to` and `from` are all
-output. What a person writes is the title, which screen it opens on, and `--is`.
+before anything is written, and `shell_html`, `nav[].to` and `from` are all output. What a person
+says is the title, the front door, the dimensions and where each prototype sits.
 
-⛔ **`splits_on` is a sentence somebody wrote, and nothing infers it.** A classifier reading two
-titles and concluding "role" would be a guess wearing a decision's clothes — the same objection as
-`Note.kind`. Absent is absent, and every surface says so rather than labelling it.
+⛔ **Nothing infers a dimension.** Two titles reading "CRE — loan processor" and "Admin" would give a
+classifier "Role" and "Product line"; absent is absent, and every surface says so rather than
+labelling it. The example in the form is a *placeholder*, which a person overwrites.
 
-⛔ **`title` and `is` are different strings on purpose.** "CRE — loan processor" is for a reader;
-`is: loan processor` is which side of the split this one is. A chooser built from titles alone cannot
-tell you that two of five options are both the admin, or that nothing covers the signed-out case —
-and `check` reports exactly those: `prototypes-split-on-nothing`, `two-prototypes-one-answer`,
-`prototype-answers-nothing`, `prototype-opens-on-nothing`.
+⛔ **`title` and `is` are different things on purpose.** "CRE admin" is for a reader; `is` is where
+it sits. A list built from titles alone cannot say that two of five are the same combination, or
+that nothing covers signed-out — and `check` reports exactly those: `prototypes-split-on-nothing`,
+`two-prototypes-one-answer`, `prototype-answers-nothing`, `nothing-covers-this`,
+`a-prototype-opens-on-nothing`.
 
-⛔ **How much of the product each one reaches is derived, never typed.** It is what separates a
-second way through the product from one screen somebody filed hopefully, and it is a fact about the
-truth. The first prototype in the file is where a reader lands — ordering, not a `default:` flag.
+⛔ **The dropdowns are FILTERS, not a coordinate.** They narrow the list of prototypes; each row
+carries its own placement as chips reading `role:admin`. This was built as a coordinate resolving to
+one prototype first, and it took four redesigns to find that the control's *kind* was the mistake: a
+coordinate needs a special case for a combination nothing covers, filters make that an empty list.
+⛔ **And a prototype specifying nothing is in the list saying so** — hiding it until somebody placed
+it would hide the thing that needs doing.
+
+⛔ **How much of the product each one reaches is derived, never typed**, and so is whether a value is
+covered at all. The first prototype in the file is where a reader lands — ordering, not a flag.
 
 ### ⛔ A screen somebody has worked on is not the sweep's to rewrite
 

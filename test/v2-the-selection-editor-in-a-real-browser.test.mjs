@@ -6,7 +6,7 @@
  * honest check of that is a browser pressing the button.
  *
  * ⛔ A PARSE TEST PASSED ON CODE THAT WAS DEFINITELY BROKEN, which is why this file exists beside
- * it. Fixing the `\n` escape, my edit deleted the `var asks = …` line itself — and
+ * it. Fixing the `\n` escape, my edit deleted the `var label = …` line itself — and
  * `v2-the-live-script-parses` stayed green, because a missing statement is not a syntax error. The
  * handler would have thrown `asks is not defined` on the first press. One test measures that the
  * script loads; only this one measures that pressing it does something.
@@ -49,7 +49,7 @@ function corpus() {
     [
       "splits_on:",
       "  - id: role",
-      "    asks: Role",
+      "    label: Role",
       /**
        * ⛔ A THIRD VALUE NOTHING COVERS, ON PURPOSE. The dimming assertion below used to say only
        * that nothing WAS dimmed — which proves the marker is not too wide and never proves it
@@ -59,7 +59,7 @@ function corpus() {
        */
       "    values: [admin, loan processor, auditor]",
       "  - id: line",
-      "    asks: Product line",
+      "    label: Product line",
       "    values: [CRE, private lending]",
       "prototypes:",
       "  - id: cre-admin",
@@ -286,7 +286,7 @@ test("⛔ a prototype specifying nothing says so, and can be assigned from the l
     [
       "splits_on:",
       "  - id: role",
-      "    asks: Role",
+      "    label: Role",
       "    values: [admin, loan processor]",
       "prototypes:",
       "  - id: placed",
@@ -381,7 +381,7 @@ test("⛔ Add a dimension brings up the form, and saving it keeps the ones alrea
     const before = form.hidden;
     document.querySelector('[data-dim-add]').click();
     const opened = form.hidden;
-    form.querySelector('input[name="asks"]').value = 'Signed in?';
+    form.querySelector('input[name="label"]').value = 'Signed in?';
     form.querySelector('input[name="values"]').value = 'yes, no';
     document.querySelector('[data-dim-save]').click();
     await new Promise((r) => setTimeout(r, 400));
@@ -393,7 +393,7 @@ test("⛔ Add a dimension brings up the form, and saving it keeps the ones alrea
   assert.equal(sent.length, 1);
   assert.equal(sent[0].body.intent, "splits-on");
   assert.equal(sent[0].body.axes.length, 3, "saving a new dimension dropped the ones already named");
-  assert.deepEqual(sent[0].body.axes[2], { id: "", asks: "Signed in?", values: ["yes", "no"] });
+  assert.deepEqual(sent[0].body.axes[2], { id: "", label: "Signed in?", values: ["yes", "no"] });
   /** ⛔ Including a value nothing uses — a save must not prune it, or the uncovered case vanishes. */
   assert.deepEqual(sent[0].body.axes[0].values, ["admin", "loan processor", "auditor"]);
 });
@@ -417,7 +417,7 @@ test("⛔ choosing + add a value opens the form for that dimension, and does not
       stuck: sel.value === '__add__',
       restored: sel.value === was,
       open: !form.hidden,
-      asks: form.querySelector('input[name="asks"]').value,
+      label: form.querySelector('input[name="label"]').value,
       values: form.querySelector('input[name="values"]').value,
       rows: [...document.querySelectorAll('[data-proto-row]')].filter((r) => !r.hidden).length,
     });
@@ -426,7 +426,7 @@ test("⛔ choosing + add a value opens the form for that dimension, and does not
   assert.equal(seen.stuck, false, "the add-a-value sentinel stayed selected and is now filtering");
   assert.equal(seen.restored, true, "the dropdown did not go back to what it was");
   assert.equal(seen.open, true, "it did not bring up the form");
-  assert.equal(seen.asks, "Role", "the form does not know which dimension it is adding to");
+  assert.equal(seen.label, "Role", "the form does not know which dimension it is adding to");
   assert.match(seen.values, /admin/, "the values already named were not carried in");
   assert.ok(seen.rows > 0, "the list is being filtered on a value that does not exist");
 });
@@ -456,7 +456,7 @@ test("⛔ a dim: tag in the composer names a dimension — explicit, never infer
   assert.equal(sent.length, 1);
   assert.equal(sent[0].body.intent, "splits-on", "a dim: tag did not name a dimension");
   const added = sent[0].body.axes[sent[0].body.axes.length - 1];
-  assert.equal(added.asks, "Signed in");
+  assert.equal(added.label, "Signed in");
   assert.deepEqual(added.values, ["yes", "no"]);
   /** ⛔ The ones already named travel, same as from the form. */
   assert.equal(sent[0].body.axes.length, 3, "the tag replaced the dimensions instead of adding one");

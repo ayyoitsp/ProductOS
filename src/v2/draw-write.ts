@@ -412,7 +412,7 @@ export function writeDrawnReading(root: string, scopeId: string, viewId: string,
  * asked and left blank; absent is nobody having said yet. Those are different states and every
  * surface distinguishes them.
  */
-export function writePrototypes(root: string, protos: unknown[], splitsOn?: string | Array<{ id: string; asks: string }>): string {
+export function writePrototypes(root: string, protos: unknown[], splitsOn?: string | Array<{ id: string; label: string; values?: string[] }>): string {
   const file = path.join(root, "prototypes.yaml");
   fs.writeFileSync(
     file,
