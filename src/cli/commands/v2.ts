@@ -3434,7 +3434,16 @@ async function drawEverythingOn(url: string, code: string, dryRun: boolean, toke
 
   const pages = heldPages(files);
   console.log(pc.dim(`reading code from ${path.resolve(code)}, writing truth to ${url}`));
-  drawEverything(path.resolve(code), pages, undefined, dryRun);
+  /**
+   * ⛔ THE SWEEP WRITES EVEN ON A DRY RUN, BECAUSE HERE IT WRITES INTO MEMORY.
+   *
+   * `dryRun` means "do not persist", and for a directory that has to stop the write — a file is the
+   * persistence. A held map is not: writing into it IS the computation of what would be sent, and
+   * the map is discarded. Passing the flag through made a dry run skip every write and then report
+   * "nothing moved — no document needed writing back", which is a true statement about a map nobody
+   * had touched and reads as "your corpus is already current".
+   */
+  drawEverything(path.resolve(code), pages, undefined, false);
 
   const moved = pages.moved();
   if (!moved.length) {
@@ -3442,28 +3451,58 @@ async function drawEverythingOn(url: string, code: string, dryRun: boolean, toke
     return;
   }
   if (dryRun) {
-    console.log(pc.dim(`\n  ${moved.length} document(s) would be written back; nothing sent`));
+    console.log("");
+    console.log(pc.dim(`${moved.length} document(s) would be written back to ${url}; nothing sent`));
     for (const key of moved) console.log(pc.dim(`    ${key}`));
     return;
   }
 
   console.log("");
   let sent = 0;
+  const failed: Array<{ key: string; why: string }> = [];
   for (const key of moved) {
-    const out = await putDocument(i, key, pages.read(key));
+    /**
+     * ⛔ CAUGHT PER DOCUMENT, BECAUSE A THROWN ERROR KILLED THE WHOLE SWEEP WITH A STACK TRACE.
+     *
+     * The first real run hit the instance mid-restart — a deploy was in flight — and `call` threw
+     * on a 503. The sweep died at document one and printed a Node stack, so the only thing a reader
+     * could tell was that something had gone wrong SOMEWHERE in a 42-document write. Nothing had
+     * landed, which was luck: had it failed on document thirty, the corpus would have been half
+     * drawn with no account of which half.
+     *
+     * ⛔ ONE REFUSAL DOES NOT ABANDON THE REST, AND NONE IS SWALLOWED. A document the instance will
+     * not take is a thing to look at; the other forty-one are still worth writing. What is NOT
+     * acceptable is finishing quietly — so the count of what landed is the last line either way, and
+     * the exit code says whether it was all of them.
+     */
+    let out: { ok: boolean; why?: string };
+    try {
+      out = await putDocument(i, key, pages.read(key));
+    } catch (e) {
+      out = { ok: false, why: (e as Error).message };
+    }
     if (out.ok) {
       sent++;
       console.log(pc.green("✓"), pc.dim(`${key} → ${url}`));
     } else {
-      /**
-       * ⛔ ONE REFUSAL DOES NOT ABANDON THE REST, AND NONE IS SWALLOWED. A document the instance
-       * will not take is a thing to look at; the other nineteen are still worth writing, and a
-       * sweep that stopped at the first would leave the corpus half drawn with no account of where.
-       */
+      failed.push({ key, why: out.why ?? "refused" });
       console.error(pc.red("✗"), `${key}: ${out.why ?? "refused"}`);
     }
   }
-  console.log(pc.green("✓"), `${sent} of ${moved.length} documents written to ${url}`);
+  console.log("");
+  console.log(
+    failed.length ? pc.yellow("!") : pc.green("✓"),
+    `${sent} of ${moved.length} documents written to ${url}`
+  );
+  if (failed.length) {
+    /**
+     * ⛔ AND IT EXITS NON-ZERO. A sweep that wrote 30 of 42 and returned success is a sweep whose
+     * caller — a deploy step, a script, the next session — carries on as though the corpus were
+     * current. The thing that must never happen quietly is a partial write.
+     */
+    console.error(pc.dim(`  ${failed.length} refused. Re-run to retry only what is still different.`));
+    process.exit(1);
+  }
 }
 
 function drawEverything(code: string, pages: Pages, corpusAt: string | undefined, dryRun: boolean): void {
@@ -3591,8 +3630,19 @@ function drawEverything(code: string, pages: Pages, corpusAt: string | undefined
     }
     const origin = repoOf(route);
     const written = writeSketchHtml(
-      // ⛔ The tree this view came out of, which is not always the one the sweep was aimed at.
-      diskPages(viewRoot ?? into),
+      /**
+       * ⛔ THE PAGES THE SWEEP WAS GIVEN, NOT A FRESH ONE OVER A DIRECTORY.
+       *
+       * I wrapped this call site in `diskPages(...)` while threading the seam through, so a sweep
+       * handed an instance's documents drew 85 screens and wrote every one of them to the CHECKOUT —
+       * then reported "nothing moved" and sent nothing. Compiles, draws, says a true thing about a
+       * map it never touched.
+       *
+       * ⛔ `viewRoot` IS SET ONLY FOR A VIEW FOUND IN THE CHECKOUT'S v1 TREE, which is a file in
+       * that checkout rather than a document of the corpus being swept — so those go to their own
+       * directory and everything the corpus itself declared goes wherever the corpus lives.
+       */
+      viewRoot ? diskPages(viewRoot) : pages,
       scopeId(scope),
       view.id,
       drawn.html,
