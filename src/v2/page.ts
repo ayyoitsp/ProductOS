@@ -82,6 +82,35 @@ const SLOT_LABEL: Record<SlotName, string> = {
 
 export interface PageOptions {
   /**
+   * Which views arrive with their content, when the rest should arrive as they are asked for.
+   *
+   * ⛔ THE PAGE SHIPPED 144 SECTIONS AND SHOWED ONE.
+   *
+   * Peter: *"we should not be dumping everything in a single packet. we should be loading in the
+   * appropriate information, like any other web app. this is ridiculous"*. Bilrost: 12 MB of stored
+   * truth into a 49.8 MB document, 157s, 150s of it before the first byte.
+   *
+   * ⛔ AND THE REVIEW SURFACE DOES NOT GET WORSE, WHICH IS THE WHOLE RISK IN THIS CHANGE AND WAS
+   * SETTLED BY READING `VIEW_SWITCH` RATHER THAN BY ARGUING ABOUT IT. `show(name)` already sets
+   * `hidden` on every section but one, so reaching another feature is already a press. A section
+   * that arrives when it is asked for is the same surface; a DRAWING that needs a press to appear
+   * would not be, and that is why deferral is per SECTION and the drawings inside the one being
+   * read stay where they are.
+   *
+   * Undefined renders everything, which is what a standalone file has to do — it has no server to
+   * ask.
+   */
+  only?: string[];
+  /**
+   * Render one section and nothing else, for the endpoint that serves the rest.
+   *
+   * The whole page is still computed — the aggregates a section's content depends on are over the
+   * subtree — and one section is returned. ⛔ Extracted on sentinels rather than by matching
+   * `</section>`, because sections nest and the obvious regex would have returned the first inner
+   * close for the two kinds that do.
+   */
+  fragment?: string;
+  /**
    * Whether the acts are live.
    *
    * ⛔ `false` renders them visibly inert rather than omitting them, because a reviewer needs
@@ -192,6 +221,21 @@ interface Ctx {
   here: string[];
   /** Every ref this render will emit an anchor for. */
   anchors: Set<string>;
+  /**
+   * Whether this page has somewhere to fetch from.
+   *
+   * ⛔ A THUMBNAIL THAT CAN NEVER FILL IS A SCREEN WITH NO PICTURE, which this repo treats as a real
+   * defect. Making every thumbnail lazy regardless produced exactly that: `v2 page --out` wrote a
+   * file with 48 blank tiles, no drawings in it, and no server to ask — found by rendering the three
+   * modes side by side rather than by it breaking later.
+   *
+   * So the two wins are separated, because they need different things:
+   *
+   *   · ONE COPY PER DRAWING needs no server and is always on. Everything that shows a screen
+   *     clones from the bank, which is where the 5x went.
+   *   · FETCHING ON SCROLL needs an endpoint, so it is only on when the page is served.
+   */
+  served?: boolean;
 }
 
 function renderQuestion(q: Question, i: number, past: Decision[], ctx: Ctx): string {
@@ -1225,6 +1269,96 @@ function renderScreens(scope: Scope, ctx: Ctx, scopeId: string, opts: PageOption
  * construct and leaves every other selector byte-identical; it lives in appcss.ts, beside the
  * reading of the files, because it is a fact about the stylesheet rather than about this page.
  */
+/**
+ * One copy of each drawing on the page, which everything that shows a screen clones.
+ *
+ * ⛔ A DRAWING WAS EMBEDDED VERBATIM ONCE PER PLACE IT APPEARED, AND ONE OF THOSE PLACES RECURS
+ * WITH NESTING DEPTH.
+ *
+ * Peter: *"we should not be dumping everything in a single packet … this is ridiculous"*. Bilrost
+ * rendered 12 MB of stored truth into a 49.8 MB document, 157s with 150s to first byte. Measured on
+ * a corpus built to that shape — 144 scopes, 9.4 MB stored → 57 MB of HTML, the same ~6x — one
+ * view's drawing appeared **five times verbatim**, emitted by:
+ *
+ *   · the prototype tile                  one copy
+ *   · the flow map, PER ANCESTOR CONTAINER  one copy each — `renderGroupUx` runs for every
+ *                                           container and embeds every drawing beneath it, so a
+ *                                           feature two levels down is emitted twice, three levels
+ *                                           three times. This is the superlinear term: 14.4x the
+ *                                           scopes cost 21.4x the render.
+ *   · the screen's own state frames         NOT waste — those differ, and a reviewer needs each
+ *
+ * ⛔ THE STATE FRAMES ARE DELIBERATELY NOT IN HERE, and the distinction cost a measurement to find.
+ * In a fixture whose drawing carries no `data-part`, wiring and every derived state collapse to
+ * bytes identical to the raw drawing — so they counted as duplicates and are not. `pictureOf`
+ * composes a different picture per state against a real corpus. Deduplicating those would delete
+ * product content while the number improved.
+ *
+ * ⛔ AND NOTHING ABOUT WHAT A REVIEWER SEES CHANGES. The DOM after hydration is what it was: each
+ * host still gets its own shadow root holding its own clone. This removes repeated BYTES ON THE
+ * WIRE, not a picture off the page — which is the line PT-0007 draws and the reason this half is
+ * separable from loading scopes on demand. A drawing nobody can see until they click is a worse
+ * review surface; this is the same review surface.
+ */
+function mockBank(corpus: Corpus, ids: string[], protoScreens: ProtoScreen[], body: string, root: string): string {
+  /**
+   * ⛔ ONLY WHAT THIS PAGE ACTUALLY POINTS AT, READ OFF THE ASSEMBLED BODY.
+   *
+   * Banking the subtree was wrong in both directions at once: it missed the prototype board's
+   * screens, which are corpus-wide while `ids` is one subtree — a tile pointing at nothing, which
+   * renders blank and is the inert-template failure the hydration sweep says has cost three
+   * afternoons — and once sections are deferred it banks drawings for 143 sections nobody is
+   * looking at, which is the whole defect this is here to fix. At 64 features the bank alone was
+   * 4.42 MB of an 18.63 MB page.
+   *
+   * So the set is computed from the markup rather than predicted: whatever carries `data-mock` gets
+   * a template and nothing else does. A deferred section asks for its own when it arrives.
+   */
+  const referenced = new Set([...body.matchAll(/data-mock="([^"]+)"/g)].map((m) => m[1]!));
+  const seen = new Set<string>();
+  const out: string[] = [];
+  const bank = (ref: string, html: string | undefined) => {
+    if (!html || seen.has(ref) || !referenced.has(ref)) return;
+    seen.add(ref);
+    out.push(`<template data-mock="${esc(ref)}">${html}</template>`);
+  };
+
+  for (const id of ids) {
+    const sc = corpus.scopes.find((s) => s.scope.id === id)?.scope;
+    if (!sc) continue;
+    for (const v of sc.views) {
+      if (v.exists === "withdrawn") continue;
+      bank(`${sc.id}#${v.id}`, v.sketch_html);
+    }
+  }
+  /**
+   * ⛔ AND THE PROTOTYPE BOARD'S SCREENS, WHICH ARE CORPUS-WIDE WHILE `ids` IS ONE SUBTREE.
+   * `renderPrototype` is handed `screensOf(corpus)`, so a page rooted at a leaf tiles screens that
+   * are not under it. Banking only the subtree left those tiles pointing at nothing — a blank tile,
+   * which is precisely the inert-template failure the hydration sweep's own comment says has cost
+   * an afternoon three times. The bytes were already corpus-wide here; this does not add any.
+   */
+  for (const s of protoScreens) bank(`${s.scope}#${s.view}`, s.html);
+
+  /**
+   * ⛔ ALWAYS EMITTED, EVEN EMPTY, AND THIS WAS A REAL BUG FOUND BY DRIVING IT. On arrival nothing
+   * carries `data-mock` — the thumbnails are lazy and the sections are stubs — so the bank was
+   * empty, returned "", and the element did not exist. Every drawing the client then fetched was
+   * appended to `null` and silently dropped: 16 thumbnails that fetched correctly and stayed blank.
+   *
+   * ⛔ AND IT CARRIES THE ROOT. The client needs to name the scope the page is rooted at when it
+   * asks for a section, and these page scripts cannot interpolate — a `${...}` inside one is
+   * evaluated as TypeScript rather than shipped. So the value travels on an attribute.
+   */
+  /**
+   * ⛔ `hidden` AND NOT DISPLAY-NONE-BY-CLASS. A `<template>`'s content is inert and unrendered by
+   * the parser, so this element holds no layout either way — but it is queried by the hydration
+   * sweep, and a class could be restyled by the application's own stylesheet, which this page
+   * adopts wholesale.
+   */
+  return `<div id="mock-bank" hidden data-root="${esc(root)}">${out.join("")}</div>`;
+}
+
 function appCssOnce(opts: PageOptions): string {
   if (!opts.appCss) return "";
   /**
@@ -2048,6 +2182,7 @@ function renderHappyPath(corpus: Corpus, scopeId: string, ctx: Ctx, past: Decisi
  */
 function renderGroupUx(corpus: Corpus, scopeId: string, ctx: Ctx): string {
   const ids = descendants(corpus, scopeId);
+
   interface Node {
     scope: string;
     scopeTitle: string;
@@ -2133,9 +2268,31 @@ function renderGroupUx(corpus: Corpus, scopeId: string, ctx: Ctx): string {
    * `proto-mock` is the same class the prototype tiles use, so the one hydration sweep dresses
    * these too — one styling path, whoever built the root.
    */
+  /**
+   * ⛔ `data-mock` AND NO TEMPLATE — THIS IS THE COPY THAT RECURRED WITH DEPTH. `renderGroupUx` runs
+   * for every container scope and lays out every drawing beneath it, so a feature two levels down
+   * had its whole drawing on the wire twice, three levels three times. The clone comes from the
+   * bank at hydration and the node looks exactly as it did.
+   */
+  /**
+   * ⛔ `data-mock-lazy`, SO THE BANK DOES NOT CARRY THESE AND THEY ARRIVE AS THEY ARE SCROLLED TO.
+   *
+   * The map on Overview is the whole product's shape — every screen in the corpus as a thumbnail.
+   * Deferring every section and the board still left the arrival page at 4.9 MB holding 128
+   * templates, because these 128 shots referenced them and the bank is built from what the markup
+   * references. A different attribute name is what keeps them out of it: the banking sweep looks
+   * for `data-mock`, so a lazy shot is invisible to it until the client has filled one in.
+   *
+   * ⛔ AND IT IS THE ORDINARY WEB ANSWER RATHER THAN A PRESS. Peter asked for this to work "like
+   * any other web app", and in any other web app a grid of thumbnails loads as you scroll — it does
+   * not ask you to click each one. So nothing here is hidden behind an interaction that was not
+   * already there: a reader scrolls the map and the pictures appear, in one request per batch.
+   */
   const shot = (n: Node): string =>
     n.html
-      ? `<div class="ux-shot"><div class="ux-shot-scale"><div class="proto-mock" data-mock="${esc(`${n.scope}#${n.view}`)}"><template>${n.html}</template></div></div></div>`
+      ? `<div class="ux-shot"><div class="ux-shot-scale"><div class="proto-mock" ${
+          ctx.served ? "data-mock-lazy" : "data-mock"
+        }="${esc(`${n.scope}#${n.view}`)}"></div></div></div>`
       : `<div class="ux-shot none">${n.intended ? "not built yet" : "no picture of this screen"}</div>`;
 
   const box = (n: Node): string => `
@@ -2918,6 +3075,32 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
   if (!entry) return null;
   const ids = descendants(corpus, scopeId);
   /**
+   * Whether this view's content travels with the page, or arrives when somebody asks for it.
+   *
+   * ⛔ `only` UNDEFINED MEANS EVERYTHING, and that is not a default chosen for safety — a
+   * standalone file has no server to ask, so a deferred section there would be a section that never
+   * arrives. The served page passes `only`; `v2 page --out` does not.
+   */
+  const full = (view: string): boolean => !opts.only || opts.only.includes(view);
+  /**
+   * ⛔ SENTINELS, BECAUSE SECTIONS NEST. Extracting one by matching to the next `</section>` returns
+   * the first INNER close for the two kinds that nest, which is a truncated section that renders as
+   * a broken page rather than as an error.
+   */
+  const marked = (view: string, html: string): string =>
+    opts.fragment ? `<!--s:${view}-->${html}<!--/s:${view}-->` : html;
+  /**
+   * What a view looks like before its content has arrived.
+   *
+   * ⛔ IT KEEPS `data-view` AND `data-label`, because the nav and `VIEW_SWITCH` are built from those
+   * — a stub missing them is a menu entry that leads nowhere, and `show()` falls back to revealing
+   * EVERY section when it cannot find the one it was asked for.
+   */
+  const stub = (view: string, id: string, label: string, framed: boolean): string =>
+    `<section class="view${framed ? " framed" : ""}" id="${id}" data-view="${esc(view)}" data-ref="${esc(view)}" data-label="${esc(label)}" data-defer="${esc(view)}" hidden>
+       <p class="deferred-note">Loading this…</p>
+     </section>`;
+  /**
    * ⛔ ONE GRID PER SCOPE THAT HAS PROMISES. `gridFor` reads one scope's own exchanges, and
    * a container has none — so a single call for the named scope rendered an empty grid
    * reading `0 exchanges · 0 blank` directly above cards for every behaviour underneath it.
@@ -2990,7 +3173,13 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
     }),
     ...grids.flatMap((g) => [...g.rulesUsed.keys()]),
   ]);
-  const ctx: Ctx = { base: opts.linkBase, here: ids, anchors };
+  /**
+   * ⛔ `only` IS WHAT SAYS THERE IS A SERVER, because only the served route passes it. A standalone
+   * file and a published artifact both render everything and have nowhere to fetch from, so nothing
+   * in them may be left to arrive later.
+   */
+  const served = Boolean(opts.only);
+  const ctx: Ctx = { base: opts.linkBase, here: ids, anchors, served };
   const body = `
     ${renderNav(
       corpus,
@@ -3038,9 +3227,25 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
          * under seven open questions and nobody reads them. A second row of items, at the level
          * they belong to.
          */
-        renderPrototype(protoScreens, protoPromises, theWalk, (corpus.prototypes ?? []), selectionOf(corpus)) +
-        renderSettings(corpus) +
-        renderSubsystems(corpus) +
+        /**
+         * ⛔ THE BOARD IS NOT DEFERRED, AND THE REASON IS A REGRESSION A BROWSER TEST CAUGHT.
+         *
+         * It is the biggest section on the page — every screen in the product, tiled — so deferring
+         * it looked like the obvious win. But `DRIVE` reads `const board = document.querySelector(
+         * ".pboard"); if (!board) return;` and everything that HYDRATES A MOCK lives below that
+         * line. Take the board off the page and the hydration sweep is never installed, so every
+         * drawing anywhere on the page stays an inert template: a correct-looking document showing
+         * nothing. The sweep's own comment says it is for "EVERY MOCK ON THE PAGE, not only the ones
+         * on the board", which is true of its intent and was not true of where it sat.
+         *
+         * So the board stays and its TILES go lazy instead — the same mechanism as the map's
+         * thumbnails, already tested, and a better fit: a board is a grid of thumbnails, and
+         * thumbnails load as they are scrolled to. The markup for 128 tiles is small; it was the
+         * 128 drawings inside them that was 4.42 MB.
+         */
+        marked("prototype", renderPrototype(protoScreens, protoPromises, theWalk, (corpus.prototypes ?? []), selectionOf(corpus), served)) +
+        (full("settings") ? marked("settings", renderSettings(corpus)) : stub("settings", "view-settings", "What steers this", false)) +
+        (full("subsystems") ? marked("subsystems", renderSubsystems(corpus)) : stub("subsystems", "view-subsystems", "How it works", false)) +
         `<section class="view" id="view-overview" data-view="overview" data-ref="${esc(scopeId)}" data-label="Overview">
            <div class="sub-view" data-tabs="product" data-sub-view="queue" data-ref="queue" data-label="Queue">
              ${
@@ -3252,7 +3457,10 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
       }
       ${grids
         .map(
-          (g) => `<section class="view framed" id="${anchorOf(g.scope)}" data-view="${esc(g.scope)}" data-ref="${esc(g.scope)}" data-label="${esc(plain(g.title))}">
+          (g) =>
+            !full(g.scope)
+              ? stub(g.scope, anchorOf(g.scope), plain(g.title), true)
+              : marked(g.scope, `<section class="view framed" id="${anchorOf(g.scope)}" data-view="${esc(g.scope)}" data-ref="${esc(g.scope)}" data-label="${esc(plain(g.title))}">
             <h3 class="feature-title">${line(g.title)}</h3>
             ${
               /**
@@ -3412,7 +3620,7 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
                 </div>`;
               })()
             }
-          </section>`
+          </section>`)
         )
         .join("")}
       ${
@@ -3446,7 +3654,8 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
              * on the path the author happens to take is verified nowhere.
              */
             const framed = sc.views.some((v) => v.exists !== "withdrawn");
-            return `<section class="view${framed ? " framed" : ""}" id="${anchorOf(id)}" data-view="${esc(id)}" data-ref="${esc(id)}" data-label="${esc(plain(sc.title || id))}">
+            if (!full(id)) return stub(id, anchorOf(id), plain(sc.title || id), framed);
+            return marked(id, `<section class="view${framed ? " framed" : ""}" id="${anchorOf(id)}" data-view="${esc(id)}" data-ref="${esc(id)}" data-label="${esc(plain(sc.title || id))}">
               <h3 class="feature-title">${line(sc.title || id)}</h3>
               ${
                 framed
@@ -3483,7 +3692,7 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
                 .join("")}</ul>
               ${kids.length ? "" : `<p class="lede">Nothing is filed under this yet.</p>`}
               </div>
-            </section>`;
+            </section>`);
           })
           .join("")
       }
@@ -3498,7 +3707,30 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
       }
     </main>`;
 
-  return `${STYLE}${body}${appCssOnce(opts)}${partFacts(corpus, ids)}${renderNotePanel(corpus, ids, opts)}${VIEW_SWITCH}${NAV_PLACE}${PROTO_FRAME}${PROTOTYPE}${DRIVE}${opts.interactive ? liveScript(opts) : INERT}`;
+  /**
+   * One section and the drawings it needs, for the endpoint that serves what the page deferred.
+   *
+   * ⛔ THE WHOLE PAGE IS STILL COMPUTED AND MOST OF IT THROWN AWAY, deliberately. A section's
+   * content depends on aggregates over the subtree — `cellOf`, `homesOf`, the resolved rules — and
+   * recomputing a subset of those here would be a second derivation of the same facts, which is
+   * the one thing this repo is most consistent about refusing. With `only` holding a single view
+   * the expensive part, every OTHER section's body, is not built at all.
+   *
+   * ⛔ AND IT CARRIES ITS OWN MOCKS. The bank is built from what the markup references, so a page
+   * that deferred a section never banked that section's drawings — they arrive with it, and the
+   * client adds them to the bank before hydrating.
+   */
+  if (opts.fragment) {
+    const open = `<!--s:${opts.fragment}-->`;
+    const shut = `<!--/s:${opts.fragment}-->`;
+    const from = body.indexOf(open);
+    const to = body.indexOf(shut, from);
+    if (from === -1 || to === -1) return null;
+    const section = body.slice(from + open.length, to);
+    return `${section}${mockBank(corpus, ids, protoScreens, section, scopeId)}`;
+  }
+
+  return `${STYLE}${body}${appCssOnce(opts)}${mockBank(corpus, ids, protoScreens, body, scopeId)}${partFacts(corpus, ids)}${renderNotePanel(corpus, ids, opts)}${VIEW_SWITCH}${opts.interactive ? DEFER : ""}${NAV_PLACE}${PROTO_FRAME}${PROTOTYPE}${DRIVE}${opts.interactive ? liveScript(opts) : INERT}`;
 }
 
 
@@ -3897,6 +4129,336 @@ if (typeof EventSource !== "undefined") {
     }
   } catch (e) {}
 }`;
+
+/**
+ * What the page deferred, fetched as it is actually wanted.
+ *
+ * ⛔ A SMALLER PAGE THAT DOES NOT WORK IS WORSE THAN THE BIG ONE. This is the half that makes the
+ * 39x reduction a reduction rather than a page of empty panels: 72 stub sections and 128 blank
+ * thumbnails, each of which knows what it is missing and asks for it.
+ *
+ * ⛔ IT DOES NOT ADD A PRESS ANYWHERE. Sections were already one press apart — `VIEW_SWITCH` sets
+ * `hidden` on every section but one — and thumbnails load on scroll the way any other web app
+ * loads images. What a reviewer has to do to see a thing is exactly what it was.
+ *
+ * ⛔ AND IT IS ONLY EMITTED ON A LIVE PAGE, which the suite caught me getting wrong. A read-only
+ * render must have NO CHANNEL OUT — `v2-page` asserts it contains no `fetch(` at all — and that is a
+ * stronger guarantee than "it would find nothing to do". A standalone file is rendered with
+ * everything anyway, so there is nothing for it to fetch; shipping a script that could is the
+ * defect, not shipping one that does.
+ */
+const DEFER = `<script>
+(function () {
+  /**
+   * ⛔ FROM THE ADDRESS BAR, NOT FROM A LINK. The first version read the prefix off the first nav
+   * anchor, and every one of those is an in-page hash — so the match failed and the prefix was
+   * empty, which happens to be right locally and wrong on the hosted instance, where the whole
+   * thing is served under a path. Found by printing it rather than by it breaking.
+   */
+  const under = (function () {
+    const m = location.pathname.match(/^(.*?)\\/v2(?:\\/|$)/);
+    return m ? m[1] : "";
+  })();
+  const bankEl = document.getElementById("mock-bank");
+  const ROOT = (bankEl && bankEl.getAttribute("data-root")) || "";
+
+  /**
+   * ⛔ CSS.escape IS FOR AN IDENTIFIER, NOT FOR THE INSIDE OF A QUOTED ATTRIBUTE VALUE — and every
+   * ref in this model contains a #.
+   *
+   * CSS.escape("thing-2#thing-2-screen-1") returns thing-2\\#thing-2-screen-1, which is right for
+   * a selector like #id and wrong inside [data-mock="..."]: the quotes already make it a string, so
+   * the backslash is matched literally and the selector finds nothing. The bank held the drawing,
+   * the host named it, and the lookup returned null every time — 22 thumbnails fetched correctly
+   * and left blank, with no error anywhere.
+   *
+   * ⛔ FOUND BY READING ONE INSTANCE. The aggregates all agreed and all looked plausible: templates
+   * in the bank went up, lazy hosts went down, hydrated stayed at zero. Three probes counted
+   * different things before one of them asked what the selector actually was.
+   *
+   * In a quoted value only a backslash and the quote itself need escaping.
+   */
+  /**
+   * Find a node by what an attribute equals, without building a selector.
+   *
+   * ⛔ NO SELECTOR, BECAUSE ESCAPING ONE CORRECTLY HERE IS TWO MISTAKES DEEP AND I MADE BOTH.
+   *
+   * First CSS.escape, which is for an IDENTIFIER: every ref in this model contains a #, and
+   * CSS.escape turns it into a backslash-# that is matched literally inside [data-mock="..."] —
+   * where the quotes already make the value a string. The bank held the drawing, the host named it,
+   * and the lookup returned null every time. 22 thumbnails fetched correctly and stayed blank, with
+   * no error anywhere.
+   *
+   * Then a hand-written escaper, which was correct JavaScript and wrong HERE: this script is a
+   * TypeScript template literal, so every backslash in it is halved on the way out and the emitted
+   * regex was invalid. The script threw before defining anything.
+   *
+   * Comparing the attribute removes both. A linear scan of a few hundred templates costs nothing
+   * next to the request that fetched them.
+   */
+  const byAttr = (within, tag, attr, value) => {
+    if (!within || value == null) return null;
+    for (const el of within.querySelectorAll(tag)) if (el.getAttribute(attr) === value) return el;
+    return null;
+  };
+
+
+  /**
+   * Turn fetched markup into nodes, WITH its shadow roots.
+   *
+   * ⛔ A DECLARATIVE SHADOW ROOT IS A PARSER FEATURE, AND innerHTML IS NOT THE PARSER. Every screen
+   * on this page is wrapped by asMock as <template shadowrootmode="open">, which the HTML parser
+   * turns into a real shadow root as the document loads. Assigning the same markup through
+   * innerHTML leaves an inert <template> and no root at all — so a fetched section arrived with
+   * four templates and nothing visible, while the markup was byte-for-byte correct.
+   *
+   * ⛔ THIS IS WHY THE TEST DRIVES A BROWSER. An assertion over the returned HTML passes here, and
+   * jsdom neither implements declarative shadow DOM nor resolves the cascade that would show the
+   * result — both would have reported this working.
+   *
+   * setHTMLUnsafe is the API that runs the parser path. The fallback walks the templates and
+   * attaches each root by hand, which is what the browsers without it need.
+   */
+  function adopt(html) {
+    const box = document.createElement("div");
+    if (typeof box.setHTMLUnsafe === "function") {
+      box.setHTMLUnsafe(html);
+      return box;
+    }
+    box.innerHTML = html;
+    for (const t of [...box.querySelectorAll("template[shadowrootmode]")]) {
+      const host = t.parentElement;
+      if (!host || host.shadowRoot) continue;
+      try {
+        host.attachShadow({ mode: t.getAttribute("shadowrootmode") === "closed" ? "closed" : "open" }).appendChild(
+          t.content.cloneNode(true)
+        );
+        t.remove();
+      } catch {
+        /* a host that cannot take a shadow root keeps the template, which is what it had before */
+      }
+    }
+    return box;
+  }
+
+  /* ------------------------------------------------------------------ sections */
+
+  const pending = new Map();
+
+  async function fill(section) {
+    const view = section.getAttribute("data-defer");
+    if (!view) return section;
+    if (pending.has(view)) return pending.get(view);
+
+    const job = (async () => {
+      const note = section.querySelector(".deferred-note");
+      try {
+        const r = await fetch(under + "/api/v2/section?scope=" + encodeURIComponent(ROOT) + "&view=" + encodeURIComponent(view), {
+          headers: { accept: "text/html" },
+        });
+        if (!r.ok) throw new Error("the server answered " + r.status);
+        const html = await r.text();
+        const box = adopt(html);
+        /**
+         * ⛔ THE DRAWINGS THAT CAME WITH IT GO TO THE BANK, NOT INTO THE SECTION. Everything that
+         * shows a screen clones from one copy; a second copy living inside a section is the
+         * duplication this whole change removed.
+         */
+        const bank = document.getElementById("mock-bank");
+        if (bank) for (const t of [...box.querySelectorAll('template[data-mock]')]) {
+          if (!byAttr(bank, "template", "data-mock", t.getAttribute("data-mock"))) bank.appendChild(t);
+          else t.remove();
+        }
+        const fresh = box.querySelector("section.view");
+        if (!fresh) throw new Error("the server sent no section");
+        /** Keep whether it is showing — the reader may already be looking at this panel. */
+        fresh.hidden = section.hidden;
+        section.replaceWith(fresh);
+        return fresh;
+      } catch (e) {
+        /**
+         * ⛔ A FAILURE SAYS SO AND OFFERS THE RETRY. An empty panel is indistinguishable from a
+         * feature with nothing in it, which is the one reading a reviewer must never be handed.
+         */
+        if (note) {
+          note.className = "deferred-note failed";
+          note.textContent = "This part of the page could not be loaded — " + (e && e.message ? e.message : "no answer") + ". ";
+          const again = document.createElement("button");
+          again.type = "button";
+          again.textContent = "Try again";
+          again.addEventListener("click", () => { pending.delete(view); fill(section); });
+          note.appendChild(again);
+        }
+        pending.delete(view);
+        return section;
+      }
+    })();
+    pending.set(view, job);
+    return job;
+  }
+
+  /**
+   * ⛔ BEFORE THE SWITCH, NOT AFTER IT. show() looks for a section whose data-view matches and
+   * reveals EVERY section when it finds none — so switching to a stub that is mid-replacement could
+   * flash the whole corpus onto one scroll. Filling it first means show only ever sees the real one.
+   */
+  const stubFor = (name) => byAttr(document, "section.view", "data-defer", name);
+
+  document.addEventListener("click", (ev) => {
+    for (const el of ev.composedPath ? ev.composedPath() : [ev.target]) {
+      const name = el instanceof Element && el.getAttribute ? el.getAttribute("data-goto") : null;
+      if (!name) continue;
+      const stub = stubFor(name);
+      if (stub) fill(stub);
+      return;
+    }
+  }, true);
+
+  /** The hash is the other way in, including arriving with one and pressing back. */
+  const fromHash = () => {
+    const h = location.hash.replace(/^#/, "");
+    if (!h) return;
+    const stub = stubFor(h) || [...document.querySelectorAll("section.view[data-defer]")].find((s) => s.id === h);
+    if (stub) fill(stub);
+  };
+  addEventListener("hashchange", fromHash);
+  fromHash();
+
+  /** And whatever is showing on arrival, if the server deferred it anyway. */
+  for (const s of document.querySelectorAll("section.view[data-defer]")) if (!s.hidden) fill(s);
+
+  /* -------------------------------------------------------------- thumbnails */
+
+  /**
+   * ⛔ ONE REQUEST FOR A BATCH. The map on Overview is every screen in the product — a request each
+   * would be 128 of them on one scroll.
+   */
+  const waiting = new Set();
+  let flushing = null;
+
+  async function flush() {
+    flushing = null;
+    const refs = [...waiting].slice(0, 60);
+    if (!refs.length) return;
+    for (const r of refs) waiting.delete(r);
+    try {
+      const r = await fetch(under + "/api/v2/mocks?refs=" + encodeURIComponent(refs.join(",")), { headers: { accept: "text/html" } });
+      if (!r.ok) throw new Error(String(r.status));
+      const box = adopt(await r.text());
+      const bank = document.getElementById("mock-bank");
+      if (bank) for (const t of [...box.querySelectorAll("template[data-mock]")]) bank.appendChild(t);
+      /**
+       * ⛔ THE TEMPLATE GOES INTO THE HOST, WHICH IS THE MARKUP THE PAGE ALWAYS HAD.
+       *
+       * The first version set data-mock and left the host empty, trusting the sweep to find the
+       * drawing in the bank. Driven in a browser, the fetch succeeded, the bank filled, the host
+       * was pointed at it — and no shadow root ever appeared. Rather than keep bisecting another
+       * script to find out why, this hands the ordinary path exactly what it has always consumed: a
+       * host with a template inside it. The clone is made here, on the client, so the wire still
+       * carries one copy — which was the whole point — and there is still only ONE piece of code
+       * that turns a template into a shadow root. The file already warns what two of those cost.
+       */
+      for (const ref of refs) {
+        const src = byAttr(document.getElementById("mock-bank"), "template", "data-mock", ref);
+        if (!src) continue;
+        for (const host of document.querySelectorAll("[data-mock-lazy]")) {
+          if (host.getAttribute("data-mock-lazy") !== ref) continue;
+          if (!host.querySelector("template")) {
+            const tpl = document.createElement("template");
+            tpl.innerHTML = src.innerHTML;
+            host.appendChild(tpl);
+          }
+          host.setAttribute("data-mock", ref);
+          host.removeAttribute("data-mock-lazy");
+        }
+      }
+    } catch {
+      /** ⛔ Put them back rather than lose them — a thumbnail that never retries is a blank tile. */
+      for (const r of refs) waiting.add(r);
+    }
+    if (waiting.size) flushing = setTimeout(flush, 400);
+  }
+
+  /**
+   * Make sure one drawing is in the bank, fetching it if nobody has scrolled past it yet.
+   *
+   * ⛔ THE BOARD AND THE WALK OPEN A SCREEN THE READER NEVER SCROLLED TO. A tile loads its own
+   * thumbnail on scroll, but pressing a tile opens that screen big, and the walk jumps to screens
+   * anywhere in the product — neither of which is preceded by the thumbnail coming into view. Those
+   * two paths read the bank directly, so without this they would open an empty stage, which is the
+   * review surface getting worse in exactly the way PT-0007 warned about.
+   */
+  window.__posEnsureMock = async function (ref) {
+    const bank = document.getElementById("mock-bank");
+    if (!bank || !ref) return null;
+    const have = byAttr(bank, "template", "data-mock", ref);
+    if (have) return have;
+    const r = await fetch(under + "/api/v2/mocks?refs=" + encodeURIComponent(ref), { headers: { accept: "text/html" } });
+    if (!r.ok) return null;
+    const box = adopt(await r.text());
+    for (const t of [...box.querySelectorAll("template[data-mock]")]) bank.appendChild(t);
+    return byAttr(bank, "template", "data-mock", ref);
+  };
+
+  const want = (host) => {
+    const ref = host.getAttribute("data-mock-lazy");
+    if (!ref) return;
+    waiting.add(ref);
+    if (!flushing) flushing = setTimeout(flush, 50);
+  };
+
+  /**
+   * ⛔ A GENEROUS MARGIN, SO THEY ARE THERE BEFORE THEY ARE REACHED. A thumbnail that begins loading
+   * at the moment it crosses the fold is a thumbnail the reader watches appear, which reads as the
+   * page being slow — the thing this change exists to stop.
+   */
+  /**
+   * ⛔ WATCH THE BOX THAT HAS A SIZE, NOT THE HOST, WHICH HAS NONE UNTIL IT IS FILLED.
+   *
+   * An unfilled host measures 0x0 — the drawing that gives it height has not arrived — and a
+   * zero-area target is exactly the case IntersectionObserver is least dependable on. Driven in a
+   * real browser it never fired: the tab was pressed, the shot was on screen, the host was
+   * {w:0,h:0} and all 32 thumbnails stayed blank. The frame around it (.ux-shot, .ptile-glass) is
+   * sized by the stylesheet whether or not anything is in it, so that is what is watched, and the
+   * host is found back from it.
+   */
+  const sizedBox = (h) => h.closest(".ux-shot, .ptile-glass, .ux-shot-scale, .ptile-scale") || h;
+
+  if (typeof IntersectionObserver === "function") {
+    const eye = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          if (!e.isIntersecting) continue;
+          for (const h of e.target.matches("[data-mock-lazy]") ? [e.target] : e.target.querySelectorAll("[data-mock-lazy]")) want(h);
+          eye.unobserve(e.target);
+        }
+      },
+      { rootMargin: "600px 0px" }
+    );
+    const watched = new WeakSet();
+    const watch = () => {
+      for (const h of document.querySelectorAll("[data-mock-lazy]")) {
+        const box = sizedBox(h);
+        if (watched.has(box)) continue;
+        watched.add(box);
+        eye.observe(box);
+      }
+    };
+    watch();
+    new MutationObserver(watch).observe(document.body, { childList: true, subtree: true });
+    /**
+     * ⛔ AND WHEN A PANEL IS REVEALED, which is not a mutation to anything's children. Switching a
+     * view or a tab flips hidden, so a thumbnail that was 0x0 inside a display:none panel becomes
+     * visible without the tree changing — and an observer already told "not intersecting" is not
+     * asked again. A press re-sweeps.
+     */
+    document.addEventListener("click", () => setTimeout(watch, 60), true);
+  } else {
+    /** No observer: ask for them all rather than show nothing. */
+    for (const h of document.querySelectorAll("[data-mock-lazy]")) want(h);
+  }
+})();
+<\/script>`;
 
 function liveScript(opts: PageOptions): string {
   const mode = opts.records ?? "http";
@@ -5622,8 +6184,83 @@ const DRIVE = `<script>
    * loose in this document its stylesheet restyles the review surface around them. That happened
    * once and the page came apart.
    */
+  /**
+   * The one copy of a drawing, by scope#view.
+   *
+   * ⛔ AN ATTRIBUTE SELECTOR BUILT BY CONCATENATION IS WHAT THE TWO OLDER LOOKUPS DO, and a scope id
+   * is author-supplied. CSS.escape where it exists, and a scan otherwise — a ref containing a
+   * quote would otherwise build a selector that throws and take the whole sweep with it.
+   */
+  /**
+   * ⛔ THE BANK, OR A FETCH, BEFORE GIVING UP. bankedMock answers only for drawings already here;
+   * a screen reached by pressing a tile or by walking may not be yet.
+   */
+  async function ensureMock(ref) {
+    const here = bankedMock(ref);
+    if (here) return here;
+    if (typeof window.__posEnsureMock === "function") {
+      try { await window.__posEnsureMock(ref); } catch (e) { /* offline: the stage says so below */ }
+    }
+    return bankedMock(ref);
+  }
+
+  /**
+   * ⛔ CSS.escape IS FOR AN IDENTIFIER, NOT FOR THE INSIDE OF A QUOTED ATTRIBUTE VALUE — and every
+   * ref in this model contains a #.
+   *
+   * CSS.escape("thing-2#thing-2-screen-1") returns thing-2\\#thing-2-screen-1, which is right for
+   * a selector like #id and wrong inside [data-mock="..."]: the quotes already make it a string, so
+   * the backslash is matched literally and the selector finds nothing. The bank held the drawing,
+   * the host named it, and the lookup returned null every time — 22 thumbnails fetched correctly
+   * and left blank, with no error anywhere.
+   *
+   * ⛔ FOUND BY READING ONE INSTANCE. The aggregates all agreed and all looked plausible: templates
+   * in the bank went up, lazy hosts went down, hydrated stayed at zero. Three probes counted
+   * different things before one of them asked what the selector actually was.
+   *
+   * In a quoted value only a backslash and the quote itself need escaping.
+   */
+  /**
+   * Find a node by what an attribute equals, without building a selector.
+   *
+   * ⛔ NO SELECTOR, BECAUSE ESCAPING ONE CORRECTLY HERE IS TWO MISTAKES DEEP AND I MADE BOTH.
+   *
+   * First CSS.escape, which is for an IDENTIFIER: every ref in this model contains a #, and
+   * CSS.escape turns it into a backslash-# that is matched literally inside [data-mock="..."] —
+   * where the quotes already make the value a string. The bank held the drawing, the host named it,
+   * and the lookup returned null every time. 22 thumbnails fetched correctly and stayed blank, with
+   * no error anywhere.
+   *
+   * Then a hand-written escaper, which was correct JavaScript and wrong HERE: this script is a
+   * TypeScript template literal, so every backslash in it is halved on the way out and the emitted
+   * regex was invalid. The script threw before defining anything.
+   *
+   * Comparing the attribute removes both. A linear scan of a few hundred templates costs nothing
+   * next to the request that fetched them.
+   */
+  const byAttr = (within, tag, attr, value) => {
+    if (!within || value == null) return null;
+    for (const el of within.querySelectorAll(tag)) if (el.getAttribute(attr) === value) return el;
+    return null;
+  };
+
+  function bankedMock(ref) {
+    return byAttr(document.getElementById("mock-bank"), "template", "data-mock", ref);
+  }
+
   function hydrate(host) {
-    const tpl = host.querySelector("template");
+    /**
+     * ⛔ THE DRAWING MAY NOT BE INSIDE THIS HOST. Every place a screen appears used to carry its own
+     * verbatim copy of the drawing, and one of those places recurs with nesting depth — so a
+     * Bilrost view was on the wire five times. They now carry only data-mock and clone the one
+     * copy in the bank. A host with its own template still wins, because the state frames have
+     * their own pictures and must not be served the base drawing.
+     */
+    let tpl = host.querySelector("template");
+    if (!tpl) {
+      const ref = host.getAttribute("data-mock");
+      if (ref) tpl = bankedMock(ref);
+    }
     if (!tpl || host.shadowRoot) return host.shadowRoot;
     /**
      * ⛔ THE HOST OPTS INTO THE PRODUCT'S THEME BEFORE ITS SHADOW ROOT EXISTS. The design system is
@@ -5736,13 +6373,17 @@ const DRIVE = `<script>
         : '<p class="none">Nothing in the corpus says anything about this control. That is a gap, not a bug.</p>');
   }
 
-  function open(screen) {
+  async function open(screen) {
     bigTitle.textContent = titles[screen] || screen;
     bigStage.innerHTML = "";
     const host = document.createElement("div");
     host.className = "proto-mock";
-    /** Cloned from the tile's own template, so the big view and the tile can never disagree. */
-    const src = board.querySelector('.proto-mock[data-mock="' + screen.replace(/"/g, '\\"') + '"] template');
+    /**
+     * ⛔ FROM THE BANK, BECAUSE A TILE NO LONGER CARRIES ITS OWN COPY. It used to be cloned from
+     * the tile's template so the big view and the tile could not disagree; they still cannot —
+     * there is now exactly one copy of each drawing on the page and both read it.
+     */
+    const src = await ensureMock(screen);
     if (src) {
       const tpl = document.createElement("template");
       tpl.innerHTML = src.innerHTML;
@@ -5820,7 +6461,15 @@ const DRIVE = `<script>
       group.hidden = items.length === 0;
     }
 
-    function go(ref, remember) {
+    /**
+     * ⛔ async, BECAUSE IT AWAITS A DRAWING NOW — AND FORGETTING THIS KILLED THE WHOLE SCRIPT.
+     *
+     * await inside a non-async function is a SyntaxError, and this script is a string: the
+     * TypeScript build compiles happily and the browser discards the entire DRIVE script at parse
+     * time. Every mock on the page stayed an inert template, the big view would not open, and
+     * nothing anywhere reported an error. Found by pressing a tile and watching nothing happen.
+     */
+    async function go(ref, remember) {
       const step = walk.steps[ref];
       if (!step) return;
       if (remember !== false) { const cur = stage.dataset.at; if (cur && cur !== ref) trail.push(cur); }
@@ -5831,7 +6480,7 @@ const DRIVE = `<script>
       where.textContent = [step.area, step.scope, step.title].filter(Boolean).join("  \u25b8  ");
 
       stage.innerHTML = "";
-      const src = board.querySelector('.proto-mock[data-mock="' + ref.replace(/"/g, '\\"') + '"] template');
+      const src = await ensureMock(ref);
       if (src) {
         const host = document.createElement("div");
         host.className = "proto-mock";
@@ -7976,7 +8625,7 @@ function walkInside(walk: Walk, protos: Prototype[], sel: Selection): string {
     ${stranded}`;
 }
 
-function renderPrototype(screens: ProtoScreen[], promises: ProtoPromise[], walk?: Walk, protos?: Prototype[], sel?: Selection): string {
+function renderPrototype(screens: ProtoScreen[], promises: ProtoPromise[], walk?: Walk, protos?: Prototype[], sel?: Selection, served?: boolean): string {
   if (!screens.length && !promises.length) return "";
 
   /**
@@ -7999,7 +8648,7 @@ function renderPrototype(screens: ProtoScreen[], promises: ProtoPromise[], walk?
   const without = screens.filter((s) => !s.html);
 
   const tile = (s: ProtoScreen): string => `<figure class="ptile" data-proto="${esc(s.scope + "#" + s.view)}">
-      <div class="ptile-glass"><div class="ptile-scale"><div class="proto-mock" data-mock="${esc(s.scope + "#" + s.view)}"><template>${s.html}</template></div></div></div>
+      <div class="ptile-glass"><div class="ptile-scale"><div class="proto-mock" ${served ? "data-mock-lazy" : "data-mock"}="${esc(s.scope + "#" + s.view)}"></div></div></div>
       <figcaption>
         <span class="pp-t">${line(s.title)}</span>
         <span class="pp-m">${line(s.scopeTitle)} · ${s.says.length} behaviour${s.says.length === 1 ? "" : "s"}${
