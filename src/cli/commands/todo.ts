@@ -10,7 +10,51 @@ import {
   readFrameworkGaps,
   gapsWhoseFieldShipped,
   recordFrameworkGap,
+  settleFrameworkGap,
 } from "../../core/framework-gaps.js";
+
+/**
+ * The schema sources a shipped field could be declared in.
+ *
+ * ⛔ IT READ `core/product.ts` ALONE, AND EVERY FIELD ADDED THIS YEAR LANDS IN
+ * `v2/schema.ts`. So the check that exists to notice a closed gap was looking in a file
+ * where the answer could not appear. Both, now, and the union is what counts as shipped.
+ */
+function schemaSources(): string {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const candidates = ["core/product.ts", "v2/schema.ts"].flatMap((rel) => [
+    path.resolve(here, "../../", rel),
+    path.resolve(here, "../../../src", rel),
+  ]);
+  return candidates
+    .filter((p) => fs.existsSync(p))
+    .map((p) => fs.readFileSync(p, "utf-8"))
+    .join("\n");
+}
+
+/**
+ * ⛔ THIS RAN ONLY UNDER `scan`, AND `todo` IS THE VERB EVERYBODY TYPES. Reading the
+ * backlog never mentioned that an entry might already be closed — so a gap whose field
+ * shipped stayed on the list until somebody happened to run the recording verb.
+ */
+function warnAboutGapsThatMayBeClosed(gaps: Parameters<typeof gapsWhoseFieldShipped>[0]): void {
+  const stale = gapsWhoseFieldShipped(gaps, schemaSources());
+  if (!stale.length) return;
+  console.log(
+    pc.bold(pc.yellow(`\n${stale.length} open gap${stale.length === 1 ? "" : "s"} may already be closed`))
+  );
+  for (const { gap, fields } of stale) {
+    console.log(
+      `  ${pc.yellow("→")} ${gap.id} names ${fields.map((f: string) => pc.cyan(f)).join(", ")}, which now exist${fields.length === 1 ? "s" : ""}`
+    );
+    console.log(`    ${pc.dim(gap.what.split("\n")[0]?.slice(0, 100) ?? "")}`);
+  }
+  console.log(
+    pc.dim(
+      "\nCheck each: if the field answers the question, `productos todo close <id> --resolution \"…\"`.\nA shipped capability reported as missing keeps a compromise alive that nobody needs."
+    )
+  );
+}
 
 /**
  * `productos todo` — framework gaps, addressed to ProductOS's developers.
@@ -39,6 +83,12 @@ export function todoCommand(): Command {
       );
       if (gaps.length === 0) {
         console.log(pc.dim("No open framework gaps. Run `productos todo scan` to look for new ones."));
+        /**
+         * ⛔ AND STILL WARN. "No open framework gaps" after a hand-edit broke this file
+         * twice in one session — the record of what the model cannot express reading as a
+         * finished backlog is the worst way for it to fail.
+         */
+        warnAboutGapsThatMayBeClosed(readFrameworkGaps(paths));
         return;
       }
       console.log(pc.bold(`${gaps.length} framework gap${gaps.length === 1 ? "" : "s"}`));
@@ -50,6 +100,7 @@ export function todoCommand(): Command {
         if (g.forced_into) console.log(`  ${pc.dim("forced into:")} ${g.forced_into}`);
         for (const e of g.evidence) console.log(`  ${pc.dim("·")} ${pc.cyan(e)}`);
       }
+      warnAboutGapsThatMayBeClosed(gaps);
       console.log(
         pc.dim(
           `\nRecorded in ${paths.root.replace(process.cwd() + "/", "")}/framework-gaps.yaml — ` +
@@ -72,31 +123,7 @@ export function todoCommand(): Command {
       // ⛔ And the other direction: gaps that have since been closed by shipped code. The
       // backlog of what the model cannot express is worthless if a third of it is stale,
       // and stale in the direction that keeps a compromise alive after the hole closed.
-      const here = path.dirname(fileURLToPath(import.meta.url));
-      const schemaPath = [
-        path.resolve(here, "../../core/product.ts"),
-        path.resolve(here, "../../../src/core/product.ts"),
-      ].find((x) => fs.existsSync(x));
-      if (schemaPath) {
-        const stale = gapsWhoseFieldShipped(
-          readFrameworkGaps(paths),
-          fs.readFileSync(schemaPath, "utf-8")
-        );
-        if (stale.length) {
-          console.log(
-            pc.bold(pc.yellow(`\n${stale.length} open gap${stale.length === 1 ? "" : "s"} may already be closed`))
-          );
-          for (const { gap, fields } of stale) {
-            console.log(`  ${pc.yellow("→")} ${gap.id} names ${fields.map((f: string) => pc.cyan(f)).join(", ")}, which now exist${fields.length === 1 ? "s" : ""}`);
-            console.log(`    ${pc.dim(gap.what.split("\n")[0]?.slice(0, 100) ?? "")}`);
-          }
-          console.log(
-            pc.dim(
-              "\nCheck each: if the field answers the question, close it with a resolution. A shipped capability reported as missing keeps a compromise alive that nobody needs."
-            )
-          );
-        }
-      }
+      warnAboutGapsThatMayBeClosed(readFrameworkGaps(paths));
       console.log(
         added === 0
           ? pc.dim(`Scanned: ${found.length} forced fit(s) found, all already recorded.`)
@@ -123,6 +150,39 @@ export function todoCommand(): Command {
         forced_into: opts.forcedInto,
       });
       console.log(g ? pc.green("✓") + ` Recorded ${g.id}` : pc.dim("Already recorded."));
+    });
+
+  /**
+   * ⛔ CLOSING A GAP HAD NO COMMAND, SO IT WAS A HAND-EDIT — and the predictable thing
+   * happened on the first session that closed several. Nine were marked closed by hand and
+   * the tenth, whose fix had shipped and been verified in `main`, was left open and then
+   * reported as closed.
+   */
+  cmd
+    .command("close")
+    .description("Settle a gap — the model can express it now, or it was never a gap")
+    .argument("<id>", "The gap id, e.g. fg-0013")
+    .requiredOption("--resolution <why>", "What changed, or why this is not a gap")
+    .option("--accepted", "A known limitation we are living with, rather than fixed")
+    .option("--wont-fix", "Not going to be addressed")
+    .action((id: string, opts: { resolution: string; accepted?: boolean; wontFix?: boolean }) => {
+      const paths = resolvePathsOrThrow();
+      const status = opts.wontFix ? "wont-fix" : opts.accepted ? "accepted" : "closed";
+      try {
+        const g = settleFrameworkGap(paths, id, status, opts.resolution);
+        console.log(`${pc.green("✓")} ${g.id} is ${pc.bold(status)}`);
+        /**
+         * ⛔ AND IT SAYS WHAT IS STILL OWED. The code shipping is half of it: `forced_into`
+         * names a compromise sitting in a corpus, and nothing else will ever go back for it.
+         */
+        if (g.forced_into) {
+          console.log(pc.yellow(`\n  Still forced, and now fixable in one pass:`));
+          console.log(`  ${g.forced_into}`);
+        }
+      } catch (e) {
+        console.error(pc.red((e as Error).message));
+        process.exitCode = 1;
+      }
     });
 
   return cmd;

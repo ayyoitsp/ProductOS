@@ -295,6 +295,18 @@ export const AREAS: Area[] = [
       "src/v2/store/identity.ts",
       /** ⛔ Reading the record of what was corrected is a derivation over it, and writes nothing. */
       "src/core/learn.ts",
+      /**
+       * ⛔ WHAT THE RECORD OF WHAT THE MODEL CANNOT EXPRESS SAYS ABOUT ITSELF — beside `learn.ts`,
+       * for the same reason and found the same way. `gapsWhoseFieldShipped` reads an open gap and
+       * the schema and answers whether the hole has since closed, which is a derivation over the
+       * backlog and writes nothing.
+       *
+       * Listed because it was NOT, and the cascade therefore could not see a change to it: three
+       * layers reported ✗ for a change that had reached all three, because no layer owned the file.
+       * A false ✗ is the safe direction; the unsafe one is the same mechanism — a layer verified
+       * against a registry that does not list the file the running code actually reads.
+       */
+      "src/core/framework-gaps.ts",
       "src/adapters/claude.ts",
     ],
     needs: ["read-files", "run-commands", "search-files"],
@@ -483,6 +495,13 @@ export const AREAS: Area[] = [
       "src/v2/states.ts",
       "src/v2/moved.ts",
       "src/cli/commands/v2.ts",
+      /**
+       * ⛔ THE SURFACE ONTO THE FRAMEWORK'S OWN BACKLOG, and it was missing a verb for the whole
+       * of its life. `todo` offered `list`, `scan` and `add` — so closing a gap was a hand-edit to
+       * a YAML file with nothing forcing the step, and the first session to close several closed
+       * nine and left the tenth open while reporting it closed.
+       */
+      "src/cli/commands/todo.ts",
       "src/mcp/v2-tools.ts",
     ],
     needs: ["read-files", "run-commands", "show-a-page"],

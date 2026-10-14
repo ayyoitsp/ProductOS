@@ -118,7 +118,11 @@ export function recordFrameworkGap(paths: ProductosPaths, gap: Omit<FrameworkGap
     id: `fg-${String(existing.length + 1).padStart(4, "0")}`,
     status: gap.status ?? "open",
   });
-  const all = [...existing, next];
+  writeGaps(paths, [...existing, next]);
+  return next;
+}
+
+function writeGaps(paths: ProductosPaths, all: FrameworkGap[]): void {
   fs.mkdirSync(path.dirname(gapsFilePath(paths)), { recursive: true });
   fs.writeFileSync(
     gapsFilePath(paths),
@@ -129,7 +133,47 @@ export function recordFrameworkGap(paths: ProductosPaths, gap: Omit<FrameworkGap
       YAML.stringify({ version: 1, gaps: all }, { lineWidth: 90 }),
     "utf-8"
   );
-  return next;
+}
+
+/**
+ * Settle a gap: closed, accepted or won't-fix, with a reason.
+ *
+ * ⛔ THERE WAS NO COMMAND FOR THIS, SO THE ONLY WAY TO CLOSE A GAP WAS TO HAND-EDIT THE
+ * FILE — and the first thing that went wrong was exactly what you would predict. Nine gaps
+ * were closed in one session and the tenth, whose fix had just shipped and been verified in
+ * `main`, was left `open` and then REPORTED as closed. Peter asked "any other framework
+ * gaps?" and the honest answer was six, not five, because of a step with no forcing
+ * function behind it.
+ *
+ * Hand-editing also broke this file twice in one session — a duplicate YAML key, after
+ * which `todo` printed "No open framework gaps". The worst possible failure for the record
+ * of what the model cannot express: it reads as a finished backlog.
+ *
+ * ⛔ A RESOLUTION IS REQUIRED, and the reason is the one the rest of this repo gives for
+ * every refusal: a gap closed with no account of how leaves the next session unable to tell
+ * a gap that was FIXED from a gap somebody stopped caring about — and `forced_into` is
+ * still sitting in a corpus licensing the compromise either way.
+ */
+export function settleFrameworkGap(
+  paths: ProductosPaths,
+  id: string,
+  status: Extract<FrameworkGap["status"], "closed" | "accepted" | "wont-fix">,
+  resolution: string
+): FrameworkGap {
+  const all = readFrameworkGaps(paths);
+  const gap = all.find((g) => g.id === id);
+  if (!gap) {
+    throw new Error(
+      `no framework gap ${id}. Open gaps: ${all.filter((g) => g.status === "open").map((g) => g.id).join(", ") || "none"}`
+    );
+  }
+  if (!resolution.trim()) throw new Error(`closing ${id} needs a resolution — what changed, or why it is not a gap`);
+  const settled = FrameworkGap.parse({ ...gap, status, resolution: resolution.trim() });
+  writeGaps(
+    paths,
+    all.map((g) => (g.id === id ? settled : g))
+  );
+  return settled;
 }
 
 /**
@@ -238,13 +282,35 @@ export function detectFrameworkGaps(containers: FeatureDocument[]): Array<Omit<F
  * a gap about non-functional requirements mentions `holds_for` in passing and is genuinely
  * still open — so it proposes and never closes.
  */
+/**
+ * Every field name a schema source declares.
+ *
+ * ⛔ THE PREVIOUS PATTERN FOUND 37 OF THE 146 FIELDS IN `v2/schema.ts`, AND THE ANSWER IT
+ * GAVE WAS ZERO EITHER WAY — the shape CLAUDE.md warns about, in the one mechanism built
+ * to stop this record rotting. Two reasons, both measured rather than reasoned about:
+ *
+ *   · it required EXACTLY two spaces of indentation, so every field nested inside another
+ *     object was invisible — 37 of 146
+ *   · it required `z.` on the same line as the name, so a field whose chain is wrapped by
+ *     the formatter is invisible. `rests_on: z` + newline + `.array(…)` is how the field
+ *     this was found by is actually written, and `set_by` too
+ *
+ * Both are formatting, which is the worst thing for a detector to depend on: the field is
+ * declared, shipped and tested, and whether this notices turns on where a line broke.
+ */
+export function shippedFields(schemaSource: string): string[] {
+  return [
+    ...new Set(
+      [...schemaSource.matchAll(/^\s+([a-z_][a-z0-9_]*):\s*z\b/gm)].map((m) => m[1]!)
+    ),
+  ];
+}
+
 export function gapsWhoseFieldShipped(
   gaps: FrameworkGap[],
   schemaSource: string
 ): Array<{ gap: FrameworkGap; fields: string[] }> {
-  const shipped = [
-    ...schemaSource.matchAll(/^\s{2}([a-z_]+):\s*z\./gm),
-  ].map((m) => m[1]!);
+  const shipped = shippedFields(schemaSource);
   const out: Array<{ gap: FrameworkGap; fields: string[] }> = [];
   for (const gap of gaps) {
     if (gap.status !== "open") continue;
