@@ -18,7 +18,7 @@ import os from "node:os";
 import path from "node:path";
 
 const { resolveRoute, isResolved, fingerprintOf } = await import(path.resolve("dist/v2/routes.js"));
-const { writeSketchHtml } = await import(path.resolve("dist/v2/draw-write.js"));
+const { writeSketchHtml, diskPages } = await import(path.resolve("dist/v2/draw-write.js"));
 
 /** A tiny repo: two components, one of which really renders the screen. */
 function fixture() {
@@ -129,7 +129,15 @@ test("⛔ a screen needs a PICTURE, not a component — the earlier version of t
 test("the sweep exists and is reachable without naming a component", () => {
   const cli = fs.readFileSync("src/cli/commands/v2.ts", "utf-8");
   assert.match(cli, /\.option\("--all"/, "draw must take --all");
-  assert.match(cli, /if \(o\.all\) return drawEverything/, "and --all must sweep");
+  /**
+   * ⛔ THAT `--all` SWEEPS, NOT WHICH LINE SAYS SO. This matched `if (o.all) return drawEverything`
+   * exactly, so it failed the moment the sweep gained a second destination — an instance — and
+   * reported a strictly broader capability as a regression. The claim is that `--all` reaches a
+   * sweep; it now has to reach BOTH, which is more than the old assertion could say.
+   */
+  assert.match(cli, /if \(o\.all\)/, "and --all must sweep");
+  assert.match(cli, /drawEverything\(/, "the directory sweep is gone");
+  assert.match(cli, /drawEverythingOn\(/, "there is no sweep that writes to an instance");
   /** ⛔ `--route` stopped being required, or --all could never run. */
   assert.ok(!/requiredOption\("--route/.test(cli), "--route must not be required any more");
 });
@@ -233,7 +241,7 @@ test("redrawing a screen that has parts replaces the drawing rather than adding 
   const count = (body, re) => (body.match(re) ?? []).length;
 
   writeSketchHtml(
-    root,
+    diskPages(root),
     "thing",
     "the-screen",
     '<div class="new">the new drawing</div>',
@@ -254,7 +262,7 @@ test("redrawing a screen that has parts replaces the drawing rather than adding 
 
   /** ⛔ And again, because the failure only showed itself on the SECOND write. */
   writeSketchHtml(
-    root,
+    diskPages(root),
     "thing",
     "the-screen",
     '<div class="new">the new drawing</div>',

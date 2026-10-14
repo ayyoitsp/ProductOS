@@ -31,7 +31,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { CORPUS_DIRS, loadCorpus } from "./load.js";
 import { append } from "./log.js";
-import { writePrototypes, writeWithin } from "./draw-write.js";
+import { writePrototypes, writeWithin, diskPages } from "./draw-write.js";
 import { walkOf } from "./walk.js";
 import { axesOf, answersOf } from "./schema.js";
 import { doorOpensOn } from "./selection.js";
@@ -355,7 +355,7 @@ export const INTENTS: Intent[] = [
         ids.add(ax.id);
       }
       const corpus = loadCorpus(a.dir);
-      writePrototypes(a.dir, corpus.prototypes, axes);
+      writePrototypes(diskPages(a.dir), corpus.prototypes, axes);
       append(a.dir, {
         kind: "corpus-changed",
         at: new Date().toISOString(),
@@ -418,7 +418,7 @@ export const INTENTS: Intent[] = [
       if (body.remove === true || str(body.remove) === "true") {
         const going = corpus.prototypes.find((p) => p.id === id);
         if (!going) return { ok: false, why: `no prototype "${id}" here` };
-        writePrototypes(a.dir, corpus.prototypes.filter((p) => p.id !== id), corpus.splitsOn);
+        writePrototypes(diskPages(a.dir), corpus.prototypes.filter((p) => p.id !== id), corpus.splitsOn);
         append(a.dir, {
           kind: "corpus-changed",
           at: new Date().toISOString(),
@@ -481,7 +481,7 @@ export const INTENTS: Intent[] = [
       const protos = existing
         ? corpus.prototypes.map((p) => (p.id === id ? next : p))
         : [...corpus.prototypes, next];
-      writePrototypes(a.dir, protos, corpus.splitsOn);
+      writePrototypes(diskPages(a.dir), protos, corpus.splitsOn);
       append(a.dir, {
         kind: "corpus-changed",
         at: new Date().toISOString(),
@@ -543,7 +543,7 @@ export const INTENTS: Intent[] = [
       if (!holder) return { ok: false, why: `no screen "${ref}" in this corpus` };
 
       if (!of) {
-        const file = writeWithin(a.dir, holder.scope, holder.view.id, "");
+        const file = writeWithin(diskPages(a.dir), holder.scope, holder.view.id, "");
         if (!file) return { ok: false, why: `could not find "${ref}" to change` };
         append(a.dir, { kind: "corpus-changed", at: new Date().toISOString(), by: a.who.actor, via: "page", ref, wrote: keyOf(a.dir, file), says: `${here.title} is no longer inside anything` });
         return { ok: true, said: `${here.title} is its own way in again` };
@@ -571,7 +571,7 @@ export const INTENTS: Intent[] = [
         up = found?.view.within;
       }
 
-      const file = writeWithin(a.dir, holder.scope, holder.view.id, of);
+      const file = writeWithin(diskPages(a.dir), holder.scope, holder.view.id, of);
       if (!file) return { ok: false, why: `could not find "${ref}" to write it into` };
       append(a.dir, { kind: "corpus-changed", at: new Date().toISOString(), by: a.who.actor, via: "page", ref, wrote: keyOf(a.dir, file), says: `${here.title} appears inside ${of}` });
       /** ⛔ The number that changed, because it is the point: a contained screen is not a front door. */

@@ -221,6 +221,29 @@ export const carry = (
 export const note = (i: Instance, about: string, says: string, by?: string): Promise<Outcome> =>
   say_(i, "note", { about, says, by });
 
+/**
+ * Every document an instance holds, as the map `memoryStore` and `heldPages` eat.
+ *
+ * ⛔ THE FILES THEMSELVES, NOT A MIRROR ON DISK. `mirror` writes them to a temp directory, which is
+ * right for a command that wants to run disk-shaped tools over them and wrong for a generator: the
+ * whole reason the generator is being changed is that a corpus on disk became a second writable copy
+ * somebody's work died in.
+ */
+export const documents = async (i: Instance): Promise<Record<string, string>> => {
+  const body = (await call(i, "/api/v2/corpus")) as { files?: Record<string, string> };
+  return body.files ?? {};
+};
+
+/**
+ * Write one document back.
+ *
+ * ⛔ THROUGH THE ONE DOOR AND ON THE `author` GATE. Writing truth is not agreeing to it, which is
+ * exactly the authority a generator should have — and a route of its own would be a second set of
+ * gates to keep in step with the first.
+ */
+export const putDocument = (i: Instance, key: string, says: string): Promise<Outcome> =>
+  say_(i, "document", { key, says });
+
 export const inbox = (i: Instance, o: { since?: number; claim?: string; limit?: number }): Promise<unknown> =>
   call(i, "/api/v2/inbox", { method: "POST", body: JSON.stringify(o) });
 
