@@ -935,7 +935,7 @@ for telemetry.
 exchanges:
   - id: see-the-list
     title: Somebody looks at the deals list
-    asked_by: person                        # person | machinery
+    asked_by: person                        # person | system | integrator
     at: { view: deals-list, part: deal-row }
     reads: [deal, stage]                    # terms this ask reads
     changes: [deal]                         # terms it changes
