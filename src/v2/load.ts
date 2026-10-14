@@ -244,6 +244,60 @@ function why(e: unknown): string {
   return (e as Error).message.split("\n")[0]!;
 }
 
+/**
+ * ⛔ A FILE THE LOADER CANNOT MAKE SENSE OF IS REPORTED, NOT SKIPPED.
+ *
+ * Every one of these collections read `raw.<key> ?? []`, so a file holding a single bare object —
+ * the reading's own fields at the top level, which is what an author writes when they follow the
+ * example rather than the schema — yielded an empty list, looped zero times, and pushed nothing to
+ * `broken`. The file was discarded in total silence.
+ *
+ * Measured on a real corpus mid-index: **129 of 208 reading files dropped**, `loadCorpus` reporting
+ * `0` broken readings, and twenty-odd authors who had each written their evidence with file:line
+ * pointers and had no way to discover none of it was being read. A file that says nothing the
+ * loader understands was indistinguishable from a file that says nothing.
+ *
+ * ⛔ IT IS THE INVERSE OF THE TWO FINDINGS FIXED IN #132 AND STRICTLY WORSE. Those fired on correct
+ * output, which is noisy and self-announcing. This goes quiet on incorrect output, which is the
+ * failure nobody can detect from the outside — the shape `check` exists to prevent and the one
+ * `GLOSSARY.md` warns is costly in both directions.
+ *
+ * ⛔ AN EMPTY OR COMMENT-ONLY FILE IS STILL FINE. `YAML.parse` gives `null` for both, and a blank
+ * file is visibly blank to whoever opens it — there is no hidden content to lose. What is reported
+ * is a file that plainly holds SOMETHING the loader was not asked for.
+ */
+function itemsIn(raw: unknown, key: string, file: string, broken: Array<{ file: string; why: string }>): unknown[] {
+  if (raw === null || raw === undefined) return [];
+  if (typeof raw !== "object" || Array.isArray(raw)) {
+    broken.push({ file, why: `this is not a \`${key}:\` file — the loader expects a mapping with \`${key}:\` in it` });
+    return [];
+  }
+  const held = raw as Record<string, unknown>;
+  /**
+   * ⛔ AN EMPTY OBJECT IS NOTHING, AND THE CALLERS HAND ME ONE. Each does
+   * `YAML.parse(readFile(file)) ?? {}`, so an empty or comment-only file arrives here as `{}`
+   * rather than as null — and my first version reported every one of them. A blank file is visibly
+   * blank to whoever opens it; there is no hidden content to lose, so reporting it is noise.
+   */
+  if (Object.keys(held).length === 0) return [];
+  if (!(key in held)) {
+    /** ⛔ Name what IS there, so the author can see their own fields and spot the missing wrapper. */
+    const got = Object.keys(held).slice(0, 4).join(", ");
+    broken.push({
+      file,
+      why: `no \`${key}:\` at the top level, so nothing in this file was read — it holds ${got ? `\`${got}\`` : "no recognised keys"}. Wrap the entries in \`${key}:\``,
+    });
+    return [];
+  }
+  const v = held[key];
+  if (v === null || v === undefined) return [];
+  if (!Array.isArray(v)) {
+    broken.push({ file, why: `\`${key}:\` is not a list here, so nothing in this file was read` });
+    return [];
+  }
+  return v;
+}
+
 export function loadCorpus(root: string, store: Store = diskStore): Corpus {
   const paths = v2Paths(root);
   const readDir = (dir: string, ext: string[]): string[] => store.list(dir, ext);
@@ -296,7 +350,7 @@ export function loadCorpus(root: string, store: Store = diskStore): Corpus {
   for (const file of readDir(paths.readings, [".yaml", ".yml"])) {
     try {
       const raw = YAML.parse(readFile(file)) ?? {};
-      for (const r of raw.readings ?? []) readings.push(Reading.parse(r));
+      for (const r of itemsIn(raw, "readings", file, broken)) readings.push(Reading.parse(r));
     } catch (e) {
       broken.push({ file, why: why(e) });
     }
@@ -305,7 +359,7 @@ export function loadCorpus(root: string, store: Store = diskStore): Corpus {
   for (const file of readDir(path.join(paths.root, "notes"), [".yaml", ".yml"])) {
     try {
       const raw = YAML.parse(readFile(file)) ?? {};
-      for (const n of raw.notes ?? []) notes.push(Note.parse(n));
+      for (const n of itemsIn(raw, "notes", file, broken)) notes.push(Note.parse(n));
     } catch (e) {
       broken.push({ file, why: why(e) });
     }
@@ -318,7 +372,7 @@ export function loadCorpus(root: string, store: Store = diskStore): Corpus {
   for (const file of readDir(path.join(paths.root, "steers"), [".yaml", ".yml"])) {
     try {
       const raw = YAML.parse(readFile(file)) ?? {};
-      for (const x of raw.steers ?? []) steers.push(Steer.parse(x));
+      for (const x of itemsIn(raw, "steers", file, broken)) steers.push(Steer.parse(x));
     } catch (e) {
       broken.push({ file, why: why(e) });
     }
@@ -334,7 +388,7 @@ export function loadCorpus(root: string, store: Store = diskStore): Corpus {
   for (const file of readDir(paths.root, [".yaml", ".yml"]).filter((f) => /access\.ya?ml$/.test(f))) {
     try {
       const raw = YAML.parse(readFile(file)) ?? {};
-      for (const x of raw.access ?? []) access.push(Access.parse(x));
+      for (const x of itemsIn(raw, "access", file, broken)) access.push(Access.parse(x));
     } catch (e) {
       broken.push({ file, why: why(e) });
     }
@@ -411,7 +465,7 @@ export function loadCorpus(root: string, store: Store = diskStore): Corpus {
   for (const file of readDir(paths.verdicts, [".yaml", ".yml"])) {
     try {
       const raw = YAML.parse(readFile(file)) ?? {};
-      for (const v of raw.verdicts ?? []) verdicts.push(Verdict.parse(v));
+      for (const v of itemsIn(raw, "verdicts", file, broken)) verdicts.push(Verdict.parse(v));
     } catch (e) {
       broken.push({ file, why: why(e) });
     }
