@@ -62,6 +62,52 @@ export function doorOpensOn(
   return undefined;
 }
 
+/**
+ * The screen a door MEANT, where the scope it names holds exactly one.
+ *
+ * ⛔ A REF WITH EXACTLY ONE CANDIDATE IS NOT A GUESS, AND REFUSING IT MADE SOMEBODY RETYPE IT.
+ *
+ * Peter, after being refused twice: *"should be obvious which to point each one at"*. His Admin
+ * prototype said `org-loan-terms#org-loan-terms`, and `org-loan-terms` is a scope holding exactly
+ * one screen. There is no ambiguity to resolve — there is one screen it could be — and the refusal
+ * sent him to look up a name the corpus already knew.
+ *
+ * ⛔ IT IS RESOLUTION, NOT INFERENCE, AND THE DIFFERENCE IS THE COUNT. One candidate is an answer;
+ * two is a question, and a question answered by picking the first is the classifier this model
+ * refuses everywhere. So: exactly one, or nothing — and the refusal that remains NAMES the
+ * candidates rather than asking somebody to go and find them.
+ *
+ * ⛔ AND THE CALLER WRITES THE RESOLVED REF BACK. Resolving on every read would leave an
+ * unresolvable string in the corpus forever, with every reader re-deriving the same correction and
+ * nothing recording that it had been made.
+ */
+export function theOnlyScreenIn(c: Corpus, startsAt: string): { ref: string; title: string } | undefined {
+  if (!startsAt.includes("#")) return undefined;
+  const [scopeId] = startsAt.split("#");
+  const entry = c.scopes.find((e) => e.scope.id === scopeId);
+  if (!entry) return undefined;
+  const views = (entry.scope.views ?? []).filter((v) => v.exists !== "withdrawn");
+  if (views.length !== 1) return undefined;
+  const only = views[0]!;
+  return { ref: `${entry.scope.id}#${only.id}`, title: only.title ?? only.id };
+}
+
+/**
+ * Every screen in the scope a door names — what a refusal should say instead of "no such screen".
+ *
+ * ⛔ THE CANDIDATES, BECAUSE A REFUSAL THAT NAMES NONE SENDS SOMEBODY TO GO AND LOOK. The corpus
+ * knows them; printing them is the difference between a refusal somebody can act on and one they
+ * have to investigate.
+ */
+export function screensIn(c: Corpus, startsAt: string): string[] {
+  const [scopeId] = startsAt.split("#");
+  const entry = c.scopes.find((e) => e.scope.id === scopeId);
+  if (!entry) return [];
+  return (entry.scope.views ?? [])
+    .filter((v) => v.exists !== "withdrawn")
+    .map((v) => `${entry.scope.id}#${v.id}`);
+}
+
 export interface Option {
   id: string;
   title: string;
