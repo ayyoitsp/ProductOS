@@ -2890,7 +2890,28 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
          * product that HAS the concept, and only a note: the sentence is still the thing a person
          * agrees to, and an author may legitimately not know the role yet.
          */
-        if (model !== "neither" && !held.length && saysText(ex.slots?.may?.says).trim())
+        /**
+         * ⛔ AND A RULE'S `held_by` COUNTS, or writing the sentence once is punished for it.
+         *
+         * Six authors wrote one `may` rule instead of four-to-eight copies — the move this model
+         * asks for — and their exchanges then had no `held_by` of their own, so this finding fired
+         * on every one of them for prose that was not theirs and which they could not fix without
+         * un-writing the rule.
+         */
+        /**
+         * ⛔ COMPUTED HERE WITH `selectsFor`, NOT READ FROM `reach`. `reach` is declared seventy
+         * lines BELOW this block, so referring to it resolved to something unintended rather than
+         * failing — the list came back empty, the finding went on firing, and the build was clean.
+         * A silent wrong answer from a name that looks in scope.
+         */
+        const byRule = corpus.rules
+          .filter(
+            (r) =>
+              r.rule.fills.includes("may") &&
+              selectsFor({ ...r.rule, standing: undefined }, scope, ex, lineageOf(corpus, scope.id), corpus)
+          )
+          .flatMap((r) => r.rule.held_by ?? []);
+        if (model !== "neither" && !held.length && !byRule.length && saysText(ex.slots?.may?.says).trim())
           add({
             severity: "note",
             kind: "who-may-is-only-prose",
@@ -2899,6 +2920,34 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
             fix: `name ${model === "permissions" ? "the permissions" : "the roles"} in \`held_by\`, beside the sentence. ⛔ The sentence stays: it is what somebody agrees to, and the names are what make it answerable from the other end — "what can an underwriter reach"`,
           });
       }
+
+    /**
+     * ⛔ A RULE'S OWN IDS MUST RESOLVE, or the enumeration it exists to provide is decorative.
+     *
+     * Same refusal as on a slot, for the same reason: a name that resolves to nothing reads as a
+     * constraint and enforces none — and a rule's reaches every exchange its selector touches, so
+     * one bad id there is wrong in more places than one bad id on a slot.
+     */
+    for (const { rule } of corpus.rules) {
+      if (!rule.fills.includes("may")) continue;
+      for (const id of rule.held_by ?? [])
+        if (!byId.has(id))
+          add({
+            severity: "refuse",
+            kind: "may-names-nothing",
+            where: `${rule.id}#may`,
+            what: `this rule says only "${id}" may perform what it reaches, and the product has no role or permission by that name`,
+            fix: `add it where the product's roles and permissions are listed, or correct the name. ⛔ A rule reaches every exchange its selector touches, so a name that resolves to nothing is wrong on all of them`,
+          });
+        else if (!wants(byId.get(id)!.kind))
+          add({
+            severity: "note",
+            kind: "an-access-model-this-product-does-not-use",
+            where: `${rule.id}#may`,
+            what: `this rule names the ${byId.get(id)!.kind} "${id}", and this product is configured as access: ${model}`,
+            fix: `either change \`access:\` in the corpus config to the model the product actually has, or say who may in terms of the one it does`,
+          });
+    }
 
     /**
      * ⛔ A ROLE OR PERMISSION NOTHING USES. Dead access is worse than a missing one: it reads as

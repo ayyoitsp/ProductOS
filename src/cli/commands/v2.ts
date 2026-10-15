@@ -927,7 +927,25 @@ export function v2Command(): Command {
           console.log(pc.dim("  the words it collides with, and no candidates — the answer is which sense the"));
           console.log(pc.dim("  product means. Rule it in words, then the scopes using the other names are"));
           console.log(pc.dim("  corrected to match; until then every feature using any of them is using one."));
-          console.log(pc.dim(`  answer it: productos v2 rule ${q.ref} --says "…which sense wins…" --because "…" --by <your name>`));
+          /**
+           * ⛔ NO COMMAND, BECAUSE NO COMMAND CAN DO IT — AND I PRINTED ONE ANYWAY.
+           *
+           * #148 surfaced contested words and minted a ref shape no verb accepts: `<scope>#<word>`,
+           * where the word is the product's own multi-word phrase. #153 then printed
+           * `v2 rule <that ref>` as the way to answer it, and it fails with `no exchange "where a
+           * value was read from"`. An author found it on the ninth scope carrying one: *"a ref
+           * segment is kebab-case, so every multi-word term is unanswerable."*
+           *
+           * ⛔ AND THE DEEPER REASON IS THAT THE ANSWER HAS NOWHERE TO GO. `Term.contested` is
+           * `{question, with}`, strictly. Ruling a word means choosing a sense and renaming the
+           * losing uses in whatever scopes carry them — an authoring act across files, not a verb.
+           * So any command here would be a lie, and the honest thing is to say what the ruling
+           * consists of. Same shape as this file already uses for drafting candidates: "drafting
+           * options is authoring, not an act".
+           */
+          console.log(pc.dim("  there is no command for this one: say which sense wins, then the scopes using"));
+          console.log(pc.dim("  the other names are corrected to match and the contested note comes off. That is"));
+          console.log(pc.dim("  authoring across files, not an act — the productos skill routes it."))
         } else {
           console.log("");
           /**
@@ -945,7 +963,22 @@ export function v2Command(): Command {
           const pol = q.asksPolarity ? ` --refuses yes|no` : "";
           console.log(pc.dim(`  or answer it now: productos v2 rule ${q.ref} --says "…"${stands}${then}${pol} --because "…" --by <your name>`));
         }
-        console.log(pc.dim(`  not now:    productos v2 defer ${q.ref} --because "…" --until "…" --by <your name>`));
+        if (q.kind === "contested word") {
+          /**
+           * ⛔ AND IT CANNOT BE PARKED EITHER, SO DO NOT OFFER IT. `defer` resolves a ref to an
+           * exchange and a slot; a term is neither, so this printed a second command that fails
+           * the same way the answer command did. `schema.ts` already records somebody hitting
+           * this: *"a term is not a slot, so `defer` answered `no exchange \"completion\"`"* — they
+           * closed their case by giving the term the field it needed, which is a schema decision
+           * and not a thing to invent here. Filed as a gap; saying so is better than offering a
+           * command that errors.
+           */
+          console.log(pc.dim("  and it cannot be parked: `defer` wants an exchange and a slot, and a word is"));
+          console.log(pc.dim("  neither. Recorded as a framework gap — until it closes, a vocabulary question"));
+          console.log(pc.dim("  somebody is not ready to settle has to stay open."));
+        } else {
+          console.log(pc.dim(`  not now:    productos v2 defer ${q.ref} --because "…" --until "…" --by <your name>`));
+        }
       }
     });
 

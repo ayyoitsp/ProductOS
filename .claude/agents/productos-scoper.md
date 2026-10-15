@@ -671,6 +671,30 @@ separately unruled, you cannot say so. Raise the sharper one with `of:` and name
 out as an open rule. Do not invent a second standing to fit both in, and do not merge two questions
 into one `about`: a reviewer answering a merged question has answered neither.
 
+## ⛔ A rule that says who may, names who holds it — `held_by` on the rule
+
+```yaml
+fills: [may]
+mode: supplies
+statement: Only somebody the deal has been given to may change what it is measured against.
+held_by: [org-loan-manage, underwriter]    # ⛔ the ids, beside the sentence
+```
+
+**Write the sentence once as a rule and keep the enumeration.** Before this field existed, moving a
+shared `may` into a rule — the move this model asks for — threw away the answer to "what can an
+underwriter reach", because `held_by` lived only on a slot. Six authors filed that as a gap
+independently in one corpus (fg-0052, fg-0067, fg-0090, fg-0096, fg-0107, fg-0114), every one of
+them having done the right thing and been punished for it.
+
+⛔ **And nothing told them.** `who-may-is-only-prose` fires on a slot whose `may` names nobody; a
+rule-supplied `may` is not blank, so the finding went quiet at the same moment the data was lost.
+It now counts a reaching rule's `held_by`, and a rule's own ids are refused if they resolve to
+nothing — a rule reaches every exchange its selector touches, so one bad name there is wrong on all
+of them.
+
+⛔ **The sentence still matters more than the list.** It is what a person agrees to; the ids are
+what make it answerable from the other end. Never replace one with the other.
+
 ## Rules — where the leverage is, and where each one belongs
 
 Before writing the same sentence on a third exchange, stop. It is a rule:
