@@ -19,6 +19,7 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { eq, sql } from "drizzle-orm";
 import { type Db, isRefusal, storeFor } from "./access.js";
+import { queryCounter } from "./trace.js";
 import { becauseOf } from "./because.js";
 import { stuckWrites } from "./instance.js";
 import { applyMigrations, SchemaAheadError } from "./migrate.js";
@@ -122,9 +123,10 @@ export function openStore(databaseUrl: string): { db: Db; close: () => Promise<v
       if (notice.code === "42P07") return; // the ledger already exists; that is the normal case
       process.stderr.write(`[productos] postgres: ${notice.message}\n`);
     },
+
   });
   return {
-    db: drizzle(client) as unknown as Db,
+    db: drizzle(client, { logger: queryCounter }) as unknown as Db,
     close: () => client.end({ timeout: 5 }),
   };
 }
