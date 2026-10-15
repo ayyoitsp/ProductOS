@@ -103,7 +103,12 @@ test("⛔ an area holds its own items, and does not name itself among them", () 
 
   /** ⛔ Non-zero, because zero here is what a build with no nesting at all also produces. */
   assert.ok((inside.match(/class="holds/g) || []).length >= 1, "no row in the area holds a subtree");
-  assert.ok((inside.match(/data-twist-scope=/g) || []).length >= 1, "no row has a collapse control");
+  /**
+   * ⛔ AND NO CONTROL ON THE ROW. This asserted the opposite an hour ago — *"we don't need the
+   * chevron next to 'attachment routing'"* — and the old assertion is retired rather than kept
+   * alongside, because a suite that asserts both shapes of a decision pins nothing.
+   */
+  assert.doesNotMatch(inside, /data-twist-scope=/, "the rows still carry a chevron of their own");
 });
 
 /**
@@ -125,9 +130,9 @@ test("⛔ a leaf gets no collapse control, and the counts are chips", () => {
   const menu = menuOf(html);
 
   /** The deepest scope holds nothing, so it must not offer to expand. */
-  const leaf = /<li[^>]*data-scope="weekly-top-up"[^>]*>([\s\S]*?)<\/span>/.exec(menu);
+  const leaf = /<li[^>]*data-scope="weekly-top-up"[^>]*>([\s\S]*?)<\/li>/.exec(menu);
   assert.ok(leaf, "the deepest scope is not a row");
-  assert.match(leaf[1], /twisty none/, "a leaf is offering a control that would expand nothing");
+  assert.doesNotMatch(leaf[1], /twisty/, "a leaf is carrying a control or a spacer for one");
 
   /**
    * ⛔ THE CHIPLESS ROW, FOUND AND SHOWN TO BE CHIPLESS FIRST. Asserting the sentence is absent from
@@ -160,34 +165,6 @@ test("⛔ the branch you are standing in is open", () => {
   assert.ok(row, "the ancestor is not a row at all");
   assert.match(row[1], /\bopen\b/, "the container holding the page you are on is collapsed");
 });
-
-test("⛔ in a real browser: a subtree is hidden until its twisty is pressed", { skip }, async () => {
-    const { corpus, rootId } = deepCorpus();
-    const html = renderScopePage(corpus, rootId, {});
-    const page = await openPage(html, { exe, width: 1200, height: 900 });
-    try {
-    await page.waitFor("!!document.querySelector('.scopes.inside .twisty.sub')", "the menu to nest");
-
-    const seen = await page.evaluate(`(() => {
-      document.documentElement.setAttribute('data-nav', 'left');
-      const row = document.querySelector('li[data-scope="pocket-money"]');
-      const sub = row.querySelector(':scope > ul');
-      const tw = row.querySelector(':scope > .scoperow > .twisty');
-      const shutNow = getComputedStyle(sub).display;
-      tw.click();
-      const openNow = getComputedStyle(sub).display;
-      tw.click();
-      return { shutNow, openNow, after: getComputedStyle(sub).display };
-    })()`);
-
-    /** ⛔ Three distinguishable outcomes out of one element, so none of them is the default. */
-    assert.equal(seen.shutNow, "none", "the subtree is visible before anything was pressed");
-    assert.equal(seen.openNow, "block", "pressing the twisty did not open the subtree");
-    assert.equal(seen.after, "none", "pressing it again did not shut the subtree");
-    } finally {
-      await page.close();
-    }
-  });
 
 test("⛔ in a real browser: opening one container shuts its siblings", { skip }, async () => {
     /**
@@ -276,6 +253,102 @@ test("⛔ in a real browser: the menu column reserves the composer's height and 
     assert.equal(seen.overflow, "auto", "the column does not scroll, so anything under the bar is lost");
     assert.equal(seen.scrolls, true, "the column has nothing to scroll, so the reserve proves nothing");
     assert.equal(seen.scrolled, true, "the column would not scroll to its own bottom");
+  } finally {
+    await page.close();
+  }
+});
+
+test("⛔ in a real browser: the top menu can still reach every feature", { skip }, async () => {
+  /**
+   * ⛔ THIS IS THE TEST THAT DID NOT EXIST, AND ITS ABSENCE SHIPPED A BROKEN TOP MENU.
+   *
+   * Peter: *"you completely broke support for the top menu..... 🤦... are you compeltely unaware of
+   * how the product works?"*, then *"top menu shoudl more or less behave as before"* and *"tabs
+   * instead of collapsible rows"*.
+   *
+   * Across the top, the groups collapse to a row and hold nothing, so the tree behind the chevron is
+   * the ONLY way to reach a feature. Making rows collapsible by default folded every feature away,
+   * and with the row chevrons gone there was nothing left to open them.
+   *
+   * ⛔ WHAT THIS MEASURES IS REACHABILITY, not a layout property. My first attempt asserted the tabs
+   * sat on one row — true on the broken build, because the row does not wrap — and then that the
+   * subtrees were hidden, which a probe showed they already were: top mode hides the whole tree until
+   * the chevron, so the rule I had just written as "the fix" was redundant and the break was
+   * elsewhere. The question is whether a person can get to a feature from here.
+   *
+   * ⛔ AND IT NEEDS A CORPUS WITH DEPTH. The existing top-menu test measures the seed, whose areas
+   * hold no scopes — so there is nothing to fold, and every assertion about folding passes.
+   */
+  const { corpus, rootId } = deepCorpus();
+  const html = renderScopePage(corpus, rootId, {});
+  const page = await openPage(html, { exe, width: 1200, height: 900 });
+  try {
+    await page.waitFor("!!document.querySelector('.topframe .chev')", "the chevron that opens the tree");
+
+    const seen = await page.evaluate(`(() => {
+      document.documentElement.setAttribute('data-nav', 'top');
+      document.querySelector('.topframe .chev').click();
+      const tree = document.querySelector('.topframe > nav.scopes');
+      const rows = [...tree.querySelectorAll('li')];
+      /** A row a person can actually see and press, measured rather than inferred from a class. */
+      const reachable = rows.filter((r) => r.getBoundingClientRect().height > 0).map((r) => r.dataset.scope);
+      const tabs = [...document.querySelectorAll('.topframe .tabhead .tab')];
+      return {
+        treeShown: getComputedStyle(tree).display,
+        reachable,
+        deepest: reachable.includes('weekly-top-up'),
+        tabs: tabs.length,
+        tabRows: new Set(tabs.map((t) => Math.round(t.getBoundingClientRect().top))).size,
+      };
+    })()`);
+
+    assert.notEqual(seen.treeShown, "none", "the chevron does not open the tree");
+    /** ⛔ The deepest scope, three levels down — the one a folded tree hides. */
+    assert.equal(seen.deepest, true, `the top menu cannot reach a nested feature; it offers ${seen.reachable.join(", ")}`);
+    assert.ok(seen.reachable.length >= 4, `only ${seen.reachable.length} features are reachable from the top menu`);
+    /** And the tabs are still tabs: one row, as before. */
+    assert.ok(seen.tabs >= 3, `expected a tab per area, got ${seen.tabs}`);
+    assert.equal(seen.tabRows, 1, `the areas are spread over ${seen.tabRows} rows in the top menu`);
+  } finally {
+    await page.close();
+  }
+});
+
+test("⛔ a row carries no control of its own, and selecting it opens what is in it", { skip }, async () => {
+  /**
+   * Peter: *"there's an extra chevron now... we don't need the chevron next to 'attachment routing',
+   * for example. once you click an item, its sub menu should automatically show if it has one"*.
+   *
+   * ⛔ BOTH HALVES, because "no chevron" alone is satisfied by a menu that cannot open at all — which
+   * is strictly worse than the extra glyph he was complaining about.
+   */
+  const { corpus, rootId } = deepCorpus();
+  const html = renderScopePage(corpus, rootId, {});
+  const page = await openPage(html, { exe, width: 1200, height: 900 });
+  try {
+    await page.waitFor("!!document.querySelector('.scopes.inside')", "an area with items");
+
+    const seen = await page.evaluate(`(() => {
+      document.documentElement.setAttribute('data-nav', 'left');
+      const row = document.querySelector('li[data-scope="pocket-money"]');
+      const sub = row.querySelector(':scope > ul');
+      const link = row.querySelector(':scope > .scoperow > a');
+      row.classList.remove('open');
+      const before = getComputedStyle(sub).display;
+      link.click();
+      return {
+        chevrons: document.querySelectorAll('nav.scopes .twisty').length,
+        before,
+        after: getComputedStyle(sub).display,
+        /** ⛔ The link still navigates — the handler must not have swallowed it. */
+        went: location.hash,
+      };
+    })()`);
+
+    assert.equal(seen.chevrons, 0, `the menu still draws ${seen.chevrons} row chevrons`);
+    assert.equal(seen.before, "none", "the subtree was open before anything was chosen");
+    assert.equal(seen.after, "block", "choosing an item did not open what is in it");
+    assert.match(seen.went, /pocket-money/, "the row stopped navigating when it gained a handler");
   } finally {
     await page.close();
   }
