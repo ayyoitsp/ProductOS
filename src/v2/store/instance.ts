@@ -23,7 +23,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import http from "node:http";
-import { CORPUS_DIRS, corpusFiles } from "../load.js";
+import { CORPUS_DIRS, corpusFiles, loadCorpus, type Corpus } from "../load.js";
 import { appendedLines, sessionsIn, writeLog, writeSessions } from "./corpus.js";
 import { published, streamFor } from "./pushes.js";
 import { PRESENCE_MS } from "../presence.js";
@@ -269,6 +269,8 @@ export interface Materialized {
   logHad: number;
   /** Who the store said was listening going in. Anything newer than this is a heartbeat to keep. */
   listening: Array<{ session: string; at: string }>;
+  /** The corpus this read already parsed, for the routes that want one. Absent on a write. */
+  corpusFor?: () => Corpus;
   /**
    * Whether this directory is shared with other in-flight reads.
    *
@@ -300,7 +302,18 @@ export interface Materialized {
  */
 const READ = new Map<
   string,
-  { fp: string; documents: Record<string, string>; events: StoredEvent[]; dir?: string }
+  {
+    fp: string;
+    documents: Record<string, string>;
+    events: StoredEvent[];
+    dir?: string;
+    /**
+     * ⛔ THE PARSED CORPUS, because laying the documents out and then parsing them back is the last
+     * thing every request was doing with bytes it already had — ~374ms of YAML per page view on
+     * Bilrost's corpus. Held beside the directory it was parsed from, and dropped with it.
+     */
+    corpus?: Corpus;
+  }
 >();
 
 /** ⛔ A bound, because a corpus is ~19 MB in memory and an instance serves many projects. */
@@ -341,7 +354,15 @@ function countLogLines(dir: string): number {
 /** Stop sharing this project's laid-out directory — it is no longer known to be pristine. */
 export function forgetDir(projectId: string): void {
   const entry = READ.get(projectId);
-  if (entry) entry.dir = undefined;
+  if (entry) {
+    entry.dir = undefined;
+    /**
+     * ⛔ AND THE CORPUS PARSED FROM IT. Keeping a corpus whose directory has been thrown away for
+     * not being pristine would be the staleness this is careful about, one level up — the files are
+     * suspect, so what was read out of them is too.
+     */
+    entry.corpus = undefined;
+  }
 }
 
 export function forgetRead(projectId: string): void {
@@ -354,6 +375,19 @@ export async function materializeProject(store: ProjectStore, mutating = false):
    * `/api/v2/presence` is a GET like any other and the answer changes without the corpus changing,
    * so it is read every time — in parallel with the fingerprint, which is the only other thing
    * needed to find out whether anything else has to be read at all.
+   */
+  /**
+   * ⛔ A WRITE ASKS FOR THE FINGERPRINT TOO, AND I BRIEFLY MADE IT NOT — WHICH WAS SLOWER.
+   *
+   * The reasoning that looked right: the fingerprint decides whether a cached read may be reused,
+   * and a write never reuses the DIRECTORY, so why pay for it. The measurement disagreed — the
+   * write went from 9 queries to 10. A write still needs `before`, the documents as they were when
+   * it started, and a matching fingerprint is exactly the proof that the cached copy still IS that.
+   * Skipping it traded one cheap trip for two expensive reads.
+   *
+   * ⛔ WHAT MUST NOT HAPPEN IS CACHING FROM A WRITE, which is a different thing and is enforced
+   * below: recording a fingerprint taken BEFORE a write would leave the next reader matching on a
+   * corpus that has since moved.
    */
   const [fp, listening] = await Promise.all([store.fingerprint(), store.listening(PRESENCE_MS)]);
 
@@ -373,11 +407,15 @@ export async function materializeProject(store: ProjectStore, mutating = false):
      */
     [documents, events] = await Promise.all([store.documents(), store.since(0, LOG_CEILING)]);
     /** ⛔ Oldest out first, so a busy instance holds a bounded number of corpora. */
-    if (READ.size >= READ_CEILING && !READ.has(store.projectId)) {
+    if (!mutating && READ.size >= READ_CEILING && !READ.has(store.projectId)) {
       const oldest = READ.keys().next().value;
       if (oldest !== undefined) READ.delete(oldest);
     }
-    READ.set(store.projectId, { fp, documents, events });
+    /**
+     * ⛔ NOTHING IS REMEMBERED FROM A WRITE. The fingerprint was taken before the write landed, so
+     * storing it would hand the next reader a match against a corpus that has since moved.
+     */
+    if (!mutating) READ.set(store.projectId, { fp, documents, events });
   }
 
   /**
@@ -405,7 +443,26 @@ export async function materializeProject(store: ProjectStore, mutating = false):
     const entry = READ.get(store.projectId);
     if (entry) entry.dir = dir;
   }
-  return { dir, documents, logHad, listening, shared: Boolean(!mutating) };
+  /**
+   * ⛔ A GETTER, SO A ROUTE THAT DOES NOT NEED A CORPUS DOES NOT PARSE ONE. Presence reads notes and
+   * nothing else; making it pay for a parse to answer "is anybody listening" is the cost this whole
+   * sweep has been removing.
+   *
+   * ⛔ AND NEVER FOR A WRITE. A write edits the directory and then expects to read what it wrote, so
+   * a corpus parsed before its own edit would be a request that cannot see its own work — the same
+   * reason a writer is handed its own directory rather than the shared one.
+   */
+  const corpusFor = mutating
+    ? undefined
+    : () => {
+        const entry = READ.get(store.projectId);
+        if (entry?.fp === fp && entry.corpus) return entry.corpus;
+        const parsed = loadCorpus(dir);
+        if (entry?.fp === fp) entry.corpus = parsed;
+        return parsed;
+      };
+
+  return { dir, documents, logHad, listening, shared: Boolean(!mutating), corpusFor };
 }
 
 /**
@@ -500,8 +557,14 @@ export async function writeBack(
     return { changed: [], logged: 0 };
   }
 
-  const now = await store.documents();
-  const conflict = [...changed, ...removed].filter((k) => (now[k] ?? undefined) !== (before[k] ?? undefined));
+  /**
+   * ⛔ ONLY THE PATHS THIS REQUEST TOUCHED. This asked for every document in the project — 19 MB on
+   * Bilrost's corpus — to compare the handful it changed, and then discarded the rest. The question
+   * is unchanged: does each path this request touched still hold what it held when it started.
+   */
+  const touched = [...new Set([...changed, ...removed])];
+  const now = await store.sourcesOf(touched);
+  const conflict = touched.filter((k) => (now[k] ?? undefined) !== (before[k] ?? undefined));
   if (conflict.length) return { conflict };
 
   /**
@@ -511,9 +574,21 @@ export async function writeBack(
    */
   forgetRead(store.projectId);
 
-  for (const key of changed) await store.put(key, after[key]!);
-  /** ⛔ Deprecated, never deleted — the store has no delete path to call. */
-  for (const key of removed) await store.deprecate(key);
+  /**
+   * ⛔ THE DOCUMENT WRITES GO TOGETHER — they touch different paths, so waiting for each before
+   * sending the next bought a round trip per file. A placement save changes one file and did not
+   * care; a sweep that redraws forty screens paid forty trips in series.
+   *
+   * ⛔ AND THE APPENDS BELOW DELIBERATELY DO NOT. An event's `seq` is allocated under the primary
+   * key — two appends racing both compute the same next number, the key rejects the loser and it
+   * retries. Firing them together would manufacture exactly the collisions the retry exists to
+   * survive, and turn N trips into N plus the retries. Serial is the cheaper correct answer there.
+   */
+  await Promise.all([
+    ...changed.map((key) => store.put(key, after[key]!)),
+    /** ⛔ Deprecated, never deleted — the store has no delete path to call. */
+    ...removed.map((key) => store.deprecate(key)),
+  ]);
 
   /**
    * ⛔ IN ORDER, AND AFTER THE DOCUMENTS. An event announcing a change that is not in the store yet
@@ -609,7 +684,7 @@ export async function instanceRoute(
   const mutating = req.method !== "GET" && req.method !== "HEAD";
 
   const run = async (): Promise<boolean> => {
-    const { dir, documents: before, logHad, listening: wasListening, shared } = await materializeProject(reached, mutating);
+    const { dir, documents: before, logHad, listening: wasListening, shared, corpusFor } = await materializeProject(reached, mutating);
     /**
      * ⛔ A MUTATING RESPONSE IS HELD UNTIL THE WRITE LANDS, OR THE CALLER IS TOLD 200 FOR A WRITE
      * THAT WAS REFUSED. The delegate answers as soon as it has performed the act against the
@@ -624,6 +699,7 @@ export async function instanceRoute(
     try {
       const handled = await v2Route(req, held ? held.proxy : res, addressed.rest, {
         dir,
+        corpusFor,
         who,
         /**
          * ⛔ THE STREAM READS THE STORE, NOT THE DIRECTORY IT WAS HANDED.
