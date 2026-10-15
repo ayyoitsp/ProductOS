@@ -284,15 +284,48 @@ function renderQuestion(q: Question, i: number, past: Decision[], ctx: Ctx): str
     })
     .join("");
 
-  if (q.revises)
+  if (q.revises) {
+    /**
+     * ⛔ ONE PER LINE WHERE THERE IS MORE THAN ONE, so "this much of it is unruled" is legible
+     * against the thing it is part of. Glued into a paragraph, a seven-statement slot gave a
+     * reviewer no way to see which of the seven an option would touch.
+     */
+    const each = q.saysEach ?? [];
+    const already =
+      each.length > 1
+        ? `<ul class="says-each">${each
+            .map(
+              (x) =>
+                `<li${x.inQuestion ? ' class="in-question"' : ""}>${line(x.says)}${
+                  x.inQuestion ? ' <span class="tag">this one is unruled</span>' : ""
+                }</li>`
+            )
+            .join("")}</ul>`
+        : `<p class="v">${line(q.revises)}</p>`;
+    /**
+     * ⛔ AND IT NO LONGER CONTRADICTS THE BUTTONS BESIDE IT. This said "has to be written rather
+     * than picked" unconditionally, while the options above it each rendered a pressable "This
+     * one" — so the page told a reviewer they could not do the thing it was offering. The CLI
+     * had `candidatesAreWhole` for exactly this and the page read it nowhere.
+     */
+    const note = !q.candidates.length
+      ? "Nothing is drafted here, so a ruling has to be written out."
+      : q.candidatesAreWhole
+        ? "Each option is the whole sentence, so picking one replaces it cleanly."
+        : each.length > 1
+          ? each.some((x) => x.inQuestion)
+            ? "Each option replaces the marked statement only. The others stand exactly as they are."
+            : "Each option answers only the part in question. The other statements above stand; picking one does not remove them."
+          : "Each option answers only the part in question.";
     acts.push(`
       <div class="revises">
         <p class="k">it already says</p>
-        <p class="v">${line(q.revises)}</p>
+        ${already}
         <p class="k">and this much of it is unruled</p>
         <p class="v">${line(q.about)}</p>
-        <p class="note">A ruling here replaces the whole sentence, so it has to be written rather than picked.</p>
+        <p class="note">${note}</p>
       </div>`);
+  }
 
   return `
     <article class="q${q.parked ? " parked" : ""}" id="${anchorOf(q.ref)}" data-ref="${esc(q.ref)}" data-label="${esc(`undecided · ${q.ref}`)}">
@@ -7201,6 +7234,13 @@ export const STYLE = `<style>
     margin: .9rem 0; font-size: .92rem; }
   .cost { border-left: 3px solid var(--warn); }
   .revises .v { margin: 0 0 .6rem; }
+  /* ⛔ One statement per line, and the unruled one marked — glued into a paragraph, a
+     seven-statement slot gave a reviewer no way to see which of the seven an option touches. */
+  .says-each { margin: 0 0 .6rem; padding-left: 1.1rem; }
+  .says-each li { margin: 0 0 .35rem; }
+  .says-each li.in-question { font-weight: 600; }
+  .says-each li.in-question .tag { font-weight: 400; font-size: .8em; opacity: .75;
+    border: 1px solid currentColor; border-radius: 999px; padding: 0 .4em; margin-left: .3em; }
   .revises .note { color: var(--dim); font-size: .85rem; margin: .5rem 0 0; }
   .observed ul { margin: .3rem 0 0; padding-left: 1.1rem; }
   .observed .basis { color: var(--dim); font-size: .85em; }
