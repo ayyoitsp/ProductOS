@@ -259,6 +259,125 @@ test("switching to a deferred feature fills it in, and what arrives is really on
   }
 });
 
+/**
+ * ⛔ GOING SOMEWHERE AND COMING BACK, BECAUSE ONE PRESS WORKS AND THAT IS WHY NOTHING CAUGHT THIS.
+ *
+ * Peter: *"I'm tapping on 'Versioned Inputs', which 'states nothing of its own'. it incorrectly
+ * does not route anywhere. It should have its own page that's mostly blank, or lists its children,
+ * should not just keep what is rendered on the screen"*.
+ *
+ * Everything a single press touches was correct: the nav emits an anchor, the anchor's target is on
+ * the page, and `/api/v2/section` answers 200 with the container's own page — prose, and the list of
+ * what is filed under it. Driven once on the live instance it routed perfectly. The defect needs a
+ * SEQUENCE, and the test above is exactly one press long.
+ *
+ * `VIEW_SWITCH` captured every `section.view` ONCE at load. `fill()` REPLACES a deferred section
+ * with a fresh element off the wire, so that list keeps the detached stub and has never heard of
+ * what replaced it:
+ *
+ *   · navigating AWAY from a filled section never hides it — no entry to set `hidden` on, so it
+ *     stays on screen underneath the next one
+ *   · navigating BACK to it matches nothing, and the no-match branch un-hides EVERY view on the
+ *     page — 130 sections at once on his corpus, which reads exactly like a press that did nothing
+ *
+ * ⛔ SO THE ASSERTION IS "EXACTLY ONE", NOT "THE RIGHT ONE IS SHOWING". The right one WAS showing
+ * the whole time; what was wrong is everything else that was showing with it. An assertion on the
+ * target alone passes on the bug.
+ */
+/**
+ * ⛔ ONE SECTION IS SHOWING WHEN THE READER ARRIVES — AND THIS IS A GUARD ON THE SCRIPTS THEMSELVES.
+ *
+ * It looks like a triviality and it is the cheapest detector this page has for a script that DIED.
+ * Every section is server-rendered visible and the switcher hides all but one on load, so if any
+ * emitted script throws before that runs, the page arrives as one long scroll of everything.
+ *
+ * ⛔ AND "EVERY SCRIPT IS VALID JAVASCRIPT" CANNOT CATCH THAT, which is why this exists separately.
+ * While fixing the routing above I changed `views` from an array to a function and missed the fifth
+ * use of it — `views.find(...)`, 300 lines further down, past where I had grepped. That parses
+ * perfectly; it is a TypeError at run time, and it killed the whole switcher. The parse guard was
+ * green. What caught it was a DIFFERENT test's arithmetic about hidden sections, by accident.
+ *
+ * So the observable gets its own name: on arrival, exactly one.
+ */
+test("the reader arrives looking at exactly one section", { skip }, async () => {
+  const { base, close } = await serve(dir);
+  const page = await openPage(null, { exe, url: `${base}/v2`, width: 1440, height: 900 });
+  after(() => page.close());
+  try {
+    await page.waitFor(
+      `location.href.indexOf(${JSON.stringify(base)}) === 0 && document.readyState === "complete"`,
+      "the page to finish loading"
+    );
+    /** ⛔ Non-vacuous: there have to be several, or "exactly one" is what a one-view page does anyway. */
+    const total = await page.evaluate(`document.querySelectorAll("section.view").length`);
+    assert.ok(total > 4, `the page has ${total} sections, so showing one proves nothing`);
+
+    const showing = await page.evaluate(
+      `[...document.querySelectorAll("section.view")].filter((s) => !s.hidden).map((s) => s.dataset.view || s.id)`
+    );
+    assert.deepEqual(
+      showing,
+      ["overview"],
+      `${showing.length} of ${total} sections are showing on arrival — a script that hides the rest did not finish: ${JSON.stringify(showing.slice(0, 6))}`
+    );
+  } finally {
+    close();
+  }
+});
+
+test("going away from a filled section and back shows exactly it, both times", { skip }, async () => {
+  const { base, close } = await serve(dir);
+  const page = await openPage(null, { exe, url: `${base}/v2`, width: 1440, height: 900 });
+  after(() => page.close());
+  try {
+    /**
+     * ⛔ A CONTAINER, because that is what he was pressing and what states nothing of its own —
+     * `part-0` has no exchanges, so its view is the listing of what is filed under it.
+     */
+    const showing = `[...document.querySelectorAll("section.view")].filter((s) => !s.hidden).map((s) => s.dataset.view)`;
+    const press = (id) => page.evaluate(`document.querySelector('nav.scopes a[data-goto="${id}"]').click()`);
+    const filled = (id) =>
+      page.waitFor(
+        `(() => { const s = document.querySelector('section.view[data-view="${id}"]'); return !!s && !s.hasAttribute("data-defer"); })()`,
+        `the deferred section for ${id} to be filled`
+      );
+
+    /** ⛔ Non-vacuous: it has to have been DEFERRED, or this test is about a page that never split. */
+    const wasStub = await page.evaluate(
+      `Boolean(document.querySelector('section.view[data-defer="part-0"]'))`
+    );
+    assert.ok(wasStub, "part-0 was not deferred, so nothing here exercises the replacement at all");
+
+    await press("part-0");
+    await filled("part-0");
+    const first = await page.evaluate(showing);
+    assert.deepEqual(first, ["part-0"], `pressing the container left ${JSON.stringify(first)} showing`);
+
+    /** ⛔ And it really is the container's page: the thing he said it should be. */
+    const holds = await page.evaluate(`(() => {
+      const s = document.querySelector('section.view[data-view="part-0"]');
+      return { text: s.textContent.includes("What is filed under it"), kids: s.querySelectorAll("ul.contents a[data-goto]").length,
+               height: Math.round(s.getBoundingClientRect().height) };
+    })()`);
+    assert.ok(holds.text, "the container's page does not say what is filed under it");
+    assert.ok(holds.kids > 0, "the container's page lists none of its children");
+    assert.ok(holds.height > 80, `the container's page computes to ${holds.height}px — nothing is in it`);
+
+    /** Away. ⛔ THE ONE THAT FAILS ON THE PREVIOUS BUILD: the filled section is never hidden. */
+    await press("thing-1");
+    await filled("thing-1");
+    const away = await page.evaluate(showing);
+    assert.deepEqual(away, ["thing-1"], `navigating away left ${JSON.stringify(away)} showing at once`);
+
+    /** And back. ⛔ The other half: a filled section matches nothing, so the page reveals all of it. */
+    await press("part-0");
+    const back = await page.evaluate(showing);
+    assert.deepEqual(back, ["part-0"], `coming back left ${JSON.stringify(back)} showing at once`);
+  } finally {
+    close();
+  }
+});
+
 test("a drawing arrives without anybody pressing for it, and what is unopened waits", { skip }, async () => {
   const { base, close } = await serve(dir);
   const page = await openPage(null, { exe, url: `${base}/v2` });
