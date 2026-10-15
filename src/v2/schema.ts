@@ -2235,6 +2235,26 @@ export const Rule = z
      * `constrains` rule read as `supplies` governs nothing while still appearing in the
      * rule list as though it did.
      */
+    /**
+     * The roles or permissions this rule's `may` requires — ⛔ SIX AUTHORS FILED ITS ABSENCE.
+     *
+     * fg-0052, fg-0067, fg-0090, fg-0096, fg-0107 and fg-0114, independently, in one corpus. Every
+     * one of them had done the RIGHT thing and been punished for it: the same authorization
+     * sentence was about to go on four to eight exchanges, so they wrote it once as a rule — and
+     * `held_by` lived only on a `SlotFill`, so the ids went into the rule's prose and those
+     * exchanges became invisible to "what can this role reach".
+     *
+     * ⛔ AND THE FINDING WENT QUIET AT THE SAME TIME, which is why it kept happening.
+     * `who-may-is-only-prose` fires on a slot whose `may` names nobody; a rule-supplied `may` is
+     * not blank, so nothing complained. The recommended shape silently lost the enumerable answer
+     * and nothing said so — one author's words: *"the recommended shape is the one that silently
+     * loses the permission enumeration."*
+     *
+     * ⛔ THE SENTENCE IS STILL WHAT A PERSON AGREES TO. Same as on a slot: "nobody outside the
+     * deal's own team, even an admin" is the part a human validates, and the ids are what make it
+     * checkable and listable. This does not replace `statement`; it stands beside it.
+     */
+    held_by: z.array(z.string()).default([]),
     mode: z.enum(["supplies", "constrains"]),
     scope: Selector,
     criteria: z.array(Criterion).default([]),
