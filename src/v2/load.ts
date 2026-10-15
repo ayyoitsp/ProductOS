@@ -159,6 +159,37 @@ export const diskStore: Store = {
  * a column name is. What would be a leak is one of these reaching a page.
  */
 /**
+ * What may be in a corpus directory: the sentences, and a screen's picture.
+ *
+ * ⛔ `.html` IS HERE BECAUSE A DRAWING IS ITS OWN FILE NOW, and leaving it out was silent data
+ * loss rather than a missing read. `writeBack` diffs `corpusFiles(dir)` against the documents the
+ * request was given — so a drawing the store holds and this does not see appears as REMOVED, and
+ * every hosted write would have deprecated every drawing in the project.
+ */
+const CORPUS_EXT = /\.(md|ya?ml|html)$/;
+
+/**
+ * Everything under one corpus directory, at whatever depth it sits.
+ *
+ * ⛔ RECURSIVE, FOR THE SAME REASON. `drawings/<scope>/<view>.html` is two levels down and this
+ * read one — so the drawing `materialize` had just written to disk was invisible on the way back,
+ * which is the other half of the same defect.
+ */
+function walk(here: string, prefix: string, out: Record<string, string>): void {
+  for (const entry of fs.readdirSync(here, { withFileTypes: true })) {
+    const at = path.join(here, entry.name);
+    /** ⛔ Keys are POSIX, because they are store paths — a Windows separator would be a new row. */
+    const key = `${prefix}/${entry.name}`;
+    if (entry.isDirectory()) {
+      walk(at, key, out);
+      continue;
+    }
+    if (!entry.isFile() || !CORPUS_EXT.test(entry.name)) continue;
+    out[key] = fs.readFileSync(at, "utf-8");
+  }
+}
+
+/**
  * Every file a corpus is made of, keyed by the path a directory would give it.
  *
  * ⛔ THE COUNTERPART OF `memoryStore`, AND THEY MUST STAY THAT WAY. An instance reads a corpus with
@@ -233,10 +264,7 @@ export function corpusFiles(root: string): Record<string, string> {
   for (const sub of CORPUS_DIRS) {
     const here = path.join(root, sub);
     if (!fs.existsSync(here)) continue;
-    for (const f of fs.readdirSync(here)) {
-      if (!/\.(md|ya?ml)$/.test(f)) continue;
-      out[`${sub}/${f}`] = fs.readFileSync(path.join(here, f), "utf-8");
-    }
+    walk(here, sub, out);
   }
   if (fs.existsSync(root)) {
     for (const entry of fs.readdirSync(root, { withFileTypes: true })) {

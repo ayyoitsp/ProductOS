@@ -57,3 +57,35 @@ closed: 2026-10-15
 # a directory, because `writeBack` diffs the files on it.
 #
 # 1008/1008.
+#
+# ⛔ APPENDED AGAIN, AND IT IS THE IMPORTANT PART. SPLITTING THE ROW BROKE THE WRITE PATH, AND
+# NOTHING IN 1008 TESTS SAID SO.
+#
+# `writeBack` computes `removed = keys(before).filter(k => !(k in after))`, where `before` is what
+# the store holds and `after` is `corpusFiles(dir)`. And `corpusFiles` read ONE level deep, matching
+# only `.md|.ya?ml` — so `drawings/<scope>/<view>.html` was invisible to it. Two consequences:
+#
+#   · EVERY SAVE WOULD HAVE DEPRECATED EVERY DRAWING IN THE PROJECT. All 83 of Bilrost's, on the
+#     next placement save, leaving every screen in the product blank.
+#   · A DRAWING DRAWN ON THE INSTANCE NEVER REACHED THE STORE. It existed for one request and went
+#     out with the temp directory.
+#
+# ⛔ FOUND BY A NUMBER THAT WAS IMPOSSIBLE, NOT BY A TEST. `scripts/bench-layout.mjs` reported 15 MB
+# read back off local disk in 1ms. 15 GB/s is not a fast read; it is a read that did not happen.
+# This is the rule at the top of CLAUDE.md working as intended, one more time: the aggregate agreed
+# with what I wanted, and the only thing that caught it was the aggregate being absurd.
+#
+# ⛔ AND THE SEAM TEST WRITTEN IN THE SAME HOUR TO CATCH EXACTLY THIS DID NOT. "A held write records
+# exactly what moved" exercises `memoryStore`; this path goes through a directory. 0151 names the
+# risk as "a drawing landing where no reader looks", and it had landed precisely there — one layer
+# over from where I was looking for it.
+#
+# FIXED: `corpusFiles` walks each corpus directory to whatever depth it has, and `CORPUS_EXT`
+# includes `.html`. Pinned by two tests in `v2-a-write-asks-for-what-it-changed`, both verified red
+# on the previous build. The benchmark now prints the bytes beside the timing, so a read with
+# nothing behind it is visible rather than flattering.
+#
+# AND THE "NOT DONE" ABOVE IS SMALLER THAN IT SOUNDED. Laying a 15 MB corpus out and parsing it is
+# ~44ms and ~19ms locally — a floor a save pays, not the seconds Peter was waiting on.
+#
+# 1010/1010.
