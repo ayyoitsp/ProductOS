@@ -182,9 +182,13 @@ export const leases = pgTable("leases", {
  *
  * `presence.ts` records a listening session in `events/sessions.json` beside the corpus, which is
  * right for a directory and was silently a no-op here: the hosted path materializes the corpus into
- * a fresh temp directory per request, `corpusFiles` carries only `.md`/`.yaml` (a `.json` could
- * never have been in it), and the directory is deleted in a `finally`. So every heartbeat was
- * written and thrown away, and `/api/v2/presence` returned `working: []` forever.
+ * a fresh temp directory per request, `corpusFiles` carries only the corpus's own extensions (a
+ * `.json` could never have been in it), and the directory is deleted in a `finally`. So every
+ * heartbeat was written and thrown away, and `/api/v2/presence` returned `working: []` forever.
+ *
+ * ⛔ AND IT IS THE EXTENSIONS THAT ARE THE POINT, NOT `.md`/`.yaml` SPECIFICALLY — which this
+ * comment used to name, and which stopped being true the day a screen's picture became its own
+ * `.html` file. `events/` is excluded by being a directory nobody enumerates; see `CORPUS_EXT`.
  *
  * The cost of that is not cosmetic and is already on the record twice. Peter, at the banner:
  * *"Nobody is working on this right now — 1 request is waiting"* → *"again??????"*. The one surface
