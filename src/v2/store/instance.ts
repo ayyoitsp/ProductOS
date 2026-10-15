@@ -25,6 +25,7 @@ import path from "node:path";
 import http from "node:http";
 import { CORPUS_DIRS, corpusFiles, loadCorpus, type Corpus } from "../load.js";
 import { appendedLines, sessionsIn, writeLog, writeSessions } from "./corpus.js";
+import { line, noteCorpus, noteDir, traced, tracingOn, type Trace } from "./trace.js";
 import { published, streamFor } from "./pushes.js";
 import { PRESENCE_MS } from "../presence.js";
 import { v2Route } from "../serve.js";
@@ -396,6 +397,7 @@ export async function materializeProject(store: ProjectStore, mutating = false):
   let events: StoredEvent[];
 
   if (had && had.fp === fp) {
+    noteCorpus("cached");
     documents = had.documents;
     events = had.events;
   } else {
@@ -405,6 +407,7 @@ export async function materializeProject(store: ProjectStore, mutating = false):
      * Neon, on every single request, for nothing. `scripts/bench-store.mjs` is where that
      * number came from and is how to check it again.
      */
+    noteCorpus("read");
     [documents, events] = await Promise.all([store.documents(), store.since(0, LOG_CEILING)]);
     /** ⛔ Oldest out first, so a busy instance holds a bounded number of corpora. */
     if (!mutating && READ.size >= READ_CEILING && !READ.has(store.projectId)) {
@@ -436,6 +439,7 @@ export async function materializeProject(store: ProjectStore, mutating = false):
    * not an assumption that nothing ever writes to it.
    */
   const reusable = !mutating && had && had.fp === fp && had.dir && fs.existsSync(had.dir);
+  noteDir(reusable ? "reused" : "laid-out");
   const dir = reusable ? had!.dir! : materialize(documents);
   const logHad = reusable ? countLogLines(dir) : writeLog(dir, events);
   writeSessions(dir, listening);
@@ -790,8 +794,40 @@ export async function instanceRoute(
     }
   };
 
-  /** Reads do not need the lock; anything that might write does. */
-  return mutating ? serialize(addressed.id, run) : run();
+  /**
+   * ⛔ ONE LINE PER REQUEST, SAYING WHAT IT DID — and the lock still only wraps what might write.
+   *
+   * Peter: *"should we add logs or instrumentation? this is ridiculous"*. Everything PT-0007 learned
+   * was learned by building a harness, and the harness was wrong about the environment six times.
+   * What goes in the line is exactly what no harness could see from outside: how many times the
+   * request crossed the network, and whether the corpus it served was reused or read again.
+   *
+   * ⛔ THE BYTES ARE COUNTED OFF THE RESPONSE, NOT GUESSED FROM THE BODY. A route may stream, hold
+   * a connection open, or answer 304 — asking the response what it wrote is the only count that is
+   * true for all of them.
+   */
+  const started = Date.now();
+  let wrote = 0;
+  const realWrite = res.write.bind(res);
+  const realEnd = res.end.bind(res);
+  const size = (chunk: unknown): number =>
+    typeof chunk === "string" ? Buffer.byteLength(chunk) : chunk instanceof Buffer ? chunk.length : 0;
+  (res as { write: unknown }).write = (chunk: unknown, ...rest: unknown[]) => {
+    wrote += size(chunk);
+    return (realWrite as (...a: unknown[]) => boolean)(chunk, ...rest);
+  };
+  (res as { end: unknown }).end = (chunk?: unknown, ...rest: unknown[]) => {
+    wrote += size(chunk);
+    return (realEnd as (...a: unknown[]) => unknown)(chunk, ...rest);
+  };
+
+  const { out, trace } = await traced(() => (mutating ? serialize(addressed.id, run) : run()));
+  if (tracingOn()) {
+    process.stderr.write(
+      line(req.method ?? "?", `/p/${addressed.id}${addressed.rest}`, res.statusCode, wrote, Date.now() - started, trace)
+    );
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------

@@ -509,6 +509,18 @@ export const AREAS: Area[] = [
        * nine and left the tenth open while reporting it closed.
        */
       "src/cli/commands/todo.ts",
+      /**
+       * ⛔ WHAT EACH REQUEST DID, WHICH IS A SURFACE ONTO THE INSTANCE RATHER THAN A DERIVATION OF
+       * IT. Filed here because what it produces is read by a person — one line per request, saying
+       * how many times the request crossed the network and whether the corpus it served was reused.
+       * A reviewer asked "why is this page slow" is asking about this file.
+       *
+       * ⛔ AND IT EXISTS BECAUSE NOTHING ON THE INSIDE WAS COUNTING. Peter: *"should we add logs or
+       * instrumentation? this is ridiculous"* — after a day in which every performance number came
+       * from a harness built for the occasion, and the harness was wrong about the environment six
+       * times. From outside, three readings of one unchanged page came back 71.7s, 40.9s and 26.7s.
+       */
+      "src/v2/store/trace.ts",
       "src/mcp/v2-tools.ts",
     ],
     needs: ["read-files", "run-commands", "show-a-page"],
