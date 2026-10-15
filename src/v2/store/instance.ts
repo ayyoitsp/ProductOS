@@ -337,6 +337,47 @@ const READ_CEILING = 4;
 const DRAWINGS = "drawings/";
 
 /**
+ * Reads this process has asked for and not yet received, so several requests wanting the same thing
+ * wait on ONE of them.
+ *
+ * ⛔ BECAUSE EVERY SAVE SETS OFF A HERD. `writeBack` calls `forgetRead`, and then the page, the
+ * presence poll, the live connection, the thread and the mocks all arrive within a few hundred
+ * milliseconds of each other — with nothing in flight shared, each one independently pulled the
+ * whole corpus. Measured with `scripts/probe-stampede.mjs`: six concurrent requests after a save
+ * read it SIX times over.
+ *
+ * That is also why the live numbers climbed rather than sitting at one cost — 4s, then 6s, then
+ * 12s, then 21s for a 35-byte presence answer. They were queuing behind each other's reads.
+ *
+ * ⛔ KEYED ON THE FINGERPRINT, WHICH IS WHAT MAKES SHARING SAFE RATHER THAN MERELY CHEAP. Two
+ * requests share a read only when they are asking about the same corpus; a request that arrives
+ * after a further write has a different key and reads for itself. This is the same question the
+ * cache answers, asked of a read that has not landed yet.
+ *
+ * ⛔ AND IT IS NOT A CACHE. The entry is dropped the moment the read settles, including when it
+ * throws — a failed read must not be handed to the next request, and nothing here survives long
+ * enough to serve stale truth. The rule that a write never caches is untouched: this shares the
+ * read a write is already doing, and stores nothing for anybody who comes later.
+ */
+const INFLIGHT = new Map<string, Promise<unknown>>();
+
+function once<T>(key: string, go: () => Promise<T>): Promise<T> {
+  const had = INFLIGHT.get(key) as Promise<T> | undefined;
+  if (had) return had;
+  const job = go().finally(() => {
+    /** ⛔ Only if it is still ours — a later read under the same key must not be dropped by an earlier one. */
+    if (INFLIGHT.get(key) === job) INFLIGHT.delete(key);
+  });
+  INFLIGHT.set(key, job);
+  return job;
+}
+
+/** ⛔ For tests, which need to know a herd shared one read rather than that it was fast. */
+export function readsInFlight(): number {
+  return INFLIGHT.size;
+}
+
+/**
  * Forget what this process read, because it has just changed it.
  *
  * ⛔ BELT AND BRACES OVER THE FINGERPRINT, AND THE REASON IS A NARROW BUT REAL HOLE IN IT.
@@ -421,10 +462,11 @@ export async function materializeProject(store: ProjectStore, mutating = false):
    * the comment this replaces was about exactly that, and the sequential version of it cost a full
    * trip per request against Neon.
    */
+  const at = store.projectId;
   const [truth, drawings, events] = await Promise.all([
-    truthHeld ? Promise.resolve(had!.truth) : store.documentsOutside(DRAWINGS),
-    drawingsHeld ? Promise.resolve(had!.drawings) : store.documentsUnder(DRAWINGS),
-    truthHeld ? Promise.resolve(had!.events) : store.since(0, LOG_CEILING),
+    truthHeld ? Promise.resolve(had!.truth) : once(`${at}|t|${fp.truth}`, () => store.documentsOutside(DRAWINGS)),
+    drawingsHeld ? Promise.resolve(had!.drawings) : once(`${at}|d|${fp.drawings}`, () => store.documentsUnder(DRAWINGS)),
+    truthHeld ? Promise.resolve(had!.events) : once(`${at}|e|${fp.truth}`, () => store.since(0, LOG_CEILING)),
   ]);
   noteCorpus(truthHeld && drawingsHeld ? "cached" : "read");
 
