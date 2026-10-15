@@ -185,20 +185,34 @@ function projectStore(db: Db, projectId: string): ProjectStore {
      * ⛔ AGGREGATES, NOT ROWS — the whole point is to not read the documents. Two selects rather
      * than one because they are different tables, and both are covered by the project index.
      */
+    /**
+     * ⛔ ONE ROUND TRIP, AND THE FIRST VERSION OF THIS MADE EXACTLY THE MISTAKE THIS FILE'S NEIGHBOUR
+     * WARNS ABOUT, four lines from the warning.
+     *
+     * `materializeProject` carries a ⛔ saying "ONE ROUND TRIP, NOT TWO … asking for the second only
+     * after the first arrived cost a full trip — 90ms against Neon, on every single request, for
+     * nothing". I then wrote a fingerprint as two sequential awaits.
+     *
+     * It cost more than 90ms, because against Neon a trivial query is dominated by the trip rather
+     * than the work: `listening()` was measured at 176ms returning 0 rows and `since(0, 100000)` at
+     * 231ms returning 233. So a 35-byte presence answer was ~0.8s on the instance while the same
+     * code took 37ms locally over PGlite — the whole difference being how many times it crossed the
+     * network, which a local store cannot show. The fourth member of the environment family today.
+     *
+     * Two scalar subqueries in one statement: one trip, same answer, and the events table is only
+     * touched for its max.
+     */
     async fingerprint() {
-      const [docs] = await db
+      const [row] = await db
         .select({
           n: sql<number>`count(*)`,
           updated: sql<string>`coalesce(max(${documents.updatedAt})::text, '')`,
           gone: sql<string>`coalesce(max(${documents.deprecatedAt})::text, '')`,
+          seq: sql<number>`(select coalesce(max(${events.seq}), 0) from ${events} where ${events.projectId} = ${projectId})`,
         })
         .from(documents)
         .where(eq(documents.projectId, projectId));
-      const [log] = await db
-        .select({ seq: sql<number>`coalesce(max(${events.seq}), 0)` })
-        .from(events)
-        .where(eq(events.projectId, projectId));
-      return [docs?.n ?? 0, docs?.updated ?? "", docs?.gone ?? "", log?.seq ?? 0].join("|");
+      return [row?.n ?? 0, row?.updated ?? "", row?.gone ?? "", row?.seq ?? 0].join("|");
     },
 
     async put(path, source, projection) {
@@ -265,11 +279,27 @@ function projectStore(db: Db, projectId: string): ProjectStore {
      */
     async listening(withinMs) {
       const floor = new Date(Date.now() - withinMs);
-      await db.delete(listening).where(and(eq(listening.projectId, projectId), lt(listening.at, floor)));
-      const rows = await db
-        .select({ session: listening.session, at: listening.at })
-        .from(listening)
-        .where(and(eq(listening.projectId, projectId), gt(listening.at, floor)));
+      /**
+       * ⛔ THE REAP AND THE ANSWER GO TOGETHER, AND THIS IS ON EVERY REQUEST. The delete was awaited
+       * before the select for no reason: the two touch disjoint rows — one takes what is older than
+       * the floor, the other reads what is newer — so waiting for the tidy-up before asking the
+       * question bought a whole round trip per request.
+       *
+       * Against the hosted store that is ~180ms on every page view, every presence poll and every
+       * write, measured by injecting the trip locally: presence was 884ms of which this was one
+       * round. Same reasoning, and the same measurement, as the reach pair above.
+       *
+       * ⛔ AND THE ANSWER DOES NOT DEPEND ON THE REAP SUCCEEDING. Reaping is opportunistic — the
+       * expiry model is `within`, not deletion — so the worst case of overlapping them is that a
+       * listener already past the floor is read once more and lapses on the next poll.
+       */
+      const [, rows] = await Promise.all([
+        db.delete(listening).where(and(eq(listening.projectId, projectId), lt(listening.at, floor))),
+        db
+          .select({ session: listening.session, at: listening.at })
+          .from(listening)
+          .where(and(eq(listening.projectId, projectId), gt(listening.at, floor))),
+      ]);
       return rows.map((r) => ({ session: r.session, at: r.at.toISOString() }));
     },
   };
