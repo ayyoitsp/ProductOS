@@ -1,0 +1,64 @@
+id: "0147"
+said: things like saving prototype on placement takes a LOOONG time - not done w performance issues.  do a sweep
+at: 2026-10-14
+kind: derivation
+reaches:
+  surface: countLogLines
+  pin: a writer gets its own directory; a reader may share a pristine one
+waived:
+  derive: "`notesIn` is in `src/v2/load.ts`, which the registry files under MODEL rather than derive — so this kind's routing cannot see it. ⛔ SECOND TIME TODAY, after 0146 waived the same layer for the same reason about `resolveRules`. Two in one day makes it a pattern rather than an accident: load.ts holds real derivations — what a rule reaches, what the notes say — while being filed as the layer that reads files. Worth a change record of its own against the registry; not worth renaming a function into a derive file to make a check pass, which would verify a file the change does not live in."
+  check: "`src/v2/check.ts` refuses things about a corpus, and nothing here can make one wrong — only read it fewer times. The risk this carries is a reader being handed a directory that is not pristine, which is a pin: a mutating request sharing one, a reused directory reporting the wrong log position, and a shared directory not being marked all turn the suite red."
+closed: 2026-10-15
+
+# ⛔ APPENDED AFTER `change close`, which drops comments. See 0141 / 0144 / 0145 / 0146.
+#
+# "saving prototype on placement takes a LOOONG time - not done w performance issues. do a sweep"
+#
+# ⛔ SWEPT THROUGH THE REAL REQUEST PATH, ON THE REAL CORPUS. Every number I have been wrong about
+# today came from timing a piece in isolation, so this drove real HTTP against a real store holding
+# Bilrost's 169 documents and timed what a person waits for.
+#
+#     ⛔ AND THE FIRST RUN OF THE SWEEP MEASURED SIX AUTH REFUSALS at 0-18ms and read like the
+#     instance was instant. It now signs in, and refuses to run at all if it cannot.
+#
+# WHAT EVERY REQUEST WAS PAYING, whatever it asked for. Profiled across 18 requests, excluding idle:
+#
+#     ~2.9s   YAML parsing
+#     ~1.6s   reading the files back
+#     ~1.0s   writing them out
+#      337ms  unlinking the temp directory
+#
+# Every request wrote 17.5 MB to a fresh directory, read it back, parsed it, and deleted it. Then
+# the route did its work.
+#
+#     GET /api/v2/presence   1062ms → 49ms     ← 35 bytes of answer, and the PAGE POLLS IT
+#     GET /v2 (warm)        ~1188ms → ~490ms
+#     POST placement    834-1034ms → ~400-450ms
+#
+# TWO FIXES. `/api/v2/presence` parsed the whole corpus to count open notes; `notesIn` reads just
+# `notes/`, extracted from `loadCorpus` rather than written again so one fact keeps one home. And a
+# pristine materialized directory is reused instead of laid out and deleted per request.
+#
+# ⛔ SHARING A DIRECTORY IS THE RISKIEST THING IN THIS SWEEP, because `writeBack` diffs the files on
+# disk against what the request was given — so a request that WRITES must not share one. Three
+# constraints, each pinned: only non-mutating requests share; a dirtied shared directory is thrown
+# away rather than trusted, which makes the invariant falsifiable instead of assumed; and a shared
+# directory is not deleted by the request that read it.
+#
+# ⛔ MY OWN TEST FROM THREE HOURS EARLIER CAUGHT THIS CHANGE — "each request still gets its own
+# directory" went red, which is what it was written for. It was asserting the IMPLEMENTATION rather
+# than the reason, so it was rewritten to pin the real guarantee and now asserts MORE than it did:
+# the old version could not tell a writer from a reader at all. Loosening a test because the code
+# changed is how a guarantee disappears quietly, so that distinction was the point.
+#
+# ⛔ AND ONE OF THE NEW ASSERTIONS WAS VACUOUS. Stress-testing four constraints, three went red and
+# "a reused directory reports log position 0" did not: the fixture appended no events, so `logHad`
+# was 0 on both paths and the comparison could not fail. Same shape as every other measurement error
+# today. Fixed by appending events first, then verified red on the defect.
+#
+# WHAT IS LEFT, RANKED — this is not finished:
+#   1. the route re-parses the corpus per request (~374ms of GET /v2) — needs a parsed corpus
+#      threaded through `v2Route` rather than a directory
+#   2. a write parses it AGAIN inside the intent handler
+#   3. `writeBack`'s conflict re-read, a second full `documents()` on every write
+#   4. `since(0, LOG_CEILING)` — 231ms, unbounded, `writeLog` its only consumer, still unfiled
