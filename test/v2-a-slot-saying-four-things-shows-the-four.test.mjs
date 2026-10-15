@@ -23,6 +23,7 @@ import { test } from "node:test";
 import fs from "node:fs";
 import path from "node:path";
 import { temp } from "./support/temp.mjs";
+import { execFileSync } from "node:child_process";
 import { renderScopePage } from "../dist/v2/page.js";
 
 const { loadCorpus } = await import(path.resolve("dist/v2/load.js"));
@@ -145,6 +146,34 @@ test("the question carries the statements, so the CLI could show them too", () =
   assert.deepEqual(
     q.saysEach.filter((x) => x.inQuestion).map((x) => x.says),
     ["The third thing, which is the one in question."]
+  );
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test("the CLI lists them too, and does not advise overwriting the siblings", () => {
+  /**
+   * ⛔ THE PAGE WAS FIXED AND THIS SURFACE WAS NOT, which is the same defect twice. Reported by an
+   * author reading the output: a pick "could reasonably be read as deleting the sibling statement
+   * it does not touch".
+   *
+   * ⛔ AND THE ADVICE WAS ACTIVELY DESTRUCTIVE. With `of:` set, `settle` replaces the named
+   * statement and leaves its siblings byte-identical — so `--pick` is right. The CLI instead said
+   * "a ruling here becomes the whole sentence — so write the one you want, keeping what is already
+   * agreed", which would have a reviewer retype four statements and overwrite the three nobody
+   * asked about.
+   */
+  const { dir, scope } = corpusWithFour();
+  const out = execFileSync(process.execPath, [path.resolve("dist/cli/index.js"), "v2", "decide", scope, "--at", dir], {
+    encoding: "utf-8",
+  });
+
+  assert.match(out, /this one is unruled/, "the CLI does not mark which statement is in question");
+  assert.match(out, /replaces the marked statement only/, "the CLI does not say what a pick replaces");
+  assert.match(out, /--pick N/, "the CLI does not offer the pick that is actually safe");
+  assert.doesNotMatch(
+    out,
+    /write the one you want, keeping what is already agreed/,
+    "⛔ the CLI still tells a reviewer to retype the merged sentence, overwriting the siblings"
   );
   fs.rmSync(dir, { recursive: true, force: true });
 });

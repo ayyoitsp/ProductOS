@@ -828,7 +828,23 @@ export function v2Command(): Command {
         if (q.revises) {
           console.log("");
           console.log("  This already says:");
-          console.log(`    ${q.revises.replace(/\s+/g, " ").trim()}`);
+          /**
+           * ⛔ ONE PER LINE, AND THE UNRULED ONE MARKED. `revises` is `saysText`, which joins every
+           * statement with a space — so a slot saying four things printed as one sentence and a
+           * reviewer had no way to see which an option would touch. Reported by an author who read
+           * the output and said a pick "could reasonably be read as deleting the sibling statement
+           * it does not touch". The page was fixed and this surface was not, which is the same
+           * defect twice and worth saying once.
+           */
+          const each = q.saysEach ?? [];
+          if (each.length > 1)
+            for (const x of each)
+              console.log(
+                x.inQuestion
+                  ? `    ${pc.yellow("▸")} ${x.says.replace(/\s+/g, " ").trim()} ${pc.dim("← this one is unruled")}`
+                  : `      ${pc.dim(x.says.replace(/\s+/g, " ").trim())}`
+              );
+          else console.log(`    ${q.revises.replace(/\s+/g, " ").trim()}`);
           if (q.candidates.length) {
             console.log("");
             console.log("  Proposed for the unruled part:");
@@ -845,6 +861,17 @@ export function v2Command(): Command {
             console.log(pc.dim("  each option above is the whole sentence, so picking one replaces it cleanly:"));
             console.log(pc.dim(`    productos v2 rule ${q.ref} --pick N --because "…" --by <your name>`));
             console.log(pc.dim(`    or instead: productos v2 rule ${q.ref} --says "…" --because "…" --by <your name>`));
+          } else if (each.some((x) => x.inQuestion)) {
+            /**
+             * ⛔ AND THIS BRANCH TOLD THEM TO DO THE DESTRUCTIVE THING. With `of:` set, `settle`
+             * replaces the named statement and leaves its siblings byte-identical — so `--pick`
+             * is safe and correct. The advice to "write the whole sentence, keeping what is
+             * already agreed" would have had a reviewer retype four statements by hand and
+             * overwrite the three nobody asked about. The information was in the standing the
+             * whole time.
+             */
+            console.log(pc.dim("  each option replaces the marked statement only — the others stand untouched:"));
+            console.log(pc.dim(`    productos v2 rule ${q.ref} --pick N --because "…" --by <your name>`));
           } else {
             console.log(pc.dim("  the options above answer only the unruled part, and a ruling here becomes the"));
             console.log(pc.dim("  whole sentence — so write the one you want, keeping what is already agreed:"));
