@@ -26,7 +26,7 @@ import path from "node:path";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { applyMigrations } from "../dist/v2/store/migrate.js";
-import { createProject, materializeProject, forgetRead, forgetDir } from "../dist/v2/store/instance.js";
+import { createProject, materializeProject, forgetRead, forgetDir, readsInFlight } from "../dist/v2/store/instance.js";
 import { storeFor, isRefusal } from "../dist/v2/store/access.js";
 import { accountFor } from "../dist/v2/store/identity.js";
 import { corpusFiles } from "../dist/v2/load.js";
@@ -373,4 +373,119 @@ test("writing a sentence re-reads the sentences and keeps the pictures", async (
   );
   /** ⛔ And a redraw does not drag the sentences back with it. */
   assert.equal(calls.truth, 2, `the sentences were read ${calls.truth} times — a redraw re-read them`);
+});
+
+/**
+ * ⛔ A SAVE SETS OFF A HERD, AND EACH OF THEM WAS READING THE WHOLE CORPUS.
+ *
+ * `writeBack` calls `forgetRead`, and then the page, the presence poll, the live connection, the
+ * thread and the mocks all arrive within a few hundred milliseconds. Read off the live instance:
+ *
+ *     GET …/api/v2/presence 200 35b  4734ms db=6q corpus=read dir=laid-out
+ *     GET …/v2             200 2977164b  9124ms db=6q corpus=read dir=laid-out
+ *     GET …/api/v2/presence 200 35b 12131ms db=6q corpus=read dir=laid-out
+ *     GET …/api/v2/presence 200 35b 20932ms db=6q corpus=read dir=laid-out
+ *
+ * ⛔ THE CLIMBING NUMBERS ARE THE TELL, and they are why "it is slow" was the wrong diagnosis. One
+ * cost repeated looks like one number repeated. 4s, 6s, 12s, 21s for a 35-byte answer is requests
+ * queuing behind each other's reads — measured as six-for-six by `scripts/probe-stampede.mjs`.
+ */
+test("several requests arriving after a save share one read", async () => {
+  const { store } = await freshStore();
+  await seed(store);
+  await store.put("drawings/area-x/view-y.html", "<div>drawn</div>");
+  forgetRead(store.projectId);
+  const { store: counted, calls } = counting(store);
+
+  await materializeProject(counted);
+  assert.equal(calls.truth, 1, "the warm-up did not read");
+
+  /** ⛔ The real case: the cache has just been dropped, so every one of them HAS to read. */
+  forgetRead(store.projectId);
+  const together = await Promise.all(Array.from({ length: 6 }, () => materializeProject(counted)));
+
+  assert.equal(calls.truth, 2, `six requests after a save read the sentences ${calls.truth - 1} times over`);
+  assert.equal(calls.drawings, 2, `six requests after a save read the drawings ${calls.drawings - 1} times over`);
+  assert.equal(calls.since, 2, `six requests after a save read the log ${calls.since - 1} times over`);
+
+  /** ⛔ Non-vacuous: all six have to have actually been given the corpus, not an empty one. */
+  for (const m of together) {
+    assert.equal(Object.keys(m.documents).length, 7, `one of the six got ${Object.keys(m.documents).length} documents`);
+    assert.equal(m.documents["drawings/area-x/view-y.html"], "<div>drawn</div>", "one of the six got no drawing");
+  }
+
+  /** ⛔ And nothing is left behind — a map that only grows is a leak with a nice name. */
+  assert.equal(readsInFlight(), 0, `${readsInFlight()} reads are still recorded as in flight after all of them finished`);
+});
+
+/**
+ * ⛔ A FAILED READ IS NOT SHARED WITH WHOEVER COMES NEXT, which is the hazard of holding a promise
+ * rather than a value. A rejected read left in the map would be handed to every later request for
+ * that corpus — one network blip turning into a project that is permanently down.
+ */
+test("a read that fails is not handed to the next request", async () => {
+  const { store } = await freshStore();
+  await seed(store);
+  forgetRead(store.projectId);
+
+  let fail = true;
+  let tries = 0;
+  const brittle = {
+    ...store,
+    documentsOutside: (...a) => {
+      tries++;
+      return fail ? Promise.reject(new Error("the network went away")) : store.documentsOutside(...a);
+    },
+  };
+
+  await assert.rejects(() => materializeProject(brittle), /the network went away/, "a failing read did not reach the caller");
+
+  /**
+   * ⛔ SETTLED-TO-ZERO, NOT ZERO-RIGHT-NOW — and asserting the latter caught my own wrong model.
+   *
+   * `Promise.all` rejects the instant the first read fails, while the other two are still on the
+   * wire. So two reads are legitimately in flight at the moment the caller hears about the failure,
+   * and reading the count there measures the race rather than the drop. What the map must not do is
+   * KEEP them, so this waits for it with a bound and fails if it never empties.
+   */
+  const emptied = await (async () => {
+    for (let i = 0; i < 100; i++) {
+      if (readsInFlight() === 0) return true;
+      await new Promise((r) => setTimeout(r, 20));
+    }
+    return false;
+  })();
+  assert.ok(emptied, `${readsInFlight()} reads are still recorded as in flight two seconds after they settled`);
+
+  /** ⛔ THE ONE THAT MATTERS: the next request reads for itself rather than being given the failure. */
+  fail = false;
+  const after = await materializeProject(brittle);
+  assert.equal(tries, 2, `the second request did not read again — it was handed the first one's failure (${tries} attempts)`);
+  assert.equal(Object.keys(after.documents).length, 6, "the request that recovered was given no corpus");
+});
+
+/**
+ * ⛔ AND TWO REQUESTS ABOUT DIFFERENT CORPORA NEVER SHARE, which is the whole reason the key carries
+ * the fingerprint. Sharing by project alone would hand a request that arrived after a second write
+ * the read taken before it — a cache that serves stale truth, built out of something that is not
+ * supposed to be a cache at all.
+ */
+test("a request that arrives after a further write reads for itself", async () => {
+  const { db, store, reach } = await freshStore();
+  await seed(store);
+  forgetRead(store.projectId);
+  const { store: counted, calls } = counting(store);
+
+  await materializeProject(counted);
+  const elsewhere = await elsewhereIn(db, reach);
+  await elsewhere.put("truth/thing-0.md", `---\nid: thing-0\ntitle: One\nexists: kept\n---\n\nOne.\n`);
+  const first = await materializeProject(counted);
+  const readsAfterFirst = calls.truth;
+
+  await elsewhere.put("truth/thing-0.md", `---\nid: thing-0\ntitle: Two\nexists: kept\n---\n\nTwo.\n`);
+  const second = await materializeProject(counted);
+
+  assert.equal(calls.truth, readsAfterFirst + 1, "the second write did not cause a read of its own");
+  assert.match(first.documents["truth/thing-0.md"], /One/, "the first request saw the wrong corpus");
+  assert.match(second.documents["truth/thing-0.md"], /Two/, "a request after a second write was served the corpus from before it");
 });

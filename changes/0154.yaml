@@ -1,0 +1,60 @@
+id: "0154"
+said: Nothing left to do?
+at: 2026-10-15
+kind: derivation
+reaches:
+  surface: readsInFlight
+  pin: several requests arriving after a save share one read
+waived:
+  derive: ⛔ FOURTH TIME, SAME CAUSE, AND IT IS NOW THE FINDING RATHER THAN AN EXCUSE. What decides whether a read has to happen at all — the two-part fingerprint comparison and the map of reads already in flight — is a derivation over state the corpus already holds, and it lives in `src/v2/store/instance.ts`, which the registry files under SURFACE because that file also serves requests. 0146 waived this layer for `resolveRules`, 0147 for `notesIn` and 0151 for `drawingPath`, all three in `src/v2/load.ts`, all three for the same shape of reason. Renaming a function into a derive file to make a check pass would be the worst available answer. The right one is a registry that can say a file holds both, and that needs Peter's words rather than my noticing — `productos learn` is what should surface it, and this waiver is the fourth data point it will count.
+  check: No corpus becomes wrong by this, and that is the test for whether a check belongs. How many times one read happens is invisible in the product truth it produces — all six requests were always handed the same corpus, which is what the pin asserts non-vacuously. A check firing on this would report a performance property to an author who cannot act on it, and `src/v2/check.ts` is for findings an author fixes. The dangerous direction is the opposite one — a shared read handing somebody a corpus from before a write they should see — and that is two pins, because it is a fact about the code rather than about anybody's corpus.
+closed: 2026-10-15
+
+# ⛔ APPENDED AFTER `change close`, which drops comments. See 0141 / 0144-0153.
+#
+# Peter: *"Nothing left to do?"* — and there was. The sweep 0148 opened was not finished; I had said
+# I was starting on this and then got pulled onto the routing defect in 0153 and did not come back.
+#
+# ⛔ THE CLIMBING NUMBERS WERE THE TELL, AND I READ THEM AS "IT IS SLOW". Off the instance's own log,
+# which 0150 put there:
+#
+#     GET …/api/v2/presence 200 35b  4734ms db=6q corpus=read dir=laid-out
+#     GET …/v2             200 2977164b  9124ms db=6q corpus=read dir=laid-out
+#     GET …/api/v2/presence 200 35b 12131ms db=6q corpus=read dir=laid-out
+#     GET …/api/v2/presence 200 35b 20932ms db=6q corpus=read dir=laid-out
+#
+# One cost repeated looks like ONE NUMBER repeated. 4s then 6s then 12s then 21s, for a 35-byte
+# answer, is requests queuing behind each other — and `writeBack` calls `forgetRead`, so every save
+# drops the cache and the page, the presence poll, the live connection, the thread and the mocks all
+# arrive within a few hundred milliseconds of each other with nothing to share.
+#
+# MEASURED, with `scripts/probe-stampede.mjs`:
+#
+#     warm-up                    truth=1 drawings=1 since=1
+#     6 at once, nothing changed truth=0 drawings=0 since=0   <- the cache was already right
+#     6 at once, after a save    truth=6 drawings=6 since=6   <- six for six
+#
+# and after: `truth=1 drawings=1 since=1`.
+#
+# ⛔ KEYED ON THE FINGERPRINT, WHICH IS WHAT MAKES SHARING SAFE RATHER THAN MERELY CHEAP. Two
+# requests wait on one read only when they are asking about the same corpus; a request arriving
+# after a further write has a different key and reads for itself. Pinned in both directions, because
+# the dangerous failure here is the opposite of the one being fixed: a shared read handing somebody
+# truth from before a write they should have seen is worse than the 21 seconds.
+#
+# ⛔ AND IT IS NOT A CACHE. The entry is dropped the moment the read settles, INCLUDING WHEN IT
+# THROWS. A rejected promise left in the map would be handed to every later request for that
+# corpus — one network blip becoming a project that is permanently down. That is its own pin.
+#
+# ⛔ AN ASSERTION OF MINE WAS WRONG AND CAUGHT MY OWN MODEL. I asserted zero reads in flight
+# immediately after a failure; it was 2. `Promise.all` rejects the instant the FIRST read fails
+# while the other two are still on the wire, so two really are in flight at that moment — the
+# assertion was measuring the race, not the drop. It now waits for the map to empty, with a bound,
+# which tests the thing I meant.
+#
+# STILL NOT DONE, AND DELIBERATELY: each of those six requests still LAYS OUT its own directory.
+# Measured at ~44ms for a 15 MB corpus locally (`scripts/bench-layout.mjs`), against 2.7 MB per
+# request off the network, so it is the smaller half — and sharing a directory between concurrent
+# readers is the thing `writeBack` diffs against. Worth doing only with a number saying it matters.
+#
+# 1021/1021.
