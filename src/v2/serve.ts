@@ -11,7 +11,7 @@
  * divergence again, this time between the browser and the terminal.
  */
 import type http from "node:http";
-import { loadCorpus, corpusFiles, notesIn } from "./load.js";
+import { loadCorpus, corpusFiles, notesIn, type Corpus } from "./load.js";
 import { renderScopePage, standalone } from "./page.js";
 import { perform, preview, payloadFrom, VIA, ACTS, type Act, type Via } from "./acts.js";
 /**
@@ -40,6 +40,24 @@ export interface V2Routes {
    * whether a request is a browser or a token would be a second place the guarantee could be wrong.
    */
   who?: Principal;
+  /**
+   * The corpus, when something above this has already read it.
+   *
+   * ⛔ EVERY REQUEST RE-PARSED 17.5 MB THAT THE CALLER WAS ALREADY HOLDING. The hosted path reads
+   * the documents out of the store, lays them out as a directory and hands it over; this route then
+   * parses all 169 of them back. Measured on Bilrost's corpus that is ~374ms of YAML on every page
+   * view, for an answer the caller had before it called.
+   *
+   * ⛔ SAME REASONING AS `who` DIRECTLY ABOVE: passing it in rather than re-deriving it keeps one
+   * decision in one place. And it is a GETTER rather than a corpus so a route that never needs one
+   * does not pay for it — presence reads notes and nothing else.
+   *
+   * ⛔ ONLY A NON-MUTATING REQUEST MAY BE GIVEN ONE. A write changes the directory and then expects
+   * to read what it wrote; handing it a corpus parsed before its own edit would be a request that
+   * cannot see its own work. The hosted path passes this for reads and withholds it for writes, for
+   * exactly the reason it hands a writer its own directory.
+   */
+  corpusFor?: () => Corpus;
   /**
    * Where the live stream gets its events, when the corpus on disk is not where they land.
    *
@@ -486,7 +504,7 @@ export async function v2Route(req: http.IncomingMessage, res: http.ServerRespons
    * section returned; with `only` holding a single view, every other section's body is never built.
    */
   if (req.method === "GET" && p === "/api/v2/section") {
-    const corpus = loadCorpus(dir);
+    const corpus = opts.corpusFor ? opts.corpusFor() : loadCorpus(dir);
     const q = new URL(req.url ?? "/", "http://localhost").searchParams;
     const root = q.get("scope") || corpus.scopes.find((x) => !x.scope.in)?.scope.id || "";
     const view = q.get("view") || "";
@@ -519,7 +537,7 @@ export async function v2Route(req: http.IncomingMessage, res: http.ServerRespons
    * request each would be 128 of them. The client collects what has come into view and asks once.
    */
   if (req.method === "GET" && p === "/api/v2/mocks") {
-    const corpus = loadCorpus(dir);
+    const corpus = opts.corpusFor ? opts.corpusFor() : loadCorpus(dir);
     const q = new URL(req.url ?? "/", "http://localhost").searchParams;
     const want = (q.get("refs") || "")
       .split(",")
@@ -539,7 +557,7 @@ export async function v2Route(req: http.IncomingMessage, res: http.ServerRespons
   }
 
   if (req.method === "GET") {
-    const corpus = loadCorpus(dir);
+    const corpus = opts.corpusFor ? opts.corpusFor() : loadCorpus(dir);
     const scope = p === "/v2" ? undefined : decodeURIComponent(p.slice("/v2/".length));
     /**
      * ⛔ `/v2` LANDS ON A REAL SCOPE, NOT AN INDEX OF ONE ITEM. Every scope tree has a root, and

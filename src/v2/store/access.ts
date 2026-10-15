@@ -10,7 +10,7 @@
  * ⛔ THE SCOPE IS THE PROJECT, NOT THE OWNER. So this survives the owner model changing: an owning
  * group arriving above accounts later does not touch a line in here.
  */
-import { and, asc, eq, gt, isNull, lt, sql } from "drizzle-orm";
+import { and, asc, eq, gt, isNull, lt, sql, inArray } from "drizzle-orm";
 import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 import type { Refusal } from "../identity.js";
 import { authIsOff } from "./identity.js";
@@ -53,6 +53,21 @@ export interface ProjectStore {
    * store that parsed for itself would be a second implementation of the model.
    */
   documents(): Promise<Record<string, string>>;
+
+  /**
+   * The source of just these paths.
+   *
+   * ⛔ `writeBack` READ ALL 19 MB TO COMPARE THE ONE FILE A REQUEST CHANGED. Its conflict check asks
+   * whether the paths this request touched still hold what they held when it started — which is a
+   * question about a handful of paths, answered by fetching every document in the project. On the
+   * hosted store that is the single most expensive read there is, on the path of every write,
+   * including the placement save Peter is waiting on.
+   *
+   * ⛔ IT IS THE SAME QUESTION, NARROWED — not a weaker one. The check compares `now[k]` against
+   * `before[k]` for the paths in `changed` and `removed` and ignores every other key, so fetching
+   * the others was work whose result was discarded.
+   */
+  sourcesOf(paths: string[]): Promise<Record<string, string>>;
 
   /**
    * What the document set is AT, without reading it.
@@ -215,6 +230,17 @@ function projectStore(db: Db, projectId: string): ProjectStore {
       return [row?.n ?? 0, row?.updated ?? "", row?.gone ?? "", row?.seq ?? 0].join("|");
     },
 
+    async sourcesOf(paths) {
+      if (!paths.length) return {};
+      const rows = await db
+        .select({ path: documents.path, source: documents.source })
+        .from(documents)
+        .where(and(eq(documents.projectId, projectId), inArray(documents.path, paths), isNull(documents.deprecatedAt)));
+      const out: Record<string, string> = {};
+      for (const r of rows) out[r.path] = r.source;
+      return out;
+    },
+
     async put(path, source, projection) {
       await db
         .insert(documents)
@@ -238,16 +264,31 @@ function projectStore(db: Db, projectId: string): ProjectStore {
      * sequence shared across projects would be the easy alternative, and would make one project's
      * cursor move because a different project changed.
      */
+    /**
+     * ⛔ THE SEQ IS ALLOCATED IN THE INSERT, NOT ASKED FOR FIRST. This read the maximum and then
+     * inserted — two round trips per event, in series, and a write appends at least one. Against
+     * the hosted store that is ~360ms of waiting to record one thing happening.
+     *
+     * ⛔ AND THE RETRY IS WHY THIS IS SAFE RATHER THAN CLEVER. The original comment is still the
+     * governing one: the number is allocated under the primary key, not trusted from a read. Two
+     * sessions appending at once still both compute the same next number, the key still rejects the
+     * loser, and it still retries. Computing it inside the statement narrows the window; it was
+     * never the thing keeping this correct.
+     */
     async append(kind, payload = {}) {
       for (let attempt = 0; attempt < 8; attempt++) {
-        const [row] = await db
-          .select({ max: sql<number>`coalesce(max(${events.seq}), 0)` })
-          .from(events)
-          .where(eq(events.projectId, projectId));
-        const seq = Number(row?.max ?? 0) + 1;
         try {
-          await db.insert(events).values({ projectId, seq, kind, payload });
-          return seq;
+          const [row] = await db
+            .insert(events)
+            .values({
+              projectId,
+              seq: sql<number>`(select coalesce(max(${events.seq}), 0) + 1 from ${events} where ${events.projectId} = ${projectId})`,
+              kind,
+              payload,
+            })
+            .returning({ seq: events.seq });
+          if (row?.seq) return Number(row.seq);
+          throw new Error("the insert returned no seq");
         } catch (e) {
           if (!/duplicate key|unique/i.test((e as Error).message ?? "")) throw e;
         }
