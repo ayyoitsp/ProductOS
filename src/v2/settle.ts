@@ -27,7 +27,7 @@
 import fs from "node:fs";
 import { parseFrontmatter } from "../core/frontmatter.js";
 import YAML from "yaml";
-import { Scope, Rule, type SlotName , saysText} from "./schema.js";
+import { Scope, Rule, type SlotName , saysText, statements} from "./schema.js";
 import { loadCorpus, resolveRules, selectsFor, lineageOf, type Corpus } from "./load.js";
 import { resolveRef } from "./ref.js";
 import { removals, refuseBecause } from "./write.js";
@@ -70,6 +70,14 @@ export interface Question {
    * authors and they need to see what they are revising.
    */
   revises?: string;
+  /**
+   * ⛔ THE STATEMENTS ONE BY ONE, because glued together they read as a single sentence a
+   * ruling would replace entirely. A slot saying seven things rendered as one paragraph, under
+   * "it already says", beside an option whose own `replaces` is `only the part in question` —
+   * so choosing it looked like deleting the other six. `saysText` is right for hashing and
+   * matching and wrong for showing somebody what they are about to change.
+   */
+  saysEach?: Array<{ says: string; inQuestion: boolean }>;
   /** What is unruled about the agreed sentence. */
   about?: string;
   /** Observations recorded against this exact question. */
@@ -283,6 +291,15 @@ function questionsIn(corpus: Corpus, scopeId: string): Question[] {
          */
         candidates: s.candidates ?? [],
         revises: s.about ? saysText(fill.says) : undefined,
+        /**
+         * ⛔ AND IT MARKS WHICH ONE, because `standing.of` already names it and `settle` already
+         * replaces only that statement, leaving its siblings byte-identical. The surface was the
+         * one layer that did not know — so the information existed, was acted on correctly, and
+         * was withheld from the person being asked to decide.
+         */
+        saysEach: s.about
+          ? statements(fill.says).map((x) => ({ says: x.says, inQuestion: Boolean(s.of) && x.id === s.of }))
+          : undefined,
         candidatesAreWhole:
           (s.candidates ?? []).length > 0 && (s.candidates ?? []).every((c) => c.replaces === "the whole sentence"),
         about: s.about,
