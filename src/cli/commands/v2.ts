@@ -3215,10 +3215,15 @@ export function v2Command(): Command {
     .option("--on <date>", "the day they asked (a carried-in row already has one)")
     .option("--id <id>", "the id of the row this was carried in under, so carrying it twice files one note")
     /**
+     * ⛔ THE SKILL DOCUMENTED THIS BEFORE THE CLI HAD IT, which is the defect I had just fixed
+     * twice over: an instruction nobody can follow. Written here so the documented command runs.
+     */
+    .option("--probe", "a session checking that writing works — counted in no waiting total, shown on no surface a person reviews")
+    /**
      * ⛔ NO `--at` HERE. The parent declares it; declaring it again is what made the value vanish.
      * `optsWithGlobals` reads it whichever side of the verb it was typed.
      */
-    .action(async (says: string, o: { about: string; by: string; via?: string; on?: string; id?: string }, self: Command) => {
+    .action(async (says: string, o: { about: string; by: string; via?: string; on?: string; id?: string; probe?: boolean }, self: Command) => {
       const g = self.optsWithGlobals() as { at?: string; token?: string };
       if (looksLikeInstance(g.at)) {
         try {
@@ -3241,6 +3246,7 @@ export function v2Command(): Command {
         via: o.via as Via,
         at: o.on ?? new Date().toISOString().slice(0, 10),
         id: o.id,
+        probe: o.probe === true,
       });
       if (!r.ok) {
         console.error(pc.red("✗"), r.why);

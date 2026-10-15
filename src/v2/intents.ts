@@ -196,6 +196,14 @@ export const INTENTS: Intent[] = [
       },
       { name: "says", says: "What should change, in their words", required: true, long: true },
       { name: "by", says: "Who is asking — defaults to whoever the instance authenticated", required: false },
+      {
+        name: "probe",
+        says:
+          "⛔ Set this when a session is checking that writing works and NOBODY is waiting on it. " +
+          "A probe is counted nowhere and shown on no surface a person reviews — it is still a real " +
+          "write through the whole path, which is the point of it",
+        required: false,
+      },
     ],
     run: (a, body) =>
       fileNote(a.dir, {
@@ -204,6 +212,8 @@ export const INTENTS: Intent[] = [
         by: str(body.by) || a.pressing,
         via: "page",
         at: new Date().toISOString().slice(0, 10),
+        /** ⛔ Only ever true where somebody said so. An inferred probe is a request discarded. */
+        ...(body.probe === true ? { probe: true as const } : {}),
       }),
   },
   /**
