@@ -72,7 +72,11 @@ test("the stylesheet answers for the side placement, and the top one is the defa
   assert.match(html, /:root\[data-nav="left"\] \.topframe \{[^}]*position: fixed/);
   // ⛔ The chevron is a top-menu economy. A column has the height, so the tree stays open and the
   // control that would close it goes away.
-  assert.match(html, /:root\[data-nav="left"\] \.topframe \.chev \{ display: none/);
+  //
+  // ⛔ NOT SCOPED TO THE FRAME ANY MORE. The chevron sits on the breadcrumb line, and that line left
+  // the frame when Peter said *"breadcrumb on page in both top/side menu modes"* — so a selector
+  // naming `.topframe .chev` describes a nesting that no longer exists.
+  assert.match(html, /:root\[data-nav="left"\] \.chev \{ display: none/);
   // Below the breakpoint the menu is at the top whatever was remembered, so the offer goes away.
   assert.match(html, /@media \(max-width: [\d.]+rem\) \{ \.navplace \{ display: none/);
 });
