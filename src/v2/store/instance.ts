@@ -29,7 +29,7 @@ import { line, noteCorpus, noteDir, traced, tracingOn, type Trace } from "./trac
 import { published, streamFor } from "./pushes.js";
 import { PRESENCE_MS } from "../presence.js";
 import { v2Route } from "../serve.js";
-import { type Db, isRefusal, type ProjectStore, type StoredEvent, storeFor } from "./access.js";
+import { type Db, isRefusal, type ProjectStore, type StoredEvent, storeFor, type Fingerprint } from "./access.js";
 import { principalFrom } from "./identity.js";
 import { projects } from "./schema.js";
 import { eq } from "drizzle-orm";
@@ -304,8 +304,16 @@ export interface Materialized {
 const READ = new Map<
   string,
   {
-    fp: string;
-    documents: Record<string, string>;
+    /**
+     * ⛔ TWO HALVES, SO A SAVE KEEPS THE PICTURES. A drawing is its own document, and a write to the
+     * sentences cannot change one — so each half is matched against its own fingerprint and reused
+     * on its own. On Bilrost that is the difference between a save costing 19 MB and 2.7 MB.
+     */
+    fp: Fingerprint;
+    /** Everything that is not a drawing. */
+    truth: Record<string, string>;
+    /** The drawings, kept across writes that cannot have touched them. */
+    drawings: Record<string, string>;
     events: StoredEvent[];
     dir?: string;
     /**
@@ -319,6 +327,14 @@ const READ = new Map<
 
 /** ⛔ A bound, because a corpus is ~19 MB in memory and an instance serves many projects. */
 const READ_CEILING = 4;
+
+/**
+ * Where the drawings are, as the prefix that splits a corpus in two.
+ *
+ * ⛔ ONE HOME, AND IT MATCHES `drawingRel`. The reader, the writer and this split must agree about
+ * where a picture lives; three copies of the string would agree today and not next month.
+ */
+const DRAWINGS = "drawings/";
 
 /**
  * Forget what this process read, because it has just changed it.
@@ -393,22 +409,28 @@ export async function materializeProject(store: ProjectStore, mutating = false):
   const [fp, listening] = await Promise.all([store.fingerprint(), store.listening(PRESENCE_MS)]);
 
   const had = READ.get(store.projectId);
-  let documents: Record<string, string>;
-  let events: StoredEvent[];
+  const truthHeld = had?.fp.truth === fp.truth;
+  const drawingsHeld = had?.fp.drawings === fp.drawings;
 
-  if (had && had.fp === fp) {
-    noteCorpus("cached");
-    documents = had.documents;
-    events = had.events;
-  } else {
-    /**
-     * ⛔ ONE ROUND TRIP, NOT TWO. The documents and the log are independent reads, and
-     * asking for the second only after the first arrived cost a full trip — 90ms against
-     * Neon, on every single request, for nothing. `scripts/bench-store.mjs` is where that
-     * number came from and is how to check it again.
-     */
-    noteCorpus("read");
-    [documents, events] = await Promise.all([store.documents(), store.since(0, LOG_CEILING)]);
+  /**
+   * ⛔ THE HALVES ARE ASKED FOR SEPARATELY, AND THIS IS THE WHOLE POINT. A save moves the truth
+   * fingerprint and cannot move the drawings one, so the 14.8 MB of pictures is reused while the
+   * 2.7 MB of sentences is read again.
+   *
+   * ⛔ ONE ROUND TRIP FOR WHATEVER IS ACTUALLY NEEDED. The reads that are still wanted go together;
+   * the comment this replaces was about exactly that, and the sequential version of it cost a full
+   * trip per request against Neon.
+   */
+  const [truth, drawings, events] = await Promise.all([
+    truthHeld ? Promise.resolve(had!.truth) : store.documentsOutside(DRAWINGS),
+    drawingsHeld ? Promise.resolve(had!.drawings) : store.documentsUnder(DRAWINGS),
+    truthHeld ? Promise.resolve(had!.events) : store.since(0, LOG_CEILING),
+  ]);
+  noteCorpus(truthHeld && drawingsHeld ? "cached" : "read");
+
+  const documents: Record<string, string> = { ...truth, ...drawings };
+
+  if (!truthHeld || !drawingsHeld) {
     /** ⛔ Oldest out first, so a busy instance holds a bounded number of corpora. */
     if (!mutating && READ.size >= READ_CEILING && !READ.has(store.projectId)) {
       const oldest = READ.keys().next().value;
@@ -418,7 +440,7 @@ export async function materializeProject(store: ProjectStore, mutating = false):
      * ⛔ NOTHING IS REMEMBERED FROM A WRITE. The fingerprint was taken before the write landed, so
      * storing it would hand the next reader a match against a corpus that has since moved.
      */
-    if (!mutating) READ.set(store.projectId, { fp, documents, events });
+    if (!mutating) READ.set(store.projectId, { fp, truth, drawings, events });
   }
 
   /**
@@ -438,7 +460,7 @@ export async function materializeProject(store: ProjectStore, mutating = false):
    * next reader lays out a clean one. The invariant is that a shared directory is pristine; it is
    * not an assumption that nothing ever writes to it.
    */
-  const reusable = !mutating && had && had.fp === fp && had.dir && fs.existsSync(had.dir);
+  const reusable = !mutating && truthHeld && drawingsHeld && had?.dir && fs.existsSync(had.dir);
   noteDir(reusable ? "reused" : "laid-out");
   const dir = reusable ? had!.dir! : materialize(documents);
   const logHad = reusable ? countLogLines(dir) : writeLog(dir, events);
@@ -460,9 +482,10 @@ export async function materializeProject(store: ProjectStore, mutating = false):
     ? undefined
     : () => {
         const entry = READ.get(store.projectId);
-        if (entry?.fp === fp && entry.corpus) return entry.corpus;
+        const current = entry?.fp.truth === fp.truth && entry?.fp.drawings === fp.drawings;
+        if (current && entry?.corpus) return entry.corpus;
         const parsed = loadCorpus(dir);
-        if (entry?.fp === fp) entry.corpus = parsed;
+        if (current && entry) entry.corpus = parsed;
         return parsed;
       };
 

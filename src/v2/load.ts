@@ -122,6 +122,19 @@ export interface Store {
   /** Files directly under `dir` with one of these extensions, as full keys, sorted. */
   list: (dir: string, ext: string[]) => string[];
   read: (file: string) => string;
+  /**
+   * Whether one named file is there.
+   *
+   * ⛔ ASKED OF THE STORE, NOT OF `fs`. A corpus is a directory locally and a set of rows hosted,
+   * and `loadCorpus` is the one reader for both — reaching for `fs.existsSync` here would work on a
+   * laptop and answer "no drawing" for every screen on the instance, which is the shape of bug this
+   * file already carries two ⛔ comments about.
+   *
+   * ⛔ AND NOT `list`-AND-FILTER, which was the alternative. Listing a directory to ask about one
+   * file is a question nobody reading it would recognise, and it is one readdir per scope for an
+   * answer about one path.
+   */
+  has: (file: string) => boolean;
 }
 
 /** The corpus as a directory. What every local command uses. */
@@ -135,6 +148,7 @@ export const diskStore: Store = {
           .map((f) => path.join(dir, f))
           .sort(),
   read: (file) => fs.readFileSync(file, "utf-8"),
+  has: (file) => fs.existsSync(file),
 };
 
 /**
@@ -145,6 +159,37 @@ export const diskStore: Store = {
  * a column name is. What would be a leak is one of these reaching a page.
  */
 /**
+ * What may be in a corpus directory: the sentences, and a screen's picture.
+ *
+ * ⛔ `.html` IS HERE BECAUSE A DRAWING IS ITS OWN FILE NOW, and leaving it out was silent data
+ * loss rather than a missing read. `writeBack` diffs `corpusFiles(dir)` against the documents the
+ * request was given — so a drawing the store holds and this does not see appears as REMOVED, and
+ * every hosted write would have deprecated every drawing in the project.
+ */
+const CORPUS_EXT = /\.(md|ya?ml|html)$/;
+
+/**
+ * Everything under one corpus directory, at whatever depth it sits.
+ *
+ * ⛔ RECURSIVE, FOR THE SAME REASON. `drawings/<scope>/<view>.html` is two levels down and this
+ * read one — so the drawing `materialize` had just written to disk was invisible on the way back,
+ * which is the other half of the same defect.
+ */
+function walk(here: string, prefix: string, out: Record<string, string>): void {
+  for (const entry of fs.readdirSync(here, { withFileTypes: true })) {
+    const at = path.join(here, entry.name);
+    /** ⛔ Keys are POSIX, because they are store paths — a Windows separator would be a new row. */
+    const key = `${prefix}/${entry.name}`;
+    if (entry.isDirectory()) {
+      walk(at, key, out);
+      continue;
+    }
+    if (!entry.isFile() || !CORPUS_EXT.test(entry.name)) continue;
+    out[key] = fs.readFileSync(at, "utf-8");
+  }
+}
+
+/**
  * Every file a corpus is made of, keyed by the path a directory would give it.
  *
  * ⛔ THE COUNTERPART OF `memoryStore`, AND THEY MUST STAY THAT WAY. An instance reads a corpus with
@@ -152,8 +197,40 @@ export const diskStore: Store = {
  * remote copy silently does not have — and the two would disagree about what the corpus says while
  * both reported themselves healthy.
  */
+/**
+ * Where a screen's picture lives, relative to the corpus root.
+ *
+ * ⛔ ONE HOME FOR THE KEY, because the reader and the writer must agree and a second copy of this
+ * expression would agree on the day it was written and never again. `loadCorpus` reads it onto
+ * `View.sketch_html`; `writeSketchHtml` writes it beside the document.
+ *
+ * ⛔ AND IT IS THE KEY THE PAGE ALREADY USES — `data-mock="<scope>#<view>"` and
+ * `/api/v2/mocks?refs=` address a drawing by that pair, so the file layout and the wire agree
+ * rather than needing a translation nobody maintains.
+ */
+export const drawingRel = (scopeId: string, viewId: string): string => `drawings/${scopeId}/${viewId}.html`;
+
 export const CORPUS_DIRS = [
   "truth",
+  /**
+   * ⛔ A SCREEN'S PICTURE IS ITS OWN FILE, BECAUSE IT WAS 85% OF THE CORPUS AND NOBODY COULD NOT
+   * READ IT.
+   *
+   * Peter: *"i don't understand why everything is so big? why isn't stuff broken down?"* and then
+   * *"why can't we just not re-read the images?"*. Measured on Bilrost: 17.5 MB of corpus, of which
+   * **14.8 MB was 83 `sketch_html` values** — the sentences, rules, readings and verdicts together
+   * were 2.7 MB. One feature, `pl-deal-workspace`, was a single 5.1 MB row that is 98% HTML.
+   *
+   * ⛔ AND INSIDE A ROW THEY CANNOT BE SKIPPED. The store is keyed by path with the source as one
+   * text column, so `select path, source` hands back the drawing whether anybody wanted it or not —
+   * which is why every page view, and every save, read all 14.8 MB. "Just do not re-read the
+   * images" is only available once they are their own entry.
+   *
+   * ⛔ NO SCHEMA CHANGE, which is what makes this cheap: `documents` is already one row per PATH, so
+   * splitting the file splits the row. And a diff improves — today a drawing is a single-line YAML
+   * scalar of megabytes that no review can read, where this is one HTML file per screen.
+   */
+  "drawings",
   "rules",
   "charter",
   "readings",
@@ -187,10 +264,7 @@ export function corpusFiles(root: string): Record<string, string> {
   for (const sub of CORPUS_DIRS) {
     const here = path.join(root, sub);
     if (!fs.existsSync(here)) continue;
-    for (const f of fs.readdirSync(here)) {
-      if (!/\.(md|ya?ml)$/.test(f)) continue;
-      out[`${sub}/${f}`] = fs.readFileSync(path.join(here, f), "utf-8");
-    }
+    walk(here, sub, out);
   }
   if (fs.existsSync(root)) {
     for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
@@ -222,6 +296,8 @@ export const memoryStore = (root: string, files: Record<string, string>): Store 
         .map((k) => path.join(root, k));
     },
     read: (file) => files[rel(file)] ?? "",
+    /** ⛔ `in`, not truthiness — an empty file is a file, and a screen may legitimately be blank. */
+    has: (file) => rel(file) in files,
   };
 };
 
@@ -369,11 +445,50 @@ export function loadCorpus(root: string, store: Store = diskStore): Corpus {
   const capabilities: Corpus["capabilities"] = [];
   const charter: Corpus["charter"] = [];
 
+  /**
+   * Where a screen's picture lives, as a path under the corpus root.
+   *
+   * ⛔ `<scope>/<view>.html`, WHICH IS ALREADY THE KEY THE PAGE USES. `data-mock="<scope>#<view>"`
+   * and `/api/v2/mocks?refs=` address drawings by exactly this pair, so the file layout and the
+   * wire format agree rather than needing a translation nobody maintains.
+   */
+  const drawingPath = (scopeId: string, viewId: string): string =>
+    path.join(paths.root, drawingRel(scopeId, viewId));
+
   for (const file of readDir(paths.truth, [".md"])) {
     if (path.basename(file).toLowerCase() === "readme.md") continue;
     try {
       const p = parseFrontmatter(readFile(file));
-      scopes.push({ scope: Scope.parse(p.data), body: p.content.trim(), file });
+      const scope = Scope.parse(p.data);
+      /**
+       * ⛔ A DRAWING ON DISK WINS, AND AN INLINE ONE STILL WORKS. Corpora written before the split
+       * carry `sketch_html` in the document, and a corpus may not stop loading because the layout
+       * moved on — the doc-migration moves them when it runs, and until it does both read.
+       *
+       * ⛔ AND IT IS SET ONTO `sketch_html`, DELIBERATELY. Everything downstream — the renderer, the
+       * wiring, the states, the mock bank — asks a View for its `sketch_html`, so assembling it here
+       * means the storage shape changed and the model did not. A second field would have been a
+       * second question every reader has to ask.
+       */
+      for (const v of scope.views) {
+        const where = drawingPath(scope.id, v.id);
+        /**
+         * ⛔ THE FILE WINS, AND PREFERRING THE INLINE ONE WAS A REAL BUG I SHIPPED FOR AN HOUR.
+         *
+         * The first version skipped a view that already had `sketch_html`, reasoning that an
+         * un-migrated corpus should keep working. It does — but it also meant a STALE inline
+         * drawing beat a freshly written file, silently and forever. Caught by
+         * `v2-a-worse-drawing-does-not-win`, whose fixture writes the drawing as a QUOTED scalar
+         * while the writer's deletion pass only matched block scalars, so the old one survived the
+         * redraw and the new one was invisible.
+         *
+         * The right precedence is the simple one: the file is where drawings are written, so the
+         * file is what a drawing IS. An inline one is a fallback for a corpus that has not been
+         * redrawn yet, and a leftover is then harmless rather than authoritative.
+         */
+        if (store.has(where)) v.sketch_html = store.read(where);
+      }
+      scopes.push({ scope, body: p.content.trim(), file });
     } catch (e) {
       broken.push({ file, why: why(e) });
     }

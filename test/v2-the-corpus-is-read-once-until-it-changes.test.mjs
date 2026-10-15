@@ -79,12 +79,25 @@ async function seed(store, n = 6) {
  * read HAPPENED is a fact about the code; how long it took is a fact about the afternoon.
  */
 function counting(store) {
-  const calls = { documents: 0, since: 0, listening: 0, fingerprint: 0 };
+  /**
+   * ⛔ THE TWO HALVES ARE COUNTED SEPARATELY, BECAUSE THAT IS NOW THE WHOLE QUESTION.
+   *
+   * Peter: *"why can't we just not re-read the images?"*. A drawing is its own document, so a
+   * corpus read is two reads — the sentences and the pictures — and each is reused on its own
+   * fingerprint. Counting them together would have left every assertion below still passing while
+   * a save re-read 14.8 MB of pictures it could not have changed.
+   *
+   * `documents` stays counted because nothing on a request path may call it any more: it reads the
+   * whole corpus in one go, which is the cost this file exists to have removed.
+   */
+  const calls = { truth: 0, drawings: 0, documents: 0, since: 0, listening: 0, fingerprint: 0 };
   return {
     calls,
     store: {
       ...store,
       documents: (...a) => (calls.documents++, store.documents(...a)),
+      documentsOutside: (...a) => (calls.truth++, store.documentsOutside(...a)),
+      documentsUnder: (...a) => (calls.drawings++, store.documentsUnder(...a)),
       since: (...a) => (calls.since++, store.since(...a)),
       listening: (...a) => (calls.listening++, store.listening(...a)),
       fingerprint: (...a) => (calls.fingerprint++, store.fingerprint(...a)),
@@ -98,12 +111,15 @@ test("the first read reads, and reading again does not", async () => {
   const { store: counted, calls } = counting(store);
 
   const first = await materializeProject(counted);
-  assert.equal(calls.documents, 1, "the first request did not read the documents");
+  assert.equal(calls.truth, 1, "the first request did not read the documents");
+  assert.equal(calls.drawings, 1, "the first request did not read the drawings");
+  assert.equal(calls.documents, 0, "something on the request path read the whole corpus in one go");
   /** ⛔ Non-vacuous: it has to have actually produced a corpus, or "no second read" means nothing. */
   assert.equal(Object.keys(first.documents).length, 6, `the first read produced ${Object.keys(first.documents).length} documents`);
 
   const second = await materializeProject(counted);
-  assert.equal(calls.documents, 1, "the second request read all the documents again");
+  assert.equal(calls.truth, 1, "the second request read all the documents again");
+  assert.equal(calls.drawings, 1, "the second request read all the drawings again");
   assert.equal(calls.since, 1, "the second request read the whole event log again");
   assert.deepEqual(second.documents, first.documents, "the second request was handed a different corpus");
 });
@@ -118,7 +134,7 @@ test("a write is seen immediately, by fingerprint alone", async () => {
   const { store: counted, calls } = counting(store);
 
   await materializeProject(counted);
-  const readsAfterWarm = calls.documents;
+  const readsAfterWarm = calls.truth;
 
   /** ⛔ Through a DIFFERENT store handle, so nothing in-process could have invalidated anything —
    *  this is the fingerprint doing the work and not `forgetRead`. */
@@ -126,7 +142,7 @@ test("a write is seen immediately, by fingerprint alone", async () => {
   await elsewhere.put("truth/thing-0.md", `---\nid: thing-0\ntitle: Renamed\nexists: kept\n---\n\nChanged.\n`);
 
   const after = await materializeProject(counted);
-  assert.equal(calls.documents, readsAfterWarm + 1, "a write did not invalidate the cached read");
+  assert.equal(calls.truth, readsAfterWarm + 1, "a write did not invalidate the cached read");
   assert.match(after.documents["truth/thing-0.md"], /Renamed/, "the request was served the corpus from before the write");
 });
 
@@ -196,7 +212,7 @@ test("who is listening is asked every time", async () => {
   await materializeProject(counted);
 
   assert.equal(calls.listening, 3, `presence was read ${calls.listening} times across three requests`);
-  assert.equal(calls.documents, 1, "the documents were read more than once, so this test is not about the cache");
+  assert.equal(calls.truth, 1, "the documents were read more than once, so this test is not about the cache");
 });
 
 /** ⛔ And the fingerprint is paid once per request — it is the thing that replaced the 19 MB. */
@@ -208,7 +224,8 @@ test("the cheap read happens every request and the expensive one does not", asyn
   for (let i = 0; i < 4; i++) await materializeProject(counted);
 
   assert.equal(calls.fingerprint, 4, `the fingerprint was read ${calls.fingerprint} times for four requests`);
-  assert.equal(calls.documents, 1, `the documents were read ${calls.documents} times for four requests`);
+  assert.equal(calls.truth, 1, `the documents were read ${calls.truth} times for four requests`);
+  assert.equal(calls.drawings, 1, `the drawings were read ${calls.drawings} times for four requests`);
 });
 
 /**
@@ -296,4 +313,64 @@ test("a reader that dirties the shared directory stops it being shared", async (
     /Thing 0/,
     "the fresh directory carries the tampered file, so it was not laid out again from the store"
   );
+});
+
+/**
+ * ⛔ A SAVE RE-READS THE SENTENCES AND KEEPS THE PICTURES, WHICH IS THE THING PETER ASKED FOR.
+ *
+ * Peter: *"uh, you mean move it to a blob? or why can't we just not re-read the images?"* — and
+ * then *"let's do both - ne wrow for images, and don't re-read images"*. On Bilrost the drawings
+ * are 14.8 MB of a 17.5 MB corpus, so a one-line edit to a screen's words was pulling all of it
+ * back across the wire for nothing.
+ *
+ * ⛔ THE ASSERTION THAT CANNOT PASS BY ACCIDENT IS THE DRAWINGS ONE. "The truth was re-read" is
+ * what the old whole-corpus cache already did; "the drawings were NOT re-read" is the new fact,
+ * and it fails on the previous build. Verified by pointing both halves at the same fingerprint
+ * and watching this go red.
+ *
+ * ⛔ AND IT CHECKS THE OTHER DIRECTION TOO. A cache that keeps the pictures must still notice a
+ * picture changing, or a redraw is invisible on the one surface anybody reviews on — which is a
+ * strictly worse bug than the cost it was removing.
+ */
+test("writing a sentence re-reads the sentences and keeps the pictures", async () => {
+  const { db, store, reach } = await freshStore();
+  await seed(store);
+  await store.put("drawings/area-x/view-y.html", "<div>drawn</div>");
+  forgetRead(store.projectId);
+  const { store: counted, calls } = counting(store);
+
+  const warm = await materializeProject(counted);
+  assert.equal(calls.truth, 1, "the warm-up did not read the sentences");
+  assert.equal(calls.drawings, 1, "the warm-up did not read the drawings");
+  assert.equal(
+    warm.documents["drawings/area-x/view-y.html"],
+    "<div>drawn</div>",
+    "the two halves were not merged back into one corpus"
+  );
+
+  /** ⛔ A different handle, so this is the fingerprint and not an in-process invalidation. */
+  const elsewhere = await elsewhereIn(db, reach);
+  await elsewhere.put("truth/thing-0.md", `---\nid: thing-0\ntitle: Edited\nexists: kept\n---\n\nEdited.\n`);
+
+  const after = await materializeProject(counted);
+  assert.equal(calls.truth, 2, "a write to the sentences did not re-read the sentences");
+  assert.equal(calls.drawings, 1, `the drawings were read ${calls.drawings} times — a sentence edit re-read the pictures`);
+  assert.match(after.documents["truth/thing-0.md"], /Edited/, "the request was served the corpus from before the write");
+  assert.equal(
+    after.documents["drawings/area-x/view-y.html"],
+    "<div>drawn</div>",
+    "the kept drawing did not survive into the corpus the next request got"
+  );
+
+  /** ⛔ The other direction: a redraw must still be seen, or keeping them is worse than re-reading. */
+  await elsewhere.put("drawings/area-x/view-y.html", "<div>redrawn</div>");
+  const redrawn = await materializeProject(counted);
+  assert.equal(calls.drawings, 2, "a redraw did not invalidate the kept drawings");
+  assert.equal(
+    redrawn.documents["drawings/area-x/view-y.html"],
+    "<div>redrawn</div>",
+    "a redrawn screen was served from the cache as its old picture"
+  );
+  /** ⛔ And a redraw does not drag the sentences back with it. */
+  assert.equal(calls.truth, 2, `the sentences were read ${calls.truth} times — a redraw re-read them`);
 });

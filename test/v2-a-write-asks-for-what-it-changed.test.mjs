@@ -194,3 +194,103 @@ test("a write caches nothing for the next reader", async () => {
     "the reader after a write was served the corpus from before it"
   );
 });
+
+/**
+ * ⛔ A WRITE WOULD HAVE DEPRECATED EVERY DRAWING IN THE PROJECT, SILENTLY, ON EVERY SAVE.
+ *
+ * Found by a number that was impossible rather than merely surprising: a benchmark said 15 MB of
+ * corpus was read back off local disk in 1ms. It was not — `corpusFiles` read one level deep and
+ * matched only `.md|.yaml`, so `drawings/<scope>/<view>.html` was read not slowly but NEVER.
+ *
+ * That is not a missing read. `writeBack` computes
+ *
+ *     removed = Object.keys(before).filter((k) => !(k in after))
+ *
+ * where `before` is what the store holds and `after` is `corpusFiles(dir)`. A drawing the store
+ * holds and `corpusFiles` cannot see is therefore REMOVED — so the save Peter was waiting on would
+ * have deprecated all 83 of Bilrost's drawings and left every screen in the product blank.
+ *
+ * ⛔ IT PASSED EVERYTHING. 1008 tests, twice, including the seam test written in the same hour
+ * specifically to catch a drawing that lands on disk and not in the store — because that one
+ * exercises `memoryStore`, and this path goes through a directory. The split's own change record
+ * says the risk is "a drawing landing where no reader looks", and it had landed exactly there.
+ *
+ * ⛔ SO THE ASSERTION IS ABOUT WHAT A WRITE LEAVES BEHIND, not about what a reader can see. A
+ * reader was always fine: `loadCorpus` has its own read and found the drawing.
+ */
+test("a write leaves the drawings alone — it never reports them as removed", async () => {
+  const { store } = await fresh();
+  await store.put("truth/t0.md", doc("t0", "T0"));
+  await store.put("drawings/area-x/view-y.html", "<div>drawn</div>");
+  await store.put("drawings/area-x/other.html", "<div>also drawn</div>");
+  forgetRead("prj-w");
+
+  const m = await materializeProject(store, true);
+
+  /** ⛔ The directory really holds the drawing, or what follows is about the wrong thing. */
+  const fs = await import("node:fs");
+  const path = await import("node:path");
+  assert.ok(
+    fs.existsSync(path.join(m.dir, "drawings", "area-x", "view-y.html")),
+    "the materialized directory has no drawing in it, so this test is not about the write path"
+  );
+
+  /** One ordinary edit to the sentences, which is the save that was deprecating the pictures. */
+  fs.writeFileSync(path.join(m.dir, "truth", "t0.md"), doc("t0", "Edited"));
+
+  const out = await writeBack(store, m.documents, m.dir, m.logHad);
+  assert.ok(!("conflict" in out), `the write refused: ${JSON.stringify(out)}`);
+  assert.deepEqual(out.changed, ["truth/t0.md"], `the write reported changing ${JSON.stringify(out.changed)}`);
+
+  /** ⛔ THE ONE THAT FAILS ON THE PREVIOUS BUILD. Both drawings are still there, with their bytes. */
+  forgetRead("prj-w");
+  const still = await store.documents();
+  assert.equal(
+    still["drawings/area-x/view-y.html"],
+    "<div>drawn</div>",
+    "a save deprecated a drawing it never touched"
+  );
+  assert.equal(
+    still["drawings/area-x/other.html"],
+    "<div>also drawn</div>",
+    "a save deprecated a drawing it never touched"
+  );
+  assert.match(still["truth/t0.md"], /Edited/, "the edit the save was actually for did not land");
+});
+
+/**
+ * ⛔ AND THE OTHER DIRECTION: A DRAWING WRITTEN ON THE INSTANCE HAS TO REACH THE STORE.
+ *
+ * The same blindness broke the redraw path, less dramatically and just as completely: `v2 draw`
+ * inside a request writes the picture into the materialized directory, and a `writeBack` that
+ * cannot see the file reports nothing changed. The drawing would exist for the length of one
+ * request and then be deleted with the temp directory.
+ */
+test("a drawing written into the directory reaches the store", async () => {
+  const { store } = await fresh();
+  await store.put("truth/t0.md", doc("t0", "T0"));
+  forgetRead("prj-w");
+
+  const m = await materializeProject(store, true);
+  const fs = await import("node:fs");
+  const path = await import("node:path");
+  const at = path.join(m.dir, "drawings", "area-z", "view-q.html");
+  fs.mkdirSync(path.dirname(at), { recursive: true });
+  fs.writeFileSync(at, "<div>freshly drawn</div>");
+
+  const out = await writeBack(store, m.documents, m.dir, m.logHad);
+  assert.ok(!("conflict" in out), `the write refused: ${JSON.stringify(out)}`);
+  assert.deepEqual(
+    out.changed,
+    ["drawings/area-z/view-q.html"],
+    `the write reported changing ${JSON.stringify(out.changed)}`
+  );
+
+  forgetRead("prj-w");
+  const now = await store.documents();
+  assert.equal(
+    now["drawings/area-z/view-q.html"],
+    "<div>freshly drawn</div>",
+    "a drawing written during a request never reached the store"
+  );
+});

@@ -13,6 +13,7 @@ import fs from "node:fs";
 import path from "node:path";
 import YAML from "yaml";
 import { THE_GENERATOR } from "./held.js";
+import { drawingRel } from "./load.js";
 
 const INDENT = "    ";
 
@@ -267,6 +268,7 @@ export function writeSketchHtml(
   for (const file of ordered) {
     const raw = pages.read(file);
     // The scope this file holds, however its id is spelled in either layout.
+    const whose = /^id:\s*["']?([^"'\n]+)["']?\s*$/m.exec(raw)?.[1]?.trim();
     if (!new RegExp(`^id:\\s*["']?[^\\n]*\\b${scopeLeaf}["']?\\s*$`, "m").test(raw)) continue;
     const lines = raw.split("\n");
     const start = lines.findIndex((l) => l.trim() === `- id: ${viewId}`);
@@ -356,7 +358,16 @@ export function writeSketchHtml(
       }
     }
     for (const key of ["sketch_html", "sketch"]) {
-      const has = lines.findIndex((l, i) => i > start && i < end && new RegExp(`^\\s*${key}:\\s*[|>]`).test(l));
+      /**
+       * ⛔ A QUOTED SCALAR COUNTS TOO, AND IT DID NOT. This matched only `key: |` and `key: >`, so a
+       * drawing written as `sketch_html: "<div…>"` survived every redraw — and once the new drawing
+       * moved to its own file, that leftover was a stale picture nobody could get rid of. The reader
+       * now prefers the file, so this is no longer load-bearing for correctness; it is what actually
+       * removes the old bytes from the document rather than leaving megabytes of dead HTML in it.
+       */
+      const has = lines.findIndex(
+        (l, i) => i > start && i < end && new RegExp(`^\\s*${key}:\\s*([|>]|["'])`).test(l)
+      );
       if (has < 0) continue;
       let stop = has + 1;
       const pad = (/^(\s*)/.exec(lines[has]!)![1] ?? "").length;
@@ -387,8 +398,27 @@ export function writeSketchHtml(
       ...(text
         ? [`${INDENT}sketch: |`, ...text.split("\n").map((l) => `${INDENT}  ${l}`)]
         : []),
-      `${INDENT}sketch_html: |`,
-      ...html.split("\n").map((l) => `${INDENT}  ${l}`),
+      /**
+       * ⛔ THE DRAWING IS NO LONGER IN THE DOCUMENT. It goes to `drawings/<scope>/<view>.html`, and
+       * what stays here is the sentence-level record: where it was drawn from, the ASCII sketch a
+       * person reads in a terminal, and the states.
+       *
+       * Peter: *"i don't understand why everything is so big? why isn't stuff broken down?"* —
+       * measured on Bilrost, 14.8 MB of a 17.5 MB corpus was 83 `sketch_html` values, and one
+       * feature was a single 5.1 MB row that is 98% HTML. Inside a row they cannot be skipped: the
+       * store is keyed by path with the source as one text column, so every page view and every
+       * save read all 14.8 MB whether anybody wanted a picture or not.
+       *
+       * ⛔ AND THE CORPUS MIGRATES ITSELF, which is why this needs no migration mechanism. The
+       * deletion pass above already strips an inline `sketch_html`, the reader honours both layouts,
+       * and `v2 draw --all` is part of the normal ritual — so a corpus moves one screen at a time as
+       * screens are redrawn, and a corpus nobody redraws keeps working untouched.
+       *
+       * ⛔ A STATE'S OWN DRAWING STAYS INLINE FOR NOW, deliberately and not by oversight: the view's
+       * main drawing is the bulk, and moving the states means a second key shape
+       * (`<view>.<n>.html`) and a second reader. One shape at a time, so a corpus is never half in
+       * a layout nobody has read.
+       */
       ...(states?.length
         ? [
             `${INDENT}states:`,
@@ -403,10 +433,31 @@ export function writeSketchHtml(
     ];
     lines.splice(insert, 0, ...block);
     pages.write(file, lines.join("\n"));
+    /**
+     * ⛔ THE PICTURE, BESIDE THE DOCUMENT RATHER THAN INSIDE IT — and written AFTER the document, so
+     * a corpus is never left holding a drawing no view mentions. The other order would leave an
+     * orphan on any failure between the two.
+     *
+     * `keyFor` exists for exactly this: its own comment says two writers CREATE a document rather
+     * than editing one, and naming it is where a directory and a store genuinely differ.
+     */
+    /**
+     * ⛔ UNDER THE ID THE DOCUMENT ACTUALLY CARRIES, NOT THE ONE WE WERE PASSED — and getting this
+     * wrong put one tree's drawing in another tree's folder.
+     *
+     * The comment above explains why the FILE is found by whole-id-then-leaf: one writer serves both
+     * corpus layouts, where a scope is `deal-list` in one and `cre/deals/deal-list` in the other. So
+     * the caller may hand over either spelling, while `loadCorpus` looks for a drawing under
+     * `scope.id` as the document spells it. Writing under the passed id meant the drawing landed
+     * somewhere the reader never looks, and `v2-mock-wears-the-theme` caught it as "the products
+     * tree got the other tree's drawing".
+     */
+    pages.write(pages.keyFor(drawingRel(whose ?? scopeId, viewId)), html);
     return file;
   }
   return undefined;
 }
+
 
 /**
  * Record where a control leads, on the part itself.

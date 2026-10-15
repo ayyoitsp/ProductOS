@@ -1,0 +1,81 @@
+id: "0151"
+said: like each level should just be its own entry in a database or something - is this just one big file?
+at: 2026-10-15
+kind: concept
+reaches:
+  model: drawingRel
+  generate: drawingRel
+  pin: the same drawing, written through a directory and through a held map, lands identically
+waived:
+  derive: "The reading side is `drawingPath` inside `loadCorpus`, in `src/v2/load.ts`, which the registry files under MODEL rather than derive. ⛔ THIRD TIME TODAY — 0146 waived this layer for `resolveRules` and 0147 for `notesIn`, both in the same file, both for the same reason. Three in one day is not an accident: load.ts holds real derivations (what a rule reaches, what the notes say, where a drawing is) while being filed as the layer that reads files. That is now worth its own change record against the registry, and it is still not worth renaming a function into a derive file to make a check pass."
+  surface: Nothing renders differently, deliberately. `loadCorpus` reads a drawing back onto `View.sketch_html`, so the renderer, the wiring, the states and the mock bank are untouched — the storage shape changed and the model did not. A surface change here would mean the split had leaked into what a reader sees, and it has not.
+  check: No corpus becomes wrong by this. The two risks the split carries are a drawing landing where no reader looks, and a stale inline one winning over a fresh file — both are pins, and both were REAL bugs caught by existing tests while this was being written.
+  instruct: No author writes a drawing by hand; the generator does. The skills tell an author what a screen must SAY, and where its picture is stored is not a choice they make.
+closed: 2026-10-15
+
+# ⛔ APPENDED AFTER `change close`, which drops comments. See 0141 / 0144-0150.
+#
+# Peter: *"i don't understand why everything is so big? why isn't stuff broken down? should we
+# rethink the db?"*, then *"like each level should just be its own entry in a database or something
+# - is this just one big file?"*
+#
+# MEASURED, AND HE WAS RIGHT:
+#
+#     documents        169
+#     total           17.5 MB
+#     drawings        14.8 MB  in 83 sketch_html values  = 85% of the corpus
+#     everything else  2.7 MB  ← the sentences, rules, readings, verdicts
+#
+#     truth/pl-deal-workspace.md   5182 kB   98% drawing   ← ONE ROW
+#
+# ⛔ AND THE DB DID NOT NEED RETHINKING. `documents` is one row per PATH with the source as one text
+# column, which is fine — the GRANULARITY was wrong for exactly one field. A screen's picture lived
+# inside the document describing the feature, so `select path, source` handed back 14.8 MB whether
+# anybody wanted a picture or not. "Why can't we just not re-read the images" is only available once
+# they are their own entry.
+#
+# WHAT CHANGED: `drawings/<scope>/<view>.html`, which is already the key the page addresses a
+# drawing by — `data-mock="<scope>#<view>"` and `/api/v2/mocks?refs=`. So the file layout and the
+# wire agree rather than needing a translation nobody maintains.
+#
+#     document   18,705 B -> 18,047 B      the 59 kB drawing did not land in it
+#     drawing    drawings/money/balance.html   59 kB
+#     round-trip loadCorpus gives back 60,011 bytes, identical to what was written
+#     broken     0
+#
+# ⛔ NO SCHEMA CHANGE, which is what made it cheap: one row per path means splitting the file splits
+# the row. `drawings` joins CORPUS_DIRS, so import, export and the hosted store carry it already.
+#
+# ⛔ AND NO MIGRATION MECHANISM, because there could not be one. `DocMigration.apply(path, source)`
+# returns one source — it rewrites a document and cannot CREATE a second, so it structurally cannot
+# split a file. Instead the reader honours both layouts and the writer strips the inline one, so a
+# corpus migrates itself one screen at a time as screens are redrawn. `v2 draw --all` already does
+# that, and a corpus nobody redraws keeps working untouched.
+#
+# ⛔ TWO REAL BUGS, BOTH CAUGHT BY TESTS THAT ALREADY EXISTED:
+#
+#   · A STALE DRAWING BEAT A FRESH ONE, SILENTLY. The reader preferred an inline `sketch_html` so an
+#     un-migrated corpus would keep working — but the writer's strip matched only BLOCK scalars, and
+#     a drawing written as `sketch_html: "<div…>"` survived every redraw. The new one went to a file
+#     nobody read. `v2-a-worse-drawing-does-not-win` said so. The file is authoritative now, and the
+#     strip handles quoted scalars so the dead bytes actually leave the document.
+#   · ONE TREE'S DRAWING LANDED IN ANOTHER TREE'S FOLDER. The writer finds a document by
+#     whole-id-then-leaf so one implementation serves both layouts; I wrote the drawing under the id
+#     the CALLER passed while `loadCorpus` looks under the id the DOCUMENT carries. For
+#     `cre/deals/deal-list` against `deal-list` those differ. `v2-mock-wears-the-theme` caught it.
+#
+# ⛔ AND THE SEAM TEST GOT STRONGER RATHER THAN LOOSENED. "A held write records exactly what moved"
+# failed because two things move now. That assertion is what prevents silent data loss: `writeBack`
+# sends the store exactly what `moved()` reports, so a drawing written into the held map and not
+# reported would be drawn locally and blank on the instance. It asserts the drawing key is included
+# and holds the drawing.
+#
+# ⛔ I ALSO MISREPORTED THE BLAST RADIUS TO PETER MID-CHANGE: I said "only one of 22 test files
+# broke", measured by running THREE files rather than the suite. It was six. Corrected as soon as
+# the suite answered, which is the only thing that could have.
+#
+# STILL OWED, AND IT IS THE HALF HE ASKED FOR: the fingerprint and the read cache are still
+# whole-corpus, so a truth write still invalidates the drawings. Splitting them by directory is what
+# makes a save stop re-reading 14.8 MB it never touched — small now that the data is separable.
+#
+# 1007/1007.
