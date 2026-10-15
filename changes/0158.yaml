@@ -1,0 +1,9 @@
+id: "0158"
+said: also. menu is hidden below the bottom chat bar, make sure the offset is correct
+at: 2026-10-15
+kind: surface
+reaches:
+  surface: CLEARANCE FOR THE COMPOSER AT THE BOTTOM OF THE COLUMN
+  pin: reserves the composer
+waived: {}
+closed: 2026-10-15

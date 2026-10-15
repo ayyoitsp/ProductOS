@@ -2751,18 +2751,48 @@ function renderNav(
   /** Rules this scope owns, split by whether they are still a question. */
   const rulesOwnedBy = (id: string, asking: boolean) =>
     [...homes].filter(([rid, home]) => home === id && openRule.has(rid) === asking).length;
-  const rows: string[] = [];
-  const walk = (parent: string | undefined, depth: number): void => {
+  /**
+   * ⛔ A CONTAINER IS COLLAPSIBLE, WHICH MEANS ITS ITEMS ARE INSIDE IT.
+   *
+   * Peter: *"what happened to collapsable menu items? CRE/dealmanagement are not collapsible???"*
+   * and *"'Product' itself doesn't need to be a menu item under the 'Product' main tab"*.
+   *
+   * Both are the same defect. This built ONE flat list of every scope in the corpus, indented by a
+   * `--d` custom property, and hung it under the crumbs as a sibling of the tab row. So an area
+   * appeared twice — once as its tab, once as a row of that list — and nothing could collapse,
+   * because an indent is not a container: there was no element holding a group's items to hide.
+   *
+   * The earlier round of this moved Overview's own strip inside its area and stopped there, which is
+   * why the areas still looked like the thing he had already had fixed.
+   *
+   * So the rows nest: each container holds a real `<ul>` of its children, and the subtree for an
+   * area is emitted INSIDE that area's group, starting at the area's children. An area naming
+   * itself at the top of its own menu is the duplicate he is pointing at.
+   */
+  /**
+   * ⛔ THE BRANCH YOU ARE STANDING IN IS OPEN, because collapsed-by-default plus one-open-at-a-time
+   * is a menu that cannot show you where you are. Everything folds shut on load, so the row for the
+   * page on screen is inside two closed containers and the menu answers "which feature is this"
+   * with nothing — the question it exists for.
+   */
+  const standingIn = new Set<string>();
+  for (let at: string | undefined = here; at; at = corpus.scopes.find((x) => x.scope.id === at)?.scope.in) {
+    standingIn.add(at);
+  }
+  /** How many rows the whole corpus yields, so a corpus with nothing to navigate grows no tree. */
+  let counted = 0;
+  const subtree = (parent: string | undefined, depth: number): string => {
+    const rows: string[] = [];
     for (const { scope } of kids(parent)) {
       /**
-       * ⛔ THE ROOT IS NOT A ROW. It is the Overview tab, and listing it again at the head of both
-       * trees gave every half a first entry that jumped to the other tab — the one place the tree is
-       * not for.
+       * ⛔ THE ROOT IS NOT A ROW, AND NEITHER IS AN AREA INSIDE ITS OWN GROUP. The root is the
+       * Overview tab; listing it again at the head of the tree gave every half a first entry that
+       * jumped to another tab. The same argument reaches one level further down now that each area
+       * holds its own items: *"'Product' itself doesn't need to be a menu item under the 'Product'
+       * main tab"*. A group is named by its head, so the first row inside it is the first thing in
+       * it — callers pass the container whose contents they want, and it is never a row of them.
        */
-      if (!scope.in) {
-        walk(scope.id, depth);
-        continue;
-      }
+      if (!scope.in) return subtree(scope.id, depth);
       const qs = questionsFor(corpus, scope.id);
       /**
        * ⛔ AN ORG-WIDE QUESTION IS COUNTED ONCE, NOT ONCE PER SCOPE IT REACHES.
@@ -2839,21 +2869,67 @@ function renderNav(
             : base
               ? `<a href="${esc(base)}/${esc(scope.id)}">${label}</a>`
               : `<span class="unlinked" title="not on this page">${label}</span>`;
+      /**
+       * ⛔ A COUNT IS A CHIP, AND A CHIP IS A NUMBER AND A MARK.
+       *
+       * Peter: *"get rid of 'XXX below', not sure what that means... shorten '5 unanswered' '5 {?
+       * icon}', and '59 to read' to '59 {eyes icon}'. make them chips next to the menu item name"*.
+       *
+       * `below` went rather than got shorter. It counted the work in a row's descendants, which is
+       * the sum he had already had removed once from these rows — *"i don't think subsections should
+       * sum up questions below it"* — and it came back in as a dim pill whose label named a direction
+       * rather than a thing. Nobody can act on "4 below"; the rows beneath it already say it.
+       *
+       * ⛔ THE MARK CARRIES A TITLE, because an icon alone states nothing. `?` and the eye are short
+       * enough to sit in a menu, and a reader who has not guessed what they mean can hover one — the
+       * screen-reader name is the full phrase, not the glyph.
+       */
+      const chip = (n: number, tone: string, mark: string, says: string) =>
+        ` <span class="n ${tone}" title="${esc(`${n} ${says}`)}" aria-label="${esc(`${n} ${says}`)}">${n}<span class="mark" aria-hidden="true">${mark}</span></span>`;
+      /**
+       * ⛔ AND NOTHING WHERE THERE IS NOTHING. Peter: *"'states nothing of its own' should be
+       * removed"*. It was the fallback on a row with no chips at all — a sentence longer than every
+       * label beside it, in a menu, saying only that the four counts were zero. A row with no chips
+       * already says that, and says it in the space a menu has.
+       */
+      const children = subtree(scope.id, depth + 1);
+      const standing = standingIn.has(scope.id);
+      counted++;
       rows.push(
-        `<li style="--d:${depth}">${name}` +
-          (here_open ? ` <span class="n warn">${here_open} unanswered</span>` : "") +
-          (orgWide ? ` <span class="n warn">${orgWide} shared</span>` : "") +
-          (toRead ? ` <span class="n ok">${toRead} to read</span>` : "") +
-          (ready ? ` <span class="n ok">${ready} whole</span>` : "") +
-          (!here_open && !orgWide && !toRead && !ready ? ` <span class="n">${under ? "states nothing of its own" : "—"}</span>` : "") +
-          // ⛔ Dim, and labelled "below": it is not this row's work, it is where to look next.
-          (under ? ` <span class="n under">${under} below</span>` : "") +
+        `<li style="--d:${depth}" data-scope="${esc(scope.id)}"${
+          children ? ` class="holds${standing ? " open" : ""}"` : ""
+        }>` +
+          `<span class="scoperow">` +
+          /**
+           * ⛔ A TWISTY ONLY WHERE THERE IS A SUBTREE, the rule the area groups already follow: a
+           * control that expands nothing reads as "there is more here" and then answers nothing.
+           * Where there is none, an empty span of the same width keeps the labels in one column —
+           * otherwise every leaf sits a notch left of its siblings and the indent stops meaning
+           * depth.
+           */
+          (children
+            ? `<button type="button" class="twisty sub" data-twist-scope="${esc(scope.id)}" aria-expanded="${
+                standing ? "true" : "false"
+              }" aria-label="${esc(`Show what is in ${scope.title || scope.id}`)}">▾</button>`
+            : `<span class="twisty none" aria-hidden="true"></span>`) +
+          name +
+          (here_open ? chip(here_open, "warn", "?", "unanswered") : "") +
+          (orgWide ? chip(orgWide, "warn", "◇", "shared across the product") : "") +
+          (toRead ? chip(toRead, "ok", "👁", "to read") : "") +
+          (ready ? chip(ready, "ok", "✓", "whole") : "") +
+          `</span>` +
+          children +
           `</li>`
       );
-      walk(scope.id, depth + 1);
     }
+    return rows.length ? `<ul>${rows.join("")}</ul>` : "";
   };
-  walk(undefined, 0);
+  /**
+   * ⛔ ONE WALK, RENDERED WHERE EACH PART OF IT BELONGS. The per-area subtree and the whole tree come
+   * from the same function over the same corpus — two projections of one source, which is what this
+   * project allows, rather than two lists of the same scopes that have to be kept agreeing.
+   */
+  const subtreeOf = (areaId: string) => subtree(areaId, 0);
   /**
    * ⛔ THE TREE IS WHAT A ONE-SCOPE CORPUS DOES NOT NEED. THE FIXED TABS ARE NOT.
    *
@@ -2871,7 +2947,19 @@ function renderNav(
    * So the suppression moves to the tree it was about: no tree where there is nothing to navigate,
    * and the destinations stay.
    */
-  const tree = rows.length < 2 ? "" : `<nav class="scopes"><ul>${rows.join("")}</ul></nav>`;
+  /**
+   * ⛔ THE WHOLE TREE IS THE TOP MENU'S, WHERE THE GROUPS COLLAPSE TO A ROW AND HOLD NOTHING.
+   *
+   * Down the side, each area holds its own items, so a second flat copy of every scope is the
+   * duplicate he is pointing at. Across the top there is no column for a group to own, so the
+   * chevron beside the trail still needs something to open.
+   *
+   * ⛔ Both are `subtree`, not two renderings maintained apart — the thing this project's own rule
+   * about one home per fact is for.
+   */
+  /** From no parent at all: the root is stepped through rather than listed, as above. */
+  const whole = subtree(undefined, 0);
+  const tree = counted < 2 ? "" : `<nav class="scopes">${whole}</nav>`;
   /**
    * ⛔ THE TRAIL IS BUILT WHERE THE TREE IS, from the same `in:` chain the rows are indented by.
    * Computing it again in the browser would be a second answer to "where am I", and the two would
@@ -2929,6 +3017,8 @@ function renderNav(
    */
   const derivedGoes = new Map<string, string>();
   for (const c of inferConnections(corpus).made) derivedGoes.set(c.from, c.to);
+  /** Which tabs are areas of the product, and so hold scopes of their own. */
+  const areaIds = new Set(corpus.scopes.filter((x) => x.scope.in === rootId).map((x) => x.scope.id));
   const sections: Array<{ id: string; label: string; toRead?: number }> = [
     { id: "overview", label: "Overview" },
     /**
@@ -3064,8 +3154,18 @@ function renderNav(
      * the side menu's business, and the top menu must not change at all.
      */
     `<div class="tabs">${sections
-      .map(
-        (t) =>
+      .map((t) => {
+        /**
+         * ⛔ WHAT THIS GROUP ACTUALLY HOLDS, COMPUTED ONCE AND GATING BOTH THINGS THAT DEPEND ON IT.
+         *
+         * The twisty was drawn on every group but the prototype, which put a collapse control on
+         * areas holding nothing — the seed has two of them — and that is the defect this same
+         * comment refuses two lines down. An empty list rendered as an empty `<nav>` as well, so the
+         * group looked like a container to every stylesheet rule and to anything counting them.
+         */
+        const inside = areaIds.has(t.id) ? subtreeOf(t.id) : "";
+        const holds = t.id === "overview" || inside !== "";
+        return (
           `<div class="tabgroup" data-group="${esc(t.id)}">` +
           `<div class="tabhead">` +
           `<button type="button" class="tab" data-tab="${esc(t.id)}">${t.label}${
@@ -3087,16 +3187,26 @@ function renderNav(
            * group moves you into it. ⛔ And only where the group has something to collapse — a
            * twisty that expands nothing is the thing this project refuses by name elsewhere.
            */
-          (t.id === "prototype"
-            ? ""
-            : `<button type="button" class="twisty" data-twist="${esc(t.id)}" aria-expanded="true" aria-label="Collapse ${esc(
+          (holds
+            ? `<button type="button" class="twisty" data-twist="${esc(t.id)}" aria-expanded="true" aria-label="Collapse ${esc(
                 t.label
-              )}">▾</button>`) +
+              )}">▾</button>`
+            : "") +
           `</div>` +
           /** Overview's own items move inside their area — see the strip below. */
           (t.id === "overview" ? OVERVIEW_STRIP : "") +
+          /**
+           * ⛔ AND AN AREA'S FEATURES MOVE INSIDE THEIR AREA, which is what the round that wrote the
+           * line above stopped short of. Overview's strip went in; the areas kept pointing at a flat
+           * list hung under the crumbs, so they were the one kind of group whose contents were
+           * somewhere else — *"CRE/dealmanagement are not collapsible???"*.
+           *
+           * Nothing for the prototype or the settings surfaces: they are not containers of scopes.
+           */
+          (inside ? `<nav class="scopes inside">${inside}</nav>` : "") +
           `</div>`
-      )
+        );
+      })
       .join("")}${NAV_PLACE_BUTTON}</div>` +
     /**
      * ⛔ OVERVIEW'S OWN MENU BELONGS IN THE FRAME, NOT IN THE PAGE.
@@ -3117,6 +3227,23 @@ function renderNav(
      * page. ⛔ The markup was all present, which is why a test asserting the markup passed it.
      */
 
+    /**
+     * ⛔ ONE WAY OUT, BECAUSE THERE IS ONE WAY IN.
+     *
+     * Peter: *"we need better error handling - we should just pass the response to a notification
+     * bar or something... a generic 'out' way to message back to the user if it's not from the chat
+     * interface"*.
+     *
+     * He had been handed raw fields, because every handler formatted its own outcome into whichever
+     * status span happened to be nearby. Twenty-one of those — each a place the next intent has to
+     * remember to add a twenty-second, and each able to forget. The ones that forgot are why a
+     * refusal reached him as a blob, and why one reached him as "Not saved: Not Found".
+     *
+     * The door in is one endpoint and every intent answers the same four fields, so the way out is
+     * one bar rendering exactly those, and the sender announces through it. A caller cannot opt out,
+     * which is the point: the next intent gets this without anybody wiring it up.
+     */
+    `<div class="out" id="out" role="status" aria-live="polite"></div>` +
     /**
      * ⛔ THE TRAIL NAVIGATES; THE CHEVRON EXPANDS. One control doing both meant every attempt to go
      * up a level dropped the whole tree on you instead, which is the opposite of what a breadcrumb
@@ -4689,13 +4816,26 @@ async function record(payload, form, button) {
         body: JSON.stringify({ intent: payload.act, ...payload }),
       });
       const body = await res.json();
-      if (!res.ok || body.ok === false) {
-        status.innerHTML = "<strong>Not recorded.</strong> " + (body.why || res.statusText) +
-          (body.detail && body.detail.length ? "<br>" + body.detail.join("<br>") : "");
+      /*
+       * ⛔ THROUGH THE ONE WAY OUT. This built its own sentence out of the same four fields the bar
+       * renders, into a status span beside the control — so what an act said depended on which
+       * control you pressed, and the three senders that did this are where he was handed an outcome
+       * he could not read.
+       *
+       * The row's own status line stays: it says whether THIS act landed, which is a different
+       * question from what the corpus answered, and it is the only thing a reader looking at the row
+       * can see without turning their head.
+       */
+      const out = !res.ok && body.ok === undefined
+        ? { ok: false, why: res.status + " " + (res.statusText || "refused"), detail: ["nothing was recorded"] }
+        : body;
+      announce(out);
+      if (!out.ok) {
+        status.textContent = "Not recorded.";
         status.classList.add("bad");
         return;
       }
-      status.textContent = body.said || "recorded";
+      status.textContent = out.said || "recorded";
     } else if (MODE === "mcp") {
       /**
        * ⛔ STRAIGHT INTO THE CORPUS ON THE READER'S OWN MACHINE. No database, no row to carry in,
@@ -4964,20 +5104,20 @@ if (noteBar) {
       const mine = already.filter((a) => a.label.toLowerCase() === label.toLowerCase())[0];
       if (mine) mine.values = values;
       else already.push({ id: "", label, values });
+      /*
+       * ⛔ THE SENDER, NOT A SECOND COPY OF IT. This is the exact path that answered him with
+       * "Not saved: Not Found" — a status line pasted after a prefix, with no account of what had
+       * happened or whether anything had landed. The dimensions he was adding did not arrive, and
+       * the page said four words about it.
+       */
       try {
-        const res = await fetch(API, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ intent: "splits-on", axes: already }),
-        });
-        const body = await res.json();
-        if (!res.ok || body.ok === false) throw new Error(body.why || res.statusText);
+        await sendIntent("splits-on", { axes: already });
         text.value = ""; grow();
-        status.textContent = body.said || "saved"; status.className = "status ok";
+        status.textContent = "saved"; status.className = "status ok";
         setTimeout(() => location.reload(), 700);
       } catch (err) {
-        status.textContent = "Not saved: " + (err && err.message ? err.message : String(err));
-        status.className = "status bad";
+        /* ⛔ Already announced, in full, by the sender. The row says only that it did not land. */
+        status.textContent = "Not saved"; status.className = "status bad";
       }
       return;
     }
@@ -5027,19 +5167,92 @@ if (noteBar) {
  * error that killed every script on the page, including the walk and the composer. Caught by
  * reading where the function sits rather than by trusting that it compiled.
  */
-function wireSelectionEditor() {
-  var sendIntent = function (intent, payload) {
-    return fetch(API, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(Object.assign({ intent: intent }, payload)),
+/*
+ * ⛔ ONE WAY OUT. Every intent answers the same four fields, so one function renders that shape and
+ * every send goes through it. A handler that formats its own outcome is a handler that can forget
+ * to, and the ones that forgot are why a refusal reached him as raw fields.
+ */
+function announce(out) {
+  var bar = document.getElementById("out");
+  if (!bar) return out;
+  var ok = !!(out && out.ok);
+  var note = document.createElement("div");
+  note.className = "outnote " + (ok ? "ok" : "bad");
+
+  var head = document.createElement("strong");
+  head.textContent = ok ? out.said || "done" : (out && out.why) || "it did not go through";
+  note.appendChild(head);
+
+  var detail = (out && out.detail) || [];
+  for (var d = 0; d < detail.length; d++) {
+    var line = document.createElement("span");
+    line.textContent = detail[d];
+    note.appendChild(line);
+  }
+
+  var x = document.createElement("button");
+  x.type = "button";
+  x.className = "outnote-x";
+  x.setAttribute("aria-label", "Dismiss");
+  x.textContent = "×";
+  x.addEventListener("click", function () { note.remove(); });
+  note.appendChild(x);
+
+  bar.appendChild(note);
+  /*
+   * ⛔ ONLY WHAT SUCCEEDED FADES. The complaint behind this bar is a failure he could not read; one
+   * that disappears on a timer is the same failure with a deadline on it. A refusal waits to be
+   * dismissed.
+   */
+  if (ok) setTimeout(function () { note.remove(); }, 7000);
+  return out;
+}
+
+var sendIntent = function (intent, payload) {
+  return fetch(API, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(Object.assign({ intent: intent }, payload)),
+  })
+    .then(function (res) { return res.json().then(function (b) { return { res: res, body: b }; }); })
+    .then(function (r) {
+      /*
+       * ⛔ AN HTTP FAILURE IS AN OUTCOME TOO. A 404 or a 503 carries none of the four fields, so the
+       * status line has to become the reason — that is how "Not saved: Not Found" reached him with
+       * no account at all of what had happened.
+       */
+      var answered = r.body && r.body.ok !== undefined;
+      var out = answered
+        ? r.body
+        : { ok: false, why: r.res.status + " " + (r.res.statusText || "refused"), detail: ["nothing was written"] };
+      announce(out);
+      if (!out.ok) {
+        var refusal = new Error(out.why || "refused");
+        refusal.announced = true;
+        throw refusal;
+      }
+      return [out.said].concat(out.detail || []).filter(Boolean).join(" — ");
     })
-      .then(function (res) { return res.json().then(function (b) { return { res: res, body: b }; }); })
-      .then(function (r) {
-        if (!r.res.ok || r.body.ok === false) throw new Error(r.body.why || r.res.statusText);
-        return [r.body.said].concat(r.body.detail || []).filter(Boolean).join(" — ");
-      });
-  };
+    .catch(function (err) {
+      /*
+       * ⛔ ANNOUNCED ONCE, NOT TWICE. The handler above announced the refusal before throwing, so
+       * this speaks only for a failure that produced no answer at all — an instance that is down, a
+       * connection that dropped. A flag says which; matching my own message text would not, and
+       * the checker classifying its findings by regex over its own prose is a bug this repo had.
+       */
+      if (!err || !err.announced) {
+        announce({
+          ok: false,
+          why: "could not reach the corpus",
+          detail: [err && err.message ? err.message : "the instance gave no answer"],
+        });
+      }
+      throw err;
+    });
+};
+
+function wireSelectionEditor() {
+
 
   /*
    * ⛔ SHOW THE DETAIL ONLY WHEN ASKED. The gaps and the placement table used to sit open under the
@@ -6959,23 +7172,55 @@ const VIEW_SWITCH = `<script>
   const remember = () => {
     try { localStorage.setItem(SHUT, JSON.stringify([...shut])); } catch (e) { /* private window: collapse still works, it just forgets */ }
   };
-  for (const t of document.querySelectorAll(".twisty")) {
-    const name = t.dataset.twist;
-    const group = t.closest(".tabgroup");
-    if (!group) continue;
-    const paint = () => {
+  /*
+   * ⛔ THE GROUP TWISTIES ONLY. The rows inside a group carry their own, and a selector of
+   * a bare twisty selector caught both — so every row's control read its group name as undefined,
+   * and all of them shared one entry in the remembered set under that one name. Collapsing any
+   * feature collapsed every feature.
+   */
+  const groupTwisties = [...document.querySelectorAll(".twisty[data-twist]")];
+  const paintGroups = () => {
+    for (const t of groupTwisties) {
+      const name = t.dataset.twist;
+      const group = t.closest(".tabgroup");
+      if (!group) continue;
       const closed = shut.has(name);
       group.classList.toggle("shut", closed);
       t.setAttribute("aria-expanded", closed ? "false" : "true");
       t.setAttribute("aria-label", (closed ? "Expand " : "Collapse ") + (group.querySelector(".tab")?.textContent || name).trim());
-    };
-    paint();
+    }
+  };
+  /*
+   * ⛔ ONE OPEN AT A TIME. Peter: "Let's auto collapse the non-active menu item, so you can only
+   * have one expanded leaf at a time, like a 'normal' menu".
+   *
+   * Every group remembering its own state independently meant a menu that only ever grew: four
+   * areas open at once down a column too narrow for one of them, and the area you were working in
+   * pushed off the bottom of the screen by the three you were not. Opening one is therefore also
+   * the act of closing the others.
+   */
+  const openOnly = (name) => {
+    for (const t of groupTwisties) {
+      const id = t.dataset.twist;
+      if (id !== name) shut.add(id);
+    }
+    shut.delete(name);
+    remember();
+    paintGroups();
+  };
+  paintGroups();
+  for (const t of groupTwisties) {
     t.addEventListener("click", (ev) => {
       ev.stopPropagation();
-      if (shut.has(name)) shut.delete(name);
-      else shut.add(name);
-      remember();
-      paint();
+      const name = t.dataset.twist;
+      /* ⛔ Shutting one shuts only it: "one at a time" is a cap on what is open, not a rule that
+         something must be. */
+      if (shut.has(name)) openOnly(name);
+      else {
+        shut.add(name);
+        remember();
+        paintGroups();
+      }
     });
   }
   /*
@@ -6985,14 +7230,36 @@ const VIEW_SWITCH = `<script>
    */
   for (const t of document.querySelectorAll(".topframe .tab")) {
     t.addEventListener("click", () => {
-      const name = t.dataset.tab;
-      if (!shut.has(name)) return;
-      shut.delete(name);
-      remember();
-      const group = t.closest(".tabgroup");
-      if (group) group.classList.remove("shut");
-      const tw = group && group.querySelector(".twisty");
-      if (tw) tw.setAttribute("aria-expanded", "true");
+      openOnly(t.dataset.tab);
+    });
+  }
+  /*
+   * ⛔ AND A CONTAINER INSIDE A GROUP COLLAPSES THE SAME WAY, because that is what he was asking
+   * about: "what happened to collapsable menu items? CRE/dealmanagement are not collapsible???".
+   * Those are rows, not groups, and rows had no control at all — the menu was one flat indented list
+   * in which nothing could be folded away.
+   *
+   * ⛔ Siblings only, not the whole tree. Closing everything else on open would fold up the branch
+   * you are standing in, which is the chain the render deliberately leaves open.
+   */
+  for (const t of document.querySelectorAll(".twisty[data-twist-scope]")) {
+    const row = t.closest("li");
+    if (!row) continue;
+    t.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      ev.preventDefault();
+      const was = row.classList.contains("open");
+      if (!was) {
+        const list = row.parentElement;
+        for (const sib of list ? list.children : []) {
+          if (sib === row) continue;
+          sib.classList.remove("open");
+          const own = sib.querySelector(":scope > .scoperow > .twisty");
+          if (own) own.setAttribute("aria-expanded", "false");
+        }
+      }
+      row.classList.toggle("open", !was);
+      t.setAttribute("aria-expanded", was ? "false" : "true");
     });
   }
 
@@ -7567,11 +7834,41 @@ export const STYLE = `<style>
   .unlinked { color: var(--ink); border-bottom: 1px dotted var(--line); }
   nav.scopes { margin: 1.25rem 0 0; }
   nav.scopes ul { list-style: none; margin: 0; padding: 0; font-size: .92rem; }
-  nav.scopes li { padding: .3rem 0 .3rem calc(var(--d) * 1.1rem); border-bottom: 1px solid var(--line);
-    display: flex; gap: .6rem; align-items: baseline; flex-wrap: wrap; }
-  nav.scopes .n { font-size: .78rem; color: var(--dim); }
-  /* What is filed below this row, not what this row owes — dimmer, and always last. */
-  nav.scopes .n.under { opacity: .55; font-style: italic; }
+  /*
+   * ⛔ A ROW IS A ROW, AND ITS SUBTREE IS A LIST INSIDE IT.
+   *
+   * The indent used to be the only thing expressing depth, on one flat list — which is exactly why
+   * nothing could collapse: there was no element holding a container's items to hide. Now the rows
+   * nest, so the structure carries the depth and the row box stops being a flex row itself; the
+   * head of each row is.
+   */
+  nav.scopes li { border-bottom: 1px solid var(--line); }
+  nav.scopes li > ul > li:last-child { border-bottom: 0; }
+  nav.scopes .scoperow { display: flex; align-items: center; gap: .3rem;
+    padding: .3rem 0 .3rem calc(var(--d) * .55rem); }
+  nav.scopes .scoperow > a, nav.scopes .scoperow > strong, nav.scopes .scoperow > .unlinked {
+    flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  nav.scopes li.holds > ul { display: none; }
+  nav.scopes li.holds.open > ul { display: block; }
+  /* ⛔ One glyph turned, not a second character — one string, two states. */
+  nav.scopes .twisty.sub { background: none; border: 0; cursor: pointer; color: var(--dim);
+    font: inherit; font-size: .65rem; line-height: 1; padding: .2rem .25rem; border-radius: 4px;
+    flex: 0 0 auto; transition: transform .12s; }
+  nav.scopes .twisty.sub:hover { color: var(--ink); }
+  nav.scopes .twisty.sub[aria-expanded="false"] { transform: rotate(-90deg); }
+  /* A leaf has no control, and an empty box of its width keeps every label in one column. */
+  nav.scopes .twisty.none { display: inline-block; flex: 0 0 auto; width: 1.05rem; }
+  /*
+   * ⛔ A COUNT IS A CHIP: a number and a mark, in a pill beside the label.
+   *
+   * Peter: *"shorten '5 unanswered' '5 {? icon}', and '59 to read' to '59 {eyes icon}'. make them
+   * chips next to the menu item name"*. Spelled out, two of these were wider than the feature name
+   * they sat beside, so every row wrapped onto a second line and the menu read as prose.
+   */
+  nav.scopes .n { font-size: .72rem; color: var(--dim); flex: 0 0 auto;
+    display: inline-flex; align-items: center; gap: .15rem; padding: .05rem .32rem;
+    border: 1px solid var(--line); border-radius: 999px; background: var(--card); }
+  nav.scopes .n .mark { font-size: .7rem; line-height: 1; }
   nav.scopes .n.warn { color: var(--warn); }
   nav.scopes .n.ok { color: var(--ok); }
   nav.scopes .grouping { color: var(--dim); }
@@ -7689,7 +7986,31 @@ export const STYLE = `<style>
     :root[data-nav="left"] .topframe .chev { display: none; }
     :root[data-nav="left"] .topframe nav.scopes { max-height: none; margin: .4rem 0 0;
       padding: 0 .9rem 1rem; }
-    :root[data-nav="left"] .topframe nav.scopes li { padding-left: calc(var(--d) * .75rem); }
+    /*
+     * ⛔ AND THE WHOLE-CORPUS TREE IS NOT SHOWN TWICE. Down the side each area holds its own items,
+     * so the flat list under the crumbs is the same scopes a second time — which is what made an
+     * area appear as both a group and a row of a list below it.
+     *
+     * It stays in the markup for the top menu, where groups collapse to a row and hold nothing.
+     */
+    :root[data-nav="left"] .topframe > nav.scopes { display: none; }
+    :root[data-nav="left"] .topframe nav.scopes.inside { margin: 0; padding: 0 .6rem .5rem; }
+    /*
+     * ⛔ CLEARANCE FOR THE COMPOSER AT THE BOTTOM OF THE COLUMN. Peter: *"menu is hidden below the
+     * bottom chat bar, make sure the offset is correct"*.
+     *
+     * The frame is a fixed full-height column and the composer is fixed over the bottom of the
+     * window, so the last area in the menu sat underneath it — and it is the LAST one that needed
+     * reaching, because opening a group pushes everything below it further down. Scrolling did not
+     * help: the column ended where the viewport did, so the rows under the bar had nowhere to
+     * scroll to.
+     *
+     * ⛔ AND IT REUSES THE COMPOSER'S OWN MEASUREMENT — the bottom-height variable the thread keeps
+     * current — rather than a second constant of my own. The dock grows as replies arrive, and
+     * a hardcoded offset would be right only while the window happened to be the size I guessed.
+     */
+    :root[data-nav="left"] .topframe { overflow-y: auto;
+      padding-bottom: calc(4.5rem + var(--bottom-h) + 1rem); }
   }
   .prose { margin: .6rem 0 1.4rem; max-width: 42rem; }
   .prose p { margin: .6rem 0; }
@@ -8228,6 +8549,36 @@ export const STYLE = `<style>
    * review. Each line is clamped to two; the whole thing to a few. Hovering a line opens it.
    */
   body.has-note-bar { padding-bottom: calc(4.5rem + var(--bottom-h)); }
+
+  /*
+   * ⛔ THE ONE WAY OUT. Peter: *"we need better error handling - we should just pass the response to
+   * a notification bar or something... a generic 'out' way to message back to the user if it's not
+   * from the chat interface"*.
+   *
+   * Above the composer, because that is where an answer to something he just did belongs — and the
+   * composer's own height is a variable, so the bar sits on top of the dock rather than under it,
+   * which is the mistake the side menu had.
+   *
+   * ⛔ Stacked newest last and never taller than a third of the window: a refusal waits to be
+   * dismissed, so without a cap a run of them would own the screen being reviewed.
+   */
+  .out { position: fixed; right: 1rem; bottom: calc(5.5rem + var(--bottom-h)); z-index: 60;
+    display: flex; flex-direction: column; gap: .4rem; width: min(26rem, calc(100vw - 2rem));
+    max-height: 34vh; overflow-y: auto; pointer-events: none; }
+  .out:empty { display: none; }
+  .outnote { pointer-events: auto; position: relative; display: flex; flex-direction: column;
+    gap: .2rem; padding: .55rem 1.9rem .55rem .7rem; border-radius: 8px; font-size: .82rem;
+    background: var(--card); border: 1px solid var(--line); box-shadow: 0 6px 18px rgba(0,0,0,.18); }
+  .outnote strong { font-weight: 600; font-size: .84rem; }
+  .outnote span { color: var(--dim); font-size: .78rem; }
+  /* ⛔ The two outcomes do not look alike. A refusal that reads like a confirmation is the thing
+     being fixed here — he was handed one and could not tell what had happened. */
+  .outnote.ok { border-left: 3px solid var(--ok); }
+  .outnote.bad { border-left: 3px solid var(--bad); }
+  .outnote-x { position: absolute; top: .3rem; right: .35rem; background: none; border: 0;
+    color: var(--dim); cursor: pointer; font-size: 1rem; line-height: 1; padding: .1rem .25rem;
+    border-radius: 4px; }
+  .outnote-x:hover { color: var(--ink); }
 
   .gate-note { background: var(--warn-bg); border-left: 3px solid var(--warn); border-radius: 0 6px 6px 0;
     padding: .7rem .9rem; margin: .9rem 0 1.4rem; font-size: .92rem; }
