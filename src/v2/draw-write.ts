@@ -236,6 +236,14 @@ export function writeSketchHtml(
   html: string,
   prov?: Provenance,
   text?: string,
+  /**
+   * The screen's OWN states, derived from a component. Absent where there is no component to derive
+   * them from — `propose` passes none, and a view's generated states go with the drawing it
+   * replaces.
+   *
+   * ⛔ NOT A PART'S STATES, WHICH ARE A DIFFERENT THING AND SOMEBODY'S AUTHORED WORK. See the
+   * splice below: conflating the two silently deleted them on every run.
+   */
   states?: WrittenState[]
 ): string | undefined {
   const scopeLeaf = scopeId.split("/").pop()!;
@@ -320,7 +328,25 @@ export function writeSketchHtml(
      * empty state keeps offering one. They are output, exactly like the drawing above them.
      */
     {
-      const at = lines.findIndex((l, i) => i > start && i < end && /^\s*states:\s*$/.test(l));
+      /**
+       * ⛔ THE VIEW'S OWN `states:`, NEVER A PART'S — AND THEY ARE DIFFERENT THINGS.
+       *
+       * `View.states` is generated: keyed on `when`, the condition in the code, redrawn whenever
+       * the component moves. `Part.states` is AUTHORED: keyed on `kind`, a word a person chose,
+       * with what somebody is told while the part is in that condition.
+       *
+       * This matched `/^\s*states:\s*$/` at ANY indent inside the view's window — and a part's
+       * `states:` is inside that window, because parts are children of the view. So it found the
+       * first one, which on a view whose parts carry authored states is the AUTHORED block, spliced
+       * it out, and wrote generated view-level states in its place. Two authors reported the loss
+       * independently; one lost them on only ONE of two sibling parts, which is exactly what
+       * "the first match wins" looks like from the outside.
+       *
+       * The view's keys sit at `INDENT`. A part's sit deeper. That is the whole distinction.
+       */
+      const at = lines.findIndex(
+        (l, i) => i > start && i < end && new RegExp(`^${INDENT}states:\\s*$`).test(l)
+      );
       if (at >= 0) {
         let stop = at + 1;
         const pad = (/^(\s*)/.exec(lines[at]!)![1] ?? "").length;
