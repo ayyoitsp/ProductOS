@@ -34,7 +34,7 @@ import { append } from "./log.js";
 import { writePrototypes, writeWithin, diskPages } from "./draw-write.js";
 import { walkOf } from "./walk.js";
 import { axesOf, answersOf } from "./schema.js";
-import { doorOpensOn } from "./selection.js";
+import { doorOpensOn, theOnlyScreenIn, screensIn } from "./selection.js";
 
 /** An axis id from its question, so nobody is asked to invent a slug for a sentence they just wrote. */
 const slugify = (s: string): string =>
@@ -443,19 +443,44 @@ export const INTENTS: Intent[] = [
       const existing = corpus.prototypes.find((p) => p.id === id);
       const title = str(body.title).trim() || existing?.title;
       if (!title) return { ok: false, why: `"${id}" is new, so say what to call it`, detail: ["title"] };
-      const startsAt = str(body.startsAt).trim() || existing?.starts_at;
-      if (!startsAt) return { ok: false, why: `"${title}" needs a front door`, detail: ["startsAt, as <scope>#<view>"] };
+      const asked = str(body.startsAt).trim() || existing?.starts_at;
+      if (!asked) return { ok: false, why: `"${title}" needs a front door`, detail: ["startsAt, as <scope>#<view>"] };
       /**
        * ⛔ THE DOOR IS RESOLVED BEFORE ANYTHING IS WRITTEN, through the same predicate `check` uses.
        * A door onto nothing is refused at handover anyway; catching it here means the person who
        * typed it hears about it instead of the next reader who clicks it.
        */
-      if (!doorOpensOn(corpus, startsAt))
-        return {
-          ok: false,
-          why: `no screen "${startsAt}" in this corpus, so nothing can open on it`,
-          detail: ["name it as <scope>#<view>"],
-        };
+      let startsAt = asked;
+      let corrected: string | undefined;
+      if (!doorOpensOn(corpus, startsAt)) {
+        /**
+         * ⛔ ONE CANDIDATE IS AN ANSWER. Peter, refused twice on `org-loan-terms#org-loan-terms`:
+         * *"should be obvious which to point each one at"* — and it was: that scope holds exactly
+         * one screen. Refusing sent him to look up a name the corpus already knew.
+         *
+         * ⛔ AND THE CORRECTION IS WRITTEN BACK, not re-derived on every read. A corpus left holding
+         * an unresolvable string makes every reader repeat the same resolution with nothing
+         * recording that it was made — and `check` would go on refusing a corpus that is, in fact,
+         * unambiguous.
+         */
+        const only = theOnlyScreenIn(corpus, startsAt);
+        if (only) {
+          corrected = `${asked} is not a screen; "${only.title}" is the only one in that feature, so that is what it opens on`;
+          startsAt = only.ref;
+        } else {
+          /**
+           * ⛔ TWO CANDIDATES IS A QUESTION, AND THE REFUSAL NAMES THEM. Picking the first would be
+           * the classifier this model refuses everywhere; sending somebody away to find the list is
+           * the refusal they learn to ignore.
+           */
+          const near = screensIn(corpus, startsAt);
+          return {
+            ok: false,
+            why: `no screen "${startsAt}" in this corpus, so nothing can open on it`,
+            detail: near.length ? [`that feature has: ${near.join(" · ")}`] : ["name it as <scope>#<view>"],
+          };
+        }
+      }
       /** Answers merge, so saying the role does not wipe the product line. */
       const answers: Record<string, string> = { ...answersOf(existing?.is, axes) };
       const given = body.is;
@@ -496,6 +521,8 @@ export const INTENTS: Intent[] = [
         ok: true,
         said: `${existing ? "changed" : "declared"} ${title}, opening on ${startsAt}`,
         detail: [
+          /** ⛔ SAID OUT LOUD. A door silently pointed somewhere else is a correction nobody agreed to. */
+          ...(corrected ? [corrected] : []),
           ...(Object.keys(answers).length ? [axes.map((ax) => `${ax.label} ${answers[ax.id] ?? "—"}`).join(" · ")] : []),
           ...(owed.length ? [`still says nothing about: ${owed.map((ax) => ax.label).join(", ")}`] : []),
           /** ⛔ Said out loud: the chrome is drawn from a repository an instance does not have. */
