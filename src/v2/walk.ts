@@ -63,6 +63,22 @@ export interface Walk {
   reachable: Set<Ref>;
   /** Named, never dropped — see the header. */
   unreachable: Ref[];
+  /**
+   * Screens no DECLARED door opens onto — reachable from no prototype's `starts_at`.
+   *
+   * ⛔ `unreachable` ABOVE IS A DIFFERENT QUESTION, AND THE DIFFERENCE HID AN ENTIRE PRODUCT AREA.
+   *
+   * `entries` is inferred from topology: any screen with no inbound edge is treated as a front
+   * door. So 133 screens of one area, wired to each other and opened on by NO prototype, flooded
+   * `reachable` from doors nobody declared — and `no-way-in` reported two screens, both from the
+   * other area. A door is a declared thing; inferring one from the shape of the graph is a guess
+   * wearing a decision's clothes.
+   *
+   * Peter, on finding it: *"i'm confused why the prototypes don't even exist - when I already
+   * asked you to index private lending. how could you have possibly indexed it with no
+   * prototypes?????"*
+   */
+  unentered: Ref[];
 }
 
 const refOf = (scope: Scope, view: View): Ref => `${scope.id}#${view.id}`;
@@ -197,11 +213,58 @@ export function walkOf(corpus: Corpus, startAt?: string): Walk {
   }
 
   const unreachable = [...steps.keys()].filter((r) => !reachable.has(r)).sort();
+
+  /**
+   * ⛔ FROM THE DOORS SOMEBODY DECLARED, AND ONLY THOSE. Same flood, different roots: a prototype's
+   * `starts_at` is the only thing in this model that claims "a person comes in here".
+   */
+  /**
+   * ⛔ DECLARED NAVIGATION, FOR THIS QUESTION ONLY — AND DELIBERATELY NOT IN `exits`.
+   *
+   * `leads_to` reaches the walk nowhere: exits come from `inferConnections`, and `connects.ts:183`
+   * reads `if (p.leads_to) continue;` — correctly, since its job is inferring what nobody wrote. So
+   * every control whose destination an author DID write counts for nothing in reachability.
+   *
+   * ⛔ MY FIRST FIX PUT IT IN `exits` AND BROKE FOUR TESTS. `exits` feeds `ledTo`, which decides
+   * `entries` — the inferred doors — so adding authored navigation there silently redefined what
+   * counts as a front door and what a held screen is. Those semantics are somebody else's and were
+   * load-bearing. This question does not need them changed: it asks what a person can reach from a
+   * door somebody DECLARED, so it floods on its own edges and leaves the topology exactly as it was.
+   */
+  const alsoLeadsTo = new Map<Ref, Ref[]>();
+  for (const entry of corpus.scopes)
+    for (const view of entry.scope.views ?? []) {
+      const from = refOf(entry.scope, view);
+      if (!steps.has(from)) continue;
+      for (const part of view.parts ?? []) {
+        if (!part.leads_to) continue;
+        /** ⛔ Through the same resolver as `within`: a bare view id means "in this scope". */
+        const to = resolveWithin(part.leads_to, entry.scope, steps);
+        if (to) alsoLeadsTo.set(from, [...(alsoLeadsTo.get(from) ?? []), to]);
+      }
+    }
+
+  const entered = new Set<Ref>();
+  const fromDoors: Ref[] = (corpus.prototypes ?? [])
+    .map((p) => p.starts_at)
+    .filter((r): r is string => Boolean(r) && steps.has(r));
+  const pending: Ref[] = [...fromDoors];
+  while (pending.length) {
+    const ref = pending.pop()!;
+    if (entered.has(ref)) continue;
+    entered.add(ref);
+    const step = steps.get(ref);
+    if (!step) continue;
+    for (const held of step.holds) pending.push(held);
+    for (const exit of step.exits) pending.push(exit.to);
+    for (const to of alsoLeadsTo.get(ref) ?? []) pending.push(to);
+  }
+  const unentered = [...steps.keys()].filter((r) => !entered.has(r)).sort();
   /**
    * ⛔ THE NAMED START COMES FIRST AND STAYS A DOOR. It may well be a screen something leads to —
    * a deals list is reached from half the product — and dropping it from the doors because of that
    * would leave the prototype with no front door at all.
    */
   const ordered = startAt && steps.has(startAt) ? [startAt, ...entries.filter((e) => e !== startAt)] : entries;
-  return { steps, entries: ordered, reachable, unreachable };
+  return { steps, entries: ordered, reachable, unreachable, unentered };
 }
