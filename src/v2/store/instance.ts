@@ -269,6 +269,15 @@ export interface Materialized {
   logHad: number;
   /** Who the store said was listening going in. Anything newer than this is a heartbeat to keep. */
   listening: Array<{ session: string; at: string }>;
+  /**
+   * Whether this directory is shared with other in-flight reads.
+   *
+   * ⛔ IT MUST NOT BE DELETED WHEN THE REQUEST ENDS. The teardown removed the directory
+   * unconditionally, which is right for one a request owns and wrong for one the next reader is
+   * about to use — and a request deleting another's corpus mid-read is the worst possible version
+   * of this optimisation.
+   */
+  shared?: boolean;
 }
 
 /**
@@ -289,7 +298,10 @@ export interface Materialized {
  * disk against what the request was given, so a stray write by one request would be read as the
  * other's. The expensive part was the network, not the 51ms of local writes.
  */
-const READ = new Map<string, { fp: string; documents: Record<string, string>; events: StoredEvent[] }>();
+const READ = new Map<
+  string,
+  { fp: string; documents: Record<string, string>; events: StoredEvent[]; dir?: string }
+>();
 
 /** ⛔ A bound, because a corpus is ~19 MB in memory and an instance serves many projects. */
 const READ_CEILING = 4;
@@ -308,11 +320,35 @@ const READ_CEILING = 4;
  * is every write that goes through this instance. Across processes the fingerprint is still what
  * decides, and that is worth saying out loud rather than implying it is exact.
  */
+/**
+ * How many lines the materialized log holds, for a directory that was already laid out.
+ *
+ * ⛔ `writeLog` RETURNED THIS AS A SIDE EFFECT OF WRITING, and `appendedLines` slices by position —
+ * so reusing a directory still has to know where the request's own appends will start. Counting is
+ * what writing was being used for.
+ */
+function countLogLines(dir: string): number {
+  try {
+    return fs
+      .readFileSync(path.join(dir, "events", "log.jsonl"), "utf-8")
+      .split("\n")
+      .filter((l) => l.trim()).length;
+  } catch {
+    return 0;
+  }
+}
+
+/** Stop sharing this project's laid-out directory — it is no longer known to be pristine. */
+export function forgetDir(projectId: string): void {
+  const entry = READ.get(projectId);
+  if (entry) entry.dir = undefined;
+}
+
 export function forgetRead(projectId: string): void {
   READ.delete(projectId);
 }
 
-export async function materializeProject(store: ProjectStore): Promise<Materialized> {
+export async function materializeProject(store: ProjectStore, mutating = false): Promise<Materialized> {
   /**
    * ⛔ PRESENCE IS NEVER CACHED, AND IT IS THE REASON THIS IS NOT ONE ROUND TRIP ANY MORE.
    * `/api/v2/presence` is a GET like any other and the answer changes without the corpus changing,
@@ -344,10 +380,32 @@ export async function materializeProject(store: ProjectStore): Promise<Materiali
     READ.set(store.projectId, { fp, documents, events });
   }
 
-  const dir = materialize(documents);
-  const logHad = writeLog(dir, events);
+  /**
+   * ⛔ THE SAME DIRECTORY AGAIN, WHEN THE REQUEST CANNOT WRITE TO IT.
+   *
+   * Every request wrote all 169 documents to a fresh temp directory, read them back, parsed them,
+   * and deleted them — profiled across 18 requests on Bilrost's corpus, that floor was ~1.0s of
+   * writing, ~1.6s of reading and ~2.9s of YAML. A 35-byte presence answer paid it.
+   *
+   * ⛔ ONLY WHEN THE REQUEST IS NOT MUTATING, and the reason is `writeBack`: it diffs the files on
+   * disk against what the request was given, so a request that writes into a SHARED directory
+   * would have its writes read as somebody else's. A mutating request therefore still gets its own,
+   * exactly as before.
+   *
+   * ⛔ AND A DIRTY SHARED DIRECTORY IS THROWN AWAY RATHER THAN TRUSTED. If a non-mutating request
+   * does somehow change a file, `writeBack` sees it, and `forgetDir` drops the directory so the
+   * next reader lays out a clean one. The invariant is that a shared directory is pristine; it is
+   * not an assumption that nothing ever writes to it.
+   */
+  const reusable = !mutating && had && had.fp === fp && had.dir && fs.existsSync(had.dir);
+  const dir = reusable ? had!.dir! : materialize(documents);
+  const logHad = reusable ? countLogLines(dir) : writeLog(dir, events);
   writeSessions(dir, listening);
-  return { dir, documents, logHad, listening };
+  if (!mutating) {
+    const entry = READ.get(store.projectId);
+    if (entry) entry.dir = dir;
+  }
+  return { dir, documents, logHad, listening, shared: Boolean(!mutating) };
 }
 
 /**
@@ -541,7 +599,7 @@ export async function instanceRoute(
   const mutating = req.method !== "GET" && req.method !== "HEAD";
 
   const run = async (): Promise<boolean> => {
-    const { dir, documents: before, logHad, listening: wasListening } = await materializeProject(reached);
+    const { dir, documents: before, logHad, listening: wasListening, shared } = await materializeProject(reached, mutating);
     /**
      * ⛔ A MUTATING RESPONSE IS HELD UNTIL THE WRITE LANDS, OR THE CALLER IS TOLD 200 FOR A WRITE
      * THAT WAS REFUSED. The delegate answers as soon as it has performed the act against the
@@ -586,7 +644,18 @@ export async function instanceRoute(
        */
       await keepHeartbeats(reached, dir, wasListening);
 
+      /**
+       * ⛔ A READ THAT CHANGED A FILE MEANS THE SHARED DIRECTORY IS NO LONGER PRISTINE, and the
+       * invariant that makes sharing safe is that it is. So `writeBack` is still asked on every
+       * request — it is what notices — and the directory stops being shared the moment it has
+       * anything in it that the store does not. This is the assumption made falsifiable rather
+       * than trusted.
+       */
       const result = await writeBack(reached, before, dir, logHad);
+      if (shared && "changed" in result && (result.changed.length > 0 || result.logged > 0)) {
+        forgetDir(addressed.id);
+        fs.rmSync(path.dirname(dir), { recursive: true, force: true });
+      }
       if ("conflict" in result) {
         held?.discard();
         return (
@@ -625,7 +694,13 @@ export async function instanceRoute(
       held?.discard();
       throw e;
     } finally {
-      fs.rmSync(path.dirname(dir), { recursive: true, force: true });
+      /**
+       * ⛔ A SHARED DIRECTORY IS NOT THIS REQUEST'S TO DELETE. It belongs to the read cache and the
+       * next reader is about to use it; removing it here would hand somebody an empty corpus — or
+       * delete one out from under a request still reading it. One per project, replaced when the
+       * fingerprint moves, so this does not grow.
+       */
+      if (!shared) fs.rmSync(path.dirname(dir), { recursive: true, force: true });
     }
   };
 

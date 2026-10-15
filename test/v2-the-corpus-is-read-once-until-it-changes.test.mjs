@@ -21,10 +21,12 @@
  */
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import fs from "node:fs";
+import path from "node:path";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { applyMigrations } from "../dist/v2/store/migrate.js";
-import { createProject, materializeProject, forgetRead } from "../dist/v2/store/instance.js";
+import { createProject, materializeProject, forgetRead, forgetDir } from "../dist/v2/store/instance.js";
 import { storeFor, isRefusal } from "../dist/v2/store/access.js";
 import { accountFor } from "../dist/v2/store/identity.js";
 import { corpusFiles } from "../dist/v2/load.js";
@@ -209,19 +211,89 @@ test("the cheap read happens every request and the expensive one does not", asyn
   assert.equal(calls.documents, 1, `the documents were read ${calls.documents} times for four requests`);
 });
 
-/** The materialized directory is still per request, so two requests cannot share mutable state. */
-test("each request still gets its own directory", async () => {
+/**
+ * ⛔ THIS TEST USED TO SAY "EACH REQUEST STILL GETS ITS OWN DIRECTORY", AND IT CAUGHT ME.
+ *
+ * It went red when the materialized directory started being reused, which is exactly what it was
+ * written for. But it was asserting the IMPLEMENTATION rather than the reason: the reason a request
+ * needs its own directory is that `writeBack` diffs the files on disk against what the request was
+ * given, so a request that WRITES must not share one. A read has nothing to diff.
+ *
+ * So the guarantee is narrower than the old assertion and not weaker:
+ *
+ *   · a mutating request gets its own directory — unchanged, and still the thing that matters
+ *   · a non-mutating request may be handed a pristine shared one
+ *   · a shared directory that turns out NOT to be pristine is thrown away rather than trusted
+ *
+ * ⛔ REWRITTEN RATHER THAN DELETED, AND THAT DISTINCTION IS THE WHOLE POINT. Loosening a test
+ * because the code changed is how a guarantee disappears quietly. What follows asserts more than
+ * the old one did, not less — the old test could not tell a writer from a reader at all.
+ *
+ * Why it is worth the risk: every request wrote 169 documents to disk, read them back, parsed them
+ * and deleted them. Profiled across 18 requests on Bilrost's corpus that floor was ~1.0s of writes,
+ * ~1.6s of reads and ~2.9s of YAML, and a 35-byte presence answer — which the page POLLS — paid all
+ * of it. 1062ms to 49ms.
+ */
+test("a writer gets its own directory; a reader may share a pristine one", async () => {
   const { store } = await freshStore();
   await seed(store);
   const { store: counted } = counting(store);
 
-  const a = await materializeProject(counted);
-  const b = await materializeProject(counted);
-  assert.notEqual(a.dir, b.dir, "two requests were handed the same directory — writeBack diffs files in it");
+  const readA = await materializeProject(counted, false);
+  const readB = await materializeProject(counted, false);
+  assert.equal(readA.dir, readB.dir, "two reads laid out the corpus twice — the directory is not being reused");
+  assert.equal(readA.shared, true, "a read's directory is not marked shared, so the teardown will delete it");
 
-  /** ⛔ And both directories really hold the corpus, not just a path. */
-  for (const m of [a, b]) {
+  /** ⛔ THE ONE THAT MATTERS. A writer sharing a directory has its writes read as somebody else's. */
+  const write = await materializeProject(counted, true);
+  assert.notEqual(write.dir, readA.dir, "a MUTATING request was handed the shared directory");
+  assert.ok(!write.shared, "a mutating request's directory is marked shared, so it would outlive the write");
+});
+
+test("a shared directory really holds the corpus, and the log position is right either way", async () => {
+  const { store } = await freshStore();
+  await seed(store);
+  /**
+   * ⛔ EVENTS FIRST, OR THE LOG ASSERTION BELOW IS VACUOUS — and it was. With an empty log both
+   * paths report position 0, so `second.logHad === first.logHad` passed even when the reused path
+   * returned a hardcoded 0. Verified by breaking it and watching this test stay green, which is the
+   * same shape of mistake as a count that agrees with the hypothesis.
+   */
+  for (let i = 0; i < 3; i++) await store.append("corpus-changed", { ref: `thing-${i}`, says: "something" });
+  forgetRead(store.projectId);
+  const { store: counted } = counting(store);
+
+  const first = await materializeProject(counted, false);
+  const second = await materializeProject(counted, false);
+
+  for (const m of [first, second]) {
     const files = corpusFiles(m.dir);
     assert.ok(Object.keys(files).length >= 6, `a materialized directory holds ${Object.keys(files).length} files`);
   }
+  /**
+   * ⛔ `logHad` IS A POSITION, NOT A COUNT OF WORK DONE. `appendedLines` slices the log from it to
+   * find what the request appended, and the reused path counts the lines instead of writing them —
+   * so if those two disagreed, a request's own appends would be missed or duplicated.
+   */
+  assert.ok(first.logHad >= 3, `the fixture's log is ${first.logHad} lines, so this comparison proves nothing`);
+  assert.equal(second.logHad, first.logHad, "the reused directory reports a different log position than the one that wrote it");
+});
+
+test("a reader that dirties the shared directory stops it being shared", async () => {
+  const { store } = await freshStore();
+  await seed(store);
+  const { store: counted } = counting(store);
+
+  const m = await materializeProject(counted, false);
+  /** Something writes into it, which a read is not supposed to do — the case that must not be trusted. */
+  fs.writeFileSync(path.join(m.dir, "truth", "thing-0.md"), "---\nid: thing-0\ntitle: Tampered\nexists: kept\n---\n");
+  forgetDir(store.projectId);
+
+  const after = await materializeProject(counted, false);
+  assert.notEqual(after.dir, m.dir, "a dirtied directory was handed to the next reader");
+  assert.match(
+    corpusFiles(after.dir)["truth/thing-0.md"] ?? "",
+    /Thing 0/,
+    "the fresh directory carries the tampered file, so it was not laid out again from the store"
+  );
 });

@@ -11,7 +11,7 @@
  * divergence again, this time between the browser and the terminal.
  */
 import type http from "node:http";
-import { loadCorpus, corpusFiles } from "./load.js";
+import { loadCorpus, corpusFiles, notesIn } from "./load.js";
 import { renderScopePage, standalone } from "./page.js";
 import { perform, preview, payloadFrom, VIA, ACTS, type Act, type Via } from "./acts.js";
 /**
@@ -298,7 +298,8 @@ export async function v2Route(req: http.IncomingMessage, res: http.ServerRespons
      */
     const q = new URL(req.url ?? "/", "http://localhost").searchParams;
     const refs = q.getAll("about").flatMap((x) => x.split("|")).map((x) => x.trim()).filter(Boolean);
-    const all = loadCorpus(dir).notes;
+    /** ⛔ Just the notes. This parsed the whole 17.5 MB corpus to list a handful of small files. */
+    const all = notesIn(dir);
     const mine = refs.length ? all.filter((n) => refs.includes(n.about)) : all;
     return (
       json(res, {
@@ -324,7 +325,11 @@ export async function v2Route(req: http.IncomingMessage, res: http.ServerRespons
    * surface. The page asks this and says so out loud.
    */
   if (req.method === "GET" && p === "/api/v2/presence") {
-    const waiting = loadCorpus(dir).notes.filter((n) => n.state === "open");
+    /**
+     * ⛔ JUST THE NOTES, AND THIS IS THE ONE THE PAGE POLLS. It parsed 17.5 MB of corpus to count
+     * open notes, so a 35-byte answer cost 400-1000ms — measured through the real request path.
+     */
+    const waiting = notesIn(dir).filter((n) => n.state === "open");
     return json(res, { working: working(dir), waiting: waiting.length }), true;
   }
 

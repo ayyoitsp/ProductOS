@@ -330,6 +330,35 @@ function itemsIn(raw: unknown, key: string, file: string, broken: Array<{ file: 
   return [];
 }
 
+/**
+ * Just the notes, for the callers that only ever wanted the notes.
+ *
+ * ⛔ `/api/v2/presence` PARSED 17.5 MB TO COUNT A HANDFUL OF OPEN NOTES, AND THE PAGE POLLS IT.
+ *
+ * Measured through the real request path on Bilrost's corpus: a 35-BYTE presence answer cost
+ * 400-1000ms. Profiled across 18 requests, the floor underneath every one of them was YAML parsing
+ * ~2.9s, reading the files back ~1.6s and writing them out ~1.0s — because the request materializes
+ * the whole corpus to disk, reads it back, parses it, and deletes it. For "is anybody listening",
+ * none of that is wanted.
+ *
+ * `notes/` is a handful of small `.yaml` files. Reading them is the same loop `loadCorpus` runs,
+ * lifted so one fact has one home — ⛔ NOT a second implementation of it, which would be the usual
+ * cost of a narrow reader and is why this is extracted rather than written.
+ */
+export function notesIn(root: string, broken?: Array<{ file: string; why: string }>, store: Store = diskStore): Note[] {
+  const out: Note[] = [];
+  /** ⛔ Through the Store, like `loadCorpus` — so a corpus held in memory answers this too. */
+  for (const file of store.list(path.join(v2Paths(root).root, "notes"), [".yaml", ".yml"])) {
+    try {
+      const raw = YAML.parse(store.read(file)) ?? {};
+      for (const n of itemsIn(raw, "notes", file, broken ?? [])) out.push(Note.parse(n));
+    } catch (e) {
+      broken?.push({ file, why: why(e) });
+    }
+  }
+  return out;
+}
+
 export function loadCorpus(root: string, store: Store = diskStore): Corpus {
   const paths = v2Paths(root);
   const readDir = (dir: string, ext: string[]): string[] => store.list(dir, ext);
@@ -387,15 +416,7 @@ export function loadCorpus(root: string, store: Store = diskStore): Corpus {
       broken.push({ file, why: why(e) });
     }
   }
-  const notes: Note[] = [];
-  for (const file of readDir(path.join(paths.root, "notes"), [".yaml", ".yml"])) {
-    try {
-      const raw = YAML.parse(readFile(file)) ?? {};
-      for (const n of itemsIn(raw, "notes", file, broken)) notes.push(Note.parse(n));
-    } catch (e) {
-      broken.push({ file, why: why(e) });
-    }
-  }
+  const notes: Note[] = notesIn(root, broken, store);
   /**
    * ⛔ WHAT STEERS THIS PROJECT, which is not product truth and not a note either. See `Steer` in
    * the schema for why those are three different things.
