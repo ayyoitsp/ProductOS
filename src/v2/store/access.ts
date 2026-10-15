@@ -10,7 +10,7 @@
  * ⛔ THE SCOPE IS THE PROJECT, NOT THE OWNER. So this survives the owner model changing: an owning
  * group arriving above accounts later does not touch a line in here.
  */
-import { and, asc, eq, gt, isNull, lt, sql, inArray } from "drizzle-orm";
+import { and, asc, eq, gt, isNull, lt, sql, inArray, like, not } from "drizzle-orm";
 import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 import type { Refusal } from "../identity.js";
 import { authIsOff } from "./identity.js";
@@ -18,6 +18,19 @@ import { documents, events, listening, projectMembers, projects } from "./schema
 
 /** Any drizzle Postgres instance. ⛔ The driver is the caller's business — see `migrate.ts`. */
 export type Db = PgDatabase<PgQueryResultHKT, Record<string, unknown>, Record<string, never>>;
+
+/**
+ * What a project is AT, in two halves.
+ *
+ * ⛔ TWO, BECAUSE A SAVE MUST NOT INVALIDATE THE PICTURES. A drawing is its own document now, and a
+ * write to the sentences cannot change one — so a single value made every reader after a save treat
+ * 14.8 MB of Bilrost's 17.5 MB as suspect. `truth` carries the log's position too: an appended
+ * event changes what a reader of the log sees and cannot change a drawing.
+ */
+export interface Fingerprint {
+  truth: string;
+  drawings: string;
+}
 
 /**
  * Who is asking, in the terms this layer needs.
@@ -70,6 +83,21 @@ export interface ProjectStore {
   sourcesOf(paths: string[]): Promise<Record<string, string>>;
 
   /**
+   * The documents that are not drawings, and the drawings, as two reads.
+   *
+   * ⛔ BECAUSE A SAVE MUST NOT RE-READ THE PICTURES. Peter: *"why can't we just not re-read the
+   * images?"*. On Bilrost that is 14.8 MB of 17.5, and a write to the sentences cannot change one —
+   * but a single `documents()` cannot express "everything except the drawings", so every save read
+   * all of it back.
+   *
+   * ⛔ SPLIT BY PATH PREFIX, which is a fact about the corpus layout rather than a guess about
+   * content. `documents()` stays for the callers that genuinely want the whole corpus — export, the
+   * corpus endpoint — and those are not on any request's hot path.
+   */
+  documentsOutside(prefix: string): Promise<Record<string, string>>;
+  documentsUnder(prefix: string): Promise<Record<string, string>>;
+
+  /**
    * What the document set is AT, without reading it.
    *
    * ⛔ EVERY REQUEST READ 19 MB TO SERVE A PAGE, and `documents()` is 1729ms of it against Neon —
@@ -82,7 +110,7 @@ export interface ProjectStore {
    * changes what a reader of the log sees while leaving the documents alone. A fingerprint that
    * missed either would serve a stale corpus, which is worse than a slow one.
    */
-  fingerprint(): Promise<string>;
+  fingerprint(): Promise<Fingerprint>;
 
   put(path: string, source: string, projection?: Record<string, unknown>): Promise<void>;
   /** ⛔ Nothing is deleted. */
@@ -218,16 +246,68 @@ function projectStore(db: Db, projectId: string): ProjectStore {
      * touched for its max.
      */
     async fingerprint() {
+      /**
+       * ⛔ TWO FINGERPRINTS IN ONE TRIP, SO A SAVE STOPS RE-READING THE PICTURES.
+       *
+       * Peter: *"why can't we just not re-read the images?"* — and once a drawing is its own row,
+       * that becomes available. 14.8 MB of Bilrost's 17.5 MB is drawings. A write to the sentences
+       * cannot change a drawing, so a single whole-corpus fingerprint was telling every reader
+       * after a save that 14.8 MB it had never touched was now suspect.
+       *
+       * ⛔ SPLIT BY WHERE THE DOCUMENT LIVES, not by what it looks like. `drawings/…` is the one
+       * path prefix the generator owns; everything else is somebody's words. That is a fact about
+       * the corpus layout rather than a guess about content, so it cannot be wrong about a document
+       * nobody anticipated.
+       *
+       * ⛔ AND STILL ONE ROUND TRIP. Two aggregates over the same table, filtered by prefix, in one
+       * statement — because the comment four lines up in `materializeProject` is about exactly this
+       * and I have already broken it once today by writing a fingerprint as two sequential awaits.
+       */
+      const drawingsPrefix = "drawings/%";
       const [row] = await db
         .select({
-          n: sql<number>`count(*)`,
-          updated: sql<string>`coalesce(max(${documents.updatedAt})::text, '')`,
-          gone: sql<string>`coalesce(max(${documents.deprecatedAt})::text, '')`,
+          truthN: sql<number>`count(*) filter (where ${documents.path} not like ${drawingsPrefix})`,
+          truthUpdated: sql<string>`coalesce(max(${documents.updatedAt}) filter (where ${documents.path} not like ${drawingsPrefix})::text, '')`,
+          truthGone: sql<string>`coalesce(max(${documents.deprecatedAt}) filter (where ${documents.path} not like ${drawingsPrefix})::text, '')`,
+          drawnN: sql<number>`count(*) filter (where ${documents.path} like ${drawingsPrefix})`,
+          drawnUpdated: sql<string>`coalesce(max(${documents.updatedAt}) filter (where ${documents.path} like ${drawingsPrefix})::text, '')`,
+          drawnGone: sql<string>`coalesce(max(${documents.deprecatedAt}) filter (where ${documents.path} like ${drawingsPrefix})::text, '')`,
           seq: sql<number>`(select coalesce(max(${events.seq}), 0) from ${events} where ${events.projectId} = ${projectId})`,
         })
         .from(documents)
         .where(eq(documents.projectId, projectId));
-      return [row?.n ?? 0, row?.updated ?? "", row?.gone ?? "", row?.seq ?? 0].join("|");
+      return {
+        truth: [row?.truthN ?? 0, row?.truthUpdated ?? "", row?.truthGone ?? "", row?.seq ?? 0].join("|"),
+        drawings: [row?.drawnN ?? 0, row?.drawnUpdated ?? "", row?.drawnGone ?? ""].join("|"),
+      };
+    },
+
+    async documentsOutside(prefix) {
+      const rows = await db
+        .select({ path: documents.path, source: documents.source })
+        .from(documents)
+        .where(
+          and(
+            eq(documents.projectId, projectId),
+            isNull(documents.deprecatedAt),
+            not(like(documents.path, `${prefix}%`))
+          )
+        );
+      const out: Record<string, string> = {};
+      for (const r of rows) out[r.path] = r.source;
+      return out;
+    },
+
+    async documentsUnder(prefix) {
+      const rows = await db
+        .select({ path: documents.path, source: documents.source })
+        .from(documents)
+        .where(
+          and(eq(documents.projectId, projectId), isNull(documents.deprecatedAt), like(documents.path, `${prefix}%`))
+        );
+      const out: Record<string, string> = {};
+      for (const r of rows) out[r.path] = r.source;
+      return out;
     },
 
     async sourcesOf(paths) {

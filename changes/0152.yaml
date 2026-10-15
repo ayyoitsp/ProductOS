@@ -1,0 +1,59 @@
+id: "0152"
+said: let's do both - ne wrow for images, and don't re-read images
+at: 2026-10-15
+kind: derivation
+reaches:
+  derive: documentsOutside
+  surface: drawingsHeld
+  pin: writing a sentence re-reads the sentences and keeps the pictures
+waived:
+  check: No corpus becomes wrong by this, and that is the test for whether a check belongs. What a request pulls out of the store is invisible in the product truth it produces — the same corpus comes out either way, which is the thing the pin asserts. A check that fired on this would be reporting a performance property to an author who cannot act on it, and `src/v2/check.ts` is for findings an author fixes. The risk the split carries is the opposite direction — a kept drawing that is stale — and that is a pin, because it is a fact about the code rather than about anybody's corpus.
+closed: 2026-10-15
+
+# ⛔ APPENDED AFTER `change close`, which drops comments. See 0141 / 0144-0151.
+#
+# Peter: *"uh, you mean move it to a blob? or why can't we just not re-read the images?"*, then
+# *"let's do both - ne wrow for images, and don't re-read images"*. 0151 did the row; this is the
+# half it closed by naming as still owed.
+#
+# WHAT A REQUEST NOW PULLS, on a Bilrost-shaped corpus — `scripts/bench-split.mjs`:
+#
+#     cold read                  truth 2.71 MB   drawings 14.82 MB
+#     warm read                  truth 0.00 MB   drawings  0.00 MB
+#     a save, after an edit      truth 2.71 MB   drawings  0.00 MB   <- the point
+#     the page after the save    truth 2.71 MB   drawings  0.00 MB
+#     the page after a redraw    truth 0.00 MB   drawings 14.82 MB   <- the other direction
+#
+# A one-line edit to a screen's words costs 2.71 MB instead of 17.53 MB.
+#
+# ⛔ TWO FINGERPRINTS, IN ONE ROUND TRIP. `fingerprint()` returns `{truth, drawings}` from two
+# filtered aggregates in a single statement — `count(*) filter (where path not like 'drawings/%')`
+# and its complement. Writing it as two sequential awaits is the mistake the comment four lines
+# above `materializeProject` already warns about, and I made it once today before reading that.
+#
+# ⛔ SPLIT BY WHERE THE DOCUMENT LIVES, NOT BY WHAT IT LOOKS LIKE. `drawings/` is the one prefix
+# the generator owns; everything else is somebody's words. A fact about the corpus layout cannot be
+# wrong about a document nobody anticipated, which a content heuristic would be.
+#
+# ⛔ THE LOG BELONGS TO `truth`. An appended event changes what a reader of the log sees and cannot
+# change a drawing, so `max(seq)` is in the truth half — and `since(0, …)` is skipped on exactly
+# the requests that skip the sentences.
+#
+# ⛔ THE NEW FACT IS THE DRAWINGS ASSERTION, AND IT IS THE ONLY ONE THAT COULD NOT PASS BY ACCIDENT.
+# "The truth was re-read" is what the whole-corpus cache already did. Verified by pointing both
+# halves at the same fingerprint in `dist/` and watching the pin go red with the right message —
+# `the drawings were read 2 times — a sentence edit re-read the pictures`.
+#
+# ⛔ AND THE OTHER DIRECTION IS PINNED IN THE SAME TEST, because a cache that keeps a stale picture
+# is strictly worse than the cost it removed: a redraw must still invalidate the drawings half, and
+# must not drag the sentences back with it. Both asserted, both non-zero.
+#
+# ⛔ `calls.documents` IS STILL COUNTED, AND ASSERTED TO BE ZERO ON A REQUEST. `documents()` reads
+# the whole corpus in one go — that is the 19 MB this file exists to have removed — so the pin says
+# nothing on a request path may call it any more, rather than leaving that to be noticed later.
+#
+# WHAT IS NOT DONE: a save still LAYS OUT its own directory, which writes all 17.5 MB to local
+# disk. That is unchanged by this and was never the network cost; a mutating request cannot share
+# a directory, because `writeBack` diffs the files on it.
+#
+# 1008/1008.
