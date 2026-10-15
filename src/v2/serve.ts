@@ -317,7 +317,8 @@ export async function v2Route(req: http.IncomingMessage, res: http.ServerRespons
     const q = new URL(req.url ?? "/", "http://localhost").searchParams;
     const refs = q.getAll("about").flatMap((x) => x.split("|")).map((x) => x.trim()).filter(Boolean);
     /** ⛔ Just the notes. This parsed the whole 17.5 MB corpus to list a handful of small files. */
-    const all = notesIn(dir);
+    /** ⛔ A probe is a write somebody made to see whether writing worked. It is nobody's thread. */
+    const all = notesIn(dir).filter((n) => !n.probe);
     const mine = refs.length ? all.filter((n) => refs.includes(n.about)) : all;
     return (
       json(res, {
@@ -347,7 +348,12 @@ export async function v2Route(req: http.IncomingMessage, res: http.ServerRespons
      * ⛔ JUST THE NOTES, AND THIS IS THE ONE THE PAGE POLLS. It parsed 17.5 MB of corpus to count
      * open notes, so a 35-byte answer cost 400-1000ms — measured through the real request path.
      */
-    const waiting = notesIn(dir).filter((n) => n.state === "open");
+    /**
+     * ⛔ NOT THE PROBES. This counted them, so five of another session's write-path tests told
+     * Peter that six people were waiting on him — *"and what are those 6 requests, i did not send
+     * any requests"*. Nobody was waiting on any of them.
+     */
+    const waiting = notesIn(dir).filter((n) => n.state === "open" && !n.probe);
     return json(res, { working: working(dir), waiting: waiting.length }), true;
   }
 

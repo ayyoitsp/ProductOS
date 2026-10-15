@@ -166,6 +166,28 @@ You are the **orchestrator**, and you are the session — not a subagent. That i
 ⛔ **Every author writes and none may settle.** An author may propose, populate, draw and regenerate; it may never produce a verdict, answer an open question, or mark anything validated. None of them can put a question to a person — deliberately, because consent obtained inside a subagent has no record of how it was obtained. What an author cannot resolve comes back to you as a question, and you put it to the person yourself.
 <!-- /productos:preset -->
 
+## ⛔ A probe is a write, not a request — `Note.probe`
+
+A session that needs to check whether an instance can take a write has to write *something*, and
+the request queue is the only writable thing there. So say what it is:
+
+```bash
+productos v2 notes add "staleness-probe-231153" --about <ref> --by <session> --via cli --probe --at <corpus>
+```
+
+Over the single door it is the same field: `POST /api/v2/in` with `{"intent":"note", …, "probe":true}`.
+
+`probe: true` is counted in no waiting total and shown on no surface a person reviews. It is still a
+real note, really stored, through the whole write path — which is the entire point of it.
+
+⛔ **Omit it and you are asking somebody for a change.** Five probes from one session rendered on
+Peter's review page as five people waiting on him. He read the banner and asked *"what are those 6
+requests, i did not send any requests"*. He had not sent any.
+
+⛔ **And never infer it.** `staleness-probe-231153` is text a classifier would be right about, and
+being right about it is not the point: a note treated as a probe because of how it reads is
+somebody's request silently discarded. The flag is set by whoever wrote the note or it is not set.
+
 ## ⛔ A gap is filed against the corpus it was found in
 
 ```bash
