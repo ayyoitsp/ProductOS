@@ -1,0 +1,70 @@
+id: "0148"
+said: things like saving prototype on placement takes a LOOONG time - not done w performance issues.  do a sweep
+at: 2026-10-15
+kind: derivation
+reaches:
+  pin: listening reaps and answers in one round, not two
+waived:
+  derive: "The change is in `src/v2/store/access.ts`, which the registry files under DERIVE — but the checker looks for the named thing and what changed there is the SHAPE of two queries rather than a new name. `listening` and `fingerprint` were already there. ⛔ Waived rather than renamed: a layer check satisfied by inventing an identifier verifies nothing."
+  surface: Nothing renders differently. The page is the same bytes; it arrives sooner because the request in front of it crosses the network fewer times.
+  check: "No corpus can be wrong about this. The risk it carries is a fingerprint that is fast and WRONG — one round that stops noticing a change, which would serve a reviewer a corpus that has moved. That is a pin, and it goes red: one round missing a deprecation turns the suite."
+closed: 2026-10-15
+
+# ⛔ APPENDED AFTER `change close`, which drops comments. See 0141 / 0144 / 0145 / 0146 / 0147.
+#
+# ⛔ THE SAID IS PETER'S, AND MY FIRST ATTEMPT AT THIS RECORD PARAPHRASED A MEASUREMENT INTO IT.
+# I wrote "presence did not move: a 35-byte answer is 0.84s on the instance and 37ms locally" as
+# `said:`, which is nobody's words — it is the deploy session's finding, which is evidence rather
+# than an author. The rule this repo is most insistent about is quote, never paraphrase, and the
+# reason applies exactly here: the requirement is "do a sweep", and the measurement is how the sweep
+# found its next target.
+#
+# ⛔ THE SWEEP'S FIRST TWO FIXES SHIPPED AND PRESENCE DID NOT MOVE. The deploy session measured it:
+# 0.84 / 1.01 / 1.27s for 35 bytes of answer on the instance, against 37ms here, same code. I
+# confirmed it myself — five consecutive calls at 0.80-0.93s — and verified the running image really
+# carries #149 (`countLogLines` x2, `notesIn` x3, `resolveRulesUncached` x2).
+#
+# WHY: PGlite is in-process, so a query costs nothing locally and the NUMBER OF TIMES A REQUEST
+# CROSSES THE NETWORK cannot be seen. Against the hosted store a trivial query is ~180ms of trip
+# whatever it carries — `listening()` was measured at 176ms returning zero rows. I had optimised the
+# local work and never measured the thing that dominates there.
+#
+# ⛔ FIFTH MEMBER OF ONE FAMILY TODAY: a synthetic corpus instead of Bilrost's, a browser probe that
+# measured about:blank, a profile of an empty corpus, a log assertion with no events in it, and now
+# a store with no network. Every one a measurement taken where the thing being measured does not
+# live; every one caught by something disagreeing with it rather than by care.
+#
+# ⛔ AND COUNTING QUERIES OVERSTATED IT, which I got wrong before I got it right. Six per request
+# read as 6 x 180ms — but two queries fired together cross once, and `storeFor` already parallelises
+# its reach pair with a comment recording the measurement: five sequential 611ms, the same five
+# concurrent 157ms. What matters is the DEPTH OF THE AWAIT CHAIN. So the harness injects a delay per
+# query and lets wall-clock answer; with it, local reproduced the instance almost exactly —
+# presence 884ms against a measured 0.84s, the page 1858ms against 1.86s.
+#
+# THE SIX, NAMED:
+#
+#     1  auth          sessions inner join accounts
+#     2  reach         select id from projects where owner_id = $1      ┐ already concurrent
+#     3  reach         select project_id from project_members           ┘
+#     4  fingerprint   count(*), max(updated_at), max(deprecated_at), max(seq)
+#     5  listening     delete from listening where at < floor           ┐ WERE SERIAL
+#     6  listening     select session, at from listening                ┘
+#
+# TWO FIXES, both about waiting rather than working:
+#
+#   · `listening()` awaited its tidy-up delete before asking its question, on every request —
+#     including every presence poll and every write. The two touch disjoint rows: one takes what is
+#     older than the floor, the other reads what is newer.
+#   · `fingerprint()` asked twice in series. ⛔ I wrote it that way FOUR LINES from a comment saying
+#     "ONE ROUND TRIP, NOT TWO … asking for the second only after the first arrived cost a full trip".
+#
+#                             before    after
+#     presence                 884ms  →  586ms
+#     GET /v2 (2.8 MB page)   1858ms  → 1077ms
+#     POST placement          3042ms  → 1723ms
+#
+# ⛔ AND THE PIN IS WHAT MAKES THIS SURVIVE, because a serial pair is invisible on a local store and
+# that is precisely how both of these got written. The test injects a trip per query and asserts the
+# chain depth. Three defects put back one at a time, each red: the reap blocking the answer, the
+# fingerprint asking twice, and — the one that matters more than speed — a fingerprint that is one
+# round and WRONG, no longer noticing a deprecation.

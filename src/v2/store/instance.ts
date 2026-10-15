@@ -447,17 +447,27 @@ async function keepHeartbeats(
   before: Array<{ session: string; at: string }>,
 ): Promise<void> {
   const was = new Map(before.map((w) => [w.session, w.at]));
+  /**
+   * ⛔ THE BEATS GO TOGETHER, NOT ONE ROUND TRIP EACH. This awaited inside the loop, so a project
+   * with four listeners cost four serial writes — and against Neon a trivial write is ~175ms of
+   * trip whatever it carries, on every request, including the presence poll the page runs.
+   *
+   * ⛔ AND EACH STILL FAILS ALONE. One listener's bad row must not fail the request it rode in on,
+   * which is why this is `allSettled` over per-beat try/catch rather than a transaction: a lost
+   * beat is a surface that lapses, not a broken write.
+   */
+  const beats: Array<Promise<void>> = [];
   for (const w of sessionsIn(dir)) {
     if (was.get(w.session) === w.at) continue;
     const at = new Date(w.at);
     if (Number.isNaN(at.getTime())) continue;
-    /** ⛔ One listener's bad row must not fail the request it rode in on. */
-    try {
-      await store.saw(w.session, at);
-    } catch {
-      // Presence is a convenience; losing one beat is a surface that lapses, not a broken write.
-    }
+    beats.push(
+      store.saw(w.session, at).catch(() => {
+        // Presence is a convenience; losing one beat is a surface that lapses, not a broken write.
+      })
+    );
   }
+  await Promise.all(beats);
 }
 
 /**
