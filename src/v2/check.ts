@@ -13,7 +13,7 @@
 import { SLOTS, SLOT_ASKS, DEMONSTRABLE_SLOTS, owesDemonstration, statements, saysText, NOT_A_DOCUMENT, type SlotName, type Says } from "./schema.js";
 import { walkOf } from "./walk.js";
 import { holdsOn } from "./held.js";
-import { selectionOf, gapsIn, doorOpensOn } from "./selection.js";
+import { selectionOf, gapsIn, doorOpensOn, theOnlyScreenIn, screensIn } from "./selection.js";
 import {
   DOWNSTREAM_OF_ANSWER,
   answerIsUnknown,
@@ -481,12 +481,27 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
        * two implementations; now there is one, exported, and both callers use it.
        */
       if (doorOpensOn(corpus, at)) continue;
+      /**
+       * ⛔ THE REFUSAL NAMES THE CANDIDATES, because sending somebody to go and look is how a
+       * refusal gets ignored. Peter, refused twice: *"should be obvious which to point each one
+       * at"* — and the corpus knew the answer both times.
+       *
+       * ⛔ AND WHERE THERE IS EXACTLY ONE, SAYING SO IS THE WHOLE FIX. The page resolves that case
+       * on write now, so a corpus reaching here with one candidate was authored some other way —
+       * which is precisely when being told the name is worth most.
+       */
+      const only = theOnlyScreenIn(corpus, at);
+      const near = screensIn(corpus, at);
       add({
         severity: "refuse",
         kind: "a-prototype-opens-on-nothing",
         where: (p as { id?: string }).id ?? at,
         what: `opens on \`${at}\`, and there is no such screen here`,
-        fix: "name a screen that exists as `<scope>#<view>` — a prototype is a door, and a door onto nothing is worse than no door, because the page offers it",
+        fix: only
+          ? `that feature holds exactly one screen — \`${only.ref}\` ("${only.title}") — so that is what this door means. Set it, and the page will do it for you the next time anybody edits this prototype there.`
+          : near.length
+            ? `name one of that feature's screens: ${near.map((r) => `\`${r}\``).join(" · ")}`
+            : "name a screen that exists as `<scope>#<view>` — a prototype is a door, and a door onto nothing is worse than no door, because the page offers it",
       });
     }
 
