@@ -6634,8 +6634,29 @@ const DRIVE = `<script>
 
 const VIEW_SWITCH = `<script>
 (function () {
-  const views = [...document.querySelectorAll("section.view")];
-  if (views.length < 2) return;
+  /**
+   * ⛔ ASKED FOR AT THE MOMENT OF THE SWITCH, NOT CAPTURED ONCE AT LOAD.
+   *
+   * Peter: *"I'm tapping on 'Versioned Inputs', which 'states nothing of its own'. it incorrectly
+   * does not route anywhere... should not just keep what is rendered on the screen"*.
+   *
+   * A snapshot was correct until the page started deferring sections. fill() REPLACES a deferred
+   * section with a fresh element off the wire, so a list taken at load keeps the detached stub and
+   * has never heard of what replaced it. Two consequences, and the second is the one he saw:
+   *
+   *   · navigating AWAY from a filled section never hides it — it has no entry to set hidden on,
+   *     so it stays on screen underneath the next one
+   *   · navigating BACK to it matches nothing, and the no-match branch below un-hides EVERY view
+   *     on the page. On this corpus that is 130 sections at once, which reads exactly like a press
+   *     that did nothing
+   *
+   * ⛔ AND A SINGLE PRESS WORKS, WHICH IS WHY NOTHING CAUGHT IT. Driven on the live page, pressing
+   * this row routes, fetches and renders correctly — the markup is right, the anchor resolves, the
+   * endpoint answers 200 with the container's own page. The defect needs a SEQUENCE: go there, go
+   * elsewhere, come back. scripts/probe-goto.mjs is that sequence.
+   */
+  const views = () => [...document.querySelectorAll("section.view")];
+  if (views().length < 2) return;
   const menu = [...document.querySelectorAll("nav.scopes a[data-goto]")];
   const frame = document.querySelector(".topframe");
   const crumbs = frame && frame.querySelector(".crumbs");
@@ -6671,13 +6692,14 @@ const VIEW_SWITCH = `<script>
 
   const show = (name, collapse, fromHistory) => {
     let found = false;
-    for (const v of views) {
+    const all = views();
+    for (const v of all) {
       const mine = v.dataset.view === name;
       v.hidden = !mine;
       found = found || mine;
     }
     if (!found) {
-      for (const v of views) v.hidden = false;
+      for (const v of all) v.hidden = false;
       /** ⛔ Showing everything means the page scrolls again, so the frame has to let go. */
       delete document.documentElement.dataset.framed;
       return;
@@ -6696,7 +6718,7 @@ const VIEW_SWITCH = `<script>
      * remains belongs to a pane inside it. ⛔ Set here rather than in CSS because only the switcher
      * knows which view is showing, and the product's own views are documents that must still scroll.
      */
-    const shown = views.find((v) => v.dataset.view === name);
+    const shown = all.find((v) => v.dataset.view === name);
     if (shown && shown.classList.contains("framed")) document.documentElement.dataset.framed = "1";
     else delete document.documentElement.dataset.framed;
     /**
@@ -6952,7 +6974,7 @@ const VIEW_SWITCH = `<script>
   }
 
   const opening = location.hash.replace(/^#/, "");
-  const fromHash = opening === "view-overview" ? "overview" : views.find((v) => v.id === opening)?.dataset.view;
+  const fromHash = opening === "view-overview" ? "overview" : views().find((v) => v.id === opening)?.dataset.view;
   // Opening on a named view means somebody linked to it: collapse. Opening cold: leave it open.
   // ⛔ Opens on Overview: what the product is, and what it owes. Landing in a feature's grid with
   // no idea what the product is was the shape this replaced.

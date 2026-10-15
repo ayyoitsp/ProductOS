@@ -1,0 +1,62 @@
+id: "0153"
+said: I'm tapping on 'Versioned Inputs', which 'states nothing of its own'.  it incorrectly does not route anywhere.  It should have its own page that's mostly blank, or lists its children, should not just keep what is rendered on the screen
+at: 2026-10-15
+kind: surface
+reaches:
+  surface: const views = () => [...document.querySelectorAll
+  pin: going away from a filled section and back shows exactly it, both times
+waived: {}
+closed: 2026-10-15
+
+# ⛔ APPENDED AFTER `change close`, which drops comments. See 0141 / 0144-0152.
+#
+# Peter: *"I'm tapping on 'Versioned Inputs', which 'states nothing of its own'. it incorrectly does
+# not route anywhere. It should have its own page that's mostly blank, or lists its children, should
+# not just keep what is rendered on the screen"*.
+#
+# ⛔ THE HALF HE ASKED FOR ALREADY EXISTED, AND CHECKING THAT FIRST IS WHAT MADE THIS CHEAP. A
+# container's page is a real view: prose, and `What is filed under it` with a link per child.
+# `/api/v2/section?view=versioned-inputs` answers 200 with 7874 bytes of exactly that. Nothing in
+# the model, the renderer or the skills needed a line. The defect was entirely that he could not
+# GET there.
+#
+# ⛔ AND A SINGLE PRESS WORKS, WHICH IS WHY NOTHING HAD CAUGHT IT. Driven on the live page in a real
+# browser, pressing that row routes, fetches and renders. The markup is right, the anchor resolves,
+# the target is on the page. Reading the HTML said the page was fine; pressing it once said the page
+# was fine. The defect needs a SEQUENCE — go there, go elsewhere, come back — and the existing test
+# for deferred sections is exactly one press long.
+#
+# WHAT WAS WRONG: `VIEW_SWITCH` captured every `section.view` ONCE at load, and `fill()` REPLACES a
+# deferred section with a fresh element off the wire. So the list keeps a detached stub and has
+# never heard of what replaced it:
+#
+#   · going AWAY from a filled section never hides it — no entry to set `hidden` on, so it stays on
+#     screen underneath the next one
+#   · coming BACK matches nothing, and the no-match branch un-hides EVERY view on the page. 130
+#     sections at once on his corpus, which is precisely "keeps what is rendered on the screen"
+#
+# Measured on the live instance before the fix, pressing a container then another scope then back:
+#
+#     showing  ["versioned-inputs"]                  <- one press: correct
+#     showing  ["capabilities","versioned-inputs"]   <- went away; the old one never hid
+#     showing  ["capabilities","versioned-inputs"]   <- came back; nothing changed at all
+#
+# ⛔ AND THE FIX WAS WRONG ONCE, CAUGHT BY ANOTHER TEST'S ARITHMETIC RATHER THAN BY ANYTHING AIMED AT
+# IT. Changing `views` from an array to a function left a FIFTH use 300 lines further down —
+# `views.find(...)`, past where I had grepped — which parses perfectly and is a TypeError at run
+# time. It killed the whole switcher, so the page arrived with every section visible. `every script
+# the page emits is valid JavaScript` was GREEN: a parse check cannot see a TypeError. What went red
+# was `what is unopened waits`, because the prototype board stopped being hidden and its 19 waiting
+# thumbnails became 0.
+#
+# ⛔ SO THE ARRIVAL STATE NOW HAS ITS OWN NAME: `the reader arrives looking at exactly one section`.
+# It reads like a triviality and it is the cheapest detector this page has for a script that died —
+# every section is server-rendered visible, and the switcher is what hides the rest. Verified red
+# with the TypeError put back.
+#
+# ⛔ AND I NEARLY LOOSENED THE TEST THAT CAUGHT IT. `waited > 0` looked like it had become stale
+# under the new behaviour. It had not: it was right, my change was broken, and the honest move was
+# `scripts/probe-hidden.mjs` — print the hidden sections of one page and look — rather than deciding
+# between two disagreeing tests by picking the one that suited me.
+#
+# 1012/1012.
