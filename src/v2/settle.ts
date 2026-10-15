@@ -27,7 +27,7 @@
 import fs from "node:fs";
 import { parseFrontmatter } from "../core/frontmatter.js";
 import YAML from "yaml";
-import { Scope, Rule, type SlotName , saysText} from "./schema.js";
+import { Scope, Rule, type SlotName , saysText, statements} from "./schema.js";
 import { loadCorpus, resolveRules, selectsFor, lineageOf, type Corpus } from "./load.js";
 import { resolveRef } from "./ref.js";
 import { removals, refuseBecause } from "./write.js";
@@ -39,7 +39,13 @@ export interface Question {
   scope: string;
   exchange: string;
   exchangeTitle: string;
-  slot: SlotName;
+  /**
+   * ⛔ ABSENT ON A QUESTION ABOUT A WORD, because a word has no slot and inventing one would be a
+   * guess wearing a decision's clothes. `Term.contested` exists precisely so a collision between
+   * names has a home at the grain of the NAME — pinning it to some exchange's `answer` would put
+   * the ruling in a place no other feature using that word would ever look.
+   */
+  slot?: SlotName;
   kind: string;
   /** The question, in whatever form the standing carries it. */
   asks: string;
@@ -70,6 +76,14 @@ export interface Question {
    * authors and they need to see what they are revising.
    */
   revises?: string;
+  /**
+   * ⛔ THE STATEMENTS ONE BY ONE, because glued together they read as a single sentence a
+   * ruling would replace entirely. A slot saying seven things rendered as one paragraph, under
+   * "it already says", beside an option whose own `replaces` is `only the part in question` —
+   * so choosing it looked like deleting the other six. `saysText` is right for hashing and
+   * matching and wrong for showing somebody what they are about to change.
+   */
+  saysEach?: Array<{ says: string; inQuestion: boolean }>;
   /** What is unruled about the agreed sentence. */
   about?: string;
   /** Observations recorded against this exact question. */
@@ -123,7 +137,8 @@ export function questionsFor(corpus: Corpus, scopeId: string): Question[] {
    * surface did not know about.
    */
   const fromRules = openRuleQuestions(corpus, under);
-  return orderByAttention(corpus, [...fromRules, ...fromSlots]);
+  const fromTerms = openTermQuestions(corpus, under);
+  return orderByAttention(corpus, [...fromRules, ...fromTerms, ...fromSlots]);
 }
 
 /**
@@ -157,6 +172,59 @@ export function orderByAttention(corpus: Corpus, questions: Question[]): Questio
 }
 
 /** Open rules whose selector reaches any exchange in these scopes. */
+/**
+ * A word somebody recorded as contested, asked of the person who can rule it.
+ *
+ * ⛔ `Term.contested` PARSED, WAS TESTED, AND NO SURFACE READ IT. Two authors found this
+ * independently in one session: *"`v2 decide` listed six questions and not the seventh, which sat
+ * on a term"*, and *"question 3 reaches nobody — somebody has to route it by hand"*.
+ *
+ * ⛔ AND THE FIELD WAS ADDED TO PREVENT EXACTLY WHAT CAME BACK. Its own comment records fg-0004: a
+ * scoper found *version selection*, *model revision*, *master model version* and *input version*
+ * used across four places for three distinct objects, and **left the collision out of truth
+ * entirely** rather than settle it by writing a definition. `contested` gave that a home in the
+ * schema — and `questionsIn` walks `scope.exchanges` only, so the home was write-only. A question
+ * recorded where nobody is asked is the silence the field was built to end.
+ */
+export function openTermQuestions(corpus: Corpus, scopeIds: string[]): Question[] {
+  const out: Question[] = [];
+  const parked = new Map(corpus.verdicts.filter((v) => v.kind === "defer").map((v) => [v.target!, v]));
+  for (const { scope } of corpus.scopes.filter((x) => scopeIds.includes(x.scope.id))) {
+    for (const [word, term] of Object.entries(scope.terms ?? {})) {
+      if (!term?.contested) continue;
+      const ref = `${scope.id}#${word}`;
+      const put = parked.get(ref);
+      out.push({
+        ref,
+        scope: scope.id,
+        exchange: "(a word this corpus uses)",
+        exchangeTitle: `The word "${word}"`,
+        kind: "contested word",
+        asks: [
+          norm(term.contested.question),
+          `It collides with: ${term.contested.with.join(", ")}.`,
+          /**
+           * ⛔ SAYING WHAT IT MEANS HERE, because the collision is only legible beside the sense
+           * this scope committed to. "These three words disagree" without the definitions is the
+           * feeling the schema comment warns about.
+           */
+          `Here it means: ${norm(term.means)}`,
+          `Until it is ruled, every feature using any of those names is using one of them.`,
+        ]
+          .filter(Boolean)
+          .join("\n"),
+        candidates: [],
+        blocks: [],
+        parked: put ? { by: put.by, because: put.because!, until: put.until! } : undefined,
+        revises: undefined,
+        observed: [],
+        conflictsWith: [],
+      });
+    }
+  }
+  return out;
+}
+
 export function openRuleQuestions(corpus: Corpus, scopeIds: string[]): Question[] {
   const out: Question[] = [];
   for (const { rule } of corpus.rules) {
@@ -181,7 +249,21 @@ export function openRuleQuestions(corpus: Corpus, scopeIds: string[]): Question[
         norm(s.question),
         s.about ? `In question: ${norm(s.about)}` : "",
         `Answering it once settles ${rule.fills.join(" and ")} on ${reaches.length} exchange${reaches.length === 1 ? "" : "s"} here, and on every one written after it.`,
-        `Until then it governs nothing, and those slots read as the blanks they are.`,
+        /**
+         * ⛔ TRUE OF A `supplies` RULE AND FALSE OF A `constrains` ONE, AND IT SAID IT OF BOTH.
+         *
+         * A `supplies` rule IS the answer where the slot is silent, so until it is ruled those
+         * slots really are blank. A `constrains` rule adds a requirement to whatever the slot
+         * already says — so the slots are not blank, they are answered and ungoverned.
+         *
+         * Reported by an author whose two `answer` slots say ten things and three things: *"the
+         * reach itself is right for a `constrains` rule; the sentence about blanks is false and is
+         * the first thing a reviewer reads about the feature."* A reviewer who believes it goes
+         * looking for ten missing sentences that are sitting in front of them.
+         */
+        rule.mode === "supplies"
+          ? `Until then it governs nothing, and those slots read as the blanks they are.`
+          : `Until then it governs nothing — those slots say what they say, and nothing is holding them to it.`,
       ]
         .filter(Boolean)
         .join("\n"),
@@ -283,6 +365,15 @@ function questionsIn(corpus: Corpus, scopeId: string): Question[] {
          */
         candidates: s.candidates ?? [],
         revises: s.about ? saysText(fill.says) : undefined,
+        /**
+         * ⛔ AND IT MARKS WHICH ONE, because `standing.of` already names it and `settle` already
+         * replaces only that statement, leaving its siblings byte-identical. The surface was the
+         * one layer that did not know — so the information existed, was acted on correctly, and
+         * was withheld from the person being asked to decide.
+         */
+        saysEach: s.about
+          ? statements(fill.says).map((x) => ({ says: x.says, inQuestion: Boolean(s.of) && x.id === s.of }))
+          : undefined,
         candidatesAreWhole:
           (s.candidates ?? []).length > 0 && (s.candidates ?? []).every((c) => c.replaces === "the whole sentence"),
         about: s.about,

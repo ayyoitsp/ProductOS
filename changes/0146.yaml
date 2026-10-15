@@ -1,9 +1,59 @@
 id: "0146"
-said: also - 'states nothing of its own' should be rmeoved
-at: 2026-10-15
-kind: surface
+said: isn't 10s still pretty slow?
+at: 2026-10-14
+kind: derivation
 reaches:
-  surface: AND NOTHING WHERE THERE IS NOTHING
-  pin: the empty-row sentence is still rendered
-waived: {}
-closed: 2026-10-15
+  pin: the same corpus is worked out once
+waived:
+  derive: "The function memoized is `resolveRules` in `src/v2/load.ts`, and the registry files that under MODEL rather than derive — so this kind's routing cannot see it. Waived rather than worked around: renaming something into a derive file to satisfy the check would be the check verifying a file the change does not live in. ⛔ Worth noticing on its own: a derivation that resolves which rule reaches which exchange sits in the loader, so \"what a rule reaches\" is answered by the layer that reads files. That is a real observation about where this concept lives and is not a thing to fix at the tail of a performance change."
+  surface: Nothing renders differently — the page is byte-for-byte what it was, 2.01 MB, and that is the point. This changes how many times a derivation is worked out to produce it, from once per scope to once per corpus. A surface change here would mean the page showing something new, and if it did, this would be wrong rather than fast.
+  check: "`src/v2/check.ts` refuses things about a corpus. This cannot make a corpus wrong, only recomputed — and the risk it DOES carry is staleness, which is a pin: the memo was keyed on one shared answer and on nothing at all, and the suite went red both times."
+closed: 2026-10-14
+
+# ⛔ APPENDED AFTER `change close`, which drops comments. See 0141 / 0144 / 0145.
+#
+# "isn't 10s still pretty slow?" — about a TTFB that was still 10s after the page went from 49.8 MB
+# to 2.98 MB. It was, and neither the store nor the machine was the reason.
+#
+# ⛔ I HAD NEVER TIMED THE REAL CORPUS. Every number I quoted for this page came from a synthetic
+# one, which is the same mistake as measuring from files while the instance reads a store. Pulling
+# 17.5 MB of actual Bilrost off the instance and timing the real pipeline:
+#
+#     materialize     48ms
+#     loadCorpus     374ms
+#     render        8139ms   ← the page a reader arrives at, 2.01 MB
+#
+# My synthetic said the render was 465ms. The real one is 18x that.
+#
+# ⛔ PROFILED, NOT GUESSED — and my first profile was broken in a way worth recording. It reported
+# 503ms total, all module loading, which would have meant the render was free. Two numbers that
+# cannot both be true, and the broken one was mine: the script passed the corpus endpoint's
+# {dir, files} wrapper straight to `materializeFor`, so it profiled an empty corpus with no root.
+# It now refuses a payload under 100 documents.
+#
+# The real profile, by self time:
+#
+#     6538ms  62.6%  selects       load.js:604
+#     1061ms  10.2%  resolveRules  load.js:428
+#      547ms   5.2%  lineage       load.js:590
+#
+# `resolveRules` walks every scope x every exchange x every rule. TWELVE call sites ask for it, and
+# several are per-scope: `gridFor` once per scope — 127 on that corpus — `renderExchanges` once per
+# scope, `stampFor` once per ref. So a whole-corpus walk ran hundreds of times to render one section.
+#
+#     render, the page a reader arrives at   8139ms → 297ms    27x
+#     render, every section                 29796ms → 1079ms   28x
+#
+# The whole real pipeline is now ~720ms against ~8.6s.
+#
+# ⛔ A `WeakMap` ON THE CORPUS OBJECT, which is what makes it correct rather than merely fast.
+# `loadCorpus` produces a fresh object, so a changed corpus is a different key and gets its own
+# answer — nothing has to remember to invalidate anything, which is the only kind of cache worth
+# having on a derivation. It is also the pattern this codebase already uses: `goesCache` in
+# `page.ts` does exactly this for the same reason.
+#
+# ⛔ AND THE TESTS ARE ABOUT STALENESS, NOT SPEED. A memo that returns a stale answer is worse than
+# a slow one, because the corpus is what somebody is reviewing. Keyed on a single shared answer, two
+# tests go red — including the one asserting a different corpus gets its own, which is the leak
+# `Rule.in` exists to stop, reintroduced by a cache rather than by a selector. With no memo at all,
+# one goes red. 961/961 with it in place, so nothing in the suite mutates a corpus between calls.

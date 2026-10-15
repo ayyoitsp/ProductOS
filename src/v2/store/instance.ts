@@ -23,12 +23,13 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import http from "node:http";
-import { CORPUS_DIRS, corpusFiles } from "../load.js";
+import { CORPUS_DIRS, corpusFiles, loadCorpus, type Corpus } from "../load.js";
 import { appendedLines, sessionsIn, writeLog, writeSessions } from "./corpus.js";
+import { line, noteCorpus, noteDir, traced, tracingOn, type Trace } from "./trace.js";
 import { published, streamFor } from "./pushes.js";
 import { PRESENCE_MS } from "../presence.js";
 import { v2Route } from "../serve.js";
-import { type Db, isRefusal, type ProjectStore, type StoredEvent, storeFor } from "./access.js";
+import { type Db, isRefusal, type ProjectStore, type StoredEvent, storeFor, type Fingerprint } from "./access.js";
 import { principalFrom } from "./identity.js";
 import { projects } from "./schema.js";
 import { eq } from "drizzle-orm";
@@ -269,28 +270,268 @@ export interface Materialized {
   logHad: number;
   /** Who the store said was listening going in. Anything newer than this is a heartbeat to keep. */
   listening: Array<{ session: string; at: string }>;
+  /** The corpus this read already parsed, for the routes that want one. Absent on a write. */
+  corpusFor?: () => Corpus;
+  /**
+   * Whether this directory is shared with other in-flight reads.
+   *
+   * ⛔ IT MUST NOT BE DELETED WHEN THE REQUEST ENDS. The teardown removed the directory
+   * unconditionally, which is right for one a request owns and wrong for one the next reader is
+   * about to use — and a request deleting another's corpus mid-read is the worst possible version
+   * of this optimisation.
+   */
+  shared?: boolean;
 }
 
-export async function materializeProject(store: ProjectStore): Promise<Materialized> {
+/**
+ * The corpus this process last read out of a project, and what it was at when it did.
+ *
+ * ⛔ 19 MB WAS READ OUT OF NEON TO SERVE EVERY PAGE VIEW — `documents()` alone is 1729ms against
+ * the instance for 169 rows, measured. Two page views a second apart read the same 19 MB twice, and
+ * the second one learned nothing the first had not.
+ *
+ * ⛔ KEYED ON A FINGERPRINT, NOT ON TIME. A TTL would serve a corpus somebody has just changed, and
+ * the whole guarantee of this surface is that what you are reviewing is what is there. The
+ * fingerprint covers the document count, the latest write, the latest deprecation and the log's
+ * last `seq` — so a write, a deprecation or an appended event all miss the cache, and nothing else
+ * does.
+ *
+ * ⛔ AND THE DIRECTORY IS STILL BUILT PER REQUEST, deliberately. Handing two requests one directory
+ * would be faster again and would share mutable state between them: `writeBack` diffs the files on
+ * disk against what the request was given, so a stray write by one request would be read as the
+ * other's. The expensive part was the network, not the 51ms of local writes.
+ */
+const READ = new Map<
+  string,
+  {
+    /**
+     * ⛔ TWO HALVES, SO A SAVE KEEPS THE PICTURES. A drawing is its own document, and a write to the
+     * sentences cannot change one — so each half is matched against its own fingerprint and reused
+     * on its own. On Bilrost that is the difference between a save costing 19 MB and 2.7 MB.
+     */
+    fp: Fingerprint;
+    /** Everything that is not a drawing. */
+    truth: Record<string, string>;
+    /** The drawings, kept across writes that cannot have touched them. */
+    drawings: Record<string, string>;
+    events: StoredEvent[];
+    dir?: string;
+    /**
+     * ⛔ THE PARSED CORPUS, because laying the documents out and then parsing them back is the last
+     * thing every request was doing with bytes it already had — ~374ms of YAML per page view on
+     * Bilrost's corpus. Held beside the directory it was parsed from, and dropped with it.
+     */
+    corpus?: Corpus;
+  }
+>();
+
+/** ⛔ A bound, because a corpus is ~19 MB in memory and an instance serves many projects. */
+const READ_CEILING = 4;
+
+/**
+ * Where the drawings are, as the prefix that splits a corpus in two.
+ *
+ * ⛔ ONE HOME, AND IT MATCHES `drawingRel`. The reader, the writer and this split must agree about
+ * where a picture lives; three copies of the string would agree today and not next month.
+ */
+const DRAWINGS = "drawings/";
+
+/**
+ * Reads this process has asked for and not yet received, so several requests wanting the same thing
+ * wait on ONE of them.
+ *
+ * ⛔ BECAUSE EVERY SAVE SETS OFF A HERD. `writeBack` calls `forgetRead`, and then the page, the
+ * presence poll, the live connection, the thread and the mocks all arrive within a few hundred
+ * milliseconds of each other — with nothing in flight shared, each one independently pulled the
+ * whole corpus. Measured with `scripts/probe-stampede.mjs`: six concurrent requests after a save
+ * read it SIX times over.
+ *
+ * That is also why the live numbers climbed rather than sitting at one cost — 4s, then 6s, then
+ * 12s, then 21s for a 35-byte presence answer. They were queuing behind each other's reads.
+ *
+ * ⛔ KEYED ON THE FINGERPRINT, WHICH IS WHAT MAKES SHARING SAFE RATHER THAN MERELY CHEAP. Two
+ * requests share a read only when they are asking about the same corpus; a request that arrives
+ * after a further write has a different key and reads for itself. This is the same question the
+ * cache answers, asked of a read that has not landed yet.
+ *
+ * ⛔ AND IT IS NOT A CACHE. The entry is dropped the moment the read settles, including when it
+ * throws — a failed read must not be handed to the next request, and nothing here survives long
+ * enough to serve stale truth. The rule that a write never caches is untouched: this shares the
+ * read a write is already doing, and stores nothing for anybody who comes later.
+ */
+const INFLIGHT = new Map<string, Promise<unknown>>();
+
+function once<T>(key: string, go: () => Promise<T>): Promise<T> {
+  const had = INFLIGHT.get(key) as Promise<T> | undefined;
+  if (had) return had;
+  const job = go().finally(() => {
+    /** ⛔ Only if it is still ours — a later read under the same key must not be dropped by an earlier one. */
+    if (INFLIGHT.get(key) === job) INFLIGHT.delete(key);
+  });
+  INFLIGHT.set(key, job);
+  return job;
+}
+
+/** ⛔ For tests, which need to know a herd shared one read rather than that it was fast. */
+export function readsInFlight(): number {
+  return INFLIGHT.size;
+}
+
+/**
+ * Forget what this process read, because it has just changed it.
+ *
+ * ⛔ BELT AND BRACES OVER THE FINGERPRINT, AND THE REASON IS A NARROW BUT REAL HOLE IN IT.
+ * `updatedAt` is stamped by whichever node performs the write, not by the database — so two writers
+ * with skewed clocks can leave `max(updated_at)` unmoved while the content changed, and a write
+ * that touches an existing document without appending an event moves neither the count nor `seq`.
+ * The window needs clock skew AND an equal document count AND no logged event, which is why it is
+ * narrow rather than impossible.
+ *
+ * Calling this after a write removes the case entirely for the process that did the writing, which
+ * is every write that goes through this instance. Across processes the fingerprint is still what
+ * decides, and that is worth saying out loud rather than implying it is exact.
+ */
+/**
+ * How many lines the materialized log holds, for a directory that was already laid out.
+ *
+ * ⛔ `writeLog` RETURNED THIS AS A SIDE EFFECT OF WRITING, and `appendedLines` slices by position —
+ * so reusing a directory still has to know where the request's own appends will start. Counting is
+ * what writing was being used for.
+ */
+function countLogLines(dir: string): number {
+  try {
+    return fs
+      .readFileSync(path.join(dir, "events", "log.jsonl"), "utf-8")
+      .split("\n")
+      .filter((l) => l.trim()).length;
+  } catch {
+    return 0;
+  }
+}
+
+/** Stop sharing this project's laid-out directory — it is no longer known to be pristine. */
+export function forgetDir(projectId: string): void {
+  const entry = READ.get(projectId);
+  if (entry) {
+    entry.dir = undefined;
+    /**
+     * ⛔ AND THE CORPUS PARSED FROM IT. Keeping a corpus whose directory has been thrown away for
+     * not being pristine would be the staleness this is careful about, one level up — the files are
+     * suspect, so what was read out of them is too.
+     */
+    entry.corpus = undefined;
+  }
+}
+
+export function forgetRead(projectId: string): void {
+  READ.delete(projectId);
+}
+
+export async function materializeProject(store: ProjectStore, mutating = false): Promise<Materialized> {
   /**
-   * ⛔ ONE ROUND TRIP, NOT TWO. The documents and the log are independent reads, and
-   * asking for the second only after the first arrived cost a full trip — 90ms against
-   * Neon, on every single request, for nothing. `scripts/bench-store.mjs` is where that
-   * number came from and is how to check it again.
-   *
-   * ⛔ PRESENCE RIDES ALONG IN THE SAME TRIP, for exactly that reason. It is read on every request
-   * because `/api/v2/presence` is a GET like any other, and a third serial round trip to answer
-   * "is anybody listening" would have made the cheapest question on the instance the slowest.
+   * ⛔ PRESENCE IS NEVER CACHED, AND IT IS THE REASON THIS IS NOT ONE ROUND TRIP ANY MORE.
+   * `/api/v2/presence` is a GET like any other and the answer changes without the corpus changing,
+   * so it is read every time — in parallel with the fingerprint, which is the only other thing
+   * needed to find out whether anything else has to be read at all.
    */
-  const [documents, events, listening] = await Promise.all([
-    store.documents(),
-    store.since(0, LOG_CEILING),
-    store.listening(PRESENCE_MS),
+  /**
+   * ⛔ A WRITE ASKS FOR THE FINGERPRINT TOO, AND I BRIEFLY MADE IT NOT — WHICH WAS SLOWER.
+   *
+   * The reasoning that looked right: the fingerprint decides whether a cached read may be reused,
+   * and a write never reuses the DIRECTORY, so why pay for it. The measurement disagreed — the
+   * write went from 9 queries to 10. A write still needs `before`, the documents as they were when
+   * it started, and a matching fingerprint is exactly the proof that the cached copy still IS that.
+   * Skipping it traded one cheap trip for two expensive reads.
+   *
+   * ⛔ WHAT MUST NOT HAPPEN IS CACHING FROM A WRITE, which is a different thing and is enforced
+   * below: recording a fingerprint taken BEFORE a write would leave the next reader matching on a
+   * corpus that has since moved.
+   */
+  const [fp, listening] = await Promise.all([store.fingerprint(), store.listening(PRESENCE_MS)]);
+
+  const had = READ.get(store.projectId);
+  const truthHeld = had?.fp.truth === fp.truth;
+  const drawingsHeld = had?.fp.drawings === fp.drawings;
+
+  /**
+   * ⛔ THE HALVES ARE ASKED FOR SEPARATELY, AND THIS IS THE WHOLE POINT. A save moves the truth
+   * fingerprint and cannot move the drawings one, so the 14.8 MB of pictures is reused while the
+   * 2.7 MB of sentences is read again.
+   *
+   * ⛔ ONE ROUND TRIP FOR WHATEVER IS ACTUALLY NEEDED. The reads that are still wanted go together;
+   * the comment this replaces was about exactly that, and the sequential version of it cost a full
+   * trip per request against Neon.
+   */
+  const at = store.projectId;
+  const [truth, drawings, events] = await Promise.all([
+    truthHeld ? Promise.resolve(had!.truth) : once(`${at}|t|${fp.truth}`, () => store.documentsOutside(DRAWINGS)),
+    drawingsHeld ? Promise.resolve(had!.drawings) : once(`${at}|d|${fp.drawings}`, () => store.documentsUnder(DRAWINGS)),
+    truthHeld ? Promise.resolve(had!.events) : once(`${at}|e|${fp.truth}`, () => store.since(0, LOG_CEILING)),
   ]);
-  const dir = materialize(documents);
-  const logHad = writeLog(dir, events);
+  noteCorpus(truthHeld && drawingsHeld ? "cached" : "read");
+
+  const documents: Record<string, string> = { ...truth, ...drawings };
+
+  if (!truthHeld || !drawingsHeld) {
+    /** ⛔ Oldest out first, so a busy instance holds a bounded number of corpora. */
+    if (!mutating && READ.size >= READ_CEILING && !READ.has(store.projectId)) {
+      const oldest = READ.keys().next().value;
+      if (oldest !== undefined) READ.delete(oldest);
+    }
+    /**
+     * ⛔ NOTHING IS REMEMBERED FROM A WRITE. The fingerprint was taken before the write landed, so
+     * storing it would hand the next reader a match against a corpus that has since moved.
+     */
+    if (!mutating) READ.set(store.projectId, { fp, truth, drawings, events });
+  }
+
+  /**
+   * ⛔ THE SAME DIRECTORY AGAIN, WHEN THE REQUEST CANNOT WRITE TO IT.
+   *
+   * Every request wrote all 169 documents to a fresh temp directory, read them back, parsed them,
+   * and deleted them — profiled across 18 requests on Bilrost's corpus, that floor was ~1.0s of
+   * writing, ~1.6s of reading and ~2.9s of YAML. A 35-byte presence answer paid it.
+   *
+   * ⛔ ONLY WHEN THE REQUEST IS NOT MUTATING, and the reason is `writeBack`: it diffs the files on
+   * disk against what the request was given, so a request that writes into a SHARED directory
+   * would have its writes read as somebody else's. A mutating request therefore still gets its own,
+   * exactly as before.
+   *
+   * ⛔ AND A DIRTY SHARED DIRECTORY IS THROWN AWAY RATHER THAN TRUSTED. If a non-mutating request
+   * does somehow change a file, `writeBack` sees it, and `forgetDir` drops the directory so the
+   * next reader lays out a clean one. The invariant is that a shared directory is pristine; it is
+   * not an assumption that nothing ever writes to it.
+   */
+  const reusable = !mutating && truthHeld && drawingsHeld && had?.dir && fs.existsSync(had.dir);
+  noteDir(reusable ? "reused" : "laid-out");
+  const dir = reusable ? had!.dir! : materialize(documents);
+  const logHad = reusable ? countLogLines(dir) : writeLog(dir, events);
   writeSessions(dir, listening);
-  return { dir, documents, logHad, listening };
+  if (!mutating) {
+    const entry = READ.get(store.projectId);
+    if (entry) entry.dir = dir;
+  }
+  /**
+   * ⛔ A GETTER, SO A ROUTE THAT DOES NOT NEED A CORPUS DOES NOT PARSE ONE. Presence reads notes and
+   * nothing else; making it pay for a parse to answer "is anybody listening" is the cost this whole
+   * sweep has been removing.
+   *
+   * ⛔ AND NEVER FOR A WRITE. A write edits the directory and then expects to read what it wrote, so
+   * a corpus parsed before its own edit would be a request that cannot see its own work — the same
+   * reason a writer is handed its own directory rather than the shared one.
+   */
+  const corpusFor = mutating
+    ? undefined
+    : () => {
+        const entry = READ.get(store.projectId);
+        const current = entry?.fp.truth === fp.truth && entry?.fp.drawings === fp.drawings;
+        if (current && entry?.corpus) return entry.corpus;
+        const parsed = loadCorpus(dir);
+        if (current && entry) entry.corpus = parsed;
+        return parsed;
+      };
+
+  return { dir, documents, logHad, listening, shared: Boolean(!mutating), corpusFor };
 }
 
 /**
@@ -332,17 +573,27 @@ async function keepHeartbeats(
   before: Array<{ session: string; at: string }>,
 ): Promise<void> {
   const was = new Map(before.map((w) => [w.session, w.at]));
+  /**
+   * ⛔ THE BEATS GO TOGETHER, NOT ONE ROUND TRIP EACH. This awaited inside the loop, so a project
+   * with four listeners cost four serial writes — and against Neon a trivial write is ~175ms of
+   * trip whatever it carries, on every request, including the presence poll the page runs.
+   *
+   * ⛔ AND EACH STILL FAILS ALONE. One listener's bad row must not fail the request it rode in on,
+   * which is why this is `allSettled` over per-beat try/catch rather than a transaction: a lost
+   * beat is a surface that lapses, not a broken write.
+   */
+  const beats: Array<Promise<void>> = [];
   for (const w of sessionsIn(dir)) {
     if (was.get(w.session) === w.at) continue;
     const at = new Date(w.at);
     if (Number.isNaN(at.getTime())) continue;
-    /** ⛔ One listener's bad row must not fail the request it rode in on. */
-    try {
-      await store.saw(w.session, at);
-    } catch {
-      // Presence is a convenience; losing one beat is a surface that lapses, not a broken write.
-    }
+    beats.push(
+      store.saw(w.session, at).catch(() => {
+        // Presence is a convenience; losing one beat is a surface that lapses, not a broken write.
+      })
+    );
   }
+  await Promise.all(beats);
 }
 
 /**
@@ -375,13 +626,38 @@ export async function writeBack(
     return { changed: [], logged: 0 };
   }
 
-  const now = await store.documents();
-  const conflict = [...changed, ...removed].filter((k) => (now[k] ?? undefined) !== (before[k] ?? undefined));
+  /**
+   * ⛔ ONLY THE PATHS THIS REQUEST TOUCHED. This asked for every document in the project — 19 MB on
+   * Bilrost's corpus — to compare the handful it changed, and then discarded the rest. The question
+   * is unchanged: does each path this request touched still hold what it held when it started.
+   */
+  const touched = [...new Set([...changed, ...removed])];
+  const now = await store.sourcesOf(touched);
+  const conflict = touched.filter((k) => (now[k] ?? undefined) !== (before[k] ?? undefined));
   if (conflict.length) return { conflict };
 
-  for (const key of changed) await store.put(key, after[key]!);
-  /** ⛔ Deprecated, never deleted — the store has no delete path to call. */
-  for (const key of removed) await store.deprecate(key);
+  /**
+   * ⛔ THE CACHED READ GOES BEFORE THE WRITES, NOT AFTER THEM. Dropping it afterwards leaves a
+   * window in which this process has written and another request can still be handed what was read
+   * before — small, and exactly the kind of window that turns into "the page showed me old truth".
+   */
+  forgetRead(store.projectId);
+
+  /**
+   * ⛔ THE DOCUMENT WRITES GO TOGETHER — they touch different paths, so waiting for each before
+   * sending the next bought a round trip per file. A placement save changes one file and did not
+   * care; a sweep that redraws forty screens paid forty trips in series.
+   *
+   * ⛔ AND THE APPENDS BELOW DELIBERATELY DO NOT. An event's `seq` is allocated under the primary
+   * key — two appends racing both compute the same next number, the key rejects the loser and it
+   * retries. Firing them together would manufacture exactly the collisions the retry exists to
+   * survive, and turn N trips into N plus the retries. Serial is the cheaper correct answer there.
+   */
+  await Promise.all([
+    ...changed.map((key) => store.put(key, after[key]!)),
+    /** ⛔ Deprecated, never deleted — the store has no delete path to call. */
+    ...removed.map((key) => store.deprecate(key)),
+  ]);
 
   /**
    * ⛔ IN ORDER, AND AFTER THE DOCUMENTS. An event announcing a change that is not in the store yet
@@ -477,7 +753,7 @@ export async function instanceRoute(
   const mutating = req.method !== "GET" && req.method !== "HEAD";
 
   const run = async (): Promise<boolean> => {
-    const { dir, documents: before, logHad, listening: wasListening } = await materializeProject(reached);
+    const { dir, documents: before, logHad, listening: wasListening, shared, corpusFor } = await materializeProject(reached, mutating);
     /**
      * ⛔ A MUTATING RESPONSE IS HELD UNTIL THE WRITE LANDS, OR THE CALLER IS TOLD 200 FOR A WRITE
      * THAT WAS REFUSED. The delegate answers as soon as it has performed the act against the
@@ -492,6 +768,7 @@ export async function instanceRoute(
     try {
       const handled = await v2Route(req, held ? held.proxy : res, addressed.rest, {
         dir,
+        corpusFor,
         who,
         /**
          * ⛔ THE STREAM READS THE STORE, NOT THE DIRECTORY IT WAS HANDED.
@@ -522,7 +799,18 @@ export async function instanceRoute(
        */
       await keepHeartbeats(reached, dir, wasListening);
 
+      /**
+       * ⛔ A READ THAT CHANGED A FILE MEANS THE SHARED DIRECTORY IS NO LONGER PRISTINE, and the
+       * invariant that makes sharing safe is that it is. So `writeBack` is still asked on every
+       * request — it is what notices — and the directory stops being shared the moment it has
+       * anything in it that the store does not. This is the assumption made falsifiable rather
+       * than trusted.
+       */
       const result = await writeBack(reached, before, dir, logHad);
+      if (shared && "changed" in result && (result.changed.length > 0 || result.logged > 0)) {
+        forgetDir(addressed.id);
+        fs.rmSync(path.dirname(dir), { recursive: true, force: true });
+      }
       if ("conflict" in result) {
         held?.discard();
         return (
@@ -561,12 +849,50 @@ export async function instanceRoute(
       held?.discard();
       throw e;
     } finally {
-      fs.rmSync(path.dirname(dir), { recursive: true, force: true });
+      /**
+       * ⛔ A SHARED DIRECTORY IS NOT THIS REQUEST'S TO DELETE. It belongs to the read cache and the
+       * next reader is about to use it; removing it here would hand somebody an empty corpus — or
+       * delete one out from under a request still reading it. One per project, replaced when the
+       * fingerprint moves, so this does not grow.
+       */
+      if (!shared) fs.rmSync(path.dirname(dir), { recursive: true, force: true });
     }
   };
 
-  /** Reads do not need the lock; anything that might write does. */
-  return mutating ? serialize(addressed.id, run) : run();
+  /**
+   * ⛔ ONE LINE PER REQUEST, SAYING WHAT IT DID — and the lock still only wraps what might write.
+   *
+   * Peter: *"should we add logs or instrumentation? this is ridiculous"*. Everything PT-0007 learned
+   * was learned by building a harness, and the harness was wrong about the environment six times.
+   * What goes in the line is exactly what no harness could see from outside: how many times the
+   * request crossed the network, and whether the corpus it served was reused or read again.
+   *
+   * ⛔ THE BYTES ARE COUNTED OFF THE RESPONSE, NOT GUESSED FROM THE BODY. A route may stream, hold
+   * a connection open, or answer 304 — asking the response what it wrote is the only count that is
+   * true for all of them.
+   */
+  const started = Date.now();
+  let wrote = 0;
+  const realWrite = res.write.bind(res);
+  const realEnd = res.end.bind(res);
+  const size = (chunk: unknown): number =>
+    typeof chunk === "string" ? Buffer.byteLength(chunk) : chunk instanceof Buffer ? chunk.length : 0;
+  (res as { write: unknown }).write = (chunk: unknown, ...rest: unknown[]) => {
+    wrote += size(chunk);
+    return (realWrite as (...a: unknown[]) => boolean)(chunk, ...rest);
+  };
+  (res as { end: unknown }).end = (chunk?: unknown, ...rest: unknown[]) => {
+    wrote += size(chunk);
+    return (realEnd as (...a: unknown[]) => unknown)(chunk, ...rest);
+  };
+
+  const { out, trace } = await traced(() => (mutating ? serialize(addressed.id, run) : run()));
+  if (tracingOn()) {
+    process.stderr.write(
+      line(req.method ?? "?", `/p/${addressed.id}${addressed.rest}`, res.statusCode, wrote, Date.now() - started, trace)
+    );
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------

@@ -1,0 +1,62 @@
+id: "0150"
+said: should we add logs or instriumentation? this is ridiculous
+at: 2026-10-15
+kind: surface
+reaches:
+  surface: queryCounter
+  pin: two requests in flight at once do not count each other's queries
+waived: {}
+closed: 2026-10-15
+
+# ⛔ APPENDED AFTER `change close`, which drops comments. See 0141 / 0144-0149.
+#
+# ⛔ THE INSTANCE COULD NOT SAY WHERE A REQUEST'S TIME WENT, AND THAT IS WHAT COST THE DAY.
+#
+# Every number in PT-0007 came from a harness built for the occasion, and the harness was wrong
+# about the environment SIX times:
+#
+#   · a synthetic corpus instead of Bilrost's — the real render was 18x slower
+#   · a corpus read from FILES while the instance reads a store
+#   · a browser probe that measured about:blank
+#   · a CPU profile of an empty corpus, reporting the render as free
+#   · a local store with no network, so round trips were invisible
+#   · PRODUCTOS_AUTH on, while the instance runs it OFF — so the trip counts I reported to Peter,
+#     and the "cache the auth lookups" recommendation I built on them, were for a configuration
+#     nobody is running. With auth off a warm read is 3 queries, not 6.
+#
+# From outside, the deploy session got 71.7s, 40.9s and 26.7s for the same unchanged page, and a
+# 273 kB page took 5.8s in the same minute. Nobody could say why, because nothing inside counted.
+#
+#     [productos] GET  /p/x/v2              200 2977214b 736ms db=5q corpus=read   dir=laid-out
+#     [productos] GET  /p/x/api/v2/presence 200      35b  48ms db=3q corpus=cached  dir=reused
+#     [productos] GET  /p/x/v2              200 2977214b 256ms db=3q corpus=cached  dir=reused
+#     [productos] POST /p/x/api/v2/in       200     146b 379ms db=6q corpus=cached  dir=laid-out
+#     [productos] GET  /p/x/v2              200 2978658b 625ms db=5q corpus=read   dir=laid-out
+#
+# `db=` is the count no harness can see from outside. `corpus=`/`dir=` say whether the caching is
+# working — a question I could only answer today by grepping a container's `dist`. And the last line
+# is the post-write cost, visible at a glance rather than after an hour of probing.
+#
+# ⛔ PER REQUEST UNDER CONCURRENCY, which is why it is AsyncLocalStorage and not a counter. The
+# instance serves overlapping requests — the deploy session fired four at once — and a module-level
+# counter would bill one request's queries to another. A measurement that LIES is worse than one
+# that is missing, and there were six of those today.
+#
+# ⛔ TWO MISTAKES BUILDING IT, BOTH CAUGHT:
+#
+#   · the first counter hooked `postgres-js`, which SHIPS, so it read zero under PGlite, which the
+#     TESTS run — an untested counter that silently reports nothing, which is the exact failure
+#     `server.ts` already carries a ⛔ about. Moved to drizzle's driver-independent logger, and a
+#     test now asserts the shipping path wires it, since no test here can build the real driver.
+#   · the line claimed `db=5q/412ms`. The logger fires when a statement is ISSUED, not when it
+#     returns, so that duration would have been invented. It reports the count only, and a pin
+#     fails if a duration reappears.
+#
+# ⛔ AND THE SUITE CAUGHT THE NEW FILE BEING ON NOBODY'S MAP. `agents-and-areas` requires every
+# `src/v2/store/*.ts` to be claimed by an area, because a file no area claims is a place no reviewer
+# is sent — the test's own comment records ten files going missing that way before. Filed under
+# surface: what it produces is read by a person, and a reviewer asking "why is this page slow" is
+# asking about this file.
+#
+# ⛔ NOT ON BY A FLAG. A log nobody turned on is a log nobody has when they need it, and by the time
+# anybody needs this the slow request has already happened. `PRODUCTOS_QUIET=1` is the way out.

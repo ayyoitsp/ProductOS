@@ -1,9 +1,10 @@
 id: "0142"
-said: we need better error handling - we should just pass the response to a notification bar or something... a generic 'out' way to message back to the user if it's not from the chat interface
-at: 2026-10-15
-kind: surface
+said: we should have product OS self improve from the get-go. all the feedback it receives we should record and figure out how to improve the agents.
+at: 2026-10-14
+kind: instruction
 reaches:
-  surface: function announce(out)
-  pin: a refusal is announced, with its reason and its detail
+  instruct: files your finding against whatever product lives there
+
+  pin: it was filed against the repo cwd was standing in
+
 waived: {}
-closed: 2026-10-15

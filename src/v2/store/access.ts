@@ -10,7 +10,7 @@
  * ⛔ THE SCOPE IS THE PROJECT, NOT THE OWNER. So this survives the owner model changing: an owning
  * group arriving above accounts later does not touch a line in here.
  */
-import { and, asc, eq, gt, isNull, lt, sql } from "drizzle-orm";
+import { and, asc, eq, gt, isNull, lt, sql, inArray, like, not } from "drizzle-orm";
 import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 import type { Refusal } from "../identity.js";
 import { authIsOff } from "./identity.js";
@@ -18,6 +18,19 @@ import { documents, events, listening, projectMembers, projects } from "./schema
 
 /** Any drizzle Postgres instance. ⛔ The driver is the caller's business — see `migrate.ts`. */
 export type Db = PgDatabase<PgQueryResultHKT, Record<string, unknown>, Record<string, never>>;
+
+/**
+ * What a project is AT, in two halves.
+ *
+ * ⛔ TWO, BECAUSE A SAVE MUST NOT INVALIDATE THE PICTURES. A drawing is its own document now, and a
+ * write to the sentences cannot change one — so a single value made every reader after a save treat
+ * 14.8 MB of Bilrost's 17.5 MB as suspect. `truth` carries the log's position too: an appended
+ * event changes what a reader of the log sees and cannot change a drawing.
+ */
+export interface Fingerprint {
+  truth: string;
+  drawings: string;
+}
 
 /**
  * Who is asking, in the terms this layer needs.
@@ -53,6 +66,51 @@ export interface ProjectStore {
    * store that parsed for itself would be a second implementation of the model.
    */
   documents(): Promise<Record<string, string>>;
+
+  /**
+   * The source of just these paths.
+   *
+   * ⛔ `writeBack` READ ALL 19 MB TO COMPARE THE ONE FILE A REQUEST CHANGED. Its conflict check asks
+   * whether the paths this request touched still hold what they held when it started — which is a
+   * question about a handful of paths, answered by fetching every document in the project. On the
+   * hosted store that is the single most expensive read there is, on the path of every write,
+   * including the placement save Peter is waiting on.
+   *
+   * ⛔ IT IS THE SAME QUESTION, NARROWED — not a weaker one. The check compares `now[k]` against
+   * `before[k]` for the paths in `changed` and `removed` and ignores every other key, so fetching
+   * the others was work whose result was discarded.
+   */
+  sourcesOf(paths: string[]): Promise<Record<string, string>>;
+
+  /**
+   * The documents that are not drawings, and the drawings, as two reads.
+   *
+   * ⛔ BECAUSE A SAVE MUST NOT RE-READ THE PICTURES. Peter: *"why can't we just not re-read the
+   * images?"*. On Bilrost that is 14.8 MB of 17.5, and a write to the sentences cannot change one —
+   * but a single `documents()` cannot express "everything except the drawings", so every save read
+   * all of it back.
+   *
+   * ⛔ SPLIT BY PATH PREFIX, which is a fact about the corpus layout rather than a guess about
+   * content. `documents()` stays for the callers that genuinely want the whole corpus — export, the
+   * corpus endpoint — and those are not on any request's hot path.
+   */
+  documentsOutside(prefix: string): Promise<Record<string, string>>;
+  documentsUnder(prefix: string): Promise<Record<string, string>>;
+
+  /**
+   * What the document set is AT, without reading it.
+   *
+   * ⛔ EVERY REQUEST READ 19 MB TO SERVE A PAGE, and `documents()` is 1729ms of it against Neon —
+   * measured on the instance, 169 rows. The page then parses all of it and renders one section.
+   * Nothing about that read changes between two page views a second apart, and this is how a caller
+   * finds that out for the price of one aggregate row.
+   *
+   * ⛔ IT COVERS DEPRECATION AND THE LOG, NOT JUST WRITES. A document deprecated rather than
+   * updated changes what a corpus contains while leaving `max(updated_at)` alone; an appended event
+   * changes what a reader of the log sees while leaving the documents alone. A fingerprint that
+   * missed either would serve a stale corpus, which is worse than a slow one.
+   */
+  fingerprint(): Promise<Fingerprint>;
 
   put(path: string, source: string, projection?: Record<string, unknown>): Promise<void>;
   /** ⛔ Nothing is deleted. */
@@ -166,6 +224,103 @@ function projectStore(db: Db, projectId: string): ProjectStore {
       return out;
     },
 
+    /**
+     * ⛔ AGGREGATES, NOT ROWS — the whole point is to not read the documents. Two selects rather
+     * than one because they are different tables, and both are covered by the project index.
+     */
+    /**
+     * ⛔ ONE ROUND TRIP, AND THE FIRST VERSION OF THIS MADE EXACTLY THE MISTAKE THIS FILE'S NEIGHBOUR
+     * WARNS ABOUT, four lines from the warning.
+     *
+     * `materializeProject` carries a ⛔ saying "ONE ROUND TRIP, NOT TWO … asking for the second only
+     * after the first arrived cost a full trip — 90ms against Neon, on every single request, for
+     * nothing". I then wrote a fingerprint as two sequential awaits.
+     *
+     * It cost more than 90ms, because against Neon a trivial query is dominated by the trip rather
+     * than the work: `listening()` was measured at 176ms returning 0 rows and `since(0, 100000)` at
+     * 231ms returning 233. So a 35-byte presence answer was ~0.8s on the instance while the same
+     * code took 37ms locally over PGlite — the whole difference being how many times it crossed the
+     * network, which a local store cannot show. The fourth member of the environment family today.
+     *
+     * Two scalar subqueries in one statement: one trip, same answer, and the events table is only
+     * touched for its max.
+     */
+    async fingerprint() {
+      /**
+       * ⛔ TWO FINGERPRINTS IN ONE TRIP, SO A SAVE STOPS RE-READING THE PICTURES.
+       *
+       * Peter: *"why can't we just not re-read the images?"* — and once a drawing is its own row,
+       * that becomes available. 14.8 MB of Bilrost's 17.5 MB is drawings. A write to the sentences
+       * cannot change a drawing, so a single whole-corpus fingerprint was telling every reader
+       * after a save that 14.8 MB it had never touched was now suspect.
+       *
+       * ⛔ SPLIT BY WHERE THE DOCUMENT LIVES, not by what it looks like. `drawings/…` is the one
+       * path prefix the generator owns; everything else is somebody's words. That is a fact about
+       * the corpus layout rather than a guess about content, so it cannot be wrong about a document
+       * nobody anticipated.
+       *
+       * ⛔ AND STILL ONE ROUND TRIP. Two aggregates over the same table, filtered by prefix, in one
+       * statement — because the comment four lines up in `materializeProject` is about exactly this
+       * and I have already broken it once today by writing a fingerprint as two sequential awaits.
+       */
+      const drawingsPrefix = "drawings/%";
+      const [row] = await db
+        .select({
+          truthN: sql<number>`count(*) filter (where ${documents.path} not like ${drawingsPrefix})`,
+          truthUpdated: sql<string>`coalesce(max(${documents.updatedAt}) filter (where ${documents.path} not like ${drawingsPrefix})::text, '')`,
+          truthGone: sql<string>`coalesce(max(${documents.deprecatedAt}) filter (where ${documents.path} not like ${drawingsPrefix})::text, '')`,
+          drawnN: sql<number>`count(*) filter (where ${documents.path} like ${drawingsPrefix})`,
+          drawnUpdated: sql<string>`coalesce(max(${documents.updatedAt}) filter (where ${documents.path} like ${drawingsPrefix})::text, '')`,
+          drawnGone: sql<string>`coalesce(max(${documents.deprecatedAt}) filter (where ${documents.path} like ${drawingsPrefix})::text, '')`,
+          seq: sql<number>`(select coalesce(max(${events.seq}), 0) from ${events} where ${events.projectId} = ${projectId})`,
+        })
+        .from(documents)
+        .where(eq(documents.projectId, projectId));
+      return {
+        truth: [row?.truthN ?? 0, row?.truthUpdated ?? "", row?.truthGone ?? "", row?.seq ?? 0].join("|"),
+        drawings: [row?.drawnN ?? 0, row?.drawnUpdated ?? "", row?.drawnGone ?? ""].join("|"),
+      };
+    },
+
+    async documentsOutside(prefix) {
+      const rows = await db
+        .select({ path: documents.path, source: documents.source })
+        .from(documents)
+        .where(
+          and(
+            eq(documents.projectId, projectId),
+            isNull(documents.deprecatedAt),
+            not(like(documents.path, `${prefix}%`))
+          )
+        );
+      const out: Record<string, string> = {};
+      for (const r of rows) out[r.path] = r.source;
+      return out;
+    },
+
+    async documentsUnder(prefix) {
+      const rows = await db
+        .select({ path: documents.path, source: documents.source })
+        .from(documents)
+        .where(
+          and(eq(documents.projectId, projectId), isNull(documents.deprecatedAt), like(documents.path, `${prefix}%`))
+        );
+      const out: Record<string, string> = {};
+      for (const r of rows) out[r.path] = r.source;
+      return out;
+    },
+
+    async sourcesOf(paths) {
+      if (!paths.length) return {};
+      const rows = await db
+        .select({ path: documents.path, source: documents.source })
+        .from(documents)
+        .where(and(eq(documents.projectId, projectId), inArray(documents.path, paths), isNull(documents.deprecatedAt)));
+      const out: Record<string, string> = {};
+      for (const r of rows) out[r.path] = r.source;
+      return out;
+    },
+
     async put(path, source, projection) {
       await db
         .insert(documents)
@@ -189,16 +344,31 @@ function projectStore(db: Db, projectId: string): ProjectStore {
      * sequence shared across projects would be the easy alternative, and would make one project's
      * cursor move because a different project changed.
      */
+    /**
+     * ⛔ THE SEQ IS ALLOCATED IN THE INSERT, NOT ASKED FOR FIRST. This read the maximum and then
+     * inserted — two round trips per event, in series, and a write appends at least one. Against
+     * the hosted store that is ~360ms of waiting to record one thing happening.
+     *
+     * ⛔ AND THE RETRY IS WHY THIS IS SAFE RATHER THAN CLEVER. The original comment is still the
+     * governing one: the number is allocated under the primary key, not trusted from a read. Two
+     * sessions appending at once still both compute the same next number, the key still rejects the
+     * loser, and it still retries. Computing it inside the statement narrows the window; it was
+     * never the thing keeping this correct.
+     */
     async append(kind, payload = {}) {
       for (let attempt = 0; attempt < 8; attempt++) {
-        const [row] = await db
-          .select({ max: sql<number>`coalesce(max(${events.seq}), 0)` })
-          .from(events)
-          .where(eq(events.projectId, projectId));
-        const seq = Number(row?.max ?? 0) + 1;
         try {
-          await db.insert(events).values({ projectId, seq, kind, payload });
-          return seq;
+          const [row] = await db
+            .insert(events)
+            .values({
+              projectId,
+              seq: sql<number>`(select coalesce(max(${events.seq}), 0) + 1 from ${events} where ${events.projectId} = ${projectId})`,
+              kind,
+              payload,
+            })
+            .returning({ seq: events.seq });
+          if (row?.seq) return Number(row.seq);
+          throw new Error("the insert returned no seq");
         } catch (e) {
           if (!/duplicate key|unique/i.test((e as Error).message ?? "")) throw e;
         }
@@ -230,11 +400,27 @@ function projectStore(db: Db, projectId: string): ProjectStore {
      */
     async listening(withinMs) {
       const floor = new Date(Date.now() - withinMs);
-      await db.delete(listening).where(and(eq(listening.projectId, projectId), lt(listening.at, floor)));
-      const rows = await db
-        .select({ session: listening.session, at: listening.at })
-        .from(listening)
-        .where(and(eq(listening.projectId, projectId), gt(listening.at, floor)));
+      /**
+       * ⛔ THE REAP AND THE ANSWER GO TOGETHER, AND THIS IS ON EVERY REQUEST. The delete was awaited
+       * before the select for no reason: the two touch disjoint rows — one takes what is older than
+       * the floor, the other reads what is newer — so waiting for the tidy-up before asking the
+       * question bought a whole round trip per request.
+       *
+       * Against the hosted store that is ~180ms on every page view, every presence poll and every
+       * write, measured by injecting the trip locally: presence was 884ms of which this was one
+       * round. Same reasoning, and the same measurement, as the reach pair above.
+       *
+       * ⛔ AND THE ANSWER DOES NOT DEPEND ON THE REAP SUCCEEDING. Reaping is opportunistic — the
+       * expiry model is `within`, not deletion — so the worst case of overlapping them is that a
+       * listener already past the floor is read once more and lapses on the next poll.
+       */
+      const [, rows] = await Promise.all([
+        db.delete(listening).where(and(eq(listening.projectId, projectId), lt(listening.at, floor))),
+        db
+          .select({ session: listening.session, at: listening.at })
+          .from(listening)
+          .where(and(eq(listening.projectId, projectId), gt(listening.at, floor))),
+      ]);
       return rows.map((r) => ({ session: r.session, at: r.at.toISOString() }));
     },
   };

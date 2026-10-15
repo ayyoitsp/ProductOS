@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { sayIfInstalledBriefsDiffer } from "../../adapters/claude.js";
 import path from "node:path";
 import { Command } from "commander";
 import pc from "picocolors";
@@ -170,6 +171,15 @@ export function v2Command(): Command {
     .option("--token <t>", "bearer token for an instance (or $PRODUCTOS_TOKEN)")
     .action(async (o: { at?: string; token?: string }) => {
       const { corpus, findings } = checkCorpus(await openAt(o));
+      /**
+       * ⛔ ON THE VERB AUTHORS ACTUALLY TYPE, and to stderr rather than into the findings.
+       *
+       * It is not a fact about the corpus, so it must not join the refusals — a corpus verdict that
+       * mixes in the state of somebody's machine is a verdict nobody can act on cleanly. But `doctor`
+       * alone would be the same mistake `todo scan` already made once: the warning lands on the verb
+       * nobody runs, and `v2 check` is the one every author runs before handing anything over.
+       */
+      for (const line of sayIfInstalledBriefsDiffer()) process.stderr.write(pc.yellow(line) + "\n");
       const s = summarise(findings);
       const ex = corpus.scopes.reduce((n, x) => n + x.scope.exchanges.length, 0);
       console.log(
@@ -787,7 +797,7 @@ export function v2Command(): Command {
         console.log("");
         console.log(`${pc.cyan(q.ref)}  ${pc.dim(q.kind)}`);
         console.log(
-          pc.dim(`  on: ${q.exchangeTitle} — ${SLOT_ASKS_SHORT[q.slot]}${q.scope !== scope ? `  (in ${q.scope})` : ""}`)
+          pc.dim(`  on: ${q.exchangeTitle}${q.slot ? ` — ${SLOT_ASKS_SHORT[q.slot]}` : ""}${q.scope !== scope ? `  (in ${q.scope})` : ""}`)
         );
         console.log("");
         for (const line of q.asks.split("\n")) console.log(`  ${line}`);
@@ -818,7 +828,23 @@ export function v2Command(): Command {
         if (q.revises) {
           console.log("");
           console.log("  This already says:");
-          console.log(`    ${q.revises.replace(/\s+/g, " ").trim()}`);
+          /**
+           * ⛔ ONE PER LINE, AND THE UNRULED ONE MARKED. `revises` is `saysText`, which joins every
+           * statement with a space — so a slot saying four things printed as one sentence and a
+           * reviewer had no way to see which an option would touch. Reported by an author who read
+           * the output and said a pick "could reasonably be read as deleting the sibling statement
+           * it does not touch". The page was fixed and this surface was not, which is the same
+           * defect twice and worth saying once.
+           */
+          const each = q.saysEach ?? [];
+          if (each.length > 1)
+            for (const x of each)
+              console.log(
+                x.inQuestion
+                  ? `    ${pc.yellow("▸")} ${x.says.replace(/\s+/g, " ").trim()} ${pc.dim("← this one is unruled")}`
+                  : `      ${pc.dim(x.says.replace(/\s+/g, " ").trim())}`
+              );
+          else console.log(`    ${q.revises.replace(/\s+/g, " ").trim()}`);
           if (q.candidates.length) {
             console.log("");
             console.log("  Proposed for the unruled part:");
@@ -835,6 +861,17 @@ export function v2Command(): Command {
             console.log(pc.dim("  each option above is the whole sentence, so picking one replaces it cleanly:"));
             console.log(pc.dim(`    productos v2 rule ${q.ref} --pick N --because "…" --by <your name>`));
             console.log(pc.dim(`    or instead: productos v2 rule ${q.ref} --says "…" --because "…" --by <your name>`));
+          } else if (each.some((x) => x.inQuestion)) {
+            /**
+             * ⛔ AND THIS BRANCH TOLD THEM TO DO THE DESTRUCTIVE THING. With `of:` set, `settle`
+             * replaces the named statement and leaves its siblings byte-identical — so `--pick`
+             * is safe and correct. The advice to "write the whole sentence, keeping what is
+             * already agreed" would have had a reviewer retype four statements by hand and
+             * overwrite the three nobody asked about. The information was in the standing the
+             * whole time.
+             */
+            console.log(pc.dim("  each option replaces the marked statement only — the others stand untouched:"));
+            console.log(pc.dim(`    productos v2 rule ${q.ref} --pick N --because "…" --by <your name>`));
           } else {
             console.log(pc.dim("  the options above answer only the unruled part, and a ruling here becomes the"));
             console.log(pc.dim("  whole sentence — so write the one you want, keeping what is already agreed:"));
@@ -868,6 +905,29 @@ export function v2Command(): Command {
             )
           );
           console.log(pc.dim(`  or instead: productos v2 rule ${q.ref} --says "…"${stands}${then}${pol} --because "…" --by <your name>`));
+        } else if (q.kind === "contested word") {
+          /**
+           * ⛔ THE GENERIC ADVICE IS IMPOSSIBLE TO FOLLOW HERE, AND THIS IS MY OWN REGRESSION.
+           *
+           * Surfacing contested words at all was the fix for a field no surface read. They then
+           * landed in the branch below, which says "ask whoever is scoping this to add
+           * `candidates` to the standing" — and a contested word HAS no standing. `Term.contested`
+           * is `{question, with}`, strictly, so there is nowhere for a candidate to go. Reported by
+           * an author who read the output and filed it as a gap: advice the schema refuses.
+           *
+           * ⛔ AND THE ANSWER IS A DIFFERENT KIND OF THING. Every other question here chooses
+           * between behaviours. This one decides which sense of a word the product means — so what
+           * it needs is a ruling on the vocabulary, after which the losing names are renamed in the
+           * scopes that used them. There is nothing to pick, and saying "pick one" would be the
+           * surface pretending this question has the shape of the others.
+           */
+          console.log("");
+          console.log(pc.red("  This is a naming collision, not a choice between behaviours."));
+          console.log(pc.dim("  Nothing is drafted and nothing can be: a contested word carries the question and"));
+          console.log(pc.dim("  the words it collides with, and no candidates — the answer is which sense the"));
+          console.log(pc.dim("  product means. Rule it in words, then the scopes using the other names are"));
+          console.log(pc.dim("  corrected to match; until then every feature using any of them is using one."));
+          console.log(pc.dim(`  answer it: productos v2 rule ${q.ref} --says "…which sense wins…" --because "…" --by <your name>`));
         } else {
           console.log("");
           /**
@@ -3155,10 +3215,15 @@ export function v2Command(): Command {
     .option("--on <date>", "the day they asked (a carried-in row already has one)")
     .option("--id <id>", "the id of the row this was carried in under, so carrying it twice files one note")
     /**
+     * ⛔ THE SKILL DOCUMENTED THIS BEFORE THE CLI HAD IT, which is the defect I had just fixed
+     * twice over: an instruction nobody can follow. Written here so the documented command runs.
+     */
+    .option("--probe", "a session checking that writing works — counted in no waiting total, shown on no surface a person reviews")
+    /**
      * ⛔ NO `--at` HERE. The parent declares it; declaring it again is what made the value vanish.
      * `optsWithGlobals` reads it whichever side of the verb it was typed.
      */
-    .action(async (says: string, o: { about: string; by: string; via?: string; on?: string; id?: string }, self: Command) => {
+    .action(async (says: string, o: { about: string; by: string; via?: string; on?: string; id?: string; probe?: boolean }, self: Command) => {
       const g = self.optsWithGlobals() as { at?: string; token?: string };
       if (looksLikeInstance(g.at)) {
         try {
@@ -3181,6 +3246,7 @@ export function v2Command(): Command {
         via: o.via as Via,
         at: o.on ?? new Date().toISOString().slice(0, 10),
         id: o.id,
+        probe: o.probe === true,
       });
       if (!r.ok) {
         console.error(pc.red("✗"), r.why);

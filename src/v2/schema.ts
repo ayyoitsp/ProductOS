@@ -3208,6 +3208,26 @@ export const Note = z
     state: z.enum(["open", "done"]).default("open"),
     outcome: z.string().optional(),
     /**
+     * ⛔ NOBODY IS WAITING ON THIS ONE — IT IS A SESSION CHECKING THAT WRITING WORKS.
+     *
+     * Peter, at a banner saying six requests were waiting: *"and what are those 6 requests, i did
+     * not send any requests"*. He had not. Five of the six were another session's probes —
+     * `staleness-probe-231153`, `concurrent-probe-005057`, `fingerprint-probe-011554`,
+     * `fingerprint-probe2-011604`, `split-probe-172049` — written while it investigated a hung
+     * write path, and rendered on his review surface as five people asking him for changes.
+     *
+     * ⛔ AND THE QUEUE WAS THE ONLY WRITABLE THING TO PROBE. A session testing whether an instance
+     * can take a write has to write SOMETHING, and filing a request was the cheapest honest
+     * option — so the pollution is the model's fault rather than that session's. This is the field
+     * that lets a probe say what it is: counted nowhere, shown nowhere a person reviews, and still
+     * a real write that exercises the whole path.
+     *
+     * ⛔ IT IS NOT A `kind`. `kind` says what is being asked about — the corpus or the framework —
+     * and a probe asks about neither. Folding it in would make every reader of `kind` carry a
+     * value that means "disregard", which is how a vocabulary starts lying.
+     */
+    probe: z.boolean().optional(),
+    /**
      * ⛔ WHAT KIND OF THING IS BEING ASKED FOR — the corpus, or the framework that produced it.
      *
      * Peter: *"if i tag pos: {blah blah} in the message, that indicates a framework issue and to

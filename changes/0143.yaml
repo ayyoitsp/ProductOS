@@ -1,9 +1,8 @@
 id: "0143"
-said: what happened to collapsable menu items? CRE/dealmanagement are not collapsible??? get rid of 'XXX below', not sure what that means... shorten '5 unanswered' '5 {? icon}', and '59 to read' to '59 {eyes icon}'. make them chips next to the menu item name. Let's auto collapse the non-active menu item, so you can only have one expanded leaf at a time, like a "normal" menu
-at: 2026-10-15
-kind: surface
+said: why don't we just run the correct path and not rely on 'which' anyways?
+at: 2026-10-14
+kind: instruction
 reaches:
-  surface: twisty sub
-  pin: opening one container shuts its siblings
+  instruct: REQUIRED, and stable. Renaming one is a NEW requirement
+  pin: an installed brief whose body is not this build's is reported stale
 waived: {}
-closed: 2026-10-15

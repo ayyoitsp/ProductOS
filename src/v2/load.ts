@@ -122,6 +122,19 @@ export interface Store {
   /** Files directly under `dir` with one of these extensions, as full keys, sorted. */
   list: (dir: string, ext: string[]) => string[];
   read: (file: string) => string;
+  /**
+   * Whether one named file is there.
+   *
+   * ⛔ ASKED OF THE STORE, NOT OF `fs`. A corpus is a directory locally and a set of rows hosted,
+   * and `loadCorpus` is the one reader for both — reaching for `fs.existsSync` here would work on a
+   * laptop and answer "no drawing" for every screen on the instance, which is the shape of bug this
+   * file already carries two ⛔ comments about.
+   *
+   * ⛔ AND NOT `list`-AND-FILTER, which was the alternative. Listing a directory to ask about one
+   * file is a question nobody reading it would recognise, and it is one readdir per scope for an
+   * answer about one path.
+   */
+  has: (file: string) => boolean;
 }
 
 /** The corpus as a directory. What every local command uses. */
@@ -135,6 +148,7 @@ export const diskStore: Store = {
           .map((f) => path.join(dir, f))
           .sort(),
   read: (file) => fs.readFileSync(file, "utf-8"),
+  has: (file) => fs.existsSync(file),
 };
 
 /**
@@ -145,6 +159,37 @@ export const diskStore: Store = {
  * a column name is. What would be a leak is one of these reaching a page.
  */
 /**
+ * What may be in a corpus directory: the sentences, and a screen's picture.
+ *
+ * ⛔ `.html` IS HERE BECAUSE A DRAWING IS ITS OWN FILE NOW, and leaving it out was silent data
+ * loss rather than a missing read. `writeBack` diffs `corpusFiles(dir)` against the documents the
+ * request was given — so a drawing the store holds and this does not see appears as REMOVED, and
+ * every hosted write would have deprecated every drawing in the project.
+ */
+const CORPUS_EXT = /\.(md|ya?ml|html)$/;
+
+/**
+ * Everything under one corpus directory, at whatever depth it sits.
+ *
+ * ⛔ RECURSIVE, FOR THE SAME REASON. `drawings/<scope>/<view>.html` is two levels down and this
+ * read one — so the drawing `materialize` had just written to disk was invisible on the way back,
+ * which is the other half of the same defect.
+ */
+function walk(here: string, prefix: string, out: Record<string, string>): void {
+  for (const entry of fs.readdirSync(here, { withFileTypes: true })) {
+    const at = path.join(here, entry.name);
+    /** ⛔ Keys are POSIX, because they are store paths — a Windows separator would be a new row. */
+    const key = `${prefix}/${entry.name}`;
+    if (entry.isDirectory()) {
+      walk(at, key, out);
+      continue;
+    }
+    if (!entry.isFile() || !CORPUS_EXT.test(entry.name)) continue;
+    out[key] = fs.readFileSync(at, "utf-8");
+  }
+}
+
+/**
  * Every file a corpus is made of, keyed by the path a directory would give it.
  *
  * ⛔ THE COUNTERPART OF `memoryStore`, AND THEY MUST STAY THAT WAY. An instance reads a corpus with
@@ -152,8 +197,40 @@ export const diskStore: Store = {
  * remote copy silently does not have — and the two would disagree about what the corpus says while
  * both reported themselves healthy.
  */
+/**
+ * Where a screen's picture lives, relative to the corpus root.
+ *
+ * ⛔ ONE HOME FOR THE KEY, because the reader and the writer must agree and a second copy of this
+ * expression would agree on the day it was written and never again. `loadCorpus` reads it onto
+ * `View.sketch_html`; `writeSketchHtml` writes it beside the document.
+ *
+ * ⛔ AND IT IS THE KEY THE PAGE ALREADY USES — `data-mock="<scope>#<view>"` and
+ * `/api/v2/mocks?refs=` address a drawing by that pair, so the file layout and the wire agree
+ * rather than needing a translation nobody maintains.
+ */
+export const drawingRel = (scopeId: string, viewId: string): string => `drawings/${scopeId}/${viewId}.html`;
+
 export const CORPUS_DIRS = [
   "truth",
+  /**
+   * ⛔ A SCREEN'S PICTURE IS ITS OWN FILE, BECAUSE IT WAS 85% OF THE CORPUS AND NOBODY COULD NOT
+   * READ IT.
+   *
+   * Peter: *"i don't understand why everything is so big? why isn't stuff broken down?"* and then
+   * *"why can't we just not re-read the images?"*. Measured on Bilrost: 17.5 MB of corpus, of which
+   * **14.8 MB was 83 `sketch_html` values** — the sentences, rules, readings and verdicts together
+   * were 2.7 MB. One feature, `pl-deal-workspace`, was a single 5.1 MB row that is 98% HTML.
+   *
+   * ⛔ AND INSIDE A ROW THEY CANNOT BE SKIPPED. The store is keyed by path with the source as one
+   * text column, so `select path, source` hands back the drawing whether anybody wanted it or not —
+   * which is why every page view, and every save, read all 14.8 MB. "Just do not re-read the
+   * images" is only available once they are their own entry.
+   *
+   * ⛔ NO SCHEMA CHANGE, which is what makes this cheap: `documents` is already one row per PATH, so
+   * splitting the file splits the row. And a diff improves — today a drawing is a single-line YAML
+   * scalar of megabytes that no review can read, where this is one HTML file per screen.
+   */
+  "drawings",
   "rules",
   "charter",
   "readings",
@@ -187,10 +264,7 @@ export function corpusFiles(root: string): Record<string, string> {
   for (const sub of CORPUS_DIRS) {
     const here = path.join(root, sub);
     if (!fs.existsSync(here)) continue;
-    for (const f of fs.readdirSync(here)) {
-      if (!/\.(md|ya?ml)$/.test(f)) continue;
-      out[`${sub}/${f}`] = fs.readFileSync(path.join(here, f), "utf-8");
-    }
+    walk(here, sub, out);
   }
   if (fs.existsSync(root)) {
     for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
@@ -222,6 +296,8 @@ export const memoryStore = (root: string, files: Record<string, string>): Store 
         .map((k) => path.join(root, k));
     },
     read: (file) => files[rel(file)] ?? "",
+    /** ⛔ `in`, not truthiness — an empty file is a file, and a screen may legitimately be blank. */
+    has: (file) => rel(file) in files,
   };
 };
 
@@ -244,6 +320,121 @@ function why(e: unknown): string {
   return (e as Error).message.split("\n")[0]!;
 }
 
+/**
+ * ⛔ A FILE THE LOADER CANNOT MAKE SENSE OF IS REPORTED, NOT SKIPPED.
+ *
+ * Every one of these collections read `raw.<key> ?? []`, so a file holding a single bare object —
+ * the reading's own fields at the top level, which is what an author writes when they follow the
+ * example rather than the schema — yielded an empty list, looped zero times, and pushed nothing to
+ * `broken`. The file was discarded in total silence.
+ *
+ * Measured on a real corpus mid-index: **129 of 208 reading files dropped**, `loadCorpus` reporting
+ * `0` broken readings, and twenty-odd authors who had each written their evidence with file:line
+ * pointers and had no way to discover none of it was being read. A file that says nothing the
+ * loader understands was indistinguishable from a file that says nothing.
+ *
+ * ⛔ IT IS THE INVERSE OF THE TWO FINDINGS FIXED IN #132 AND STRICTLY WORSE. Those fired on correct
+ * output, which is noisy and self-announcing. This goes quiet on incorrect output, which is the
+ * failure nobody can detect from the outside — the shape `check` exists to prevent and the one
+ * `GLOSSARY.md` warns is costly in both directions.
+ *
+ * ⛔ AN EMPTY OR COMMENT-ONLY FILE IS STILL FINE. `YAML.parse` gives `null` for both, and a blank
+ * file is visibly blank to whoever opens it — there is no hidden content to lose. What is reported
+ * is a file that plainly holds SOMETHING the loader was not asked for.
+ */
+function itemsIn(raw: unknown, key: string, file: string, broken: Array<{ file: string; why: string }>): unknown[] {
+  if (raw === null || raw === undefined) return [];
+  if (typeof raw !== "object" || Array.isArray(raw)) {
+    broken.push({ file, why: `this is not a \`${key}:\` file — the loader expects a mapping with \`${key}:\` in it` });
+    return [];
+  }
+  const held = raw as Record<string, unknown>;
+  /**
+   * ⛔ AN EMPTY OBJECT IS NOTHING, AND THE CALLERS HAND ME ONE. Each does
+   * `YAML.parse(readFile(file)) ?? {}`, so an empty or comment-only file arrives here as `{}`
+   * rather than as null — and my first version reported every one of them. A blank file is visibly
+   * blank to whoever opens it; there is no hidden content to lose, so reporting it is noise.
+   */
+  if (Object.keys(held).length === 0) return [];
+  /**
+   * ⛔ THE LIST FIRST, AND A BARE ENTRY ONLY AFTER IT — because for one collection the wrapper key
+   * and an entry's own field are the SAME WORD.
+   *
+   * A steer carries `steers: generation`. So a steer written the documented way, as one bare entry,
+   * has `steers:` at its top level and the obvious ordering — "is the key there? then it is a list"
+   * — read the entry's own enum as a malformed wrapper and reported the file broken. My first
+   * version did exactly that, and the test for the four collections a person writes is what caught
+   * it; `readings`, `notes` and `access` all happen not to collide, so nothing else would have.
+   */
+  const v = key in held ? held[key] : undefined;
+  if (Array.isArray(v)) return v;
+  /** `readings:` with nothing under it is a deliberate empty answer, not a malformed file. */
+  if (key in held && (v === null || v === undefined)) return [];
+  /**
+   * ⛔ ONE BARE ENTRY IS THE DOCUMENTED SHAPE, AND IT WAS THE ONE SHAPE THAT DID NOT LOAD.
+   *
+   * `agents/productos-scoper.md` shows a reading as a file of its own, named after it, with the
+   * entry's fields at the top level and no wrapper:
+   *
+   *     # readings/<something>.yaml
+   *     id: analysts-retype-sponsor
+   *     observes: analysts re-type the sponsor name rather than search for it
+   *     bears_on: deal-list#see-the-list
+   *
+   * So an author who followed the instruction EXACTLY wrote a file the loader discarded — 143 of
+   * one corpus's 222 reading files, every one of them correct by the only description of the
+   * format they were given. Reporting those as broken would be telling twenty authors that the
+   * documented shape is a mistake; the loader was the mistake.
+   *
+   * ⛔ `id` IS THE TEST, not "some key I recognise". Accepting any unrecognised mapping would
+   * swallow a genuinely malformed file, which is the silence this whole function exists to end.
+   *
+   * ⛔ AND IT LINES UP EXACTLY WITH WHO WRITES WHAT, which is why it is the right test rather than
+   * a convenient one. `Reading`, `Note`, `Steer` and `Access` all key on `id` — those are the four
+   * a person or an author writes by hand, and the four the documented bare shape applies to.
+   * `Verdict` has no `id`, and a verdict is never hand-authored: it is a stamp, written only
+   * through `accept` or `rule`, by a person, via an intent. So a bare verdict file is still
+   * reported — correctly, because nobody was ever told to write one.
+   */
+  if ("id" in held) return [held];
+  /** ⛔ Name what IS there, so the author can see their own fields and spot the missing wrapper. */
+  const got = Object.keys(held).slice(0, 4).join(", ");
+  broken.push({
+    file,
+    why: `no \`${key}:\` list at the top level and no \`id:\` either, so nothing in this file was read — it holds ${got ? `\`${got}\`` : "no recognised keys"}. Either one entry's own fields, or a \`${key}:\` list`,
+  });
+  return [];
+}
+
+/**
+ * Just the notes, for the callers that only ever wanted the notes.
+ *
+ * ⛔ `/api/v2/presence` PARSED 17.5 MB TO COUNT A HANDFUL OF OPEN NOTES, AND THE PAGE POLLS IT.
+ *
+ * Measured through the real request path on Bilrost's corpus: a 35-BYTE presence answer cost
+ * 400-1000ms. Profiled across 18 requests, the floor underneath every one of them was YAML parsing
+ * ~2.9s, reading the files back ~1.6s and writing them out ~1.0s — because the request materializes
+ * the whole corpus to disk, reads it back, parses it, and deletes it. For "is anybody listening",
+ * none of that is wanted.
+ *
+ * `notes/` is a handful of small `.yaml` files. Reading them is the same loop `loadCorpus` runs,
+ * lifted so one fact has one home — ⛔ NOT a second implementation of it, which would be the usual
+ * cost of a narrow reader and is why this is extracted rather than written.
+ */
+export function notesIn(root: string, broken?: Array<{ file: string; why: string }>, store: Store = diskStore): Note[] {
+  const out: Note[] = [];
+  /** ⛔ Through the Store, like `loadCorpus` — so a corpus held in memory answers this too. */
+  for (const file of store.list(path.join(v2Paths(root).root, "notes"), [".yaml", ".yml"])) {
+    try {
+      const raw = YAML.parse(store.read(file)) ?? {};
+      for (const n of itemsIn(raw, "notes", file, broken ?? [])) out.push(Note.parse(n));
+    } catch (e) {
+      broken?.push({ file, why: why(e) });
+    }
+  }
+  return out;
+}
+
 export function loadCorpus(root: string, store: Store = diskStore): Corpus {
   const paths = v2Paths(root);
   const readDir = (dir: string, ext: string[]): string[] => store.list(dir, ext);
@@ -254,11 +445,50 @@ export function loadCorpus(root: string, store: Store = diskStore): Corpus {
   const capabilities: Corpus["capabilities"] = [];
   const charter: Corpus["charter"] = [];
 
+  /**
+   * Where a screen's picture lives, as a path under the corpus root.
+   *
+   * ⛔ `<scope>/<view>.html`, WHICH IS ALREADY THE KEY THE PAGE USES. `data-mock="<scope>#<view>"`
+   * and `/api/v2/mocks?refs=` address drawings by exactly this pair, so the file layout and the
+   * wire format agree rather than needing a translation nobody maintains.
+   */
+  const drawingPath = (scopeId: string, viewId: string): string =>
+    path.join(paths.root, drawingRel(scopeId, viewId));
+
   for (const file of readDir(paths.truth, [".md"])) {
     if (path.basename(file).toLowerCase() === "readme.md") continue;
     try {
       const p = parseFrontmatter(readFile(file));
-      scopes.push({ scope: Scope.parse(p.data), body: p.content.trim(), file });
+      const scope = Scope.parse(p.data);
+      /**
+       * ⛔ A DRAWING ON DISK WINS, AND AN INLINE ONE STILL WORKS. Corpora written before the split
+       * carry `sketch_html` in the document, and a corpus may not stop loading because the layout
+       * moved on — the doc-migration moves them when it runs, and until it does both read.
+       *
+       * ⛔ AND IT IS SET ONTO `sketch_html`, DELIBERATELY. Everything downstream — the renderer, the
+       * wiring, the states, the mock bank — asks a View for its `sketch_html`, so assembling it here
+       * means the storage shape changed and the model did not. A second field would have been a
+       * second question every reader has to ask.
+       */
+      for (const v of scope.views) {
+        const where = drawingPath(scope.id, v.id);
+        /**
+         * ⛔ THE FILE WINS, AND PREFERRING THE INLINE ONE WAS A REAL BUG I SHIPPED FOR AN HOUR.
+         *
+         * The first version skipped a view that already had `sketch_html`, reasoning that an
+         * un-migrated corpus should keep working. It does — but it also meant a STALE inline
+         * drawing beat a freshly written file, silently and forever. Caught by
+         * `v2-a-worse-drawing-does-not-win`, whose fixture writes the drawing as a QUOTED scalar
+         * while the writer's deletion pass only matched block scalars, so the old one survived the
+         * redraw and the new one was invisible.
+         *
+         * The right precedence is the simple one: the file is where drawings are written, so the
+         * file is what a drawing IS. An inline one is a fallback for a corpus that has not been
+         * redrawn yet, and a leftover is then harmless rather than authoritative.
+         */
+        if (store.has(where)) v.sketch_html = store.read(where);
+      }
+      scopes.push({ scope, body: p.content.trim(), file });
     } catch (e) {
       broken.push({ file, why: why(e) });
     }
@@ -296,20 +526,12 @@ export function loadCorpus(root: string, store: Store = diskStore): Corpus {
   for (const file of readDir(paths.readings, [".yaml", ".yml"])) {
     try {
       const raw = YAML.parse(readFile(file)) ?? {};
-      for (const r of raw.readings ?? []) readings.push(Reading.parse(r));
+      for (const r of itemsIn(raw, "readings", file, broken)) readings.push(Reading.parse(r));
     } catch (e) {
       broken.push({ file, why: why(e) });
     }
   }
-  const notes: Note[] = [];
-  for (const file of readDir(path.join(paths.root, "notes"), [".yaml", ".yml"])) {
-    try {
-      const raw = YAML.parse(readFile(file)) ?? {};
-      for (const n of raw.notes ?? []) notes.push(Note.parse(n));
-    } catch (e) {
-      broken.push({ file, why: why(e) });
-    }
-  }
+  const notes: Note[] = notesIn(root, broken, store);
   /**
    * ⛔ WHAT STEERS THIS PROJECT, which is not product truth and not a note either. See `Steer` in
    * the schema for why those are three different things.
@@ -318,7 +540,7 @@ export function loadCorpus(root: string, store: Store = diskStore): Corpus {
   for (const file of readDir(path.join(paths.root, "steers"), [".yaml", ".yml"])) {
     try {
       const raw = YAML.parse(readFile(file)) ?? {};
-      for (const x of raw.steers ?? []) steers.push(Steer.parse(x));
+      for (const x of itemsIn(raw, "steers", file, broken)) steers.push(Steer.parse(x));
     } catch (e) {
       broken.push({ file, why: why(e) });
     }
@@ -334,7 +556,7 @@ export function loadCorpus(root: string, store: Store = diskStore): Corpus {
   for (const file of readDir(paths.root, [".yaml", ".yml"]).filter((f) => /access\.ya?ml$/.test(f))) {
     try {
       const raw = YAML.parse(readFile(file)) ?? {};
-      for (const x of raw.access ?? []) access.push(Access.parse(x));
+      for (const x of itemsIn(raw, "access", file, broken)) access.push(Access.parse(x));
     } catch (e) {
       broken.push({ file, why: why(e) });
     }
@@ -411,7 +633,7 @@ export function loadCorpus(root: string, store: Store = diskStore): Corpus {
   for (const file of readDir(paths.verdicts, [".yaml", ".yml"])) {
     try {
       const raw = YAML.parse(readFile(file)) ?? {};
-      for (const v of raw.verdicts ?? []) verdicts.push(Verdict.parse(v));
+      for (const v of itemsIn(raw, "verdicts", file, broken)) verdicts.push(Verdict.parse(v));
     } catch (e) {
       broken.push({ file, why: why(e) });
     }
@@ -461,7 +683,38 @@ export interface Resolved {
   awaiting: Map<string, Rule[]>;
 }
 
+/**
+ * What rule reaches what, worked out once per corpus.
+ *
+ * ⛔ THIS WAS 62.6% OF THE TIME IT TOOK TO SERVE A PAGE, and not because it is slow — because it was
+ * recomputed from scratch for every scope.
+ *
+ * Measured on 17.5 MB of real Bilrost: the page a reader arrives at took **8.1 seconds** to render,
+ * of which `selects` was 6.5s of self time. `resolveRules` walks every scope x every exchange x
+ * every rule, and twelve call sites ask for it — `gridFor` once per scope (127 times on that
+ * corpus), `renderExchanges` once per scope, `stampFor` once per ref. So the whole-corpus walk ran
+ * hundreds of times to render one section.
+ *
+ * ⛔ A `WeakMap` ON THE CORPUS, WHICH IS THE PATTERN THIS CODEBASE ALREADY USES — `goesCache` in
+ * `page.ts` does exactly this for the same reason. Keying on the object rather than on an id is
+ * what makes it correct rather than merely fast: a corpus is produced fresh by `loadCorpus`, so a
+ * changed corpus is a different object and gets its own answer. Nothing has to remember to
+ * invalidate anything, which is the only kind of cache worth having on a derivation.
+ *
+ * ⛔ AND IT IS A PURE FUNCTION OF `c`, asserted by the fact that every one of those twelve callers
+ * passes nothing else. If it ever takes a second argument, this memo is wrong and has to key on it.
+ */
+const resolved = new WeakMap<Corpus, Resolved>();
+
 export function resolveRules(c: Corpus): Resolved {
+  const had = resolved.get(c);
+  if (had) return had;
+  const out = resolveRulesUncached(c);
+  resolved.set(c, out);
+  return out;
+}
+
+function resolveRulesUncached(c: Corpus): Resolved {
   const inherited = new Map<string, Rule>();
   const awaiting = new Map<string, Rule[]>();
   const constrained = new Map<string, Rule[]>();

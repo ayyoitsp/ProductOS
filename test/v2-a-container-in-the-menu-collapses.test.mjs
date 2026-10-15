@@ -20,12 +20,14 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import fs from "node:fs";
 import path from "node:path";
+import YAML from "yaml";
 import { temp } from "./support/temp.mjs";
 import { browserOrSkip, openPage } from "./support/chrome.mjs";
 
 const { exe, skip } = browserOrSkip();
 
 const { loadCorpus } = await import("../dist/v2/load.js");
+const { parseFrontmatter } = await import("../dist/core/frontmatter.js");
 const { renderScopePage } = await import("../dist/v2/page.js");
 
 /**
@@ -50,10 +52,33 @@ function deepCorpus() {
     .replace(/^in: family-wallet$/m, "in: pocket-money");
   fs.writeFileSync(path.join(dir, "truth", "weekly-top-up.md"), grand);
 
+  /**
+   * ⛔ AND ONE SCOPE THAT STATES NOTHING, OR THE ASSERTION ABOUT THE CHIPLESS ROW IS VACUOUS.
+   *
+   * Every scope cloned from a real one carries its behaviours and exchanges, so every row in the
+   * fixture had chips — and "the chipless row's sentence is absent" was therefore true of a build
+   * that still rendered it. Putting the sentence back did not fail the test, which is how this was
+   * caught: a check with no failing state is not a check.
+   *
+   * Frontmatter only, and only the fields a scope needs to parse at all.
+   */
+  const front = parseFrontmatter(base).data;
+  fs.writeFileSync(
+    path.join(dir, "truth", "quiet-corner.md"),
+    `---\n${YAML.stringify({
+      id: "quiet-corner",
+      title: "Quiet corner",
+      in: "money",
+      exists: front.exists,
+      happy_path: front.happy_path,
+    })}---\n`
+  );
+
   const c = loadCorpus(dir);
   assert.deepEqual(c.broken, [], "the fixture does not load");
   const ids = c.scopes.map((s) => s.scope.id);
-  for (const id of ["money", "pocket-money", "weekly-top-up"]) assert.ok(ids.includes(id), `${id} missing`);
+  for (const id of ["money", "pocket-money", "weekly-top-up", "quiet-corner"])
+    assert.ok(ids.includes(id), `${id} missing`);
   return { dir, corpus: c, rootId: c.scopes.find((s) => !s.scope.in).scope.id };
 }
 
@@ -81,23 +106,45 @@ test("⛔ an area holds its own items, and does not name itself among them", () 
   assert.ok((inside.match(/data-twist-scope=/g) || []).length >= 1, "no row has a collapse control");
 });
 
+/**
+ * ⛔ THE MENU'S OWN MARKUP, WITH THE SCRIPTS TAKEN OUT.
+ *
+ * The wording assertions below first ran against the whole document and failed on a COMMENT inside
+ * the live script — one that quotes him using the very phrase being removed, because he had said it
+ * about a different surface months earlier. A comment ships to the browser inside a script tag, so
+ * searching the document for a sentence is not asking whether a reader sees it.
+ *
+ * It is the difference between "this string is absent from the bytes" and "this is not on the menu",
+ * and only the second one is the claim.
+ */
+const menuOf = (html) => html.replace(/<script[\s\S]*?<\/script>/g, "").replace(/<style[\s\S]*?<\/style>/g, "");
+
 test("⛔ a leaf gets no collapse control, and the counts are chips", () => {
   const { corpus, rootId } = deepCorpus();
   const html = renderScopePage(corpus, rootId, {});
+  const menu = menuOf(html);
 
   /** The deepest scope holds nothing, so it must not offer to expand. */
-  const leaf = /<li[^>]*data-scope="weekly-top-up"[^>]*>([\s\S]*?)<\/span>/.exec(html);
+  const leaf = /<li[^>]*data-scope="weekly-top-up"[^>]*>([\s\S]*?)<\/span>/.exec(menu);
   assert.ok(leaf, "the deepest scope is not a row");
   assert.match(leaf[1], /twisty none/, "a leaf is offering a control that would expand nothing");
 
+  /**
+   * ⛔ THE CHIPLESS ROW, FOUND AND SHOWN TO BE CHIPLESS FIRST. Asserting the sentence is absent from
+   * a menu where no row could have carried it is asserting nothing, and that is what this did.
+   */
+  const quiet = /<li[^>]*data-scope="quiet-corner"[^>]*>[\s\S]*?<\/li>/.exec(menu);
+  assert.ok(quiet, "the fixture's silent scope is not in the menu");
+  assert.doesNotMatch(quiet[0], /class="n /, "the row this is about has chips, so it is the wrong row");
+  assert.doesNotMatch(quiet[0], /states nothing of its own/, "the empty-row sentence is still rendered");
+
   /** ⛔ And the words he asked to be replaced are gone, in both directions. */
-  assert.doesNotMatch(html, /\d+ unanswered<\/span>/, "the long form of the chip is still rendered");
-  assert.doesNotMatch(html, /\d+ to read<\/span>/, "the long form of the chip is still rendered");
-  assert.doesNotMatch(html, /states nothing of its own/, "the empty-row sentence is still rendered");
-  assert.doesNotMatch(html, /\d+ below<\/span>/, "the subtree total is still rendered");
+  assert.doesNotMatch(menu, /\d+ unanswered<\/span>/, "the long form of the chip is still rendered");
+  assert.doesNotMatch(menu, /\d+ to read<\/span>/, "the long form of the chip is still rendered");
+  assert.doesNotMatch(menu, /\d+ below<\/span>/, "the subtree total is still rendered");
   /** The short form is there, and carries the full phrase for anything that cannot read a glyph. */
-  assert.match(html, /aria-label="\d+ unanswered"/, "the chip does not say what it counts");
-  assert.match(html, /<span class="mark" aria-hidden="true">\?<\/span>/, "no question mark chip");
+  assert.match(menu, /aria-label="\d+ unanswered"/, "the chip does not say what it counts");
+  assert.match(menu, /<span class="mark" aria-hidden="true">\?<\/span>/, "no question mark chip");
 });
 
 test("⛔ the branch you are standing in is open", () => {

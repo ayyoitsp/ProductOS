@@ -1,0 +1,52 @@
+id: "0149"
+said: Keep going. Don't stop until this is usable
+at: 2026-10-15
+kind: derivation
+reaches:
+  derive: sourcesOf
+  surface: corpusFor
+  pin: the conflict check still refuses a write that started from a stale corpus
+waived:
+  check: "No corpus can be wrong about any of this. The guarantees at risk are the conflict refusal and the event numbering, and both are pins: a conflict check comparing against nothing, a sourcesOf that answers for a deprecated path, and one that ignores which paths it was asked for all turn the suite red."
+closed: 2026-10-15
+
+# ⛔ APPENDED AFTER `change close`, which drops comments. See 0141 / 0144-0148.
+#
+# Four more of the sweep, each named by counting the request's queries rather than guessing:
+#
+#   · the route re-parsed 17.5 MB the caller was already holding. `corpusFor` is passed in beside
+#     `who`, using that option's own reasoning — passing it in rather than re-deriving it keeps one
+#     decision in one place. ⛔ Withheld from a write, which must be able to see its own edit.
+#   · `writeBack` read ALL 19 MB to compare the one file a request changed, then discarded the rest.
+#     `sourcesOf(touched)` asks the same question of the paths it is about. The deploy session
+#     measured that read at 1729ms on Neon, so this is the biggest single win for a placement save —
+#     and it is INVISIBLE to the latency harness, which charges per trip regardless of payload.
+#   · `append` numbered its event in two trips, reading the max and then inserting. One now, with
+#     the seq allocated inside the insert. The primary key and the retry still do the correctness.
+#   · document writes go together instead of a trip per file. Irrelevant for one placement,
+#     significant for a sweep that redraws forty screens. ⛔ The appends deliberately stay serial:
+#     firing them together would manufacture the very collisions the retry exists to survive.
+#
+#     with 180ms injected per query:        before    after
+#       presence                             884ms  →  ~600ms
+#       GET /v2 (2.8 MB page)               1858ms  →  ~815ms
+#       POST placement                      3042ms  → ~1480ms
+#
+# ⛔ AND MEASUREMENT OVERRULED ME TWICE IN THIS BATCH.
+#
+# I "optimised" writes by skipping the fingerprint — reasoning that it only decides whether to reuse
+# a cached read, and a write never reuses. The write went 1544ms → 1808ms. A write still needs
+# `before`, the documents as they were when it started, and a matching fingerprint is exactly the
+# proof that the cached copy still IS that; skipping it traded one cheap trip for two expensive
+# reads. Reverted, and the reasoning written down where the next person will reach for it.
+#
+# And two of five stress-tests did not go red:
+#
+#   · ⛔ THE APPEND RETRY CANNOT BE TESTED WITH RACING APPENDS AT ALL. PGlite serializes, so eight
+#     concurrent appends never collide and the retry never fires — removing it entirely left the
+#     test green. It has its own test now, and the limit is stated in the file rather than implied.
+#   · the `!mutating` guard on caching is REDUNDANT: `writeBack` calls `forgetRead` before writing,
+#     so the observable guarantee is held there. Labelled as a second line of defence rather than
+#     claimed as tested — a guard believed to be tested is one somebody removes later as dead code.
+#
+# 995/995.

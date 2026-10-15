@@ -288,8 +288,26 @@ test("a sweep finds the screens in both corpus layouts, and writes each into its
   const v2 = writeSketchHtml(diskPages(path.join(root, "v2")), "deal-list", "deals-list", "<b>two</b>");
   assert.equal(v1, path.join(root, "productos/products/cre/deals/deal-list.md"));
   assert.equal(v2, path.join(root, "v2/truth/deal-list.md"));
-  assert.match(fs.readFileSync(v1, "utf-8"), /<b>one<\/b>/, "the products tree got the other tree's drawing");
-  assert.match(fs.readFileSync(v2, "utf-8"), /<b>two<\/b>/, "the Exchange tree got the other tree's drawing");
+  /**
+   * ⛔ EACH TREE'S DRAWING IS IN ITS OWN TREE, and it is now a FILE rather than a block in the
+   * document. A screen's picture was 85% of Bilrost's corpus and could not be skipped by any reader
+   * while it lived inside the row, so it moved to `drawings/<scope>/<view>.html`.
+   *
+   * ⛔ AND THIS IS STILL THE CROSSING TEST, which is the point. The writer finds a document by
+   * whole-id-then-leaf so one implementation serves both layouts — and the drawing has to be
+   * written under the id THE DOCUMENT carries, not the one the caller passed. Writing it under the
+   * passed id put the products tree's drawing in the other tree's folder, and this test said so.
+   */
+  const drawn = (base, scope) => path.join(base, "drawings", scope, "deals-list.html");
+  const one = drawn(root, "cre/deals/deal-list");
+  const two = drawn(path.join(root, "v2"), "deal-list");
+  assert.ok(fs.existsSync(one), `the products tree has no drawing at ${one}`);
+  assert.ok(fs.existsSync(two), `the v2 tree has no drawing at ${two}`);
+  assert.match(fs.readFileSync(one, "utf-8"), /<b>one<\/b>/, "the products tree got the other tree's drawing");
+  assert.match(fs.readFileSync(two, "utf-8"), /<b>two<\/b>/, "the v2 tree got the other tree's drawing");
+  /** ⛔ And neither document carries it, or the corpus holds the picture twice. */
+  assert.doesNotMatch(fs.readFileSync(v1, "utf-8"), /<b>one<\/b>/, "the drawing is in the document too");
+  assert.doesNotMatch(fs.readFileSync(v2, "utf-8"), /<b>two<\/b>/, "the drawing is in the document too");
   fs.rmSync(root, { recursive: true, force: true });
 });
 

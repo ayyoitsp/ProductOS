@@ -11,7 +11,7 @@
  * divergence again, this time between the browser and the terminal.
  */
 import type http from "node:http";
-import { loadCorpus, corpusFiles } from "./load.js";
+import { loadCorpus, corpusFiles, notesIn, type Corpus } from "./load.js";
 import { renderScopePage, standalone } from "./page.js";
 import { perform, preview, payloadFrom, VIA, ACTS, type Act, type Via } from "./acts.js";
 /**
@@ -40,6 +40,24 @@ export interface V2Routes {
    * whether a request is a browser or a token would be a second place the guarantee could be wrong.
    */
   who?: Principal;
+  /**
+   * The corpus, when something above this has already read it.
+   *
+   * ⛔ EVERY REQUEST RE-PARSED 17.5 MB THAT THE CALLER WAS ALREADY HOLDING. The hosted path reads
+   * the documents out of the store, lays them out as a directory and hands it over; this route then
+   * parses all 169 of them back. Measured on Bilrost's corpus that is ~374ms of YAML on every page
+   * view, for an answer the caller had before it called.
+   *
+   * ⛔ SAME REASONING AS `who` DIRECTLY ABOVE: passing it in rather than re-deriving it keeps one
+   * decision in one place. And it is a GETTER rather than a corpus so a route that never needs one
+   * does not pay for it — presence reads notes and nothing else.
+   *
+   * ⛔ ONLY A NON-MUTATING REQUEST MAY BE GIVEN ONE. A write changes the directory and then expects
+   * to read what it wrote; handing it a corpus parsed before its own edit would be a request that
+   * cannot see its own work. The hosted path passes this for reads and withholds it for writes, for
+   * exactly the reason it hands a writer its own directory.
+   */
+  corpusFor?: () => Corpus;
   /**
    * Where the live stream gets its events, when the corpus on disk is not where they land.
    *
@@ -183,6 +201,13 @@ export async function v2Route(req: http.IncomingMessage, res: http.ServerRespons
      * path at all, and a route added to the body alone is a route nothing routes to.
      */
     "/api/v2/thread",
+    /**
+     * ⛔ WHAT THE PAGE NO LONGER CARRIES. The document used to hold every section and every
+     * drawing — 49.8 MB for Bilrost, 150s before the first byte. These are where the rest of it
+     * comes from: one section, and a batch of drawings for thumbnails being scrolled past.
+     */
+    "/api/v2/section",
+    "/api/v2/mocks",
   ];
   if (p !== "/v2" && !p.startsWith("/v2/") && !OURS.includes(p)) return false;
 
@@ -291,7 +316,9 @@ export async function v2Route(req: http.IncomingMessage, res: http.ServerRespons
      */
     const q = new URL(req.url ?? "/", "http://localhost").searchParams;
     const refs = q.getAll("about").flatMap((x) => x.split("|")).map((x) => x.trim()).filter(Boolean);
-    const all = loadCorpus(dir).notes;
+    /** ⛔ Just the notes. This parsed the whole 17.5 MB corpus to list a handful of small files. */
+    /** ⛔ A probe is a write somebody made to see whether writing worked. It is nobody's thread. */
+    const all = notesIn(dir).filter((n) => !n.probe);
     const mine = refs.length ? all.filter((n) => refs.includes(n.about)) : all;
     return (
       json(res, {
@@ -317,7 +344,16 @@ export async function v2Route(req: http.IncomingMessage, res: http.ServerRespons
    * surface. The page asks this and says so out loud.
    */
   if (req.method === "GET" && p === "/api/v2/presence") {
-    const waiting = loadCorpus(dir).notes.filter((n) => n.state === "open");
+    /**
+     * ⛔ JUST THE NOTES, AND THIS IS THE ONE THE PAGE POLLS. It parsed 17.5 MB of corpus to count
+     * open notes, so a 35-byte answer cost 400-1000ms — measured through the real request path.
+     */
+    /**
+     * ⛔ NOT THE PROBES. This counted them, so five of another session's write-path tests told
+     * Peter that six people were waiting on him — *"and what are those 6 requests, i did not send
+     * any requests"*. Nobody was waiting on any of them.
+     */
+    const waiting = notesIn(dir).filter((n) => n.state === "open" && !n.probe);
     return json(res, { working: working(dir), waiting: waiting.length }), true;
   }
 
@@ -465,8 +501,69 @@ export async function v2Route(req: http.IncomingMessage, res: http.ServerRespons
   }
 
 
+  /**
+   * One deferred section, rendered on request.
+   *
+   * ⛔ THE SAME RENDER WITH `only` NARROWED, NOT A SECOND RENDERER. A separate code path for
+   * "one section" would be a second answer to what a section looks like, and the two would drift
+   * — which is the failure this repo has paid for most often. The whole page is computed and one
+   * section returned; with `only` holding a single view, every other section's body is never built.
+   */
+  if (req.method === "GET" && p === "/api/v2/section") {
+    const corpus = opts.corpusFor ? opts.corpusFor() : loadCorpus(dir);
+    const q = new URL(req.url ?? "/", "http://localhost").searchParams;
+    const root = q.get("scope") || corpus.scopes.find((x) => !x.scope.in)?.scope.id || "";
+    const view = q.get("view") || "";
+    if (!view) return json(res, { error: "which view" }, 400), true;
+    const frag = renderScopePage(corpus, root, {
+      interactive: true,
+      records: "http",
+      ...styleOf(corpus),
+      linkBase: "/v2",
+      by: whoIsPressing(req, opts.by),
+      recordsTo: `written into ${dir}`,
+      only: [view],
+      fragment: view,
+    });
+    /**
+     * ⛔ 404 RATHER THAN EMPTY. A view the page has a menu entry for and the server cannot render
+     * is a defect, and answering it with an empty string leaves a reader looking at a blank panel
+     * with no way to know whether the feature is empty or the request failed.
+     */
+    if (!frag) return json(res, { error: `no view "${view}" under "${root}"` }, 404), true;
+    res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
+    res.end(frag);
+    return true;
+  }
+
+  /**
+   * The drawings a batch of thumbnails needs.
+   *
+   * ⛔ ONE REQUEST FOR MANY, because the map on Overview is every screen in the product and a
+   * request each would be 128 of them. The client collects what has come into view and asks once.
+   */
+  if (req.method === "GET" && p === "/api/v2/mocks") {
+    const corpus = opts.corpusFor ? opts.corpusFor() : loadCorpus(dir);
+    const q = new URL(req.url ?? "/", "http://localhost").searchParams;
+    const want = (q.get("refs") || "")
+      .split(",")
+      .map((r: string) => r.trim())
+      .filter(Boolean);
+    if (!want.length) return json(res, { error: "which drawings" }, 400), true;
+    const out: string[] = [];
+    for (const ref of want.slice(0, 200)) {
+      const [sid, vid] = ref.split("#");
+      const sc = corpus.scopes.find((x) => x.scope.id === sid)?.scope;
+      const v = sc?.views.find((x) => x.id === vid);
+      if (v?.sketch_html) out.push(`<template data-mock="${ref.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;")}">${v.sketch_html}</template>`);
+    }
+    res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
+    res.end(out.join(""));
+    return true;
+  }
+
   if (req.method === "GET") {
-    const corpus = loadCorpus(dir);
+    const corpus = opts.corpusFor ? opts.corpusFor() : loadCorpus(dir);
     const scope = p === "/v2" ? undefined : decodeURIComponent(p.slice("/v2/".length));
     /**
      * ⛔ `/v2` LANDS ON A REAL SCOPE, NOT AN INDEX OF ONE ITEM. Every scope tree has a root, and
@@ -490,6 +587,19 @@ export async function v2Route(req: http.IncomingMessage, res: http.ServerRespons
       linkBase: "/v2",
       by: whoIsPressing(req, opts.by),
       recordsTo: `written into ${dir}`,
+      /**
+       * ⛔ WHAT ARRIVES, AND NOTHING ELSE. Peter: *"we should not be dumping everything in a single
+       * packet … this is ridiculous"*.
+       *
+       * Both names, because there are two ways in and they land on different views: `/v2` has no
+       * hash and lands on Overview, `/v2/<scope>` lands on that scope's own section. Sending one of
+       * the two would leave the other arriving at a stub it then has to fetch — a round trip to
+       * show the thing the reader explicitly asked for.
+       *
+       * ⛔ AND THE STANDALONE RENDER DOES NOT PASS THIS. `v2 page --out` has no server to ask, so a
+       * deferred section in a file is a section that never arrives.
+       */
+      only: [target, "overview"],
     });
     if (!page) {
       const known = corpus.scopes.map((s) => s.scope.id);

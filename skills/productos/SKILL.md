@@ -122,7 +122,7 @@ You are the **orchestrator**, and you are the session — not a subagent. That i
 **⛔ You keep these yourself:**
 
 - running the reviewers, which judge and never write
-- routing what comes back: a framework gap to us, a corpus finding to the author
+- routing what comes back: a framework gap to us with `productos todo add --at <corpus>`, a corpus finding to the author
 - never answering a newcomer's confusion — writing it down is the output
 
 ### Compare the drawings against the product a person actually sees
@@ -165,6 +165,44 @@ You are the **orchestrator**, and you are the session — not a subagent. That i
 
 ⛔ **Every author writes and none may settle.** An author may propose, populate, draw and regenerate; it may never produce a verdict, answer an open question, or mark anything validated. None of them can put a question to a person — deliberately, because consent obtained inside a subagent has no record of how it was obtained. What an author cannot resolve comes back to you as a question, and you put it to the person yourself.
 <!-- /productos:preset -->
+
+## ⛔ A probe is a write, not a request — `Note.probe`
+
+A session that needs to check whether an instance can take a write has to write *something*, and
+the request queue is the only writable thing there. So say what it is:
+
+```bash
+productos v2 notes add "staleness-probe-231153" --about <ref> --by <session> --via cli --probe --at <corpus>
+```
+
+Over the single door it is the same field: `POST /api/v2/in` with `{"intent":"note", …, "probe":true}`.
+
+`probe: true` is counted in no waiting total and shown on no surface a person reviews. It is still a
+real note, really stored, through the whole write path — which is the entire point of it.
+
+⛔ **Omit it and you are asking somebody for a change.** Five probes from one session rendered on
+Peter's review page as five people waiting on him. He read the banner and asked *"what are those 6
+requests, i did not send any requests"*. He had not sent any.
+
+⛔ **And never infer it.** `staleness-probe-231153` is text a classifier would be right about, and
+being right about it is not the point: a note treated as a probe because of how it reads is
+somebody's request silently discarded. The flag is set by whoever wrote the note or it is not set.
+
+## ⛔ A gap is filed against the corpus it was found in
+
+```bash
+productos todo add "<what the model cannot express>" --at <corpus> --forced-into <where it went>
+productos todo --at <corpus>          # what this corpus could not say
+```
+
+**`--at`, always.** Without it the command walks up from wherever the shell is standing and files
+the finding against whatever product lives *there*. That is not a lost gap, which would be
+recoverable — it is a gap recorded as a fact about the wrong product, indistinguishable once filed
+from that product's own, so reading the backlog reports limits the model does not have.
+
+It happened at scale before the flag existed: thirty-three gaps found while authoring one corpus
+went into another product's record, and every one of them printed the same confident tick. `add`
+now names the file it wrote to, which is the only moment somebody can still catch it.
 
 ## ⛔ How confident the corpus is, and the line that cannot move
 

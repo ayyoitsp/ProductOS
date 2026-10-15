@@ -40,6 +40,16 @@ const asYaml = (n: NoteT): string =>
     `    via: ${n.via}`,
     `    state: ${n.state}`,
     ...(n.kind && n.kind !== "corpus" ? [`    kind: ${n.kind}`] : []),
+    /**
+     * ⛔ WRITTEN, OR IT IS A FIELD THAT EXISTS ONLY IN MEMORY. I added `probe` to the schema, to
+     * the intent and to `Filing`, and the write path still dropped it here — three layers agreeing
+     * and the one that reaches disk silently disagreeing. The note validated, was stored, and came
+     * back a request somebody was waiting on.
+     *
+     * ⛔ Written only when true, like every other optional above it: absent is "an ordinary note",
+     * and `probe: false` on thousands of rows is noise that says nothing.
+     */
+    ...(n.probe ? [`    probe: true`] : []),
     ...(n.outcome ? [`    outcome: ${JSON.stringify(n.outcome)}`] : []),
     /** ⛔ Every reply kept, in order. A thread with the middle removed is a thread that lies. */
     ...(n.replies?.length
@@ -69,6 +79,15 @@ export interface Filing {
   at: string;
   /** The id from the row it was carried in under, so carrying the same row twice files one note. */
   id?: string;
+  /**
+   * ⛔ A SESSION CHECKING THAT WRITING WORKS, WITH NOBODY WAITING ON IT.
+   *
+   * Carried explicitly rather than inferred. I added this to the schema and the intent and forgot
+   * this type, so `probe: true` was accepted at the door and dropped on the way to disk — found by
+   * the test asserting one probe and getting none, which is the whole reason the test counts them
+   * rather than just counting what a person is shown.
+   */
+  probe?: boolean;
 }
 
 /**
@@ -106,6 +125,8 @@ export function fileNote(dir: string, f: Filing): Filed | NotFiled {
     at: f.at,
     via: f.via,
     state: "open" as const,
+    /** ⛔ Only where the caller said so. Absent on every ordinary note rather than `false`. */
+    ...(f.probe === true ? { probe: true as const } : {}),
   };
   const parsed = Note.safeParse(candidate);
   if (!parsed.success)
