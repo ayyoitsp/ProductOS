@@ -2337,7 +2337,9 @@ export function v2Command(): Command {
     .option("--into <dir>", "the corpus", ".")
     .option("-n, --dry-run", "say what it would draw and change nothing")
     .option("--renav", "take the product's own menu again, discarding a prototype's edits to it")
-    .action((o: { into?: string; dryRun?: boolean; renav?: boolean }) => {
+    /** ⛔ The same escape hatch `v2 draw` offers, for the one case where a shell really did shrink. */
+    .option("--anyway", "write a smaller chrome over a bigger one — only where the chrome really did get simpler")
+    .action((o: { into?: string; dryRun?: boolean; renav?: boolean; anyway?: boolean }) => {
       const into = path.resolve(o.into ?? ".");
       const corpus = loadCorpus(into);
       if (!corpus.prototypes.length) {
@@ -2399,6 +2401,32 @@ export function v2Command(): Command {
         });
         if (!shell) {
           console.log(pc.yellow("?"), `${proto.id} — nothing wraps that route, so this prototype has no chrome`);
+          return proto;
+        }
+        /**
+         * ⛔ A GOOD SHELL IS NEVER REPLACED WITH PLACEHOLDERS — AND THIS GUARD ALREADY EXISTED
+         * NEXT DOOR.
+         *
+         * `v2 draw` refuses exactly this, in as many words: *"this would replace an 11,759-byte
+         * drawing with 4,145 bytes and no component inlined — that is what a missing
+         * `components_dir` looks like"*. `v2 prototypes` had no such check, and it redraws EVERY
+         * prototype's chrome rather than the one being worked on — so one run against a corpus with
+         * no config replaced two good 7,882-byte shells, sidebar and all, with 362 bytes of
+         * placeholder. The file went from 17,891 bytes to 2,192.
+         *
+         * ⛔ "THE CHROME IS OUTPUT, NOT A DOCUMENT" IS TRUE AND WAS THE TRAP. Output is only safely
+         * regenerable while the conditions that produced it still hold; the command said so in its
+         * own closing line and then destroyed work on the strength of it. Six untouched copies in a
+         * scratch directory are the only reason nothing was lost.
+         */
+        const had = (proto.shell_html ?? "").length;
+        if (had > 0 && shell.html.length < had * 0.7 && !componentsDir && !o.anyway) {
+          console.log(
+            pc.red("✗"),
+            `${proto.id} — this would replace a ${had}-byte chrome with ${shell.html.length} bytes and no components inlined`
+          );
+          console.log(pc.dim("  that is what a missing `components_dir` looks like — the new chrome is placeholders"));
+          console.log(pc.dim("  point the corpus at its components, or pass --anyway if the chrome really did get simpler"));
           return proto;
         }
         /**
