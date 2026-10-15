@@ -3925,7 +3925,8 @@ if (typeof EventSource !== "undefined") {
     const n = done.length;
     chip.hidden = false;
     chip.textContent = String(n);
-    chip.title = n + " framework " + (n === 1 ? "ask" : "asks") + " dealt with — press to read what was done";
+    /* ⛔ "framework" was wrong the moment corpus requests started being answered the same way. */
+    chip.title = n + (n === 1 ? " request" : " requests") + " dealt with — press to read what was done";
     chip.classList.toggle("on", acksOpen);
     acks.innerHTML = acksOpen
       ? '<ul class="ack-list">' +
@@ -3934,6 +3935,11 @@ if (typeof EventSource !== "undefined") {
             (d) =>
               "<li><strong>" + safely(d.says.replace(/^\s*pos\s*:\s*/i, "")) + "</strong>" +
               (d.outcome ? '<span class="ack-what">' + safely(d.outcome) + "</span>" : "") +
+              /**
+               * ⛔ WHEN, AND WHO ASKED — because without them this is a ticker and the question it
+               * gets asked is "was this ever dealt with", which needs a date beside it.
+               */
+              '<span class="ack-when">' + safely(d.by || "") + (d.at ? " · " + safely(d.at) : "") + "</span>" +
               "</li>"
           )
           .join("") +
@@ -3953,10 +3959,27 @@ if (typeof EventSource !== "undefined") {
     fetch(UNDER + "/api/v2/thread")
       .then((r) => r.json())
       .then((b) => {
-        /** ⛔ Newest first, and capped — this is an acknowledgement, not an archive. */
+        /*
+         * ⛔ EVERY ANSWERED REQUEST, NOT THE FRAMEWORK ONES. This filtered on
+         * kind === "framework", and every request Peter has ever filed is kind: corpus — so he had
+         * four answered requests and this showed him none of them.
+         *
+         * Peter: "and we should have a history available of requests that were answered...". The
+         * data was never the problem: a closed note keeps state: done and the outcome saying what
+         * was actually done, precisely so the queue is not "a list nobody trusts". It was the
+         * surface, built as a ticker for pos: replies and never widened when corpus requests
+         * started being answered the same way.
+         *
+         * ⛔ AND THE CAP IS GONE. The old comment read "this is an acknowledgement, not an
+         * archive" — a fair description of a ticker and the wrong thing to want. A history that
+         * silently forgets the ninth answer cannot tell you whether something was ever dealt with,
+         * which is the only question it gets asked.
+         *
+         * ⛔ NO BACKTICKS IN HERE. This whole block is inside a template literal, so one ends the
+         * string and the build fails three lines later with a missing comma.
+         */
         lastAcks = (b.notes || [])
-          .filter((x) => x.kind === "framework" && x.state === "done")
-          .slice(-8)
+          .filter((x) => x.state === "done")
           .reverse();
         paintAcks(lastAcks);
       })
@@ -8171,6 +8194,8 @@ export const STYLE = `<style>
   .ack-list li { font-size: .82rem; line-height: 1.4; display: grid; gap: .1rem; }
   .ack-list strong { font-weight: 600; }
   .ack-what { color: var(--dim); }
+  /* ⛔ Who asked and when, so the list answers "was this ever dealt with" rather than just "something was". */
+  .ack-when { display: block; color: var(--dim); font-size: .85em; opacity: .8; margin-top: .15rem; }
   .who-bar { padding: .45rem .8rem;
     font-size: .84rem; text-align: center; background: var(--warn-bg); color: var(--warn);
     border-top: 1px solid var(--line); }
