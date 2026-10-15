@@ -526,6 +526,36 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
      * the corpus is target state: refusing it would make describing a screen before its door exists
      * impossible, which is the thing this model exists to allow.
      */
+    /**
+     * ⛔ NO DECLARED DOOR OPENS ONTO THESE, WHICH IS NOT WHAT `no-way-in` MEASURES.
+     *
+     * `no-way-in` asks whether a screen has an inbound edge. This asks whether a PERSON can get
+     * there — reachable from some prototype's `starts_at`. One product area had 133 screens wired
+     * to each other and no prototype opening on any of them, and `no-way-in` reported two screens
+     * from the other area, because the walk infers a door from any screen with nothing leading to
+     * it. Everything looked entered. Nothing was.
+     *
+     * Peter: *"how could you have possibly indexed it with no prototypes?????"* — and the answer
+     * was that the only thing which would have told him measured something else.
+     *
+     * ⛔ A NOTE, NOT A REFUSAL, FOR THE REASON BELOW: a corpus is target state and a screen may be
+     * described before its door exists. ⛔ BUT IT LEADS WITH THE COUNT AND SAYS "nobody can reach",
+     * because the whole failure was a true sentence nobody could act on — "2 screens have no way
+     * in" beside an unenterable product reads as a tidy corpus.
+     */
+    if (walk.unentered.length)
+      add({
+        severity: "note",
+        kind: "nobody-can-reach-this",
+        where: "the product as a walk",
+        what: !(corpus.prototypes ?? []).length
+          ? `no prototype opens on anything, so none of this product's ${walk.unentered.length} screens can be reached by a person — there is no front door at all`
+          : `${walk.unentered.length} of ${walk.steps.size} screens are reached from no prototype's front door: ${walk.unentered.slice(0, 5).join(", ")}${
+              walk.unentered.length > 5 ? `, and ${walk.unentered.length - 5} more` : ""
+            }`,
+        fix: "declare the way in — `productos v2 prototypes new \"<title>\" --starts-at <scope>#<view>` — or lead to these from a screen one already opens on. ⛔ A screen with no inbound edge is NOT a door: the walk infers entries from the graph's shape, so an area wired only to itself reads as entered while nobody can get into it.",
+      });
+
     if (walk.unreachable.length)
       add({
         severity: "note",

@@ -48,7 +48,7 @@ import { whatMoved, repoOf } from "../../v2/moved.js";
 import { HOW } from "../../v2/record.js";
 import { renderScopePage, standalone } from "../../v2/page.js";
 import { migrate } from "../../v2/migrate.js";
-import { resolvePathsOrThrow } from "../../core/paths.js";
+import { resolvePathsOrThrow, projectRootOf} from "../../core/paths.js";
 import { readConfig } from "../../core/config.js";
 
 /**
@@ -2321,12 +2321,26 @@ export function v2Command(): Command {
         return;
       }
 
-      let repoRoot = into;
+      /**
+       * ⛔ THE CODEBASE, RESOLVED THE WAY EVERY OTHER CALLER RESOLVES IT.
+       *
+       * This computed it by hand from the corpus's config and fell back to the CORPUS directory —
+       * so a corpus held outside a repo reported a route that plainly exists as "is not there".
+       * `paths.ts` forbids exactly this, in as many words: *"⛔ ONE ANSWER, because three callers
+       * were about to compute it three ways… a caller that resolved that root differently would be
+       * checking a file that is not the one the drawing named, and reporting either a phantom
+       * absence or a phantom presence."* This was the phantom absence, and it stopped three
+       * prototypes drawing their chrome while every path named was real.
+       *
+       * ⛔ AND IT FALLS BACK TO WHERE SOMEBODY IS STANDING, NOT TO THE CORPUS. `v2 draw` resolves
+       * `--route` with a bare `path.resolve`, i.e. against cwd, which is why drawing a screen from
+       * the same checkout worked in the same minute this failed. A corpus is not a place to look
+       * for application code; the checkout you are in is.
+       */
+      let repoRoot = projectRootOf(into) ?? process.cwd();
       let componentsDir: string | undefined;
       try {
-        const paths = resolvePathsOrThrow(into);
-        repoRoot = path.dirname(path.dirname(paths.configFile));
-        componentsDir = readConfig(paths).web.components_dir;
+        componentsDir = readConfig(resolvePathsOrThrow(into)).web.components_dir;
       } catch {
         /* a corpus with no config still draws — it just has no components index */
       }
