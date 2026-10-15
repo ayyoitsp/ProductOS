@@ -905,6 +905,29 @@ export function v2Command(): Command {
             )
           );
           console.log(pc.dim(`  or instead: productos v2 rule ${q.ref} --says "…"${stands}${then}${pol} --because "…" --by <your name>`));
+        } else if (q.kind === "contested word") {
+          /**
+           * ⛔ THE GENERIC ADVICE IS IMPOSSIBLE TO FOLLOW HERE, AND THIS IS MY OWN REGRESSION.
+           *
+           * Surfacing contested words at all was the fix for a field no surface read. They then
+           * landed in the branch below, which says "ask whoever is scoping this to add
+           * `candidates` to the standing" — and a contested word HAS no standing. `Term.contested`
+           * is `{question, with}`, strictly, so there is nowhere for a candidate to go. Reported by
+           * an author who read the output and filed it as a gap: advice the schema refuses.
+           *
+           * ⛔ AND THE ANSWER IS A DIFFERENT KIND OF THING. Every other question here chooses
+           * between behaviours. This one decides which sense of a word the product means — so what
+           * it needs is a ruling on the vocabulary, after which the losing names are renamed in the
+           * scopes that used them. There is nothing to pick, and saying "pick one" would be the
+           * surface pretending this question has the shape of the others.
+           */
+          console.log("");
+          console.log(pc.red("  This is a naming collision, not a choice between behaviours."));
+          console.log(pc.dim("  Nothing is drafted and nothing can be: a contested word carries the question and"));
+          console.log(pc.dim("  the words it collides with, and no candidates — the answer is which sense the"));
+          console.log(pc.dim("  product means. Rule it in words, then the scopes using the other names are"));
+          console.log(pc.dim("  corrected to match; until then every feature using any of them is using one."));
+          console.log(pc.dim(`  answer it: productos v2 rule ${q.ref} --says "…which sense wins…" --because "…" --by <your name>`));
         } else {
           console.log("");
           /**
