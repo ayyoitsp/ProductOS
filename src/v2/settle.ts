@@ -39,7 +39,13 @@ export interface Question {
   scope: string;
   exchange: string;
   exchangeTitle: string;
-  slot: SlotName;
+  /**
+   * ⛔ ABSENT ON A QUESTION ABOUT A WORD, because a word has no slot and inventing one would be a
+   * guess wearing a decision's clothes. `Term.contested` exists precisely so a collision between
+   * names has a home at the grain of the NAME — pinning it to some exchange's `answer` would put
+   * the ruling in a place no other feature using that word would ever look.
+   */
+  slot?: SlotName;
   kind: string;
   /** The question, in whatever form the standing carries it. */
   asks: string;
@@ -123,7 +129,8 @@ export function questionsFor(corpus: Corpus, scopeId: string): Question[] {
    * surface did not know about.
    */
   const fromRules = openRuleQuestions(corpus, under);
-  return orderByAttention(corpus, [...fromRules, ...fromSlots]);
+  const fromTerms = openTermQuestions(corpus, under);
+  return orderByAttention(corpus, [...fromRules, ...fromTerms, ...fromSlots]);
 }
 
 /**
@@ -157,6 +164,59 @@ export function orderByAttention(corpus: Corpus, questions: Question[]): Questio
 }
 
 /** Open rules whose selector reaches any exchange in these scopes. */
+/**
+ * A word somebody recorded as contested, asked of the person who can rule it.
+ *
+ * ⛔ `Term.contested` PARSED, WAS TESTED, AND NO SURFACE READ IT. Two authors found this
+ * independently in one session: *"`v2 decide` listed six questions and not the seventh, which sat
+ * on a term"*, and *"question 3 reaches nobody — somebody has to route it by hand"*.
+ *
+ * ⛔ AND THE FIELD WAS ADDED TO PREVENT EXACTLY WHAT CAME BACK. Its own comment records fg-0004: a
+ * scoper found *version selection*, *model revision*, *master model version* and *input version*
+ * used across four places for three distinct objects, and **left the collision out of truth
+ * entirely** rather than settle it by writing a definition. `contested` gave that a home in the
+ * schema — and `questionsIn` walks `scope.exchanges` only, so the home was write-only. A question
+ * recorded where nobody is asked is the silence the field was built to end.
+ */
+export function openTermQuestions(corpus: Corpus, scopeIds: string[]): Question[] {
+  const out: Question[] = [];
+  const parked = new Map(corpus.verdicts.filter((v) => v.kind === "defer").map((v) => [v.target!, v]));
+  for (const { scope } of corpus.scopes.filter((x) => scopeIds.includes(x.scope.id))) {
+    for (const [word, term] of Object.entries(scope.terms ?? {})) {
+      if (!term?.contested) continue;
+      const ref = `${scope.id}#${word}`;
+      const put = parked.get(ref);
+      out.push({
+        ref,
+        scope: scope.id,
+        exchange: "(a word this corpus uses)",
+        exchangeTitle: `The word "${word}"`,
+        kind: "contested word",
+        asks: [
+          norm(term.contested.question),
+          `It collides with: ${term.contested.with.join(", ")}.`,
+          /**
+           * ⛔ SAYING WHAT IT MEANS HERE, because the collision is only legible beside the sense
+           * this scope committed to. "These three words disagree" without the definitions is the
+           * feeling the schema comment warns about.
+           */
+          `Here it means: ${norm(term.means)}`,
+          `Until it is ruled, every feature using any of those names is using one of them.`,
+        ]
+          .filter(Boolean)
+          .join("\n"),
+        candidates: [],
+        blocks: [],
+        parked: put ? { by: put.by, because: put.because!, until: put.until! } : undefined,
+        revises: undefined,
+        observed: [],
+        conflictsWith: [],
+      });
+    }
+  }
+  return out;
+}
+
 export function openRuleQuestions(corpus: Corpus, scopeIds: string[]): Question[] {
   const out: Question[] = [];
   for (const { rule } of corpus.rules) {

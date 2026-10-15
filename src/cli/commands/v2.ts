@@ -797,7 +797,7 @@ export function v2Command(): Command {
         console.log("");
         console.log(`${pc.cyan(q.ref)}  ${pc.dim(q.kind)}`);
         console.log(
-          pc.dim(`  on: ${q.exchangeTitle} — ${SLOT_ASKS_SHORT[q.slot]}${q.scope !== scope ? `  (in ${q.scope})` : ""}`)
+          pc.dim(`  on: ${q.exchangeTitle}${q.slot ? ` — ${SLOT_ASKS_SHORT[q.slot]}` : ""}${q.scope !== scope ? `  (in ${q.scope})` : ""}`)
         );
         console.log("");
         for (const line of q.asks.split("\n")) console.log(`  ${line}`);

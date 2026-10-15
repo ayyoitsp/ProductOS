@@ -322,7 +322,7 @@ function renderQuestion(q: Question, i: number, past: Decision[], ctx: Ctx): str
               q.ref.includes("#")
                 ? refLink(`${q.scope}#${q.exchange}`, ctx, q.exchangeTitle)
                 : line(q.exchangeTitle)
-            } · ${esc(SLOT_LABEL[q.slot] ?? q.slot)}</p>`
+            }${q.slot ? ` · ${esc(SLOT_LABEL[q.slot] ?? q.slot)}` : ""}</p>`
           : ""
       }
       ${acts.join("")}
