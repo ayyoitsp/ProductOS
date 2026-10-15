@@ -252,10 +252,21 @@ test("redrawing a screen that has parts replaces the drawing rather than adding 
 
   const once = fs.readFileSync(file, "utf-8");
   assert.equal(count(once, /^ *drawn_from:/gm), 1, "a second drawing was written beside the first");
-  assert.equal(count(once, /^ *sketch_html: \|/gm), 2, "expected exactly the view's drawing and its one state");
+  /**
+   * ⛔ ONE INLINE DRAWING NOW — THE STATE'S. A screen's own picture is its own file, because inside
+   * the document it was 85% of Bilrost's corpus (14.8 MB of 17.5) and could not be skipped by any
+   * reader. A state's picture stays inline for now, deliberately: one key shape at a time.
+   */
+  assert.equal(count(once, /^ *sketch_html: \|/gm), 1, "expected only the state's drawing inline");
   assert.ok(!once.includes("the previous drawing"), "the old drawing survived the redraw");
   assert.ok(!once.includes("old-loading"), "the old states survived the redraw");
-  assert.ok(once.includes("the new drawing"), "the new drawing was not written");
+
+  /** ⛔ AND THE NEW DRAWING IS REALLY SOMEWHERE — the whole risk of moving it is that it lands nowhere. */
+  const drawn = path.join(root, "drawings", "thing", "the-screen.html");
+  assert.ok(fs.existsSync(drawn), `the drawing was not written to ${drawn}`);
+  assert.ok(fs.readFileSync(drawn, "utf-8").includes("the new drawing"), "the drawing file holds the wrong drawing");
+  assert.ok(!fs.readFileSync(drawn, "utf-8").includes("the previous drawing"), "the old drawing survived in the file");
+  assert.ok(!once.includes("the new drawing"), "the drawing is in the document as well as its file");
   /** ⛔ AND THE AUTHORED PARTS ARE UNTOUCHED — they are nobody's to regenerate. */
   assert.ok(once.includes("- id: save") && once.includes("- id: name"), "regenerating ate the parts");
   assert.ok(once.includes("Prose that must survive."), "regenerating ate the prose");

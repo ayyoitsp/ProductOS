@@ -87,8 +87,24 @@ test("and it still writes the drawing, so keeping them is not just doing nothing
   const dir = withAuthoredStates();
   execFileSync("node", [CLI, "v2", "propose", "named-thing#the-name", "--into", dir], { stdio: "pipe" });
   const raw = fs.readFileSync(path.join(dir, "truth", "named-thing.md"), "utf-8");
-  assert.match(raw, /sketch_html: \|/, "propose wrote no drawing");
-  assert.match(raw, /data-part="the-worked-out-name"/, "the drawing does not place the part");
+  /**
+   * ⛔ THE DRAWING IS ITS OWN FILE NOW, so "propose wrote nothing" has to be checked where the
+   * drawing actually lands. Inside the document a screen's picture was 85% of Bilrost's corpus and
+   * no reader could skip it; it lives at `drawings/<scope>/<view>.html`.
+   *
+   * ⛔ AND THIS ASSERTION IS THE WHOLE POINT OF THIS TEST — its own comment says so: "the states
+   * survived" is true of a command that wrote nothing at all. Looking in the old place would have
+   * made it vacuous in exactly the way it was written to prevent.
+   */
+  const drawn = path.join(dir, "drawings", "named-thing", "the-name.html");
+  assert.ok(fs.existsSync(drawn), `propose wrote no drawing — nothing at ${drawn}`);
+  assert.ok(fs.readFileSync(drawn, "utf-8").trim().length > 0, "propose wrote an empty drawing");
+  /** ⛔ And it places the part — in the drawing, which is where the markup now is. */
+  assert.match(
+    fs.readFileSync(drawn, "utf-8"),
+    /data-part="the-worked-out-name"/,
+    "the drawing does not place the part"
+  );
   fs.rmSync(dir, { recursive: true, force: true });
 });
 

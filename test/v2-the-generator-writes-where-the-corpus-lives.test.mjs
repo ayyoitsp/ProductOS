@@ -29,7 +29,7 @@ import { temp } from "./support/temp.mjs";
 const { diskPages, heldPages, writeSketchHtml, writeWithin, writePrototypes } = await import(
   "../dist/v2/draw-write.js"
 );
-const { loadCorpus, memoryStore, corpusFiles } = await import("../dist/v2/load.js");
+const { loadCorpus, memoryStore, corpusFiles, drawingRel } = await import("../dist/v2/load.js");
 
 function corpus() {
   const dir = path.join(temp("v2pages-"), "corpus");
@@ -61,7 +61,27 @@ test("⛔ the same drawing, written through a directory and through a held map, 
   const fromDisk = fs.readFileSync(a, "utf-8");
   const fromHeld = held.read(b);
   assert.equal(fromHeld, fromDisk, "the two sides of the seam produced different bytes");
-  assert.match(fromHeld, /<b>drawn<\/b>/);
+
+  /**
+   * ⛔ AND THE DRAWING IS NOW ITS OWN FILE, so the seam has to agree about THAT too.
+   *
+   * It used to be enough to match the HTML inside the document. A screen's picture was 85% of
+   * Bilrost's corpus — 14.8 MB of 17.5 — and inside a row it cannot be skipped, so every page view
+   * and every save read all of it. It lives at `drawings/<scope>/<view>.html` now.
+   *
+   * ⛔ THE RISK THE SPLIT INTRODUCES IS EXACTLY WHAT THIS TEST IS FOR: two writes instead of one,
+   * and a seam whose two sides could disagree about the second. A drawing that lands on disk and
+   * not in the held map is a screen that is drawn locally and blank on the instance.
+   */
+  const rel = drawingRel(scope, view);
+  assert.ok(fs.existsSync(path.join(onDisk, rel)), `the directory write left no ${rel}`);
+  const drawnOnDisk = fs.readFileSync(path.join(onDisk, rel), "utf-8");
+  const drawnHeld = held.read(held.keyFor(rel));
+  assert.equal(drawnHeld, drawnOnDisk, "the two sides of the seam wrote different drawings");
+  assert.match(drawnHeld, /<b>drawn<\/b>/, "the drawing did not reach its own file");
+
+  /** ⛔ And it is NOT in the document any more, or the corpus carries it twice. */
+  assert.doesNotMatch(fromHeld, /<b>drawn<\/b>/, "the drawing is still inside the document as well");
 });
 
 test("a held write records exactly what moved, and nothing else", () => {
@@ -77,9 +97,28 @@ test("a held write records exactly what moved, and nothing else", () => {
 
   assert.deepEqual(held.moved(), [], "something had moved before anything was written");
   const wrote = writeSketchHtml(held, scope, view, "<b>one</b>");
-  assert.deepEqual(held.moved(), [wrote], "it reported more than the document it changed");
+
+  /**
+   * ⛔ TWO THINGS MOVE NOW, AND BOTH MUST BE REPORTED. A screen's picture is its own file, so a
+   * drawing write touches the document and `drawings/<scope>/<view>.html`.
+   *
+   * ⛔ THIS IS THE ASSERTION THAT WOULD HAVE CAUGHT SILENT DATA LOSS. `writeBack` sends the store
+   * exactly what `moved()` reports — so a drawing written into the held map and NOT reported would
+   * be drawn locally, never reach the instance, and leave every screen blank on the one surface
+   * anybody reviews on. The old version of this test said "it reported more than the document it
+   * changed", which is the right instinct and the wrong list once a drawing has its own file.
+   */
+  const drawing = held.keyFor(drawingRel(scope, view));
+  assert.deepEqual(
+    [...held.moved()].sort(),
+    [wrote, drawing].sort(),
+    "what moved is not exactly the document and its drawing"
+  );
+  assert.match(held.read(drawing), /<b>one<\/b>/, "the reported drawing key holds no drawing");
+
   /** ⛔ And the map it was given is untouched — the caller's copy is not mutated underneath it. */
   assert.ok(!files[wrote].includes("<b>one</b>"), "it wrote into the caller's own map");
+  assert.ok(!(drawingRel(scope, view) in files), "it added the drawing to the caller's own map");
 });
 
 test("⛔ a held corpus loads, so the sweep reads the truth it is writing to", () => {
