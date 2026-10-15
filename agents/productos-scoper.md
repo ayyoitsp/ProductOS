@@ -625,6 +625,47 @@ most common way to make a question unanswerable.
 Four standings: `stated` · `open` · `disputed` · `out_of_scope`. Anything you cannot settle is
 `open`. `out_of_scope` costs a recorded act (`v2 waive`) and is **not yours to declare**.
 
+### ⛔ A slot that says SEVERAL things — the standing stays on the slot, and `of:` names which one
+
+⛔ **A statement cannot carry its own standing.** `Statement` holds `id` and `says` and nothing
+else, strictly, so a `standing:` beside one entry of a `says:` list does not load — the whole file
+is refused with `Unrecognized key(s) in object: 'standing'`. Two authors wrote that shape in one
+afternoon, because the example above shows `says` and `standing` adjacent and never shows this case.
+
+```yaml
+answer:
+  says:
+    - id: every-reading-is-shown
+      says: Every reading the figure was reached from is shown, with how each fared.
+    - id: disagreeing-readings-are-shown-too
+      says: A figure whose readings disagree still shows them all.
+  standing:
+    kind: open
+    of: disagreeing-readings-are-shown-too   # ⛔ WHICH statement is unruled
+    about: whether the trail carries disagreeing readings or hands the reader to where one is chosen
+    question: Does the trail show disagreeing readings, or send the reader to choose between them?
+    asked_of: peter
+    cost: a reader deciding whether to trust a number sees either everything or nothing
+    blocks: []
+    candidates:
+      - says: The trail shows every disagreeing reading, with how each fared.
+        consequence: The reader judges without leaving the figure.
+        replaces: only the part in question      # ⛔ with `of:`, this is the honest value
+```
+
+**`of:` is what keeps the other statements safe.** `settle` replaces that statement's `says` and
+leaves its siblings byte-identical — ids included, so no criterion's `of:` is orphaned — and it
+**refuses** rather than appending if the named statement has gone. The review page marks the one in
+question and says *"replaces the marked statement only. The others stand exactly as they are."*
+Without `of:`, a ruling is the whole merged sentence and every other statement in the slot is
+silently replaced by whatever gets retyped.
+
+⛔ **ONE STANDING PER SLOT, AND THAT IS A REAL LIMIT.** If two statements in the same slot are
+separately unruled, you cannot say so. Raise the sharper one with `of:` and name the other in its
+`cost`, or — only where it genuinely is a question about a class rather than one sentence — lift it
+out as an open rule. Do not invent a second standing to fit both in, and do not merge two questions
+into one `about`: a reviewer answering a merged question has answered neither.
+
 ## Rules — where the leverage is, and where each one belongs
 
 Before writing the same sentence on a third exchange, stop. It is a rule:
