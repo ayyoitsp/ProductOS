@@ -249,7 +249,21 @@ export function openRuleQuestions(corpus: Corpus, scopeIds: string[]): Question[
         norm(s.question),
         s.about ? `In question: ${norm(s.about)}` : "",
         `Answering it once settles ${rule.fills.join(" and ")} on ${reaches.length} exchange${reaches.length === 1 ? "" : "s"} here, and on every one written after it.`,
-        `Until then it governs nothing, and those slots read as the blanks they are.`,
+        /**
+         * ⛔ TRUE OF A `supplies` RULE AND FALSE OF A `constrains` ONE, AND IT SAID IT OF BOTH.
+         *
+         * A `supplies` rule IS the answer where the slot is silent, so until it is ruled those
+         * slots really are blank. A `constrains` rule adds a requirement to whatever the slot
+         * already says — so the slots are not blank, they are answered and ungoverned.
+         *
+         * Reported by an author whose two `answer` slots say ten things and three things: *"the
+         * reach itself is right for a `constrains` rule; the sentence about blanks is false and is
+         * the first thing a reviewer reads about the feature."* A reviewer who believes it goes
+         * looking for ten missing sentences that are sitting in front of them.
+         */
+        rule.mode === "supplies"
+          ? `Until then it governs nothing, and those slots read as the blanks they are.`
+          : `Until then it governs nothing — those slots say what they say, and nothing is holding them to it.`,
       ]
         .filter(Boolean)
         .join("\n"),
