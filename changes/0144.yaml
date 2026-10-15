@@ -1,0 +1,9 @@
+id: "0144"
+said: "'Product' itself doesn't need to be a menu item under the 'Product' main tab"
+at: 2026-10-15
+kind: surface
+reaches:
+  surface: never a row of them
+  pin: the area names itself inside its own menu
+waived: {}
+closed: 2026-10-15
