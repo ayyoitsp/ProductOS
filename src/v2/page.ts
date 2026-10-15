@@ -2901,17 +2901,23 @@ function renderNav(
         }>` +
           `<span class="scoperow">` +
           /**
-           * ⛔ A TWISTY ONLY WHERE THERE IS A SUBTREE, the rule the area groups already follow: a
-           * control that expands nothing reads as "there is more here" and then answers nothing.
-           * Where there is none, an empty span of the same width keeps the labels in one column —
-           * otherwise every leaf sits a notch left of its siblings and the indent stops meaning
-           * depth.
+           * ⛔ NO CONTROL ON A ROW AT ALL. CHOOSING AN ITEM IS WHAT OPENS IT.
+           *
+           * Peter: *"there's an extra chevron now... we don't need the chevron next to 'attachment
+           * routing', for example. once you click an item, its sub menu should automatically show if
+           * it has one"*.
+           *
+           * The first cut gave every container its own twisty, on the reasoning that the area groups
+           * have one. That was the wrong thing to copy: an area group's head is a TAB — pressing it
+           * selects a section — so expanding has to be a separate control or selecting would collapse
+           * what you just chose. A row is already a link to the thing it names, and going to a
+           * feature is the whole reason to want its contents. Two controls for one intention is a
+           * chevron nobody needs.
+           *
+           * ⛔ SO WHETHER A ROW HAS A SUBTREE IS NO LONGER ADVERTISED, and that is the trade he is
+           * making: one less glyph per row, and you find out by going there. The ancestry of the page
+           * you are on is open already, so the menu still answers where you are.
            */
-          (children
-            ? `<button type="button" class="twisty sub" data-twist-scope="${esc(scope.id)}" aria-expanded="${
-                standing ? "true" : "false"
-              }" aria-label="${esc(`Show what is in ${scope.title || scope.id}`)}">▾</button>`
-            : `<span class="twisty none" aria-hidden="true"></span>`) +
           name +
           (here_open ? chip(here_open, "warn", "?", "unanswered") : "") +
           (orgWide ? chip(orgWide, "warn", "◇", "shared across the product") : "") +
@@ -7234,32 +7240,31 @@ const VIEW_SWITCH = `<script>
     });
   }
   /*
-   * ⛔ AND A CONTAINER INSIDE A GROUP COLLAPSES THE SAME WAY, because that is what he was asking
-   * about: "what happened to collapsable menu items? CRE/dealmanagement are not collapsible???".
-   * Those are rows, not groups, and rows had no control at all — the menu was one flat indented list
-   * in which nothing could be folded away.
+   * ⛔ CHOOSING AN ITEM OPENS WHAT IS IN IT. Peter: "once you click an item, its sub menu should
+   * automatically show if it has one".
    *
-   * ⛔ Siblings only, not the whole tree. Closing everything else on open would fold up the branch
-   * you are standing in, which is the chain the render deliberately leaves open.
+   * This was a chevron per row, which he then had to press after pressing the row — two controls for
+   * one intention, and the second one on every container whether he wanted it or not. Going to a
+   * feature is the reason to want its contents, so the link is the control.
+   *
+   * ⛔ AND THE NAVIGATION IS NOT INTERCEPTED. The handler adds a class and returns; it does not
+   * preventDefault, because the row's job is still to take you there. The previous version called
+   * preventDefault on a control that was not a link — correct there, and it would silently break
+   * every row's link here.
+   *
+   * ⛔ Siblings only. Closing everything on open would fold up the branch you are standing in, which
+   * is the chain the render deliberately leaves open — and on a cross-page link the next render opens
+   * that chain itself, so this only has to be right for a jump within the page.
    */
-  for (const t of document.querySelectorAll(".twisty[data-twist-scope]")) {
-    const row = t.closest("li");
-    if (!row) continue;
-    t.addEventListener("click", (ev) => {
-      ev.stopPropagation();
-      ev.preventDefault();
-      const was = row.classList.contains("open");
-      if (!was) {
-        const list = row.parentElement;
-        for (const sib of list ? list.children : []) {
-          if (sib === row) continue;
-          sib.classList.remove("open");
-          const own = sib.querySelector(":scope > .scoperow > .twisty");
-          if (own) own.setAttribute("aria-expanded", "false");
-        }
+  for (const row of document.querySelectorAll("nav.scopes li.holds")) {
+    const link = row.querySelector(":scope > .scoperow > a");
+    if (!link) continue;
+    link.addEventListener("click", () => {
+      const list = row.parentElement;
+      for (const sib of list ? list.children : []) {
+        if (sib !== row) sib.classList.remove("open");
       }
-      row.classList.toggle("open", !was);
-      t.setAttribute("aria-expanded", was ? "false" : "true");
+      row.classList.add("open");
     });
   }
 
@@ -7848,16 +7853,34 @@ export const STYLE = `<style>
     padding: .3rem 0 .3rem calc(var(--d) * .55rem); }
   nav.scopes .scoperow > a, nav.scopes .scoperow > strong, nav.scopes .scoperow > .unlinked {
     flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  nav.scopes li.holds > ul { display: none; }
-  nav.scopes li.holds.open > ul { display: block; }
-  /* ⛔ One glyph turned, not a second character — one string, two states. */
-  nav.scopes .twisty.sub { background: none; border: 0; cursor: pointer; color: var(--dim);
-    font: inherit; font-size: .65rem; line-height: 1; padding: .2rem .25rem; border-radius: 4px;
-    flex: 0 0 auto; transition: transform .12s; }
-  nav.scopes .twisty.sub:hover { color: var(--ink); }
-  nav.scopes .twisty.sub[aria-expanded="false"] { transform: rotate(-90deg); }
-  /* A leaf has no control, and an empty box of its width keeps every label in one column. */
-  nav.scopes .twisty.none { display: inline-block; flex: 0 0 auto; width: 1.05rem; }
+  /*
+   * ⛔ COLLAPSING IS THE SIDE MENU'S BEHAVIOUR AND ONLY ITS.
+   *
+   * Peter: *"you completely broke support for the top menu..... 🤦... are you compeltely unaware of
+   * how the product works?"*, then *"top menu shoudl more or less behave as before"* and *"tabs
+   * instead of collapsible rows"*.
+   *
+   * Across the top, the tree behind the chevron is the ONLY way to reach a feature — the groups
+   * collapse to a row and hold nothing. Making rows collapsible by default turned that into four
+   * area names with their contents folded away, and with the row chevrons gone there was nothing to
+   * open them: a chevron that reveals a list of four things you cannot expand.
+   *
+   * ⛔ AND MY FIRST DIAGNOSIS OF HIS REPORT WAS WRONG. I assumed the area subtrees were being laid
+   * out in the tab row by contents-display, wrote a rule to hide them, and the probe said they were
+   * already hidden — top mode hides the whole tree until the chevron. The rule was redundant and the
+   * break was somewhere else entirely. Measured rather than reasoned about, which is the only reason
+   * the redundant rule did not ship as the fix.
+   *
+   * So: open everywhere, and foldable only down the side.
+   */
+  nav.scopes li.holds > ul { display: block; }
+  /*
+   * ⛔ NO CONTROL ON A ROW, SO THE NESTING CARRIES THE DEPTH ON ITS OWN. With a chevron on every
+   * container and a spacer on every leaf, the labels lined up because each row paid the same 1.05rem
+   * whether it had a control or not. Both are gone — *"we don't need the chevron next to 'attachment
+   * routing'"* — so a nested list is indented as a list, which is what one is for.
+   */
+  nav.scopes li > ul { padding-left: .85rem; border-left: 1px solid var(--line); margin-left: .35rem; }
   /*
    * ⛔ A COUNT IS A CHIP: a number and a mark, in a pill beside the label.
    *
@@ -7994,7 +8017,12 @@ export const STYLE = `<style>
      * It stays in the markup for the top menu, where groups collapse to a row and hold nothing.
      */
     :root[data-nav="left"] .topframe > nav.scopes { display: none; }
-    :root[data-nav="left"] .topframe nav.scopes.inside { margin: 0; padding: 0 .6rem .5rem; }
+    /* ⛔ And down here it is the opposite way round: the group's own list is the menu. */
+    :root[data-nav="left"] .topframe nav.scopes.inside { display: block; margin: 0;
+      padding: 0 .6rem .5rem; }
+    /* ⛔ Foldable HERE, where a column has one feature's worth of width and a dozen to show. */
+    :root[data-nav="left"] nav.scopes li.holds > ul { display: none; }
+    :root[data-nav="left"] nav.scopes li.holds.open > ul { display: block; }
     /*
      * ⛔ CLEARANCE FOR THE COMPOSER AT THE BOTTOM OF THE COLUMN. Peter: *"menu is hidden below the
      * bottom chat bar, make sure the offset is correct"*.
