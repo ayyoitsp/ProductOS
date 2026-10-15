@@ -2931,12 +2931,6 @@ function renderNav(
     return rows.length ? `<ul>${rows.join("")}</ul>` : "";
   };
   /**
-   * ⛔ ONE WALK, RENDERED WHERE EACH PART OF IT BELONGS. The per-area subtree and the whole tree come
-   * from the same function over the same corpus — two projections of one source, which is what this
-   * project allows, rather than two lists of the same scopes that have to be kept agreeing.
-   */
-  const subtreeOf = (areaId: string) => subtree(areaId, 0);
-  /**
    * ⛔ THE TREE IS WHAT A ONE-SCOPE CORPUS DOES NOT NEED. THE FIXED TABS ARE NOT.
    *
    * This returned "" for the WHOLE frame, which took the tab row with it — so in a corpus with one
@@ -3169,8 +3163,7 @@ function renderNav(
          * comment refuses two lines down. An empty list rendered as an empty `<nav>` as well, so the
          * group looked like a container to every stylesheet rule and to anything counting them.
          */
-        const inside = areaIds.has(t.id) ? subtreeOf(t.id) : "";
-        const holds = t.id === "overview" || inside !== "";
+        const holds = t.id === "overview" || areaIds.has(t.id);
         return (
           `<div class="tabgroup" data-group="${esc(t.id)}">` +
           `<div class="tabhead">` +
@@ -3202,14 +3195,19 @@ function renderNav(
           /** Overview's own items move inside their area — see the strip below. */
           (t.id === "overview" ? OVERVIEW_STRIP : "") +
           /**
-           * ⛔ AND AN AREA'S FEATURES MOVE INSIDE THEIR AREA, which is what the round that wrote the
-           * line above stopped short of. Overview's strip went in; the areas kept pointing at a flat
-           * list hung under the crumbs, so they were the one kind of group whose contents were
-           * somewhere else — *"CRE/dealmanagement are not collapsible???"*.
+           * ⛔ AND NO SECOND TREE PER AREA. THERE IS ALREADY ONE, AND THE SCRIPT MOVES IT HERE.
            *
-           * Nothing for the prototype or the settings surfaces: they are not containers of scopes.
+           * I rendered a subtree inside every area group to put an area's features under it. That
+           * mechanism already existed: `scopeTree()` filters the one tree's rows to the selected
+           * section and the frame script APPENDS that tree into the selected group, so it physically
+           * sits under the area whose features it lists. Its own comment says why — *"a second tree
+           * per area would be two derivations of one fact, which is what this project keeps being
+           * bitten by"*.
+           *
+           * ⛔ AND IT BIT EXACTLY THERE. Two trees meant two sets of rows for one corpus, and the one
+           * I added inherited the collapsed-by-default rule that made the top menu's tree unusable —
+           * the thing he reported. Reading the script before adding to it would have cost a minute.
            */
-          (inside ? `<nav class="scopes inside">${inside}</nav>` : "") +
           `</div>`
         );
       })
@@ -3255,6 +3253,27 @@ function renderNav(
      * up a level dropped the whole tree on you instead, which is the opposite of what a breadcrumb
      * is for.
      */
+    tree +
+    `</div>` +
+    /**
+     * ⛔ THE TRAIL IS ON THE PAGE, NOT IN THE MENU — IN BOTH PLACEMENTS.
+     *
+     * Peter: *"the breadcrumb for the page does not belong in the menu - always at the top of the
+     * page"*, then *"breadcrumb on page in both top/side menu modes..... very simpel..."*.
+     *
+     * It was a child of the frame, which is a sticky header across the top and a fixed 19rem column
+     * down the side — so the same markup read as "the top of the page" in one placement and "a row
+     * inside the menu" in the other. Where it SITS was never the question: a breadcrumb says where
+     * the page you are reading is filed, so it belongs to the page.
+     *
+     * Outside the frame it is in the document flow, under the tab row in top mode and beside the
+     * column in side mode, which is the top of the page in both — without the placement being asked
+     * about anywhere.
+     *
+     * ⛔ THE CHEVRON STAYS WITH IT. It opens the tree, which is still the frame's, and it is already
+     * hidden down the side where the menu needs no opening. Two things on one line because they are
+     * both about getting somewhere else, not because they share an ancestor.
+     */
     `<div class="crumbs"><span class="trail"></span>` +
     /**
      * ⛔ AND NO CHEVRON WHERE THERE IS NO TREE TO SHOW. A control that expands nothing is the thing
@@ -3262,8 +3281,6 @@ function renderNav(
      * answers nothing, which is worse than the absence it is covering for.
      */
     (tree ? `<button type="button" class="chev" aria-expanded="false" aria-label="Show every feature">▾</button>` : "") +
-    `</div>` +
-    tree +
     `</div>`
   );
 }
@@ -6901,8 +6918,9 @@ const VIEW_SWITCH = `<script>
   if (views().length < 2) return;
   const menu = [...document.querySelectorAll("nav.scopes a[data-goto]")];
   const frame = document.querySelector(".topframe");
-  const crumbs = frame && frame.querySelector(".crumbs");
-  const trail = frame && frame.querySelector(".trail");
+  /* ⛔ On the document, not inside the frame — the trail is the page's now, in both placements. */
+  const crumbs = document.querySelector(".crumbs");
+  const trail = document.querySelector(".trail");
   const tree = frame && frame.querySelector("nav.scopes");
   let trails = {};
   try { trails = JSON.parse(frame.dataset.trails); } catch {}
@@ -6914,7 +6932,7 @@ const VIEW_SWITCH = `<script>
    */
   const setOpen = (open) => {
     if (!tree) return;
-    const c = frame.querySelector(".chev");
+    const c = document.querySelector(".chev");
     /**
      * ⛔ A TREE WITH NO CONTROL TO REOPEN IT IS NEVER CLOSED.
      *
@@ -7004,7 +7022,7 @@ const VIEW_SWITCH = `<script>
     // ⛔ Overview has no tree to open, so the chevron goes away rather than opening an empty one.
     if (chev) chev.hidden = section === "overview";
     const sm = document.querySelector(".topframe .subtabs");
-    const cr = document.querySelector(".topframe .crumbs");
+    const cr = document.querySelector(".crumbs");
     if (sm) sm.hidden = section !== "overview";
     if (cr) cr.hidden = section === "overview";
     /*
@@ -7045,7 +7063,7 @@ const VIEW_SWITCH = `<script>
     } catch {}
   };
 
-  const chev = frame && frame.querySelector(".chev");
+  const chev = document.querySelector(".chev");
   if (chev) chev.addEventListener("click", () => setOpen(tree.hidden));
   /**
    * ⛔ Re-asked, not re-decided. Moving the menu — or dragging the window across the breakpoint —
@@ -7079,17 +7097,39 @@ const VIEW_SWITCH = `<script>
    */
   const scopeTree = (section) => {
     for (const li of tree ? tree.querySelectorAll("li") : []) {
-      const a = li.querySelector("a[data-goto]") || li.querySelector("[data-goto]");
-      const id = a && a.dataset.goto;
       /**
-       * ⛔ A ROW THE FILTER CANNOT IDENTIFY IS HIDDEN, NOT KEPT.
+       * ⛔ THE ROW SAYS WHICH SCOPE IT IS, rather than the filter inferring it from a link.
        *
-       * Defaulting to visible meant every row without a usable link survived every filter — so
-       * choosing the product half still showed the machinery, while the machinery half looked
-       * correct and hid the bug. An unidentifiable row is exactly the one there is no reason to
-       * trust.
+       * It read the id off a[data-goto], and the row for the scope you are currently ON has no
+       * link — it is its own name in bold, because a link to where you already are is not a link. So
+       * that row was unidentifiable, fell to the branch below, and the area whose page you were
+       * reading was the one row the filter could not reason about.
+       *
+       * ⛔ A ROW THE FILTER CANNOT IDENTIFY IS STILL HIDDEN. Defaulting to visible meant every row
+       * without a usable link survived every filter — so choosing the product half still showed the
+       * machinery, while the machinery half looked correct and hid the bug.
        */
+      const id = li.dataset.scope;
       li.hidden = section === "overview" || !id || sectionOf[id] !== section;
+      /**
+       * ⛔ AND THE AREA ITSELF IS NOT A ROW OF ITS OWN MENU. Peter: *"'Product' itself doesn't need
+       * to be a menu item under the 'Product' main tab"*.
+       *
+       * The tree hangs under the group it is listing and the group's head already names it, so the
+       * row whose id IS the section is the group repeating itself one line below its own tab. It
+       * belongs in this filter rather than in the render: one tree is emitted for the whole corpus,
+       * and which scope is redundant depends on where that tree currently hangs.
+       *
+       * ⛔ ITS ROW, NOT ITS ITEMS. The rows nest now, so an area's row CONTAINS its features —
+       * hiding the whole row would take every one of them with it, which is the area looking right and
+       * holding nothing. Only the row's own line is hidden.
+       *
+       * ⛔ AND IT IS FORCED OPEN, because the control that would open it is the line just hidden.
+       */
+      const own = li.querySelector(":scope > .scoperow");
+      const redundant = !!id && id === section;
+      if (own) own.hidden = redundant;
+      if (redundant) li.classList.add("open");
     }
   };
   // ⛔ No per-row binding: the delegated handler above covers the menu, the crumbs and a
@@ -7925,21 +7965,21 @@ export const STYLE = `<style>
   .subtab.on { color: var(--ink); font-weight: 600; border-bottom-color: var(--accent); }
   .subtab .pill, .topframe .tab .pill { font-size: .72rem; background: var(--warn); color: var(--bg);
     border-radius: 99px; padding: .05rem .4rem; margin-left: .25rem; vertical-align: .05em; }
-  .topframe .crumbs { display: flex; gap: .5rem; align-items: center; width: 100%;
+  .crumbs { display: flex; gap: .5rem; align-items: center; width: 100%;
     max-width: 100%; margin: 0 auto; padding: .45rem 2rem .6rem;
     border-top: 1px solid var(--line); background: none; border: 0;
     font: inherit; font-size: .9rem; color: var(--ink); cursor: pointer; text-align: left; }
-  .topframe .trail { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .topframe .trail .up { color: var(--dim); }
-  .topframe .trail .at { font-weight: 600; }
-  .topframe .trail .sep { color: var(--dim); margin: 0 .4rem; }
-  .topframe .trail a.up { color: var(--dim); text-decoration: none; }
-  .topframe .trail a.up:hover { color: var(--accent); text-decoration: underline; }
-  .topframe .chev { background: none; border: 1px solid var(--line); border-radius: 6px;
+  .trail { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .trail .up { color: var(--dim); }
+  .trail .at { font-weight: 600; }
+  .trail .sep { color: var(--dim); margin: 0 .4rem; }
+  .trail a.up { color: var(--dim); text-decoration: none; }
+  .trail a.up:hover { color: var(--accent); text-decoration: underline; }
+  .chev { background: none; border: 1px solid var(--line); border-radius: 6px;
     color: var(--dim); cursor: pointer; font: inherit; line-height: 1; padding: .25rem .5rem;
     transition: transform .12s ease; }
-  .topframe .chev:hover { color: var(--ink); border-color: var(--accent); }
-  .topframe.open .chev { transform: rotate(180deg); }
+  .chev:hover { color: var(--ink); border-color: var(--accent); }
+  .crumbs.open .chev { transform: rotate(180deg); }
   /* ── Where the menu lives: one attribute on the root, one set of markup. ──
      ⛔ NOT A SECOND FRAME. Everything below re-lays out the frame that is already there; nothing
      here adds a row, a count or a link that the top placement does not also have, so a reader who
@@ -7998,28 +8038,22 @@ export const STYLE = `<style>
     :root[data-nav="left"] .subtab { text-align: left; border-bottom: 0;
       border-left: 2px solid transparent; padding: .3rem .6rem; }
     :root[data-nav="left"] .subtab.on { border-left-color: var(--accent); }
-    :root[data-nav="left"] .topframe .crumbs { padding: .5rem .9rem; align-items: flex-start; }
-    /* A column is narrow and tall, so the trail wraps rather than losing its head to an ellipsis. */
-    :root[data-nav="left"] .topframe .trail { white-space: normal; overflow: visible;
-      text-overflow: clip; }
+    /*
+     * ⛔ AND THE TWO OVERRIDES THAT MADE IT FIT A COLUMN ARE GONE WITH IT.
+     *
+     * A tighter padding and a wrapping trail were both compensations for living in a 19rem column:
+     * *"A column is narrow and tall, so the trail wraps rather than losing its head to an ellipsis"*.
+     * On the page it has the width of the page in either placement, so the one rule serves both — and
+     * leaving these behind would have been the trail laid out for a column it is no longer in, which
+     * is the kind of leftover that reads as a deliberate difference.
+     */
     /* ⛔ THE CHEVRON IS A TOP-MENU ECONOMY. It exists because sixteen rows cannot sit permanently
        across a page above the thing being read. Down the side there is nothing to compete with, so
        the tree stays open and the control that would close it goes away — and the script reads
        exactly this rule to know it must not collapse. */
-    :root[data-nav="left"] .topframe .chev { display: none; }
+    :root[data-nav="left"] .chev { display: none; }
     :root[data-nav="left"] .topframe nav.scopes { max-height: none; margin: .4rem 0 0;
       padding: 0 .9rem 1rem; }
-    /*
-     * ⛔ AND THE WHOLE-CORPUS TREE IS NOT SHOWN TWICE. Down the side each area holds its own items,
-     * so the flat list under the crumbs is the same scopes a second time — which is what made an
-     * area appear as both a group and a row of a list below it.
-     *
-     * It stays in the markup for the top menu, where groups collapse to a row and hold nothing.
-     */
-    :root[data-nav="left"] .topframe > nav.scopes { display: none; }
-    /* ⛔ And down here it is the opposite way round: the group's own list is the menu. */
-    :root[data-nav="left"] .topframe nav.scopes.inside { display: block; margin: 0;
-      padding: 0 .6rem .5rem; }
     /* ⛔ Foldable HERE, where a column has one feature's worth of width and a dozen to show. */
     :root[data-nav="left"] nav.scopes li.holds > ul { display: none; }
     :root[data-nav="left"] nav.scopes li.holds.open > ul { display: block; }
