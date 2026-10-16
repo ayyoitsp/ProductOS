@@ -141,6 +141,20 @@ export const Statement = z
   .object({
     id: z.string().regex(new RegExp(`^${SEGMENT}$`), "a statement id is one segment, kebab-case"),
     says: z.string().min(10, "a statement nobody can read is not worth agreeing to"),
+    /**
+     * Which combination of the product's dimensions this holds for. Absent means every one.
+     *
+     * ⛔ Peter: *"the dimensions should affect the truths as well"*. A product that genuinely differs
+     * by role differs in what it PROMISES, not only in which walkthrough you are shown — so the
+     * field belongs on the sentence, which is the thing somebody agrees to.
+     *
+     * ⛔ UNSAID MEANS EVERYWHERE, NEVER NOWHERE. A statement with no `holds_for` holds under every
+     * combination, so every corpus written before dimensions existed says exactly what it said
+     * before. See `holdsUnder` in `dimensions.ts` — one predicate, read by the renderer, the checker
+     * and the selector alike, because the last time two callers each owned a copy of a selection
+     * rule they disagreed within the hour.
+     */
+    holds_for: z.record(z.string().min(1)).optional(),
   })
   .strict();
 export type Statement = z.infer<typeof Statement>;
@@ -708,6 +722,15 @@ export const SlotFill = z
      */
     says: z.union([z.string().min(10), z.array(Statement).min(2)]).optional(),
     standing: Standing.default({ kind: "stated" }),
+    /**
+     * Which combination of the product's dimensions this whole slot holds for. Absent means every one.
+     *
+     * ⛔ ON THE SLOT AS WELL AS ON THE STATEMENT, because the two say different things. A statement's
+     * `holds_for` is "this sentence is promised there"; a slot's is "this part of the exchange only
+     * exists there" — a refusal an auditor never meets, a reading only an admin is shown. Writing the
+     * second as a `holds_for` on every statement in the slot would be the same fact in N places.
+     */
+    holds_for: z.record(z.string().min(1)).optional(),
     /** ⛔ Observable by the asker, or it is engineering's. */
     within: z.string().min(10).optional(),
     outcomes: z.array(RefusalOutcome).optional().describe("for `refuses` — named, never a code"),
@@ -1892,6 +1915,15 @@ export type HappyPath = z.infer<typeof HappyPath>;
 export const View = z.object({
   id: z.string(),
   title: z.string(),
+  /**
+   * Which combination of the product's dimensions this screen is for. Absent means every one.
+   *
+   * ⛔ Peter: *"we need dimensions to carry through to all features, so we can have different
+   * variations PER feature"*. Two screens in one feature may do the same job and differ only by who
+   * is looking at it; this is how they say so, without one of them having to be renamed after the
+   * audience it serves.
+   */
+  holds_for: z.record(z.string().min(1)).optional(),
   view_kind: z.string().optional().describe("form · list · detail · modal · strip — selectable by a Rule"),
   exists: z.enum(["intended", "kept", "withdrawn"]).optional(),
   /* ⛔ `runtime` REMOVED. Read by nothing, and what it meant was never written down. */
@@ -2420,6 +2452,38 @@ export type Rule = z.infer<typeof Rule>;
 export const Scope = z.object({
   id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/, "scope ids are kebab-case slugs, not paths"),
   title: z.string().min(2),
+  /**
+   * The ways this product varies — declared once, on the product, reaching every feature in it.
+   *
+   * ⛔ Peter: *"we need dimensions to carry through to all features, so we can have different
+   * variations PER feature. and the dimensions should affect the truths as well"*.
+   *
+   * ⛔ THE HOME MOVED HERE RATHER THAN A SECOND ONE BEING ADDED. They arrived as `splits_on` inside
+   * `prototypes.yaml`, because what was being asked for that day was a prototype selector — so a
+   * dimension could only pick one of a handful of whole walkthroughs. A product that genuinely
+   * differs by role differs per FEATURE, in what each one promises. `splits_on` stays readable as the
+   * older spelling and `dimensionsOf` prefers this; what it must never do is merge them, which would
+   * invent a third list neither file says and leave nowhere to go and read the answer.
+   *
+   * ⛔ ON THE PRODUCT, NOT ON EVERY SCOPE. The field is here because this is the Scope shape and the
+   * product is one — `dimensionsOf` reads the root and nothing else. A feature declaring dimensions
+   * of its own would be a second product inside the first, and `check` refuses it.
+   */
+  dimensions: z
+    .array(
+      z
+        .object({
+          id: z.string().min(1),
+          label: z.string().min(1).describe("the dimension's name as a reader sees it — Role, Product line"),
+          /**
+           * ⛔ EMPTY IS HONEST — a dimension somebody named and has not filled in — and `check` says
+           * so rather than this refusing a half-authored product.
+           */
+          values: z.array(z.string().min(1)).default([]),
+        })
+        .strict()
+    )
+    .optional(),
   /**
    * What this feature is FOR, agreed before any detail of it. See `HappyPath`.
    *

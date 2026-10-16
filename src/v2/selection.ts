@@ -26,6 +26,7 @@
  */
 import { resolveView, type Corpus } from "./load.js";
 import { axesOf, answersOf, type Axis } from "./schema.js";
+import { dimensionsOf } from "./dimensions.js";
 import { walkOf } from "./walk.js";
 
 /**
@@ -174,7 +175,14 @@ export function selectionOf(c: Corpus): Selection {
       }
     }
 
-  const axes = axesOf(c.splitsOn, protos);
+  /*
+   * ⛔ THE PRODUCT'S DIMENSIONS, THROUGH THE ONE READER. This read `splits_on` directly, which was
+   * right while dimensions lived only in the prototypes file — Peter: *"we need dimensions to carry
+   * through to all features"*. Reading it here as well would mean the selector and the features
+   * disagreed about what the product splits on, which is the shape of defect this project has paid
+   * for three times.
+   */
+  const axes = dimensionsOf(c);
   const options = protos.map((p): Option => {
     /**
      * ⛔ THE WALK FROM THIS DOOR, NOT THE WHOLE CORPUS. The point of several prototypes is that each

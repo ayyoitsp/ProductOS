@@ -1,0 +1,14 @@
+id: "0160"
+said: we need dimensions to carry through to all features, so we can have different variations PER feature. and the dimensions should affect the truths as well
+at: 2026-10-16
+kind: concept
+reaches:
+  model: holds_for
+  derive: holdsUnder
+  generate: writeHoldsFor
+  surface: chip holds
+  check: a-variant-names-an-undeclared-dimension
+  instruct: A dimension reaches every feature
+  pin: unsaid means everywhere
+waived: {}
+closed: 2026-10-16

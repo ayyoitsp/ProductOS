@@ -478,6 +478,68 @@ Then **check a number on the live page that would be different if it had not wor
 page returns 200. A corpus was once reported deployed while every drawing on it still came from the
 previous generator, and the tick was true.
 
+### ⛔ A dimension reaches every feature, and every truth inside one — `dimensions`, `holds_for`
+
+Peter: *"we need dimensions to carry through to all features, so we can have different variations
+PER feature. and the dimensions should affect the truths as well"*.
+
+Dimensions started life inside `prototypes.yaml`, where one could only pick a whole walkthrough. A
+product that genuinely differs by role differs **per feature**, in what each one promises — so they
+are declared on the **product**, and any screen or sentence says which combination it is for:
+
+```yaml
+# the product — the scope with no `in:`
+dimensions:
+  - id: role
+    label: Role
+    values: [admin, loan processor]
+  - id: line
+    label: Product line
+    values: [CRE, private lending]
+```
+
+```yaml
+# a feature: two drawings of one job, for two audiences
+views:
+  - id: deals-list
+    title: Deals, as an admin
+    holds_for: { role: admin }
+  - id: deals-list-processor
+    title: Deals, as a loan processor
+    holds_for: { role: loan processor }
+
+exchanges:
+  - id: price-a-deal
+    slots:
+      shows:
+        says:
+          - id: margin
+            says: The indicative margin is shown beside the rate.
+            holds_for: { role: admin }
+          - id: rate
+            says: The rate is shown to two decimal places.
+```
+
+⛔ **Unsaid means EVERYWHERE, never nowhere.** A truth with no `holds_for` holds under every
+combination — `rate` above is promised to everyone. Write `holds_for` only where the product really
+does differ; adding it "for completeness" narrows a promise nobody asked to narrow.
+
+⛔ **On the slot when the whole part only exists there**, on the statement when one sentence does. A
+refusal an auditor never meets is the slot's `holds_for`; a line of detail only an admin is shown is
+the statement's. Writing the first as a `holds_for` on each of its statements is the same fact in N
+places.
+
+⛔ **The ids are the product's own dimension ids, and a typo does not fail — it goes universal.** A
+dimension nobody declared excludes nothing, so `roles: admin` quietly shows an admin-only screen to
+everybody. `v2 check` refuses both an undeclared dimension and a value the dimension does not list.
+
+⛔ **Never declare dimensions on a feature.** They are the product's, read from the root scope and
+nowhere else; a feature declaring its own would be a second product inside the first.
+
+⛔ **And a feature never states what it varies by** — that is derived from the `holds_for` actually
+present. A field saying "varies by role" beside truths that say so themselves is a second record
+with no forcing function.
+
 ### ⛔ Several ways through one product — dimensions, and which one each prototype is
 
 Peter: *"we can have different prototypes for differnet prototypes.. like 'unauthenticated' could be

@@ -31,9 +31,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { CORPUS_DIRS, loadCorpus } from "./load.js";
 import { append } from "./log.js";
-import { writePrototypes, writeWithin, diskPages } from "./draw-write.js";
+import { writePrototypes, writeWithin, diskPages, writeHoldsFor } from "./draw-write.js";
 import { walkOf } from "./walk.js";
 import { axesOf, answersOf } from "./schema.js";
+import { dimensionsOf, sayCombination, variesBy } from "./dimensions.js";
 import { doorOpensOn, theOnlyScreenIn, screensIn } from "./selection.js";
 
 /** An axis id from its question, so nobody is asked to invent a slug for a sentence they just wrote. */
@@ -449,7 +450,8 @@ export const INTENTS: Intent[] = [
           ],
         };
       }
-      const axes = axesOf(corpus.splitsOn, corpus.prototypes);
+      /* ⛔ The one reader, so a placement is judged against the dimensions the product declares. */
+      const axes = dimensionsOf(corpus);
       const existing = corpus.prototypes.find((p) => p.id === id);
       const title = str(body.title).trim() || existing?.title;
       if (!title) return { ok: false, why: `"${id}" is new, so say what to call it`, detail: ["title"] };
@@ -617,6 +619,100 @@ export const INTENTS: Intent[] = [
         ok: true,
         said: `${here.title} appears inside ${doorOpensOn(corpus, of)?.title ?? of}`,
         detail: [`${after.entries.length} way${after.entries.length === 1 ? "" : "s"} into this product now`],
+      };
+    },
+  },
+  {
+    /**
+     * ⛔ WHO A SCREEN IS FOR, SAID FROM THE PAGE.
+     *
+     * Peter: *"we need dimensions to carry through to all features, so we can have different
+     * variations PER feature"*, and long before that, about the thing that made this necessary:
+     * *"I should be able to drive this from the listener/input, right??? why could you possibly need
+     * this?"*
+     *
+     * A field only a hand-edit can set is a field only the sessions that know about it will ever
+     * write — which is the hand-authoring trap this project opens on. There is a test asserting that
+     * every fact a reviewer states is reachable from the page, and it failed on `View.holds_for`
+     * before this existed.
+     */
+    name: "holds-for",
+    gate: "author",
+    does: "Say which combination of the product's dimensions a screen is for — or take it back",
+    takes: [
+      { name: "view", says: "The screen, as <scope>#<view>", required: true },
+      {
+        name: "is",
+        says: "The combination, as dimension id to value. ⛔ Empty takes it back, and that is how a screen becomes everybody's again",
+        required: false,
+      },
+    ],
+    run: (a, body) => {
+      const ref = str(body.view).trim();
+      if (!ref) return { ok: false, why: "say which screen" };
+      const corpus = loadCorpus(a.dir);
+      const here = doorOpensOn(corpus, ref);
+      const holder = corpus.scopes
+        .flatMap((e) => (e.scope.views ?? []).map((v) => ({ scope: e.scope.id, view: v })))
+        .find((x) => `${x.scope}#${x.view.id}` === ref || x.view.id === ref);
+      if (!here || !holder) return { ok: false, why: `no screen "${ref}" in this corpus` };
+
+      const asked = (body.is ?? {}) as Record<string, unknown>;
+      const is: Record<string, string> = {};
+      for (const [dim, value] of Object.entries(asked)) {
+        const v = str(value).trim();
+        if (v) is[dim] = v;
+      }
+
+      /**
+       * ⛔ REFUSED HERE RATHER THAN FOUND BY `check` LATER, because the failure is silent and in the
+       * safe-looking direction: a dimension this product never declared narrows nothing, so the
+       * screen stays visible to everybody and the author believes they have restricted it.
+       */
+      const dims = dimensionsOf(corpus);
+      for (const [dim, value] of Object.entries(is)) {
+        const known = dims.find((d) => d.id === dim);
+        if (!known)
+          return {
+            ok: false,
+            why: `this product has no dimension "${dim}", so holding a screen for it would narrow nothing`,
+            detail: dims.length
+              ? [`it splits on: ${dims.map((d) => `${d.id} (${d.label})`).join(" · ")}`]
+              : ["declare the product's dimensions first — they are the product's, not a feature's"],
+          };
+        if (known.values.length && !known.values.includes(value))
+          return {
+            ok: false,
+            why: `"${value}" is not one of ${known.label}'s values`,
+            detail: [`${known.label} is: ${known.values.join(" · ")}`],
+          };
+      }
+
+      const file = writeHoldsFor(diskPages(a.dir), holder.scope, holder.view.id, is);
+      if (!file) return { ok: false, why: `could not find "${ref}" to change` };
+      const says = Object.keys(is).length
+        ? `${here.title} is what ${sayCombination(is, dims)} sees`
+        : `${here.title} is everybody's again`;
+      append(a.dir, {
+        kind: "corpus-changed",
+        at: new Date().toISOString(),
+        by: a.who.actor,
+        via: "page",
+        ref,
+        wrote: keyOf(a.dir, file),
+        says,
+      });
+      /**
+       * ⛔ AND IT SAYS WHAT THE FEATURE NOW VARIES BY, which is the thing he asked for — a variation
+       * per feature is only useful if the feature can be asked what its variations are.
+       */
+      const varies = variesBy(loadCorpus(a.dir), holder.scope);
+      return {
+        ok: true,
+        said: says,
+        detail: varies.length
+          ? [`${holder.scope} now varies by ${varies.map((d) => d.label.toLowerCase()).join(" and ")}`]
+          : [`${holder.scope} states one thing for everybody again`],
       };
     },
   },
