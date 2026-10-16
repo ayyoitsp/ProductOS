@@ -1183,7 +1183,12 @@ function renderScreens(scope: Scope, ctx: Ctx, scopeId: string, opts: PageOption
             ? `<span class="chip ok" title="${esc(`${whyHeld(held)} — a sweep leaves this alone; only naming it redraws it`)}">worked on</span>`
             : "";
           return `<article class="screen" id="${anchorOf(`${scopeId}#view#${v.id}`)}" data-screen="${esc(v.id)}"
-            data-ref="${esc(scopeId)}"${held.length ? ' data-held="1"' : ""} data-label="${esc(`screen: ${plain(v.title)}`)}">
+            data-ref="${esc(scopeId)}"${held.length ? ' data-held="1"' : ""}${
+              /* ⛔ Omitted where the screen is everybody's — absent means everywhere, as in the model. */
+              v.holds_for && Object.keys(v.holds_for).length
+                ? ` data-holds="${esc(JSON.stringify(v.holds_for))}"`
+                : ""
+            } data-label="${esc(`screen: ${plain(v.title)}`)}">
             ${
               /**
                * ⛔ NO HEADING WHERE THERE IS ONLY ONE SCREEN. Peter: *"there's white space above the
@@ -1596,6 +1601,18 @@ function renderBehaviours(
     settled: boolean;
     standing: string;
     detail: string;
+    /**
+     * ⛔ WHO THIS SENTENCE IS PROMISED TO, carried to the row so the page can be filtered without a
+     * reload. Peter: *"the dimensions should affect the truths as well"*, and then, of the filter:
+     * *"is the dimension filter on every feature page"* — it was not, and a filter that needs a
+     * round trip per choice is not a filter.
+     *
+     * ⛔ THE SLOT'S AND THE STATEMENT'S, MERGED, with the statement's winning. They say different
+     * things — the slot's is "this part only exists there", the statement's is "this sentence is
+     * only promised there" — and a sentence inside an admin-only slot is admin-only whatever it
+     * says about itself.
+     */
+    holds?: Record<string, string>;
   }> = [];
   for (const ex of entry.scope.exchanges) {
     const ref = `${scopeId}#${ex.id}`;
@@ -1687,6 +1704,10 @@ function renderBehaviours(
             .slice(0, 40)}`,
           /** ⛔ The whole sentence. See the table below for why nothing is cut. */
           says: shown.length > 1 ? line(said.says) : says,
+          holds: {
+            ...((fill as { holds_for?: Record<string, string> } | undefined)?.holds_for ?? {}),
+            ...((said as { holds_for?: Record<string, string> } | undefined)?.holds_for ?? {}),
+          },
           settled,
           standing,
           detail: `
@@ -1978,7 +1999,17 @@ function renderCard(
 /** One behaviour, as a row plus the row that opens under it. */
 function behRow(
   corpus: Corpus,
-  r: { sref: string; slot: SlotName; says: string; label: string; settled: boolean; standing: string; detail: string },
+  r: {
+    sref: string;
+    slot: SlotName;
+    says: string;
+    label: string;
+    settled: boolean;
+    standing: string;
+    detail: string;
+    /** ⛔ Who it is promised to — see the row type in `renderBehaviours`. */
+    holds?: Record<string, string>;
+  },
   interactive: boolean
 ): string {
   const st = stampFor(corpus, r.sref);
@@ -1992,7 +2023,17 @@ function behRow(
      *  the row's stale chip carried a title naming who agreed and the card's did not. */
     const parts = confidenceParts(corpus, r.sref);
     const chip = parts.chips;
-  return `<tr class="beh" id="beh-${slug(r.sref)}" data-beh="${esc(r.sref)}" data-ref="${esc(r.sref)}" data-label="${esc(r.label)}">
+  /*
+   * ⛔ `data-holds` IS OMITTED WHERE A SENTENCE IS EVERYBODY'S, not written as an empty object.
+   *
+   * The filter treats an absent attribute as "holds everywhere", which is the model's own default —
+   * so an empty `{}` would be a third state meaning the same thing, and the first reader to treat it
+   * as "holds for nothing" would empty the page. ⛔ And this repo's own rule applies: for a feature
+   * whose correct answer today is zero, a count of these attributes is not a check. The test reads
+   * three outcomes out of one corpus instead.
+   */
+  const holds = r.holds && Object.keys(r.holds).length ? ` data-holds="${esc(JSON.stringify(r.holds))}"` : "";
+  return `<tr class="beh" id="beh-${slug(r.sref)}" data-beh="${esc(r.sref)}" data-ref="${esc(r.sref)}" data-label="${esc(r.label)}"${holds}>
       <td class="row-says"><span class="says-text">${r.says}</span>${
         /**
          * ⛔ THE CHIPS RUN ON FROM THE SENTENCE. Peter: *"chips inline with the text at the end of
@@ -3308,6 +3349,27 @@ function renderNav(
      */
     `<div class="crumbs"><span class="trail"></span>` +
     /**
+     * ⛔ THE DIMENSION FILTER, ON EVERY PAGE, BECAUSE A FILTER ON ONE TAB FILTERS NOTHING.
+     *
+     * Peter: *"Has anything is the dimension filter on every feature page"* — it was not. The model
+     * reached every truth and the only control that read it was on the prototype board, so a reader
+     * on a feature page could see that a variant existed and could not ask to be shown it.
+     *
+     * ⛔ IT IS IN THE FRAME, which is the part that does not scroll and is on every page by
+     * construction. Rendering it per page would be the same control in a dozen places, and the one
+     * on the board would be a thirteenth copy of the same question.
+     *
+     * ⛔ AND IT IS THE SAME CONTROL THE BOARD USES — `data-walk-dim` — because he already settled
+     * what these are: *"so the prototypes just has chips of which dimension, e.g. role:admin. and
+     * the drop down selectors will be filters"*. One answer, read by the board to pick a prototype
+     * and by the page to narrow what it shows.
+     *
+     * ⛔ ABSENT WHERE A PRODUCT DECLARES NO DIMENSIONS. A row of empty dropdowns is the "nav row that
+     * does nothing" this file refuses by name — it reads as a feature that is broken rather than one
+     * nobody has used yet.
+     */
+    dimensionFilter(corpus) +
+    /**
      * ⛔ AND NO CHEVRON WHERE THERE IS NO TREE TO SHOW. A control that expands nothing is the thing
      * `check` refuses by name elsewhere in this project — it reads as "there is more here" and then
      * answers nothing, which is worse than the absence it is covering for.
@@ -3988,7 +4050,7 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
     return `${section}${mockBank(corpus, ids, protoScreens, section, scopeId)}`;
   }
 
-  return `${STYLE}${body}${appCssOnce(opts)}${mockBank(corpus, ids, protoScreens, body, scopeId)}${partFacts(corpus, ids)}${renderNotePanel(corpus, ids, opts)}${VIEW_SWITCH}${opts.interactive ? DEFER : ""}${NAV_PLACE}${PROTO_FRAME}${PROTOTYPE}${DRIVE}${opts.interactive ? liveScript(opts) : INERT}`;
+  return `${STYLE}${body}${appCssOnce(opts)}${mockBank(corpus, ids, protoScreens, body, scopeId)}${partFacts(corpus, ids)}${renderNotePanel(corpus, ids, opts)}${VIEW_SWITCH}${opts.interactive ? DEFER : ""}${DIM_FILTER}${NAV_PLACE}${PROTO_FRAME}${PROTOTYPE}${DRIVE}${opts.interactive ? liveScript(opts) : INERT}`;
 }
 
 
@@ -7514,6 +7576,98 @@ const PROTO_FRAME = `<script>
 })();
 </script>`;
 
+/**
+ * ⛔ THE DIMENSION FILTER, APPLIED TO EVERY PAGE AND REMEMBERED.
+ *
+ * Peter: *"Has anything is the dimension filter on every feature page"*, then *"Build it"*.
+ *
+ * ⛔ IN THE BROWSER, BECAUSE THE SERVER NEVER SEES THE CHOICE. A round trip per dropdown would make
+ * the filter slower than scrolling past what it hides, and the page already carries what it needs:
+ * every screen and every behaviour row states its own combination in `data-holds`.
+ *
+ * ⛔ REMEMBERED, for the reason the menu placement is: a reading posture, not a per-page decision.
+ * Being asked again on every feature is the same as not being asked.
+ *
+ * ⛔ AND IT SAYS WHAT IT HID. A page that silently omits truth is how somebody agrees to less than
+ * they believe they are agreeing to, so the count is beside the control rather than discoverable.
+ */
+const DIM_FILTER = `<script>
+(function () {
+  const bar = document.querySelector("[data-dimfilter]");
+  if (!bar) return;
+  /*
+   * ⛔ ITS OWN ATTRIBUTE, NOT THE BOARD'S.
+   *
+   * This first reused the board's own walk-dim attribute, which its selector already uses — so each
+   * script saw the other's controls and four of the board's tests went red. The two do different
+   * jobs: the board's picks WHICH PROTOTYPE to walk and can add a dimension or a value; this one
+   * narrows what a page shows. They share the answer, not the markup.
+   */
+  const picks = Array.prototype.slice.call(bar.querySelectorAll("[data-dim-filter]"));
+  const said = bar.querySelector("[data-dimhidden]");
+  const KEY = "productos:asked";
+
+  const remembered = (function () {
+    try { return JSON.parse(localStorage.getItem(KEY) || "{}"); } catch (e) { return {}; }
+  })();
+
+  const asked = function () {
+    const want = {};
+    for (const sel of picks) if (sel.value) want[sel.getAttribute("data-dim-filter")] = sel.value;
+    return want;
+  };
+
+  /*
+   * ⛔ THE SAME PREDICATE THE REST OF THE SYSTEM USES, in the one language this file can carry it in.
+   * A truth that says nothing is never hidden; a dimension the reader has not chosen hides nothing;
+   * only a stated disagreement hides. Getting any of those backwards empties the page.
+   */
+  const holdsUnder = function (holds, want) {
+    if (!holds) return true;
+    for (const dim in holds) {
+      if (!Object.prototype.hasOwnProperty.call(holds, dim)) continue;
+      if (want[dim] && want[dim] !== holds[dim]) return false;
+    }
+    return true;
+  };
+
+  const apply = function () {
+    const want = asked();
+    let hidden = 0;
+    const subjects = document.querySelectorAll("[data-holds]");
+    for (const el of subjects) {
+      let holds = null;
+      try { holds = JSON.parse(el.getAttribute("data-holds")); } catch (e) { holds = null; }
+      const keep = holdsUnder(holds, want);
+      /*
+       * ⛔ A CLASS, NOT THE hidden ATTRIBUTE. Several of these elements are table rows whose own
+       * open/closed state already uses hidden — writing it here would fight that and leave a row
+       * stuck whichever lost.
+       */
+      el.classList.toggle("dimhide", !keep);
+      if (!keep) hidden++;
+    }
+    if (said) {
+      const chosen = Object.keys(want).length;
+      said.hidden = !hidden;
+      said.textContent = hidden
+        ? hidden + " hidden by " + (chosen === 1 ? "this choice" : "these choices")
+        : "";
+    }
+    try { localStorage.setItem(KEY, JSON.stringify(want)); } catch (e) { /* private window: it just forgets */ }
+  };
+
+  for (const sel of picks) {
+    const was = remembered[sel.getAttribute("data-dim-filter")];
+    /* ⛔ Only a value this dimension still offers — a remembered one that has since been removed
+       would narrow the page to nothing and offer no way to see why. */
+    if (was) for (const opt of sel.options) if (opt.value === was) sel.value = was;
+    sel.addEventListener("change", apply);
+  }
+  apply();
+})();
+</script>`;
+
 const NAV_PLACE = `<script>
 (function () {
   const root = document.documentElement;
@@ -7794,6 +7948,27 @@ export const STYLE = `<style>
    * catches that, and it caught this; a fallback would have hidden it, which is why none is used.
    */
   .chip.holds { border-color: var(--accent); color: var(--accent); }
+  /*
+   * THE DIMENSION FILTER, ON THE BREADCRUMB LINE OF EVERY PAGE.
+   *
+   * ⛔ One row, and it wraps rather than scrolling: a product with four dimensions would otherwise
+   * put the fourth off the edge of the line, and a control you cannot see is a filter nobody knows
+   * is applied.
+   */
+  .dimfilter { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; }
+  .dimpick { display: inline-flex; align-items: center; gap: .25rem; font-size: .78rem; color: var(--dim); }
+  .dimpick .dimlabel { white-space: nowrap; }
+  .dimpick select { font: inherit; font-size: .78rem; padding: .1rem .25rem; border: 1px solid var(--line);
+    border-radius: 4px; background: var(--card); color: var(--ink); }
+  /*
+   * ⛔ WHAT IS BEING HIDDEN, SAID BESIDE THE CONTROL THAT HID IT. A page that quietly omits truth is
+   * how somebody agrees to less than they think they are agreeing to — the count is the thing that
+   * makes the omission visible, so it is not tucked anywhere.
+   */
+  .dimhid { font-size: .72rem; color: var(--warn); white-space: nowrap; }
+  .dimhid[hidden] { display: none; }
+  /* ⛔ A class rather than the hidden attribute: table rows already use that for open and closed. */
+  .dimhide { display: none !important; }
   /*
    * SUPPORT IS NOT CONFIRMATION, AND THE EYE MUST NOT HAVE TO READ THE WORD TO KNOW.
    *
@@ -9100,6 +9275,39 @@ function renderSubsystems(corpus: Corpus): string {
  * what the prototypes are; a split whose question is unstated, or two options answering it
  * identically, is exactly the thing they are here to fix.
  */
+/**
+ * One control per dimension, on the breadcrumb line of every page.
+ *
+ * ⛔ "ANY" IS A VALUE, AND IT IS THE DEFAULT. A dimension with nothing chosen must not narrow — the
+ * model's rule is that unsaid means everywhere, and a filter whose default was the first value would
+ * silently show a reader one audience's product and call it the product.
+ *
+ * ⛔ AND THE COUNT OF WHAT IS HIDDEN IS PART OF THE CONTROL, not a detail below it. A page that
+ * quietly omits truth is how somebody agrees to less than they think they are agreeing to; the
+ * number is what makes the omission visible. It is filled by the script, because what is on screen
+ * depends on a choice the server never sees.
+ */
+function dimensionFilter(corpus: Corpus): string {
+  const dims = dimensionsOf(corpus);
+  if (!dims.length) return "";
+  return (
+    `<div class="dimfilter" data-dimfilter>` +
+    dims
+      .map(
+        (d) =>
+          `<label class="dimpick"><span class="dimlabel">${esc(d.label)}</span>` +
+          `<select data-dim-filter="${esc(d.id)}" aria-label="${esc(`Show this product as ${d.label}`)}">` +
+          /** ⛔ The empty value is "any", named so a reader knows nothing is being hidden. */
+          `<option value="">any</option>` +
+          d.values.map((v) => `<option value="${esc(v)}">${esc(v)}</option>`).join("") +
+          `</select></label>`
+      )
+      .join("") +
+    `<span class="dimhid" data-dimhidden hidden></span>` +
+    `</div>`
+  );
+}
+
 function selectionAtTheRoot(sel: Selection): string {
   if (!sel.options.length) return "";
   const gaps = gapsIn(sel);
