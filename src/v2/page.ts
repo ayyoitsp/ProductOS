@@ -98,13 +98,81 @@ const anchorOf = (ref: string): string => `at-${slug(ref)}`;
  * page; neither has an address to be durable about, so both keep fragments. The rule that a link is
  * only written where its target will exist is unchanged — see `refLink`.
  */
-const urlOf = (ref: string, base: string | undefined): string => {
-  const at = `#${anchorOf(ref)}`;
-  if (!base) return at;
-  const scope = ref.split("#")[0]!;
-  /** The scope IS the page, so a ref that is just a scope needs no fragment of its own. */
-  return ref === scope ? `${base}/${encodeURIComponent(scope)}` : `${base}/${encodeURIComponent(scope)}${at}`;
-};
+/** The chain of ids the menu shows above a scope — the crumb trail, which IS the menu. */
+export type Trails = Record<string, Array<{ id: string; label: string }>>;
+
+/**
+ * Where every scope sits in the menu: the chain of ancestors above it.
+ *
+ * ⛔ THE TRAIL IS BUILT FROM THE SAME `in:` CHAIN THE TREE IS INDENTED BY. Computing it again in the
+ * browser would be a second answer to "where am I", and the two would drift the first time a scope
+ * moved. It used to live inside `renderNav`, which was right while it only drew crumbs — and wrong
+ * the moment the URL became the menu path, because then the addresses and the breadcrumbs would
+ * have been two derivations of one fact.
+ *
+ * ⛔ EVERY LEVEL IS SOMEWHERE YOU CAN STAND, so every crumb carries the id it navigates to. With
+ * labels alone the ancestors were decoration: "Deals" sat above "The deals list" in the trail and
+ * in the tree and did nothing in either, which is a link that failed as far as a reader can tell.
+ *
+ * ⛔ THE ROOT IS NOT A CRUMB. It is the Overview tab, so repeating it at the head of every trail
+ * spent the widest part of the line on the one place the tab row already names — and read as a
+ * level you could go up to that was in fact a different tab. It is also why `/v2/overview` is the
+ * root's address rather than `/v2/<root-id>`.
+ */
+export function trailsOf(corpus: Corpus): Trails {
+  // ⛔ plain(), not line(): these labels are written with textContent in the browser.
+  const labelOf = (id: string) => plain(corpus.scopes.find((x) => x.scope.id === id)?.scope.title || id);
+  const trail = (id: string): Array<{ id: string; label: string }> => {
+    const out: Array<{ id: string; label: string }> = [];
+    let at: string | undefined = id;
+    const guard = new Set<string>();
+    while (at && !guard.has(at)) {
+      guard.add(at);
+      out.unshift({ id: at, label: labelOf(at) });
+      at = corpus.scopes.find((x) => x.scope.id === at)?.scope.in;
+    }
+    return out;
+  };
+  const trails: Trails = { overview: [{ id: "overview", label: "Overview" }] };
+  for (const { scope } of corpus.scopes) {
+    const t = trail(scope.id);
+    trails[scope.id] = t.length > 1 ? t.slice(1) : t;
+  }
+  return trails;
+}
+
+/**
+ * The address of a ref: the path through the menu to it.
+ *
+ * ⛔ NO FRAGMENTS. Peter: *"get rid of the fucking anchors. URLs should follow the menu structure"*,
+ * and then, asked for the shape: *"v2/overview, v2/product/{feature}/{subfeature}, etc"*.
+ *
+ * The previous cut gave each scope a flat `/v2/<scope>` and still hung `#at-<scope>` off the end of
+ * it, so the address bar read `/v2/part-0#at-part-0` — an address and an anchor saying the same
+ * thing twice, in a shape that told a reader nothing about where they were. He called it largely
+ * broken and he was right.
+ *
+ * ⛔ AND THE MENU PATH IS NOT A NEW DERIVATION. `trails` already holds exactly this chain, because
+ * it is what the crumbs are drawn from — so the URL and the breadcrumb cannot disagree about where
+ * something sits. Computing an ancestry here would be a second answer to a question the page has
+ * already answered, which is the thing this repo keeps paying for.
+ *
+ * ⛔ A REF BELOW A SCOPE CONTINUES THE PATH. `money#balance#may` is `…/money/balance/may`: the `#`
+ * separators of a ref are the same nesting the menu shows, so they become segments rather than an
+ * anchor. Nothing in an address is a fragment any more.
+ *
+ * ⛔ EXCEPT WITH NO BASE, where there is no address to speak of — `v2 page --out` writes a file and
+ * a published artifact is one page. A fragment is the only thing that can move within either, and
+ * writing a URL there would be the defect rather than the fix.
+ */
+const addressIn =
+  (base: string | undefined, trails: Trails) =>
+  (ref: string): string => {
+    if (!base) return `#${anchorOf(ref)}`;
+    const [scope, ...rest] = ref.split("#");
+    const menu = trails[scope!]?.map((c) => c.id) ?? [scope!];
+    return `${base}/${[...menu, ...rest].map(encodeURIComponent).join("/")}`;
+  };
 
 /** What each slot asks. ⛔ Imported meaning, not a third copy — see `SLOT_ASKS` in the schema. */
 const SLOT_LABEL: Record<SlotName, string> = {
@@ -249,11 +317,11 @@ function refLink(ref: string, ctx: Ctx, label?: string): string {
      * its own is only an address if you already know which page you were on.
      */
     return ctx.anchors.has(ref)
-      ? `<a href="${esc(urlOf(ref, ctx.base))}">${esc(text)}</a>`
+      ? `<a href="${esc(ctx.url(ref))}">${esc(text)}</a>`
       : `<span class="unlinked" title="nothing on this page answers that directly">${esc(text)}</span>`;
   }
   if (!ctx.base) return `<span class="unlinked" title="filed under ${esc(scope)}, which this page does not contain">${esc(text)}</span>`;
-  return `<a href="${esc(urlOf(ref, ctx.base))}">${esc(text)}</a>`;
+  return `<a href="${esc(ctx.url(ref))}">${esc(text)}</a>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -261,6 +329,13 @@ function refLink(ref: string, ctx: Ctx, label?: string): string {
 
 interface Ctx {
   base?: string;
+  /**
+   * The address of a ref, as a path through the menu.
+   *
+   * ⛔ ON THE CONTEXT RATHER THAN RECOMPUTED, because it closes over `trails` — and `trails` is what
+   * the crumbs are built from, so a link and the breadcrumb above it cannot disagree.
+   */
+  url: (ref: string) => string;
   here: string[];
   /** Every ref this render will emit an anchor for. */
   anchors: Set<string>;
@@ -2005,14 +2080,13 @@ function renderCard(
   card: { id: string; says: string; target?: string; mitigated_by?: string; feeds?: string[] },
   interactive: boolean,
   /**
-   * Where this page is served from, so the measures a card feeds are addressable.
+   * How to address a ref, so the measures a card feeds are reachable.
    *
-   * ⛔ PASSED RATHER THAN DEFAULTED, because a default of "no base" is what silently keeps a
-   * fragment. The two renders that genuinely have no address — a file and a published artifact —
-   * pass `undefined` from the one place that knows it, and there is nowhere else for the answer
-   * to be guessed.
+   * ⛔ PASSED RATHER THAN DEFAULTED, because a default would silently keep a fragment. The renders
+   * that genuinely have no address — a file, a published artifact — get a function that returns one,
+   * from the single place that knows which render this is.
    */
-  base: string | undefined
+  address: (ref: string) => string
 ): string {
   const ref = `${scopeId}#${list}#${card.id}`;
   const st = stampFor(corpus, ref);
@@ -2029,7 +2103,7 @@ function renderCard(
        */
       card.feeds?.length
         ? `<p class="frame-extra"><span class="k">tells us</span> ${card.feeds
-            .map((f) => `<a href="${esc(urlOf(`${scopeId}#measure#${f}`, base))}">${esc(f)}</a>`)
+            .map((f) => `<a href="${esc(address(`${scopeId}#measure#${f}`))}">${esc(f)}</a>`)
             .join(", ")}</p>`
         : ""
     }
@@ -2848,6 +2922,8 @@ function renderNav(
   corpus: Corpus,
   here: string,
   base: string | undefined,
+  /** ⛔ The same answer `refLink` gives, so the tree and the body cannot address a scope differently. */
+  address: (ref: string) => string,
   contains: Set<string>,
   open: number,
   aboutLabel: string,
@@ -2989,9 +3065,9 @@ function renderNav(
         scope.id === here
           ? `<strong title="${hover}">${label}</strong>`
           : holdsIt
-            ? `<a href="${esc(urlOf(scope.id, base))}" data-goto="${esc(scope.id)}" title="${hover}">${label}</a>`
+            ? `<a href="${esc(address(scope.id))}" data-goto="${esc(scope.id)}" title="${hover}">${label}</a>`
             : base
-              ? `<a href="${esc(urlOf(scope.id, base))}" title="${hover}">${label}</a>`
+              ? `<a href="${esc(address(scope.id))}" data-goto="${esc(scope.id)}" title="${hover}">${label}</a>`
               : `<span class="unlinked" title="not on this page">${label}</span>`;
       /**
        * ⛔ A COUNT IS A CHIP, AND A CHIP IS A NUMBER AND A MARK.
@@ -3084,41 +3160,7 @@ function renderNav(
   /** From no parent at all: the root is stepped through rather than listed, as above. */
   const whole = subtree(undefined, 0);
   const tree = counted < 2 ? "" : `<nav class="scopes">${whole}</nav>`;
-  /**
-   * ⛔ THE TRAIL IS BUILT WHERE THE TREE IS, from the same `in:` chain the rows are indented by.
-   * Computing it again in the browser would be a second answer to "where am I", and the two would
-   * drift the first time a scope moved.
-   */
-  // ⛔ plain(), not line(): these labels are written with textContent in the browser.
-  const labelOf = (id: string) => plain(corpus.scopes.find((x) => x.scope.id === id)?.scope.title || id);
-  const trail = (id: string): Array<{ id: string; label: string }> => {
-    const out: Array<{ id: string; label: string }> = [];
-    let at: string | undefined = id;
-    const guard = new Set<string>();
-    while (at && !guard.has(at)) {
-      guard.add(at);
-      out.unshift({ id: at, label: labelOf(at) });
-      at = corpus.scopes.find((x) => x.scope.id === at)?.scope.in;
-    }
-    return out;
-  };
-  /**
-   * ⛔ EVERY LEVEL IS SOMEWHERE YOU CAN STAND, so every crumb carries the id it navigates to. With
-   * labels alone the ancestors were decoration: "Deals" sat above "The deals list" in the trail and
-   * in the tree and did nothing in either, which is a link that failed as far as a reader can tell.
-   */
-  const trails: Record<string, Array<{ id: string; label: string }>> = {
-    overview: [{ id: "overview", label: "Overview" }],
-  };
-  /**
-   * ⛔ THE ROOT IS NOT A CRUMB. It is the Overview tab, so repeating it at the head of every trail
-   * spent the widest part of the line on the one place the tab row already names — and read as a
-   * level you could go up to that was in fact a different tab.
-   */
-  for (const { scope } of corpus.scopes) {
-    const t = trail(scope.id);
-    trails[scope.id] = t.length > 1 ? t.slice(1) : t;
-  }
+  const trails = trailsOf(corpus);
   /**
    * ⛔ THE TOP LEVEL IS A ROW OF TABS, NOT A ROW INSIDE A DROPDOWN.
    *
@@ -3550,12 +3592,19 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
    * in them may be left to arrive later.
    */
   const served = Boolean(opts.only);
-  const ctx: Ctx = { base: opts.linkBase, here: ids, anchors, served };
+  /**
+   * ⛔ BUILT ONCE, FROM `trails`, AND HANDED TO EVERYTHING THAT WRITES A LINK. The menu path is the
+   * address, so a second derivation of it would be a link that disagrees with the breadcrumb above
+   * it about where the thing sits.
+   */
+  const address = addressIn(opts.linkBase, trailsOf(corpus));
+  const ctx: Ctx = { base: opts.linkBase, url: address, here: ids, anchors, served };
   const body = `
     ${renderNav(
       corpus,
       scopeId,
       opts.linkBase,
+      address,
       viewed,
       live.length,
       line(entry.scope.title || scopeId),
@@ -3616,7 +3665,7 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
          */
         marked("prototype", renderPrototype(protoScreens, protoPromises, theWalk, (corpus.prototypes ?? []), selectionOf(corpus), served)) +
         (full("settings") ? marked("settings", renderSettings(corpus)) : stub("settings", "view-settings", "What steers this", false)) +
-        (full("subsystems") ? marked("subsystems", renderSubsystems(corpus, opts.linkBase)) : stub("subsystems", "view-subsystems", "How it works", false)) +
+        (full("subsystems") ? marked("subsystems", renderSubsystems(corpus, address)) : stub("subsystems", "view-subsystems", "How it works", false)) +
         `<section class="view" id="view-overview" data-view="overview" data-ref="${esc(scopeId)}" data-label="Overview">
            <div class="sub-view" data-tabs="product" data-sub-view="queue" data-ref="queue" data-label="Queue">
              ${
@@ -3936,7 +3985,7 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
               (() => {
                 const sc = corpus.scopes.find((x) => x.scope.id === g.scope)!.scope;
                 const cards = (list: "why" | "risk" | "measure" | "instrument", held: typeof sc.why) =>
-                  held.map((c) => renderCard(corpus, g.scope, list, c, !!opts.interactive, opts.linkBase)).join("");
+                  held.map((c) => renderCard(corpus, g.scope, list, c, !!opts.interactive, address)).join("");
                 const none = (what: string, how: string) =>
                   `<p class="owes">Nothing here says ${what}. ${how}</p>`;
                 /** ⛔ Inside the feature's view, so it appears and disappears with the feature. */
@@ -4054,7 +4103,7 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
                     0
                   );
                   const ready = a.acceptable.filter((r: string) => under.some((u) => r.startsWith(`${u}#`))).length;
-                  return `<li><a href="${esc(urlOf(k.scope.id, ctx.base))}" data-goto="${esc(k.scope.id)}">${line(
+                  return `<li><a href="${esc(ctx.url(k.scope.id))}" data-goto="${esc(k.scope.id)}">${line(
                     k.scope.title || k.scope.id
                   )}</a> <span class="n">${behaviours} behaviour${behaviours === 1 ? "" : "s"}${
                     ready ? ` · ${ready} ready to agree to` : ""
@@ -7211,11 +7260,19 @@ const VIEW_SWITCH = `<script>
      * Overview, which is right, and arriving with the fragment also puts the reader at the section
      * on a page that holds several.
      */
-    const tail = name === "overview" ? "#view-overview" : "#at-" + name;
-    const at = BASE && name !== "overview" ? BASE + "/" + encodeURIComponent(name) + tail : tail;
+    /**
+     * ⛔ THE MENU PATH, AND NOTHING ELSE. The previous cut pushed /v2/part-0#at-part-0 — an address
+     * and an anchor saying the same thing twice. Peter: *"get rid of the fucking anchors."*
+     *
+     * ⛔ A PAGE WITH NO ADDRESS PUSHES NOTHING, rather than inventing one. A file has no history to
+     * speak of and writing a URL into its address bar would be a link nobody can follow.
+     */
+    const at = addressOf(name);
+    /** ⛔ Compared against whichever part of the address it IS, or every move pushes a duplicate. */
+    const now = at.charAt(0) === "#" ? location.hash : location.pathname;
     try {
       if (fromHistory) history.replaceState(null, "", at);
-      else if (location.pathname + location.hash !== at) history.pushState(null, "", at);
+      else if (now !== at) history.pushState(null, "", at);
     } catch {}
   };
 
@@ -7306,6 +7363,46 @@ const VIEW_SWITCH = `<script>
     return m ? m[1] : "";
   })();
 
+  /**
+   * The address of a view: the path through the menu to it.
+   *
+   * ⛔ FROM trails, WHICH THE SERVER PUT ON THE PAGE — not recomputed here. The crumbs above and
+   * the URL below have to be the same chain, and the way to guarantee that is for there to be only
+   * one chain. Peter: *"URLs should follow the menu structure"* and *"v2/overview,
+   * v2/product/{feature}/{subfeature}, etc"*.
+   *
+   * ⛔ AND NOTHING RETURNS A FRAGMENT. With no BASE this page has no address at all — a file, or a
+   * published artifact — so it keeps whatever it arrived with and nothing is pushed.
+   */
+  const addressOf = (name) => {
+    /**
+     * ⛔ A FRAGMENT WHERE THERE IS NO PATH, which mirrors what the renderer writes. A file and a
+     * published artifact have no address, and their links are fragments — so pushing nothing left
+     * a saved page with no way to say where it was and broke its back button. Caught by
+     * v2-a-container-in-the-menu-collapses, which drives a FILE render and asserts the row still
+     * navigates. Getting rid of anchors means getting rid of them where there is an alternative.
+     */
+    if (!BASE) return name === "overview" ? "#view-overview" : "#at-" + name;
+    const crumbs = trails[name] || [{ id: name }];
+    return BASE + "/" + crumbs.map(function (c) { return encodeURIComponent(c.id); }).join("/");
+  };
+
+  /**
+   * Which view an address names: the deepest segment this page actually holds.
+   *
+   * ⛔ THE DEEPEST, NOT THE FIRST, because the path is an ancestry — /v2/product/cre/rent-roll
+   * names rent-roll, and every segment before it is a view too. Reading left to right would land
+   * a reader on the area every time they asked for a feature inside it.
+   */
+  const viewAt = (pathname) => {
+    if (!BASE || pathname.indexOf(BASE) !== 0) return null;
+    const segs = pathname.slice(BASE.length).split("/").filter(Boolean).map(decodeURIComponent);
+    for (let i = segs.length - 1; i >= 0; i--) {
+      if (segs[i] === "overview" || views().some(function (v) { return v.dataset.view === segs[i]; })) return segs[i];
+    }
+    return null;
+  };
+
   document.addEventListener("click", (e) => {
     const a = e.target.closest && e.target.closest("a[href]");
     if (!a) return;
@@ -7322,16 +7419,27 @@ const VIEW_SWITCH = `<script>
       let u;
       try { u = new URL(a.href, location.href); } catch (err) { return; }
       if (u.origin !== location.origin) return;
-      const named = decodeURIComponent(u.pathname.replace(/^.*\\/v2\\/?/, ""));
-      const holds = named && views().some((v) => v.dataset.view === named);
-      if (u.pathname !== location.pathname && !holds) return;
+      /**
+       * ⛔ AN ADDRESS THIS PAGE HOLDS IS A SWITCH; ANYTHING ELSE IS THE BROWSER'S. That is what
+       * makes the link durable and the move instant at the same time — a reader following a link to
+       * a section already in the document must not refetch three megabytes to reach it.
+       */
+      const named = viewAt(u.pathname);
+      if (!named) return;
       e.preventDefault();
-      if (named) show(named, true);
-      else if (u.hash) {
-        const target = document.querySelector(u.hash);
-        const view = target && target.closest("section.view");
-        if (view && view.hidden) show(view.dataset.view, true);
-        if (target && target.scrollIntoView) target.scrollIntoView({ block: "start" });
+      show(named, true);
+      /**
+       * ⛔ AND A REF BELOW THE VIEW IS SCROLLED TO BY LOOKUP, NOT BY FRAGMENT. The tail of the path
+       * past the view is the ref — …/rent-roll/review-the-rows — so the element is found by what
+       * it IS rather than by an anchor hung off the URL.
+       */
+      const segs = u.pathname.slice(BASE.length).split("/").filter(Boolean).map(decodeURIComponent);
+      const cut = segs.lastIndexOf(named);
+      const tail = segs.slice(cut + 1);
+      if (tail.length) {
+        const want = named + "#" + tail.join("#");
+        const el = [...document.querySelectorAll("[data-ref]")].find(function (x) { return x.dataset.ref === want; });
+        if (el && el.scrollIntoView) { el.scrollIntoView({ block: "start" }); return; }
       }
       window.scrollTo(0, 0);
       return;
@@ -7364,7 +7472,9 @@ const VIEW_SWITCH = `<script>
    */
   const fromAddress = () => {
     const h = location.hash.replace(/^#/, "");
-    const name = h === "view-overview" || !h ? "overview" : h.replace(/^at-/, "");
+    /** ⛔ The address is the path now; the hash is only read when there is no path to read. */
+    const byPath = viewAt(location.pathname);
+    const name = byPath || (h === "view-overview" || !h ? "overview" : h.replace(/^at-/, ""));
     const target = document.querySelector('section.view[data-view="' + (window.CSS && CSS.escape ? CSS.escape(name) : name) + '"]');
     if (target) show(name, true, true);
   };
@@ -7503,8 +7613,18 @@ const VIEW_SWITCH = `<script>
     });
   }
 
+  /**
+   * ⛔ THE PATH, NOT THE HASH. /v2/product/cre/rent-roll has to land on rent-roll, and reading
+   * the fragment meant every address that named something landed on Overview instead — which is
+   * most of what "the feature seems largely broken" was.
+   *
+   * ⛔ The hash is still honoured as a fallback, because a link somebody saved from the previous
+   * build is still a link somebody saved.
+   */
   const opening = location.hash.replace(/^#/, "");
-  const fromHash = opening === "view-overview" ? "overview" : views().find((v) => v.id === opening)?.dataset.view;
+  const fromHash =
+    viewAt(location.pathname) ||
+    (opening === "view-overview" ? "overview" : views().find((v) => v.id === opening)?.dataset.view);
   // Opening on a named view means somebody linked to it: collapse. Opening cold: leave it open.
   // ⛔ Opens on Overview: what the product is, and what it owes. Landing in a feature's grid with
   // no idea what the product is was the shape this replaced.
@@ -9255,7 +9375,7 @@ function renderSettings(corpus: Corpus): string {
  * the furniture of product truth is the exact mistake `packet.ts` made when it printed "accepted
  * separately" on rules nobody had stamped.
  */
-function renderSubsystems(corpus: Corpus, base: string | undefined): string {
+function renderSubsystems(corpus: Corpus, address: (ref: string) => string): string {
   if (!corpus.capabilities.length) return "";
   const subs = corpus.capabilities.map((x) => x.capability);
   const titleOf = (id: string) => subs.find((s) => s.id === id)?.title ?? id;
@@ -9272,7 +9392,7 @@ function renderSubsystems(corpus: Corpus, base: string | undefined): string {
     const [scopeId, exId] = ref.split("#");
     const sc = corpus.scopes.find((s) => s.scope.id === scopeId)?.scope;
     const ex = sc?.exchanges.find((e) => e.id === exId);
-    return `<a href="${esc(urlOf(`${scopeId}#${exId}`, base))}">${line(ex?.title ?? ref)}</a>`;
+    return `<a href="${esc(address(`${scopeId}#${exId}`))}">${line(ex?.title ?? ref)}</a>`;
   };
 
   /**
