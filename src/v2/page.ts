@@ -19,7 +19,7 @@ import { resolveRules, type Corpus } from "./load.js";
 import { scopeToShadow, liftFaces, PANE_FIT } from "./appcss.js";
 import { promisesOf, screensOf, type ProtoPromise, type ProtoScreen } from "./prototype.js";
 import { inferConnections, landingsFor, finishesFor, stateShowing } from "./connects.js";
-import { pictureOf, STATE_CSS } from "./states.js";
+import { pictureOf, unpicturedParts, STATE_CSS } from "./states.js";
 import { deriveStates } from "./derive-states.js";
 import { walkOf, type Walk } from "./walk.js";
 import { inEffect, declined as declinedSteers, reaches } from "./steers.js";
@@ -1333,13 +1333,36 @@ function renderScreens(scope: Scope, ctx: Ctx, scopeId: string, opts: PageOption
                             * produced for a state of a screen nobody has built, which is most of
                             * the point of making `when` optional in the first place.
                             */
-                           `<button type="button" class="state-tab${isDerived(i) ? " derived" : ""}" data-state="${i + 1}" title="${esc(
-                             isDerived(i)
-                               ? `worked out from ${(st as { from?: string }).from ?? "the sentences"} — nobody has agreed to this yet`
-                               : st.when
-                                 ? `in the code: ${st.when}`
-                                 : "this screen states this, and no code was read for it"
-                           )}">${line(st.label)}${isDerived(i) ? " ·" : ""}</button>`
+                           /**
+                            * ⛔ A STATE WHOSE CONTROL IS IN NO PICTURE RENDERS AS THE ORDINARY
+                            * SCREEN, AND UNTIL NOW SAID NOTHING ABOUT IT.
+                            *
+                            * `check` reports it — `no-picture-of-this-screen-contains-this-control`
+                            * — but `check` is not where a reviewer is standing. They are on this
+                            * tab, looking at a picture identical to the one behind it, with no way
+                            * to tell whether the state claims nothing or whether the thing it
+                            * claims is simply not drawn. Those are opposite conclusions and the
+                            * page offered the same pixels for both.
+                            *
+                            * Confirmed on the deployed instance: the finding is 0 on every page on
+                            * 4100 because `page.ts` never rendered it, while `check` on the same
+                            * commit returns 3.
+                            */
+                           (() => {
+                             const missing = isDerived(i) ? unpicturedParts(v, st) : [];
+                             const why = missing.length
+                               ? `${missing.join(", ")} ${missing.length === 1 ? "is" : "are"} in no picture of this screen, so this renders as the ordinary screen — draw it in a state where ${missing.length === 1 ? "it is" : "they are"} on it`
+                               : isDerived(i)
+                                 ? `worked out from ${(st as { from?: string }).from ?? "the sentences"} — nobody has agreed to this yet`
+                                 : st.when
+                                   ? `in the code: ${st.when}`
+                                   : "this screen states this, and no code was read for it";
+                             return `<button type="button" class="state-tab${isDerived(i) ? " derived" : ""}${
+                               missing.length ? " unpictured" : ""
+                             }" data-state="${i + 1}" title="${esc(why)}">${line(st.label)}${isDerived(i) ? " ·" : ""}${
+                               missing.length ? ` <span class="nopic" aria-label="not drawn">⌀</span>` : ""
+                             }</button>`;
+                           })()
                        )
                        .join("")}
                      ${
@@ -9321,6 +9344,14 @@ export const STYLE = `<style>
     background: var(--bg); color: var(--dim); border-radius: 999px; padding: .12rem .6rem; }
   .state-tab:hover { color: var(--ink); }
   .state-tab.on { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+  /*
+   * ⛔ A STATE THAT CANNOT DRAW ITSELF SAYS SO ON ITS OWN TAB. Without this it renders the ordinary
+   * screen, which is indistinguishable from a state claiming nothing — opposite conclusions, same
+   * pixels. Dashed, because the tab is real and its picture is not.
+   */
+  .state-tab.unpictured { border-style: dashed; }
+  .state-tab .nopic { opacity: .65; font-size: .72rem; }
+  .state-tab.on .nopic { opacity: .85; }
   /* Leaving one feature for another — said before it happens, not after. */
   .pt-detail .leaving { margin: 0 0 .4rem; padding: .35rem .55rem; border-radius: 6px;
     background: var(--code); border: 1px solid var(--accent); font-size: .85rem; }

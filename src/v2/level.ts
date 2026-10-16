@@ -206,6 +206,12 @@ export interface Level {
  *
  * ⛔ A READING KIND THAT MEANS "DRIVEN, RATHER THAN READ" BELONGS HERE THE DAY IT LANDS — a walk of
  * the running product is the strongest member of this set, not a new one.
+ *
+ * ⛔ AND THAT DAY IS THIS ONE: `walk` IS IN THE SET, NOT A FIFTH LEVEL. The rung Peter asked for —
+ * *"a level of confirmation that is higher than 'LLM generated'… like 'product behavior'"* — is a
+ * zone in `confidence.ts` (`Confidence.observed`) and the existing `observed` route here. Giving it
+ * a sixth level name would have split the one field a consumer's gate reads into two, which is the
+ * thing the header of this file refuses. `confidence.ts` keeps the zone; this keeps the gate.
  */
 export const SEEN_RUNNING: ReadonlyArray<Reading["basis"]["kind"]> = [
   "test-run",
@@ -213,6 +219,8 @@ export const SEEN_RUNNING: ReadonlyArray<Reading["basis"]["kind"]> = [
   "inspection",
   "telemetry",
   "log",
+  /** An agent drove the running product and recorded what happened — re-runnable, so falsifiable. */
+  "walk",
 ];
 
 /**

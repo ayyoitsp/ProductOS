@@ -62,6 +62,22 @@ You are the **orchestrator**, and you are the session — not a subagent. That i
 - putting the survey in front of a person before thirty scopers start against a partition that is wrong
 - every act of judgement — nothing here is validated by having been written
 
+### Index what a product already does, by driving it
+
+*They say:* walk the app · index what this does today · what is actually on these screens
+
+**Spawn, in order:**
+
+- `walker` *(design · writes)* — **one per unit, in parallel** — ⛔ one area each, because a session that walked thirty screens describes the thirtieth in the words of the first
+- `rendered` *(design · judges, writes nothing)* — where a walked screen is one the corpus already holds, whether the two agree — a difference here is the most valuable thing this route produces
+
+**⛔ You keep these yourself:**
+
+- ⛔ somebody else having signed in. The walker never authenticates: an agent that can sign in can reach everything the person could, and a sign-in wall is a RESULT — which routes are behind it is the most useful thing a first pass reports
+- ⛔ pressing nothing that sends, deletes, publishes or pays. A walk that changed the data cannot be repeated, and being repeatable is the only reason it counts for anything
+- ⛔ the difference between what the product does and what it should do. Everything this route writes is proposed; nothing it sees could tell it which of the two it is looking at
+- every act of judgement — a walk is evidence, and evidence is not agreement
+
 ### Run one analysis across everything, over only what is outstanding
 
 *They say:* index the capabilities · re-derive the test cases · analyse the whole corpus · what is left to work out · sweep this corpus

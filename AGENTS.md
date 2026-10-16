@@ -20,6 +20,7 @@ flowchart LR
     demonstrator["demonstrator<br/><i>What would have to be demonstrated for this claim to be believed?</i><br/>· per feature ·"]
     instrumenter["instrumenter<br/><i>What does this product record, and which question does each recording answer?</i><br/>· per feature ·"]
     designer["designer<br/><i>What should this screen look like, where no code renders it?</i><br/>· per screen no component renders ·"]
+    walker["walker<br/><i>What does this product already do, driven rather than read?</i><br/>· per area of the running product ·"]
     evidencer["evidencer<br/><i>What already demonstrates each of these claims?</i>"]
   end
   subgraph REVIEWERS["reviewers — each asks one question about the whole"]
@@ -62,7 +63,7 @@ flowchart LR
 | seat | roles |
 |---|---|
 | **product** | `surveyor` ·writes· · `scoper` ·writes· · `newcomer` · `completeness` · `coherence` |
-| **design** | `designer` ·writes· · `rendered` · `design-critique` |
+| **design** | `designer` ·writes· · `walker` ·writes· · `rendered` · `design-critique` |
 | **engineering** | `machinist` ·writes· · `decomposer` ·writes· · `instrumenter` ·writes· · `truthfulness` · `architecture` · `buildability` |
 | **quality** | `demonstrator` ·writes· · `evidencer` ·writes· · `coverage` · `hand-authored` · `test-design` |
 | **the framework itself** | `consistency` · `can-the-model-say-it` |
@@ -97,6 +98,11 @@ flowchart TD
   scan_a_codebase --> scan_a_codebase_coherence["coherence"]
   scan_a_codebase --> scan_a_codebase_hand-authored["hand-authored"]
   scan_a_codebase -.->|keeps| scan_a_codebase_self(["the session — 4 things it may not hand off"])
+  walk_a_running_product(["walk a running product<br/><i>Index what a product already does, by driving it</i>"])
+  walk_a_running_product --> walk_a_running_product_walker["walker ×N"]
+  walk_a_running_product --> walk_a_running_product_rendered["rendered"]
+  walk_a_running_product --> walk_a_running_product_can-the-model-say-it["can-the-model-say-it"]
+  walk_a_running_product -.->|keeps| walk_a_running_product_self(["the session — 4 things it may not hand off"])
   index_a_corpus(["index a corpus<br/><i>Run one analysis across everything, over only what is outstanding</i>"])
   index_a_corpus --> index_a_corpus_decomposer["decomposer"]
   index_a_corpus --> index_a_corpus_demonstrator["demonstrator ×N"]
@@ -178,6 +184,21 @@ Turn a whole codebase into a first corpus.
 - running `productos v2 check` before anybody is asked to look
 - putting the survey in front of a person before thirty scopers start against a partition that is wrong
 - every act of judgement — nothing here is validated by having been written
+
+### walk a running product
+
+Index what a product already does, by driving it.
+
+**Spawns, in order:**
+- `walker` *(design · writes)* — one per unit, in parallel — ⛔ one area each, because a session that walked thirty screens describes the thirtieth in the words of the first
+- `rendered` *(design · judges, writes nothing)* — where a walked screen is one the corpus already holds, whether the two agree — a difference here is the most valuable thing this route produces
+- `can-the-model-say-it` *(the framework itself · judges, writes nothing)* — whether what the product does could be written down at all, since a walk finds behaviour nobody designed a field for
+
+**⛔ Keeps, because it may not be delegated:**
+- ⛔ somebody else having signed in. The walker never authenticates: an agent that can sign in can reach everything the person could, and a sign-in wall is a RESULT — which routes are behind it is the most useful thing a first pass reports
+- ⛔ pressing nothing that sends, deletes, publishes or pays. A walk that changed the data cannot be repeated, and being repeatable is the only reason it counts for anything
+- ⛔ the difference between what the product does and what it should do. Everything this route writes is proposed; nothing it sees could tell it which of the two it is looking at
+- every act of judgement — a walk is evidence, and evidence is not agreement
 
 ### index a corpus
 
@@ -317,6 +338,7 @@ Held three ways rather than one: no author declares `ask-the-human`, so no host 
 | **demonstrator** | What would have to be demonstrated for this claim to be believed? | feature | criteria — what must be demonstrated for each claim, as given/when/then; `derived` — the role, the date, and the hash of the claim it was worked out against; `of` — which statement, wherever the slot says more than one thing; `level` — where somebody would have to stand to observe it, where that is knowable from the claim |
 | **instrumenter** | What does this product record, and which question does each recording answer? | feature | instruments — what gets recorded, in the product's own terms; `feeds` — which measure each recording answers, which is what stops either end being decorative |
 | **designer** | What should this screen look like, where no code renders it? | screen no component renders | a drawing for a screen no component renders, stamped with what it was designed from |
+| **walker** | What does this product already do, driven rather than read? | area of the running product | a screen with its parts, as the product presented them — proposed, never stated; a `kind: walk` reading naming the URL and what happened there |
 | **evidencer** | What already demonstrates each of these claims? | runs once | evidence against criteria, each naming what it is and where it came from |
 
 ### `surveyor`
@@ -504,6 +526,32 @@ Held three ways rather than one: no author declares `ask-the-human`, so no host 
 - write a drawing that does not say on its face that it was designed rather than observed — a reviewer who cannot tell which they are looking at may validate a screen the product does not have
 
 **Needs:** read-files · search-files · run-commands · write-corpus · see-a-page · fetch-url  ·  **Prompt:** `agents/productos-designer.md`
+
+### `walker`
+
+**Asks:** What does this product already do, driven rather than read?
+
+**Exists because:** Peter: *"let's add walk-to-index. it doesn't give us CONFIRMED state. but it gives us a starting place for how an existing product already behaves."* bilrost has 74 routes and 681 components and the corpus reaches five of them — reading that much code to find out what the product already does is the slow way round when the product is running. ⛔ And it is the one role whose evidence can be re-checked by anybody: a walk names a URL, so a reader who doubts it can go there. That is what earns `kind: walk` a rung above anything an agent inferred, and it is the only thing that does.
+
+**Spawned:** once per area of the running product
+
+**Reads, in this order:**
+- ⛔ the RUNNING product, driven — not its source, which is what every other author here reads
+- the accessibility tree, which already says button, textbox, link — so what a control IS is a lookup rather than a guess
+- the screens the corpus already holds, so a walk of one it knows about is compared rather than duplicated
+
+**Writes:**
+- a screen with its parts, as the product presented them — proposed, never stated
+- a `kind: walk` reading naming the URL and what happened there
+
+**⛔ Never:**
+- ⛔ sign in, or enter a credential anywhere — it walks a session somebody else established, because an agent that can authenticate is an agent that can reach anything the person could
+- ⛔ record what it saw as what the product SHOULD do — a walk of a product with a bug records the bug perfectly, and only a person can say which of the two it is
+- press anything that sends, deletes, publishes or pays — it is reading a product, and a walk that changes the data is not repeatable by the next person who doubts it
+- write a sentence about what a screen promises: it saw a control, not an intention, and the gap between those is the whole corpus
+- file a walk as `inspection` — that kind means a person looked, and an agent borrowing it is the laundering this model is arranged to prevent
+
+**Needs:** read-files · search-files · run-commands · write-corpus · see-a-page  ·  **Prompt:** `agents/productos-walker.md`
 
 ### `evidencer`
 
@@ -977,7 +1025,7 @@ Territory, not ownership. Nobody is assigned an area — an agent reads this to 
 |---|---|---|
 | **model** | model | `src/v2/schema.ts` `src/v2/load.ts` `src/v2/ref.ts` `src/core/jobs.ts` `src/core/change.ts` `src/core/config.ts` `src/v2/store/schema.ts` |
 | **derive** | derive | `src/v2/grid.ts` `src/v2/stamp.ts` `src/v2/demonstrate.ts` `src/v2/analyse.ts` `src/v2/confidence.ts` `src/v2/level.ts` `src/v2/readiness.ts` `src/v2/find.ts` `src/v2/settle.ts` `src/v2/applies.ts` `src/v2/acts.ts` `src/v2/record.ts` `src/v2/spoken.ts` `src/v2/connects.ts` `src/v2/derive-states.ts` `src/v2/walk.ts` `src/v2/held.ts` `src/v2/selection.ts` `src/v2/dimensions.ts` `src/v2/steers.ts` `src/v2/store/access.ts` `src/v2/store/identity.ts` `src/core/learn.ts` `src/core/framework-gaps.ts` `src/adapters/claude.ts` |
-| **generate** | generate | `src/v2/migrate.ts` `src/v2/draw.ts` `src/v2/draw-write.ts` `src/cli/commands/v2.ts` `src/v2/routes.ts` `src/v2/propose.ts` `src/v2/propose-slots.ts` `src/v2/appcss.ts` `src/v2/icons.ts` `src/v2/shell.ts` `src/core/agents-doc.ts` `src/v2/design.ts` `src/v2/compiler.ts` `src/v2/store/watchdog.ts` `src/v2/store/because.ts` `src/v2/store/corpus.ts` `src/v2/store/doc-migrations.ts` `src/v2/store/migrate.ts` `src/v2/store/boot.ts` |
+| **generate** | generate | `src/v2/migrate.ts` `src/v2/draw.ts` `src/v2/draw-write.ts` `src/cli/commands/v2.ts` `src/v2/routes.ts` `src/v2/propose.ts` `src/v2/propose-slots.ts` `src/v2/reslot.ts` `src/v2/walked.ts` `src/v2/appcss.ts` `src/v2/icons.ts` `src/v2/shell.ts` `src/core/agents-doc.ts` `src/v2/design.ts` `src/v2/compiler.ts` `src/v2/store/watchdog.ts` `src/v2/store/because.ts` `src/v2/store/corpus.ts` `src/v2/store/doc-migrations.ts` `src/v2/store/migrate.ts` `src/v2/store/boot.ts` |
 | **operate** | operate | `Makefile` `Dockerfile` `docker-compose.yml` `docker-compose.remote.yml` `scripts/` |
 | **surface** | surface | `src/v2/page.ts` `src/v2/prototype.ts` `src/v2/serve.ts` `src/v2/intents.ts` `src/ui/server.ts` `src/ui/renderer.ts` `src/v2/store/server.ts` `src/v2/store/instance.ts` `src/v2/store/pushes.ts` `src/v2/store/mcp.ts` `src/v2/store/choose.ts` `src/cli/commands/hosted.ts` `src/v2/packet.ts` `src/v2/notes.ts` `src/v2/watch.ts` `src/v2/log.ts` `src/v2/inbox.ts` `src/v2/presence.ts` `src/v2/identity.ts` `src/v2/client.ts` `src/v2/write.ts` `src/v2/wire.ts` `src/v2/states.ts` `src/v2/moved.ts` `src/cli/commands/v2.ts` `src/cli/commands/todo.ts` `src/v2/store/trace.ts` `src/mcp/v2-tools.ts` |
 | **instruct** | instruct | `skills` `agents` |
