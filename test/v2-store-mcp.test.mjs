@@ -16,6 +16,7 @@
  * the transport test is what proves the pure function is actually on the path.
  */
 import assert from "node:assert/strict";
+const { SLOTS } = await import("../dist/v2/schema.js");
 import { temp } from "./support/temp.mjs";
 import { test } from "node:test";
 import fs from "node:fs";
@@ -291,11 +292,62 @@ test("a tool that writes lands in the store, under the instance's name, and anno
      * nothing about writing for as long as it was green.
      */
     const after = await loadFromStore(store);
-    assert.equal(after.verdicts.length, before + 1, "the act reported ok and the store did not move");
 
-    const v = after.verdicts.at(-1);
+    /**
+     * ⛔ ONE PRESS ON AN EXCHANGE WRITES ONE RECORD PER SENTENCE BENEATH IT, and this assertion used
+     * to say `before + 1`. It went red on #187, which added exactly that fan-out — "the exchange
+     * button is a bulk press, and acceptance stays per-ref".
+     *
+     * ⛔ STALE, NOT A REGRESSION, AND THE EVIDENCE IS WHICH REFS CAME BACK. Eight records looks like
+     * "one per slot", and there are eight slots, so the number alone cannot tell a bounded fan-out
+     * from an unbounded one. The targets can:
+     *
+     *     money#see-a-balance                                  <- the exchange, no note
+     *     money#see-a-balance#with #answer #after #refuses
+     *                        #fails #again #at_once            <- seven, each noted as a bulk press
+     *
+     * `#may` is ABSENT. So it is one exchange plus the sentences that actually exist and are
+     * covered — bounded by content, which is what `sentencesIn` claims — and not one per slot name.
+     * That absence is the whole difference, and asserting a count would have hidden it.
+     *
+     * So this now asserts the SHAPE of the fan-out rather than a total, which is strictly more than
+     * the line it replaces and is what #187 is for.
+     */
+    const mine = after.verdicts.filter((v) => v.target === ref || v.target.startsWith(ref + "#"));
+    assert.ok(mine.length > before, "the act reported ok and the store did not move");
+
+    const onExchange = mine.filter((v) => v.target === ref);
+    assert.equal(onExchange.length, 1, `${onExchange.length} records landed on the exchange itself`);
+    assert.equal(onExchange[0].note, undefined, "the exchange's own record was marked as a bulk press");
+
+    const beneath = mine.filter((v) => v.target !== ref);
+    assert.ok(beneath.length > 1, `only ${beneath.length} sentence beneath the exchange got its own record`);
+    for (const v of beneath) {
+      assert.match(v.note ?? "", /one press/, `${v.target} has no note saying which press it came from`);
+    }
+
+    /**
+     * ⛔ BOUNDED BY WHAT EXISTS, NOT BY THE SLOT LIST — the assertion the count could not make. If
+     * the fan-out ever became "one per slot name", this is the line that goes red.
+     */
+    assert.ok(
+      beneath.length < SLOTS.length,
+      `${beneath.length} records for ${SLOTS.length} slots — the fan-out is no longer bounded by what the exchange says`
+    );
+
+    /**
+     * ⛔ CHECKED ON THE EXCHANGE'S OWN RECORD, not on `at(-1)`. The last record is now a sentence,
+     * so the identity assertions were passing against a different row than the one they name — true
+     * today because every row shares the press's identity, and the kind of thing that stops being
+     * true silently.
+     */
+    const v = onExchange[0];
     assert.equal(v.by, "a session", "⛔ a name from the wire became the author");
     assert.equal(v.via, "agent", "a token's write was recorded as something a person did");
+    for (const r of beneath) {
+      assert.equal(r.by, "a session", `${r.target} was attributed to somebody else`);
+      assert.equal(r.via, "agent", `${r.target} was recorded as something a person did`);
+    }
     assert.ok((await store.since(0)).length > 0, "a write announced nothing, so no session hears about it");
   } finally {
     await new Promise((r) => server.close(r));
