@@ -99,6 +99,20 @@ You are the **orchestrator**, and you are the session — not a subagent. That i
 - deciding what to do with what comes back: a question the corpus must settle goes to the person, never to the builder
 - every act of judgement — an engineer saying it is buildable is not somebody agreeing it is right
 
+### Answer whether a piece of work can be built, and raise what is open as questions
+
+*They say:* can I build this · is this groomed · is this ready to build · what are the tests for this · groom this
+
+**Spawn nothing.** Every part of this is something you may not hand off.
+
+**⛔ You keep these yourself:**
+
+- the whole reading — `productos_readiness` for the verdict, the queue for each open question, and the packet for what to build from
+- ⛔ raising every open question with the person who was asked, verbatim, and answering none of them — a hole a builder fills is product truth invented by a builder
+- ⛔ never recording consent: a claim nobody has agreed to needs a stamp from a person, and no amount of grooming produces one
+- deciding what a claim with no recorded author is — ask who wrote it; a person's unconfirmed draft and an agent's inference are the same bytes
+- writing the test list, with each requirement's ref and the hash of the words it was written from, into whatever holds the work
+
 ### Find what already demonstrates the claims a corpus makes
 
 *They say:* map my tests · what covers this · align evidence
