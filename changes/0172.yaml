@@ -1,0 +1,8 @@
+id: "0172"
+said: "the prototype for deal overview is nonsensical. there's a ton of things that are not on the actual overview page. the 'real' overview page ends after the job market card. it has the deal card, the map with layers, affordability, job market"
+at: 2026-10-16
+kind: generator
+reaches:
+  generate: function exclusiveSetOf(
+  pin: a fragment holding the tabs is read the same as an element
+waived: {}
