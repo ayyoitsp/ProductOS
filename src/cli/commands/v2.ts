@@ -17,6 +17,7 @@ import { compilePacket } from "../../v2/packet.js";
 import { questionsFor, descendants } from "../../v2/settle.js";
 import { perform, preview, payloadFrom, optionText, VIA, type Act, type Via, type Outcome, type Refused } from "../../v2/acts.js";
 import { fileNote, closeNote, replyToNote } from "../../v2/notes.js";
+import { mayRecord, principalAtTheShell } from "../../v2/identity.js";
 import { snapshotStyle, styleOf, styleDrift, styleAt, wearTheme } from "../../v2/appcss.js";
 import { watchCorpus } from "../../v2/watch.js";
 import { inbox } from "../../v2/inbox.js";
@@ -697,11 +698,36 @@ export function v2Command(): Command {
     }
   };
 
+  /**
+   * ⛔ THE CALL SITE THAT NEVER ASKED `mayRecord`, AND THEREFORE THE LAST WAY TO FORGE AGREEMENT.
+   *
+   * Two sibling doors were shut: an MCP token can no longer record a human `via`, and raw YAML can
+   * no longer claim `hand: person`. Both refusals point at *the person's own CLI* as the honest
+   * route — and an agent holding a Bash tool is holding that same CLI, so it could do exactly what
+   * the other two now refuse, producing a verdict nothing anywhere can distinguish from a press.
+   *
+   * ⛔ IT IS THE SAME BOUNDARY, NOT A THIRD ONE. `principalAtTheShell` answers "who is holding
+   * this?" the way `principalOf` answers it for a request; `mayRecord` is still the one decision.
+   * Which also means `--via agent` is untouched: it is not agreement, it satisfies no gate, and
+   * landing a default so a reviewer has something to disagree with is the designed path.
+   *
+   * ⛔ AND THERE IS NO ESCAPE HATCH, deliberately. A flag or a variable that says "a person really
+   * is here" is a switch the agent sets — the same argument `mintsHumanConsent` makes about a token
+   * scope: a permission that can be granted is one somebody eventually grants. Nothing is blocked
+   * by this; one ROUTE is. The person runs the same command in their own terminal, or presses it on
+   * the page, and the refusal names both.
+   */
   const consentFrom = (o: { by: string; via?: string }) => {
     const via = (o.via ?? "cli") as Via;
     if (!VIA.includes(via)) {
       console.error(pc.red("✗"), `"${o.via}" is not a way consent could have been obtained`);
       console.error(pc.dim(`    one of: ${VIA.join(" · ")}`));
+      process.exit(1);
+    }
+    const refused = mayRecord(principalAtTheShell(), via);
+    if (refused) {
+      console.error(pc.red("✗"), refused.why);
+      for (const d of refused.detail ?? []) console.error(pc.dim(`    ${d}`));
       process.exit(1);
     }
     return { by: o.by, via };
