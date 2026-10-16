@@ -476,7 +476,11 @@ remote-doctor: build
 # any time; `deploy` runs it, backs the store up, deploys, waits for health, then reads the store.
 # ---------------------------------------------------------------------------
 deploy-check: staging-guard
-	@echo "  ✓ clean, and identical to origin/main at $$(git rev-parse --short HEAD)"
+	@# ⛔ "MERGED", NOT "IDENTICAL", BECAUSE THE CHECK ABOVE STOPPED ASKING FOR IDENTITY. The line
+	@# claimed identity while the guard it reports on asks ancestry, so a deploy one commit behind
+	@# printed "identical to origin/main" immediately under a warning saying it was not the tip. Two
+	@# lines of the same output disagreeing, and the confident one is the one a reader keeps.
+	@echo "  ✓ clean, and merged at $$(git rev-parse --short HEAD)$$(test "$$(git rev-parse HEAD)" = "$$(git rev-parse origin/main 2>/dev/null)" && echo ", which is the tip")"
 	@# ⛔ CHECKED FIRST, BECAUSE THE SUITE TAKES TEN MINUTES. `backup-remote` tests for `.env` too —
 	@#    but after the slow part, so a deploy checkout missing it burned the whole run before saying
 	@#    so. A gate that fails late on the cheapest possible question is a gate people stop running.

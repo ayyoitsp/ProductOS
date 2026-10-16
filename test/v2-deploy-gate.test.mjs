@@ -16,7 +16,8 @@
  * a clean commit. That nearly happened: this session committed another session's in-flight work by
  * running `git add -A` in a checkout that had been switched to their branch underneath it.
  *
- * The condition now asked is the one that was always meant: clean, and identical to origin/main.
+ * The condition now asked is the one that was always meant: clean, and MERGED — see the test below
+ * for why identity could not be asked where it was being asked.
  */
 import assert from "node:assert/strict";
 import { test } from "node:test";
