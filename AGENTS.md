@@ -107,6 +107,8 @@ flowchart TD
   hand_it_to_the_builders --> hand_it_to_the_builders_buildability["buildability"]
   hand_it_to_the_builders --> hand_it_to_the_builders_test-design["test-design"]
   hand_it_to_the_builders -.->|keeps| hand_it_to_the_builders_self(["the session — 3 things it may not hand off"])
+  groom_a_ticket(["groom a ticket<br/><i>Answer whether a piece of work can be built, and raise what is open as questions</i>"])
+  groom_a_ticket -.->|keeps| groom_a_ticket_self(["the session — 5 things it may not hand off"])
   map_evidence(["map evidence<br/><i>Find what already demonstrates the claims a corpus makes</i>"])
   map_evidence --> map_evidence_evidencer["evidencer"]
   map_evidence --> map_evidence_coverage["coverage"]
@@ -209,6 +211,19 @@ The engineering and QA read, once product and design have signed off.
 - ⛔ checking somebody actually agreed before spawning either of these — the precondition is the whole point of the split
 - deciding what to do with what comes back: a question the corpus must settle goes to the person, never to the builder
 - every act of judgement — an engineer saying it is buildable is not somebody agreeing it is right
+
+### groom a ticket
+
+Answer whether a piece of work can be built, and raise what is open as questions.
+
+**Spawns nothing.** Every part of this is something the session may not hand off.
+
+**⛔ Keeps, because it may not be delegated:**
+- the whole reading — `productos_readiness` for the verdict, the queue for each open question, and the packet for what to build from
+- ⛔ raising every open question with the person who was asked, verbatim, and answering none of them — a hole a builder fills is product truth invented by a builder
+- ⛔ never recording consent: a claim nobody has agreed to needs a stamp from a person, and no amount of grooming produces one
+- deciding what a claim with no recorded author is — ask who wrote it; a person's unconfirmed draft and an agent's inference are the same bytes
+- writing the test list, with each requirement's ref and the hash of the words it was written from, into whatever holds the work
 
 ### map evidence
 
@@ -961,7 +976,7 @@ Territory, not ownership. Nobody is assigned an area — an agent reads this to 
 | area | layers | files |
 |---|---|---|
 | **model** | model | `src/v2/schema.ts` `src/v2/load.ts` `src/v2/ref.ts` `src/core/jobs.ts` `src/core/change.ts` `src/core/config.ts` `src/v2/store/schema.ts` |
-| **derive** | derive | `src/v2/grid.ts` `src/v2/stamp.ts` `src/v2/demonstrate.ts` `src/v2/analyse.ts` `src/v2/confidence.ts` `src/v2/level.ts` `src/v2/settle.ts` `src/v2/applies.ts` `src/v2/acts.ts` `src/v2/record.ts` `src/v2/spoken.ts` `src/v2/connects.ts` `src/v2/derive-states.ts` `src/v2/walk.ts` `src/v2/held.ts` `src/v2/selection.ts` `src/v2/dimensions.ts` `src/v2/steers.ts` `src/v2/store/access.ts` `src/v2/store/identity.ts` `src/core/learn.ts` `src/core/framework-gaps.ts` `src/adapters/claude.ts` |
+| **derive** | derive | `src/v2/grid.ts` `src/v2/stamp.ts` `src/v2/demonstrate.ts` `src/v2/analyse.ts` `src/v2/confidence.ts` `src/v2/level.ts` `src/v2/readiness.ts` `src/v2/settle.ts` `src/v2/applies.ts` `src/v2/acts.ts` `src/v2/record.ts` `src/v2/spoken.ts` `src/v2/connects.ts` `src/v2/derive-states.ts` `src/v2/walk.ts` `src/v2/held.ts` `src/v2/selection.ts` `src/v2/dimensions.ts` `src/v2/steers.ts` `src/v2/store/access.ts` `src/v2/store/identity.ts` `src/core/learn.ts` `src/core/framework-gaps.ts` `src/adapters/claude.ts` |
 | **generate** | generate | `src/v2/migrate.ts` `src/v2/draw.ts` `src/v2/draw-write.ts` `src/cli/commands/v2.ts` `src/v2/routes.ts` `src/v2/propose.ts` `src/v2/propose-slots.ts` `src/v2/appcss.ts` `src/v2/icons.ts` `src/v2/shell.ts` `src/core/agents-doc.ts` `src/v2/design.ts` `src/v2/compiler.ts` `src/v2/store/watchdog.ts` `src/v2/store/because.ts` `src/v2/store/corpus.ts` `src/v2/store/doc-migrations.ts` `src/v2/store/migrate.ts` `src/v2/store/boot.ts` |
 | **operate** | operate | `Makefile` `Dockerfile` `docker-compose.yml` `docker-compose.remote.yml` `scripts/` |
 | **surface** | surface | `src/v2/page.ts` `src/v2/prototype.ts` `src/v2/serve.ts` `src/v2/intents.ts` `src/ui/server.ts` `src/ui/renderer.ts` `src/v2/store/server.ts` `src/v2/store/instance.ts` `src/v2/store/pushes.ts` `src/v2/store/mcp.ts` `src/v2/store/choose.ts` `src/cli/commands/hosted.ts` `src/v2/packet.ts` `src/v2/notes.ts` `src/v2/watch.ts` `src/v2/log.ts` `src/v2/inbox.ts` `src/v2/presence.ts` `src/v2/identity.ts` `src/v2/client.ts` `src/v2/write.ts` `src/v2/wire.ts` `src/v2/states.ts` `src/v2/moved.ts` `src/cli/commands/v2.ts` `src/cli/commands/todo.ts` `src/v2/store/trace.ts` `src/mcp/v2-tools.ts` |
