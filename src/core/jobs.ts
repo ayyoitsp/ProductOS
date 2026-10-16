@@ -270,6 +270,13 @@ export const AREAS: Area[] = [
        * Owned here with `stageOf` and `reachOf` for the same reason.
        */
       "src/v2/confidence.ts",
+      /**
+       * ⛔ `derive`, BESIDE `confidence.ts`, AND THE SAME REFUSAL HOLDS IT UP: how well established a
+       * fact is comes from `stampFor`, a standing, the `derived` provenance and the readings — so
+       * `accepted` is unreachable from anything computed here, and a stored level is a word that was
+       * true when it was written and unfalsifiable afterwards.
+       */
+      "src/v2/level.ts",
       "src/v2/settle.ts",
       "src/v2/acts.ts",
       "src/v2/record.ts",
