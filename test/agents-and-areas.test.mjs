@@ -670,6 +670,39 @@ test("every role's installed definition is committed, and matches its source", (
    * there was nothing to change — the failure being reasoned about was two commits behind the tree
    * it was measured in, and "which sha" was the unstated condition that was the entire finding.
    */
+  /**
+   * ⛔ AND A FILE WITH NO FRONTMATTER AT ALL WAS SKIPPED BY THE LOOP BELOW — `if (!head) continue`.
+   *
+   * The assertion that follows is about a WRONG `tools:` line. The deploy session named the other
+   * half independently: a role committed with no frontmatter, or with the `name:`/`tools:` keys
+   * missing, **passes every check in this file** — the body comparison strips frontmatter on
+   * purpose, and the slug walk skipped anything it could not parse. The host then registers no such
+   * agent, so the role silently does not exist while a green build says it is installed.
+   *
+   * ⛔ THAT IS A CHECK WITH NO FAILING STATE FOR THE THING THE INSTALL IS MOST LIKELY TO GET WRONG,
+   * which is the same shape as `CLAUDE.md`'s "a zero proves nothing unless you can say what a
+   * failing zero looks like". The skip is what made it a zero.
+   *
+   * The two keys are the ones the host reads: `name` is how a role is addressed, `tools` is what it
+   * may do. A role missing `tools` is not a safe role — the host's default is not this registry's.
+   */
+  const headless = [];
+  for (const f of fs.readdirSync(".claude/agents").filter((x) => x.startsWith("productos-") && x.endsWith(".md"))) {
+    const text = fs.readFileSync(path.join(".claude/agents", f), "utf-8");
+    const head = /^---\n([\s\S]*?)\n---/.exec(text);
+    if (!head) {
+      headless.push(`${f} → no frontmatter at all`);
+      continue;
+    }
+    for (const key of ["name", "tools"])
+      if (!new RegExp(`(^|\\n)${key}:`).test(head[1])) headless.push(`${f} → no ${key}:`);
+  }
+  assert.deepEqual(
+    headless,
+    [],
+    "these committed roles carry no usable frontmatter, so the host registers no such agent while every other check here passes — the body comparison strips frontmatter and the slug walk skips what it cannot parse"
+  );
+
   const perCheckout = [];
   for (const f of fs.readdirSync(".claude/agents").filter((x) => x.startsWith("productos-") && x.endsWith(".md"))) {
     const head = /^---\n([\s\S]*?)\n---/.exec(fs.readFileSync(path.join(".claude/agents", f), "utf-8"));
