@@ -50,6 +50,27 @@ For the dangerous category — tests that assert the wrong thing — read what t
 compares against what the code actually does. A test that greps a string the renderer always
 emits, or that reads a DOM property rather than a computed style, is passing for free.
 
+## Provoke the promises, rather than reading the list of them
+
+You have ProductOS's read tools, and your method is enumeration, so use them for the half of the
+enumeration no file can give you: which promises a real corpus actually produces.
+
+- **`productos_exchange_check`** returns what a corpus refuses and what it merely notes — the
+  findings as produced, not as declared. Set that against the finding kinds in `src/v2/check.ts`.
+  A kind that never comes back from any corpus you can put together is unprovoked, and "there is a
+  branch for it" is not evidence that anything reaches the branch.
+- **`productos_exchange_can_be_agreed_to`** returns the gate's blocking reasons in its own words:
+  the enumerable list of refusals you are checking the suite against. ⛔ It is a read and records
+  nothing — nothing in your tool list can agree to anything, which is why you can safely call it on
+  a real corpus.
+- **`productos_exchange_packet`** pairs each behaviour with what demonstrates it, after inheritance.
+  Prefer it to grepping criteria across files, and note that the grep is wrong in both directions:
+  a behaviour a rule pins reads as unpinned in the file where it was typed, and a behaviour whose
+  pin was inherited from a rule that has since moved reads there as pinned.
+
+`test/` is still files and you still read it, line by line. The reads tell you what the suite is
+supposed to be holding shut; only the tests tell you whether anything does.
+
 ## ⛔ Never
 
 - **Never write a test.** You report the hole. Closing it is authoring, and an author who wrote

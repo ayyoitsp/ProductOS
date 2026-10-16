@@ -26,7 +26,9 @@
  */
 import { perform, payloadFrom, VIA, ACTS, OWED, ALSO, type Act, type Via } from "./acts.js";
 import { closeNote, fileNote, replyToNote } from "./notes.js";
-import { mayRecord, mayRelay, type Principal } from "./identity.js";
+import { mayRecord, mayRelay, mayClaimHand, type Principal } from "./identity.js";
+import { parseFrontmatter } from "../core/frontmatter.js";
+import YAML from "yaml";
 import { authIsOff } from "./store/identity.js";
 import fs from "node:fs";
 import path from "node:path";
@@ -34,7 +36,7 @@ import { CORPUS_DIRS, loadCorpus } from "./load.js";
 import { append } from "./log.js";
 import { writePrototypes, writeWithin, diskPages, writeHoldsFor } from "./draw-write.js";
 import { walkOf } from "./walk.js";
-import { axesOf, answersOf } from "./schema.js";
+import { axesOf, answersOf, HANDS, type Hand } from "./schema.js";
 import { dimensionsOf, sayCombination, variesBy } from "./dimensions.js";
 import { doorOpensOn, theOnlyScreenIn, screensIn } from "./selection.js";
 
@@ -100,6 +102,21 @@ export interface Field {
   floor?: number;
   /** ⛔ This field's own words when it is absent, where they beat anything generic. */
   ifMissing?: string;
+  /**
+   * ⛔ CALLER-SUPPLIED BYTES THAT LAND IN THE CORPUS WHOLESALE — scanned at the gate for authorship
+   * it is not entitled to claim.
+   *
+   * Every other field is read apart and rebuilt by a `run`, so nothing a caller types reaches the
+   * corpus unexamined: `payloadFrom` names each value it takes, `wroteBy` DERIVES `hand` from the
+   * `via` `mayRecord` guards. A raw field is the one shape that defeats that by construction — the
+   * caller writes the document, so it writes every field in it, including the ones a command would
+   * have computed. `document` was the only one and had no guard at all.
+   *
+   * ⛔ DECLARED RATHER THAN SPECIAL-CASED ON THE NAME, because the next intent that takes a whole
+   * document is the one that would arrive without the check. `gateRefuses` asks about every field
+   * marked here, so declaring the field is what asks the question.
+   */
+  raw?: boolean;
 }
 
 export interface Intent {
@@ -311,7 +328,16 @@ export const INTENTS: Intent[] = [
         required: true,
         ifMissing: "say which document",
       },
-      { name: "says", says: "The whole document. ⛔ Replaces it — this is not a patch", required: true, long: true },
+      {
+        name: "says",
+        says:
+          "The whole document. ⛔ Replaces it — this is not a patch. ⛔ And it is the document's own bytes, so a " +
+          "`wrote:` in it is a claim the caller typed rather than one anything derived: `hand: person` is refused " +
+          "on a token, which may write `hand: agent` with `from:` instead",
+        required: true,
+        long: true,
+        raw: true,
+      },
     ],
     run: (a, body) => {
       const key = str(body.key);
@@ -927,7 +953,83 @@ export function unwitnessed(intent: Intent, body: Record<string, unknown>): Outc
   };
 }
 
+/**
+ * The strongest hand a document's own bytes claim — ⛔ READ STRUCTURALLY, NOT GREPPED.
+ *
+ * `hand` is `Authorship`'s and nothing else's in the whole schema, so any object in the tree
+ * carrying one is a claim about who typed a sentence, at whatever grain it sits — a statement, a
+ * named refusal, a slot, a rule. Walking the parsed document therefore answers the question once
+ * for every grain there will ever be, where a per-grain reader would have to be extended by
+ * whoever adds the fifth and would silently answer `null` until they did.
+ *
+ * `person` wins over `agent`: a document that claims both contains a claim this caller may not
+ * make, and the honest answer to "what is the strongest thing in here" is the one that gets gated.
+ *
+ * ⛔ AND BYTES NOBODY CAN PARSE STILL LAND ON DISK, so they are not waved through. A document whose
+ * YAML is malformed is a document `loadCorpus` will reject and `check` will refuse — and it is
+ * still written, still stored by `writeBack`, and one later fix away from being read. So the
+ * fallback is a conservative text scan of exactly the one spelling that matters. It is reached only
+ * when the structure is unavailable, which keeps prose out of the normal path.
+ */
+export function handClaimedBy(says: string): Hand | null {
+  /**
+   * ⛔ BYTES WITH NO `hand:` IN THEM ARE NOT PARSED, and that is not a shortcut — `drawings/` is a
+   * corpus directory, a screen's picture is its own document, and `load.ts` measured one feature at
+   * 5.1 MB of HTML. Handing that to a YAML parser on every write would make a drawing's cost a
+   * function of this guard. The question cannot have a positive answer without this substring.
+   */
+  if (!/hand\s*:/.test(says)) return null;
+  let structure: unknown;
+  try {
+    const front = parseFrontmatter(says);
+    /** A `.md` document states its shape in frontmatter and its framing in prose below it. */
+    structure = front.data && Object.keys(front.data).length ? front.data : YAML.parse(says);
+  } catch {
+    return /(^|[\s{,])hand:\s*["']?person\b/m.test(says) ? "person" : null;
+  }
+  return handIn(structure);
+}
+
+/** The walk itself, separate so the precedence above is stated once. */
+function handIn(v: unknown): Hand | null {
+  if (!v || typeof v !== "object") return null;
+  let found: Hand | null = null;
+  if (!Array.isArray(v)) {
+    const claimed = (v as Record<string, unknown>).hand;
+    if (typeof claimed === "string" && (HANDS as readonly string[]).includes(claimed)) {
+      if (claimed === "person") return "person";
+      found = "agent";
+    }
+  }
+  for (const child of Array.isArray(v) ? v : Object.values(v as Record<string, unknown>)) {
+    const h = handIn(child);
+    if (h === "person") return "person";
+    if (h) found = h;
+  }
+  return found;
+}
+
 function gateRefuses(intent: Intent, a: Asking, body: Record<string, unknown>): Outcome | null {
+  /**
+   * ⛔ WHAT THE CALLER TYPED INTO A WHOLE DOCUMENT, BEFORE THE GATE ITS INTENT NAMES.
+   *
+   * PR #183 put `wrote: {hand, as, from}` on four grains and derived it everywhere a COMMAND writes
+   * one — from the `via` `mayRecord` already guards, so the one defended boundary answered both
+   * questions. The `document` intent was not a command: it hands over raw bytes, so an agent token
+   * holding `author` could type `hand: person` and its inference became indistinguishable from a
+   * person's draft. That is the entire distinction the field exists for.
+   *
+   * ⛔ ASKED FOR EVERY GATE, NOT ONLY `author`. Today only an `author`-gated intent takes raw bytes;
+   * a `consent`- or `relay`-gated one that did would otherwise get the old hole back, and a browser
+   * principal passes here unchanged so nothing a page can do today changes.
+   */
+  for (const field of intent.takes) {
+    if (!field.raw) continue;
+    const given = body[field.name];
+    if (typeof given !== "string" || !given.trim()) continue;
+    const refused = mayClaimHand(a.who, handClaimedBy(given));
+    if (refused) return refused;
+  }
   switch (intent.gate) {
     case "consent": {
       /**

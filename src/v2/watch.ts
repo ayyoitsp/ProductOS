@@ -39,6 +39,7 @@ import path from "node:path";
 import { loadCorpus } from "./load.js";
 /** ⛔ Aliased: `seen` is already the set of records announced, and shadowing it silently broke the build. */
 import { seen as imHere } from "./presence.js";
+import { wasBulkPressed } from "./acts.js";
 
 export interface WatchOptions {
   /** Print what is already recorded before waiting. Off by default: a watcher that replays history on
@@ -111,7 +112,19 @@ export function watchCorpus(dir: string, opts: WatchOptions = {}): { stopped: Pr
       const k = keyOf("act", v as unknown as Record<string, unknown>);
       if (seen.has(k)) continue;
       seen.add(k);
-      if (announce) emit(lineFor("act", v as unknown as Record<string, unknown>));
+      /**
+       * ⛔ ONE PRESS, ONE LINE — AND A PRESS NOW WRITES NINE RECORDS.
+       *
+       * Accepting an exchange records an ordinary acceptance per sentence beneath it, so a reviewer
+       * pressing one button announced itself nine times: the press, then eight lines naming
+       * sentences nobody acted on separately. That is the same noise as announcing a file event
+       * instead of a record, one layer up — and it buries the acts that are somebody's own
+       * judgement.
+       *
+       * The press itself is still announced, and the children are in the corpus for whoever goes
+       * and looks. ⛔ Added to `seen` regardless, so a later sweep cannot announce them.
+       */
+      if (announce && !(v.kind === "accept" && wasBulkPressed(v.note))) emit(lineFor("act", v as unknown as Record<string, unknown>));
     }
     for (const n of corpus.notes) {
       const k = keyOf("note", n as unknown as Record<string, unknown>);

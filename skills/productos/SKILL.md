@@ -25,7 +25,7 @@ You are the **orchestrator**, and you are the session — not a subagent. That i
 - `scoper` *(product · writes)* — the feature written in a context holding nothing but that feature
 - `machinist` *(engineering · writes)* — the half of this feature nobody presses — what runs by itself, and what sets it off
 - `instrumenter` *(engineering · writes)* — what has to be recorded for any of this feature's measures to be knowable
-- `decomposer` *(engineering · writes)* — **one per unit, in parallel** — which parts of the system this feature needs, from the truth as it now reads
+- `decomposer` *(engineering · writes)* — which parts of the system this feature needs — ⛔ one run, against the product's settled subsystem tree, never one per feature
 - `demonstrator` *(quality · writes)* — **one per unit, in parallel** — what would have to be demonstrated for each claim to be believed, invalidated when the claim moves
 - `designer` *(design · writes)* — **one per unit, in parallel** — screens the product should have and nothing renders yet
 - `completeness` *(product · judges, writes nothing)* — whether somebody can get from the start of this feature to the end of it
@@ -36,6 +36,7 @@ You are the **orchestrator**, and you are the session — not a subagent. That i
 - the conversation about what this feature is for — a purpose inferred from code is a purpose nobody chose
 - putting every open question to the person, in their own interface
 - every act of judgement, and never answering one on their behalf
+- ⛔ settling the subsystem tree with a person before the decomposer runs, and never spawning one per feature — a part that serves several features cannot be named by a role that can see only one of them
 - ⛔ stopping here. The engineering and QA reads are a different route and it cannot run until somebody has agreed to this — an engineer costing a draft produces a decision nobody made
 
 ### Turn a whole codebase into a first corpus
@@ -67,13 +68,15 @@ You are the **orchestrator**, and you are the session — not a subagent. That i
 
 **Spawn, in order:**
 
-- `decomposer` *(engineering · writes)* — **one per unit, in parallel** — the parts each feature needs — one per ref `analyse capabilities` names, never one per feature in the corpus
+- `decomposer` *(engineering · writes)* — the parts each feature needs — one run over the refs `analyse capabilities` names, after the subsystem tree is settled
 - `demonstrator` *(quality · writes)* — **one per unit, in parallel** — what would show each claim holding — one per ref `analyse requirements` names
 - `designer` *(design · writes)* — **one per unit, in parallel** — a picture for each screen `analyse drawings` names, including the appearances a screen falls into
 
 **⛔ You keep these yourself:**
 
-- ⛔ running `productos v2 analyse <name>` FIRST and fanning only over the refs it returns — a sweep that runs over everything redoes finished work and stops being something anybody runs twice
+- ⛔ running `productos v2 analyse <name>` FIRST and working only the refs it returns — a sweep that runs over everything redoes finished work and stops being something anybody runs twice
+- ⛔ reading what the analysis says about fanning before spawning anything: one that must be settled across the product first says so, and its refs are one run's worklist rather than a list of roles to spawn
+- ⛔ putting the subsystem tree in front of a person before any part of it is worked — the names, the areas and what nests in what. Three cold runs over three features produced three disjoint trees and nothing shared, and nobody reading them could see they were the same machinery
 - deciding which analysis to run: this route does one at a time, because thirty roles of three kinds at once is a diff nobody reviews
 - ⛔ reading the stale ones before the missing ones — a unit that was done and now answers an older wording looks finished to everybody reading it
 - every act of judgement. Nothing swept is validated by having been swept, and none of these roles may stamp
@@ -108,7 +111,7 @@ You are the **orchestrator**, and you are the session — not a subagent. That i
 **⛔ You keep these yourself:**
 
 - the decision about what to do with a criterion nothing demonstrates
-- ⛔ not reading a coverage number as quality — whether those criteria would show anything is `ready it for build`, after somebody has agreed
+- ⛔ not reading a coverage number as quality — whether those criteria would show anything is `hand it to the builders`, after somebody has agreed
 - never letting coverage be reported as validation
 
 ### Find out whether a corpus can be built from by somebody who has not read it
@@ -206,7 +209,23 @@ now names the file it wrote to, which is the only moment somebody can still catc
 
 ## ⛔ How confident the corpus is, and the line that cannot move
 
-Every statement has two separate facts, and they must never be read as one scale:
+Every statement has **three** separate facts, and they must never be read as one scale:
+
+- **who wrote it** — `wrote: {hand: person|agent, as: …, from: …}` on the sentence, the statement,
+  the named refusal or the rule. ⛔ Every role writes `hand: agent` on every sentence it puts in a
+  corpus, with `from:` naming what it was worked out from. A claim software inferred and a claim a
+  product person typed-but-has-not-confirmed both read *"not confirmed"*, and so does one nobody has
+  ever looked at — the first has to be **raised as a question** when a ticket is groomed and the
+  second only needs a **stamp**. Nothing can tell them apart unless this is written.
+  ⛔ **Absent means `unrecorded`, never "a person"** — that is what a migrated corpus says, and
+  defaulting it the other way turns an agent's guess into somebody's draft. ⛔ **And it is not a
+  stamp**: no gate reads it, so it cannot make anything look agreed.
+  ⛔ **`hand: person` is not yours to type, and the door refuses it.** Where a command writes
+  authorship it is DERIVED from the `via` the consent boundary already guards; a document sent
+  through `productos_in { intent: "document" }` is raw bytes, so a session authenticated by a token
+  that types `hand: person` is refused — write `hand: agent` with `from:`, which is the claim a
+  grooming agent raises as a question. A person's hand is recorded by a person landing it themselves.
+
 
 - **confirmed** — a person's act. `accept` or `rule`, with a `by` and a `via`.
 - **strength** — `none · one source · corroborated · strongly supported`, derived from the readings
@@ -305,6 +324,35 @@ productos_exchange_record_read_through  scope, buildable, by, via
 anyone to agree to a whole exchange, call **`productos_exchange_what_it_covers`** and show them —
 an acceptance used to print what it covered in the same breath as writing it, which left no point
 at which anybody could decline.
+
+### ⛔ The second way truth gets accepted: they state a sentence, and it settles several claims
+
+A person does not only press on one claim at a time. They say a thing — *"folders are restricted to
+be linked to a single deal"* — and that one sentence answers several claims already in the corpus.
+Record the sentence as a **rule**, in their words, and then each claim it reaches is accepted with
+their sentence named as the proof. **One human act, N records.**
+
+What each reached claim's acceptance carries, and why the three are three:
+
+| | holds | whose claim it is |
+| --- | --- | --- |
+| `through:` | the **rule id** whose statement this was reached through, rather than pressed on | **theirs** — it is the sentence they stated |
+| `reading:` | why that sentence settles **this** claim | software's. ⛔ **Never their words** |
+| `read_by:` | who read it that way — a model name, or `software` where no judgement was involved | software's |
+
+⛔ **The sentence is theirs; its reach is an inference, and the two must never share a field.** Write
+the reading into `because` or into the sentence itself and the log prints a model's reasoning under a
+person's name — the `chose` / `option_said` failure, which cost the one floor the strongest act in the
+model has. Keep it in `reading:`, with `read_by:` naming who drew it.
+
+⛔ **And it names ONE claim, at `<scope>#<exchange>#<slot>`.** A whole exchange is eight sentences and
+one org-wide statement does not answer all eight; a coarser target is refused.
+
+⛔ **It lasts exactly as long as the sentence does.** `stampFor` grants a reached-through acceptance
+only while the rule it names is itself accepted and unreworded, so rewording that rule — or
+withdrawing its acceptance — withdraws every claim read through it, at once. Do not re-record the
+reading to make the stamp come back: that is the acceptance surviving a reword, which is the one thing
+the whole stamp mechanism exists to stop. Take the reworded sentence back to the person.
 
 ### When it refuses
 
@@ -819,9 +867,21 @@ productos v2 agents          # every role, what it asks, and which model runs it
 ```
 
 ⛔ **Every one judges and none may write** — enforced at install, not hoped: a role's tools are
-derived from the capabilities it declares, and no capability a judge can declare maps to a writing
-tool. A reviewer that repairs what it finds hides how often it fires, and how often it fires is the
-only measure of whether the model is holding.
+derived from the capabilities it declares, and the derivation refuses to install a judge that
+reaches anything able to change something. ⛔ **It is default-deny over ProductOS's own surface** —
+anything this server offers that is not in the read set counts as writing, `productos_in` first of
+all, because the door can perform any intent including one behind the consent gate. A reviewer that
+repairs what it finds hides how often it fires, and how often it fires is the only measure of
+whether the model is holding.
+
+**Every judge but the newcomer holds the read half of this server** — `scopes`, `page`, `grid`,
+`packet`, `questions`, `what_it_covers`, `can_be_agreed_to`, `check`, `record` — so a spawn prompt
+names the corpus and the scope rather than the files, and a judge reporting on what a corpus says is
+reporting on what a consumer's session would receive rather than on what somebody typed where. Each
+prompt says
+which of the nine answers its own question; ⛔ **do not re-explain them in a spawn prompt**, and do
+not tell one to read files instead — the surface the MVP rests on is exercised by these roles or by
+nobody who knows this model.
 
 ⛔ **Never explain ProductOS to the newcomer**, in the prompt or in follow-up. A reviewer who has
 been told what a capability is can no longer detect that the corpus failed to tell them. A newcomer

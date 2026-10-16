@@ -26,6 +26,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import { isHuman, type Via } from "./acts.js";
+import { type Hand } from "./schema.js";
 
 /**
  * ⛔ THE WHOLE VOCABULARY. Read what is there, author drafts, carry somebody else's press.
@@ -92,6 +93,43 @@ export function mayRecord(p: Principal, via: Via): Refusal | null {
       "⛔ no token scope mints human consent. It is not off by default; it is not in the vocabulary.",
       "what a session CAN do: record `via: agent`, which is a default and satisfies no gate — or relay a press a person actually made, with `carry`, which records THEIR identity and not the token's",
       "if a person is in the room, ask them, and let them press",
+    ],
+  };
+}
+
+/** The one hand that claims a human typed the words. ⛔ `agent` claims nothing about a person. */
+export const HUMAN_HAND: Hand = "person";
+
+/**
+ * May this principal submit words that claim a PERSON's hand wrote them?
+ *
+ * ⛔ THE SAME BOUNDARY AS `mayRecord`, ASKED ABOUT AUTHORSHIP INSTEAD OF AGREEMENT — and
+ * deliberately not a second one. `wroteBy` computes `hand` from the `via` `mayRecord` already
+ * guards, with its own comment saying why: *"a `--hand person` flag would have been a second gate,
+ * enforced nowhere, reachable by anything that can spell."* That held everywhere a COMMAND writes
+ * authorship, and nowhere a caller hands over a whole document: the `document` intent writes raw
+ * bytes, so an agent token could simply TYPE `hand: person` and its inference became
+ * indistinguishable from a person's draft. Which is the entire distinction the field exists for — a
+ * grooming agent raises an agent's claim as a question in the ticket, and only stamps a person's.
+ *
+ * ⛔ SO THE REFUSAL IS THE SAME SHAPE, FOR THE SAME REASON: a browser press the instance watched is
+ * a person; a token is not, whatever its bytes claim, and no scope changes that. `mintsHumanConsent`
+ * is the handle on that absence for agreement; this function is the one for authorship.
+ *
+ * ⛔ AND IT IS STILL NOT CONSENT IN EITHER DIRECTION. Letting a browser write `hand: person` says a
+ * human typed the sentence. Nothing here stamps it — `stampFor` reads none of this.
+ */
+export function mayClaimHand(p: Principal, hand: Hand | null): Refusal | null {
+  /** Nothing claimed, or `agent` claimed: an inference a reviewer can disagree with. No gate. */
+  if (hand !== HUMAN_HAND) return null;
+  if (p.kind === "browser") return null;
+  return {
+    ok: false,
+    why: "a token cannot write `hand: person` — that says a human typed this sentence, and no person is holding a token",
+    detail: [
+      "⛔ no token scope mints a person's hand. It is not off by default; it is not in the vocabulary — the same absence as human consent.",
+      "what a session CAN do: write `hand: agent` with `from:` saying what it was worked out from. That is an inference a grooming agent raises as a question, which is the whole reason the field is there",
+      "if a person really typed these words, they land it themselves from a page — then the hand is DERIVED from a press the instance watched, rather than typed by whoever is holding the token",
     ],
   };
 }

@@ -101,6 +101,135 @@ export const REF_MESSAGE =
   "a reference is a rule id, <scope>#<exchange>[#<slot>[#<case>]] where <case> is a named refusal or one statement, or <scope>#<exchange>#shows#<id> for one testing requirement — nothing else addresses anything";
 
 
+// ---------------------------------------------------------------------------
+// Who typed a sentence — which is never who agreed to it.
+
+/**
+ * ⛔ WHICH HAND TYPED THIS — AND IT IS NOT, AND CANNOT BECOME, A SECOND WAY TO LOOK ACCEPTED.
+ *
+ * *"A claim an agent inferred from a call transcript and a claim a PM typed but has not yet
+ * confirmed both read 'not confirmed'. A grooming agent needs to tell them apart, because the first
+ * should be raised as a question in the ticket and the second only needs a stamp."* And "not
+ * confirmed" is also what a sentence nobody has ever looked at says — three situations wearing one
+ * label, and nothing in the model could separate them, because nothing recorded who wrote the
+ * words.
+ *
+ * ⛔ AUTHORSHIP IS NOT CONSENT, AND THE TWO MUST NOT SHARE A FIELD. `Verdict.via` records how a
+ * person's AGREEMENT was obtained and `mayRecord` refuses a token that claims a human one. That is
+ * a different question from this one in both directions: a person can TYPE a sentence without
+ * agreeing to it (every draft), and software can type one nobody has ever read. Overloading `via`
+ * would answer the second question with the first question's guarantee, and the guarantee is the
+ * only thing tenet 1 has.
+ *
+ * ⛔ SO IT IS BUILT TO BE WORTHLESS TO FORGE. Three properties, each load-bearing:
+ *
+ *  1. **It is below the line at every value.** `person` means a human put these words here and
+ *     NOBODY HAS CONFIRMED THEM; the strongest sentence it can produce is "this only needs a
+ *     stamp". No gate reads it — not `stampFor`, not `confidenceOf`, not `check` — so there is no
+ *     act it can unlock and nothing it can make current. `test/v2-authorship.test.mjs` asserts that
+ *     as a property rather than trusting it as a habit.
+ *  2. **Where a command writes it, the hand is derived from the `via` `mayRecord` already
+ *     guards** — never from a string a caller supplies. So the hosted boundary that stops a token
+ *     claiming a person agreed is the same boundary that stops it claiming a person typed. One
+ *     gate, not a second one to keep in step.
+ *  3. **The stronger claim costs more.** `person` suppresses the question a grooming agent would
+ *     otherwise raise, so it has to name `as` whom — a named lie about a particular human, which
+ *     is the same honour system `Verdict.by` runs on and the same price. `agent` has to say what it
+ *     was worked out `from`, because a question raised in a ticket with no source is unanswerable.
+ *
+ * ⛔ AND ABSENCE IS THE ONLY WAY TO SAY UNKNOWN. Not a third enum value: every corpus that exists
+ * today is in that state, a migrated one most of all, so absence has to mean unknown whatever else
+ * is written — and a second spelling of one fact is the thing this repo most reliably pays for.
+ * It also makes landing this free: nothing backfills, so no byte of any corpus moves and no stamp
+ * goes stale on the day it arrives. See the note on `SlotFill.wrote` about the hash.
+ */
+/** ⛔ Two, and there is deliberately no third — see `Written`: unknown is an absence, not a value. */
+export const HANDS = ["person", "agent"] as const;
+export type Hand = (typeof HANDS)[number];
+
+export const Authorship = z
+  .object({
+    /** ⛔ A KIND, never a name. "A person wrote this" is not "a person agreed to this". */
+    hand: z.enum(HANDS),
+    /**
+     * Whose hand: a person's handle, or the role that worked it out.
+     *
+     * ⛔ REQUIRED, AND THAT IS THE PRICE ON `person`. Unnamed authorship is the cheapest sentence
+     * in the schema and would be the obvious way around the question an `agent` claim raises.
+     */
+    as: z.string().min(1),
+    /**
+     * What it was worked out from — the transcript, the component, the ticket.
+     *
+     * ⛔ REQUIRED ON `agent`, because the whole value of knowing software wrote it is being able to
+     * raise it as an answerable question. "An agent inferred this" with no source is a worry, not
+     * a question. Optional on `person`, where the words are their own — though a person who picked
+     * a drafted option says so here.
+     */
+    from: z.string().min(10).optional(),
+  })
+  .strict()
+  .superRefine((w, ctx) => {
+    if (w.hand === "agent" && !w.from)
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["from"],
+        message:
+          "say what this was worked out from — a claim software wrote is one somebody has to be asked about, and a question with no source is one nobody can answer",
+      });
+  });
+export type Authorship = z.infer<typeof Authorship>;
+
+/**
+ * ⛔ THREE ANSWERS, NOT TWO, AND THE THIRD IS FIRST-CLASS.
+ *
+ * `unrecorded` is not a failure to read the field; it is what the corpus actually says. It will be
+ * the commonest answer on every corpus that exists, a migrated one most of all, and a reader that
+ * collapses it into `person` has re-created the conflation this whole field was added to end — an
+ * agent's inference reading as a PM's draft, which is the exact case the MVP needs prevented.
+ */
+export type Written = Hand | "unrecorded";
+
+/**
+ * Who wrote the narrowest grain that records it.
+ *
+ * ⛔ ONE PRECEDENCE RULE, IN ONE PLACE, FOR THE SAME REASON `refineStanding` EXISTS. A standing
+ * lives on a slot and on a named case, and every protection written for the first was simply
+ * absent on the second until one function owned the contract. Authorship lives at four grains —
+ * a statement, a named refusal, a slot and a rule — and the question "who wrote THIS sentence" has
+ * exactly one answer at each, so the resolution belongs here rather than in whatever reads it.
+ *
+ * Narrowest first: a slot of thirteen statements written by one hand that gains a fourteenth from
+ * another must not report one hand for all fourteen. That is precisely the claim a grooming agent
+ * is hunting for, and burying it under the slot's answer is how it would be lost.
+ */
+export function authorshipOf(...grains: Array<{ wrote?: Authorship } | undefined | null>): Authorship | null {
+  for (const g of grains) if (g?.wrote) return g.wrote;
+  return null;
+}
+
+/** The same question, answered in the three values a reader acts on differently. */
+export function handOf(...grains: Array<{ wrote?: Authorship } | undefined | null>): Written {
+  return authorshipOf(...grains)?.hand ?? "unrecorded";
+}
+
+/**
+ * The same question about a criterion — ⛔ ANSWERED FROM `derived`, WITHOUT A SECOND FIELD.
+ *
+ * A criterion already records who worked it out and against which words. Adding `wrote:` beside
+ * `derived:` would be two records of one fact, which is the first rule of this repo, and they would
+ * disagree the first time one was written and the other was not.
+ *
+ * ⛔ AND ABSENCE IS `unrecorded`, NOT `person`. `Criterion.derived`'s own note says absent means
+ * somebody typed it — that is an inference drawn to explain the old shape, and it is the inference
+ * this field exists to stop anybody making. An LLM's YAML is byte-identical to a product person's,
+ * and every migrated corpus is full of criteria nobody attributed. What the corpus knows is that
+ * nothing derived this; who typed it is not in there.
+ */
+export function criterionHand(c: { derived?: { by: string } | undefined }): Written {
+  return c.derived ? "agent" : "unrecorded";
+}
+
 /**
  * One statement of what a slot says, with an identity.
  *
@@ -155,6 +284,19 @@ export const Statement = z
      * rule they disagreed within the hour.
      */
     holds_for: z.record(z.string().min(1)).optional(),
+    /**
+     * ⛔ THE NARROWEST GRAIN, AND THE ONE THAT MAKES THE FIELD WORTH HAVING.
+     *
+     * A slot has held thirteen statements. If authorship were recorded only on the slot, adding a
+     * fourteenth that software inferred from a transcript would either be filed under the hand
+     * that wrote the other thirteen or force a lie about all of them — and the fourteenth is the
+     * only one a grooming agent needs to find. A statement is already addressable
+     * (`<scope>#<exchange>#<slot>#<id>`), stampable and criterion-able at this grain; who wrote it
+     * has to be answerable at the same one.
+     *
+     * Absent falls through to the slot — see `authorshipOf`.
+     */
+    wrote: Authorship.optional(),
   })
   .strict();
 export type Statement = z.infer<typeof Statement>;
@@ -658,6 +800,16 @@ export const RefusalOutcome = z
     name: z.string().min(2).regex(new RegExp(`^${SEGMENT}$`), "a case name is the address a ruling is delivered to, so it is a slug: lower case, digits, - and _"),
     when: z.string().min(5),
     told: z.string().min(5).describe("what the asker is told — in their words, not a code"),
+    /**
+     * ⛔ HERE TOO, FOR THE REASON THE STANDING IS HERE TOO. `told` is copy a user reads, and it is
+     * the single most consequential string software could invent — `propose-slots.ts` is built
+     * around lifting it out of a component and refuses to compose one, precisely because an
+     * invented refusal message is indistinguishable from an agreed one. Recording the hand that
+     * put it here is what makes that distinction survive the write.
+     *
+     * Absent falls through to the slot or rule holding the case — see `authorshipOf`.
+     */
+    wrote: Authorship.optional(),
   })
   .strict()
   .superRefine((o, ctx) => {
@@ -721,6 +873,29 @@ export const SlotFill = z
      * they stay parts, so a surface can list them and a stamp can cover the set.
      */
     says: z.union([z.string().min(10), z.array(Statement).min(2)]).optional(),
+    /**
+     * ⛔ WHO TYPED THIS SLOT'S CONTENT — and the slot has to be able to hold it, because the slot
+     * is what a write path writes. `settle()` replaces `slot.says`; a role authoring a feature
+     * fills a slot with its sentence and its named cases in one go. And the commonest spelling of
+     * `says` is a BARE SENTENCE, which is not a `Statement` object at all — `statements()`
+     * synthesises one at read time and it is never stored, so a statement-only field would leave
+     * the majority of claims in every corpus with nowhere to record their author.
+     *
+     * ⛔ NOT ON THE DOCUMENT. A scope file is months of edits by a dozen hands; a document-level
+     * author answers "who last touched this file", which is a different question whose answer is
+     * wrong for almost every sentence in it.
+     *
+     * ⛔ AND NOT A SIDE LOG. Most claims are written by a role editing YAML, not by a CLI verb, so
+     * a log only the commands appended to would be blank for exactly the claims a grooming agent
+     * most needs to classify — and its blankness would be indistinguishable from an honest unknown.
+     *
+     * ⛔ IT IS IN THE STAMP, like every other key of this object, and that is safe BECAUSE absence
+     * is the only way to say unknown: nothing backfills, so no existing corpus moves and no
+     * acceptance goes stale when this lands. What it buys is that replacing an agreed sentence with
+     * software's wording cannot be done underneath a stamp — which is the same argument `held_by`
+     * and `rests_on` are in the hash for.
+     */
+    wrote: Authorship.optional(),
     standing: Standing.default({ kind: "stated" }),
     /**
      * Which combination of the product's dimensions this whole slot holds for. Absent means every one.
@@ -1015,7 +1190,10 @@ export const Criterion = z
      *    NOBODY derived, so a machine rewriting the test specs can no longer stale a stamp — a
      *    person cannot have agreed to words they never saw, and before this a re-derivation would
      *    have invalidated every acceptance in a corpus at once.
-     *  - **Absent means somebody typed it**, which is the old shape and still loads. `check` says
+     *  - **Absent means nothing derived it**, which is the old shape and still loads. ⛔ It is NOT
+     *    a record that a person typed it — see `criterionHand`. An LLM's YAML is byte-identical to
+     *    a product person's, so reading absence as a human would turn software's guess into a
+     *    draft somebody has read. `check` says
      *    so as a note and names the role that should have produced it. ⛔ Not a refusal: every
      *    corpus in existence is full of authored criteria, and a refusal firing on all of them is
      *    one people switch off — which this project has now learned twice in one day.
@@ -2184,6 +2362,16 @@ export const Rule = z
     /** Absent only while the rule itself is an open question — see `standing` below. */
     statement: z.string().min(20).optional(),
     /**
+     * ⛔ WHO TYPED THE ORG-WIDE SENTENCE — the highest-leverage claim in a corpus, so the one where
+     * "software wrote this and nobody has looked" costs the most. One statement here reaches every
+     * exchange its selector touches, including ones nobody has written yet, and `stampFor` lets a
+     * confirmed rule stand at every slot it supplies. A rule inferred from a code path and never
+     * read would borrow that reach for free.
+     *
+     * Absent falls through to nothing: a rule has no container. Unknown is then the honest answer.
+     */
+    wrote: Authorship.optional(),
+    /**
      * ⛔ AN ORG-WIDE SENTENCE CAN BE UNDECIDED, AND IT WAS THE ONE QUESTION THE MODEL COULD
      * NOT HOLD.
      *
@@ -2980,6 +3168,58 @@ export const Verdict = z
      * than its own record. Absent means the instance issued the session that pressed the button.
      */
     relayed_by: z.string().optional(),
+    /**
+     * The rule whose statement this acceptance was reached through, rather than pressed on.
+     *
+     * ⛔ ONE HUMAN ACT, N RECORDS — AND THE SENTENCE IS THE ONLY THING THE PERSON DID.
+     *
+     * A person states *"folders are restricted to be linked to a single deal"* once. That sentence
+     * is a rule, and it answers several claims already in the corpus — so each of them is settled,
+     * with their sentence named here as what settled it. The alternative is asking them the same
+     * question once per claim, which is review surface with nothing behind it: the sentence they
+     * agreed to and the sentence they are being asked about are the same string.
+     *
+     * ⛔ IT IS A REFERENCE, NOT A COPY, AND THAT IS WHAT MAKES IT SAFE. `stampFor` grants a verdict
+     * carrying this ONLY while the named rule is itself accepted and unreworded — the same
+     * precondition `acceptedThroughRule` already runs on. Without that, one sentence settles seven
+     * claims and the seven outlive the sentence being reversed, which is verbatim the failure
+     * `stamp.ts`'s header exists to prevent, reached by a new route. It needs no extra data: the
+     * rule's own verdict already carries its hashes.
+     *
+     * ⛔ A RULE ID, AND THE TARGET IS ONE CLAIM. Refined below: three segments, because a settled
+     * sentence is the grain a person reviews at, and a rule id has no `#` in it.
+     */
+    through: z.string().optional(),
+    /**
+     * Software's account of why that sentence settles THIS claim. ⛔ Never the person's words.
+     *
+     * ⛔ THE PERSON'S SENTENCE AND THE REACH OF IT ARE TWO DIFFERENT CLAIMS BY TWO DIFFERENT
+     * AUTHORS, AND A RECORD THAT MERGES THEM IS A RECORD OF CONSENT NOBODY GAVE.
+     *
+     * `through` names what a human stated. Which claims that statement verifies is an inference —
+     * made by software reading both sentences — and it can be wrong in a way the human never said
+     * anything about. Written into `because` or into `says` it would read, in the verdict log and on
+     * every page built from it, as the reasoning of whoever accepted.
+     *
+     * Same precedent, same reason as `chose` / `option_said`: `--pick` used to prepend a model's
+     * `consequence` to a human's `because`, and the log then printed a model's argument under a
+     * person's name. The fix was not to delete the argument but to keep it in its own field,
+     * attributed to whoever made it. This is that field for a reading, and `read_by` is the name.
+     *
+     * So no surface may show this as something a person said. `stampFor` carries it beside the name
+     * of whoever read it that way, never beside `by`.
+     */
+    reading: z.string().optional(),
+    /**
+     * Who read it that way — a model name, or `software` where no judgement was involved.
+     *
+     * ⛔ UNATTRIBUTED, AN INFERENCE READS AS A FACT. `via: agent` exists because software's record
+     * had to be distinguishable from a person's agreement at every gate; this is the same
+     * distinction one level down, inside a verdict a person really did make. The acceptance is
+     * theirs, the reach of it is somebody else's, and a reader who cannot see which model drew it
+     * cannot weigh it.
+     */
+    read_by: z.string().optional(),
     covers_slots: z.string().optional(),
     /**
      * The exact lines that were hashed, as they read when somebody agreed.
@@ -3075,6 +3315,49 @@ export const Verdict = z
   .superRefine((v, ctx) => {
     if (v.kind === "accept" && !v.target)
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["target"], message: "an accept names one exchange or one rule" });
+    /**
+     * ⛔ A READING WITHOUT THE SENTENCE IT READ IS AN INFERENCE WITH NOTHING UNDER IT.
+     *
+     * `reading` says why some sentence settles this claim; `read_by` says who thought so. Neither
+     * means anything without the sentence — and both, standing alone on an acceptance, would read
+     * as the reasoning of whoever accepted, which is the one thing these fields exist to prevent.
+     */
+    for (const f of ["reading", "read_by"] as const)
+      if (v[f] && !v.through)
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [f],
+          message:
+            "name the rule this was reached through — a reading with no statement under it is software's inference presented as somebody's agreement",
+        });
+    if (v.through) {
+      /**
+       * ⛔ ONE CLAIM, AT THE GRAIN A PERSON REVIEWS AT. `stampFor` recognises a rule's reach at
+       * `<scope>#<exchange>#<slot>` and nowhere else — a whole exchange is eight sentences, and one
+       * org-wide statement does not answer all eight. A verdict naming a coarser target would be
+       * written, read by nothing, and look like consent to seven sentences nobody mentioned.
+       */
+      if ((v.target ?? "").split("#").length !== 3)
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["target"],
+          message:
+            "a statement reaches one settled sentence at a time — name it as <scope>#<exchange>#<slot>, not a whole exchange",
+        });
+      /**
+       * ⛔ A RULE ID, NEVER A REF. A rule has no container and no `#`; pointing this at
+       * `<scope>#<exchange>#<slot>` would name a claim as the thing that verifies a claim, and
+       * `stampFor` would find no rule, so the acceptance would silently confer nothing. Whether a
+       * rule with this id EXISTS is enforced where it bites: a `through` naming nothing is never
+       * accepted, because nothing is accepted on its behalf.
+       */
+      if (v.through.includes("#"))
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["through"],
+          message: "name the rule by its id — a statement that settles other claims is a rule, and a rule id has no #",
+        });
+    }
     if (v.kind === "rule") {
       if (!v.settles) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["settles"], message: "a ruling names the slot it settles" });
       /**

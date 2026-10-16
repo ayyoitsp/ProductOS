@@ -357,14 +357,41 @@ staging-guard:
 	@# pass on a snippet that named the wrong paths, inverted the test, or could never fire.
 	@#
 	@# What stays here is the question theirs does not ask: identity.
+	@#
+	@# ⛔ "IS MERGED", NOT "IS THE TIP" — AND THE DIFFERENCE IS A LIVELOCK, NOT A NICETY.
+	@#
+	@# This asked whether HEAD equals origin/main, re-fetching first. `rebuild-remote` depends on
+	@# this guard, so the question is asked AFTER the suite — and the suite takes about twelve
+	@# minutes. On an afternoon where main merged every five, a sha that was the tip when the gate
+	@# started was never the tip when the gate reached the rebuild, and the gate refused: green
+	@# suite at dcf496e, backup taken, then "this checkout is not at origin/main" because 604f5db
+	@# had landed meanwhile. Staging could not advance AT ALL while people were merging, which is
+	@# the exact opposite of what the guard is for.
+	@#
+	@# Peter: *"deploys are cheap, why would you waste my time not deploying"*. A guard that cannot
+	@# ship during the only hours anybody is working is a guard that wastes exactly that time.
+	@#
+	@# So the test is ancestry: HEAD must be a commit that IS ON origin/main. That still refuses
+	@# everything it refused before — a feature branch, a local commit, anything unpushed — because
+	@# none of those is an ancestor of main. What it stops refusing is the one case that was always
+	@# fine: merged code that main has since moved past.
+	@#
+	@# ⛔ AND BEING BEHIND IS SAID OUT LOUD RATHER THAN REFUSED. Deploying an older merged sha is a
+	@# legitimate act — it is how a bad cut gets rolled back — but doing it UNKNOWINGLY is how a
+	@# session reports a fix live that it never shipped. So the count is printed, every time.
 	@git fetch -q origin main 2>/dev/null || true
-	@if [ -z "$(DEV_ANYWAY)" ] && [ "$$(git rev-parse HEAD)" != "$$(git rev-parse origin/main 2>/dev/null)" ]; then \
-		echo "✗ this checkout is not at origin/main, and staging serves what is merged."; \
+	@if [ -z "$(DEV_ANYWAY)" ] && ! git merge-base --is-ancestor HEAD origin/main 2>/dev/null; then \
+		echo "✗ this checkout holds a commit that is not on origin/main, and staging serves what is merged."; \
 		echo "    here:        $$(git rev-parse --short HEAD) on $$(git rev-parse --abbrev-ref HEAD)"; \
 		echo "    origin/main: $$(git rev-parse --short origin/main 2>/dev/null || echo unknown)"; \
 		echo ""; \
-		echo "  Deploy from a checkout that is exactly origin/main. Use a dev stack for a branch: make up"; \
+		echo "  Deploy a commit that is on origin/main. Use a dev stack for a branch: make up"; \
 		exit 1; \
+	fi
+	@behind=$$(git rev-list --count HEAD..origin/main 2>/dev/null || echo 0); \
+	if [ -z "$(DEV_ANYWAY)" ] && [ "$$behind" != "0" ]; then \
+		echo "  ⚠ deploying $$(git rev-parse --short HEAD), which origin/main is $$behind commit(s) ahead of."; \
+		echo "    Merged, so allowed — but this is NOT the tip. Those $$behind are not going out."; \
 	fi
 	@if [ -z "$(DEV_ANYWAY)" ]; then \
 		$(call MERGED_CHECK,$(STAGING_STACK) on $(STAGING_PORT),up-remote) \
@@ -449,7 +476,11 @@ remote-doctor: build
 # any time; `deploy` runs it, backs the store up, deploys, waits for health, then reads the store.
 # ---------------------------------------------------------------------------
 deploy-check: staging-guard
-	@echo "  ✓ clean, and identical to origin/main at $$(git rev-parse --short HEAD)"
+	@# ⛔ "MERGED", NOT "IDENTICAL", BECAUSE THE CHECK ABOVE STOPPED ASKING FOR IDENTITY. The line
+	@# claimed identity while the guard it reports on asks ancestry, so a deploy one commit behind
+	@# printed "identical to origin/main" immediately under a warning saying it was not the tip. Two
+	@# lines of the same output disagreeing, and the confident one is the one a reader keeps.
+	@echo "  ✓ clean, and merged at $$(git rev-parse --short HEAD)$$(test "$$(git rev-parse HEAD)" = "$$(git rev-parse origin/main 2>/dev/null)" && echo ", which is the tip")"
 	@# ⛔ CHECKED FIRST, BECAUSE THE SUITE TAKES TEN MINUTES. `backup-remote` tests for `.env` too —
 	@#    but after the slow part, so a deploy checkout missing it burned the whole run before saying
 	@#    so. A gate that fails late on the cheapest possible question is a gate people stop running.

@@ -42,6 +42,30 @@ wastes the run.
 ⛔ **Do not edit anything.** Not the corpus, not the schema. A finding produced after you
 changed a file is a finding about your edit.
 
+## Review the surface a consumer actually holds
+
+The commands above are ours; nobody outside this repository runs them. You also hold the read half
+of the MCP server, which **is** the surface a consumer's session has — so answer B from there,
+because that is where a real reviewer's experience is decided.
+
+- **`productos_exchange_questions`** is what gets put to a person, verbatim. Read it as that
+  person: is the cost of guessing wrong actually in it, do the options carry their argument, could
+  you decide from this alone? A question that needs the file open beside it to make sense is the
+  reviewability failure you are hunting, and it reads perfectly well in the file.
+- **`productos_exchange_what_it_covers`** and **`productos_exchange_can_be_agreed_to`** are the two
+  moments before a stamp: what somebody is taking on, and why they cannot take it on yet. If either
+  asks for a judgement a reviewer has no basis to make, that is a B finding and it is where the
+  rubber-stamp is either prevented or licensed. ⛔ Both compute without recording, and no act is in
+  your tool list — you can inspect the gate without going near it.
+- **`productos_exchange_check`** is the queue as a consumer receives it; count the notes that
+  should never have reached a person from there rather than from the CLI.
+- **`productos_exchange_page`** is what they read.
+
+⛔ **A read thinner than the page is your finding, not a bug report.** If a fact a person needs in
+order to decide reaches the page and not the tool, then whether this model can be reviewed depends
+on which surface somebody happened to be standing on. That is a statement about the framework,
+which is your subject — and it is unreachable from the schema, which is why nobody has made it.
+
 ## Answer these, and do not hedge
 
 **A — Is it sufficient?** Take each case below. For each, either show the fields that

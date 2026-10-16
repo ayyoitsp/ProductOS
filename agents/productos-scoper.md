@@ -320,6 +320,42 @@ at the same grain as the details it exists to frame.
 together" from the screens beneath it and the `leads_to` of their parts — so record `leads_to`, or
 the group's high-level view is a list of screens rather than a flow.
 
+### ⛔ `wrote:` — you are an agent, and every sentence you write says so
+
+```yaml
+answer:
+  says: The amount is taken off what the kid has, and the act appears at the top of their history.
+  wrote:
+    hand: agent                                  # ⛔ person | agent. You are never `person`.
+    as: productos-scoper                          # ⛔ required — whose hand, named
+    from: the spend handler in SpendForm.tsx:112  # ⛔ required on `agent` — what you worked it out from
+```
+
+⛔ **Write it on every sentence you put in a corpus.** A slot's sentence, each `says:` in a list of
+statements, each named `refuses` case, a rule's `statement:` — all of them. The narrowest grain that
+records it wins, so a slot written by you that later gains one statement somebody typed says both
+things honestly.
+
+⛔ **This is the field that tells three situations apart, and before it they wore one label.** A
+claim you inferred from a call transcript and a claim a product person typed and has not yet
+confirmed both read *"not confirmed"* — and so does a claim nobody has ever looked at. The first
+must be **raised as a question** when a ticket is groomed; the second only needs a **stamp**. If you
+do not write this, your inference is indistinguishable from somebody's draft.
+
+⛔ **`hand: person` is not yours to write, ever.** Not for a sentence somebody dictated to you, not
+for one you lifted out of a document they wrote. You are the hand on the keyboard. The only things
+that record `person` are the acts a human performs through a surface, which derive it from the same
+consent `mayRecord` guards — `productos v2 rule … --says "…"` writes it for them.
+
+⛔ **And it is not a stamp, in any direction.** `wrote` says who typed; `accept` says who agreed.
+Nothing reads `wrote` to decide whether something is confirmed, is current, or may be built — it
+cannot make a claim look agreed, which is the only reason it is safe for you to write at all.
+
+⛔ **Leaving it off is honest, and it is the one thing it can honestly say.** Absence means
+*unrecorded* — nobody knows — which is what every migrated corpus says. It is never read as "a
+person wrote this". So omit it only where you genuinely do not know who did; on a sentence you just
+wrote, you do.
+
 ### ⛔ `rests_on:` — cite the charter, do not restate it
 
 ```yaml

@@ -683,8 +683,20 @@ test("every section says how much it is holding", () => {
     if (n)
       assert.match(
         html,
-        new RegExp(`data-tab="${half.scope.id}">[^<]*<span class="pill quiet">${n}</span>`),
+        /** ⛔ Attributes between the class and the number: the pill says what it is counting now. */
+        new RegExp(`data-tab="${half.scope.id}">[^<]*<span class="pill quiet"[^>]*>${n}</span>`),
         `the ${half.scope.id} tab does not carry its count`
+      );
+    /**
+     * ⛔ AND IT SAYS WHAT IT IS COUNTING. Three counts disagreed on the Money page — the tab said
+     * 21, the heading said 22, the sub-tab said 4 — and all three were right about three different
+     * things. A bare digit on a tab is what made that read as arithmetic going wrong.
+     */
+    if (n)
+      assert.match(
+        html,
+        new RegExp(`data-tab="${half.scope.id}">[^<]*<span class="pill quiet"[^>]*aria-label="${n} sentences nobody has read"`),
+        `the ${half.scope.id} tab's count does not say what it counts`
       );
   }
 });
@@ -1144,7 +1156,8 @@ test("a chip counts what is there, not what is currently askable", () => {
 
   const root = bare.scopes.find((s) => !s.scope.in).scope.id;
   const html = renderScopePage(bare, root, { linkBase: "/v2" });
-  const pills = [...html.matchAll(/class="pill[^"]*">(\d+)</g)].map((m) => Number(m[1]));
+  /** ⛔ `[^>]*` between the class and the number — every pill now names what it is counting. */
+  const pills = [...html.matchAll(/class="pill[^"]*"[^>]*>(\d+)</g)].map((m) => Number(m[1]));
   assert.ok(pills.length > 0, "no chip carries a number while nothing is offered");
   assert.ok(
     pills.some((n) => n > 0),
