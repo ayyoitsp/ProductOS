@@ -1,0 +1,8 @@
+id: "0168"
+said: wtf? overview just disappeared? / 'file would not load' should definitely still show up in the menu.
+at: 2026-10-16
+kind: surface
+reaches:
+  surface: class="unloadable"
+  pin: the menu keeps a row for it, marked, and linking nowhere
+waived: {}

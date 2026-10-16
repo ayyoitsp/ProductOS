@@ -38,6 +38,31 @@ export function v2Paths(root: string): V2Paths {
   };
 }
 
+/**
+ * A document that would not load, and enough of itself to be named to a person.
+ *
+ * ⛔ IT CARRIES ITS OWN `id`/`title`/`in`, AND THAT IS THE WHOLE POINT. Peter, looking at an area
+ * whose Deal Overview had gone: *"wtf? overview just disappeared?"*. It had not — it failed the
+ * Part refinement, this recorded it, and the page printed the reason faithfully: a zod path and a
+ * quoted label, naming no screen. So the surfaces could report the defect and still not answer
+ * *which of my screens is missing*, and reading it as a deletion was correct from what was shown.
+ *
+ * ⛔ AND THE FILE IS NOT THE ANSWER — nothing a reader sees may mention the storage. The name has
+ * to come from the document's own words. These three fields parse cleanly on every real failure,
+ * because the failures are deeper in: a bad part, a bad state, an unknown key. So the identity is
+ * available exactly when it is needed.
+ */
+export type Unloadable = {
+  file: string;
+  why: string;
+  /** Its own id, where the document got that far. */
+  id?: string;
+  /** What it calls itself — what a reader is shown. */
+  title?: string;
+  /** Which container it belongs to, so the menu can keep its place rather than dropping it. */
+  in?: string;
+};
+
 export interface Corpus {
   paths: V2Paths;
   scopes: Array<{ scope: Scope; body: string; file: string }>;
@@ -103,7 +128,7 @@ export interface Corpus {
   verdicts: Verdict[];
   /** Files that would not parse, with why. ⛔ Reported, never thrown — one malformed file
    *  crashing every command with a stack trace and no filename happened in v1. */
-  broken: Array<{ file: string; why: string }>;
+  broken: Unloadable[];
 }
 
 /**
@@ -342,7 +367,7 @@ function why(e: unknown): string {
  * file is visibly blank to whoever opens it — there is no hidden content to lose. What is reported
  * is a file that plainly holds SOMETHING the loader was not asked for.
  */
-function itemsIn(raw: unknown, key: string, file: string, broken: Array<{ file: string; why: string }>): unknown[] {
+function itemsIn(raw: unknown, key: string, file: string, broken: Unloadable[]): unknown[] {
   if (raw === null || raw === undefined) return [];
   if (typeof raw !== "object" || Array.isArray(raw)) {
     broken.push({ file, why: `this is not a \`${key}:\` file — the loader expects a mapping with \`${key}:\` in it` });
@@ -457,8 +482,17 @@ export function loadCorpus(root: string, store: Store = diskStore): Corpus {
 
   for (const file of readDir(paths.truth, [".md"])) {
     if (path.basename(file).toLowerCase() === "readme.md") continue;
+    /**
+     * ⛔ READ BEFORE IT IS VALIDATED, so a document that fails can still say which screen it is.
+     * Assigned as we go: whatever was recovered before the throw is what the alarm and the menu
+     * get, and a document too malformed to name itself simply names nothing.
+     */
+    let named: Pick<Unloadable, "id" | "title" | "in"> = {};
     try {
       const p = parseFrontmatter(readFile(file));
+      const d = (p.data ?? {}) as Record<string, unknown>;
+      const str = (k: string) => (typeof d[k] === "string" ? (d[k] as string) : undefined);
+      named = { id: str("id"), title: str("title"), in: str("in") };
       const scope = Scope.parse(p.data);
       /**
        * ⛔ A DRAWING ON DISK WINS, AND AN INLINE ONE STILL WORKS. Corpora written before the split
@@ -490,7 +524,7 @@ export function loadCorpus(root: string, store: Store = diskStore): Corpus {
       }
       scopes.push({ scope, body: p.content.trim(), file });
     } catch (e) {
-      broken.push({ file, why: why(e) });
+      broken.push({ file, why: why(e), ...named });
     }
   }
   for (const file of readDir(paths.rules, [".md"])) {
