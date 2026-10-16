@@ -29,7 +29,7 @@
  * sentence, and reporting it above `suggested` would hand a builder a test for a claim nobody makes.
  */
 import { resolveRules, type Corpus } from "./load.js";
-import { SLOTS, statements, type Reading, type SlotName, type Standing } from "./schema.js";
+import { SLOTS, statements, authorshipOf, type Reading, type SlotName, type Standing } from "./schema.js";
 import { decidedFor, staleReason, stampFor } from "./stamp.js";
 import { resolveRef, type Ref } from "./ref.js";
 import { confidenceOf, discrepancyFor, inheritedFor, supportFor } from "./confidence.js";
@@ -140,6 +140,19 @@ export type Wrote =
   | { is: "software"; by: string; at: string }
   /** A named role worked it out, and recorded the words it worked from. */
   | { is: "a role"; by: string; at: string }
+  /**
+   * A person typed it, and nobody has confirmed it.
+   *
+   * ⛔ THE WHOLE POINT OF THE FEATURE, AND IT HAD NOWHERE TO GO. This union was written before
+   * `wrote` existed on the schema, when authorship was unrecoverable — so there was no honest value
+   * for "a human wrote this", and the only candidate was `unrecorded`.
+   *
+   * Folding the two together is exactly the failure the MVP needs prevented. The usability review:
+   * *"A claim an agent inferred from a call transcript and a claim a PM typed but has not yet
+   * confirmed both read 'not confirmed'. A grooming agent needs to tell them apart, because the
+   * first should be raised as a question in the ticket and the second only needs a stamp."*
+   */
+  | { is: "a person"; by: string }
   /** ⛔ Nothing records it: a person's unconfirmed draft and an agent's inference are the same bytes. */
   | { is: "unrecorded" };
 
@@ -252,6 +265,27 @@ export function wroteOf(corpus: Corpus, ref: string): Wrote {
         .find((c) => c.capability.id === got.subsystem)
         ?.capability.offers.find((o) => o.id === got.capability)?.derived;
       if (d) return { is: "a role", by: d.by, at: d.at };
+    }
+    /**
+     * ⛔ THE WRITE-TIME FIELD THIS FUNCTION WAS BUILT TO WAIT FOR. When this file was written,
+     * authorship was unrecoverable and every claim answered `unrecorded` — 74 of 74 on the seed.
+     * `wrote` now records it at the grain it is written at, so ask the narrowest grain first:
+     * a slot has held thirteen statements, and a fourteenth an agent inferred must not inherit the
+     * hand that wrote the other thirteen.
+     *
+     * ⛔ Absence stays `unrecorded` and is never read as a person. Every corpus that exists is in
+     * that state, and an LLM's YAML is byte-identical to a PM's.
+     */
+    if (got.kind === "statement" || got.kind === "slot") {
+      const ex = corpus.scopes
+        .find((s) => s.scope.id === got.scope)
+        ?.scope.exchanges.find((e) => e.id === got.exchange);
+      const fill = ex?.slots?.[got.slot as keyof typeof ex.slots];
+      const said = got.kind === "statement"
+        ? statements(fill?.says).find((x) => x.id === (got as { statement?: string }).statement)
+        : undefined;
+      const who = authorshipOf(said, fill);
+      if (who) return who.hand === "person" ? { is: "a person", by: who.as } : { is: "a role", by: who.as, at: "" };
     }
   }
   return { is: "unrecorded" };
