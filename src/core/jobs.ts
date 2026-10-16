@@ -277,6 +277,14 @@ export const AREAS: Area[] = [
        * true when it was written and unfalsifiable afterwards.
        */
       "src/v2/level.ts",
+      /**
+       * ⛔ `derive`, ONE LAYER ABOVE `level.ts`, AND IT MUST NEVER BECOME A SECOND ANSWER. Whether a
+       * piece of work can be built is a projection: the levels are `levelOf`'s, the questions are
+       * `questionsFor`'s, the holes the grid's and the requirements `demonstrationOf`'s. Filed here
+       * rather than under `generate` because it produces no artefact — it answers about state the
+       * corpus already holds, which is the line this area is drawn on.
+       */
+      "src/v2/readiness.ts",
       "src/v2/settle.ts",
       /**
        * ⛔ WHICH CLAIMS ONE STATED SENTENCE SETTLES, AND WHICH IT ONLY ASKS ABOUT. Filed under
@@ -2072,6 +2080,38 @@ export const SHIMS: Shim[] = [
       "⛔ checking somebody actually agreed before spawning either of these — the precondition is the whole point of the split",
       "deciding what to do with what comes back: a question the corpus must settle goes to the person, never to the builder",
       "every act of judgement — an engineer saying it is buildable is not somebody agreeing it is right",
+    ],
+  },
+  /**
+   * ⛔ THE MVP'S ACTOR HAD NO ROUTE, AND IT IS THE ONE THAT READS RATHER THAN WRITES.
+   *
+   * Every other route here produces truth or judges it. The MVP's main actor is a CONSUMER: a Claude
+   * Code instance holding a piece of work, asking ProductOS what is decided. The architecture review
+   * found the gap and the shape at once — *"None takes a ticket and answers 'is this groomed?'. The
+   * last stage has no route at all. 'Groom', 'Linear' and 'ticket' appear nowhere in the code"* — and
+   * the usability review found the same hole from the other end: the verdict existed, as prose in the
+   * preamble of 22 KB of markdown, so *"an agent deciding 'ready or not' has to parse warnings out of
+   * markdown"*.
+   *
+   * ⛔ NO TRACKER, AND THAT IS PETER'S CALL RATHER THAN AN OMISSION: *"we can hash out linear
+   * connections later, so ignore those."* The instance holds its tracker through its own connector
+   * and writes the answer there. ProductOS takes a scope or a behaviour and answers about truth.
+   *
+   * ⛔ IT SPAWNS NOBODY. Grooming reads; the roles that could judge this — buildability, test-design
+   * — wait until somebody has agreed, which is the whole of the stage split above. What a grooming
+   * run keeps is everything: the reading, the questions it raises, and the refusal to answer one.
+   */
+  {
+    route: "groom a ticket",
+    does: "Answer whether a piece of work can be built, and raise what is open as questions",
+    when: "can I build this · is this groomed · is this ready to build · what are the tests for this · groom this",
+    steps: [],
+    keeps: [
+      "the whole reading — `productos_readiness` for the verdict, the queue for each open question, and the packet for what to build from",
+      "⛔ raising every open question with the person who was asked, verbatim, and answering none of them — a hole a builder fills is product truth invented by a builder",
+      "⛔ never recording consent: a claim nobody has agreed to needs a stamp from a person, and no amount of grooming produces one",
+      "deciding what a claim with no recorded author is — ask who wrote it; a person's unconfirmed draft and an agent's inference are the same bytes",
+      "writing the test list, with each requirement's ref and the hash of the words it was written from, into whatever holds the work",
     ],
   },
   {
