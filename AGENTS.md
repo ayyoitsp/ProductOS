@@ -80,12 +80,12 @@ flowchart TD
   scope_a_feature --> scope_a_feature_scoper["scoper"]
   scope_a_feature --> scope_a_feature_machinist["machinist"]
   scope_a_feature --> scope_a_feature_instrumenter["instrumenter"]
-  scope_a_feature --> scope_a_feature_decomposer["decomposer ×N"]
+  scope_a_feature --> scope_a_feature_decomposer["decomposer"]
   scope_a_feature --> scope_a_feature_demonstrator["demonstrator ×N"]
   scope_a_feature --> scope_a_feature_designer["designer ×N"]
   scope_a_feature --> scope_a_feature_completeness["completeness"]
   scope_a_feature --> scope_a_feature_design-critique["design-critique ×N"]
-  scope_a_feature -.->|keeps| scope_a_feature_self(["the session — 4 things it may not hand off"])
+  scope_a_feature -.->|keeps| scope_a_feature_self(["the session — 5 things it may not hand off"])
   scan_a_codebase(["scan a codebase<br/><i>Turn a whole codebase into a first corpus</i>"])
   scan_a_codebase --> scan_a_codebase_surveyor["surveyor"]
   scan_a_codebase --> scan_a_codebase_scoper["scoper ×N"]
@@ -98,10 +98,10 @@ flowchart TD
   scan_a_codebase --> scan_a_codebase_hand-authored["hand-authored"]
   scan_a_codebase -.->|keeps| scan_a_codebase_self(["the session — 4 things it may not hand off"])
   index_a_corpus(["index a corpus<br/><i>Run one analysis across everything, over only what is outstanding</i>"])
-  index_a_corpus --> index_a_corpus_decomposer["decomposer ×N"]
+  index_a_corpus --> index_a_corpus_decomposer["decomposer"]
   index_a_corpus --> index_a_corpus_demonstrator["demonstrator ×N"]
   index_a_corpus --> index_a_corpus_designer["designer ×N"]
-  index_a_corpus -.->|keeps| index_a_corpus_self(["the session — 4 things it may not hand off"])
+  index_a_corpus -.->|keeps| index_a_corpus_self(["the session — 6 things it may not hand off"])
   hand_it_to_the_builders(["hand it to the builders<br/><i>The engineering and QA read, once product and design have signed off</i>"])
   hand_it_to_the_builders --> hand_it_to_the_builders_architecture["architecture"]
   hand_it_to_the_builders --> hand_it_to_the_builders_buildability["buildability"]
@@ -143,7 +143,7 @@ Turn one in-flight feature into product truth.
 - `scoper` *(product · writes)* — the feature written in a context holding nothing but that feature
 - `machinist` *(engineering · writes)* — the half of this feature nobody presses — what runs by itself, and what sets it off
 - `instrumenter` *(engineering · writes)* — what has to be recorded for any of this feature's measures to be knowable
-- `decomposer` *(engineering · writes)* — one per unit, in parallel — which parts of the system this feature needs, from the truth as it now reads
+- `decomposer` *(engineering · writes)* — which parts of the system this feature needs — ⛔ one run, against the product's settled subsystem tree, never one per feature
 - `demonstrator` *(quality · writes)* — one per unit, in parallel — what would have to be demonstrated for each claim to be believed, invalidated when the claim moves
 - `designer` *(design · writes)* — one per unit, in parallel — screens the product should have and nothing renders yet
 - `completeness` *(product · judges, writes nothing)* — whether somebody can get from the start of this feature to the end of it
@@ -153,6 +153,7 @@ Turn one in-flight feature into product truth.
 - the conversation about what this feature is for — a purpose inferred from code is a purpose nobody chose
 - putting every open question to the person, in their own interface
 - every act of judgement, and never answering one on their behalf
+- ⛔ settling the subsystem tree with a person before the decomposer runs, and never spawning one per feature — a part that serves several features cannot be named by a role that can see only one of them
 - ⛔ stopping here. The engineering and QA reads are a different route and it cannot run until somebody has agreed to this — an engineer costing a draft produces a decision nobody made
 
 ### scan a codebase
@@ -181,12 +182,14 @@ Turn a whole codebase into a first corpus.
 Run one analysis across everything, over only what is outstanding.
 
 **Spawns, in order:**
-- `decomposer` *(engineering · writes)* — one per unit, in parallel — the parts each feature needs — one per ref `analyse capabilities` names, never one per feature in the corpus
+- `decomposer` *(engineering · writes)* — the parts each feature needs — one run over the refs `analyse capabilities` names, after the subsystem tree is settled
 - `demonstrator` *(quality · writes)* — one per unit, in parallel — what would show each claim holding — one per ref `analyse requirements` names
 - `designer` *(design · writes)* — one per unit, in parallel — a picture for each screen `analyse drawings` names, including the appearances a screen falls into
 
 **⛔ Keeps, because it may not be delegated:**
-- ⛔ running `productos v2 analyse <name>` FIRST and fanning only over the refs it returns — a sweep that runs over everything redoes finished work and stops being something anybody runs twice
+- ⛔ running `productos v2 analyse <name>` FIRST and working only the refs it returns — a sweep that runs over everything redoes finished work and stops being something anybody runs twice
+- ⛔ reading what the analysis says about fanning before spawning anything: one that must be settled across the product first says so, and its refs are one run's worklist rather than a list of roles to spawn
+- ⛔ putting the subsystem tree in front of a person before any part of it is worked — the names, the areas and what nests in what. Three cold runs over three features produced three disjoint trees and nothing shared, and nobody reading them could see they were the same machinery
 - deciding which analysis to run: this route does one at a time, because thirty roles of three kinds at once is a diff nobody reviews
 - ⛔ reading the stale ones before the missing ones — a unit that was done and now answers an older wording looks finished to everybody reading it
 - every act of judgement. Nothing swept is validated by having been swept, and none of these roles may stamp
@@ -217,7 +220,7 @@ Find what already demonstrates the claims a corpus makes.
 
 **⛔ Keeps, because it may not be delegated:**
 - the decision about what to do with a criterion nothing demonstrates
-- ⛔ not reading a coverage number as quality — whether those criteria would show anything is `ready it for build`, after somebody has agreed
+- ⛔ not reading a coverage number as quality — whether those criteria would show anything is `hand it to the builders`, after somebody has agreed
 - never letting coverage be reported as validation
 
 ### check it communicates
@@ -293,7 +296,7 @@ Held three ways rather than one: no author declares `ask-the-human`, so no host 
 | author | asks | per | writes |
 |---|---|---|---|
 | **surveyor** | What does this product consist of — which areas, and which features in each? | runs once | the areas, as scopes; each feature as a scope inside its area, with a title and nothing else |
-| **scoper** | What does this one feature promise, and where does somebody meet it? | feature | the happy path — what the feature is FOR, first; views and their parts; person-asked exchanges, and what each slot says; criteria — what would show a sentence holding; `why`, `risks` and `measures` — why this is worth building, what could go wrong, and how anybody would know it worked; `terms` — what each word means in this feature; `question:` on anything it cannot resolve, with no claim beside it |
+| **scoper** | What does this one feature promise, and where does somebody meet it? | feature | the happy path — what the feature is FOR, first; views and their parts; person-asked exchanges, and what each slot says; `why`, `risks` and `measures` — why this is worth building, what could go wrong, and how anybody would know it worked; `terms` — what each word means in this feature; `question:` on anything it cannot resolve, with no claim beside it |
 | **machinist** | What does this product do that nobody presses, and what sets it off? | feature | system- and integrator-asked exchanges, and what each slot says; `when.triggered_by` — what sets it off, in product language; `when.follows` — the ask this one comes after, where something in the product sets it off; `depends_on` — what this rests on and does not itself behaviour; `question:` on anything it cannot resolve, with no claim beside it |
 | **decomposer** | Which parts of the system does this feature need, and where do they belong? | feature | subsystems — roughly what each does, and which area it is filed inside; `offers` — the capabilities a subsystem provides, each in a sentence; `serves` — the product statement each capability exists for, or the capability that needs it; `uses` — what a subsystem leans on across the tree, where containment cannot say it |
 | **demonstrator** | What would have to be demonstrated for this claim to be believed? | feature | criteria — what must be demonstrated for each claim, as given/when/then; `derived` — the role, the date, and the hash of the claim it was worked out against; `of` — which statement, wherever the slot says more than one thing; `level` — where somebody would have to stand to observe it, where that is knowable from the claim |
@@ -342,7 +345,6 @@ Held three ways rather than one: no author declares `ask-the-human`, so no host 
 - the happy path — what the feature is FOR, first
 - views and their parts
 - person-asked exchanges, and what each slot says
-- criteria — what would show a sentence holding
 - `why`, `risks` and `measures` — why this is worth building, what could go wrong, and how anybody would know it worked
 - `terms` — what each word means in this feature
 - `question:` on anything it cannot resolve, with no claim beside it
@@ -556,7 +558,7 @@ So the question you own is not asked once over a feature. It is asked once per c
 - write anything
 - fix what it finds — a reviewer that repairs hides how often it fires
 
-**Needs:** read-files · search-files · run-commands  ·  **Prompt:** `agents/productos-consistency.md`
+**Needs:** read-files · search-files · run-commands · ask-the-corpus  ·  **Prompt:** `agents/productos-consistency.md`
 
 ### `coverage`
 
@@ -583,7 +585,7 @@ So the question you own is not asked once over a feature. It is asked once per c
 - write tests itself — it reports the hole; closing it is authoring
 - count tests as a measure of anything
 
-**Needs:** read-files · search-files · run-commands  ·  **Prompt:** `agents/productos-coverage.md`
+**Needs:** read-files · search-files · run-commands · ask-the-corpus  ·  **Prompt:** `agents/productos-coverage.md`
 
 ### `hand-authored`
 
@@ -606,7 +608,7 @@ So the question you own is not asked once over a feature. It is asked once per c
 - regenerate anything itself
 - treat legitimate authoring — a claim, a question, a purpose — as a generated artefact
 
-**Needs:** read-files · search-files · run-commands  ·  **Prompt:** `agents/productos-hand-authored.md`
+**Needs:** read-files · search-files · run-commands · ask-the-corpus  ·  **Prompt:** `agents/productos-hand-authored.md`
 
 ### `truthfulness`
 
@@ -630,7 +632,7 @@ So the question you own is not asked once over a feature. It is asked once per c
 - change the corpus to match the code: the code may be the thing that is wrong, and deciding which is a person's call
 - assume the code is right
 
-**Needs:** read-files · search-files · run-commands  ·  **Prompt:** `agents/productos-truthfulness.md`
+**Needs:** read-files · search-files · run-commands · ask-the-corpus  ·  **Prompt:** `agents/productos-truthfulness.md`
 
 ### `newcomer`
 
@@ -650,6 +652,7 @@ So the question you own is not asked once over a feature. It is asked once per c
 - be told what ProductOS is — a reviewer told what a capability is can no longer detect that the corpus failed to say
 - read OVERVIEW, GLOSSARY, EXAMPLE, the skills or the source
 - write anything
+- use anything of ProductOS's — a command, or an MCP tool it was handed, has already told it what the model is
 
 **Needs:** fetch-url · read-files  ·  **Prompt:** `agents/productos-newcomer.md`
 
@@ -672,7 +675,7 @@ So the question you own is not asked once over a feature. It is asked once per c
 - write anything
 - judge whether the product is ready to build — that is a different question
 
-**Needs:** read-files · search-files · run-commands · fetch-url  ·  **Prompt:** `agents/productos-architect.md`
+**Needs:** read-files · search-files · run-commands · fetch-url · ask-the-corpus  ·  **Prompt:** `agents/productos-architect.md`
 
 ### `can-the-model-say-it`
 
@@ -694,7 +697,7 @@ So the question you own is not asked once over a feature. It is asked once per c
 - write anything
 - judge whether one particular product is ready
 
-**Needs:** read-files · search-files · run-commands  ·  **Prompt:** `agents/productos-can-the-model-say-it.md`
+**Needs:** read-files · search-files · run-commands · ask-the-corpus  ·  **Prompt:** `agents/productos-can-the-model-say-it.md`
 
 ### `completeness`
 
@@ -724,7 +727,7 @@ So the question you own is not asked once over a feature. It is asked once per c
 - treat a missing step as an authoring mistake without saying so — a path that cannot be expressed is ours, and the two need different people
 - judge whether the destination is the RIGHT destination — that is a product decision, and this asks only whether somebody can get there
 
-**Needs:** read-files · search-files · run-commands  ·  **Prompt:** `agents/productos-completeness.md`
+**Needs:** read-files · search-files · run-commands · ask-the-corpus  ·  **Prompt:** `agents/productos-completeness.md`
 
 ### `rendered`
 
@@ -752,7 +755,7 @@ So the question you own is not asked once over a feature. It is asked once per c
 - judge whether the design is good. It asks whether the drawing depicts the product, never whether either is attractive
 - report a difference it could not see — if the environment would not come up, say that instead
 
-**Needs:** read-files · search-files · run-commands · see-a-page  ·  **Prompt:** `agents/productos-rendered.md`
+**Needs:** read-files · search-files · run-commands · see-a-page · ask-the-corpus  ·  **Prompt:** `agents/productos-rendered.md`
 
 ### `coherence`
 
@@ -781,7 +784,7 @@ So the question you own is not asked once over a feature. It is asked once per c
 - ⛔ decide which side of a contradiction is correct — report both and who must choose
 - report a difference between target state and built code — that is drift, and truthfulness holds it
 
-**Needs:** read-files · search-files · run-commands  ·  **Prompt:** `agents/productos-coherence.md`
+**Needs:** read-files · search-files · run-commands · ask-the-corpus  ·  **Prompt:** `agents/productos-coherence.md`
 
 ### `design-critique`
 
@@ -808,7 +811,7 @@ So the question you own is not asked once over a feature. It is asked once per c
 - ⛔ restyle — this is about whether the screen is right, never about taste in colour or spacing
 - ⛔ object that no component renders it: a screen the product SHOULD have is the target state
 
-**Needs:** read-files · search-files · run-commands · see-a-page  ·  **Prompt:** `agents/productos-design-critique.md`
+**Needs:** read-files · search-files · run-commands · see-a-page · ask-the-corpus  ·  **Prompt:** `agents/productos-design-critique.md`
 
 ### `buildability`
 
@@ -835,7 +838,7 @@ So the question you own is not asked once over a feature. It is asked once per c
 - ⛔ treat 'no code exists yet' as a finding: a corpus may never require code to exist
 - ⛔ ask for implementation detail — how it gets built is the builder's, and demanding it is the opposite of this job
 
-**Needs:** read-files · search-files · run-commands  ·  **Prompt:** `agents/productos-buildability.md`
+**Needs:** read-files · search-files · run-commands · ask-the-corpus  ·  **Prompt:** `agents/productos-buildability.md`
 
 ### `test-design`
 
@@ -861,7 +864,7 @@ So the question you own is not asked once over a feature. It is asked once per c
 - run the tests — this is about what a criterion would SHOW, not whether it currently passes
 - ⛔ report a missing criterion: that is coverage's question, and reporting it here hides this one
 
-**Needs:** read-files · search-files · run-commands  ·  **Prompt:** `agents/productos-test-design.md`
+**Needs:** read-files · search-files · run-commands · ask-the-corpus  ·  **Prompt:** `agents/productos-test-design.md`
 
 ## The commands
 

@@ -97,6 +97,29 @@ export const CAPABILITIES = [
    * would meet it, with its own CSS applied and its own JavaScript run.
    */
   "see-a-page",
+  /**
+   * ⛔ ASK PRODUCTOS WHAT THE TRUTH SAYS — ITS OWN SURFACE, AND THE READ HALF OF IT ONLY.
+   *
+   * Every role in this file reaches a corpus the way a person with a text editor would: open the
+   * files, parse the frontmatter, work out the rest. So the surface ProductOS actually offers a
+   * consumer — the MCP server a Claude Code instance holds while it grooms a ticket — was exercised
+   * by nobody who knows this model. A reviewer reading a corpus off disk cannot notice that the
+   * read a consumer gets does not carry the field the page shows, which is the one defect that
+   * surface can have and the one no amount of file-reading will find.
+   *
+   * ⛔ `ask-`, NEVER `read-`, AND NOT THE MIRROR OF `write-corpus`. Every tool this maps to answers
+   * a question and changes nothing: what this corpus holds, what one scope says, where each
+   * behaviour stands, what covers a claim, what it refuses. The door — the one tool that can
+   * perform an act — is not a read and a judge may never hold it, which is enforced in the adapter
+   * rather than stated here: the derivation refuses to install a judge whose tools include anything
+   * that writes, in either dialect.
+   *
+   * ⛔ AND THE NEWCOMER MAY NEVER DECLARE IT. Its whole value is reading a published corpus as
+   * anybody would, with no knowledge of ProductOS — a role holding `productos_exchange_*` has been
+   * told what the model is by its own tool list, and can no longer detect that the page failed to
+   * say.
+   */
+  "ask-the-corpus",
 ] as const;
 export type Capability = (typeof CAPABILITIES)[number];
 
@@ -662,7 +685,7 @@ export const AGENTS: Agent[] = [
       "a field carried by the migrator and dropped by the generator, or the reverse",
     ],
     never: ["write anything", "fix what it finds — a reviewer that repairs hides how often it fires"],
-    needs: ["read-files", "search-files", "run-commands"],
+    needs: ["read-files", "search-files", "run-commands", "ask-the-corpus"],
     judges: true,
     prompt: "agents/productos-consistency.md",
   },
@@ -692,7 +715,7 @@ export const AGENTS: Agent[] = [
       "a fixed defect with no test named after it",
     ],
     never: ["write tests itself — it reports the hole; closing it is authoring", "count tests as a measure of anything"],
-    needs: ["read-files", "search-files", "run-commands"],
+    needs: ["read-files", "search-files", "run-commands", "ask-the-corpus"],
     judges: true,
     prompt: "agents/productos-coverage.md",
   },
@@ -726,7 +749,7 @@ export const AGENTS: Agent[] = [
       "a generated artefact that has not been regenerated since its source changed",
     ],
     never: ["regenerate anything itself", "treat legitimate authoring — a claim, a question, a purpose — as a generated artefact"],
-    needs: ["read-files", "search-files", "run-commands"],
+    needs: ["read-files", "search-files", "run-commands", "ask-the-corpus"],
     judges: true,
     prompt: "agents/productos-hand-authored.md",
   },
@@ -768,7 +791,7 @@ export const AGENTS: Agent[] = [
       "change the corpus to match the code: the code may be the thing that is wrong, and deciding which is a person's call",
       "assume the code is right",
     ],
-    needs: ["read-files", "search-files", "run-commands"],
+    needs: ["read-files", "search-files", "run-commands", "ask-the-corpus"],
     judges: true,
     prompt: "agents/productos-truthfulness.md",
   },
@@ -785,6 +808,16 @@ export const AGENTS: Agent[] = [
       "be told what ProductOS is — a reviewer told what a capability is can no longer detect that the corpus failed to say",
       "read OVERVIEW, GLOSSARY, EXAMPLE, the skills or the source",
       "write anything",
+      /**
+       * ⛔ AND THE ONE JUDGE WITH NO `ask-the-corpus`, WHICH EVERY OTHER ONE NOW HAS.
+       *
+       * The capability hands a role ProductOS's own read tools, which is what makes a reviewer able
+       * to notice that the surface a consumer gets is thinner than the page. For this role it would
+       * be the leak the two prohibitions above are about, arriving by a third door: a tool list
+       * reading `productos_exchange_scopes` has told the reader what a scope is, what an exchange
+       * is and that ProductOS exists, before they have opened the URL.
+       */
+      "use anything of ProductOS's — a command, or an MCP tool it was handed, has already told it what the model is",
     ],
     needs: ["fetch-url", "read-files"],
     judges: true,
@@ -798,7 +831,7 @@ export const AGENTS: Agent[] = [
     reads: ["the capability half of the corpus", "what each capability promises and who depends on it"],
     finds: ["machinery referenced and owned by nothing", "a boundary in the wrong place", "a subsystem that is one promise wearing a subsystem's clothes"],
     never: ["write anything", "judge whether the product is ready to build — that is a different question"],
-    needs: ["read-files", "search-files", "run-commands", "fetch-url"],
+    needs: ["read-files", "search-files", "run-commands", "fetch-url", "ask-the-corpus"],
     judges: true,
     prompt: "agents/productos-architect.md",
   },
@@ -822,7 +855,7 @@ export const AGENTS: Agent[] = [
       "a judgement a reviewer is asked for that they have no basis to make",
     ],
     never: ["write anything", "judge whether one particular product is ready"],
-    needs: ["read-files", "search-files", "run-commands"],
+    needs: ["read-files", "search-files", "run-commands", "ask-the-corpus"],
     judges: true,
     prompt: "agents/productos-can-the-model-say-it.md",
   },
@@ -861,7 +894,7 @@ export const AGENTS: Agent[] = [
       "treat a missing step as an authoring mistake without saying so — a path that cannot be expressed is ours, and the two need different people",
       "judge whether the destination is the RIGHT destination — that is a product decision, and this asks only whether somebody can get there",
     ],
-    needs: ["read-files", "search-files", "run-commands"],
+    needs: ["read-files", "search-files", "run-commands", "ask-the-corpus"],
     judges: true,
     prompt: "agents/productos-completeness.md",
   },
@@ -896,7 +929,7 @@ export const AGENTS: Agent[] = [
       "judge whether the design is good. It asks whether the drawing depicts the product, never whether either is attractive",
       "report a difference it could not see — if the environment would not come up, say that instead",
     ],
-    needs: ["read-files", "search-files", "run-commands", "see-a-page"],
+    needs: ["read-files", "search-files", "run-commands", "see-a-page", "ask-the-corpus"],
     judges: true,
     prompt: "agents/productos-rendered.md",
   },
@@ -939,7 +972,7 @@ export const AGENTS: Agent[] = [
       "⛔ decide which side of a contradiction is correct — report both and who must choose",
       "report a difference between target state and built code — that is drift, and truthfulness holds it",
     ],
-    needs: ["read-files", "search-files", "run-commands"],
+    needs: ["read-files", "search-files", "run-commands", "ask-the-corpus"],
     judges: true,
     prompt: "agents/productos-coherence.md",
   },
@@ -972,7 +1005,7 @@ export const AGENTS: Agent[] = [
       "⛔ restyle — this is about whether the screen is right, never about taste in colour or spacing",
       "⛔ object that no component renders it: a screen the product SHOULD have is the target state",
     ],
-    needs: ["read-files", "search-files", "run-commands", "see-a-page"],
+    needs: ["read-files", "search-files", "run-commands", "see-a-page", "ask-the-corpus"],
     judges: true,
     prompt: "agents/productos-design-critique.md",
   },
@@ -1007,7 +1040,7 @@ export const AGENTS: Agent[] = [
       "⛔ treat 'no code exists yet' as a finding: a corpus may never require code to exist",
       "⛔ ask for implementation detail — how it gets built is the builder's, and demanding it is the opposite of this job",
     ],
-    needs: ["read-files", "search-files", "run-commands"],
+    needs: ["read-files", "search-files", "run-commands", "ask-the-corpus"],
     judges: true,
     prompt: "agents/productos-buildability.md",
   },
@@ -1040,7 +1073,7 @@ export const AGENTS: Agent[] = [
       "run the tests — this is about what a criterion would SHOW, not whether it currently passes",
       "⛔ report a missing criterion: that is coverage's question, and reporting it here hides this one",
     ],
-    needs: ["read-files", "search-files", "run-commands"],
+    needs: ["read-files", "search-files", "run-commands", "ask-the-corpus"],
     judges: true,
     prompt: "agents/productos-test-design.md",
   },
@@ -1169,7 +1202,21 @@ export const AUTHORS: Author[] = [
        * appeared nowhere in its prompt and `triggered_by` once, against fourteen for `why`.
        */
       "person-asked exchanges, and what each slot says",
-      "criteria — what would show a sentence holding",
+      /**
+       * ⛔ `criteria` IS GONE FROM THIS LIST, AND THIS WAS THE LAST PLACE STILL CLAIMING IT.
+       *
+       * Peter: *"a product person doesn't write a criterion - what even is this? this is old shit.
+       * the agents decide what kind of tests need to exist."* The `demonstrator` was added for
+       * exactly that and declares the whole layer — `criteria`, `derived`, `of`, `level` — and
+       * `agents/productos-scoper.md` already says *"Write no `criteria:` at all"*. Only the
+       * registry was never trimmed, so the field had two owners here while one owner wrote it.
+       *
+       * ⛔ AND THIS IS THE FIELD WHERE TWO OWNERS COST THE MOST. `writes` exists so that two
+       * authors cannot both believe they hold something; the thing a second owner produces here is
+       * a hand-typed criterion sitting beside a derived one, carrying no `derived.from` — so
+       * nothing can re-derive it, nothing can stale it when the claim is reworded, and "are the
+       * tests well defined" is answered by whichever of the two a reader happens to open.
+       */
       /**
        * ⛔ DECLARED, BECAUSE THIS LIST IS WHAT STOPS TWO AUTHORS OWNING ONE FIELD — and it named
        * none of these while the prompt covered all of them: `why` fourteen times, `measures` three,
@@ -1842,7 +1889,23 @@ export const SHIMS: Shim[] = [
        * information — a requirement worked out from a sentence nobody has agreed to says so — which
        * is strictly more than a gate could tell anybody, because a gate's output is absence.
        */
-      { role: "decomposer", fan: true, why: "which parts of the system this feature needs, from the truth as it now reads" },
+      /**
+       * ⛔ NOT FANNED, AND THE ROUTE USED TO SAY OTHERWISE WHILE THE ANALYSIS SAID THIS.
+       *
+       * `ANALYSES.capabilities` in `src/v2/analyse.ts` carries `settleFirst`: one subsystem tree for
+       * the whole product has to be agreed before any unit is handed out, because a subsystem serves
+       * many features and so which parts exist is not a per-feature question. Measured there rather
+       * than argued — three decomposers fanned cold over three pricing features produced 15
+       * subsystem ids, zero proposed by more than one run and zero leaning on another run's tree:
+       * the same machinery under different names, which is worse than a mirror of the feature list
+       * because duplicates are harder to see.
+       *
+       * ⛔ AND `fan: true` IS AN INSTRUCTION, NOT A HINT — which is the whole reason the disagreement
+       * mattered. A session reading this table fans what the table says to fan, so the one sweep
+       * ProductOS knows cannot be parallelised was the one its own routing table parallelised.
+       * Pinned both ways now: no route may fan a role whose analysis declares `settleFirst`.
+       */
+      { role: "decomposer", why: "which parts of the system this feature needs — ⛔ one run, against the product's settled subsystem tree, never one per feature" },
       { role: "demonstrator", fan: true, why: "what would have to be demonstrated for each claim to be believed, invalidated when the claim moves" },
       { role: "designer", fan: true, why: "screens the product should have and nothing renders yet" },
       /**
@@ -1851,7 +1914,7 @@ export const SHIMS: Shim[] = [
        *
        * This briefly spawned an engineering and a QA read in the same pass, which asked two people
        * to judge whether a draft could be built and whether its criteria proved anything — before
-       * anybody had agreed the draft was the product. Those two roles moved to `ready it for build`,
+       * anybody had agreed the draft was the product. Those two roles moved to `hand it to the builders`,
        * which cannot run until somebody has.
        *
        * What stays is what a person needs in order TO agree: does the thing join up, and are these
@@ -1865,6 +1928,7 @@ export const SHIMS: Shim[] = [
       "the conversation about what this feature is for — a purpose inferred from code is a purpose nobody chose",
       "putting every open question to the person, in their own interface",
       "every act of judgement, and never answering one on their behalf",
+      "⛔ settling the subsystem tree with a person before the decomposer runs, and never spawning one per feature — a part that serves several features cannot be named by a role that can see only one of them",
       "⛔ stopping here. The engineering and QA reads are a different route and it cannot run until somebody has agreed to this — an engineer costing a draft produces a decision nobody made",
     ],
   },
@@ -1905,9 +1969,14 @@ export const SHIMS: Shim[] = [
    * which were already done or which were done against truth that has since moved.
    *
    * ⛔ THE FIRST STEP IS A COMMAND, NOT A ROLE, and that is the load-bearing part of this route.
-   * `productos v2 analyse <name>` says which units are outstanding; the fan goes over those refs
-   * and no others. Fanning over every feature is how a sweep costs thirty role runs to redo
+   * `productos v2 analyse <name>` says which units are outstanding; the work covers those refs and
+   * no others. Fanning over every feature is how a sweep costs thirty role runs to redo
    * twenty-nine finished ones, and it is what makes re-running this safe rather than expensive.
+   *
+   * ⛔ AND WHETHER IT MAY BE FANNED AT ALL IS THE ANALYSIS'S OWN ANSWER, NOT THIS ROUTE'S. An
+   * analysis carrying `settleFirst` cannot be worked unit by unit — `capabilities` is one — so its
+   * refs are one run's worklist. The route used to fan it anyway, which is the disagreement
+   * `settleFirst` was added to end.
    *
    * ⛔ Extendable by a row in `ANALYSES`, not by a step here. A new analysis — view states, the
    * product as a whole — appears in `analyse` and in this route's worklist the moment it is
@@ -1918,12 +1987,21 @@ export const SHIMS: Shim[] = [
     does: "Run one analysis across everything, over only what is outstanding",
     when: "index the capabilities · re-derive the test cases · analyse the whole corpus · what is left to work out · sweep this corpus",
     steps: [
-      { role: "decomposer", fan: true, why: "the parts each feature needs — one per ref `analyse capabilities` names, never one per feature in the corpus" },
+      /**
+       * ⛔ THE ONE STEP ON THIS ROUTE THAT IS NOT A FAN, FOR THE REASON `analyse capabilities`
+       * ITSELF GIVES. Its `settleFirst` says a subsystem tree is settled across the product before
+       * any unit is worked, so the refs it returns are what ONE run has to cover — not a worklist
+       * to spawn from. `--refs` warns on stderr for exactly this, and the route it was warning
+       * about was this one.
+       */
+      { role: "decomposer", why: "the parts each feature needs — one run over the refs `analyse capabilities` names, after the subsystem tree is settled" },
       { role: "demonstrator", fan: true, why: "what would show each claim holding — one per ref `analyse requirements` names" },
       { role: "designer", fan: true, why: "a picture for each screen `analyse drawings` names, including the appearances a screen falls into" },
     ],
     keeps: [
-      "⛔ running `productos v2 analyse <name>` FIRST and fanning only over the refs it returns — a sweep that runs over everything redoes finished work and stops being something anybody runs twice",
+      "⛔ running `productos v2 analyse <name>` FIRST and working only the refs it returns — a sweep that runs over everything redoes finished work and stops being something anybody runs twice",
+      "⛔ reading what the analysis says about fanning before spawning anything: one that must be settled across the product first says so, and its refs are one run's worklist rather than a list of roles to spawn",
+      "⛔ putting the subsystem tree in front of a person before any part of it is worked — the names, the areas and what nests in what. Three cold runs over three features produced three disjoint trees and nothing shared, and nobody reading them could see they were the same machinery",
       "deciding which analysis to run: this route does one at a time, because thirty roles of three kinds at once is a diff nobody reviews",
       "⛔ reading the stale ones before the missing ones — a unit that was done and now answers an older wording looks finished to everybody reading it",
       "every act of judgement. Nothing swept is validated by having been swept, and none of these roles may stamp",
@@ -1990,13 +2068,23 @@ export const SHIMS: Shim[] = [
        * Whether a claim HAS evidence is bookkeeping and safe to ask about a draft. Whether a
        * criterion would PROVE anything is a QA judgement about the truth itself, and this route can
        * be entered cold — so asking it here is asking QA to rule on something nobody has agreed to.
-       * It lives in `ready it for build`, behind the precondition.
+       * It lives in `hand it to the builders`, behind the precondition.
        */
       { role: "coverage", why: "whether each claim is pinned by something that fails on its own" },
     ],
     keeps: [
       "the decision about what to do with a criterion nothing demonstrates",
-      "⛔ not reading a coverage number as quality — whether those criteria would show anything is `ready it for build`, after somebody has agreed",
+      /**
+       * ⛔ THIS SENT PEOPLE TO A ROUTE CALLED `ready it for build`, AND THERE IS NO SUCH ROUTE.
+       *
+       * The route is `hand it to the builders` — renamed once, in four places that are data and
+       * nowhere in the prose pointing at it, so the one instruction a reader of this entry is given
+       * ("go and run that one") named nothing. ⛔ A dangling route name is worse than a missing
+       * reference: it reads as a route that exists and has not been run, and nothing told anybody
+       * otherwise, because prose was the only place a route was ever named. It is pinned now —
+       * every route a route's own words name has to be a route.
+       */
+      "⛔ not reading a coverage number as quality — whether those criteria would show anything is `hand it to the builders`, after somebody has agreed",
       "never letting coverage be reported as validation",
     ],
   },
@@ -2010,7 +2098,7 @@ export const SHIMS: Shim[] = [
        * ⛔ NO ENGINEERING READ HERE, THOUGH IT FIT WELL. This route runs BEFORE anybody is asked to
        * review, so `buildability` would have been an engineer costing a draft — the exact thing the
        * `scope a feature` split exists to prevent, arriving by a second door. What a corpus fails
-       * to DECIDE is still worth knowing; it is asked in `ready it for build`, once there is
+       * to DECIDE is still worth knowing; it is asked in `hand it to the builders`, once there is
        * something agreed to decide about.
        */
       { role: "can-the-model-say-it", why: "whether a confusion is the corpus's fault or ours — the routing this whole route exists to get right" },

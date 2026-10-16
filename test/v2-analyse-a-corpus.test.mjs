@@ -184,12 +184,29 @@ test("a sweep writes nothing and names the role rather than running it", () => {
 test("the route and the command that reach this are both declared", () => {
   const route = SHIMS.find((s) => s.route === "index a corpus");
   assert.ok(route, "nothing routes a corpus-wide analysis — it runs only when somebody remembers it");
-  /** ⛔ The analysis roles are fanned, because one session doing all of them writes the shape it
-   *  wrote last — the same reason the scan route fans its scopers. */
+  /**
+   * ⛔ FANNED WHERE THE ANALYSIS SAYS IT MAY BE, AND THIS TEST USED TO DEMAND IT OF ALL THREE.
+   *
+   * It asserted `step.fan === true` for every role on the route, written when the reason to fan was
+   * "one session doing all of them writes the shape it wrote last" — true of a drawing and of a
+   * requirement, and false of a subsystem. `ANALYSES.capabilities` then grew `settleFirst` on the
+   * strength of a measurement — three cold decomposers, 15 subsystem ids, nothing shared — and this
+   * assertion was the other half of why the route went on fanning it anyway: a test demanding the
+   * defect. ⛔ So it reads the analysis rather than naming the roles, and the next analysis that
+   * cannot be worked unit by unit is covered the day it says so.
+   */
   for (const r of ["decomposer", "demonstrator", "designer"]) {
     const step = route.steps.find((s) => s.role === r);
     assert.ok(step, `${r} is not in the sweep route`);
-    assert.equal(step.fan, true, `${r} is not fanned`);
+    const analysis = ANALYSES.find((a) => a.role === r);
+    assert.ok(analysis, `${r} is on the sweep route and no analysis names it`);
+    assert.equal(
+      !!step.fan,
+      !analysis.settleFirst,
+      analysis.settleFirst
+        ? `${r} is fanned while ${analysis.name} says ${analysis.settleFirst.what} has to be settled first`
+        : `${r} is not fanned, and ${analysis.name} has no shared judgement in it to settle`
+    );
   }
   /** ⛔ And the route keeps the thing that makes a sweep cheap: run the command first. */
   assert.ok(
