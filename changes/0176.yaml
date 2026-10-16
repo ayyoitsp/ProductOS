@@ -1,0 +1,9 @@
+id: "0176"
+said: something constantly causes my screen to reload and i go back to 'overview'
+at: 2026-10-16
+kind: surface
+reaches:
+  surface: window.showView
+  pin: does not reload a page with nothing to sync
+waived: {}
+closed: 2026-10-16
