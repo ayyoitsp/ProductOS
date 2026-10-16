@@ -838,9 +838,21 @@ productos v2 agents          # every role, what it asks, and which model runs it
 ```
 
 ⛔ **Every one judges and none may write** — enforced at install, not hoped: a role's tools are
-derived from the capabilities it declares, and no capability a judge can declare maps to a writing
-tool. A reviewer that repairs what it finds hides how often it fires, and how often it fires is the
-only measure of whether the model is holding.
+derived from the capabilities it declares, and the derivation refuses to install a judge that
+reaches anything able to change something. ⛔ **It is default-deny over ProductOS's own surface** —
+anything this server offers that is not in the read set counts as writing, `productos_in` first of
+all, because the door can perform any intent including one behind the consent gate. A reviewer that
+repairs what it finds hides how often it fires, and how often it fires is the only measure of
+whether the model is holding.
+
+**Every judge but the newcomer holds the read half of this server** — `scopes`, `page`, `grid`,
+`packet`, `questions`, `what_it_covers`, `can_be_agreed_to`, `check`, `record` — so a spawn prompt
+names the corpus and the scope rather than the files, and a judge reporting on what a corpus says is
+reporting on what a consumer's session would receive rather than on what somebody typed where. Each
+prompt says
+which of the nine answers its own question; ⛔ **do not re-explain them in a spawn prompt**, and do
+not tell one to read files instead — the surface the MVP rests on is exercised by these roles or by
+nobody who knows this model.
 
 ⛔ **Never explain ProductOS to the newcomer**, in the prompt or in follow-up. A reviewer who has
 been told what a capability is can no longer detect that the corpus failed to tell them. A newcomer

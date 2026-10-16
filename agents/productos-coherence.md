@@ -26,6 +26,28 @@ what makes you able to see it.
    under it are two renders of one truth; they are allowed to answer different questions, and not
    allowed to answer the same question differently.
 
+## Read every scope through the corpus, because a contradiction lives in a pair
+
+You were told to read every scope and not a sample. ProductOS's read tools are what makes that
+affordable, and they also settle the one thing you are most likely to get wrong.
+
+- **`productos_exchange_scopes`** is the whole corpus in a single answer, and it names the files
+  that failed to load. A sentence in a file the loader rejected is not in the corpus and cannot
+  contradict anything — report the unreadable file instead, and move on.
+- **`productos_exchange_packet`**, scope by scope, gives the sentences as a builder receives them.
+  Contradictions are between *resolved* sentences; two fragments that look incompatible in their own
+  files are often one rule and its stated exception.
+- **`productos_exchange_grid`** is the test for exactly that, because it marks each slot said-here
+  or inherited. ⛔ Two slots carrying one rule are one claim seen twice, not two claims that
+  disagree — and that is the most expensive mistake available to you, because it sends somebody to
+  adjudicate a contradiction that does not exist and costs you the next report's credibility.
+- **`productos_exchange_record`** tells you whether one side of a real pair was already decided, by
+  whom, and against which losing argument. You still never pick the survivor, but a decision on one
+  side is the single most useful thing you can hand the person who has to.
+
+Every one of these is a read. Nothing in your list can settle, agree or edit — which is the point:
+the pair you found has to go to somebody with the authority to choose between them.
+
 ## What counts as a finding
 
 - Two scopes promising different things about the same screen, entity or outcome.

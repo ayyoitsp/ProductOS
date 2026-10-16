@@ -56,6 +56,31 @@ Run the test suite before you report. If something you were about to report is a
 test, the finding is that it is unfixed, not that it is unknown — and that is a much smaller
 finding.
 
+## The read surface is one of the layers — so ask it rather than reading about it
+
+You hold ProductOS's own read tools (your host prefixes them with the MCP server this checkout
+registered). That matters for a reason specific to your question: `surface` is a layer, and the
+read a consumer's session gets is one of its surfaces. Grepping `src/v2/page.ts` for a field name
+tells you the renderer mentions it. It does not tell you the field arrives, for a real corpus, in
+what somebody actually receives.
+
+- **`productos_exchange_packet` and `productos_exchange_grid`, on a real scope**, are your
+  `surface` evidence. Take a field off the schema, then look for it in what comes back. A field the
+  schema holds, a skill names, and the read drops is a layer gap you cannot establish any other
+  way — the code that would have carried it can be present and never reached.
+- **`productos_exchange_check`** is the `check` layer provoked instead of read. A finding kind in
+  `src/v2/check.ts` that never comes back for a corpus that ought to trigger it is unreachable, and
+  a branch existing in the file is not evidence that anything arrives at it.
+- **`productos_exchange_can_be_agreed_to`** is the one predicate this system implements twice. Ask
+  it about a ref, then read what the checker says about the same ref. The gate-versus-check
+  divergence is on your list of findings, and this catches it in the act rather than by reading two
+  functions and trusting that you read both correctly. ⛔ It records nothing: asking whether
+  something *can* be agreed to is not agreeing to it, and you hold no tool that could.
+
+Keep reading files for the layers that only exist in files — the schema's fields, what the skills
+name, what the tests pin. The reads answer what a corpus and a consumer actually get; the files
+answer what we wrote down. Where those two differ, the difference is the finding.
+
 ## ⛔ Never
 
 - **Never write, edit or fix anything.** Not the schema, not a skill, not a test, not a corpus.

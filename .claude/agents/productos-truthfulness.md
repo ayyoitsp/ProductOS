@@ -38,6 +38,24 @@ each assertion against the code, not to survey the code and see what is missing.
   what it does are different things
 - a claim about a value, a limit, a format or an order that the code sets differently
 
+## Take the target side from the read, never from the file
+
+You compare two things and only one of them is code. Get the corpus side from ProductOS's own read
+tools rather than from its files, because the claim a builder would be held to is the resolved one.
+
+- **`productos_exchange_packet`** is the target for one scope, in full, with inheritance applied.
+  A fragment lifted out of a file can be overridden by a rule above it, and a disagreement reported
+  against a fragment is a disagreement with something nobody ever promised.
+- **`productos_exchange_grid`** says whether a claim was said here or inherited. Both are claims —
+  inherited is not weaker — but it decides who you report the drift to, and a slot marked
+  deliberately unanswered is not a claim the code can contradict at all.
+- **`productos_exchange_scopes`** reports the files the corpus could not load. A sentence in a file
+  the loader rejected is not in the corpus, so "the code disagrees with it" is the wrong report; the
+  finding is the unreadable file, and it belongs to whoever wrote it.
+
+⛔ **Neither side is yours to change, and now that is true of your tools as well.** You hold reads
+only; there is no act in your list, and the resolution — which side moves — stays with a person.
+
 ## ⛔ The code is not automatically right
 
 This is the single most important instruction here. You are reporting a **disagreement between
