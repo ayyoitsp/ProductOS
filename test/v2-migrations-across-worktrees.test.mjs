@@ -449,8 +449,21 @@ test("nothing that starts a container skips the dev guard", () => {
    */
   /** ⛔ The tree check lives in `MERGED_CHECK` — one home; see `v2-deploy-gate` for why theirs won. */
   assert.match(rbody, /MERGED_CHECK/, "staging-guard does not reach the working-tree check");
-  assert.match(rbody, /rev-parse origin\/main/, "the guard does not compare against origin/main");
-  assert.doesNotMatch(rbody, /merge-base --is-ancestor/, "an ancestor check lets a commit BEHIND origin/main deploy");
+  assert.match(rbody, /rev-list --count HEAD\.\.origin\/main/, "the guard does not measure itself against origin/main at all");
+  /**
+   * ⛔ ANCESTRY, AND THE LINE THIS REPLACES WAS `doesNotMatch(/merge-base --is-ancestor/)` — "an
+   * ancestor check lets a commit BEHIND origin/main deploy". Correct about the risk, and asked in a
+   * place where it could not hold: `rebuild-remote` reaches this guard AFTER the suite, twelve
+   * minutes in, and re-fetches. While main merged every five minutes, every deploy was refused for
+   * being behind a main that had moved during its own test run — so staging stayed six PRs stale,
+   * which is the staleness the rule was protecting against, caused by the rule.
+   *
+   * Merged is the question; being the tip is a report. The count is asserted in `v2-deploy-gate`,
+   * and the two halves nobody gave up — unmerged refused, dirty tree refused — are asserted here
+   * and driven for real in `v2-staging-serves-what-is-merged`.
+   */
+  assert.match(rbody, /merge-base --is-ancestor HEAD origin\/main/, "staging-guard no longer asks whether this is merged");
+  assert.match(rbody, /NOT the tip/, "a deploy that is behind no longer says so");
   /**
    * ⛔ THE GUARD ASKS GIT, NOT THE SCRIPT, AND THIS IS THE ASSERTION THAT WOULD HAVE CAUGHT IT. A
    * worktree on a branch without `scripts/stack.sh` makes `$(shell ...)` empty, compose uses its
@@ -508,7 +521,16 @@ test("nothing that starts a container skips the dev guard", () => {
    * `DEV_ANYWAY` test — so one gate covers it. The identity check is separate and needs its own.
    */
   assert.match(rbody, /\[ -z "\$\(DEV_ANYWAY\)" \][\s\S]*MERGED_CHECK/, "DEV_ANYWAY cannot get past the tree check");
-  assert.match(rbody, /\[ -z "\$\(DEV_ANYWAY\)" \][\s\S]*rev-parse origin\/main/, "DEV_ANYWAY cannot get past the identity check");
+  /**
+   * ⛔ THE MECHANISM CHANGED AND THIS REGEX NAMED THE MECHANISM. It required `DEV_ANYWAY` to be
+   * followed by a bare `rev-parse origin/main`, which was how equality was asked. The identity
+   * question is now ancestry, so the assertion matched nothing and reported the override as broken —
+   * a failure about the wording of a check rather than about the check.
+   *
+   * What is being asserted is unchanged: the override must reach the identity question too, or it
+   * advertises an escape hatch it does not have.
+   */
+  assert.match(rbody, /\[ -z "\$\(DEV_ANYWAY\)" \][\s\S]*merge-base --is-ancestor HEAD origin\/main/, "DEV_ANYWAY cannot get past the identity check");
   assert.match(mk, /DEV_ANYWAY/, "there is no way to override it on purpose");
   assert.match(mk, /^up: dev-guard migrations-check$/m, "up does not check the numbering before starting");
 });

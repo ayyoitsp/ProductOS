@@ -61,15 +61,47 @@ test("something checks the working tree, because the image is built from the tre
   assert.doesNotMatch(recipe("staging-guard"), /git status --porcelain/, "the tree check is duplicated");
 });
 
-test("the guard asks whether this is exactly origin/main", () => {
+/**
+ * ⛔ THIS TEST USED TO DEMAND EQUALITY, AND THE REASON IT GAVE WAS RIGHT. It said: "IDENTICAL, NOT
+ * `merge-base --is-ancestor`. An ancestor check passes for a commit BEHIND origin/main, which is a
+ * stale deploy nobody asked for." That is true, and an earlier attempt to loosen this guard was
+ * caught here, correctly, because it removed the refusal and put nothing in its place.
+ *
+ * ⛔ BUT EQUALITY COULD NOT BE ASKED WHERE IT WAS BEING ASKED. `rebuild-remote` depends on
+ * `staging-guard`, so the question lands AFTER the suite — about twelve minutes in — and it
+ * re-fetches first. On an afternoon when main merged every five minutes, no sha was still the tip by
+ * the time its own gate reached the rebuild:
+ *
+ *     ✓ clean, and identical to origin/main at dcf496e
+ *     # tests 1141 / # pass 1141 / # fail 0
+ *     ✓ backups/productos-remote-20261016-144457.sql.gz (2.1M)
+ *     → deploying dcf496e to productos-staging on 4100
+ *     make[1]: *** [staging-guard] Error 1
+ *
+ * Green suite, backup taken, refused at the last step. Staging sat six PRs stale while every deploy
+ * was refused for being out of date — the one failure mode the freshness rule existed to prevent,
+ * reached by enforcing it. And the refusal's own message was TRUE, so it read as the guard working.
+ *
+ * ⛔ SO FRESHNESS MOVES FROM ENFORCED TO REPORTED, AND THE REPORT IS PINNED HERE. Being behind is
+ * legitimate — it is how a bad cut gets rolled back — and unnoticed staleness is the thing that
+ * actually costs: it is how a session reports a fix live that it never shipped. A warning nobody
+ * asserts would be deleted by the next person who found it noisy, which is why the count is a
+ * requirement and not a courtesy.
+ *
+ * What is NOT given up: unmerged code still cannot deploy, and the working tree must still be clean
+ * on every path that reaches the image. Both are asserted below and in `v2-staging-serves-what-is-merged`,
+ * where the condition is lifted out of the Makefile and driven against real repositories.
+ */
+test("the guard asks whether this is merged, and says so when it is not the tip", () => {
   const g = recipe("staging-guard");
-  assert.match(g, /rev-parse HEAD/);
-  assert.match(g, /rev-parse origin\/main/);
+  assert.match(g, /merge-base --is-ancestor HEAD origin\/main/, "the guard no longer asks whether this is merged at all");
   /**
-   * ⛔ IDENTICAL, NOT `merge-base --is-ancestor`. An ancestor check passes for a commit BEHIND
-   * origin/main, which is a stale deploy nobody asked for — and it was the previous behaviour.
+   * ⛔ THE COUNT, NOT MERELY A WARNING. "this may not be the tip" is advice; a number is a fact that
+   * differs between the two cases, and a reader can act on it. `rev-list --count` is what makes the
+   * line unable to pass when it has nothing to report.
    */
-  assert.doesNotMatch(g, /merge-base --is-ancestor/, "an ancestor check lets a stale commit deploy");
+  assert.match(g, /rev-list --count HEAD\.\.origin\/main/, "the guard cannot say HOW far behind it is");
+  assert.match(g, /NOT the tip/, "being behind is no longer announced — stale deploys are silent again");
 });
 
 test("⛔ and it no longer refuses on being a worktree, which was the wrong question", () => {
