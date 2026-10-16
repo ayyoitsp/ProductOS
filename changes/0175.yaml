@@ -1,0 +1,13 @@
+id: "0175"
+said: two ways to 'accept truths' by a human. by UX - there should be a button at the exchange level and at the per-ref level. this flows straightforward into what is accepted. second way is for them to say 'folders are restricited to be linked to a single deal'. that shoudl be analyzed and the ones it enforces shoudl be marked true as well, with their sentence logged as proof.
+at: 2026-10-16
+kind: concept
+reaches:
+  model: ""
+  derive: ""
+  generate: ""
+  surface: ""
+  check: ""
+  instruct: ""
+  pin: ""
+waived: {}

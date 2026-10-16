@@ -31,6 +31,7 @@ import { checkCorpus, summarise } from "../v2/check.js";
 import { gridFor, renderGridText, actsFor, gateFor } from "../v2/grid.js";
 import { compilePacket } from "../v2/packet.js";
 import { readinessOf } from "../v2/readiness.js";
+import { find } from "../v2/find.js";
 import { questionsFor, descendants } from "../v2/settle.js";
 import { decisionsUnder, howItWasDecided } from "../v2/record.js";
 import { renderScopePage, standalone } from "../v2/page.js";
@@ -198,6 +199,39 @@ const packetTool = tool(
     const p = compilePacket(loadCorpus(dir), a.scope);
     if (!p) throw new Error(`no scope "${a.scope}"`);
     return { dir, packet: p };
+  }
+);
+
+/**
+ * ⛔ THE WAY IN. Every other Exchange tool takes a ref, and before this there was nowhere refs came
+ * from: `productos_exchange_scopes` returns a tree of ids and counts, so mapping a ticket's own
+ * sentence onto `money#record-spending#after` was the agent's guesswork.
+ *
+ * ⛔ `why` STAYS IN THE PAYLOAD. It is the whole defence against a ranked list nobody can invert —
+ * `Σ(weight × matched) === score` is recomputable by hand from what comes back — and it is what an
+ * agent pastes into a ticket to justify the ref it chose. Trim `text` before dropping it.
+ */
+const findTool = tool(
+  "productos_find",
+  "You have a ticket, an issue, or a sentence in somebody else's words and need this product's address for it. Call this first — every other Exchange tool takes a ref, and this is where refs come from. Returns refs with a snippet, how settled each one is, and why it matched. ⛔ A `ref` here feeds straight into productos_exchange_packet / _questions / _what_it_covers with no translation. ⛔ And `nothing` is an ANSWER, not an empty result: it means this product has no address for the ticket yet, so propose it rather than searching again.",
+  AtDir.extend({
+    query: z.string().describe("the ticket's own words — a sentence, not keywords"),
+    under: z.string().optional().describe("only inside this feature and the ones filed in it"),
+    kinds: z.array(z.string()).optional().describe("statement | refusal | requirement | exchange | screen | part | rule | rule-case | term | purpose | card | section | capability"),
+    limit: z.number().optional(),
+    reaching: z.number().optional().describe("a hit must reach at least this many of your words"),
+  }),
+  (a, paths) => {
+    const dir = dirOf(a, paths);
+    return {
+      dir,
+      ...find(loadCorpus(dir), a.query, {
+        ...(a.limit === undefined ? {} : { limit: a.limit }),
+        ...(a.kinds === undefined ? {} : { kinds: a.kinds as never }),
+        ...(a.under === undefined ? {} : { under: a.under }),
+        ...(a.reaching === undefined ? {} : { reaching: a.reaching }),
+      }),
+    };
   }
 );
 
@@ -635,6 +669,7 @@ export const RETIRED_LOOP_TOOLS: McpTool[] = [sayOnNoteTool, closeNoteTool];
 
 export const EXCHANGE_READ_TOOLS: McpTool[] = [
   scopesTool,
+  findTool,
   questionsTool,
   gridTool,
   packetTool,

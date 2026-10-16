@@ -285,6 +285,14 @@ export const AREAS: Area[] = [
        * corpus already holds, which is the line this area is drawn on.
        */
       "src/v2/readiness.ts",
+      /**
+       * ⛔ `derive` BESIDE `level.ts`, AND NOT `surface`, WHICH IS WHERE A SEARCH LOOKS LIKE IT
+       * BELONGS. It renders nothing and writes nothing: it walks the corpus, matches words, and
+       * returns refs with the level each one already has. The thing a reviewer has to check about
+       * it is whether the order it produces can be recomputed from what it returned — an arithmetic
+       * question about a derivation, which is this area's question and not the renderer's.
+       */
+      "src/v2/find.ts",
       "src/v2/settle.ts",
       /**
        * ⛔ WHICH CLAIMS ONE STATED SENTENCE SETTLES, AND WHICH IT ONLY ASKS ABOUT. Filed under
@@ -420,6 +428,27 @@ export const AREAS: Area[] = [
        * where neither is available it raises the question with no answer.
        */
       "src/v2/propose-slots.ts",
+      /**
+       * ⛔ `generate`, AND THE ONLY ONE HERE THAT INVENTS NOTHING AT ALL. It proposes that an
+       * existing statement is filed under the wrong question and names the one it answers — same
+       * words, same id, different slot.
+       *
+       * It exists because 45 of bilrost's 54 exchanges have exactly one slot filled and it is
+       * always `answer`: they carry `was:` provenance from v1, where a feature held a flat list of
+       * behaviours and there was no `refuses` or `fails` to file anything under. So the blanks are
+       * not missing truth, they are truth filed in the only place that existed — and moving it is
+       * cheaper and safer than going to the code for new sentences.
+       */
+      "src/v2/reslot.ts",
+      /**
+       * ⛔ `generate`, and the only source here whose input is the RUNNING product rather than a
+       * file. It turns an accessibility tree into a screen and its parts — a lookup, because the
+       * tree already says `button`, `textbox`, `link`, which is the question `PartRole` asks.
+       *
+       * Kept mechanical and out of the walker's own head on purpose: what a control IS must not be
+       * a judgement, or every walk proposes a slightly different reading of the same page.
+       */
+      "src/v2/walked.ts",
       "src/v2/appcss.ts",
       /** ⛔ Glyphs read out of the product's own icon package — a generator source, same as draw. */
       "src/v2/icons.ts",
@@ -1496,6 +1525,39 @@ export const AUTHORS: Author[] = [
     prompt: "agents/productos-designer.md",
   },
   {
+    name: "walker",
+    discipline: "design",
+    asks: "What does this product already do, driven rather than read?",
+    because:
+      "Peter: *\"let's add walk-to-index. it doesn't give us CONFIRMED state. but it gives us a " +
+      "starting place for how an existing product already behaves.\"* bilrost has 74 routes and 681 " +
+      "components and the corpus reaches five of them — reading that much code to find out what the " +
+      "product already does is the slow way round when the product is running. ⛔ And it is the one " +
+      "role whose evidence can be re-checked by anybody: a walk names a URL, so a reader who doubts " +
+      "it can go there. That is what earns `kind: walk` a rung above anything an agent inferred, and " +
+      "it is the only thing that does.",
+    reads: [
+      "⛔ the RUNNING product, driven — not its source, which is what every other author here reads",
+      "the accessibility tree, which already says button, textbox, link — so what a control IS is a lookup rather than a guess",
+      "the screens the corpus already holds, so a walk of one it knows about is compared rather than duplicated",
+    ],
+    writes: [
+      "a screen with its parts, as the product presented them — proposed, never stated",
+      "a `kind: walk` reading naming the URL and what happened there",
+    ],
+    never: [
+      "⛔ sign in, or enter a credential anywhere — it walks a session somebody else established, because an agent that can authenticate is an agent that can reach anything the person could",
+      "⛔ record what it saw as what the product SHOULD do — a walk of a product with a bug records the bug perfectly, and only a person can say which of the two it is",
+      "press anything that sends, deletes, publishes or pays — it is reading a product, and a walk that changes the data is not repeatable by the next person who doubts it",
+      "write a sentence about what a screen promises: it saw a control, not an intention, and the gap between those is the whole corpus",
+      "file a walk as `inspection` — that kind means a person looked, and an agent borrowing it is the laundering this model is arranged to prevent",
+    ],
+    needs: ["read-files", "search-files", "run-commands", "write-corpus", "see-a-page"],
+    each: "area of the running product",
+    authors: true,
+    prompt: "agents/productos-walker.md",
+  },
+  {
     name: "evidencer",
     discipline: "quality",
     asks: "What already demonstrates each of these claims?",
@@ -1982,6 +2044,37 @@ export const SHIMS: Shim[] = [
       "running `productos v2 check` before anybody is asked to look",
       "putting the survey in front of a person before thirty scopers start against a partition that is wrong",
       "every act of judgement — nothing here is validated by having been written",
+    ],
+  },
+  /**
+   * ⛔ THE OTHER DIRECTION INTO A CORPUS, AND THE ONLY ONE THAT DOES NOT READ CODE.
+   *
+   * Peter: *"let's add walk-to-index. it doesn't give us CONFIRMED state. but it gives us a
+   * starting place for how an existing product already behaves."*
+   *
+   * `scan a codebase` is the route for a product you have the source of and time to read. This is
+   * for one that is already running: bilrost is 74 routes and 681 components with five of them in
+   * the corpus, and the running app answers "what does this screen have on it" in a second.
+   *
+   * ⛔ IT PRODUCES THE WEAKEST EVIDENCE IN THE MODEL THAT IS STILL EVIDENCE. A walk says the
+   * product did this, at this URL, on this day — re-runnable by anybody, and therefore above
+   * anything an agent merely inferred. It is nowhere near agreement, and `kind: walk` keeps the two
+   * visibly apart.
+   */
+  {
+    route: "walk a running product",
+    does: "Index what a product already does, by driving it",
+    when: "walk the app · index what this does today · what is actually on these screens",
+    steps: [
+      { role: "walker", fan: true, why: "⛔ one area each, because a session that walked thirty screens describes the thirtieth in the words of the first" },
+      { role: "rendered", why: "where a walked screen is one the corpus already holds, whether the two agree — a difference here is the most valuable thing this route produces" },
+      { role: "can-the-model-say-it", why: "whether what the product does could be written down at all, since a walk finds behaviour nobody designed a field for" },
+    ],
+    keeps: [
+      "⛔ somebody else having signed in. The walker never authenticates: an agent that can sign in can reach everything the person could, and a sign-in wall is a RESULT — which routes are behind it is the most useful thing a first pass reports",
+      "⛔ pressing nothing that sends, deletes, publishes or pays. A walk that changed the data cannot be repeated, and being repeatable is the only reason it counts for anything",
+      "⛔ the difference between what the product does and what it should do. Everything this route writes is proposed; nothing it sees could tell it which of the two it is looking at",
+      "every act of judgement — a walk is evidence, and evidence is not agreement",
     ],
   },
   /**

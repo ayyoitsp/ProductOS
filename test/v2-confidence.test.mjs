@@ -438,3 +438,89 @@ test("check reports how much of a corpus rests on anything", async () => {
   assert.ok(unsupported > 0 && unsupported < total, `${unsupported} of ${total} is not a partial state`);
   fs.rmSync(dir, { recursive: true, force: true });
 });
+
+/* ───────────────────── the product-behaviour zone ───────────────────── */
+
+/**
+ * ⛔ A THIRD ZONE, AND THE REASON IT IS SAFE FOR AN AGENT TO WRITE.
+ *
+ * Peter: *"it doesn't give us CONFIRMED state. but it gives us a starting place for how an existing
+ * product already behaves. it should also have a level of confirmation that is higher than 'LLM
+ * generated'. like, we have human confirmed, we should have a level that is 'product behavior' or
+ * something. humans can confirm it. it feeds into everything downstream as well"*.
+ *
+ * The property that earns it a rung is falsifiability: a walk names a URL and what happened there,
+ * so anybody can run it again and disagree. An agent's inference has nothing to point at. That is
+ * the whole difference between this and `via: agent`.
+ */
+test("a walk says the product was seen doing this, and never that anybody agreed", () => {
+  const { corpus } = seeded();
+  const walked = withReadings(corpus, [
+    { ...reading("r-walk", A, "http://localhost:3000/money", "walk"), basis: { kind: "walk", ref: "http://localhost:3000/money", at: "2026-10-08" } },
+  ]);
+  const c = confidenceOf(walked, A);
+  assert.ok(c.observed, "a walk reading did not reach the observed zone");
+  assert.equal(c.observed.where, "http://localhost:3000/money");
+  assert.equal(c.observed.at, "2026-10-08");
+  /** ⛔ THE LINE. A walk is evidence about behaviour; it is not consent. */
+  assert.equal(c.confirmed, null, "a walk produced a confirmation");
+});
+
+test("⛔ a person looking is not an agent walking, and they do not share a zone", () => {
+  /**
+   * `inspection` is documented as somebody looking at the running product. If a walk were filed as
+   * one, a reader asking "did a human see this?" would get yes from a field that means no — which is
+   * the laundering this codebase keeps finding, one enum value along.
+   */
+  const { corpus } = seeded();
+  const looked = withReadings(corpus, [reading("r-insp", A, "somebody looked at /money", "inspection")]);
+  assert.equal(confidenceOf(looked, A).observed, null, "a person's inspection was reported as a walk");
+});
+
+test("⛔ a walk of the exchange does not observe each of its slots", () => {
+  /**
+   * `contained` support is counted toward `strength` on purpose — a reading about an exchange bears
+   * on every slot in it. "The product was seen doing this" does not inherit that way: a walk that
+   * saw what the balance ANSWERS has not seen what it refuses, and saying so would put a behaviour
+   * claim on seven slots nobody drove.
+   */
+  const { corpus } = seeded();
+  const slot = `${A}#refuses`;
+  const walked = withReadings(corpus, [
+    { id: "r-walk-x", bears_on: A, observes: "the balance screen was driven and showed a figure, at length", basis: { kind: "walk", ref: "http://localhost:3000/money", at: "2026-10-08" } },
+  ]);
+  const c = confidenceOf(walked, slot);
+  assert.ok(c.contained.length >= 1, "the fixture did not produce containment, so this proves nothing");
+  assert.equal(c.observed, null, "an exchange-level walk claimed to have observed one of its slots");
+});
+
+test("the reason says what a walk is and what it is not", () => {
+  const { corpus } = seeded();
+  const walked = withReadings(corpus, [
+    { id: "r-walk-y", bears_on: A, observes: "the balance was driven in a browser and showed a figure", basis: { kind: "walk", ref: "http://localhost:3000/money", at: "2026-10-08" } },
+  ]);
+  const why = whyConfident(walked, A).join("\n");
+  assert.match(why, /was seen doing this/);
+  assert.match(why, /re-runnable/, "nothing says it can be checked again, which is the only reason it counts");
+  /** ⛔ The sentence most able to be mistaken for "this is right" must say that it is not. */
+  assert.match(why, /not that this is what it should do/);
+});
+
+test("a walk recorded after a confirmation is a discrepancy, with nothing extra wired", () => {
+  /**
+   * ⛔ "IT FEEDS INTO EVERYTHING DOWNSTREAM" — and this is the case that matters most: somebody
+   * agreed what the product should do, and the product was later seen doing something. Nothing had
+   * to be added for this; `discrepancyFor` takes every kind of support, so a walk dated after the
+   * stamp fires it.
+   */
+  const { corpus } = seeded();
+  const withBoth = withReadings(withVerdicts(corpus, [accepting(corpus, A)]), [
+    { id: "r-walk-late", bears_on: A, observes: "the balance was driven and showed something else entirely", basis: { kind: "walk", ref: "http://localhost:3000/money", at: "2026-10-09" } },
+  ]);
+  const c = confidenceOf(withBoth, A);
+  assert.ok(c.confirmed, "the fixture did not confirm, so this proves nothing");
+  assert.ok(c.observed, "the walk did not register");
+  const why = whyConfident(withBoth, A).join("\n");
+  assert.match(why, /recorded since/);
+  assert.match(why, /nobody has looked again/);
+});

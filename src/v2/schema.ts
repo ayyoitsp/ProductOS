@@ -2090,6 +2090,109 @@ export const HappyPath = z
   .strict();
 export type HappyPath = z.infer<typeof HappyPath>;
 
+/**
+ * One appearance of a screen: a label, the condition that produces it, and what is different
+ * about each part while it holds.
+ *
+ * ⛔ NAMED, AND THAT IS THE POINT. It was an anonymous object inside `View.states`, which made
+ * every field on it invisible to `framework-not-just-output` — that test walks a list of named
+ * shapes one level deep, so for `View` it checked that `states:` was documented and never
+ * descended. `holds` was therefore defined, consumed by `states.ts`, rendered on the page, and
+ * named in no authoring instruction anywhere: 43 states across the bilrost corpus carry a whole
+ * picture and not one of them declares it.
+ *
+ * That is the exact escape the test's own header describes for `Steer`, `Note` and `Access` —
+ * 'absent from this list, so the mechanism meant to notice could not see it' — reached a second
+ * way, through a shape that had no name to put in the list.
+ */
+export const ViewState = z
+  .object({
+    when: z.string().optional().describe("the condition in the code that produces this state, where there is code"),
+    label: z.string().min(2),
+    /**
+     * ⛔ NO LONGER REQUIRED, AND THE MEASUREMENT IS WHY. `create-deal-form`'s error state is
+     * 3,244 bytes and **96% byte-identical to the default frame** — 129 bytes of difference,
+     * one red line under one field — stored as a complete second copy of the screen. One form
+     * costs 19,723 bytes across five pictures.
+     *
+     * A state whose picture is the whole screen cannot compose: two fields in error is a
+     * third picture, two fields plus a working button a fourth, and loading never arrives at
+     * all because it is not a render branch anything can harvest.
+     *
+     * ⛔ KEPT, NOT DELETED, because a state that genuinely IS a different arrangement still
+     * needs one — and every corpus in existence has these. Where `holds` is given, the
+     * picture is composed from the screen's own drawing instead.
+     */
+    sketch_html: z.string().min(1).optional(),
+    /**
+     * What is different about each part while this state holds.
+     *
+     * ⛔ THIS IS THE STATE. One picture, a set of changes applied to it — so "the borrower
+     * field is invalid AND the Continue button is working" is one state rather than a
+     * screenshot nobody generated.
+     *
+     * ⛔ AND A STATE CHANGES ANYTHING, NOT ONLY A CONDITION. Peter: *"it can change anything
+     * on screen"*. The first cut could only say "this part is in that condition", so a
+     * loading state that also hides the toolbar, or an error state that swaps the heading,
+     * had nowhere to go — and the only way to express it was the whole second screenshot this
+     * work exists to remove.
+     *
+     * A bare word is the common case and stays short:
+     *
+     *     holds: { borrower: invalid, continue: busy }
+     *
+     * and the long form says the rest:
+     *
+     *     holds:
+     *       borrower: { in: invalid, says: "Borrower is required." }
+     *       toolbar:  { hidden: true }
+     *       heading:  { says: "Checking the folder…" }
+     */
+    holds: z
+      .record(
+        z.string(),
+        z.union([
+          PartCondition,
+          z
+            .object({
+              /** The condition it is in, if any. */
+              in: PartCondition.optional(),
+              /** ⛔ Not on the screen at all in this state — which is not the same as disabled. */
+              hidden: z.boolean().optional(),
+              /**
+               * Different words here, in this state only.
+               *
+               * ⛔ OVERRIDES THE PART'S OWN `says` RATHER THAN COMPETING WITH IT. A field's
+               * `invalid` message is usually one sentence wherever it appears, which is why it
+               * lives on the part; a state that needs different words is the exception and has
+               * to be able to say so in one place rather than by declaring a second condition.
+               */
+              says: z.string().min(1).optional(),
+            })
+            .strict()
+            .refine((h) => h.in || h.hidden !== undefined || h.says, {
+              message: "this says nothing is different about the part — give it `in`, `hidden` or `says`",
+            }),
+        ]),
+      )
+      .default({}),
+  })
+  .strict()
+  .superRefine((st, ctx) => {
+    /**
+     * ⛔ A STATE WITH NEITHER A PICTURE NOR ANY CONDITIONS IS A LABEL. Nobody can look at it
+     * and nobody can tell what it claims, which is the same defect as a screen with no
+     * drawing one level down.
+     */
+    if (!st.sketch_html && !Object.keys(st.holds ?? {}).length) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["holds"],
+        message: `"${st.label}" is a state with no picture and no conditions — say which parts are in which condition, or there is nothing here to review`,
+      });
+    }
+  })
+
 export const View = z.object({
   id: z.string(),
   title: z.string(),
@@ -2184,97 +2287,7 @@ export const View = z.object({
    * ⛔ GENERATED, NEVER TYPED: `when` is the condition in the code, kept verbatim so a reader can
    * check the label against it, and the drawing is redrawn by `draw` whenever the component moves.
    */
-  states: z
-    .array(
-      z
-        .object({
-          when: z.string().optional().describe("the condition in the code that produces this state, where there is code"),
-          label: z.string().min(2),
-          /**
-           * ⛔ NO LONGER REQUIRED, AND THE MEASUREMENT IS WHY. `create-deal-form`'s error state is
-           * 3,244 bytes and **96% byte-identical to the default frame** — 129 bytes of difference,
-           * one red line under one field — stored as a complete second copy of the screen. One form
-           * costs 19,723 bytes across five pictures.
-           *
-           * A state whose picture is the whole screen cannot compose: two fields in error is a
-           * third picture, two fields plus a working button a fourth, and loading never arrives at
-           * all because it is not a render branch anything can harvest.
-           *
-           * ⛔ KEPT, NOT DELETED, because a state that genuinely IS a different arrangement still
-           * needs one — and every corpus in existence has these. Where `holds` is given, the
-           * picture is composed from the screen's own drawing instead.
-           */
-          sketch_html: z.string().min(1).optional(),
-          /**
-           * What is different about each part while this state holds.
-           *
-           * ⛔ THIS IS THE STATE. One picture, a set of changes applied to it — so "the borrower
-           * field is invalid AND the Continue button is working" is one state rather than a
-           * screenshot nobody generated.
-           *
-           * ⛔ AND A STATE CHANGES ANYTHING, NOT ONLY A CONDITION. Peter: *"it can change anything
-           * on screen"*. The first cut could only say "this part is in that condition", so a
-           * loading state that also hides the toolbar, or an error state that swaps the heading,
-           * had nowhere to go — and the only way to express it was the whole second screenshot this
-           * work exists to remove.
-           *
-           * A bare word is the common case and stays short:
-           *
-           *     holds: { borrower: invalid, continue: busy }
-           *
-           * and the long form says the rest:
-           *
-           *     holds:
-           *       borrower: { in: invalid, says: "Borrower is required." }
-           *       toolbar:  { hidden: true }
-           *       heading:  { says: "Checking the folder…" }
-           */
-          holds: z
-            .record(
-              z.string(),
-              z.union([
-                PartCondition,
-                z
-                  .object({
-                    /** The condition it is in, if any. */
-                    in: PartCondition.optional(),
-                    /** ⛔ Not on the screen at all in this state — which is not the same as disabled. */
-                    hidden: z.boolean().optional(),
-                    /**
-                     * Different words here, in this state only.
-                     *
-                     * ⛔ OVERRIDES THE PART'S OWN `says` RATHER THAN COMPETING WITH IT. A field's
-                     * `invalid` message is usually one sentence wherever it appears, which is why it
-                     * lives on the part; a state that needs different words is the exception and has
-                     * to be able to say so in one place rather than by declaring a second condition.
-                     */
-                    says: z.string().min(1).optional(),
-                  })
-                  .strict()
-                  .refine((h) => h.in || h.hidden !== undefined || h.says, {
-                    message: "this says nothing is different about the part — give it `in`, `hidden` or `says`",
-                  }),
-              ]),
-            )
-            .default({}),
-        })
-        .strict()
-        .superRefine((st, ctx) => {
-          /**
-           * ⛔ A STATE WITH NEITHER A PICTURE NOR ANY CONDITIONS IS A LABEL. Nobody can look at it
-           * and nobody can tell what it claims, which is the same defect as a screen with no
-           * drawing one level down.
-           */
-          if (!st.sketch_html && !Object.keys(st.holds ?? {}).length) {
-            ctx.addIssue({
-              code: z.ZodIssueCode.custom,
-              path: ["holds"],
-              message: `"${st.label}" is a state with no picture and no conditions — say which parts are in which condition, or there is nothing here to review`,
-            });
-          }
-        })
-    )
-    .default([]),
+  states: z.array(ViewState).default([]),
   /**
    * ⛔ `walked` WAS HERE AND IS GONE. Peter: *"how do we 'walk a screen' so that this never shows?
    * i'm confused — should users be confirming every screen?"* — and, asked which way to take it,
@@ -3066,8 +3079,25 @@ export const Reading = z.object({
      * is what it recorded in aggregate, and `inspection` is somebody looking at the running product
      * rather than at its code.
      */
+    /**
+     * ⛔ `walk` ADDED, AND IT IS DELIBERATELY NOT `inspection`.
+     *
+     * Peter: *"let's add walk-to-index. it doesn't give us CONFIRMED state. but it gives us a
+     * starting place for how an existing product already behaves. it should also have a level of
+     * confirmation that is higher than 'LLM generated'."*
+     *
+     * `inspection` is a PERSON looking at the running product. A walk is an AGENT driving it and
+     * recording what it did. Folding the two together would have been the laundering this codebase
+     * keeps finding: an agent's observation rendering identically to somebody's, so a reader asking
+     * "did a human see this?" gets yes from a field that means no.
+     *
+     * ⛔ AND IT IS WHY A WALK EARNS A RUNG AT ALL. An agent's inference cannot be re-checked — there
+     * is nothing to point at. A walk names a URL and what happened there, so anybody can go and run
+     * it again and disagree. That is the whole difference between this and `via: agent`, and it is
+     * the property that makes it evidence rather than a louder guess.
+     */
     kind: z.enum([
-      "code", "test-run", "screen", "inspection",
+      "code", "test-run", "screen", "inspection", "walk",
       "trial", "interview", "support",
       "telemetry", "log",
     ]),
