@@ -23,9 +23,9 @@ import { test } from "node:test";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { execFileSync } from "node:child_process";
 import { loadCorpus } from "../dist/v2/load.js";
 import { renderScopePage } from "../dist/v2/page.js";
+import { pressed } from "./support/press.mjs";
 
 function seed() {
   const dir = temp("v2conf-");
@@ -45,12 +45,11 @@ test("a behaviour says whether it is confirmed, without anything being opened", 
 
 test("agreeing to it changes what the card says, and retires the agree button", () => {
   const dir = seed();
-  const run = (...a) => execFileSync("node", [path.resolve("dist/cli/index.js"), "v2", ...a], { encoding: "utf-8" });
-
-  run("rule", "tasks#complete-a-task#at_once",
-    "--says", "Whoever presses first claims the task, and the second kid is told it is already done and by whom.",
-    "--because", "In the trial two kids both believed they had earned the same reward, so the claim has to be visible at once.",
-    "--by", "a-person", "--at", dir);
+  /** ⛔ Not through the CLI any more — see `support/press.mjs`. A shell cannot agree. */
+  pressed(dir, "rule", "tasks#complete-a-task#at_once", {
+    says: "Whoever presses first claims the task, and the second kid is told it is already done and by whom.",
+    because: "In the trial two kids both believed they had earned the same reward, so the claim has to be visible at once.",
+  });
   /**
    * ⛔ A BEHAVIOUR, NOT THE EXCHANGE. They are separate refs and separate acts: `#complete-a-task`
    * is the whole exchange, `#complete-a-task#may` is one sentence in it. The first version of this
@@ -58,7 +57,7 @@ test("agreeing to it changes what the card says, and retires the agree button", 
    * assertion by matching the EXCHANGE card's badge — which is how a test ends up green while
    * checking the wrong thing.
    */
-  run("accept", "tasks#complete-a-task#may", "--by", "a-person", "--at", dir);
+  pressed(dir, "accept", "tasks#complete-a-task#may");
 
   const html = page(dir, "tasks");
   assert.match(html, /class="beh-state ok"><b>confirmed<\/b><span>by a-person/,

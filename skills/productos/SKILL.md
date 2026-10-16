@@ -304,6 +304,14 @@ Whatever route you are on:
    it was obtained, which is the whole thing `via` exists to carry.
 2. **Every act of judgement.** `accept`, `rule`, `read`, `waive`, `defer`. The CLI is how somebody's
    choice gets RECORDED, never how it gets made.
+
+   ⛔ **And not from your shell — that is refused now, not discouraged.** A human `via` (`page`,
+   `question`, `chat`, `cli`) is refused when software is driving the shell or nothing is attached
+   to it, because a verdict you typed is byte-identical to one they pressed. What is open to you:
+   `--via agent`, a default that satisfies no gate and that a reviewer disagrees with. What is open
+   to them: pressing it on the page, answering in the question interface, or running the same
+   command in their own terminal. ⛔ There is no flag that says *a person really is here* — a switch
+   you can set is a switch you set.
 3. **Answering an open question.** Not even an obvious one. An answer nobody gave, written in the
    form of one somebody did, is indistinguishable afterwards from a decision.
 

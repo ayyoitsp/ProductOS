@@ -14,6 +14,7 @@ import os from "node:os";
 import { execFileSync } from "node:child_process";
 import { settle } from "../dist/v2/settle.js";
 import { Verdict } from "../dist/v2/schema.js";
+import { press } from "./support/press.mjs";
 
 const CLI = path.resolve("dist/cli/index.js");
 const REASON =
@@ -25,7 +26,7 @@ function seed() {
   return dir;
 }
 
-/** Runs the CLI and returns { code, out } — these assertions are about REFUSALS. */
+/** Runs the CLI and returns { code, out } — kept for `packet`, which is not an act. */
 function cli(args) {
   try {
     const out = execFileSync("node", [CLI, "v2", ...args], { encoding: "utf-8", stdio: ["ignore", "pipe", "pipe"] });
@@ -36,6 +37,20 @@ function cli(args) {
 }
 
 /**
+ * One act — ⛔ PERFORMED IN PROCESS, NOT THROUGH THE CLI.
+ *
+ * Every case in this file was found by a reviewer driving the CLI, and it drove it the way an agent
+ * does: a human `via` from a shell nobody is standing at, which is the forgery
+ * `principalAtTheShell` now refuses. The floors these cases are about all live in `perform` — see
+ * `support/press.mjs` — and the one thing that moves is that `instead` is read as the structure it
+ * IS rather than as the line the CLI prints from it, which the comment on `Instead` asks for.
+ */
+const act = (dir, kind, ref, body = {}, by = "peter") => press(dir, kind, ref, body, { by });
+
+/** Everything a refusal says, as one string — the assertions below are about WORDS. */
+const said = (r) => [r.why ?? r.said, ...(r.detail ?? [])].join("\n");
+
+/**
  * ⛔ `corpus.broken` was read by `check` and by nothing else, so one unparseable file — the
  * commonest hand-edit there is — let a person's "I read this and could build from it" be
  * recorded over a corpus missing part of itself.
@@ -43,19 +58,24 @@ function cli(args) {
 test("no act is recorded over a corpus that did not load", () => {
   const dir = seed();
   fs.appendFileSync(path.join(dir, "truth", "tasks.md"), "\n\tbad:\t[oops, unquoted\n");
-  for (const args of [
-    ["accept", "tasks#complete-a-task", "--by", "peter"],
-    ["read", "family-wallet", "--by", "peter", "--buildable", "yes"],
-    ["rule", "tasks#complete-a-task#at_once", "--says", "Whoever presses first claims it.", "--because", REASON, "--by", "peter"],
-    ["waive", "tasks#complete-a-task#at_once", "--because", REASON, "--by", "peter"],
-    ["defer", "tasks#complete-a-task#at_once", "--because", REASON, "--until", "a second family runs the trial", "--by", "peter"],
-    // A packet is what a builder is handed, so it is refused on the same grounds.
-    ["packet", "tasks"],
+  for (const [kind, ref, body] of [
+    ["accept", "tasks#complete-a-task"],
+    ["read", "family-wallet", { buildable: true }],
+    ["rule", "tasks#complete-a-task#at_once", { says: "Whoever presses first claims it.", because: REASON }],
+    ["waive", "tasks#complete-a-task#at_once", { because: REASON }],
+    ["defer", "tasks#complete-a-task#at_once", { because: REASON, until: "a second family runs the trial" }],
   ]) {
-    const r = cli([...args, "--at", dir]);
-    assert.equal(r.code, 1, `${args[0]} ran over a broken corpus`);
-    assert.match(r.out, /would not load/, `${args[0]} did not say what was broken`);
+    const r = act(dir, kind, ref, body);
+    assert.equal(r.ok, false, `${kind} ran over a broken corpus`);
+    assert.match(said(r), /would not load/, `${kind} did not say what was broken`);
   }
+  /**
+   * A packet is what a builder is handed, so it is refused on the same grounds — and compiling one
+   * claims nothing about anybody agreeing, so it is still driven through the CLI.
+   */
+  const packet = cli(["packet", "tasks", "--at", dir]);
+  assert.equal(packet.code, 1, "a packet was compiled over a broken corpus");
+  assert.match(packet.out, /would not load/);
   // Nothing was written by any of them.
   assert.equal(fs.existsSync(path.join(dir, "verdicts", "rulings.yaml")), false);
   assert.equal(fs.existsSync(path.join(dir, "verdicts", "reads.yaml")), false);
@@ -68,25 +88,33 @@ test("no act is recorded over a corpus that did not load", () => {
  */
 test("a parked question blocks buildable yes, and waiving it unblocks", () => {
   const dir = seed();
-  const parked = cli([
-    "defer", "tasks#complete-a-task#at_once",
-    "--because", REASON, "--until", "a second family runs the trial on one device",
-    "--by", "peter", "--at", dir,
-  ]);
-  assert.equal(parked.code, 0, parked.out);
+  const parked = act(dir, "defer", "tasks#complete-a-task#at_once", {
+    because: REASON,
+    until: "a second family runs the trial on one device",
+  });
+  assert.equal(parked.ok, true, said(parked));
 
-  const claimed = cli(["read", "tasks", "--by", "peter", "--buildable", "yes", "--at", dir]);
-  assert.equal(claimed.code, 1, "stamped buildable over a parked question");
-  assert.match(claimed.out, /parked question/);
-  // The honest exits are offered, and `waive` is one of them — deferring is not an answer,
-  // granting latitude deliberately is.
-  assert.match(claimed.out, /v2 waive tasks#complete-a-task#at_once/);
-  assert.match(claimed.out, /--buildable no/);
+  const claimed = act(dir, "read", "tasks", { buildable: true });
+  assert.equal(claimed.ok, false, "stamped buildable over a parked question");
+  assert.match(said(claimed), /parked question/);
+  /**
+   * The honest exits are offered, and `waive` is one of them — deferring is not an answer, granting
+   * latitude deliberately is. ⛔ Asserted on the STRUCTURE, which is the one source the CLI's
+   * printed command, the page's button and a question's option are each rendered from.
+   */
+  assert.ok(
+    claimed.instead?.some((i) => i.act === "waive" && i.ref === "tasks#complete-a-task#at_once"),
+    "granting latitude deliberately was not offered, so hand-editing YAML is the only exit"
+  );
+  assert.ok(
+    claimed.instead?.some((i) => i.act === "read"),
+    "saying it is not buildable was not offered"
+  );
   assert.equal(fs.existsSync(path.join(dir, "verdicts", "reads.yaml")), false);
 
   // Saying you could NOT build from it is always recordable — that is the signal nothing computes.
-  const honest = cli(["read", "tasks", "--by", "peter", "--buildable", "no", "--at", dir]);
-  assert.equal(honest.code, 0, honest.out);
+  const honest = act(dir, "read", "tasks", { buildable: false });
+  assert.equal(honest.ok, true, said(honest));
 });
 
 /**
@@ -97,20 +125,13 @@ test("a parked question blocks buildable yes, and waiving it unblocks", () => {
  */
 test("picking an option does not pay the ruler's reasoning floor", () => {
   const dir = seed();
-  const cheap = cli([
-    "rule", "what-a-kid-sees-of-a-sibling", "--pick", "2", "--because", "yes",
-    "--then", "a kid's screen shows another kid's name and no total",
-    "--by", "peter", "--at", dir,
-  ]);
-  assert.equal(cheap.code, 1, "a three-character reason cleared the floor");
-  assert.match(cheap.out, /because/);
+  const THEN = "a kid's screen shows another kid's name and no total";
+  const cheap = act(dir, "rule", "what-a-kid-sees-of-a-sibling", { pick: 2, because: "yes", then: THEN });
+  assert.equal(cheap.ok, false, "a three-character reason cleared the floor");
+  assert.match(said(cheap), /because/);
 
-  const real = cli([
-    "rule", "what-a-kid-sees-of-a-sibling", "--pick", "2", "--because", REASON,
-    "--then", "a kid's screen shows another kid's name and no total",
-    "--by", "peter", "--at", dir,
-  ]);
-  assert.equal(real.code, 0, real.out);
+  const real = act(dir, "rule", "what-a-kid-sees-of-a-sibling", { pick: 2, because: REASON, then: THEN });
+  assert.equal(real.ok, true, said(real));
   const log = fs.readFileSync(path.join(dir, "verdicts", "rulings.yaml"), "utf-8");
   // The ruler's reasoning is theirs alone…
   assert.match(log, /because: "A reason long enough/);
