@@ -350,13 +350,26 @@ Their freeform answer arrives as Other. That is a `says`, not a pick.
 
 ### 3. Record what they chose
 
+⛔ **One name per act, on every surface.** `accept` · `rule` · `waive` · `defer` · `read` are what
+the CLI types, what the page presses and what you send — and there is exactly one way to send one:
+`productos_in`, the same door `/api/v2/in` takes. There is no second tool per act; a model given
+two names for one act has been handed a decision with no right answer, and two sessions recording
+the same act under different names leave a corpus nobody can search.
+
 ```
-productos_exchange_settle          slot, pick | says, because, by, via
-productos_exchange_park            slot, because, until, by, via
-productos_exchange_grant_latitude  slot, because, by, via
-productos_exchange_agree_to        ref, by, via
-productos_exchange_record_read_through  scope, buildable, by, via
+productos_in  intent: "rule"    fields: ref, because, pick | says, by, via
+productos_in  intent: "defer"   fields: ref, because, until, by, via
+productos_in  intent: "waive"   fields: ref, because, by, via
+productos_in  intent: "accept"  fields: ref, by, via
+productos_in  intent: "read"    fields: ref, buildable, blockedBy, note, by, via
 ```
+
+⛔ **`ref` is the one address field, for all five** — a scope, an exchange or a slot, whichever the
+act is about. There is no separate `slot` or `scope` argument.
+
+⛔ **The intent is named, never inferred.** Nothing here reads a sentence and decides it meant
+`accept`; that would mint consent nobody gave. Call **`productos_intents`** when you are unsure what
+a field means — it is generated from the registry, so it cannot be out of date.
 
 `via: "question"` when they selected an option, `"chat"` when they answered in prose. Before asking
 anyone to agree to a whole exchange, call **`productos_exchange_what_it_covers`** and show them —

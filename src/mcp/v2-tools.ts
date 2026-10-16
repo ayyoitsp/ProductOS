@@ -438,7 +438,7 @@ const readThroughAct = act(
 
 const inboxTool = tool(
   "productos_exchange_inbox",
-  "What has happened since you last looked: presses a person made, questions they answered, and notes asking for a change. ⛔ READING THIS CLAIMS THE WORK IN IT — pass your session id as `claim` and every note you are handed is leased to you, so a second session does not author the same thing. Carry `head` between polls while you are running; carry `next_cursor` if you restarted and lost your place. A note is the ONLY thing here that owes you work: author the change, then close it with productos_exchange_close_note. Everything else is information — the truth already moved.",
+  "What has happened since you last looked: presses a person made, questions they answered, and notes asking for a change. ⛔ READING THIS CLAIMS THE WORK IN IT — pass your session id as `claim` and every note you are handed is leased to you, so a second session does not author the same thing. Carry `head` between polls while you are running; carry `next_cursor` if you restarted and lost your place. A note is the ONLY thing here that owes you work: author the change, then close it through the door — productos_in with intent 'close'. Everything else is information — the truth already moved.",
   AtDir.extend({
     since: z.number().describe("the last position you handled. 0 or absent reads from the beginning").optional(),
     claim: z

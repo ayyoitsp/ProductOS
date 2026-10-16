@@ -181,7 +181,8 @@ has decided, that is a `standing`, not a `says`.
 
 ⛔ **You CAN now record their acts, and that is exactly why this matters more than it used to.**
 The five acts used to be unreachable from any tool a model could call. They are reachable now —
-`productos_exchange_settle` and friends — because a person answering in conversation, or pressing
+`productos_in` with `intent: accept | rule | waive | defer | read`, which is the one door and the
+one name each act has on every surface — because a person answering in conversation, or pressing
 a button on a page you rendered for them, is the whole point. What replaced the old guarantee is
 one required field:
 
