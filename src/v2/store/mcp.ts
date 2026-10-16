@@ -29,7 +29,7 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import type { ProductosPaths } from "../../core/paths.js";
-import { EXCHANGE_ACT_TOOLS, exchangeTools, type McpTool } from "../../mcp/v2-tools.js";
+import { RETIRED_ACT_TOOLS, exchangeTools, type McpTool } from "../../mcp/v2-tools.js";
 import { mayRecord, type Principal } from "../identity.js";
 import type { Via } from "../acts.js";
 import { type Db, isRefusal, type ProjectStore, storeFor } from "./access.js";
@@ -40,8 +40,20 @@ const MCP_PATH = /^\/p\/(?!\.\.?(?:\/|$))([A-Za-z0-9_.:@+-]{1,200})\/mcp\/?$/;
 
 export const mcpProjectOf = (pathname: string): string | null => MCP_PATH.exec(pathname)?.[1] ?? null;
 
-/** ⛔ Named, so anything auditing this surface can ask which tools are acts without a string match. */
-const ACT_NAMES = new Set(EXCHANGE_ACT_TOOLS.map((t) => t.name));
+/**
+ * ⛔ Named, so anything auditing this surface can ask which tools are acts without a string match.
+ *
+ * ⛔ FROM THE RETIRED DEFINITIONS, BECAUSE THE SURFACE NO LONGER CARRIES THEM. The five acts were
+ * taken off the MCP surface when the door grew to take their intents, and this set was built from
+ * what was offered — so emptying that emptied this, and the guard below stopped recognising
+ * anything as an act. Nothing failed loudly: `mayRecord` simply stopped being asked.
+ *
+ * What makes that survivable is that the door now carries both halves itself — `refuseIntent`
+ * refuses a token claiming a human `via`, and a consent act records `by` as the identity the
+ * instance knows. This set is kept pointing at the definitions so the guard still describes the
+ * acts truthfully if one is ever offered again.
+ */
+const ACT_NAMES = new Set(RETIRED_ACT_TOOLS.map((t) => t.name));
 
 /**
  * Paths for a corpus that has no repo.
@@ -146,7 +158,13 @@ function serverFor(store: ProjectStore, who: Principal): Server {
         return { content: [{ type: "text", text: JSON.stringify(guarded, null, 2) }], isError: true };
       }
 
-      const result = await tool.handler(guarded.args, pathsFor(dir));
+      /**
+       * ⛔ AND THE TOOL IS TOLD WHO IS ASKING. `guardArgs` above only reaches tools in `ACT_NAMES`;
+       * the door is not one, and it used to build its own local-browser principal — so a remote
+       * token reached this instance as a press the instance never watched. Handing the authenticated
+       * principal down is what makes `mayRecord` ask about the real caller.
+       */
+      const result = await tool.handler(guarded.args, pathsFor(dir), who);
 
       const written = await writeBack(store, before, dir, logHad);
       if ("conflict" in written) {
@@ -178,7 +196,24 @@ function serverFor(store: ProjectStore, who: Principal): Server {
           ? { ...(result as Record<string, unknown>), dir: undefined }
           : result;
 
-      return { content: [{ type: "text", text: JSON.stringify(scrubbed, null, 2) }] };
+      /**
+       * \u26d4 A REFUSAL IS AN ERROR TO THE CALLER, OR IT READS AS A SUCCESS THAT WROTE NOTHING.
+       *
+       * `guardArgs` marks its own refusals, and a write conflict is marked just above — but a
+       * refusal the TOOL returned fell through here and came back as a plain result. So
+       * `productos_in` refusing a token's claim of `via: page` reached an MCP caller as a success,
+       * with `{ ok: false }` buried in the text. A model reading the protocol proceeds as though
+       * its act had been recorded.
+       *
+       * \u26d4 Invisible while the act tools existed, because `guardArgs` caught theirs upstream.
+       * Retiring them made the door the only path and this the only reporting.
+       */
+      const refused =
+        scrubbed && typeof scrubbed === "object" && (scrubbed as { ok?: unknown }).ok === false;
+      return {
+        content: [{ type: "text", text: JSON.stringify(scrubbed, null, 2) }],
+        ...(refused ? { isError: true } : {}),
+      };
     } catch (e) {
       return { isError: true, content: [{ type: "text", text: (e as Error).message }] };
     } finally {

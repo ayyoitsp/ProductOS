@@ -31,7 +31,7 @@ import { createProject } from "../dist/v2/store/instance.js";
 import { storeFor, isRefusal } from "../dist/v2/store/access.js";
 import { accountFor, issueToken, singleAccount } from "../dist/v2/store/identity.js";
 import { importFromDisk, loadFromStore } from "../dist/v2/store/corpus.js";
-import { EXCHANGE_ACT_TOOLS, EXCHANGE_READ_TOOLS, exchangeTools } from "../dist/mcp/v2-tools.js";
+import { RETIRED_ACT_TOOLS, EXCHANGE_READ_TOOLS, exchangeTools } from "../dist/mcp/v2-tools.js";
 import { HUMAN_VIA, TOKEN_SCOPES } from "../dist/v2/identity.js";
 
 const CLI = path.resolve("dist/cli/index.js");
@@ -103,7 +103,7 @@ function safeJson(t) {
 const textOf = (body) => body?.result?.content?.[0]?.text ?? "";
 const parsedOf = (body) => safeJson(textOf(body));
 
-const anAct = EXCHANGE_ACT_TOOLS.find((t) => t.name === "productos_exchange_agree_to");
+const anAct = RETIRED_ACT_TOOLS.find((t) => t.name === "productos_exchange_agree_to");
 
 /**
  * A ref an acceptance can actually cover.
@@ -138,8 +138,8 @@ test("the MCP path names a project, and is anchored", () => {
 });
 
 test("a token is refused every human `via`, on every act tool", () => {
-  assert.ok(EXCHANGE_ACT_TOOLS.length >= 5, "the act family shrank — this test now proves less");
-  for (const tool of EXCHANGE_ACT_TOOLS)
+  assert.ok(RETIRED_ACT_TOOLS.length >= 5, "the act family shrank — this test now proves less");
+  for (const tool of RETIRED_ACT_TOOLS)
     for (const via of HUMAN_VIA) {
       const got = guardArgs(tool, { ref: "x", by: "peter", via }, aToken, "/scratch");
       assert.ok("ok" in got, `⛔ ${tool.name} let a token record "${via}"`);
@@ -230,7 +230,16 @@ test("over the wire, a token claiming `via: page` is refused and the store is un
       base,
       "prj-ada",
       "tools/call",
-      { name: anAct.name, arguments: { ref: scope.scope.id, by: "peter", via: "page" } },
+      /**
+       * ⛔ THROUGH THE DOOR, BECAUSE THAT IS THE ONLY WAY IN NOW. The five act tools came off the
+       * surface when `productos_in` grew to take their intents — so calling one by name tests a
+       * tool nobody can reach, and the guarantee this is about (a token cannot claim a human
+       * pressed anything) has to be proven where a token would actually go.
+       */
+      {
+        name: "productos_in",
+        arguments: { intent: "accept", fields: { ref: scope.scope.id, by: "peter", via: "page" } },
+      },
       agent.token,
     );
     assert.equal(r.status, 200, "the transport itself failed");
@@ -259,7 +268,16 @@ test("a tool that writes lands in the store, under the instance's name, and anno
       base,
       "prj-ada",
       "tools/call",
-      { name: anAct.name, arguments: { ref, by: "somebody-else", via: "agent" } },
+      /**
+       * \u26d4 THROUGH THE DOOR, which is the only way in now — the five act tools came off the
+       * surface when `productos_in` grew to take their intents. The guarantee is unchanged and is
+       * the point of the test: the write lands in the STORE, under the identity the instance
+       * authenticated, and announces itself.
+       */
+      {
+        name: "productos_in",
+        arguments: { intent: "accept", fields: { ref, by: "somebody-else", via: "agent" } },
+      },
       agent.token,
     );
     assert.equal(r.status, 200, JSON.stringify(r.body).slice(0, 300));
