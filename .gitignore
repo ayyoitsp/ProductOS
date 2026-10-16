@@ -1,5 +1,11 @@
 # Node / TS
 node_modules/
+# ⛔ AND WITHOUT THE SLASH, because a trailing slash matches a DIRECTORY only — and a worktree
+#    that borrows the main checkout's dependencies does it with `ln -s`, which is a symlink. So
+#    `git add -A` committed a 120000-mode entry pointing at one machine's absolute path, and it
+#    reached main inside an otherwise green PR. Anybody cloning it gets a dangling link where
+#    their dependencies should be.
+node_modules
 dist/
 *.tsbuildinfo
 .npm/
