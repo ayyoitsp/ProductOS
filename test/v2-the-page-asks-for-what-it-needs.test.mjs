@@ -670,6 +670,104 @@ test("the route resolves a menu path, at every depth", async () => {
   }
 });
 
+/**
+ * ⛔ A COLD ARRIVAL KEEPS ITS OWN ADDRESS — EVERY DURABLE LINK DESTROYED ITSELF WITHOUT THIS.
+ *
+ * Found by the deploy session against the hosted mount, after my probe passed. Five cold loads,
+ * every one of them: correct title, correct sections, and `location.pathname` rewritten to
+ * `/v2/overview` before the reader had done anything. Paste the link, lose the link.
+ *
+ * The cause is not what it looks like. The server resolves the full path and renders a page ROOTED
+ * at the scope asked for — so that scope renders as the page's Overview rather than as a section
+ * named after itself. The switcher looked for a view with that name, found none, fell back to
+ * "overview", and pushed the address of overview over the top of the one it had been given.
+ *
+ * ⛔ A CONTAINER, NOT A FEATURE, AND THAT DISTINCTION IS THE WHOLE TEST. A scope WITH exchanges
+ * gets a grid and therefore renders as its own section even when the page is rooted at it — so a
+ * cold load of a feature lands correctly whether or not this is fixed. My probe used a feature and
+ * passed on the bug; putting the defect back and watching it stay green is how I found that out.
+ * A container has no grid, renders only as Overview, and is the case that breaks.
+ */
+test("a cold arrival keeps the address it was opened at", { skip }, async () => {
+  const { base, close } = await serve(dir);
+  const at = `${base}/v2/part-0`;
+  const page = await openPage(null, { exe, url: at, width: 1440, height: 900 });
+  after(() => page.close());
+  try {
+    /** ⛔ Waits for A document, never for a particular address — the address is what is measured. */
+    await page.waitFor(
+      `document.readyState === "complete" && document.querySelectorAll("section.view").length > 0`,
+      "a document to arrive"
+    );
+    await new Promise((r) => setTimeout(r, 300));
+
+    const seen = await page.evaluate(`({
+      path: location.pathname,
+      hash: location.hash,
+      title: document.title,
+      showing: [...document.querySelectorAll("section.view")].filter((s) => !s.hidden).map((s) => s.dataset.view || s.id),
+    })`);
+
+    /** ⛔ Non-vacuous: the server has to have served the right page, or the address is moot. */
+    assert.equal(seen.title, "Part 0", `the server served "${seen.title}" for /v2/part-0`);
+
+    /** ⛔ THE ONE THAT FAILS ON THE PREVIOUS BUILD. */
+    assert.equal(seen.path, "/v2/part-0", `opening /v2/part-0 cold rewrote the address to ${seen.path}`);
+    assert.equal(seen.hash, "", `a fragment was put back on the address: ${seen.hash}`);
+    assert.deepEqual(seen.showing, ["overview"], `it showed ${JSON.stringify(seen.showing)}`);
+  } finally {
+    close();
+  }
+});
+
+/**
+ * ⛔ A WRONG ADDRESS IS NOT A RIGHT ONE, and before this three different paths served identical
+ * bytes.
+ *
+ * The deploy session hashed them:
+ *
+ *     /capabilities/deal-pipeline        e2db87c37de0
+ *     /not-an-area/deal-pipeline         e2db87c37de0
+ *     /totally/made/up/deal-pipeline     e2db87c37de0
+ *
+ * Reading only the deepest recognised segment meant any invented ancestry served the same page —
+ * which undercuts the single claim the address makes. Peter: *"URLs should follow the menu
+ * structure"*; a path that does not follow it must not quietly work.
+ */
+test("a path that is not the menu path is corrected, and one that names nothing is refused", async () => {
+  const { base, close } = await serve(dir);
+  try {
+    /** ⛔ A real ancestry is served as-is — or the two assertions below are about a broken route. */
+    const right = await fetch(`${base}/v2/part-0/thing-0`, { redirect: "manual" });
+    assert.equal(right.status, 200, `the canonical path answered ${right.status}`);
+
+    /** An invented ancestry is corrected rather than silently served. */
+    const wrong = await fetch(`${base}/v2/not-an-area/thing-0`, { redirect: "manual" });
+    assert.equal(wrong.status, 301, `an invented ancestry answered ${wrong.status}`);
+    assert.equal(
+      wrong.headers.get("location"),
+      "/v2/part-0/thing-0",
+      `it redirected to ${wrong.headers.get("location")}`
+    );
+
+    /** And a deeper invented one, to show it is the CHAIN being checked and not one bad segment. */
+    const deeper = await fetch(`${base}/v2/totally/made/up/thing-0`, { redirect: "manual" });
+    assert.equal(deeper.headers.get("location"), "/v2/part-0/thing-0", "a longer invented ancestry was not corrected");
+
+    /**
+     * ⛔ AND AN INVENTED LEAF SAYS SO. It answered 200 with the AREA, so a reader who mistyped a
+     * feature was shown its parent with nothing saying they had not arrived — which also walks
+     * past the whole point of "a screen that would not load says which screen it is".
+     */
+    const ghost = await fetch(`${base}/v2/part-0/not-a-real-feature`, { redirect: "manual" });
+    assert.equal(ghost.status, 404, `an invented feature answered ${ghost.status}`);
+    const said = await ghost.text();
+    assert.match(said, /not-a-real-feature/, "the refusal did not name what was asked for");
+  } finally {
+    close();
+  }
+});
+
 test("every script the page emits is valid JavaScript", () => {
   const html = renderScopePage(corpus, "everything", { interactive: true, records: "http", linkBase: "/v2" });
   const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]);

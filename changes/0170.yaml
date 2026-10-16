@@ -1,0 +1,59 @@
+id: "0170"
+said: "[deploy session, against the hosted mount] cold arrival lands on Overview for every address, and rewrites the address bar while doing it / the route resolves only the last segment, so /not-an-area/deal-pipeline and /capabilities/deal-pipeline are byte-identical"
+at: 2026-10-16
+kind: surface
+reaches:
+  surface: wholeCorpus
+  pin: a cold arrival keeps the address it was opened at
+waived: {}
+closed: 2026-10-16
+
+# ⛔ APPENDED AFTER `change close`, which drops comments. See 0141 / 0144-0169.
+#
+# ⛔ `said:` IS A TEAMMATE, NOT PETER, AND THAT IS STATED RATHER THAN HIDDEN. The deploy session
+# found both of these against the hosted mount. Every other record in this directory quotes Peter;
+# this one quotes a peer, and the quote is marked. A change record with no human words is a record
+# whose requirement nobody can check — the next best thing is being honest about whose words they
+# are. 0169 is where Peter's own words on this feature live.
+#
+# ⛔ MY PROBE PASSED ON BOTH DEFECTS, AND THAT IS THE PART WORTH KEEPING.
+#
+# `probe-durable.mjs` PRESSES a nav row, and pressing exercises the in-page switch where the answer
+# is already in memory. Cold arrival is the only path where the address is the sole input — and it
+# is every link anybody bookmarks, pastes or is sent. Nobody's probe opened it.
+#
+# WHAT A COLD LOAD DID, five of them, against the live instance:
+#
+#     asked /capabilities/deal-pipeline   landed /v2/overview   title Deal pipeline
+#     asked /capabilities                 landed /v2/overview   title Capabilities
+#
+# ⛔ THE TITLE BEING RIGHT IS THE DIAGNOSIS. The server resolved the whole path and rendered the
+# page ROOTED at that scope — so the scope renders as the page's Overview rather than as a section
+# named after itself. The switcher looked for a view with that name, found none, fell back to
+# "overview", and pushed the address of overview over the one it had been handed. Right content,
+# destroyed address. Fixed by reading `data-root`, which the page already carries for the section
+# endpoint: Overview IS whatever the page is rooted at, so its address is that scope's menu path.
+#
+# ⛔ AND MY FIRST FIXTURE FOR IT STILL PASSED WITH THE DEFECT PUT BACK. A scope WITH exchanges gets
+# a grid, so it renders as its own section even when the page is rooted at it — a cold load of a
+# FEATURE lands correctly either way. A container has no grid and renders only as Overview. The
+# fixture used a feature. Same shape as everything else this week: the case convenient to measure
+# was not the case the bug lives in.
+#
+# SECOND DEFECT — a wrong address was indistinguishable from a right one. Hashed by the deploy
+# session:
+#
+#     /capabilities/deal-pipeline        e2db87c37de0
+#     /not-an-area/deal-pipeline         e2db87c37de0
+#     /totally/made/up/deal-pipeline     e2db87c37de0
+#
+# Byte-identical, because the route read only the deepest recognised segment. The address claims to
+# be the menu path, so a path that is not the menu path must not quietly work: an invented ancestry
+# is now a 301 to the canonical one, and an invented leaf is a 404 that names what was asked for
+# instead of serving its parent in silence — which was also walking straight past #174.
+#
+# ⛔ THE DEPLOY SESSION DID NOT ROLL BACK, and was right not to. Menu-path URLs, zero anchors and a
+# working press are all present and all things Peter asked for; restoring the anchors he swore at
+# to recover a cold path that was broken before this change too would have been a worse page.
+#
+# 1108/1108.
