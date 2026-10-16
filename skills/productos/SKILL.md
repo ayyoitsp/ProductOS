@@ -220,6 +220,11 @@ Every statement has **three** separate facts, and they must never be read as one
   ⛔ **Absent means `unrecorded`, never "a person"** — that is what a migrated corpus says, and
   defaulting it the other way turns an agent's guess into somebody's draft. ⛔ **And it is not a
   stamp**: no gate reads it, so it cannot make anything look agreed.
+  ⛔ **`hand: person` is not yours to type, and the door refuses it.** Where a command writes
+  authorship it is DERIVED from the `via` the consent boundary already guards; a document sent
+  through `productos_in { intent: "document" }` is raw bytes, so a session authenticated by a token
+  that types `hand: person` is refused — write `hand: agent` with `from:`, which is the claim a
+  grooming agent raises as a question. A person's hand is recorded by a person landing it themselves.
 
 
 - **confirmed** — a person's act. `accept` or `rule`, with a `by` and a `via`.
