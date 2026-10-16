@@ -132,3 +132,35 @@ A question with nothing drafted.
   assert.doesNotMatch(out, /naming collision/, "a slot standing was called a naming collision");
   fs.rmSync(dir, { recursive: true, force: true });
 });
+
+test("it offers no command it cannot honour — neither to answer nor to park", () => {
+  /**
+   * ⛔ I SHIPPED TWO COMMANDS THAT ERROR, IN TWO SEPARATE PASSES AT THIS FEATURE.
+   *
+   * #148 surfaced contested words and minted a ref shape no verb accepts: `<scope>#<word>`, where
+   * the word is the product's own multi-word phrase. #153 printed `v2 rule <that ref>` as the way
+   * to answer it. An author found it on the ninth scope carrying one: *"a ref segment is
+   * kebab-case, so every multi-word term is unanswerable."*
+   *
+   * ⛔ AND WHEN I FIXED THAT, THE `not now` LINE BESIDE IT HAD THE SAME REF. `defer` resolves to an
+   * exchange and a slot; a word is neither. `schema.ts` already records somebody hitting exactly
+   * this — *"a term is not a slot, so `defer` answered `no exchange \"completion\"`"* — so it was
+   * known, written down, and I printed it anyway.
+   *
+   * Both halves are pinned here because fixing one and leaving its twin is what I did.
+   */
+  const dir = corpusWithContestedWord();
+  const out = decide(dir);
+
+  const offered = out.match(/productos v2 (rule|defer) \S+#[^\n]*/g) ?? [];
+  const aboutTheWord = offered.filter((c) => /balance/.test(c));
+  assert.deepEqual(
+    aboutTheWord,
+    [],
+    `⛔ it offers a command against a word ref that no verb resolves: ${aboutTheWord.join(" | ")}`
+  );
+  /** And it says what to do instead, or the reviewer is left with nothing at all. */
+  assert.match(out, /there is no command for this one/);
+  assert.match(out, /cannot be parked/);
+  fs.rmSync(dir, { recursive: true, force: true });
+});

@@ -48,7 +48,7 @@ import { whatMoved, repoOf } from "../../v2/moved.js";
 import { HOW } from "../../v2/record.js";
 import { renderScopePage, standalone } from "../../v2/page.js";
 import { migrate } from "../../v2/migrate.js";
-import { resolvePathsOrThrow } from "../../core/paths.js";
+import { resolvePathsOrThrow, projectRootOf} from "../../core/paths.js";
 import { readConfig } from "../../core/config.js";
 
 /**
@@ -927,7 +927,25 @@ export function v2Command(): Command {
           console.log(pc.dim("  the words it collides with, and no candidates — the answer is which sense the"));
           console.log(pc.dim("  product means. Rule it in words, then the scopes using the other names are"));
           console.log(pc.dim("  corrected to match; until then every feature using any of them is using one."));
-          console.log(pc.dim(`  answer it: productos v2 rule ${q.ref} --says "…which sense wins…" --because "…" --by <your name>`));
+          /**
+           * ⛔ NO COMMAND, BECAUSE NO COMMAND CAN DO IT — AND I PRINTED ONE ANYWAY.
+           *
+           * #148 surfaced contested words and minted a ref shape no verb accepts: `<scope>#<word>`,
+           * where the word is the product's own multi-word phrase. #153 then printed
+           * `v2 rule <that ref>` as the way to answer it, and it fails with `no exchange "where a
+           * value was read from"`. An author found it on the ninth scope carrying one: *"a ref
+           * segment is kebab-case, so every multi-word term is unanswerable."*
+           *
+           * ⛔ AND THE DEEPER REASON IS THAT THE ANSWER HAS NOWHERE TO GO. `Term.contested` is
+           * `{question, with}`, strictly. Ruling a word means choosing a sense and renaming the
+           * losing uses in whatever scopes carry them — an authoring act across files, not a verb.
+           * So any command here would be a lie, and the honest thing is to say what the ruling
+           * consists of. Same shape as this file already uses for drafting candidates: "drafting
+           * options is authoring, not an act".
+           */
+          console.log(pc.dim("  there is no command for this one: say which sense wins, then the scopes using"));
+          console.log(pc.dim("  the other names are corrected to match and the contested note comes off. That is"));
+          console.log(pc.dim("  authoring across files, not an act — the productos skill routes it."))
         } else {
           console.log("");
           /**
@@ -945,7 +963,22 @@ export function v2Command(): Command {
           const pol = q.asksPolarity ? ` --refuses yes|no` : "";
           console.log(pc.dim(`  or answer it now: productos v2 rule ${q.ref} --says "…"${stands}${then}${pol} --because "…" --by <your name>`));
         }
-        console.log(pc.dim(`  not now:    productos v2 defer ${q.ref} --because "…" --until "…" --by <your name>`));
+        if (q.kind === "contested word") {
+          /**
+           * ⛔ AND IT CANNOT BE PARKED EITHER, SO DO NOT OFFER IT. `defer` resolves a ref to an
+           * exchange and a slot; a term is neither, so this printed a second command that fails
+           * the same way the answer command did. `schema.ts` already records somebody hitting
+           * this: *"a term is not a slot, so `defer` answered `no exchange \"completion\"`"* — they
+           * closed their case by giving the term the field it needed, which is a schema decision
+           * and not a thing to invent here. Filed as a gap; saying so is better than offering a
+           * command that errors.
+           */
+          console.log(pc.dim("  and it cannot be parked: `defer` wants an exchange and a slot, and a word is"));
+          console.log(pc.dim("  neither. Recorded as a framework gap — until it closes, a vocabulary question"));
+          console.log(pc.dim("  somebody is not ready to settle has to stay open."));
+        } else {
+          console.log(pc.dim(`  not now:    productos v2 defer ${q.ref} --because "…" --until "…" --by <your name>`));
+        }
       }
     });
 
@@ -2304,7 +2337,9 @@ export function v2Command(): Command {
     .option("--into <dir>", "the corpus", ".")
     .option("-n, --dry-run", "say what it would draw and change nothing")
     .option("--renav", "take the product's own menu again, discarding a prototype's edits to it")
-    .action((o: { into?: string; dryRun?: boolean; renav?: boolean }) => {
+    /** ⛔ The same escape hatch `v2 draw` offers, for the one case where a shell really did shrink. */
+    .option("--anyway", "write a smaller chrome over a bigger one — only where the chrome really did get simpler")
+    .action((o: { into?: string; dryRun?: boolean; renav?: boolean; anyway?: boolean }) => {
       const into = path.resolve(o.into ?? ".");
       const corpus = loadCorpus(into);
       if (!corpus.prototypes.length) {
@@ -2321,12 +2356,26 @@ export function v2Command(): Command {
         return;
       }
 
-      let repoRoot = into;
+      /**
+       * ⛔ THE CODEBASE, RESOLVED THE WAY EVERY OTHER CALLER RESOLVES IT.
+       *
+       * This computed it by hand from the corpus's config and fell back to the CORPUS directory —
+       * so a corpus held outside a repo reported a route that plainly exists as "is not there".
+       * `paths.ts` forbids exactly this, in as many words: *"⛔ ONE ANSWER, because three callers
+       * were about to compute it three ways… a caller that resolved that root differently would be
+       * checking a file that is not the one the drawing named, and reporting either a phantom
+       * absence or a phantom presence."* This was the phantom absence, and it stopped three
+       * prototypes drawing their chrome while every path named was real.
+       *
+       * ⛔ AND IT FALLS BACK TO WHERE SOMEBODY IS STANDING, NOT TO THE CORPUS. `v2 draw` resolves
+       * `--route` with a bare `path.resolve`, i.e. against cwd, which is why drawing a screen from
+       * the same checkout worked in the same minute this failed. A corpus is not a place to look
+       * for application code; the checkout you are in is.
+       */
+      let repoRoot = projectRootOf(into) ?? process.cwd();
       let componentsDir: string | undefined;
       try {
-        const paths = resolvePathsOrThrow(into);
-        repoRoot = path.dirname(path.dirname(paths.configFile));
-        componentsDir = readConfig(paths).web.components_dir;
+        componentsDir = readConfig(resolvePathsOrThrow(into)).web.components_dir;
       } catch {
         /* a corpus with no config still draws — it just has no components index */
       }
@@ -2352,6 +2401,32 @@ export function v2Command(): Command {
         });
         if (!shell) {
           console.log(pc.yellow("?"), `${proto.id} — nothing wraps that route, so this prototype has no chrome`);
+          return proto;
+        }
+        /**
+         * ⛔ A GOOD SHELL IS NEVER REPLACED WITH PLACEHOLDERS — AND THIS GUARD ALREADY EXISTED
+         * NEXT DOOR.
+         *
+         * `v2 draw` refuses exactly this, in as many words: *"this would replace an 11,759-byte
+         * drawing with 4,145 bytes and no component inlined — that is what a missing
+         * `components_dir` looks like"*. `v2 prototypes` had no such check, and it redraws EVERY
+         * prototype's chrome rather than the one being worked on — so one run against a corpus with
+         * no config replaced two good 7,882-byte shells, sidebar and all, with 362 bytes of
+         * placeholder. The file went from 17,891 bytes to 2,192.
+         *
+         * ⛔ "THE CHROME IS OUTPUT, NOT A DOCUMENT" IS TRUE AND WAS THE TRAP. Output is only safely
+         * regenerable while the conditions that produced it still hold; the command said so in its
+         * own closing line and then destroyed work on the strength of it. Six untouched copies in a
+         * scratch directory are the only reason nothing was lost.
+         */
+        const had = (proto.shell_html ?? "").length;
+        if (had > 0 && shell.html.length < had * 0.7 && !componentsDir && !o.anyway) {
+          console.log(
+            pc.red("✗"),
+            `${proto.id} — this would replace a ${had}-byte chrome with ${shell.html.length} bytes and no components inlined`
+          );
+          console.log(pc.dim("  that is what a missing `components_dir` looks like — the new chrome is placeholders"));
+          console.log(pc.dim("  point the corpus at its components, or pass --anyway if the chrome really did get simpler"));
           return proto;
         }
         /**

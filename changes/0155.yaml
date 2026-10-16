@@ -1,0 +1,9 @@
+id: "0155"
+said: we need better error handling - we should just pass the response to a notification bar or something... a generic 'out' way to message back to the user if it's not from the chat interface
+at: 2026-10-15
+kind: surface
+reaches:
+  surface: function announce(out)
+  pin: a refusal is announced, with its reason and its detail
+waived: {}
+closed: 2026-10-15

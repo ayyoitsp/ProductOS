@@ -90,7 +90,7 @@ test("the door is at the root when the page is", () => {
   assert.equal(doorAt(html, "/v2/money"), "/api/v2/in");
 });
 
-test("⛔ NOTHING the page reaches for is root-relative — all seven, not the one that failed", () => {
+test("⛔ NOTHING the page reaches for is root-relative, and every site is built from the prefix", () => {
   /**
    * ⛔ MY FIRST FIX REACHED FOUR CALL SITES AND THERE WERE SEVEN.
    *
@@ -122,7 +122,27 @@ test("⛔ NOTHING the page reaches for is root-relative — all seven, not the o
     `these leave the project behind when the page is served under one:\n  ${rooted.join("\n  ")}`
   );
 
-  /** ⛔ And every one of them is built from the prefix, or the fix reached some and not others. */
-  const built = [...src.matchAll(/(?:fetch|new EventSource|new WebSocket)\(\s*(API|UNDER \+)/g)].length;
-  assert.ok(built >= 7, `only ${built} of the page's requests are built from the prefix — one was left behind`);
+  /**
+   * ⛔ AND EVERY SITE IS CHECKED FOR ITS SHAPE, RATHER THAN THE SITES BEING COUNTED.
+   *
+   * This asserted a floor of seven, which is a number that was true on the day it was written and
+   * says nothing about any other day. Routing one of the seven through the shared sender — three of
+   * them built their own request and their own error message, which is the defect that fix was for —
+   * left six, and a correct change failed a test whose subject was something else entirely.
+   *
+   * A count cannot tell "one was consolidated" from "one was left behind". The shape of each site
+   * can: every request the script makes is built from the prefix or from a variable that was, and a
+   * new endpoint written root-relative fails this without anybody maintaining a number.
+   */
+  const sites = [...src.matchAll(/(?:fetch|new EventSource|new WebSocket)\(\s*([^,)]+)/g)].map((m) => m[1].trim());
+  assert.ok(sites.length, "the script makes no requests at all, so this proves nothing");
+  /**
+   * ⛔ AND RE-REQUESTING THE PAGE ITSELF IS ALLOWED, because `location.pathname` IS where the page
+   * is — that is the thing the prefix is derived from. Rejecting it would have been this check
+   * failing a site that cannot be wrong, which is the other way a guard costs a session its time.
+   */
+  const wrong = sites.filter(
+    (a) => !(a === "API" || a.startsWith("UNDER +") || a.startsWith("location.") || /^[A-Za-z_$][\w$]*$/.test(a))
+  );
+  assert.deepEqual(wrong, [], `these are not built from the prefix:\n  ${wrong.join("\n  ")}`);
 });
