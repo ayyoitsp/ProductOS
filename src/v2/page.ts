@@ -5445,12 +5445,31 @@ async function record(payload, form, button) {
        */
       const mcp = await claude.use("mcp");
       if (!mcp) throw new Error("this view cannot reach your machine — open it in the Claude app, where a local server can be called");
-      const TOOL = { accept: "productos_exchange_agree_to", rule: "productos_exchange_settle", waive: "productos_exchange_grant_latitude", defer: "productos_exchange_park", read: "productos_exchange_record_read_through" };
-      const tool = TOOL[payload.act];
-      if (!tool) throw new Error("no tool for " + payload.act);
+      /**
+       * ⛔ THE DOOR, BY THE ACT'S OWN NAME — AND THIS WAS BROKEN, NOT MERELY STALE.
+       *
+       * It held a map from each act to a dedicated tool: accept to productos_exchange_agree_to,
+       * rule to productos_exchange_settle, and three more. Every one of those came off the MCP
+       * surface when productos_in grew to take their intents, so callTool threw
+       * 'unknown tool',  and a press on a page opened in the Claude app **recorded nothing and
+       * reported a bare error**.
+       *
+       * It was also the last place a caller could see a second vocabulary for the five acts, which
+       * is what Peter settled: one name per act — accept, rule, waive, defer, read — across MCP,
+       * the CLI and the page. The act's own name is now the intent, so there is no map to go stale
+       * and nothing to keep in step.
+       *
+       * ⛔ No backticks in this comment: it lives inside the template literal that carries the
+       * page's browser script, so one would end the string. There is a test for that, and it is
+       * the test that caught this very edit.
+       */
       let res;
       try {
-        res = await mcp.callTool(MCP_SERVER, tool, { ...payload, via: "page", at: CORPUS });
+        res = await mcp.callTool(MCP_SERVER, "productos_in", {
+          intent: payload.act,
+          fields: { ...payload, via: "page" },
+          at: CORPUS,
+        });
       } catch (err) {
         /**
          * ⛔ BRANCH ON THE CODE, NEVER ON THE MESSAGE — and never collapse them into one banner,
