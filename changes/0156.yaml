@@ -1,0 +1,9 @@
+id: "0156"
+said: what happened to collapsable menu items? CRE/dealmanagement are not collapsible??? get rid of 'XXX below', not sure what that means... shorten '5 unanswered' '5 {? icon}', and '59 to read' to '59 {eyes icon}'. make them chips next to the menu item name. Let's auto collapse the non-active menu item, so you can only have one expanded leaf at a time, like a "normal" menu
+at: 2026-10-15
+kind: surface
+reaches:
+  surface: twisty sub
+  pin: opening one container shuts its siblings
+waived: {}
+closed: 2026-10-15

@@ -1,0 +1,11 @@
+id: "0155"
+said: |-
+  can we review our 'mcp interface' into the product? I'd like to see how our coding agents would interact with productos
+
+  [shown that 7 of 14 intents have a second, operation-shaped name on the same surface] yes, retire the duplicates.  let's see the final tool list
+at: 2026-10-15
+kind: surface
+reaches:
+  surface: RETIRED_ACT_TOOLS
+  pin: no act has a second name on the surface
+waived: {}

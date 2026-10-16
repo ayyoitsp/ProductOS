@@ -209,7 +209,20 @@ test("the seed's queue stays small enough to work", () => {
    * to 17 against 14 reviewable things, and this assertion failed — correctly by its own logic, and
    * wrongly about the thing, exactly as the three paragraphs above describe.
    */
+  /**
+   * ⛔ `nobody-can-reach-this` IS A COUNT TOO, AND IT ARRIVED THE SAME WAY THE FOUR ABOVE DID.
+   *
+   * It reports "123 of 137 screens are reached from no prototype's front door" — one summary line
+   * for the whole corpus, by construction, because that is the only grain at which the question
+   * means anything. Counted as a decision owed it took the seed from 14 to 15 and failed this
+   * assertion, which is the fifth time the paragraphs above have been right about a new finding.
+   *
+   * ⛔ AND IT IS NOT INFORMATIONAL IN THE SENSE OF UNIMPORTANT. Declaring a door is real work
+   * somebody owes — it is just one act for a product, not one per screen, and this ratchet counts
+   * what a reviewer must sit down and decide.
+   */
   const INFORMATIONAL = new Set([
+    "nobody-can-reach-this",
     "leans-on-an-example", "parked-by-a-person", "one-word-defined-twice", "nothing-to-compare-this-against",
     "behaviours-with-nothing-behind-them", "nothing-in-this-corpus-rests-on-anything",
     "requirements-nobody-worked-out", "behaviours-no-subsystem-answers",

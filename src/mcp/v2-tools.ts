@@ -38,14 +38,20 @@ import { inbox, DEFAULT_LEASE_MS } from "../v2/inbox.js";
 import { closeNote, releaseNote, replyToNote } from "../v2/notes.js";
 import { howYouWillBeTold } from "./push-state.js";
 /** ⛔ The door's own registry, so MCP cannot disagree with the route about what may be asked. */
-import { INTENTS, intentNamed, refuseIntent, incomplete, theIntents, describeIntents } from "../v2/intents.js";
+import { INTENTS, intentNamed, refuseIntent, incomplete, unwitnessed, theIntents, describeIntents } from "../v2/intents.js";
 import { localAccount, type Principal } from "../v2/identity.js";
 
 export interface McpTool {
   name: string;
   description: string;
   inputSchema: Record<string, unknown>;
-  handler: (args: unknown, paths: ProductosPaths) => Promise<unknown>;
+  /**
+   * \u26d4 THE CALLER, WHERE THE TRANSPORT KNOWS ONE. Optional because the local server does not
+   * have one to give \u2014 it IS the person at the machine. A hosted instance authenticated
+   * somebody, and a tool that ignores that and builds its own principal is deciding authority for
+   * itself, which is how `productos_in` came to treat a remote token as a local browser press.
+   */
+  handler: (args: unknown, paths: ProductosPaths, who?: Principal) => Promise<unknown>;
 }
 
 /**
@@ -86,7 +92,23 @@ function jsonSchemaOf(schema: z.ZodObject<z.ZodRawShape>): Record<string, unknow
             ? { type: "array", items: { type: "string" } }
             : inner instanceof z.ZodEnum
               ? { type: "string", enum: inner.options }
-              : { type: "string" };
+              : /**
+                 * \u26d4 A RECORD IS AN OBJECT, AND SAYING "string" HERE PUBLISHED A CONTRACT THE
+                 * VALIDATOR REFUSES.
+                 *
+                 * Every branch above names a type and the fallthrough said `string`, which is right
+                 * for the many plain fields and silently wrong for the one that is not. `productos_in`
+                 * takes `fields` as `z.record(...)`; a model reading the published schema sent a JSON
+                 * string and got back a Zod error — `expected object, received string` — on the only
+                 * interesting parameter of the single door everything is supposed to go through.
+                 *
+                 * \u26d4 Found by calling the door over the wire, not by reading this function. The
+                 * fallthrough is the shape of the bug: a default that is correct often enough that
+                 * nobody checks the case where it is not.
+                 */
+                inner instanceof z.ZodRecord || inner instanceof z.ZodObject
+                ? { type: "object", additionalProperties: true }
+                : { type: "string" };
     if (def.description) s.description = def.description;
     properties[key] = s;
     if (!def.isOptional()) required.push(key);
@@ -98,12 +120,12 @@ const tool = <T extends z.ZodObject<z.ZodRawShape>>(
   name: string,
   description: string,
   input: T,
-  handler: (a: z.infer<T>, paths: ProductosPaths) => Promise<unknown> | unknown
+  handler: (a: z.infer<T>, paths: ProductosPaths, who?: Principal) => Promise<unknown> | unknown
 ): McpTool => ({
   name,
   description,
   inputSchema: jsonSchemaOf(input),
-  handler: async (raw, paths) => handler(input.parse(raw ?? {}), paths),
+  handler: async (raw, paths, who) => handler(input.parse(raw ?? {}), paths, who),
 });
 
 // ===========================================================================
@@ -472,7 +494,7 @@ const theDoor = tool(
       .describe("the intent's own fields, as productos_intents describes them")
       .default({}),
   }),
-  (a, paths) => {
+  (a, paths, caller) => {
     const intent = intentNamed(a.intent);
     if (!intent)
       return {
@@ -487,14 +509,38 @@ const theDoor = tool(
      * at it — a browser-shaped principal, which is what the local route already builds for a local
      * press. Writing a looser one here would make MCP the way round every refusal the page obeys.
      */
-    const who: Principal = { kind: "browser", actor: localAccount(), scopes: ["read", "author"] };
-    const asking = { dir: dirOf(a, paths), who, pressing: localAccount() };
+    /**
+     * \u26d4 THE CALLER THE TRANSPORT AUTHENTICATED, AND ONLY FAILING THAT THE PERSON AT THIS
+     * MACHINE.
+     *
+     * This built a local browser principal unconditionally, which is right for the local server —
+     * it runs on somebody's machine, so the principal IS the person at it — and wrong the moment a
+     * hosted instance calls it. There, a remote token had already been authenticated and this
+     * discarded it, so `mayRecord` was asked about a browser that did not exist and a token's claim
+     * of `via: page` was accepted. Driven over the wire, not read off the page.
+     */
+    const who: Principal = caller ?? { kind: "browser", actor: localAccount(), scopes: ["read", "author"] };
+    const asking = { dir: dirOf(a, paths), who, pressing: who.actor };
     const body = a.fields as Record<string, unknown>;
     /** ⛔ Both questions, in the route's order, so MCP cannot be the way round a refusal. */
     const refused = refuseIntent(intent, asking, body);
     if (refused) return refused;
     const short = incomplete(intent, body);
     if (short) return short;
+    /**
+     * \u26d4 AND MCP IS HELD TO MORE THAN THE PAGE, ON THE ONE THING THE PAGE KNOWS AND THIS DOES NOT.
+     *
+     * The principal above is browser-shaped because the server runs on somebody's machine — which
+     * is true about the MACHINE and says nothing about a PRESS. So `via` defaulting to `page` and
+     * `by` falling back to the account are right for the route that watched somebody press, and
+     * wrong here: without this, a bare `accept` from a model wrote a verdict indistinguishable from
+     * a human pressing Accept on a rendered page.
+     *
+     * \u26d4 Stricter, never looser — a transport reaching an authority the page cannot is the
+     * failure the single door exists to prevent, and this is the other direction.
+     */
+    const unwatched = unwitnessed(intent, body);
+    if (unwatched) return unwatched;
     return intent.run(asking, body);
   }
 );
@@ -522,8 +568,28 @@ const theManual = tool(
   })
 );
 
-/** ⛔ Named so the act tools are identifiable as a group by anything auditing this surface. */
-export const EXCHANGE_ACT_TOOLS: McpTool[] = [agreeAct, settleAct, latitudeAct, parkAct, readThroughAct];
+/**
+ * ⛔ RETIRED FROM THE SURFACE — THE DOOR IS THE ONLY WAY TO ACT.
+ *
+ * Peter, shown that seven of fourteen intents had a second name here: *"yes, retire the duplicates"*.
+ *
+ * `theDoor`'s own header already made the argument, against adding MORE of these: *"a model
+ * choosing between `productos_exchange_agree_to` and `productos_accept` has been handed a decision
+ * with no right answer."* It held just as well for the five that were already here, which the door
+ * had quietly made into second names for `accept`, `rule`, `waive`, `defer` and `read`.
+ *
+ * ⛔ AND THE REASON IS NOT TIDINESS. The authority rules only hold where they are asked, and
+ * `refuseIntent` is asked in the door. Two ways in is two places that have to keep asking it, and
+ * the second one is the one nobody remembers when an intent gains a rule.
+ *
+ * ⛔ THE DEFINITIONS STAY, EXPORTED AND UNREGISTERED. They are what the HTTP act routes are checked
+ * against, and deleting them would take the comparison with them. Empty here means "not offered to
+ * a model", not "gone".
+ */
+export const EXCHANGE_ACT_TOOLS: McpTool[] = [];
+
+/** The five acts as tools — kept for the route tests, deliberately not on the MCP surface. */
+export const RETIRED_ACT_TOOLS: McpTool[] = [agreeAct, settleAct, latitudeAct, parkAct, readThroughAct];
 
 /**
  * ⛔ THE LOOP IS ITS OWN FAMILY, not a read and not an act.
@@ -533,7 +599,16 @@ export const EXCHANGE_ACT_TOOLS: McpTool[] = [agreeAct, settleAct, latitudeAct, 
  * boundary the whole design rests on — a session can never mint consent, only carry one — would be
  * one refactor away from being argued about.
  */
-export const EXCHANGE_LOOP_TOOLS: McpTool[] = [inboxTool, sayOnNoteTool, closeNoteTool, releaseNoteTool];
+/**
+ * ⛔ `sayOnNoteTool` AND `closeNoteTool` ARE GONE FROM HERE for the same reason as the five acts —
+ * the door takes `say` and `close`. What is left is what the door does NOT take: reading the inbox
+ * takes a lease rather than saying anything, and there is no `release` intent, so handing a note
+ * back has no other way in.
+ */
+export const EXCHANGE_LOOP_TOOLS: McpTool[] = [inboxTool, releaseNoteTool];
+
+/** The two note acts the door now carries — kept for the route tests, off the surface. */
+export const RETIRED_LOOP_TOOLS: McpTool[] = [sayOnNoteTool, closeNoteTool];
 
 export const EXCHANGE_READ_TOOLS: McpTool[] = [
   scopesTool,

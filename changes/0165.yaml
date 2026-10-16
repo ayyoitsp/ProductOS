@@ -1,0 +1,9 @@
+id: "0165"
+said: So features will rotate around dimensions. Dimensions should be made aware to all the agents and be a first class consideration
+at: 2026-10-16
+kind: instruction
+reaches:
+  instruct: every question here is asked per combination
+  pin: the agent tree document is generated
+waived: {}
+closed: 2026-10-16

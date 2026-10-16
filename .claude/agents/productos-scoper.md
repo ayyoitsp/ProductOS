@@ -671,6 +671,30 @@ separately unruled, you cannot say so. Raise the sharper one with `of:` and name
 out as an open rule. Do not invent a second standing to fit both in, and do not merge two questions
 into one `about`: a reviewer answering a merged question has answered neither.
 
+## ⛔ A rule that says who may, names who holds it — `held_by` on the rule
+
+```yaml
+fills: [may]
+mode: supplies
+statement: Only somebody the deal has been given to may change what it is measured against.
+held_by: [org-loan-manage, underwriter]    # ⛔ the ids, beside the sentence
+```
+
+**Write the sentence once as a rule and keep the enumeration.** Before this field existed, moving a
+shared `may` into a rule — the move this model asks for — threw away the answer to "what can an
+underwriter reach", because `held_by` lived only on a slot. Six authors filed that as a gap
+independently in one corpus (fg-0052, fg-0067, fg-0090, fg-0096, fg-0107, fg-0114), every one of
+them having done the right thing and been punished for it.
+
+⛔ **And nothing told them.** `who-may-is-only-prose` fires on a slot whose `may` names nobody; a
+rule-supplied `may` is not blank, so the finding went quiet at the same moment the data was lost.
+It now counts a reaching rule's `held_by`, and a rule's own ids are refused if they resolve to
+nothing — a rule reaches every exchange its selector touches, so one bad name there is wrong on all
+of them.
+
+⛔ **The sentence still matters more than the list.** It is what a person agrees to; the ids are
+what make it answerable from the other end. Never replace one with the other.
+
 ## Rules — where the leverage is, and where each one belongs
 
 Before writing the same sentence on a third exchange, stop. It is a rule:
@@ -1014,6 +1038,67 @@ reading as empty: a required field absent from the only example an author is giv
 only ever appears where somebody happened to know.
 
 And a rule carries `why` beside its statement — the argument, not a restatement of the sentence.
+
+## ⛔ A product may differ by role, and every question here is asked per combination
+
+Peter: *"we need dimensions to carry through to all features, so we can have different variations PER
+feature. and the dimensions should affect the truths as well"*, then *"features will rotate around
+dimensions. Dimensions should be made aware to all the agents and be a first class consideration"*.
+
+A product declares **dimensions** on itself — the scope with no `in:` — and any screen or sentence
+may say which combination it is promised to:
+
+```yaml
+# the product
+dimensions:
+  - id: role
+    label: Role
+    values: [admin, loan processor]
+```
+
+```yaml
+# a feature: two drawings of one job, and one sentence only one audience is promised
+views:
+  - id: deals-list
+    title: Deals, as an admin
+    holds_for: { role: admin }
+exchanges:
+  - id: price-a-deal
+    slots:
+      answer:
+        says:
+          - id: margin
+            says: The indicative margin is shown beside the rate.
+            holds_for: { role: admin }
+          - id: rate
+            says: The rate is shown to two decimal places.
+```
+
+⛔ **Unsaid means EVERYWHERE, never nowhere.** `rate` above is promised to everybody. Write
+`holds_for` only where the product really does differ — adding it "for completeness" narrows a
+promise nobody asked to narrow, and narrowing a sentence somebody already agreed to invalidates
+their agreement, because everybody else just lost it.
+
+⛔ **So before you write a feature, find out whether it rotates.** Read the product's `dimensions`
+first. If it declares any, the question "what does this feature promise" has one answer per
+combination, and writing a single undifferentiated answer is a claim that the product does not
+differ — which is a thing you are asserting, not a thing you are leaving open.
+
+⛔ **And where you do not know, that is a `question:`, not a guess.** "Does the processor see the
+margin?" is exactly the shape of thing an author must not answer for themselves. One sentence with no
+`holds_for` and no question is a promise to everybody; if you are not sure it is, ask.
+
+⛔ **On the slot when the whole part only exists there**, on the statement when one sentence does. A
+refusal an auditor never meets is the slot's; a line of detail only an admin is shown is the
+statement's.
+
+⛔ **Never declare dimensions on a feature.** They are the product's, read from the root and nowhere
+else. ⛔ **And never state what a feature varies by** — that is derived from the `holds_for` actually
+present, and a field claiming it is a second record with no forcing function.
+
+⛔ **A dimension id you invent narrows nothing.** `roles: admin` is not `role: admin`; a dimension the
+product never declared holds under every combination, so the variant you meant to restrict is shown
+to everyone with nothing saying so. `v2 check` refuses it — run it.
 
 ## Screens
 

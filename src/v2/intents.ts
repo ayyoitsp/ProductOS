@@ -27,13 +27,15 @@
 import { perform, payloadFrom, VIA, ACTS, OWED, ALSO, type Act, type Via } from "./acts.js";
 import { closeNote, fileNote, replyToNote } from "./notes.js";
 import { mayRecord, mayRelay, type Principal } from "./identity.js";
+import { authIsOff } from "./store/identity.js";
 import fs from "node:fs";
 import path from "node:path";
 import { CORPUS_DIRS, loadCorpus } from "./load.js";
 import { append } from "./log.js";
-import { writePrototypes, writeWithin, diskPages } from "./draw-write.js";
+import { writePrototypes, writeWithin, diskPages, writeHoldsFor } from "./draw-write.js";
 import { walkOf } from "./walk.js";
 import { axesOf, answersOf } from "./schema.js";
+import { dimensionsOf, sayCombination, variesBy } from "./dimensions.js";
 import { doorOpensOn, theOnlyScreenIn, screensIn } from "./selection.js";
 
 /** An axis id from its question, so nobody is asked to invent a slug for a sentence they just wrote. */
@@ -137,6 +139,37 @@ const str = (v: unknown): string => (typeof v === "string" ? v.trim() : "");
  * concepts, and the refusals built from the list said "not one of the five acts", which is true
  * about the five and false about the list. A refusal lists what it will take instead.
  */
+/**
+ * \u26d4 WHO AGREED — THE SESSION'S WORD WHILE AUTH IS OFF, THE INSTANCE'S ONCE IT IS ON.
+ *
+ * Peter: *"we're still in unauthenticated mode - let's have the sessions identify the human driving
+ * and we'll use that"*.
+ *
+ * `authIsOff` already says what that mode costs, where it is switched on: *every verdict written
+ * while this is set is one NOBODY CAN PROVE A HUMAN MADE.* Given that, the question is not which
+ * name is provable — none is — but which is TRUE more often. The alternatives were both worse:
+ *
+ *   - `localAccount()` is an OS username. It says who owns the laptop, never who is driving the
+ *     session, and it arrives looking exactly as authoritative as a real account.
+ *   - taking it from the wire unconditionally is what let a token write `by: peter` while
+ *     authenticated as `ci-bot` \u2014 driven, and the reason this function exists at all.
+ *
+ * So: while auth is off, the session says who is at it and that is recorded, because a stated name
+ * nobody can prove beats an inferred one nobody checked. The moment auth is on, the instance knows,
+ * and the wire is discarded \u2014 the act tools did exactly this and the comment that guarded them
+ * is worth keeping: *a name from the wire would let a session write somebody else's agreement and
+ * have it read, later, as though that person had been asked.*
+ *
+ * \u26d4 AND IT NEVER FALLS BACK. With auth off and nobody named, this returns nothing and the act
+ * is refused \u2014 a default here would be the OS username wearing a human's name, which is the
+ * shape of every bug in this file's history.
+ */
+export function whoDecided(a: Asking, body: Record<string, unknown>): string | null {
+  if (!authIsOff()) return a.who.actor;
+  const said = str(body.by).trim();
+  return said.length ? said : null;
+}
+
 function theAct(act: Act): Intent {
   return {
     name: act,
@@ -148,10 +181,36 @@ function theAct(act: Act): Intent {
       if (!VIA.includes(via))
         return { ok: false, why: `"${via}" is not a way consent could have been obtained`, detail: [VIA.join(" · ")] };
       /**
-       * ⛔ A BROWSER PRESS IS RECORDED AS THE ACCOUNT THE INSTANCE AUTHENTICATED, not as a name the
-       * request asked for. `by` from the wire was the last thing here anybody could forge.
+       * ⛔ AN ACT IS RECORDED AS THE IDENTITY THE INSTANCE KNOWS — FOR EVERY PRINCIPAL, NOT ONLY A
+       * BROWSER. `by` from the wire was the last thing here anybody could forge, and this closed it
+       * for a browser press while still taking a token's word for who agreed.
+       *
+       * ⛔ THAT HOLE WAS INVISIBLE WHILE THE ACT TOOLS EXISTED, because the hosted surface guarded
+       * them separately — `guardArgs` set `args.by = who.actor` for anything in `ACT_NAMES`, with
+       * the reason written out: *a name from the wire would let a session write somebody else's
+       * agreement under `via: agent` and have it read, later, as though that person had been
+       * asked.* Retiring those tools made this the only path, and a token calling the door wrote
+       * `by: peter` while authenticated as `ci-bot`. Driven, not reasoned about.
+       *
+       * ⛔ AND IT IS SCOPED TO CONSENT, SO RELAYING STILL WORKS. `carry` is gated `relay`, not
+       * `consent`, precisely because its whole job is carrying somebody else's press — it requires
+       * `by` and `via` outright and is untouched by this.
        */
-      const by = a.who.kind === "browser" ? a.who.actor : str(body.by) || a.who.actor;
+      const by = whoDecided(a, body);
+      /**
+       * \u26d4 NOBODY NAMED, NOTHING RECORDED. With auth off the session's word is the only thing
+       * there is; absent it, the honest outcome is a refusal rather than a verdict attributed to
+       * whoever owns the machine.
+       */
+      if (by === null)
+        return {
+          ok: false,
+          why: `${act} is an act of human judgement, and nothing here is authenticated \u2014 say \`by\`, the person driving this session`,
+          detail: [
+            "by \u2014 who decided. Recorded as stated, because with auth off nothing can prove it",
+            "\u26d4 It is not defaulted to the account this runs as: that is who owns the machine, never who is driving",
+          ],
+        };
       return perform(a.dir, act, payloadFrom(act, str(body.ref), body), { by, via });
     },
   };
@@ -449,7 +508,8 @@ export const INTENTS: Intent[] = [
           ],
         };
       }
-      const axes = axesOf(corpus.splitsOn, corpus.prototypes);
+      /* ⛔ The one reader, so a placement is judged against the dimensions the product declares. */
+      const axes = dimensionsOf(corpus);
       const existing = corpus.prototypes.find((p) => p.id === id);
       const title = str(body.title).trim() || existing?.title;
       if (!title) return { ok: false, why: `"${id}" is new, so say what to call it`, detail: ["title"] };
@@ -621,6 +681,100 @@ export const INTENTS: Intent[] = [
     },
   },
   {
+    /**
+     * ⛔ WHO A SCREEN IS FOR, SAID FROM THE PAGE.
+     *
+     * Peter: *"we need dimensions to carry through to all features, so we can have different
+     * variations PER feature"*, and long before that, about the thing that made this necessary:
+     * *"I should be able to drive this from the listener/input, right??? why could you possibly need
+     * this?"*
+     *
+     * A field only a hand-edit can set is a field only the sessions that know about it will ever
+     * write — which is the hand-authoring trap this project opens on. There is a test asserting that
+     * every fact a reviewer states is reachable from the page, and it failed on `View.holds_for`
+     * before this existed.
+     */
+    name: "holds-for",
+    gate: "author",
+    does: "Say which combination of the product's dimensions a screen is for — or take it back",
+    takes: [
+      { name: "view", says: "The screen, as <scope>#<view>", required: true },
+      {
+        name: "is",
+        says: "The combination, as dimension id to value. ⛔ Empty takes it back, and that is how a screen becomes everybody's again",
+        required: false,
+      },
+    ],
+    run: (a, body) => {
+      const ref = str(body.view).trim();
+      if (!ref) return { ok: false, why: "say which screen" };
+      const corpus = loadCorpus(a.dir);
+      const here = doorOpensOn(corpus, ref);
+      const holder = corpus.scopes
+        .flatMap((e) => (e.scope.views ?? []).map((v) => ({ scope: e.scope.id, view: v })))
+        .find((x) => `${x.scope}#${x.view.id}` === ref || x.view.id === ref);
+      if (!here || !holder) return { ok: false, why: `no screen "${ref}" in this corpus` };
+
+      const asked = (body.is ?? {}) as Record<string, unknown>;
+      const is: Record<string, string> = {};
+      for (const [dim, value] of Object.entries(asked)) {
+        const v = str(value).trim();
+        if (v) is[dim] = v;
+      }
+
+      /**
+       * ⛔ REFUSED HERE RATHER THAN FOUND BY `check` LATER, because the failure is silent and in the
+       * safe-looking direction: a dimension this product never declared narrows nothing, so the
+       * screen stays visible to everybody and the author believes they have restricted it.
+       */
+      const dims = dimensionsOf(corpus);
+      for (const [dim, value] of Object.entries(is)) {
+        const known = dims.find((d) => d.id === dim);
+        if (!known)
+          return {
+            ok: false,
+            why: `this product has no dimension "${dim}", so holding a screen for it would narrow nothing`,
+            detail: dims.length
+              ? [`it splits on: ${dims.map((d) => `${d.id} (${d.label})`).join(" · ")}`]
+              : ["declare the product's dimensions first — they are the product's, not a feature's"],
+          };
+        if (known.values.length && !known.values.includes(value))
+          return {
+            ok: false,
+            why: `"${value}" is not one of ${known.label}'s values`,
+            detail: [`${known.label} is: ${known.values.join(" · ")}`],
+          };
+      }
+
+      const file = writeHoldsFor(diskPages(a.dir), holder.scope, holder.view.id, is);
+      if (!file) return { ok: false, why: `could not find "${ref}" to change` };
+      const says = Object.keys(is).length
+        ? `${here.title} is what ${sayCombination(is, dims)} sees`
+        : `${here.title} is everybody's again`;
+      append(a.dir, {
+        kind: "corpus-changed",
+        at: new Date().toISOString(),
+        by: a.who.actor,
+        via: "page",
+        ref,
+        wrote: keyOf(a.dir, file),
+        says,
+      });
+      /**
+       * ⛔ AND IT SAYS WHAT THE FEATURE NOW VARIES BY, which is the thing he asked for — a variation
+       * per feature is only useful if the feature can be asked what its variations are.
+       */
+      const varies = variesBy(loadCorpus(a.dir), holder.scope);
+      return {
+        ok: true,
+        said: says,
+        detail: varies.length
+          ? [`${holder.scope} now varies by ${varies.map((d) => d.label.toLowerCase()).join(" and ")}`]
+          : [`${holder.scope} states one thing for everybody again`],
+      };
+    },
+  },
+  {
     name: "say",
     gate: "author",
     does: "Answer on a filed request without deciding it is finished",
@@ -725,6 +879,51 @@ export function incomplete(intent: Intent, body: Record<string, unknown>): Outco
      */
     why: short.length === 1 && short[0]!.ifMissing ? short[0]!.ifMissing : `${intent.name} needs ${short.map((f) => `\`${f.name}\``).join(", ")}`,
     detail: [...short.map((f) => `${f.name} — ${f.says}`), "⛔ nothing here is guessed from the other fields"],
+  };
+}
+
+/**
+ * ⛔ CONSENT NOBODY WATCHED HAPPEN HAS TO SAY WHO AGREED, AND HOW.
+ *
+ * Peter, choosing between tightening this and putting seven duplicate tools back: *"1 sounds good"*.
+ *
+ * The door's `via` defaults to `page` and its `by` falls back to the principal, and both are RIGHT
+ * for the page: the instance watched the press, so the account is who pressed and `page` is how.
+ * They became wrong the moment a second caller arrived wearing the same principal. Measured before
+ * this existed, `productos_in { intent: "accept", fields: { ref } }` from MCP wrote
+ *
+ *     kind: accept · by: peter · via: page
+ *
+ * — a record byte-identical to one made by pressing Accept on a rendered page, from a model that
+ * was never asked either question. Nothing downstream can tell those apart, because the difference
+ * was never written down.
+ *
+ * ⛔ SO THE RULE IS ABOUT THE PRESS, NOT THE PRINCIPAL. A caller the instance did not watch states
+ * both or records nothing. The five act tools this replaced demanded exactly that, with no default
+ * on either — and a test said why, in words worth keeping: *the weakest provenance would silently
+ * wear the strongest name*.
+ *
+ * ⛔ AND IT IS STRICTER, NEVER LOOSER. The danger the single door exists to prevent is a transport
+ * reaching an authority the page cannot; a transport held to MORE than the page is the safe
+ * direction. It is asked here rather than in the caller so the rule has one home.
+ */
+export function unwitnessed(intent: Intent, body: Record<string, unknown>): Outcome | null {
+  if (intent.gate !== "consent") return null;
+  const said = (k: string): boolean =>
+    typeof body[k] === "string" && (body[k] as string).trim().length > 0;
+  const short = ["by", "via"].filter((k) => !said(k));
+  if (!short.length) return null;
+  return {
+    ok: false,
+    why: `${intent.name} is an act of human judgement and nothing here watched it happen — say ${short
+      .map((f) => `\`${f}\``)
+      .join(" and ")}`,
+    detail: [
+      "by — who decided. \u26d4 Not the account this runs as: the person, recorded, outliving the session",
+      `via — how their consent was obtained: ${VIA.join(" | ")}`,
+      "\u26d4 `via: page` means somebody pressed a button on a rendered page showing what it covered. If that is not what happened, it is not `page`.",
+      "\u26d4 Neither is defaulted here. A default would make the weakest provenance wear the strongest name.",
+    ],
   };
 }
 

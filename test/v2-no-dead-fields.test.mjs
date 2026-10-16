@@ -53,6 +53,12 @@ const SURFACES = [
   //    every occurrence, not the first. Same argument as `moved.ts` above: a reader is a reader
   //    wherever it lives, and leaving it out reported a field that is read as read by nothing.
   "wire.ts",
+  // ⛔ And `dimensions.ts` is the only reader of `Scope.dimensions` — on purpose. The product's
+  //    dimensions are read through `dimensionsOf` and nowhere else, so that the page, the checker
+  //    and the prototype selector cannot disagree about what the product splits on. Same argument
+  //    as `moved.ts` and `wire.ts` above: leaving it out reported a field that is read, and read by
+  //    everything that matters, as read by nothing.
+  "dimensions.ts",
 ]
   .map((f) => fs.readFileSync(path.join("src/v2", f), "utf-8"))
   .concat(fs.readFileSync("src/cli/commands/v2.ts", "utf-8"))

@@ -283,6 +283,16 @@ export const AREAS: Area[] = [
        * chrome. A reviewer asked why one option says it reaches two screens is asking about this.
        */
       "src/v2/selection.ts",
+      /**
+       * ⛔ WHICH TRUTHS APPLY TO WHOM — the product's dimensions, and the one predicate that decides
+       * whether a screen or a sentence holds under the combination somebody asked for.
+       *
+       * A derivation because none of it is declared: a feature does not state that it varies by
+       * role, it either has truths that differ by role or it does not. ⛔ And it is the one place
+       * that question is answered — a reviewer asked why an admin-only screen is showing to everybody
+       * is asking about `holdsUnder`, and the answer is that an undeclared dimension narrows nothing.
+       */
+      "src/v2/dimensions.ts",
       "src/v2/steers.ts",
       /**
        * ⛔ AUTHORIZATION IS A GATE, AND THESE ARE WHERE IT IS DECIDED. `storeFor(db, who).project(id)`
@@ -617,6 +627,8 @@ export const AGENTS: Agent[] = [
       "to refused the one act the feature waits on. No layer-scoped reviewer can see either: both are " +
       "properties of the whole.",
     reads: [
+      "the product's dimensions, and which combination each screen and sentence says it holds for \u2014 a truth with no `holds_for` holds under every one",
+
       "src/core/jobs.ts — the map of areas and layers, to know what everywhere means",
       "src/v2/schema.ts — every field an author writes",
       "skills/ — whether each field is named as something to write",
@@ -625,6 +637,9 @@ export const AGENTS: Agent[] = [
       "test/ — whether any of it is pinned",
     ],
     finds: [
+      "a concept present for one combination and absent for another, where nothing says the absence was intended",
+      "a `holds_for` naming a dimension the product does not declare \u2014 it narrows NOTHING, so the variant is shown to every audience with nothing saying so",
+
       "a schema field no skill tells anyone to write",
       "a concept the renderer shows and no check can detect the absence of",
       "two implementations of one predicate — the gateFor/check divergence shape",
@@ -645,12 +660,16 @@ export const AGENTS: Agent[] = [
       "the ones with no test came back. A backtick inside a template literal broke the build six times " +
       "while two prose warnings sat above it. What a suite does not assert is what regresses.",
     reads: [
+      "the product's dimensions, and which combination each screen and sentence says it holds for \u2014 a truth with no `holds_for` holds under every one",
+
       "test/ — what is asserted, and at what grain",
       "git log — the defects that have actually happened here",
       "src/v2/check.ts — every finding, and whether each is exercised",
       "src/v2/acts.ts — every refusal, and whether each is provoked by a test",
     ],
     finds: [
+      "a behaviour pinned for one combination and unpinned for another \u2014 a count over the feature reports it as covered, and the uncovered audience is the one that ships broken",
+
       "a finding in check.ts that no test provokes",
       "a refusal in acts.ts that nothing asserts",
       "a test asserting on flattened text, or on the property a script just set, rather than on what a reader sees",
@@ -804,12 +823,17 @@ export const AGENTS: Agent[] = [
       "fully described. Nobody was looking at the path, and a feature whose steps are each correct " +
       "and do not join up is a feature nobody can use.",
     reads: [
+      "the product's dimensions, and which combination each screen and sentence says it holds for \u2014 a truth with no `holds_for` holds under every one",
+
       "each scope's happy path — what it says somebody accomplishes, and the screens it passes through",
       "those screens in order: what a person has when they arrive, and which control takes them on",
       "where each control leaves somebody — the `answer` and `after` of the exchange it performs",
       "the prototype as rendered, because a path that is described and not walkable is the failure",
     ],
     finds: [
+      "a path that completes for one combination and stops for another \u2014 read as one feature, the dead end is invisible, which is the exact failure this reviewer exists for",
+      "a step whose only way on holds for a combination the earlier steps do not",
+
       "a screen in the happy path with no control that leads to the next one",
       "a state a control puts somebody in with no way out of it",
       "a happy path whose last screen does not reach what `ends_with` claims",
@@ -878,12 +902,17 @@ export const AGENTS: Agent[] = [
       "contradiction is a property of the pair. ⛔ The author is the worst possible person to " +
       "notice, because they know which of the two they meant.",
     reads: [
+      "the product's dimensions, and which combination each screen and sentence says it holds for \u2014 a truth with no `holds_for` holds under every one",
+
       "every scope in the corpus — a contradiction is never visible from one",
       "the vocabulary across all of them — the same word, and whether it means the same thing twice",
       "each statement against the rules and criteria said to govern it",
       "what each screen promises against what the feature holding it claims",
     ],
     finds: [
+      "two sentences reported as contradicting each other that hold for DIFFERENT combinations \u2014 that is not a contradiction, and reporting it costs an author a real argument",
+      "two sentences that contradict each other under the SAME combination, which the feature's shape hides when the variants are read as alternatives",
+
       "two scopes promising different things about the same screen or the same entity",
       "one term carrying two meanings, or two terms carrying one — the first is worse",
       "a rule that forbids what a statement elsewhere asserts",

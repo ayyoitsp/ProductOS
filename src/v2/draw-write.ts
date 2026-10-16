@@ -200,7 +200,25 @@ export function locateView(
  * stating it is one call with the reference checked, rather than a hand edit that silently points at
  * nothing.
  */
-export function writeWithin(pages: Pages, scopeId: string, viewId: string, within: string): string | undefined {
+/**
+ * Set one scalar-valued key on a view, or remove it.
+ *
+ * ⛔ ONE WRITER FOR THE SHAPE, rather than a copy per field. `within` had this to itself; the second
+ * field needing it — `holds_for`, which says who a drawing is for — would have been a second
+ * function with the same four subtleties in it, and the fourth one of those is already a comment
+ * about a corpus somebody could not have intended and could not see the cause of.
+ *
+ * ⛔ The value arrives already written as YAML, because the two callers mean different things by it:
+ * a containment is a string, a combination is a map. Formatting it here would mean this function
+ * knowing every field's type, which is the schema's job.
+ */
+export function writeViewKey(
+  pages: Pages,
+  scopeId: string,
+  viewId: string,
+  key: string,
+  yaml: string
+): string | undefined {
   const found = locateView(pages, scopeId, viewId);
   if (!found) return undefined;
   const { file, lines, start, end } = found;
@@ -209,25 +227,51 @@ export function writeWithin(pages: Pages, scopeId: string, viewId: string, withi
     return INDENT;
   })();
   /** Replace an existing one rather than adding a second — a view with two is a view that will not parse. */
-  const at = lines.findIndex((l, i) => i > start && i < end && /^\s*within:/.test(l));
+  const at = lines.findIndex((l, i) => i > start && i < end && new RegExp(`^\\s*${key}:`).test(l));
   /**
    * ⛔ EMPTY REMOVES THE LINE, it does not write an empty one. `within: ""` is a reference that
    * resolves to nothing, which `check` refuses — so taking a containment back through the obvious
    * call would have left the corpus in a state the author could not have intended and could not see
-   * the cause of.
+   * the cause of. The same is true of `holds_for: {}`: a combination of nothing is not "everywhere",
+   * it is a map the next reader has to guess about.
    */
-  if (!within) {
+  if (!yaml) {
     if (at >= 0) {
       lines.splice(at, 1);
       pages.write(file, lines.join("\n"));
     }
     return file;
   }
-  const line = `${indent}within: ${JSON.stringify(within)}`;
+  const line = `${indent}${key}: ${yaml}`;
   if (at >= 0) lines[at] = line;
   else lines.splice(start + 1, 0, line);
   pages.write(file, lines.join("\n"));
   return file;
+}
+
+/** Which screen a screen appears inside. ⛔ Empty takes it back — see `writeViewKey`. */
+export function writeWithin(pages: Pages, scopeId: string, viewId: string, within: string): string | undefined {
+  return writeViewKey(pages, scopeId, viewId, "within", within ? JSON.stringify(within) : "");
+}
+
+/**
+ * Who a drawing is for. ⛔ An empty map takes it back, and that is the only way to say "everybody":
+ * absence means everywhere, so there is no combination that means it.
+ */
+export function writeHoldsFor(
+  pages: Pages,
+  scopeId: string,
+  viewId: string,
+  holds: Record<string, string>
+): string | undefined {
+  const keys = Object.keys(holds);
+  return writeViewKey(
+    pages,
+    scopeId,
+    viewId,
+    "holds_for",
+    keys.length ? `{ ${keys.map((k) => `${k}: ${JSON.stringify(holds[k])}`).join(", ")} }` : ""
+  );
 }
 
 export function writeSketchHtml(
