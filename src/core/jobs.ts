@@ -283,6 +283,16 @@ export const AREAS: Area[] = [
        * chrome. A reviewer asked why one option says it reaches two screens is asking about this.
        */
       "src/v2/selection.ts",
+      /**
+       * ⛔ WHICH TRUTHS APPLY TO WHOM — the product's dimensions, and the one predicate that decides
+       * whether a screen or a sentence holds under the combination somebody asked for.
+       *
+       * A derivation because none of it is declared: a feature does not state that it varies by
+       * role, it either has truths that differ by role or it does not. ⛔ And it is the one place
+       * that question is answered — a reviewer asked why an admin-only screen is showing to everybody
+       * is asking about `holdsUnder`, and the answer is that an undeclared dimension narrows nothing.
+       */
+      "src/v2/dimensions.ts",
       "src/v2/steers.ts",
       /**
        * ⛔ AUTHORIZATION IS A GATE, AND THESE ARE WHERE IT IS DECIDED. `storeFor(db, who).project(id)`

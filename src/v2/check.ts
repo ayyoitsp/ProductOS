@@ -14,6 +14,7 @@ import { SLOTS, SLOT_ASKS, DEMONSTRABLE_SLOTS, owesDemonstration, statements, sa
 import { walkOf } from "./walk.js";
 import { holdsOn } from "./held.js";
 import { selectionOf, gapsIn, doorOpensOn, theOnlyScreenIn, screensIn } from "./selection.js";
+import { unknownHolds, dimensionsOf } from "./dimensions.js";
 import {
   DOWNSTREAM_OF_ANSWER,
   answerIsUnknown,
@@ -502,6 +503,41 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
           : near.length
             ? `name one of that feature's screens: ${near.map((r) => `\`${r}\``).join(" · ")}`
             : "name a screen that exists as `<scope>#<view>` — a prototype is a door, and a door onto nothing is worse than no door, because the page offers it",
+      });
+    }
+
+    /**
+     * ⛔ A `holds_for` NAMING A DIMENSION THE PRODUCT DOES NOT HAVE IS THE ONE DANGEROUS TYPO HERE.
+     *
+     * Peter: *"we need dimensions to carry through to all features... and the dimensions should
+     * affect the truths as well"*. A dimension id is a free-text key, so `role: admin` and
+     * `roles: admin` are two different dimensions as far as the predicate is concerned — and the
+     * second silently holds under EVERY combination, because a dimension nobody asked about excludes
+     * nothing.
+     *
+     * ⛔ SO THE FAILURE MODE IS SILENT AND IN THE SAFE-LOOKING DIRECTION: the variant does not
+     * disappear, it quietly becomes universal, and a screen meant for one role is shown to all of
+     * them with nothing anywhere saying so. That is a refusal rather than a note.
+     *
+     * ⛔ AND A VALUE IS ONLY JUDGED WHERE THE DIMENSION DECLARED ITS VALUES. A dimension somebody has
+     * named and not filled in cannot tell a wrong value from a right one, and saying otherwise would
+     * refuse every corpus mid-authoring.
+     */
+    for (const bad of unknownHolds(corpus)) {
+      const dims = dimensionsOf(corpus);
+      const known = dims.find((d) => d.id === bad.dimension);
+      add({
+        severity: "refuse",
+        kind: bad.value ? "a-variant-names-an-undeclared-value" : "a-variant-names-an-undeclared-dimension",
+        where: bad.where,
+        what: bad.value
+          ? `holds for \`${bad.dimension}: ${bad.value}\`, and "${bad.value}" is not one of that dimension's values`
+          : `holds for \`${bad.dimension}\`, and this product declares no such dimension`,
+        fix: bad.value
+          ? `${known?.label ?? bad.dimension} is ${known?.values.map((v) => `"${v}"`).join(" · ")} — use one of those, or add this value to the product's dimension`
+          : dims.length
+            ? `this product splits on ${dims.map((d) => `\`${d.id}\``).join(" · ")}. An unrecognised dimension does not narrow anything — it holds everywhere, so this truth is being shown to everybody`
+            : "this product declares no dimensions at all, so nothing can hold for one. Declare them on the product first",
       });
     }
 

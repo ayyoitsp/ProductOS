@@ -37,6 +37,7 @@ import { demonstrationOf } from "./demonstrate.js";
 import { decisionsOn, decisionsUnder, howItWasDecided, type Decision } from "./record.js";
 import { holdsOn, whyHeld } from "./held.js";
 import { selectionOf, gapsIn, type Selection, type Option } from "./selection.js";
+import { dimensionsOf, sayCombination, variesBy } from "./dimensions.js";
 
 const esc = (s: unknown): string =>
   String(s ?? "")
@@ -1201,6 +1202,25 @@ function renderScreens(scope: Scope, ctx: Ctx, scopeId: string, opts: PageOption
             ${
               v.exists === "intended"
                 ? `<p class="owes">This screen does not exist yet — everything here is intent, not observation.</p>`
+                : ""
+            }
+            ${
+              /**
+               * ⛔ WHO THIS SCREEN IS FOR, ON THE SCREEN. Peter: *"we need dimensions to carry through
+               * to all features, so we can have different variations PER feature"*.
+               *
+               * A feature with two drawings of the same job and nothing saying which audience each
+               * belongs to is worse than one drawing: a reviewer reads the first, agrees to it, and
+               * has agreed to something that was never promised to the person they had in mind. The
+               * model carrying `holds_for` while no reader sees it is the same defect one layer down.
+               *
+               * ⛔ The chip says the dimension's LABEL and the value, not the id — `role: admin` is
+               * the storage talking, and nothing a reader sees should mention it.
+               */
+              v.holds_for && Object.keys(v.holds_for).length
+                ? `<p class="chips"><span class="chip holds" title="${esc(
+                    `this drawing is what ${sayCombination(v.holds_for, dimensionsOf(corpus))} sees`
+                  )}">${esc(sayCombination(v.holds_for, dimensionsOf(corpus)))}</span></p>`
                 : ""
             }
             ${
@@ -7763,6 +7783,17 @@ export const STYLE = `<style>
   .chip.ok { border-color: var(--ok); color: var(--ok); }
   .chip.warn { border-color: var(--warn); color: var(--warn); }
   .chip.type { border-style: dashed; }
+  /*
+   * WHO A VARIANT IS FOR. Filled rather than outlined, because it is not a status — it is the
+   * audience this drawing or this sentence belongs to, and a reader scanning a feature with several
+   * variants is looking for the one that is theirs.
+   */
+  /*
+   * ⛔ NO INVENTED TOKEN. The first version painted an accent-soft variable this page has never
+   * defined — so it resolved to nothing and the chip drew with no background at all. A guard here
+   * catches that, and it caught this; a fallback would have hidden it, which is why none is used.
+   */
+  .chip.holds { border-color: var(--accent); color: var(--accent); }
   /*
    * SUPPORT IS NOT CONFIRMATION, AND THE EYE MUST NOT HAVE TO READ THE WORD TO KNOW.
    *
