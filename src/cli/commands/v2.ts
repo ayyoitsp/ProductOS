@@ -2896,11 +2896,63 @@ export function v2Command(): Command {
         console.error(pc.red("✗"), "name the screen as <scope>#<view>");
         process.exit(1);
       }
-      const into = path.resolve(o.into ?? ".");
+      /**
+       * ⛔ ONE SCREEN REACHES AN INSTANCE TOO, and this is the half that was missing.
+       *
+       * `--all` has drawn straight onto an instance since `drawEverythingOn`. One screen went
+       * through `path.resolve(o.into)`, which treats a URL as a RELATIVE PATH -- so naming one
+       * screen on a hosted corpus read the checkout, inlined 76 components, drew 331kb, and then
+       * failed with `no view "a-deals-overview" under "deal-overview" in
+       * <cwd>/http:/127.0.0.1:4100/p/prj-bks5f4m325`. A minute of work thrown away on a mangled
+       * path, after printing a green tick twice.
+       *
+       * ⛔ AND `--dry-run` REPORTED SUCCESS, which is what actually cost the time. A dry run never
+       * writes, so the step that would have refused the URL never ran and the output was
+       * indistinguishable from a supported command. Same shape as every other entry in this
+       * project's book of measurements that agreed with what somebody wanted to be true: the
+       * condition under which the check holds -- here, "a write actually happens" -- was the one
+       * condition not present.
+       *
+       * ⛔ SO IT USES THE SEAM THAT ALREADY EXISTS: `Pages` over a held map, the corpus read
+       * through `memoryStore`, and only the documents that moved pushed back through the one door.
+       * Nothing is mirrored to a directory -- a second writable copy of a hosted corpus is the
+       * defect that seam was built to end, and the one Peter has banned by name.
+       */
+      const onInstance = looksLikeInstance(o.into);
+      const inst = onInstance ? instanceOf(o.into!, o.token) : undefined;
+      /** Where the TRUTH is: a directory, or the instance's url for every message it appears in. */
+      const where = onInstance ? o.into!.replace(/\/+$/, "") : path.resolve(o.into ?? ".");
+      /**
+       * Where the CODE is. ⛔ For an instance these cannot be one place, which is the distinction
+       * `drawEverythingOn` already draws: the truth is hosted, the components are in a checkout.
+       */
+      const codeAt = path.resolve(o.code ?? ".");
+      let pages: Pages;
+      if (onInstance) {
+        let files: Record<string, string> = {};
+        try {
+          files = await documents(inst!);
+        } catch (e) {
+          console.error(pc.red("✗"), `could not read the corpus at ${where}: ${(e as Error).message}`);
+          process.exit(1);
+        }
+        if (!Object.keys(files).length) {
+          console.error(pc.red("✗"), `${where} holds no corpus documents`);
+          process.exit(1);
+        }
+        pages = heldPages(files);
+      } else {
+        pages = diskPages(where);
+      }
+      /** The corpus being drawn into, read through whichever side is holding it. */
+      const readCorpus = () =>
+        onInstance ? loadCorpus("", memoryStore("", filesOf(pages))) : loadCorpus(where);
+      /** ⛔ Config comes from the CHECKOUT when truth is hosted — an instance has no config.yaml. */
+      const configAt = onInstance ? codeAt : where;
       let componentsDir: string | undefined;
       let designDir: string | undefined;
       try {
-        const paths = resolvePathsOrThrow(into);
+        const paths = resolvePathsOrThrow(configAt);
         const root = path.dirname(path.dirname(paths.configFile));
         const cfg = readConfig(paths);
         componentsDir = cfg.web.components_dir ? path.resolve(root, cfg.web.components_dir) : undefined;
@@ -2929,7 +2981,7 @@ export function v2Command(): Command {
       /** Whether a hand-drawn sketch sits beside the generated one — see the warning below. */
       let hasAscii = false;
       try {
-        const c = loadCorpus(into);
+        const c = readCorpus();
         const sc = c.scopes.find((x) => x.scope.id === scopeId || x.scope.id === scopeId.split("/").pop())?.scope;
         const v = sc?.views.find((x) => x.id === viewId);
         parts = v?.parts ?? [];
@@ -3074,7 +3126,7 @@ export function v2Command(): Command {
        */
       const already = (() => {
         try {
-          const c = loadCorpus(into);
+          const c = readCorpus();
           const v = c.scopes.find((x) => x.scope.id === scopeId)?.scope.views.find((x) => x.id === viewId);
           return v?.sketch_html ?? "";
         } catch {
@@ -3100,7 +3152,7 @@ export function v2Command(): Command {
       const origin = repoOf(route);
       if (!origin) console.log(pc.yellow("!"), "the component is not in a git repository, so nothing records where this came from");
       const prov = origin ? { from: path.relative(origin.root, route), at: origin.head } : undefined;
-      const written = writeSketchHtml(diskPages(into),
+      const written = writeSketchHtml(pages,
         scopeId,
         viewId,
         drawn.html,
@@ -3109,10 +3161,10 @@ export function v2Command(): Command {
         drawn.drawnStates.map((st) => ({ when: st.when, label: st.label, html: st.html }))
       );
       if (!written) {
-        console.error(pc.red("✗"), `no view "${viewId}" under "${scopeId}" in ${into}`);
+        console.error(pc.red("✗"), `no view "${viewId}" under "${scopeId}" in ${where}`);
         process.exit(1);
       }
-      console.log(pc.dim(`  written into ${path.relative(process.cwd(), written)}`));
+      console.log(pc.dim(`  written into ${onInstance ? written : path.relative(process.cwd(), written)}`));
       /**
        * ⛔ THE DRAWING IS ALSO A READING, AND NOTHING WAS RECORDING IT. The component path and the
        * commit were already known here and went only into the drawing's provenance — so the one unit
@@ -3120,8 +3172,43 @@ export function v2Command(): Command {
        * `readings/` was empty in every corpus. If it can be generated, generate it.
        */
       if (prov) {
-        const recorded = writeDrawnReading(diskPages(into), scopeId, viewId, prov);
-        console.log(pc.dim(`  recorded as a reading in ${path.relative(process.cwd(), recorded)}`));
+        const recorded = writeDrawnReading(pages, scopeId, viewId, prov);
+        console.log(
+          pc.dim(`  recorded as a reading in ${onInstance ? recorded : path.relative(process.cwd(), recorded)}`)
+        );
+      }
+      /**
+       * ⛔ AND ON AN INSTANCE, THE WRITE IS NOT DONE UNTIL IT IS SENT. `heldPages` records what
+       * moved and deliberately posts nothing itself — the caller is the only thing that knows how
+       * to put a document back, and a writer with its own route would be a second client of the
+       * one door. Exactly what `drawEverythingOn` does, for the one-screen case.
+       */
+      if (onInstance) {
+        const moved = (pages as Pages & { moved: () => string[] }).moved();
+        let sent = 0;
+        const failed: Array<{ key: string; why: string }> = [];
+        for (const key of moved) {
+          let out: { ok: boolean; why?: string };
+          try {
+            out = await putDocument(inst!, key, pages.read(key));
+          } catch (e) {
+            out = { ok: false, why: (e as Error).message };
+          }
+          if (out.ok) {
+            sent++;
+            console.log(pc.green("✓"), pc.dim(`${key} → ${where}`));
+          } else {
+            failed.push({ key, why: out.why ?? "refused" });
+            console.error(pc.red("✗"), `${key}: ${out.why ?? "refused"}`);
+          }
+        }
+        console.log(
+          failed.length ? pc.yellow("!") : pc.green("✓"),
+          `${sent} of ${moved.length} document(s) written to ${where}`
+        );
+        /** ⛔ Non-zero, so a half-written screen is not reported as a drawn one. */
+        if (failed.length) process.exitCode = 1;
+        return;
       }
       console.log(pc.dim("  re-run this after the component changes — the drawing is output, not a document"));
     });
