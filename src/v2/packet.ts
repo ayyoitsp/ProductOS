@@ -60,13 +60,45 @@ function outcomeLines(
 export function compilePacket(corpus: Corpus, scopeId: string): string | null {
   const under = descendants(corpus, scopeId);
   if (under.length > 1) {
-    const body = under.map((id) => compileOne(corpus, id)).filter(Boolean) as string[];
+    const body = under.map((id) => compileOne(corpus, id)?.md).filter(Boolean) as string[];
     return body.length ? body.join("\n\n---\n\n") : null;
   }
-  return compileOne(corpus, scopeId);
+  return compileOne(corpus, scopeId)?.md ?? null;
 }
 
-function compileOne(corpus: Corpus, scopeId: string): string | null {
+/**
+ * Whether a builder could start on this, and what stops them.
+ *
+ * ⛔ THE PACKET'S OWN ANSWER, NOT A SECOND ONE. The packet has always known this — it prints
+ * *"This packet has 2 holes: …"* at the top of the markdown — and the rendered page printed
+ * nothing, so a reviewer had to read to the bottom of a feature to work out what the compiler
+ * had already decided. The obvious repair was to count unsettled slots on the page, and that is
+ * the defect this project finds in itself most often: two answers to one question, drifting the
+ * first time `check` changes its mind about what a hole is.
+ *
+ * So the hole list comes back from the same pass that writes the banner — one traversal, one
+ * verdict, two renderings of it.
+ *
+ * ⛔ THE REFS ARE SUBSTRATE. `record-spending#after` is an address, not a sentence, and nothing a
+ * reader sees may carry one. Whoever renders this turns them into titles; the packet is read by
+ * builders and may keep them.
+ */
+export interface Readiness {
+  /** Nothing is missing — a builder can start without inventing product truth. */
+  ready: boolean;
+  /** `<exchange>#<slot>` for each, in the order the packet reports them. */
+  holes: string[];
+}
+
+export function readinessOf(corpus: Corpus, scopeId: string): Readiness | null {
+  const under = descendants(corpus, scopeId);
+  const each = under.map((id) => compileOne(corpus, id)).filter(Boolean) as Array<{ md: string; holes: string[] }>;
+  if (!each.length) return null;
+  const holes = each.flatMap((x) => x.holes);
+  return { ready: holes.length === 0, holes };
+}
+
+function compileOne(corpus: Corpus, scopeId: string): { md: string; holes: string[] } | null {
   const entry = corpus.scopes.find((s) => s.scope.id === scopeId);
   if (!entry) return null;
   const { inherited, constrained } = resolveRules(corpus);
@@ -762,5 +794,5 @@ function compileOne(corpus: Corpus, scopeId: string): string | null {
         `A builder who fills one has invented product truth. Settle them first.`
     );
   }
-  return out.join("\n");
+  return { md: out.join("\n"), holes };
 }
