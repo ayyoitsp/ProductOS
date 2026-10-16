@@ -86,14 +86,18 @@ model's words. **Unregistering the 38 tools is open**, and it matters more than 
 premise is many Claude Code instances connecting and orienting themselves, and each one meets
 both vocabularies as tool names with no page to disambiguate them.
 
-### `service/` and `backend/` — what they are, and why they are still here
+### `backend/` — what it is, and why it is still here
 
 | | What it is | Why it is still here |
 |---|---|---|
-| **`service/`** | the **retired** hosted store. It models the replaced schema and cannot read an Exchange corpus at all | **it is still deployed.** Deleting the source for something serving traffic is not a tidy-up, so tearing it down — and deciding what happens to anything in its database — is **Peter's call.** Its own notice is the only thing stopping somebody extending it |
 | **`backend/`** | **not ProductOS.** It is the Family Wallet demo's API, mirroring the demo app's local ledger as a REST surface so that app can run either fully local or backend-driven | the demo lives here, so its API did too. Nothing in ProductOS depends on it. Whether it moves out is a deliberate question, not a cleanup |
 
-The hosted Exchange store is `src/v2/store/`, with the compose files at the repository root.
+The hosted Exchange store is `src/v2/store/`, with the compose files at the repository root, and
+it is now the only one. **The retired store's source has been deleted** — schema, routes, review
+app, its own migrations and its deploy script. Nothing imported it and nothing in the suite read
+it. ⛔ **Deleting it did not stop its deployment**: a container app of that code was running when
+the source went, and tearing it down is a cloud operation nobody has performed. The names needed
+to do it are in the private architecture note, not here.
 
 ---
 
@@ -117,7 +121,10 @@ The hosted Exchange store is `src/v2/store/`, with the compose files at the repo
    away from the caller and refuses a human `via` on an agent token. That is defensible with one
    person at the machine and changes character with many instances connecting, each told to make
    tickets unambiguous and each therefore tempted to settle what it finds.
-4. **`backend/` and `service/`** — see the table above. Both are Peter's to answer.
+4. **`backend/`** — see the table above. Whether it moves out is Peter's to answer.
+5. **The retired store's container app is still serving.** Its source is gone; the deployment is
+   not, and it holds whatever was written to its database. Tearing it down needs cloud access, so
+   it is a decision plus an action, neither of which belongs to this repository.
 
 **Implementation, no decision needed:**
 
