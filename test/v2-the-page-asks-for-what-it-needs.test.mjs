@@ -490,6 +490,93 @@ test("a drawing arrives without anybody pressing for it, and what is unopened wa
  * to look. This asserts the emitted text is free of them, so the next person gets a named failure
  * instead of forty confusing TS1005s.
  */
+/**
+ * ⛔ EVERY LINK THE SERVED PAGE WRITES IS FETCHED, AND HAS TO ANSWER.
+ *
+ * Peter: *"we should have durable links for everything in product os. no idea why we use anchors
+ * for everything."* The answer to "why" turned out not to be a design choice:
+ * `/p/<project>/v2/<scope>` has answered 200 the whole time, and the page emitted ZERO of them —
+ * 469 fragments and nothing else — because `linkBase` was hardcoded `"/v2"`. Root-relative, so on
+ * the hosted instance it resolved to `/v2/<scope>`:
+ *
+ *     /p/prj-bks5f4m325/v2/versioned-inputs   200   1978320 bytes
+ *     /v2/versioned-inputs                    404       111 bytes   <- what the page wrote
+ *
+ * ⛔ AND NO ASSERTION ON THE MARKUP COULD HAVE CAUGHT IT, which is the point of fetching. The link
+ * was present, well-formed, and pointed at a real scope id. What was wrong was the one thing only
+ * the server can answer: whether that URL is where the page is. CLAUDE.md opens on this class —
+ * "the environment convenient to measure in is not the environment the thing lives in" — and the
+ * local server, which IS mounted at the root, made the broken form look correct.
+ *
+ * ⛔ SO THE PAGE IS RENDERED UNDER A MOUNT IT IS NOT SERVED AT EITHER. The route here is at the
+ * root, so asking for `/v2/<scope>` would pass on the bug. Rendering with a mount and then fetching
+ * what it wrote, with the mount stripped, is what makes the assertion about the LINK rather than
+ * about this fixture's convenience.
+ */
+test("every durable link the served page writes resolves", async () => {
+  const { base, close } = await serve(dir);
+  try {
+    const MOUNT = "/p/prj-under-a-path";
+    const html = renderScopePage(corpus, "everything", {
+      interactive: true,
+      records: "http",
+      linkBase: MOUNT + "/v2",
+      only: ["everything"],
+    });
+
+    const written = [...new Set((html.match(/href="([^"]+)"/g) ?? []).map((m) => m.slice(6, -1)))]
+      .map((h) => h.split("#")[0])
+      .filter((h) => h.startsWith("/"));
+
+    /** Non-vacuous: a page that wrote no links at all would otherwise pass this trivially. */
+    assert.ok(written.length >= 2, `the page wrote ${written.length} addressed links, so this proves nothing`);
+
+    /** ⛔ EVERY ONE IS UNDER THE MOUNT IT WAS GIVEN — the shape of the bug, asserted directly. */
+    for (const h of written) {
+      assert.ok(h.startsWith(MOUNT + "/v2"), `the page wrote ${h}, which is not under the mount it was rendered for`);
+    }
+
+    /** And each one answers, with the mount stripped because this fixture's route is at the root. */
+    for (const h of written) {
+      const r = await fetch(base + h.slice(MOUNT.length));
+      assert.equal(r.status, 200, `the page wrote ${h} and it answered ${r.status}`);
+      const body = await r.text();
+      assert.ok(body.length > 2000, `${h} answered 200 with ${body.length} bytes, which is not a page`);
+    }
+  } finally {
+    close();
+  }
+});
+
+/**
+ * ⛔ AND THE ROUTE ITSELF HAS TO CARRY THE MOUNT, which is a separate claim from `urlOf` honouring
+ * a base it is handed. The bug was not in the renderer: `linkBase: "/v2"` was hardcoded at both
+ * render sites inside `serve.ts`, so no caller could have fixed it. The hosted delegate strips
+ * `/p/<id>` before handing the path over and is therefore the only thing that knows what it
+ * stripped — the same reason `who` and `corpusFor` are passed in rather than re-derived.
+ */
+test("the route writes links under the mount it was given", async () => {
+  const MOUNT = "/p/prj-mounted";
+  const server = http.createServer(async (req, res) => {
+    const p = new URL(req.url ?? "/", "http://localhost").pathname;
+    if (!(await v2Route(req, res, p, { dir, mount: MOUNT }))) {
+      res.writeHead(404);
+      res.end("no");
+    }
+  });
+  await new Promise((r) => server.listen(0, r));
+  try {
+    const html = await (await fetch(`http://127.0.0.1:${server.address().port}/v2`)).text();
+    const under = (html.match(new RegExp(`href="${MOUNT}/v2/`, "g")) ?? []).length;
+    assert.ok(under >= 2, `the route wrote ${under} links under its mount`);
+    /** ⛔ THE ONE THAT FAILS ON THE PREVIOUS BUILD: not a single link at the bare root. */
+    const bare = (html.match(/href="\/v2\//g) ?? []).length;
+    assert.equal(bare, 0, `the route wrote ${bare} links at /v2, which 404 on any mounted instance`);
+  } finally {
+    server.close();
+  }
+});
+
 test("every script the page emits is valid JavaScript", () => {
   const html = renderScopePage(corpus, "everything", { interactive: true, records: "http", linkBase: "/v2" });
   const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]);

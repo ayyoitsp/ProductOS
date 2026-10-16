@@ -147,28 +147,73 @@ test("a slot answered at a rule is named, not linked", () => {
  *
  * Three cases, and the middle one is the one that shipped broken.
  */
-test("a page navigates within itself, and across pages only for what it does not hold", () => {
+/**
+ * ⛔ THIS TEST USED TO ASSERT THE OPPOSITE, AND IT WAS WRONG RATHER THAN MERELY OUT OF DATE.
+ *
+ * Peter: *"we should have durable links for everything in product os. no idea why we use anchors
+ * for everything."* Counted on the live page: 469 `href="#at-…"` and zero durable links. The old
+ * case 1 here asserted exactly that — that a served root page links to itself by FRAGMENT — with
+ * the reason "jumping within the page you are on beats reloading it".
+ *
+ * ⛔ THE REASON WAS RIGHT AND THE CONCLUSION DID NOT FOLLOW, which is why this is rewritten rather
+ * than deleted. A durable link to a section of the page you are on is still handled in the page:
+ * the click handler takes any link whose path is the one you are on, or which names a view this
+ * page holds, and switches without a reload. So the fast jump is kept AND the link is an address
+ * somebody can send. The old test could not tell those two apart, because it only looked at `href`.
+ *
+ * ⛔ AND A FRAGMENT WAS NEVER AN ADDRESS. A `#` never reaches the server, so a link to a thing is
+ * indistinguishable from a link to the page it sits on — unservable, unredirectable, and no help to
+ * an instance deciding what the reader wanted. `/p/<project>/v2/<scope>` has answered 200 the whole
+ * time; the page simply never emitted one, because `linkBase` was hardcoded root-relative and
+ * 404ed everywhere except the local server that made it look fine.
+ *
+ * What this asserts now is strictly more than what it replaced: the shape of the link, that the
+ * in-page switch survives alongside it, and that a render with no address still tells the truth.
+ */
+test("a served page links by address; a page with no address says so", () => {
   const root = corpus.scopes.find((s) => !s.scope.in).scope.id;
   const leaf = corpus.scopes.find((s) => s.scope.exchanges.length && s.scope.in).scope.id;
+  const navOf = (html) => html.match(/nav class="scopes"[\s\S]*?<\/nav>/)[0];
 
-  // 1. The root holds the whole subtree, so it anchors — even when a base is available, because
-  //    jumping within the page you are on beats reloading it.
-  for (const opts of [{}, { linkBase: "/v2" }]) {
-    const html = renderScopePage(corpus, root, opts);
-    assert.match(html, /nav class="scopes"/, "no nav at all");
-    assert.ok(
-      (html.match(/nav class="scopes"[\s\S]*?<\/nav>/)[0].match(/href="#/g) ?? []).length >= 2,
-      `root${opts.linkBase ? " (served)" : ""}: the nav is not navigable`
-    );
-  }
+  /** 1. Served: the nav addresses each scope by URL, and under the base it is actually served at. */
+  const served = renderScopePage(corpus, root, { linkBase: "/p/prj-x/v2" });
+  assert.match(served, /nav class="scopes"/, "no nav at all");
+  const nav = navOf(served);
+  const links = nav.match(/href="\/p\/prj-x\/v2\/[^"]+"/g) ?? [];
+  assert.ok(links.length >= 2, `the served nav emitted ${links.length} durable links`);
 
-  // 2. A leaf holds only itself, so the rest of the tree needs cross-page links where served…
-  const servedLeaf = renderScopePage(corpus, leaf, { linkBase: "/v2" });
-  assert.match(servedLeaf, /href="\/v2\//, "a served leaf offered no way to the other scopes");
+  /**
+   * ⛔ AND NONE OF THEM IS A BARE FRAGMENT. This is the assertion that fails on the previous build,
+   * where every one of these was `href="#at-…"`.
+   */
+  const frags = nav.match(/href="#/g) ?? [];
+  assert.equal(frags.length, 0, `the served nav still addresses ${frags.length} scopes by fragment`);
 
-  // 3. …and is honest about them where there is nowhere to send you.
+  /**
+   * ⛔ THE IN-PAGE SWITCH SURVIVES, which is the half the old test was protecting. Without
+   * `data-goto` a durable link would be correct and a full reload, which is a worse page.
+   */
+  assert.ok((nav.match(/data-goto="/g) ?? []).length >= links.length, "the durable links lost their in-page switch");
+
+  /** ⛔ ROOT-RELATIVE IS THE BUG, so the base has to be carried through rather than assumed. */
+  assert.doesNotMatch(nav, /href="\/v2\//, "a link was written at /v2 rather than under the base it is served at");
+
+  /** 2. A leaf holds only itself, so the rest of the tree is reachable by address where served… */
+  const servedLeaf = renderScopePage(corpus, leaf, { linkBase: "/p/prj-x/v2" });
+  assert.match(servedLeaf, /href="\/p\/prj-x\/v2\//, "a served leaf offered no way to the other scopes");
+
+  /**
+   * 3. …and is honest where there is nowhere to send you.
+   *
+   * ⛔ A FILE AND A PUBLISHED ARTIFACT HAVE NO ADDRESS TO BE DURABLE ABOUT, so they keep fragments.
+   * That is not the defect this change fixes; writing a URL there would be the defect.
+   */
+  const alone = renderScopePage(corpus, root);
+  assert.ok((navOf(alone).match(/href="#/g) ?? []).length >= 2, "a page with no address stopped navigating at all");
+  assert.doesNotMatch(alone, /href="\/v2/, "a standalone file offered a link it cannot follow");
+  assert.doesNotMatch(alone, /href="\/p\//, "a standalone file offered a hosted link it cannot follow");
+
   const aloneLeaf = renderScopePage(corpus, leaf);
-  assert.doesNotMatch(aloneLeaf, /href="\/v2/, "a standalone file offered a link it cannot follow");
   assert.match(aloneLeaf, /class="unlinked"/, "a standalone leaf claimed to reach scopes it does not hold");
 });
 
