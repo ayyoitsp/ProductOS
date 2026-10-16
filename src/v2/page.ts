@@ -3128,6 +3128,30 @@ function renderNav(
           `</li>`
       );
     }
+    /**
+     * A document that would not load keeps its place here, named, and goes nowhere.
+     *
+     * ⛔ Peter: *"'file would not load' should definitely still show up in the menu."* The nav walks
+     * `corpus.scopes`, which is exactly the set that parsed — so an unloadable screen left no trace
+     * in the one surface whose job is saying what this product consists of, and its area quietly
+     * showed five children where there were six. The alarm at the top said a file had not loaded;
+     * nothing connected that to the gap in the tree.
+     *
+     * ⛔ NOT A LINK, because there is no page to go to — the scope does not exist to render. A row
+     * that navigates nowhere would be the dead menu item this file's own opening comment is about;
+     * this one states a condition instead, which is what the reader needs to act.
+     */
+    for (const b of corpus.broken) {
+      const who = b.title ?? b.id;
+      if (!who || b.in !== parent) continue;
+      counted++;
+      rows.push(
+        `<li style="--d:${depth}" class="unloadable"${b.id ? ` data-scope="${esc(b.id)}"` : ""}>` +
+          `<span class="scoperow"><span class="name">${esc(who)}</span>` +
+          `<span class="n warn" title="this document would not load, so it is not on this page" ` +
+          `aria-label="would not load">would not load</span></span></li>`
+      );
+    }
     return rows.length ? `<ul>${rows.join("")}</ul>` : "";
   };
   /**
@@ -3551,7 +3575,13 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
          <p><strong>${corpus.broken.length} file${corpus.broken.length === 1 ? "" : "s"} here would not load</strong>, so everything below is computed without ${
            corpus.broken.length === 1 ? "it" : "them"
          } — nothing on this page should be agreed to until that is fixed.</p>
-         <ul>${corpus.broken.map((b) => `<li>${esc(b.why.split("\n")[0])}</li>`).join("")}</ul>
+         <ul>${corpus.broken
+           .map((b) => {
+             /* The screen's own words where it got far enough to say them, and never its file. */
+             const who = b.title ?? b.id;
+             return `<li>${who ? `<strong>${esc(who)}</strong> &mdash; ` : ""}${esc(b.why.split("\n")[0])}</li>`;
+           })
+           .join("")}</ul>
        </div>`
     : "";
 
