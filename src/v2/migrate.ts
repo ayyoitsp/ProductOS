@@ -497,6 +497,20 @@ export function migrate(v1Root: string, outDir: string, at: string): Migration {
               cadence: "on-an-event",
             },
             exists: allRetired(group) ? "withdrawn" : v1.status === "planned" ? "intended" : "kept",
+            /**
+             * ⛔ NO `wrote:`, AND THE SILENCE IS THE ANSWER — see `Wrote` in the schema.
+             *
+             * v1 recorded nothing about who typed a claim, so there is no hand to carry across.
+             * Writing `person` would be the migration deciding, on no evidence, that a human read
+             * every sentence it is copying — which is exactly the thing the field exists to stop
+             * anybody assuming. Writing `agent` would be worse: a lie about words a person may well
+             * have written years ago.
+             *
+             * Absence is the only spelling of unknown, so every migrated claim reports `unknown`
+             * and a grooming agent knows to ask rather than to guess. ⛔ It also means this landing
+             * moves no byte of any corpus and stales no acceptance, which is what let the field go
+             * into the stamp honestly.
+             */
             slots: { answer: { says: flat(b.claim) } },
             criteria: b.test_cases.map((t, i) => {
               carried.criteria++;
@@ -617,6 +631,11 @@ export function migrate(v1Root: string, outDir: string, at: string): Migration {
        * The id is what a stamp and a criterion point at, so v1's is reused rather than generated:
        * a stamp made against `an-unsized-deal-shows-no-loan-figure` still names the same thing if
        * this migration is ever re-run.
+       */
+      /**
+       * ⛔ AND NO `wrote:` HERE EITHER — the same reasoning as the capability branch above, at the
+       * grain where it matters most: these are the several statements of one slot, and v1 knew who
+       * typed none of them. Each one comes across reporting `unknown`.
        */
       const claims = group.filter((b) => flat(b.claim)).map((b) => ({ id: seg(b.id), says: flat(b.claim) }));
       const answer = claims.length === 1 ? claims[0]!.says : claims;

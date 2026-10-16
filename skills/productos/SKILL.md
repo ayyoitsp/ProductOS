@@ -206,7 +206,18 @@ now names the file it wrote to, which is the only moment somebody can still catc
 
 ## ⛔ How confident the corpus is, and the line that cannot move
 
-Every statement has two separate facts, and they must never be read as one scale:
+Every statement has **three** separate facts, and they must never be read as one scale:
+
+- **who wrote it** — `wrote: {hand: person|agent, as: …, from: …}` on the sentence, the statement,
+  the named refusal or the rule. ⛔ Every role writes `hand: agent` on every sentence it puts in a
+  corpus, with `from:` naming what it was worked out from. A claim software inferred and a claim a
+  product person typed-but-has-not-confirmed both read *"not confirmed"*, and so does one nobody has
+  ever looked at — the first has to be **raised as a question** when a ticket is groomed and the
+  second only needs a **stamp**. Nothing can tell them apart unless this is written.
+  ⛔ **Absent means `unrecorded`, never "a person"** — that is what a migrated corpus says, and
+  defaulting it the other way turns an agent's guess into somebody's draft. ⛔ **And it is not a
+  stamp**: no gate reads it, so it cannot make anything look agreed.
+
 
 - **confirmed** — a person's act. `accept` or `rule`, with a `by` and a `via`.
 - **strength** — `none · one source · corroborated · strongly supported`, derived from the readings

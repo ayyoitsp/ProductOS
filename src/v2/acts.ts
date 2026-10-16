@@ -20,7 +20,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { checkCorpus } from "./check.js";
 import { loadCorpus, type Corpus } from "./load.js";
-import { Verdict, type SlotName } from "./schema.js";
+import { Verdict, statements, authorshipOf, type SlotName, type Authorship } from "./schema.js";
 import { gateFor } from "./grid.js";
 import { coveredBy, stampFor, staleReason } from "./stamp.js";
 import { questionsFor, settle, waive as applyWaiver, govern, withdraw as takeOut } from "./settle.js";
@@ -97,6 +97,32 @@ export interface Consent {
    */
   relayedBy?: string;
 }
+
+/**
+ * Which hand supplied the words an act is about to write into the corpus.
+ *
+ * ⛔ DERIVED FROM `via`, NEVER TAKEN FROM THE CALLER — and that is the whole of why this field can
+ * never become a second route to looking agreed. `mayRecord` refuses a token that claims a human
+ * `via`; computing authorship from the same value means the one boundary already defended is the
+ * one that answers both questions. A `--hand person` flag would have been a second gate, enforced
+ * nowhere, reachable by anything that can spell.
+ *
+ * ⛔ AND IT IS STILL NOT CONSENT. `person` here says a human typed these words. It says nothing
+ * about anyone having agreed to them — that is `stampFor`, which reads none of this.
+ */
+export const wroteBy = (consent: Consent, from?: string): Authorship =>
+  isHuman(consent.via)
+    ? { hand: "person", as: consent.by, ...(from ? { from } : {}) }
+    : {
+        hand: "agent",
+        as: consent.by,
+        /**
+         * ⛔ ONE SENTENCE, SAID IDENTICALLY, rather than a bespoke one per act. `propose-slots.ts`
+         * holds the same line for the same reason: a sentence this file made up for each occasion
+         * would be indistinguishable from one somebody wrote.
+         */
+        from: from ?? "landed by software as a default a reviewer can disagree with — nobody has read it",
+      };
 
 /**
  * An act that WOULD be honest here, offered instead of the one that was refused.
@@ -275,7 +301,7 @@ export function preview(dir: string, act: Act, payload: Payload): { ok: true; re
     const aim = aimOf(corpus, target);
     if ("ok" in aim) return aim;
     if (!c) return no(`no exchange or rule "${target}"`);
-    return { ok: true, reads: c.reads };
+    return { ok: true, reads: [...c.reads, ...whoseWords(corpus, target)] };
   }
 
   if (act === "read") {
@@ -304,6 +330,61 @@ export function preview(dir: string, act: Act, payload: Payload): { ok: true; re
       ...(target.standing?.question ? [flat(target.standing.question)] : []),
     ],
   };
+}
+
+/**
+ * Whose words these are, said at the moment somebody is asked to agree to them.
+ *
+ * ⛔ THE ONE PLACE A REVIEWER CANNOT GET THIS WRONG LATER. A person about to stamp a sentence is
+ * entitled to know it was worked out by software from a call transcript and that nobody has read
+ * it since — that is the difference between reading a claim and ratifying a guess, and it is
+ * invisible on the page today because "not confirmed" says it for all three cases at once.
+ *
+ * ⛔ APPENDED TO THE PREVIEW, NOT FOLDED INTO `coveredBy`. What a stamp COVERS is the behaviour;
+ * provenance is context for the decision, not part of the sentence — and putting it in the hashed
+ * reading would write it into `covered_text` and make a re-recorded author read as a reworded
+ * claim.
+ */
+function whoseWords(corpus: Corpus, target: string): string[] {
+  const r = resolveRef(corpus, target);
+  if ("error" in r) return [];
+  const ref = r.ref;
+  if (ref.kind === "rule") {
+    const rule = corpus.rules.find((x) => x.rule.id === ref.rule)?.rule;
+    return sayWhoWrote(authorshipOf(rule));
+  }
+  if (ref.kind === "rule-case") {
+    const rule = corpus.rules.find((x) => x.rule.id === ref.rule)?.rule;
+    return sayWhoWrote(authorshipOf((rule?.outcomes ?? []).find((o) => o.name === ref.name), rule));
+  }
+  if (ref.kind !== "slot" && ref.kind !== "statement" && ref.kind !== "case") return [];
+  const ex = corpus.scopes.find((s) => s.scope.id === ref.scope)?.scope.exchanges.find((x) => x.id === ref.exchange);
+  const fill = ex?.slots?.[ref.slot];
+  if (!fill) return [];
+  /** ⛔ Narrowest grain first, through the one precedence rule — see `authorshipOf` in the schema. */
+  const narrower =
+    ref.kind === "statement"
+      ? statements(fill.says).find((x) => x.id === ref.name)
+      : ref.kind === "case"
+        ? (fill.outcomes ?? []).find((o) => o.name === ref.name)
+        : undefined;
+  return sayWhoWrote(authorshipOf(narrower, fill));
+}
+
+/**
+ * ⛔ THREE ANSWERS, AND THE THIRD IS SAID OUT LOUD RATHER THAN LEFT BLANK. A sentence whose author
+ * nobody recorded is the commonest case in a migrated corpus, and silence about it reads exactly
+ * like a person having typed it — which is the conflation this whole field exists to end.
+ */
+function sayWhoWrote(w: ReturnType<typeof authorshipOf>): string[] {
+  if (!w)
+    return ["", "⛔ nobody recorded who wrote this, so there is no telling whether anyone has read it."];
+  if (w.hand === "agent")
+    return [
+      "",
+      `⛔ these words were worked out by ${w.as}, from ${w.from} — nobody has read them.`,
+    ];
+  return ["", `written by ${w.as}${w.from ? ` — ${w.from}` : ""}. ⛔ Written is not agreed.`];
 }
 
 /**
@@ -966,14 +1047,32 @@ function doRule(dir: string, o: RulePayload, consent: Consent): Outcome {
    * person decided, the corpus says nobody has, and `check` reports `ruled-but-not-written` at
    * somebody who did everything right.
    */
-  const applied = settle(dir, o.slot, says, consent.by, today(), o.because, {
-    defersTo: o.defersTo,
-    insteadOf: o.insteadOf,
-    then: o.then,
-    refuses: o.refuses,
-    outcomes: pickedOutcomes,
-    none: pickedNone,
-  });
+  const applied = settle(
+    dir,
+    o.slot,
+    says,
+    consent.by,
+    today(),
+    o.because,
+    {
+      defersTo: o.defersTo,
+      insteadOf: o.insteadOf,
+      then: o.then,
+      refuses: o.refuses,
+      outcomes: pickedOutcomes,
+      none: pickedNone,
+    },
+    /**
+     * ⛔ A PICKED OPTION'S WORDS WERE DRAFTED BY SOMETHING ELSE, AND THE RECORD SAYS SO.
+     *
+     * The hand is still the ruler's — a person who picks has READ the sentence, which is exactly
+     * the distinction that decides whether a grooming agent raises a question about it — but the
+     * words are not theirs, and `chose` is the only surviving trace of where they came from once
+     * `standing.candidates` is deleted. Same argument as `option_said` directly above: the
+     * drafter's contribution is kept, attributed to the drafter.
+     */
+    wroteBy(consent, chose ? `the ruler picked ${chose}, drafted for this question` : undefined)
+  );
   if (!applied.ok)
     return no(`that ruling cannot be written in: ${applied.why}`, [
       "nothing has been recorded — fix the slot or the ruling and run it again",
