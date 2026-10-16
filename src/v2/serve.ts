@@ -586,7 +586,26 @@ export async function v2Route(req: http.IncomingMessage, res: http.ServerRespons
 
   if (req.method === "GET") {
     const corpus = opts.corpusFor ? opts.corpusFor() : loadCorpus(dir);
-    const scope = p === "/v2" ? undefined : decodeURIComponent(p.slice("/v2/".length));
+    /**
+     * Which scope a menu path names: the deepest segment that is one.
+     *
+     * ⛔ THE URL IS THE MENU PATH NOW. Peter: *"get rid of the fucking anchors. URLs should follow
+     * the menu structure"*, then *"v2/overview, v2/product/{feature}/{subfeature}, etc"*. So the
+     * address carries the whole ancestry, and `/v2/<one-segment>` was only ever the leaf of it.
+     *
+     * ⛔ THE DEEPEST, NOT THE FIRST, because every segment before the last is a scope too — reading
+     * left to right would serve the area whenever somebody asked for a feature inside it.
+     *
+     * ⛔ AND A SEGMENT THAT IS NOT A SCOPE IS NOT AN ERROR. `/v2/overview` names a tab, and the tail
+     * of `…/rent-roll/review-the-rows` names a ref inside a scope — both belong to the browser,
+     * which selects the section and scrolls. The server's only job is to answer with the page that
+     * holds them, so an unrecognised tail falls back to the deepest scope it did recognise rather
+     * than 404ing on an address the page itself wrote.
+     */
+    const segments =
+      p === "/v2" ? [] : p.slice("/v2/".length).split("/").filter(Boolean).map((x) => decodeURIComponent(x));
+    let scope: string | undefined;
+    for (const seg of segments) if (corpus.scopes.some((x) => x.scope.id === seg)) scope = seg;
     /**
      * ⛔ `/v2` LANDS ON A REAL SCOPE, NOT AN INDEX OF ONE ITEM. Every scope tree has a root, and
      * the page already renders the whole subtree beneath whatever it is given — so an index page

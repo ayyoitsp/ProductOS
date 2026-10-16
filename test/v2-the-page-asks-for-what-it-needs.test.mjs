@@ -577,6 +577,99 @@ test("the route writes links under the mount it was given", async () => {
   }
 });
 
+/**
+ * ⛔ THE URL IS THE MENU PATH, AND NOTHING IS AN ANCHOR.
+ *
+ * Peter: *"uhm. this feature seems largely broken. let me re-prhase. get rid of the fucking
+ * anchors. URLs should follow the menu structure."* — and then the shape, exactly:
+ * *"v2/overview, v2/product/{feature}/{subfeature}, etc"*.
+ *
+ * The cut before this gave each scope a flat `/v2/<scope>` and still hung `#at-<scope>` off the
+ * end, so the address bar read `/v2/part-0#at-part-0`: an address and an anchor saying the same
+ * thing twice, in a shape that told a reader nothing about where they were. The pin that shipped
+ * with it only asked whether each link RESOLVED, which that satisfied.
+ *
+ * ⛔ SO THIS ASSERTS THE SHAPE, NOT MERELY THAT IT WORKS. A link can answer 200 and still be the
+ * wrong URL, and the previous round is the proof.
+ */
+test("every link is a menu path, and not one of them is an anchor", () => {
+  const MOUNT = "/p/prj-under-a-path";
+  const html = renderScopePage(corpus, "everything", {
+    interactive: true,
+    records: "http",
+    linkBase: MOUNT + "/v2",
+    only: ["everything"],
+  });
+
+  const hrefs = [...new Set((html.match(/href="([^"]+)"/g) ?? []).map((m) => m.slice(6, -1)))];
+  const internal = hrefs.filter((h) => h.startsWith(MOUNT));
+  assert.ok(internal.length >= 4, `the page wrote ${internal.length} internal links, so this proves nothing`);
+
+  /** ⛔ THE ONE HE ASKED FOR, AND IT FAILS ON THE PREVIOUS BUILD: no fragments at all. */
+  const anchored = hrefs.filter((h) => h.includes("#"));
+  assert.deepEqual(anchored, [], `${anchored.length} links still carry an anchor, e.g. ${anchored[0]}`);
+
+  /**
+   * ⛔ AND THE PATH IS THE ANCESTRY. `thing-0` is filed under `part-0`, so its address has to carry
+   * `part-0` — a flat `/v2/thing-0` resolves perfectly and is the thing he called broken.
+   */
+  const deep = internal.find((h) => h.endsWith("/thing-0"));
+  assert.ok(deep, `no link addressed thing-0; got ${JSON.stringify(internal.slice(0, 5))}`);
+  assert.equal(deep, `${MOUNT}/v2/part-0/thing-0`, `thing-0 is addressed as ${deep}, which is not its menu path`);
+
+  /** ⛔ Nothing above the root leaks in: the root is the Overview tab, not a segment. */
+  for (const h of internal) {
+    assert.ok(!h.includes("/everything/"), `${h} carries the root, which the menu does not show`);
+  }
+});
+
+/**
+ * ⛔ AND THE SERVER RESOLVES WHAT THE PAGE WRITES — every segment of it, not just the last.
+ *
+ * A menu path is several segments and the old route read exactly one, so `/v2/part-0/thing-0`
+ * would have 404ed on an address the page itself had just written. The deepest segment that names
+ * a scope is the page; everything after it belongs to the browser.
+ */
+test("the route resolves a menu path, at every depth", async () => {
+  const { base, close } = await serve(dir);
+  try {
+    const cases = [
+      ["/v2", "the bare root"],
+      ["/v2/overview", "the Overview tab"],
+      ["/v2/part-0", "an area"],
+      ["/v2/part-0/thing-0", "a feature under its area"],
+      ["/v2/part-0/thing-0/do-it-0", "a ref inside a feature"],
+    ];
+    for (const [path, what] of cases) {
+      const r = await fetch(base + path);
+      assert.equal(r.status, 200, `${what} (${path}) answered ${r.status}`);
+      const body = await r.text();
+      assert.ok(body.length > 2000, `${what} (${path}) answered 200 with ${body.length} bytes`);
+    }
+
+    /**
+     * ⛔ NON-VACUOUS: the deep path has to serve the FEATURE, not fall back to the root. Without
+     * this every case above passes on a route that ignores the path entirely.
+     */
+    const deep = await (await fetch(base + "/v2/part-0/thing-0")).text();
+    const root = await (await fetch(base + "/v2")).text();
+    const titleOf = (h) => (h.match(/<title>([^<]*)<\/title>/) ?? [, ""])[1];
+    /**
+     * ⛔ THE TITLE, NOT THE SIZE — and the first version of this compared sizes and was WRONG about
+     * which way round they go. The deep page served 380,398 bytes against the root's 327,853,
+     * because the root DEFERS every section but one while a scoped page renders its feature whole.
+     * "Smaller means scoped" was a proxy for the thing I meant, and it measured the opposite.
+     */
+    assert.equal(titleOf(deep), "Thing 0", `the deep path served "${titleOf(deep)}"`);
+    assert.notEqual(titleOf(root), titleOf(deep), "the root and the deep path served the same page, so the path changed nothing");
+    /** ⛔ And it really is scoped: the root's nav holds every feature, this one's subtree does not. */
+    assert.ok(!deep.includes('data-view="thing-5"'), "the deep path carried a feature from outside its own subtree");
+    assert.ok(root.includes('data-view="thing-5"'), "the root does not hold thing-5 either, so the line above proves nothing");
+  } finally {
+    close();
+  }
+});
+
 test("every script the page emits is valid JavaScript", () => {
   const html = renderScopePage(corpus, "everything", { interactive: true, records: "http", linkBase: "/v2" });
   const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]);

@@ -101,9 +101,17 @@ await page.waitFor(
 /** ⛔ The marker: survives a history push, dies in a navigation. */
 await page.evaluate(`window.__probeSurvived = true`);
 
+/**
+ * ⛔ THE DEEPEST ROW, because a top-level one proves nothing about the structure. `part-0` sits
+ * directly under the root and the root is not a crumb, so its menu path is one segment — which is
+ * indistinguishable from the flat `/v2/<scope>` this change replaced. A row two levels down is
+ * where `/v2/{area}/{feature}` either appears or does not.
+ */
 const row = await page.evaluate(`(() => {
-  const a = [...document.querySelectorAll("nav.scopes a[data-goto]")].find((x) => x.dataset.goto !== "overview");
-  return a ? { goto: a.dataset.goto, href: a.getAttribute("href") } : null;
+  const rows = [...document.querySelectorAll("nav.scopes a[data-goto]")].filter((x) => x.dataset.goto !== "overview");
+  const deepest = rows.map((a) => ({ goto: a.dataset.goto, href: a.getAttribute("href"), depth: (a.getAttribute("href") || "").split("/").length }))
+    .sort((x, y) => y.depth - x.depth)[0];
+  return deepest || null;
 })()`);
 if (!row) {
   console.error("the nav has no row to press");
@@ -149,8 +157,17 @@ console.log(`   showing   ${JSON.stringify(landed.showing)}`);
 console.log("");
 const ok = [];
 if (!row.href.startsWith(`${MOUNT}/v2/`)) ok.push(`⛔ the nav still writes ${row.href}`);
+/**
+ * ⛔ NO FRAGMENT ANYWHERE. Peter: *"get rid of the fucking anchors. URLs should follow the menu
+ * structure"*. Checked on the link, on the address bar after the press, and on both at once —
+ * the previous cut satisfied "has a path" while still writing /v2/part-0#at-part-0.
+ */
+if (row.href.includes("#")) ok.push(`⛔ the nav link still carries an anchor: ${row.href}`);
+if (after.hash) ok.push(`⛔ the address bar still carries an anchor: ${after.hash}`);
 if (!after.survived) ok.push("⛔ pressing a durable link reloaded the page");
-if (after.path !== `${MOUNT}/v2/${row.goto}`) ok.push(`⛔ the address bar says ${after.path}, not ${MOUNT}/v2/${row.goto}`);
+/** ⛔ The LAST segment is the thing; everything before it is the menu above it. */
+if (after.path.split("/").pop() !== row.goto) ok.push(`⛔ the address bar says ${after.path}, which does not end at ${row.goto}`);
+if (!after.path.startsWith(`${MOUNT}/v2/`)) ok.push(`⛔ the address bar says ${after.path}, not under ${MOUNT}/v2`);
 if (!landed.views) ok.push("⛔ the copied address opened a page with nothing on it");
 if (ok.length) ok.forEach((x) => console.log(x));
 else console.log(`✓ durable in the address bar, no reload, and the address opens on its own`);
