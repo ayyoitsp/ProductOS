@@ -2980,11 +2980,14 @@ export function v2Command(): Command {
       let parts: Array<{ id: string; role: string; label?: string; leads_to?: string; decorative?: boolean }> = [];
       /** Whether a hand-drawn sketch sits beside the generated one — see the warning below. */
       let hasAscii = false;
+      /** What the truth calls this screen, which is how an exclusive set of tabs is chosen between. */
+      let viewTitle = "";
       try {
         const c = readCorpus();
         const sc = c.scopes.find((x) => x.scope.id === scopeId || x.scope.id === scopeId.split("/").pop())?.scope;
         const v = sc?.views.find((x) => x.id === viewId);
         parts = v?.parts ?? [];
+        viewTitle = v?.title ?? "";
         hasAscii = Boolean(v?.sketch);
         /**
          * ⛔ IT GOES THROUGH, AND IT SAYS WHOSE WORK IT IS REPLACING.
@@ -3005,7 +3008,12 @@ export function v2Command(): Command {
       } catch {
         parts = [];
       }
-      const drawn = drawFromRoute(route, { componentsDir, parts });
+      /**
+       * ⛔ THE VIEW'S OWN WORDS GO IN, so a page of mutually exclusive tabs draws THIS one. Its id
+       * and title are what the truth calls this screen; the code cannot say which tab it is.
+       */
+      const screenWords = [scopeId, viewId, viewTitle].filter(Boolean).join(" ");
+      const drawn = drawFromRoute(route, { componentsDir, parts, screen: screenWords });
       if (!drawn.html.trim()) {
         console.error(pc.red("✗"), "nothing could be read out of that component");
         for (const u of drawn.unresolved) console.error(pc.dim(`  ${u}`));
@@ -3870,7 +3878,12 @@ function drawEverything(code: string, pages: Pages, corpusAt: string | undefined
     const parts = view.parts ?? [];
     let drawn;
     try {
-      drawn = drawFromRoute(route, { componentsDir: componentsDir ? path.resolve(repoRoot, componentsDir) : undefined, parts });
+      drawn = drawFromRoute(route, {
+        componentsDir: componentsDir ? path.resolve(repoRoot, componentsDir) : undefined,
+        parts,
+        /** ⛔ The sweep names the screen too, or every tabbed page in the corpus draws all its tabs. */
+        screen: [ref.split("#")[0], view.id, view.title].filter(Boolean).join(" "),
+      });
     } catch (e) {
       stuck.push({ ref, why: "no-candidate", detail: `could not read ${path.relative(repoRoot, route)}: ${(e as Error).message}` });
       continue;
