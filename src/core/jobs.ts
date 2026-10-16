@@ -342,6 +342,21 @@ export const AREAS: Area[] = [
       "src/v2/migrate.ts",
       "src/v2/draw.ts",
       "src/v2/draw-write.ts",
+      /**
+       * ⛔ THE GENERATOR THAT WRITES TO AN INSTANCE LIVES HERE, AND THIS AREA DID NOT CLAIM IT.
+       *
+       * `drawEverythingOn` — pull the corpus, draw in memory, push only what moved through the one
+       * door — is in the CLI file, as is the per-screen path beside it. Both decide where a drawing
+       * LANDS, which is this area's question, and neither was on any area's list. Same omission as
+       * `core/agents-doc.ts` below, with the same consequence: no reviewer looks at it, and a change
+       * that genuinely reaches `generate` cannot be recorded as having reached it.
+       *
+       * It cost exactly that. One screen named with `--into <url>` ran `path.resolve` on the url,
+       * drew 331kb from 76 components, and died on `<cwd>/http:/127.0.0.1:4100/...` — so the only
+       * way to put one drawing on a hosted corpus was to carry it by hand, which is how a screen
+       * came to hold its states and no picture of its own.
+       */
+      "src/cli/commands/v2.ts",
       "src/v2/routes.ts",
       "src/v2/propose.ts",
       /**

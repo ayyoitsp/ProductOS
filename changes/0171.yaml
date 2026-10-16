@@ -1,0 +1,8 @@
+id: "0171"
+said: "uh, what am i looking at on deal overview? just a bunch of text? wtf? / fix whatever framework issue allowed this to happen too"
+at: 2026-10-16
+kind: generator
+reaches:
+  generate: const onInstance = looksLikeInstance(o.into)
+  pin: the drawing is posted to the instance through the one door
+waived: {}
