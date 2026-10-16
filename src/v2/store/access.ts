@@ -12,7 +12,7 @@
  */
 import { and, asc, eq, gt, isNull, lt, sql, inArray, like, not } from "drizzle-orm";
 import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
-import type { Refusal } from "../identity.js";
+import type { Principal, Refusal } from "../identity.js";
 import { authIsOff } from "./identity.js";
 import { documents, events, listening, projectMembers, projects } from "./schema.js";
 
@@ -40,7 +40,8 @@ export interface Fingerprint {
  * A second opinion about it in the store would be a second place the guarantee could be wrong.
  */
 export interface Who {
-  kind: "browser" | "token";
+  /** ⛔ The principal's own type, not a copy of its spelling — a shell is a kind of caller too. */
+  kind: Principal["kind"];
   /** The account. For a token, the account that issued it. */
   account: string;
   /** Empty means every project the account can reach — ⛔ never every project. */

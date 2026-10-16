@@ -181,7 +181,8 @@ has decided, that is a `standing`, not a `says`.
 
 ⛔ **You CAN now record their acts, and that is exactly why this matters more than it used to.**
 The five acts used to be unreachable from any tool a model could call. They are reachable now —
-`productos_exchange_settle` and friends — because a person answering in conversation, or pressing
+`productos_in` with `intent: accept | rule | waive | defer | read`, which is the one door and the
+one name each act has on every surface — because a person answering in conversation, or pressing
 a button on a page you rendered for them, is the whole point. What replaced the old guarantee is
 one required field:
 
@@ -1645,6 +1646,12 @@ rather than a blank. It is the only value of `via` that is not consent, and it i
 
 ⛔ **Use it only where nobody was asked, and never instead of asking.** The whole model rests on a
 person having agreed; a default is scaffolding for that conversation, not a substitute for it.
+
+⛔ **And `--via page|question|chat|cli` is not available to you — it is REFUSED, not frowned upon.**
+Any human `via` from a shell software is driving is turned away by the CLI itself, with the reasons
+printed. This is not an obstacle to route around: a verdict you typed is byte-identical to one the
+person pressed, and nothing afterwards could tell them apart. If they are in the room, they press it
+themselves — on the page, in the question interface, or from their own terminal.
 
 ⛔ **It must be obvious, on the thing itself, that somebody is being asked to change it.** The page
 says *"Nobody has looked at this. It was written for you by X"* in a warning band, and the queue

@@ -410,11 +410,9 @@ of this repository will meet it:
   side. The registry marks which belong to the track that is no longer where the work is; the
   older ones speak *container*, *behavior*, *test case*, *surface* and *element*, and
   [`GLOSSARY.md`](./GLOSSARY.md) deliberately defines none of those words.
-- **`service/` is the retired hosted store, and it is still deployed.** It models the older
-  schema and cannot read an Exchange corpus at all. It is not deleted because it is serving
-  traffic: deleting the source for something live is not a tidy-up, so whether it is torn down —
-  and what happens to anything in its database — is **Peter's call**. Its own notice is currently
-  the only thing stopping somebody extending it.
+- **The retired hosted store is gone.** It modelled the older schema and could not read an
+  Exchange corpus at all; its source was deleted rather than carried. The hosted store is
+  `src/v2/store/`, with the compose files at the repository root — and it is the only one.
 - **`backend/` is not ProductOS.** It is the **Family Wallet** demo's API — the dogfooding app in
   `demo/`, mirrored as a REST surface so that app can run either fully local or backend-driven.
   Nothing in ProductOS depends on it. It lives here because the demo does, and moving it out is a

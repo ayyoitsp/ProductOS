@@ -1,1 +1,0 @@
-ALTER TABLE "surfaces" ADD COLUMN "sketch_html" text;

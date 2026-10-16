@@ -304,6 +304,14 @@ Whatever route you are on:
    it was obtained, which is the whole thing `via` exists to carry.
 2. **Every act of judgement.** `accept`, `rule`, `read`, `waive`, `defer`. The CLI is how somebody's
    choice gets RECORDED, never how it gets made.
+
+   ⛔ **And not from your shell — that is refused now, not discouraged.** A human `via` (`page`,
+   `question`, `chat`, `cli`) is refused when software is driving the shell or nothing is attached
+   to it, because a verdict you typed is byte-identical to one they pressed. What is open to you:
+   `--via agent`, a default that satisfies no gate and that a reviewer disagrees with. What is open
+   to them: pressing it on the page, answering in the question interface, or running the same
+   command in their own terminal. ⛔ There is no flag that says *a person really is here* — a switch
+   you can set is a switch you set.
 3. **Answering an open question.** Not even an obvious one. An answer nobody gave, written in the
    form of one somebody did, is indistinguishable afterwards from a decision.
 
@@ -342,13 +350,26 @@ Their freeform answer arrives as Other. That is a `says`, not a pick.
 
 ### 3. Record what they chose
 
+⛔ **One name per act, on every surface.** `accept` · `rule` · `waive` · `defer` · `read` are what
+the CLI types, what the page presses and what you send — and there is exactly one way to send one:
+`productos_in`, the same door `/api/v2/in` takes. There is no second tool per act; a model given
+two names for one act has been handed a decision with no right answer, and two sessions recording
+the same act under different names leave a corpus nobody can search.
+
 ```
-productos_exchange_settle          slot, pick | says, because, by, via
-productos_exchange_park            slot, because, until, by, via
-productos_exchange_grant_latitude  slot, because, by, via
-productos_exchange_agree_to        ref, by, via
-productos_exchange_record_read_through  scope, buildable, by, via
+productos_in  intent: "rule"    fields: ref, because, pick | says, by, via
+productos_in  intent: "defer"   fields: ref, because, until, by, via
+productos_in  intent: "waive"   fields: ref, because, by, via
+productos_in  intent: "accept"  fields: ref, by, via
+productos_in  intent: "read"    fields: ref, buildable, blockedBy, note, by, via
 ```
+
+⛔ **`ref` is the one address field, for all five** — a scope, an exchange or a slot, whichever the
+act is about. There is no separate `slot` or `scope` argument.
+
+⛔ **The intent is named, never inferred.** Nothing here reads a sentence and decides it meant
+`accept`; that would mint consent nobody gave. Call **`productos_intents`** when you are unsure what
+a field means — it is generated from the registry, so it cannot be out of date.
 
 `via: "question"` when they selected an option, `"chat"` when they answered in prose. Before asking
 anyone to agree to a whole exchange, call **`productos_exchange_what_it_covers`** and show them —
