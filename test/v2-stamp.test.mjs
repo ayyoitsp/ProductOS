@@ -59,6 +59,17 @@ const SAMPLE = {
    * everybody, which is the direction `held_by` was caught on.
    */
   holds_for: { role: "somebody-nobody-agreed-about" },
+  /**
+   * ⛔ WHOSE WORDS THESE ARE IS PART OF WHAT SOMEBODY AGREED TO — not because authorship is
+   * consent (it is emphatically not; no gate reads it) but because replacing an agreed sentence
+   * with software's wording must not be doable underneath a stamp. Same argument as `held_by` and
+   * `rests_on` above: the sentence can read identically while what a reviewer was looking at has
+   * changed.
+   *
+   * ⛔ And this costs nothing on any corpus that exists, because absence is the only spelling of
+   * `unrecorded` — nothing backfills it, so no stamp moved on the day the field landed.
+   */
+  wrote: { hand: "agent", as: "productos-machinist", from: "the spend handler the screen was drawn from" },
 };
 
 test("every key of SlotFill changes the canonical form the hash is taken over", () => {
