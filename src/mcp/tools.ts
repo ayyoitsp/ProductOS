@@ -799,12 +799,41 @@ const getTracking: McpTool = {
   },
 };
 
+/**
+ * \u26d4 `verified` IS NOT ONE OF THE STATUSES A MODEL IS OFFERED — AND THAT IS THE ENFORCEMENT.
+ *
+ * `productos_verify_behavior` is withheld for a reason written out at the registry below, and this
+ * tool was the same act under another name: `status: "verified"` reached `recordTransition` with
+ * `setVerified: true`, which stamps `last_verified` and `verified_by` — `by` DEFAULTING TO
+ * "ai-runtime", so the sidecar recorded the runtime itself as the verifier. Unregistering
+ * `verify_behavior` was meant to close exactly this, and an architect's finding about it ("the one
+ * bit the docs call sacred is enforced by a sentence in a tool description") applied here verbatim:
+ * the only thing standing in the way was the description saying *use 'verified' only when a human
+ * explicitly confirms*.
+ *
+ * \u26d4 THE ENUM, NOT A SENTENCE. A model can ignore an instruction and cannot ignore a schema
+ * that does not offer the value — and this is the shape the BYOK editor has always had
+ * (`src/byok/processor.ts`, whose `update_tracking` lists exactly these five). The MCP surface was
+ * the looser of the two sides of one concept.
+ *
+ * \u26d4 THE OTHER STATUSES STAY, because none of them claims anybody agreed to anything: an agent
+ * noticing that code moved (`stale`), that evidence disagrees (`contested`), or that a claim is now
+ * proposed is doing its job, and `contested` can only ever reduce what the corpus claims. Same
+ * asymmetry as `unverifyBehavior` keeping its registration.
+ */
+const AGENT_STATUSES = BehaviorStatus.options.filter((s) => s !== "verified") as [string, ...string[]];
+
 const UpdateTrackingInput = z.object({
   feature_id: z.string(),
   implements: z.array(z.string()).optional().describe("Replace the feature's implementation paths"),
   behavior_id: z.string().optional(),
   code_refs: z.array(z.string()).optional().describe("Replace the behavior's code_refs"),
-  status: BehaviorStatus.optional(),
+  status: z
+    .enum(AGENT_STATUSES)
+    .optional()
+    .describe(
+      "The behavior's tracking status. \u26d4 'verified' is not here and cannot be sent: it means a person confirmed the claim holds, and nothing a model calls may record that. A human does it by pressing Accept on the page, or with `productos verify` on their own machine."
+    ),
   note: z.string().optional().describe("Optional note recorded in history alongside the transition"),
   by: z.string().default("ai-runtime"),
 });
@@ -812,9 +841,26 @@ const UpdateTrackingInput = z.object({
 const updateTracking: McpTool = {
   name: "productos_update_tracking",
   description:
-    "Update the tracking sidecar. Use this for implementation refs and verification state — these are NOT in product truth. Set `implements` to update the feature's code paths. Set `behavior_id` plus code_refs/status to update one behavior's tracking. Status transitions are recorded in the behavior's history. Use 'verified' only when a human explicitly confirms; agents proposing claims should use 'proposed' or leave status alone.",
+    "Update the tracking sidecar. Use this for implementation refs and tracking status — these are NOT in product truth. Set `implements` to update the feature's code paths. Set `behavior_id` plus code_refs/status to update one behavior's tracking. Status transitions are recorded in the behavior's history. \u26d4 THERE IS NO 'verified' HERE: human validation is not something a model records, under any name. Use 'proposed' for a claim you are putting up for review, 'contested' when evidence disagrees with one, 'stale' when the code it referred to moved — and leave the stamp to a person.",
   inputSchema: zodToInputSchema(UpdateTrackingInput),
   handler: async (raw, paths) => {
+    /**
+     * \u26d4 ASKED BEFORE `parse`, SO THE ANSWER IS A REFUSAL AND NOT A TYPE ERROR. The enum
+     * already refuses it; a Zod failure reaches an MCP caller as a bare message with nowhere to go
+     * ("invalid enum value"), and a caller with nowhere to go is a caller that invents a way round.
+     * This names the two human paths instead.
+     */
+    const asked = (raw as { status?: unknown } | null)?.status;
+    if (asked === "verified")
+      return {
+        ok: false,
+        why: "`verified` means a person confirmed this claim holds, and nothing a model calls can record that",
+        detail: [
+          "a person stamps it by pressing Accept on the page, or with `productos verify` on their own machine",
+          "what you can say here: `proposed` (up for review), `contested` (evidence disagrees), `stale` (the code it referred to moved)",
+          "\u26d4 and if you believe the claim does hold, say so to the person and let them stamp it — an agreement nobody gave, written in the form of one somebody did, cannot be told apart afterwards",
+        ],
+      };
     const args = UpdateTrackingInput.parse(raw);
     const t = readTracking(paths, args.feature_id) ?? emptyTrackingFor(args.feature_id);
     if (args.implements !== undefined) t.implements = args.implements;
@@ -823,10 +869,14 @@ const updateTracking: McpTool = {
       if (args.code_refs !== undefined) cur.code_refs = args.code_refs;
       t.behaviors[args.behavior_id] = cur;
       if (args.status) {
+        /**
+         * \u26d4 NO `setVerified` ON THIS PATH AT ALL, rather than `args.status === "verified"`
+         * left to evaluate false. The flag is what writes `verified_by`, and a dead comparison is
+         * one careless edit from being live again.
+         */
         recordTransition(t, args.behavior_id, args.status as never, args.by, {
-          status: args.status,
+          status: args.status as BehaviorStatus,
           note: args.note,
-          setVerified: args.status === "verified",
         });
       }
     }
@@ -1295,6 +1345,11 @@ export const tools: McpTool[] = [
   undoEditTool,
   // tracking
   getTracking,
+  /**
+   * \u26d4 REGISTERED, WITH THE ONE STATUS THAT CLAIMS AGREEMENT TAKEN OUT OF ITS ENUM — see
+   * `AGENT_STATUSES` above. `status: "verified"` made this `verify_behavior` under another name,
+   * with `by` defaulting to "ai-runtime"; unregistering that tool was meant to close this.
+   */
   updateTracking,
   // feedback queue
   listFeedbackTool,
