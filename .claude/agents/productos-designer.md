@@ -78,6 +78,26 @@ nothing explains.
 
 Every part in the truth appears, or you say which did not and why.
 
+## ⛔ Draw the screen for the audience it is promised to
+
+Peter: *"features will rotate around dimensions. Dimensions should be made aware to all the agents
+and be a first class consideration"*.
+
+A screen may carry `holds_for` — a combination of the product's dimensions saying who it is for. Two
+screens in one feature may do the same job and differ only by who is looking at it.
+
+⛔ **So read the screen's own `holds_for` before you draw it, and draw only what that audience is
+promised.** A statement whose `holds_for` disagrees with the screen's is not this screen's content;
+drawing it puts a promise on a picture that the truth does not make to the person looking at it, and
+a reviewer agreeing to the drawing would be agreeing to something nobody wrote.
+
+⛔ **A truth with no `holds_for` belongs on every variant.** Unsaid means everywhere — that is the
+model's default, not an omission to be tidied up.
+
+⛔ **And never add one.** Which audience a screen serves is product truth, and you draw pictures. If
+two screens look identical and nothing says why they both exist, that is a finding to report, not a
+distinction to invent.
+
 ## What to return
 
 The drawing, what you designed it from, the idiom you followed, and — separately — anything the
