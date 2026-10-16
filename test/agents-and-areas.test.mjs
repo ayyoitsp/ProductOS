@@ -34,6 +34,8 @@ import {
   SKILL,
 } from "../dist/core/jobs.js";
 import { agentsDoc, withPreset } from "../dist/core/agents-doc.js";
+/** ⛔ The analyses, because a route's prose names them too and nothing checked those either. */
+import { ANALYSES } from "../dist/v2/analyse.js";
 
 test("every layer is somebody's territory, exactly once", () => {
   for (const layer of LAYERS) {
@@ -370,6 +372,51 @@ test("every route names real roles, and none delegates the settling", () => {
       `"${name}" touches truth and nothing in its keeps says the settling stays with the session`
     );
   }
+});
+
+/**
+ * ⛔ A ROUTE'S OWN WORDS SENT PEOPLE TO A ROUTE THAT DOES NOT EXIST.
+ *
+ * `map evidence` kept this: *"whether those criteria would show anything is `ready it for build`,
+ * after somebody has agreed"*. There is no such route — it is `hand it to the builders`, renamed in
+ * the data and not in the four pieces of prose pointing at it. ⛔ And a dangling route name is worse
+ * than a missing reference: it reads as a route that exists and has not been run yet, so the one
+ * instruction the reader of that entry is given names nothing, and nothing anywhere said so,
+ * because prose was the only place a route was ever referred to by name.
+ *
+ * ⛔ THE SAME ARGUMENT AS `danglingSteps`, APPLIED TO THE HALF THAT IS SENTENCES. `steps` has named
+ * roles checked against the registries since the day it existed; `keeps` and `why` carry the
+ * cross-references a session actually follows and nothing read them at all.
+ */
+test("every route and analysis a route's own words name is a real one", () => {
+  const routes = new Set(SHIMS.map((s) => s.route));
+  const analyses = new Set(ANALYSES.map((a) => a.name));
+  /**
+   * ⛔ THE CANDIDATES ARE BACKTICKED LOWERCASE PHRASES, which is how this registry refers to a
+   * route and to nothing else: a command carries `productos` or a `<placeholder>`, a field is one
+   * word, a role is one word. Measured before being relied on — on the defect this test is named
+   * for, the four candidates were three real `analyse <name>` references and the dead route.
+   */
+  const dangling = [];
+  for (const sh of SHIMS)
+    for (const [what, text] of [
+      ...sh.keeps.map((k) => ["keeps", k]),
+      ...sh.steps.map((s) => [`step ${s.role}`, s.why]),
+      ["does", sh.does],
+      ["when", sh.when],
+    ])
+      for (const m of text.matchAll(/`([^`]+)`/g)) {
+        const said = m[1];
+        if (!/\s/.test(said) || !/^[a-z][a-z \-]+$/.test(said)) continue;
+        const analysed = /^analyse (.+)$/.exec(said);
+        if (analysed ? analyses.has(analysed[1]) : routes.has(said)) continue;
+        dangling.push(`"${sh.route}" → ${what} names \`${said}\``);
+      }
+  assert.deepEqual(
+    dangling,
+    [],
+    `a route sends somebody to something that does not exist:\n  ${dangling.join("\n  ")}`
+  );
 });
 
 /**

@@ -40,6 +40,46 @@ test("⛔ the machinery half has exactly one owner, and it is not the scoper", (
   assert.match(author("machinist").writes.join(" | "), /system- and integrator-asked exchanges/);
 });
 
+/**
+ * ⛔ TWO AUTHORS DECLARED THE CRITERIA LAYER, AND IT IS THE FIELD WHERE THAT COSTS THE MOST.
+ *
+ * Peter: *"a product person doesn't write a criterion - what even is this? this is old shit. the
+ * agents decide what kind of tests need to exist."* The `demonstrator` was added for exactly that,
+ * and `agents/productos-scoper.md` was rewritten to say *"Write no `criteria:` at all"* — but the
+ * scoper's own `writes` still said *"criteria — what would show a sentence holding"*. So the field
+ * whose owner decides whether tests are well defined had two owners in the one list that exists to
+ * stop that, and an author reading the registry saw permission the prompt had taken away.
+ *
+ * ⛔ WHY THIS FIELD AND NOT ANOTHER: what a second owner produces is a typed criterion beside a
+ * derived one with no `derived.from` — so nothing can re-derive it, nothing stales it when the claim
+ * is reworded, and `analyse requirements` reports the feature as done.
+ */
+test("⛔ the criteria layer has exactly one owner, and it is not the scoper", () => {
+  const mentions = AUTHORS.flatMap((a) => a.writes.filter((w) => /\bcriteri/.test(w)).map((w) => [a.name, w]));
+  assert.deepEqual(
+    mentions.filter(([, w]) => /^criteria\b/.test(w)).map(([n]) => n),
+    ["demonstrator"],
+    "the artefact a builder implements is owned by none or by several"
+  );
+  /**
+   * ⛔ AND THE ONE OTHER ROLE THAT SAYS THE WORD IS POINTING AT THEM, NOT WRITING THEM. The
+   * `evidencer` writes *"evidence against criteria"* — the opposite direction, and the distinction
+   * is the whole reason `test-design` exists: finding what already demonstrates a claim is not
+   * deciding what would have to be demonstrated.
+   */
+  for (const [name, w] of mentions)
+    if (name !== "demonstrator")
+      assert.match(w, /evidence against criteria/, `the author "${name}" claims part of the criteria layer: ${w}`);
+  /** ⛔ And the owner owns the whole of it — a criterion nobody can re-derive is the defect. */
+  assert.match(author("demonstrator").writes.join(" | "), /`derived`/);
+  /** ⛔ The prompt already said so; this is the half that lagged, so both are asserted. */
+  assert.match(prompt("scoper"), /Write no `criteria:` at all/);
+  /** ⛔ And the judge of this layer is still forbidden to fix what it finds. */
+  const td = AGENTS.find((a) => a.name === "test-design");
+  assert.ok(td?.judges, "the role that reads criteria no longer judges");
+  assert.ok(!td.needs.includes("write-corpus"), "the criteria judge can write — it would repair instead of reporting");
+});
+
 test("⛔ `depends_on` has an owner, and had none", () => {
   /**
    * The schema calls it "the only thing carrying the structure the deleted capability tree used to

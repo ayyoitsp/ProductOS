@@ -38,6 +38,8 @@ const dir = path.join(temp("v2fan-"), "v2");
 execFileSync("node", [CLI, "v2", "reset", "--at", dir], { stdio: "pipe" });
 
 const { ANALYSES } = await import(path.resolve("dist/v2/analyse.js"));
+/** ⛔ The routing table, because declaring a sweep unfannable and then fanning it is the real defect. */
+const { SHIMS } = await import(path.resolve("dist/core/jobs.js"));
 
 function run(args) {
   const out = { stdout: "", stderr: "" };
@@ -115,6 +117,41 @@ test("--refs keeps stdout pipeable and puts the warning on stderr", () => {
  * and all parallel work would have stopped. A requirement belongs to one claim and a drawing to one
  * screen; neither needs to know what another unit decided.
  */
+/**
+ * ⛔ AND THE ROUTING TABLE SAID THE OPPOSITE, IN THE ONE PLACE A SESSION ACTUALLY READS.
+ *
+ * `settleFirst` landed on `capabilities`, the CLI warned about it on two surfaces — and `SHIMS` went
+ * on carrying `{ role: "decomposer", fan: true }` on both `scope a feature` and `index a corpus`.
+ * So ProductOS held the measurement and instructed the fan anyway: `fan: true` is not a hint, it is
+ * what tells a skill to spawn one role per unit, and it is rendered into `skills/productos/SKILL.md`
+ * where every future session meets it before it ever runs `analyse`.
+ *
+ * ⛔ PINNED AGAINST THE ANALYSIS RATHER THAN AGAINST A ROLE NAME, so the next analysis that cannot
+ * be worked unit by unit is covered the day it declares it — including one whose role is fanned
+ * perfectly legitimately by some other route for some other work.
+ */
+test("no route fans a role whose analysis says it must be settled first", () => {
+  const unfannable = new Map(ANALYSES.filter((a) => a.settleFirst).map((a) => [a.role, a]));
+  assert.ok(unfannable.size >= 1, "no analysis declares settleFirst — this check has nothing to protect");
+  const wrong = [];
+  for (const sh of SHIMS)
+    for (const step of sh.steps)
+      if (step.fan && unfannable.has(step.role))
+        wrong.push(`"${sh.route}" fans ${step.role}, and ${unfannable.get(step.role).name} must settle first`);
+  assert.deepEqual(
+    wrong,
+    [],
+    `a route parallelises the one sweep that produced three disjoint trees:\n  ${wrong.join("\n  ")}`
+  );
+
+  /** ⛔ And the role is still ON those routes — dropping the step would satisfy the rule and lose the work. */
+  for (const role of unfannable.keys())
+    assert.ok(
+      SHIMS.some((sh) => sh.steps.some((s) => s.role === role)),
+      `${role} is on no route at all now, which is not the fix — it runs once, it does not stop running`
+    );
+});
+
 test("the analyses that genuinely are independent are not marked", () => {
   const independent = ANALYSES.filter((a) => a.name !== "capabilities");
   assert.ok(independent.length >= 2, `only ${independent.length} other analyses — this check is too weak`);

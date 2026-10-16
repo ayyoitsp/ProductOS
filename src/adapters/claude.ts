@@ -100,7 +100,84 @@ const TOOL_FOR: Record<Capability, string[]> = {
    * neither list can quietly acquire a member of the other kind.
    */
   "write-corpus": ["Write", "Edit"],
+  /**
+   * ⛔ PRODUCTOS'S OWN SURFACE, READ HALF ONLY — AND NO ROLE COULD REACH IT AT ALL BEFORE THIS.
+   *
+   * This map named built-ins and Chrome and nothing else, so every author and every judge reached a
+   * corpus by opening its files while the MCP server — the surface a consumer actually holds — was
+   * exercised only by the main session. The roles that know this model best were the ones never
+   * using it, which is how a read that does not carry what the page shows ships unnoticed.
+   *
+   * ⛔ NAMED WITHOUT THE HOST'S PREFIX, BECAUSE THE PREFIX IS NOT KNOWABLE HERE. A worktree
+   * registers `productos-<slug>` and the main checkout registers `productos` — see `mcpServerName`
+   * — so a hardcoded `mcp__productos__…` would hand every judge in a worktree nine tools that do
+   * not exist, which is the "installed and fails halfway through" failure the author refusal below
+   * is written against. `toolsFor` resolves these against the registration this install just wrote.
+   *
+   * ⛔ AND THE LIST IS THE GUARANTEE, so it holds reads and only reads. It is the same set as
+   * `EXCHANGE_READ_TOOLS` in `src/mcp/v2-tools.ts`, which is where the read/act/door split is
+   * decided; a test pins the two together rather than this file deciding for itself what a read is.
+   * ⛔ `productos_in` IS DELIBERATELY ABSENT: the door can perform any intent, including one behind
+   * the consent gate, so it is the one ProductOS tool a judge may never hold.
+   */
+  "ask-the-corpus": [
+    "productos_exchange_scopes",
+    "productos_exchange_page",
+    "productos_exchange_grid",
+    "productos_exchange_packet",
+    "productos_exchange_questions",
+    "productos_exchange_what_it_covers",
+    "productos_exchange_can_be_agreed_to",
+    "productos_exchange_check",
+    "productos_exchange_record",
+  ],
 };
+
+/** A ProductOS tool, as ProductOS names it — before any host puts its own prefix on it. */
+const PRODUCTOS_TOOL = /^productos_/;
+
+/** How this host spells an MCP tool: the server name, which is per-checkout. */
+const MCP_PREFIX = /^mcp__[a-z0-9-]+__/;
+
+/**
+ * Everything the read capability offers, by its ProductOS name. ⛔ Read off `TOOL_FOR` rather than
+ * written twice — a second list is how one of them comes to allow something the other refuses.
+ */
+const CORPUS_READS: ReadonlySet<string> = new Set(TOOL_FOR["ask-the-corpus"]);
+
+/** What a capability's tool is called on this host, once the server registration is known. */
+export const hostToolName = (tool: string, server: string): string =>
+  PRODUCTOS_TOOL.test(tool) ? `mcp__${server}__${tool}` : tool;
+
+/**
+ * The tools a role's declared capabilities come to on this host.
+ *
+ * ⛔ A NAMED, EXPORTED DERIVATION, because it is where two of the model's refusals are enforced and
+ * it used to be three lines inlined in two installers. Nothing could ask what a role would be handed
+ * without running an install, which writes into `~/.claude` that every live session reads.
+ */
+export function toolsFor(needs: readonly Capability[], server: string): string[] {
+  return [...new Set(needs.flatMap((c) => TOOL_FOR[c] ?? []).map((t) => hostToolName(t, server)))];
+}
+
+/**
+ * ⛔ WHICH OF THESE TOOLS COULD CHANGE SOMETHING — the predicate "a judge never writes" is enforced
+ * with, and it is DEFAULT-DENY over ProductOS's own surface.
+ *
+ * Two dialects can write: the host's own editors, and ProductOS's MCP tools. For the first, a name
+ * list is enough and has been for as long as `write-corpus` has existed. For the second a name list
+ * would be exactly the wrong shape — the MCP surface grows, and a new act arriving in it must not
+ * become reachable from a judge by default. So anything ProductOS offers that is not in the read
+ * capability counts as writing, which makes the door, the five acts and the inbox lease all
+ * unreachable from a judging capability without anybody having to remember to add them here.
+ */
+export function writingToolsIn(tools: readonly string[]): string[] {
+  return tools.filter((tool) => {
+    const bare = tool.replace(MCP_PREFIX, "");
+    if (/^(Write|Edit|MultiEdit|NotebookEdit)$/.test(bare)) return true;
+    return PRODUCTOS_TOOL.test(bare) && !CORPUS_READS.has(bare);
+  });
+}
 
 /**
  * ⛔ WHAT NO AUTHOR MAY BE HANDED, AND WHY THIS IS A LIST RATHER THAN A HOPE.
@@ -141,6 +218,7 @@ function agentsDirFor(cfgRoot?: string, home: string = HOME): string {
  * which is why no author gets a question tool.
  */
 function installClaudeAuthors(
+  mcpName: string,
   update?: boolean,
   cfg?: ProductosConfig,
   cfgRoot?: string,
@@ -174,7 +252,7 @@ function installClaudeAuthors(
           `because consent obtained inside a subagent has no record of how it was obtained. Record it as a question in the corpus instead.`
       );
 
-    const tools = [...new Set(author.needs.flatMap((c) => TOOL_FOR[c] ?? []))];
+    const tools = toolsFor(author.needs, mcpName);
     if (!tools.length) continue;
     const model = models[author.name] ?? dflt;
     const name = path.basename(author.prompt).replace(/\.md$/, "");
@@ -225,7 +303,14 @@ function installClaudeAuthors(
   return out;
 }
 
-function installClaudeAgents(dev: boolean, update?: boolean, cfg?: ProductosConfig, cfgRoot?: string, home: string = HOME): string[] {
+function installClaudeAgents(
+  dev: boolean,
+  mcpName: string,
+  update?: boolean,
+  cfg?: ProductosConfig,
+  cfgRoot?: string,
+  home: string = HOME
+): string[] {
   const root = bundledAgentsRoot();
   if (!fs.existsSync(root)) return [];
   const AGENT_TARGET = agentsDirFor(cfgRoot, home);
@@ -266,13 +351,28 @@ function installClaudeAgents(dev: boolean, update?: boolean, cfg?: ProductosConf
     const src = path.join(root, path.basename(agent.prompt));
     if (!fs.existsSync(src)) continue;
 
-    const tools = [...new Set(agent.needs.flatMap((c) => TOOL_FOR[c] ?? []))];
+    const tools = toolsFor(agent.needs, mcpName);
     if (!tools.length) continue;
     /**
      * ⛔ A JUDGE NEVER GETS Write OR Edit, and this is where that is enforced rather than hoped:
      * the tool list is derived from declared capabilities, and no capability a judge may declare
      * maps to a writing tool.
+     *
+     * ⛔ AND IT IS NOW CHECKED RATHER THAN ARRANGED, BECAUSE A JUDGE REACHES PRODUCTOS ITSELF.
+     * While the only writing tools were `Write` and `Edit`, "no judge declares `write-corpus`" was
+     * the whole of it and a test on the registry held it. A judge now holds `mcp__…__productos_*`
+     * tools, and that surface grows without this file being opened — so the derivation asks the
+     * question itself, default-deny, and REFUSES rather than installing a narrowed version. Same
+     * argument as the author refusal above: a role whose prompt forbids what its tools allow fails
+     * in a way that reads as the host being broken instead of the spec being wrong.
      */
+    const writing = writingToolsIn(tools);
+    if (writing.length)
+      throw new Error(
+        `the judge "${agent.name}" would be handed ${writing.join(", ")} — a reviewer that can write is a reviewer ` +
+          `that repairs what it finds, which hides how often it fires. Take the capability off the role, or take the ` +
+          `tool out of the capability it is reached through.`
+      );
     const model = models[agent.name] ?? dflt;
     const name = path.basename(agent.prompt).replace(/\.md$/, "");
     const front = [
@@ -800,9 +900,15 @@ export function installClaudeSkills(
   register(host.desktopConfig, false);
   void target;
 
+  /**
+   * ⛔ THE ROLES ARE TOLD WHAT THE SERVER WAS REGISTERED AS, which is why this runs after the
+   * registration above rather than beside the skills. A role's ProductOS tools name one MCP server,
+   * and from a worktree that is `productos-<slug>` — so a list written from the plain name would
+   * install nine tools that do not exist on exactly the machines this project develops on.
+   */
   const agents = [
-    ...installClaudeAgents(dev, opts.update, opts.config, opts.configRoot, opts.home),
-    ...installClaudeAuthors(opts.update, opts.config, opts.configRoot, opts.steers, opts.home),
+    ...installClaudeAgents(dev, name, opts.update, opts.config, opts.configRoot, opts.home),
+    ...installClaudeAuthors(name, opts.update, opts.config, opts.configRoot, opts.steers, opts.home),
   ];
 
   /**
