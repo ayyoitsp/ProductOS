@@ -10,10 +10,10 @@ pocket-money app ProductOS keeps as its seed corpus.
 > restores so every run starts identical. It is the corpus most of the model's refusals were
 > proved against, so nothing here is invented for the document.
 >
-> ⛔ **Text rather than screenshots.** The only rendered screenshots in this repository are of
-> the model the Exchange model replaced, and a picture of the retired shape beside an
-> explanation of the current one is worse than no picture. Render the real thing instead:
-> `productos v2 page money`.
+> ⛔ **Text rather than screenshots.** This repository keeps no rendered screenshots at all. The
+> ones it used to hold were of the model the Exchange model replaced, and a picture of the retired
+> shape beside an explanation of the current one is worse than no picture — so they went with it.
+> Render the real thing instead: `productos v2 page money`.
 
 ---
 

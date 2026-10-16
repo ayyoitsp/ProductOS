@@ -159,10 +159,9 @@ Start with the feature you're building now. Grow at the edges. Areas nobody touc
 surface so the app can run either fully local or backend-driven. Nothing in ProductOS depends on
 it.
 
-`service/` is the **retired** hosted store. It models the replaced schema, cannot read an
-Exchange corpus at all, and is **not deleted because it is still deployed** — tearing it down,
-and deciding what happens to anything in its database, is a deliberate call rather than a
-cleanup. The hosted Exchange store is `src/v2/store/`, with the compose files here at the root.
+The hosted store is `src/v2/store/`, with the compose files here at the root. The older store
+that modelled the replaced schema has been deleted — if you find a reference to one anywhere
+else, it is out of date.
 
 ## License
 
