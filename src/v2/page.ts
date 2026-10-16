@@ -37,6 +37,7 @@ import { demonstrationOf } from "./demonstrate.js";
 import { decisionsOn, decisionsUnder, howItWasDecided, type Decision } from "./record.js";
 import { holdsOn, whyHeld } from "./held.js";
 import { selectionOf, gapsIn, type Selection, type Option } from "./selection.js";
+import { dimensionsOf, sayCombination, variesBy } from "./dimensions.js";
 
 const esc = (s: unknown): string =>
   String(s ?? "")
@@ -67,6 +68,43 @@ const plain = (s: unknown): string => String(s ?? "").replace(/\s+/g, " ").trim(
  */
 const slug = (ref: string): string => ref.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "");
 const anchorOf = (ref: string): string => `at-${slug(ref)}`;
+
+/**
+ * The address of a ref — a whole URL where there is a server, a fragment where there is not.
+ *
+ * ⛔ EVERY LINK ON THE PAGE WAS A FRAGMENT, AND A FRAGMENT IS NOT AN ADDRESS.
+ *
+ * Peter: *"we should have durable links for everything in product os. no idea why we use anchors
+ * for everything."* Counted on the live page: 469 `href="#at-…"` and zero durable links.
+ *
+ * And the answer to "why" is not that it was a design choice. `/p/<project>/v2/<scope>` already
+ * serves that scope's own page — 200, 1.98 MB, today — so the durable link existed and the page
+ * never emitted one. The only code path that would is `refLink`'s cross-page branch, and it was
+ * built from `linkBase: "/v2"`: root-relative, so on the hosted instance it resolved to `/v2/<id>`
+ * and 404ed. Local serving made that look correct. Eighth instance of the class CLAUDE.md opens
+ * on — "the environment convenient to measure in is not the environment the thing lives in".
+ *
+ * ⛔ WHAT A FRAGMENT COSTS is not theoretical: a `#` never reaches the server, so a link to a thing
+ * is indistinguishable from a link to the page it is on. It cannot be served, cannot be redirected,
+ * and tells an instance nothing about what the reader wanted — which is also why the whole corpus
+ * had to ship in one packet before anybody could look at one feature of it.
+ *
+ * ⛔ A PATH FOR THE SCOPE, A FRAGMENT WITHIN IT — and that is the whole scheme rather than a
+ * compromise. A ref below a scope (`money#balance`, a slot, a question) lives ON that scope's page,
+ * so its address is that page plus where to look. The path is what the server resolves and the
+ * fragment is what the browser does, which is the division every addressable document has.
+ *
+ * ⛔ AND NO BASE MEANS NO URL TO GIVE. `v2 page --out` writes a file and a published artifact is one
+ * page; neither has an address to be durable about, so both keep fragments. The rule that a link is
+ * only written where its target will exist is unchanged — see `refLink`.
+ */
+const urlOf = (ref: string, base: string | undefined): string => {
+  const at = `#${anchorOf(ref)}`;
+  if (!base) return at;
+  const scope = ref.split("#")[0]!;
+  /** The scope IS the page, so a ref that is just a scope needs no fragment of its own. */
+  return ref === scope ? `${base}/${encodeURIComponent(scope)}` : `${base}/${encodeURIComponent(scope)}${at}`;
+};
 
 /** What each slot asks. ⛔ Imported meaning, not a third copy — see `SLOT_ASKS` in the schema. */
 const SLOT_LABEL: Record<SlotName, string> = {
@@ -205,12 +243,17 @@ function refLink(ref: string, ctx: Ctx, label?: string): string {
    * Same-scope-ness was never the property that mattered. Whether the anchor gets rendered is.
    */
   if (within) {
+    /**
+     * ⛔ THE DURABLE FORM EVEN THOUGH THE TARGET IS RIGHT HERE, which is the change Peter asked for.
+     * A reader who has found the thing wants to be able to send somebody to it, and a fragment on
+     * its own is only an address if you already know which page you were on.
+     */
     return ctx.anchors.has(ref)
-      ? `<a href="#${anchorOf(ref)}">${esc(text)}</a>`
+      ? `<a href="${esc(urlOf(ref, ctx.base))}">${esc(text)}</a>`
       : `<span class="unlinked" title="nothing on this page answers that directly">${esc(text)}</span>`;
   }
   if (!ctx.base) return `<span class="unlinked" title="filed under ${esc(scope)}, which this page does not contain">${esc(text)}</span>`;
-  return `<a href="${esc(ctx.base)}/${esc(scope)}#${anchorOf(ref)}">${esc(text)}</a>`;
+  return `<a href="${esc(urlOf(ref, ctx.base))}">${esc(text)}</a>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -1182,7 +1225,12 @@ function renderScreens(scope: Scope, ctx: Ctx, scopeId: string, opts: PageOption
             ? `<span class="chip ok" title="${esc(`${whyHeld(held)} — a sweep leaves this alone; only naming it redraws it`)}">worked on</span>`
             : "";
           return `<article class="screen" id="${anchorOf(`${scopeId}#view#${v.id}`)}" data-screen="${esc(v.id)}"
-            data-ref="${esc(scopeId)}"${held.length ? ' data-held="1"' : ""} data-label="${esc(`screen: ${plain(v.title)}`)}">
+            data-ref="${esc(scopeId)}"${held.length ? ' data-held="1"' : ""}${
+              /* ⛔ Omitted where the screen is everybody's — absent means everywhere, as in the model. */
+              v.holds_for && Object.keys(v.holds_for).length
+                ? ` data-holds="${esc(JSON.stringify(v.holds_for))}"`
+                : ""
+            } data-label="${esc(`screen: ${plain(v.title)}`)}">
             ${
               /**
                * ⛔ NO HEADING WHERE THERE IS ONLY ONE SCREEN. Peter: *"there's white space above the
@@ -1201,6 +1249,25 @@ function renderScreens(scope: Scope, ctx: Ctx, scopeId: string, opts: PageOption
             ${
               v.exists === "intended"
                 ? `<p class="owes">This screen does not exist yet — everything here is intent, not observation.</p>`
+                : ""
+            }
+            ${
+              /**
+               * ⛔ WHO THIS SCREEN IS FOR, ON THE SCREEN. Peter: *"we need dimensions to carry through
+               * to all features, so we can have different variations PER feature"*.
+               *
+               * A feature with two drawings of the same job and nothing saying which audience each
+               * belongs to is worse than one drawing: a reviewer reads the first, agrees to it, and
+               * has agreed to something that was never promised to the person they had in mind. The
+               * model carrying `holds_for` while no reader sees it is the same defect one layer down.
+               *
+               * ⛔ The chip says the dimension's LABEL and the value, not the id — `role: admin` is
+               * the storage talking, and nothing a reader sees should mention it.
+               */
+              v.holds_for && Object.keys(v.holds_for).length
+                ? `<p class="chips"><span class="chip holds" title="${esc(
+                    `this drawing is what ${sayCombination(v.holds_for, dimensionsOf(corpus))} sees`
+                  )}">${esc(sayCombination(v.holds_for, dimensionsOf(corpus)))}</span></p>`
                 : ""
             }
             ${
@@ -1576,6 +1643,18 @@ function renderBehaviours(
     settled: boolean;
     standing: string;
     detail: string;
+    /**
+     * ⛔ WHO THIS SENTENCE IS PROMISED TO, carried to the row so the page can be filtered without a
+     * reload. Peter: *"the dimensions should affect the truths as well"*, and then, of the filter:
+     * *"is the dimension filter on every feature page"* — it was not, and a filter that needs a
+     * round trip per choice is not a filter.
+     *
+     * ⛔ THE SLOT'S AND THE STATEMENT'S, MERGED, with the statement's winning. They say different
+     * things — the slot's is "this part only exists there", the statement's is "this sentence is
+     * only promised there" — and a sentence inside an admin-only slot is admin-only whatever it
+     * says about itself.
+     */
+    holds?: Record<string, string>;
   }> = [];
   for (const ex of entry.scope.exchanges) {
     const ref = `${scopeId}#${ex.id}`;
@@ -1667,6 +1746,10 @@ function renderBehaviours(
             .slice(0, 40)}`,
           /** ⛔ The whole sentence. See the table below for why nothing is cut. */
           says: shown.length > 1 ? line(said.says) : says,
+          holds: {
+            ...((fill as { holds_for?: Record<string, string> } | undefined)?.holds_for ?? {}),
+            ...((said as { holds_for?: Record<string, string> } | undefined)?.holds_for ?? {}),
+          },
           settled,
           standing,
           detail: `
@@ -1920,7 +2003,16 @@ function renderCard(
   scopeId: string,
   list: "why" | "risk" | "measure" | "instrument",
   card: { id: string; says: string; target?: string; mitigated_by?: string; feeds?: string[] },
-  interactive: boolean
+  interactive: boolean,
+  /**
+   * Where this page is served from, so the measures a card feeds are addressable.
+   *
+   * ⛔ PASSED RATHER THAN DEFAULTED, because a default of "no base" is what silently keeps a
+   * fragment. The two renders that genuinely have no address — a file and a published artifact —
+   * pass `undefined` from the one place that knows it, and there is nowhere else for the answer
+   * to be guessed.
+   */
+  base: string | undefined
 ): string {
   const ref = `${scopeId}#${list}#${card.id}`;
   const st = stampFor(corpus, ref);
@@ -1937,7 +2029,7 @@ function renderCard(
        */
       card.feeds?.length
         ? `<p class="frame-extra"><span class="k">tells us</span> ${card.feeds
-            .map((f) => `<a href="#${anchorOf(`${scopeId}#measure#${f}`)}">${esc(f)}</a>`)
+            .map((f) => `<a href="${esc(urlOf(`${scopeId}#measure#${f}`, base))}">${esc(f)}</a>`)
             .join(", ")}</p>`
         : ""
     }
@@ -1958,7 +2050,17 @@ function renderCard(
 /** One behaviour, as a row plus the row that opens under it. */
 function behRow(
   corpus: Corpus,
-  r: { sref: string; slot: SlotName; says: string; label: string; settled: boolean; standing: string; detail: string },
+  r: {
+    sref: string;
+    slot: SlotName;
+    says: string;
+    label: string;
+    settled: boolean;
+    standing: string;
+    detail: string;
+    /** ⛔ Who it is promised to — see the row type in `renderBehaviours`. */
+    holds?: Record<string, string>;
+  },
   interactive: boolean
 ): string {
   const st = stampFor(corpus, r.sref);
@@ -1972,7 +2074,17 @@ function behRow(
      *  the row's stale chip carried a title naming who agreed and the card's did not. */
     const parts = confidenceParts(corpus, r.sref);
     const chip = parts.chips;
-  return `<tr class="beh" id="beh-${slug(r.sref)}" data-beh="${esc(r.sref)}" data-ref="${esc(r.sref)}" data-label="${esc(r.label)}">
+  /*
+   * ⛔ `data-holds` IS OMITTED WHERE A SENTENCE IS EVERYBODY'S, not written as an empty object.
+   *
+   * The filter treats an absent attribute as "holds everywhere", which is the model's own default —
+   * so an empty `{}` would be a third state meaning the same thing, and the first reader to treat it
+   * as "holds for nothing" would empty the page. ⛔ And this repo's own rule applies: for a feature
+   * whose correct answer today is zero, a count of these attributes is not a check. The test reads
+   * three outcomes out of one corpus instead.
+   */
+  const holds = r.holds && Object.keys(r.holds).length ? ` data-holds="${esc(JSON.stringify(r.holds))}"` : "";
+  return `<tr class="beh" id="beh-${slug(r.sref)}" data-beh="${esc(r.sref)}" data-ref="${esc(r.sref)}" data-label="${esc(r.label)}"${holds}>
       <td class="row-says"><span class="says-text">${r.says}</span>${
         /**
          * ⛔ THE CHIPS RUN ON FROM THE SENTENCE. Peter: *"chips inline with the text at the end of
@@ -2861,13 +2973,25 @@ function renderNav(
       // from "has no exchanges" claimed every container in the corpus was on this page, and a leaf
       // scope's page links at a dozen sections it does not contain.
       const holdsIt = contains.has(scope.id);
+      /**
+       * ⛔ EVERY ROW SAYS ITS OWN NAME ON HOVER. Peter: *"also make a hover for each item even with
+       * scrolling on"*.
+       *
+       * The labels no longer truncate, so a long one is reached by scrolling — and scrolling to read
+       * a name is work a hover does for free. It is the plain title rather than the rendered one: a
+       * tooltip is text, and inline formatting in it would arrive as the markup it is written in.
+       *
+       * ⛔ The unlinked variant keeps its own: "not on this page" is why that row cannot be pressed,
+       * which is worth more than repeating the name it is already showing.
+       */
+      const hover = esc(plain(scope.title || scope.id));
       const name =
         scope.id === here
-          ? `<strong>${label}</strong>`
+          ? `<strong title="${hover}">${label}</strong>`
           : holdsIt
-            ? `<a href="#${anchorOf(scope.id)}" data-goto="${esc(scope.id)}">${label}</a>`
+            ? `<a href="${esc(urlOf(scope.id, base))}" data-goto="${esc(scope.id)}" title="${hover}">${label}</a>`
             : base
-              ? `<a href="${esc(base)}/${esc(scope.id)}">${label}</a>`
+              ? `<a href="${esc(urlOf(scope.id, base))}" title="${hover}">${label}</a>`
               : `<span class="unlinked" title="not on this page">${label}</span>`;
       /**
        * ⛔ A COUNT IS A CHIP, AND A CHIP IS A NUMBER AND A MARK.
@@ -3300,6 +3424,27 @@ function renderNav(
      */
     `<div class="crumbs"><span class="trail"></span>` +
     /**
+     * ⛔ THE DIMENSION FILTER, ON EVERY PAGE, BECAUSE A FILTER ON ONE TAB FILTERS NOTHING.
+     *
+     * Peter: *"Has anything is the dimension filter on every feature page"* — it was not. The model
+     * reached every truth and the only control that read it was on the prototype board, so a reader
+     * on a feature page could see that a variant existed and could not ask to be shown it.
+     *
+     * ⛔ IT IS IN THE FRAME, which is the part that does not scroll and is on every page by
+     * construction. Rendering it per page would be the same control in a dozen places, and the one
+     * on the board would be a thirteenth copy of the same question.
+     *
+     * ⛔ AND IT IS THE SAME CONTROL THE BOARD USES — `data-walk-dim` — because he already settled
+     * what these are: *"so the prototypes just has chips of which dimension, e.g. role:admin. and
+     * the drop down selectors will be filters"*. One answer, read by the board to pick a prototype
+     * and by the page to narrow what it shows.
+     *
+     * ⛔ ABSENT WHERE A PRODUCT DECLARES NO DIMENSIONS. A row of empty dropdowns is the "nav row that
+     * does nothing" this file refuses by name — it reads as a feature that is broken rather than one
+     * nobody has used yet.
+     */
+    dimensionFilter(corpus) +
+    /**
      * ⛔ AND NO CHEVRON WHERE THERE IS NO TREE TO SHOW. A control that expands nothing is the thing
      * `check` refuses by name elsewhere in this project — it reads as "there is more here" and then
      * answers nothing, which is worse than the absence it is covering for.
@@ -3501,7 +3646,7 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
          */
         marked("prototype", renderPrototype(protoScreens, protoPromises, theWalk, (corpus.prototypes ?? []), selectionOf(corpus), served)) +
         (full("settings") ? marked("settings", renderSettings(corpus)) : stub("settings", "view-settings", "What steers this", false)) +
-        (full("subsystems") ? marked("subsystems", renderSubsystems(corpus)) : stub("subsystems", "view-subsystems", "How it works", false)) +
+        (full("subsystems") ? marked("subsystems", renderSubsystems(corpus, opts.linkBase)) : stub("subsystems", "view-subsystems", "How it works", false)) +
         `<section class="view" id="view-overview" data-view="overview" data-ref="${esc(scopeId)}" data-label="Overview">
            <div class="sub-view" data-tabs="product" data-sub-view="queue" data-ref="queue" data-label="Queue">
              ${
@@ -3821,7 +3966,7 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
               (() => {
                 const sc = corpus.scopes.find((x) => x.scope.id === g.scope)!.scope;
                 const cards = (list: "why" | "risk" | "measure" | "instrument", held: typeof sc.why) =>
-                  held.map((c) => renderCard(corpus, g.scope, list, c, !!opts.interactive)).join("");
+                  held.map((c) => renderCard(corpus, g.scope, list, c, !!opts.interactive, opts.linkBase)).join("");
                 const none = (what: string, how: string) =>
                   `<p class="owes">Nothing here says ${what}. ${how}</p>`;
                 /** ⛔ Inside the feature's view, so it appears and disappears with the feature. */
@@ -3939,7 +4084,7 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
                     0
                   );
                   const ready = a.acceptable.filter((r: string) => under.some((u) => r.startsWith(`${u}#`))).length;
-                  return `<li><a href="#${anchorOf(k.scope.id)}" data-goto="${esc(k.scope.id)}">${line(
+                  return `<li><a href="${esc(urlOf(k.scope.id, ctx.base))}" data-goto="${esc(k.scope.id)}">${line(
                     k.scope.title || k.scope.id
                   )}</a> <span class="n">${behaviours} behaviour${behaviours === 1 ? "" : "s"}${
                     ready ? ` · ${ready} ready to agree to` : ""
@@ -3986,7 +4131,7 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
     return `${section}${mockBank(corpus, ids, protoScreens, section, scopeId)}`;
   }
 
-  return `${STYLE}${body}${appCssOnce(opts)}${mockBank(corpus, ids, protoScreens, body, scopeId)}${partFacts(corpus, ids)}${renderNotePanel(corpus, ids, opts)}${VIEW_SWITCH}${opts.interactive ? DEFER : ""}${NAV_PLACE}${PROTO_FRAME}${PROTOTYPE}${DRIVE}${opts.interactive ? liveScript(opts) : INERT}`;
+  return `${STYLE}${body}${appCssOnce(opts)}${mockBank(corpus, ids, protoScreens, body, scopeId)}${partFacts(corpus, ids)}${renderNotePanel(corpus, ids, opts)}${VIEW_SWITCH}${opts.interactive ? DEFER : ""}${DIM_FILTER}${NAV_PLACE}${PROTO_FRAME}${PROTOTYPE}${DRIVE}${opts.interactive ? liveScript(opts) : INERT}`;
 }
 
 
@@ -7086,10 +7231,21 @@ const VIEW_SWITCH = `<script>
      * ⛔ And replaceState when arriving BY history, or going back would push a new entry for the
      * place it just returned to and trap somebody between two views.
      */
-    const at = "#" + (name === "overview" ? "view-overview" : "at-" + name);
+    /**
+     * ⛔ THE WHOLE ADDRESS, NOT JUST THE FRAGMENT. Peter: *"we should have durable links for
+     * everything in product os"*. The address bar is where a reader copies a link from, so moving
+     * within the page has to leave a URL somebody else can open — and /<base>/<scope> is served.
+     *
+     * ⛔ THE FRAGMENT IS KEPT TOO, and it is not redundant. The server resolves the path and the
+     * browser resolves the fragment; arriving at the path alone shows the scope as that page's
+     * Overview, which is right, and arriving with the fragment also puts the reader at the section
+     * on a page that holds several.
+     */
+    const tail = name === "overview" ? "#view-overview" : "#at-" + name;
+    const at = BASE && name !== "overview" ? BASE + "/" + encodeURIComponent(name) + tail : tail;
     try {
       if (fromHistory) history.replaceState(null, "", at);
-      else if (location.hash !== at) history.pushState(null, "", at);
+      else if (location.pathname + location.hash !== at) history.pushState(null, "", at);
     } catch {}
   };
 
@@ -7168,9 +7324,48 @@ const VIEW_SWITCH = `<script>
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") setOpen(false); });
   // ⛔ An anchor from elsewhere on the page — "decide it", a grid row, a blocks ref — must bring its
   // view with it, or following a link inside a hidden section does nothing at all.
+  /**
+   * Where this page is served from, read off the address bar.
+   *
+   * ⛔ THE SAME ANSWER THE FETCHES ALREADY USE, and deliberately not a second derivation — DEFER
+   * computes exactly this and the comment there records what happened when it was read off a link
+   * instead. Empty for a page with no server, which is the case that must keep fragments.
+   */
+  const BASE = (function () {
+    const m = location.pathname.match(/^(.*?\\/v2)(?:\\/|$)/);
+    return m ? m[1] : "";
+  })();
+
   document.addEventListener("click", (e) => {
-    const a = e.target.closest && e.target.closest('a[href^="#"]');
+    const a = e.target.closest && e.target.closest("a[href]");
     if (!a) return;
+    /**
+     * ⛔ A DURABLE LINK TO SOMEWHERE ON THIS PAGE IS STILL A JUMP, NOT A RELOAD.
+     *
+     * Making every ref link a real URL would otherwise trade an instant switch for a full fetch of
+     * a 3 MB page to land on a section already in the document. So: if the link's own path is the
+     * one we are on, or it names a view this page holds, handle it here — and let the browser have
+     * it otherwise, which is what makes the link durable in the first place.
+     */
+    const raw = a.getAttribute("href") || "";
+    if (raw.indexOf("#") !== 0) {
+      let u;
+      try { u = new URL(a.href, location.href); } catch (err) { return; }
+      if (u.origin !== location.origin) return;
+      const named = decodeURIComponent(u.pathname.replace(/^.*\\/v2\\/?/, ""));
+      const holds = named && views().some((v) => v.dataset.view === named);
+      if (u.pathname !== location.pathname && !holds) return;
+      e.preventDefault();
+      if (named) show(named, true);
+      else if (u.hash) {
+        const target = document.querySelector(u.hash);
+        const view = target && target.closest("section.view");
+        if (view && view.hidden) show(view.dataset.view, true);
+        if (target && target.scrollIntoView) target.scrollIntoView({ block: "start" });
+      }
+      window.scrollTo(0, 0);
+      return;
+    }
     /**
      * ⛔ A data-goto ANYWHERE IS HONOURED, not only inside the menu.
      *
@@ -7512,6 +7707,98 @@ const PROTO_FRAME = `<script>
 })();
 </script>`;
 
+/**
+ * ⛔ THE DIMENSION FILTER, APPLIED TO EVERY PAGE AND REMEMBERED.
+ *
+ * Peter: *"Has anything is the dimension filter on every feature page"*, then *"Build it"*.
+ *
+ * ⛔ IN THE BROWSER, BECAUSE THE SERVER NEVER SEES THE CHOICE. A round trip per dropdown would make
+ * the filter slower than scrolling past what it hides, and the page already carries what it needs:
+ * every screen and every behaviour row states its own combination in `data-holds`.
+ *
+ * ⛔ REMEMBERED, for the reason the menu placement is: a reading posture, not a per-page decision.
+ * Being asked again on every feature is the same as not being asked.
+ *
+ * ⛔ AND IT SAYS WHAT IT HID. A page that silently omits truth is how somebody agrees to less than
+ * they believe they are agreeing to, so the count is beside the control rather than discoverable.
+ */
+const DIM_FILTER = `<script>
+(function () {
+  const bar = document.querySelector("[data-dimfilter]");
+  if (!bar) return;
+  /*
+   * ⛔ ITS OWN ATTRIBUTE, NOT THE BOARD'S.
+   *
+   * This first reused the board's own walk-dim attribute, which its selector already uses — so each
+   * script saw the other's controls and four of the board's tests went red. The two do different
+   * jobs: the board's picks WHICH PROTOTYPE to walk and can add a dimension or a value; this one
+   * narrows what a page shows. They share the answer, not the markup.
+   */
+  const picks = Array.prototype.slice.call(bar.querySelectorAll("[data-dim-filter]"));
+  const said = bar.querySelector("[data-dimhidden]");
+  const KEY = "productos:asked";
+
+  const remembered = (function () {
+    try { return JSON.parse(localStorage.getItem(KEY) || "{}"); } catch (e) { return {}; }
+  })();
+
+  const asked = function () {
+    const want = {};
+    for (const sel of picks) if (sel.value) want[sel.getAttribute("data-dim-filter")] = sel.value;
+    return want;
+  };
+
+  /*
+   * ⛔ THE SAME PREDICATE THE REST OF THE SYSTEM USES, in the one language this file can carry it in.
+   * A truth that says nothing is never hidden; a dimension the reader has not chosen hides nothing;
+   * only a stated disagreement hides. Getting any of those backwards empties the page.
+   */
+  const holdsUnder = function (holds, want) {
+    if (!holds) return true;
+    for (const dim in holds) {
+      if (!Object.prototype.hasOwnProperty.call(holds, dim)) continue;
+      if (want[dim] && want[dim] !== holds[dim]) return false;
+    }
+    return true;
+  };
+
+  const apply = function () {
+    const want = asked();
+    let hidden = 0;
+    const subjects = document.querySelectorAll("[data-holds]");
+    for (const el of subjects) {
+      let holds = null;
+      try { holds = JSON.parse(el.getAttribute("data-holds")); } catch (e) { holds = null; }
+      const keep = holdsUnder(holds, want);
+      /*
+       * ⛔ A CLASS, NOT THE hidden ATTRIBUTE. Several of these elements are table rows whose own
+       * open/closed state already uses hidden — writing it here would fight that and leave a row
+       * stuck whichever lost.
+       */
+      el.classList.toggle("dimhide", !keep);
+      if (!keep) hidden++;
+    }
+    if (said) {
+      const chosen = Object.keys(want).length;
+      said.hidden = !hidden;
+      said.textContent = hidden
+        ? hidden + " hidden by " + (chosen === 1 ? "this choice" : "these choices")
+        : "";
+    }
+    try { localStorage.setItem(KEY, JSON.stringify(want)); } catch (e) { /* private window: it just forgets */ }
+  };
+
+  for (const sel of picks) {
+    const was = remembered[sel.getAttribute("data-dim-filter")];
+    /* ⛔ Only a value this dimension still offers — a remembered one that has since been removed
+       would narrow the page to nothing and offer no way to see why. */
+    if (was) for (const opt of sel.options) if (opt.value === was) sel.value = was;
+    sel.addEventListener("change", apply);
+  }
+  apply();
+})();
+</script>`;
+
 const NAV_PLACE = `<script>
 (function () {
   const root = document.documentElement;
@@ -7782,6 +8069,38 @@ export const STYLE = `<style>
   .chip.warn { border-color: var(--warn); color: var(--warn); }
   .chip.type { border-style: dashed; }
   /*
+   * WHO A VARIANT IS FOR. Filled rather than outlined, because it is not a status — it is the
+   * audience this drawing or this sentence belongs to, and a reader scanning a feature with several
+   * variants is looking for the one that is theirs.
+   */
+  /*
+   * ⛔ NO INVENTED TOKEN. The first version painted an accent-soft variable this page has never
+   * defined — so it resolved to nothing and the chip drew with no background at all. A guard here
+   * catches that, and it caught this; a fallback would have hidden it, which is why none is used.
+   */
+  .chip.holds { border-color: var(--accent); color: var(--accent); }
+  /*
+   * THE DIMENSION FILTER, ON THE BREADCRUMB LINE OF EVERY PAGE.
+   *
+   * ⛔ One row, and it wraps rather than scrolling: a product with four dimensions would otherwise
+   * put the fourth off the edge of the line, and a control you cannot see is a filter nobody knows
+   * is applied.
+   */
+  .dimfilter { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; }
+  .dimpick { display: inline-flex; align-items: center; gap: .25rem; font-size: .78rem; color: var(--dim); }
+  .dimpick .dimlabel { white-space: nowrap; }
+  .dimpick select { font: inherit; font-size: .78rem; padding: .1rem .25rem; border: 1px solid var(--line);
+    border-radius: 4px; background: var(--card); color: var(--ink); }
+  /*
+   * ⛔ WHAT IS BEING HIDDEN, SAID BESIDE THE CONTROL THAT HID IT. A page that quietly omits truth is
+   * how somebody agrees to less than they think they are agreeing to — the count is the thing that
+   * makes the omission visible, so it is not tucked anywhere.
+   */
+  .dimhid { font-size: .72rem; color: var(--warn); white-space: nowrap; }
+  .dimhid[hidden] { display: none; }
+  /* ⛔ A class rather than the hidden attribute: table rows already use that for open and closed. */
+  .dimhide { display: none !important; }
+  /*
    * SUPPORT IS NOT CONFIRMATION, AND THE EYE MUST NOT HAVE TO READ THE WORD TO KNOW.
    *
    * Peter chose that a confirmation may raise another statement's strength, on the condition that
@@ -7919,10 +8238,46 @@ export const STYLE = `<style>
    */
   nav.scopes li { border-bottom: 1px solid var(--line); }
   nav.scopes li > ul > li:last-child { border-bottom: 0; }
+  /*
+   * ⛔ THE ROW IS AS WIDE AS WHAT IS IN IT, AND AT LEAST AS WIDE AS THE MENU.
+   *
+   * max-content is what lets the column scroll to a long name instead of cutting it. min-width:
+   * 100% is what keeps the hover band full width anyway — without it a short row's highlight stops
+   * at the end of its text, so the thing under the pointer and the thing lit up are different
+   * shapes, which reads as a rendering fault rather than a hover.
+   */
   nav.scopes .scoperow { display: flex; align-items: center; gap: .3rem;
-    padding: .3rem 0 .3rem calc(var(--d) * .55rem); }
+    width: max-content; min-width: 100%; border-radius: 4px;
+    padding: .3rem .4rem .3rem calc(var(--d) * .55rem + .4rem); }
+  /*
+   * ⛔ AND EVERY ITEM ANSWERS THE POINTER. Peter: *"also make a hover for each item even with
+   * scrolling on"*.
+   *
+   * Only the link reacted before, so the half of the row holding the chips was dead to the pointer —
+   * in a menu you are scrolling sideways, losing track of which line you are on is the whole
+   * difficulty. The band is the row, not the text in it.
+   */
+  nav.scopes .scoperow:hover { background: var(--card); }
+  nav.scopes .scoperow:hover > a { text-decoration: underline; }
+  /*
+   * ⛔ NOTHING IN THE MENU IS CUT OFF. Peter: *"we shouldn't have anything truncated in the menu...
+   * don't truncate, scroll"*.
+   *
+   * An ellipsis destroys the one thing a menu row carries. Two features whose names differ at the
+   * end — and in a real corpus they do, because they are filed under a shared container and named
+   * for what separates them — render as the same row, so the menu stops distinguishing exactly the
+   * items it exists to distinguish.
+   *
+   * ⛔ SO THE ROW KEEPS ITS WIDTH AND THE MENU SCROLLS. flex: 1; min-width: 0 was what made the
+   * label the part that gives: it told the label to absorb the shortfall and permitted it to shrink
+   * below its content. Without them the row is as wide as its contents and the column scrolls
+   * sideways to reach the rest — see the overflow rule in the side-menu block.
+   *
+   * ⛔ nowrap STAYS. Wrapping is the other way to avoid truncating, and it makes a row two or three
+   * lines tall — so a menu of a dozen features becomes a page of prose, which is worse than either.
+   */
   nav.scopes .scoperow > a, nav.scopes .scoperow > strong, nav.scopes .scoperow > .unlinked {
-    flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    flex: 0 0 auto; white-space: nowrap; }
   /*
    * ⛔ COLLAPSING IS THE SIDE MENU'S BEHAVIOUR AND ONLY ITS.
    *
@@ -8103,6 +8458,17 @@ export const STYLE = `<style>
      */
     :root[data-nav="left"] .topframe { overflow-y: auto;
       padding-bottom: calc(4.5rem + var(--bottom-h) + 1rem); }
+    /*
+     * ⛔ AND IT SCROLLS SIDEWAYS TO A LONG NAME RATHER THAN CUTTING IT. Peter: *"don't truncate,
+     * scroll"*.
+     *
+     * The overflow is on the tree, not on the column: putting it on the column would scroll the tabs
+     * and the breadcrumb sideways with it, so choosing an area would move the control you just
+     * pressed. ⛔ And overflow-y: visible with it, or the nested lists get a second vertical
+     * scrollbar inside the one the column already has — a box that scrolls in one axis cannot be
+     * asked to clip in the other.
+     */
+    :root[data-nav="left"] nav.scopes { overflow-x: auto; overflow-y: visible; }
   }
   .prose { margin: .6rem 0 1.4rem; max-width: 42rem; }
   .prose p { margin: .6rem 0; }
@@ -8919,7 +9285,7 @@ function renderSettings(corpus: Corpus): string {
  * the furniture of product truth is the exact mistake `packet.ts` made when it printed "accepted
  * separately" on rules nobody had stamped.
  */
-function renderSubsystems(corpus: Corpus): string {
+function renderSubsystems(corpus: Corpus, base: string | undefined): string {
   if (!corpus.capabilities.length) return "";
   const subs = corpus.capabilities.map((x) => x.capability);
   const titleOf = (id: string) => subs.find((s) => s.id === id)?.title ?? id;
@@ -8936,7 +9302,7 @@ function renderSubsystems(corpus: Corpus): string {
     const [scopeId, exId] = ref.split("#");
     const sc = corpus.scopes.find((s) => s.scope.id === scopeId)?.scope;
     const ex = sc?.exchanges.find((e) => e.id === exId);
-    return `<a href="#${anchorOf(`${scopeId}#${exId}`)}">${line(ex?.title ?? ref)}</a>`;
+    return `<a href="${esc(urlOf(`${scopeId}#${exId}`, base))}">${line(ex?.title ?? ref)}</a>`;
   };
 
   /**
@@ -9040,6 +9406,39 @@ function renderSubsystems(corpus: Corpus): string {
  * what the prototypes are; a split whose question is unstated, or two options answering it
  * identically, is exactly the thing they are here to fix.
  */
+/**
+ * One control per dimension, on the breadcrumb line of every page.
+ *
+ * ⛔ "ANY" IS A VALUE, AND IT IS THE DEFAULT. A dimension with nothing chosen must not narrow — the
+ * model's rule is that unsaid means everywhere, and a filter whose default was the first value would
+ * silently show a reader one audience's product and call it the product.
+ *
+ * ⛔ AND THE COUNT OF WHAT IS HIDDEN IS PART OF THE CONTROL, not a detail below it. A page that
+ * quietly omits truth is how somebody agrees to less than they think they are agreeing to; the
+ * number is what makes the omission visible. It is filled by the script, because what is on screen
+ * depends on a choice the server never sees.
+ */
+function dimensionFilter(corpus: Corpus): string {
+  const dims = dimensionsOf(corpus);
+  if (!dims.length) return "";
+  return (
+    `<div class="dimfilter" data-dimfilter>` +
+    dims
+      .map(
+        (d) =>
+          `<label class="dimpick"><span class="dimlabel">${esc(d.label)}</span>` +
+          `<select data-dim-filter="${esc(d.id)}" aria-label="${esc(`Show this product as ${d.label}`)}">` +
+          /** ⛔ The empty value is "any", named so a reader knows nothing is being hidden. */
+          `<option value="">any</option>` +
+          d.values.map((v) => `<option value="${esc(v)}">${esc(v)}</option>`).join("") +
+          `</select></label>`
+      )
+      .join("") +
+    `<span class="dimhid" data-dimhidden hidden></span>` +
+    `</div>`
+  );
+}
+
 function selectionAtTheRoot(sel: Selection): string {
   if (!sel.options.length) return "";
   const gaps = gapsIn(sel);

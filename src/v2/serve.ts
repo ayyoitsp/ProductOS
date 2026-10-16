@@ -31,6 +31,28 @@ export interface V2Routes {
   /** The corpus directory this server is serving. */
   dir: string;
   /**
+   * The path this route is mounted under, so a link it writes resolves where the page actually is.
+   *
+   * ⛔ THE PAGE EMITTED 469 FRAGMENTS AND ZERO WORKING LINKS, AND THIS IS WHY.
+   *
+   * Peter: *"we should have durable links for everything in product os. no idea why we use anchors
+   * for everything."* The durable link already existed — `/p/<project>/v2/<scope>` answers 200 — and
+   * `linkBase` was hardcoded `"/v2"`. Root-relative, so hosted it resolved to `/v2/<scope>` and
+   * 404ed, while locally, where the route IS at the root, it was correct. Measured both ways:
+   *
+   *     /p/prj-bks5f4m325/v2/versioned-inputs   200   1978320 bytes
+   *     /v2/versioned-inputs                    404       111 bytes   <- what the page wrote
+   *
+   * ⛔ PASSED IN, NOT DERIVED FROM THE REQUEST, for the same reason `who` and `corpusFor` are: the
+   * caller strips the prefix before handing the path over, so it is the only thing that knows what
+   * it stripped. Re-deriving it here would be a second answer to a question that already has one,
+   * and this file is where the first copy of that mistake was.
+   *
+   * Empty for a local server, which is served at the root — the default, and the case that has
+   * always worked and always hidden this.
+   */
+  mount?: string;
+  /**
    * ⛔ WHO IS ASKING, WHEN SOMETHING ABOVE THIS ALREADY KNOWS.
    *
    * Locally nothing does, so this is absent and `principalOf` answers from the request — one person
@@ -519,7 +541,7 @@ export async function v2Route(req: http.IncomingMessage, res: http.ServerRespons
       interactive: true,
       records: "http",
       ...styleOf(corpus),
-      linkBase: "/v2",
+      linkBase: `${opts.mount ?? ""}/v2`,
       by: whoIsPressing(req, opts.by),
       recordsTo: `written into ${dir}`,
       only: [view],
@@ -584,7 +606,7 @@ export async function v2Route(req: http.IncomingMessage, res: http.ServerRespons
       interactive: true,
       records: "http",
       ...styleOf(corpus),
-      linkBase: "/v2",
+      linkBase: `${opts.mount ?? ""}/v2`,
       by: whoIsPressing(req, opts.by),
       recordsTo: `written into ${dir}`,
       /**

@@ -49,6 +49,16 @@ const SAMPLE = {
    * file already makes about `held_by`.
    */
   rests_on: ["decisions#something-else-entirely"],
+  /**
+   * ⛔ WHO IT IS PROMISED TO IS PART OF WHAT SOMEBODY AGREED TO — the same argument as `held_by`, one
+   * step further. A sentence agreed to as the product's behaviour, later narrowed to `role: admin`,
+   * is a different promise: everybody else lost it. The words did not change, so nothing but the
+   * hash can notice, and an acceptance that survived that would be a tenet-one hole.
+   *
+   * ⛔ And in the other direction too: REMOVING a `holds_for` widens a promise from one audience to
+   * everybody, which is the direction `held_by` was caught on.
+   */
+  holds_for: { role: "somebody-nobody-agreed-about" },
 };
 
 test("every key of SlotFill changes the canonical form the hash is taken over", () => {

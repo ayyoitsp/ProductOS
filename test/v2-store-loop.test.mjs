@@ -240,9 +240,15 @@ test("closing a note is what lets the cursor past it", async () => {
     const claimed = await callTool(base, token, "productos_exchange_inbox", { since: 0, claim: "session-a" });
     const noteId = (claimed.parsed.events ?? []).find((e) => e.work).work;
 
-    const closed = await callTool(base, token, "productos_exchange_close_note", {
-      id: noteId,
-      outcome: "regenerated the page from the corpus",
+    /**
+     * \u26d4 THROUGH THE DOOR. `productos_exchange_close_note` came off the surface when
+     * `productos_in` grew to take `close`, so calling it by name tests a tool nobody can reach —
+     * and the thing this proves, that a close LANDS IN THE STORE, has to be proven where a session
+     * would actually go.
+     */
+    const closed = await callTool(base, token, "productos_in", {
+      intent: "close",
+      fields: { note: noteId, outcome: "regenerated the page from the corpus" },
     });
     assert.ok(!closed.isError, JSON.stringify(closed.parsed).slice(0, 300));
 

@@ -514,6 +514,20 @@ Held three ways rather than one: no author declares `ask-the-human`, so no host 
 
 ⛔ **None may write, and none may fix what it finds.** Run after a corpus is written, never during. An author cannot review their own work, and after a few exchanges there is no reader left in a session who has not been told the answer.
 
+### ⛔ Every question here is asked per combination, not once
+
+A product declares **dimensions** — `role`, `product line`, whatever the project names — and any screen or sentence may carry a `holds_for` saying which combination it is promised to. A truth with no `holds_for` holds under **every** combination.
+
+So the question you own is not asked once over a feature. It is asked once per combination the feature states something for, and the answers differ:
+
+- a path that completes for an admin and **stops** for a loan processor is an incomplete path, and reading it as one feature hides that entirely
+- two sentences that contradict each other are **not** a contradiction when they hold for different combinations — reporting one is a false finding that costs an author a real argument
+- a behaviour pinned for one combination and unpinned for another is unpinned, and a count over the feature reports it as covered
+
+⛔ **And the silent failure is a dimension nobody declared.** A `holds_for` naming one narrows nothing — it holds everywhere — so a mistyped variant is shown to every audience with nothing saying so. `v2 check` refuses it; if you are reading a corpus that has not been checked, look.
+
+⛔ **Derived, never declared.** A feature does not state what it varies by; that is read off the `holds_for` actually present. A corpus claiming otherwise is a second record with no forcing function, and is itself a finding.
+
 ### `consistency`
 
 **Asks:** Is every concept present in every layer it needs to be, or does it exist in one and nowhere else?
@@ -521,6 +535,7 @@ Held three ways rather than one: no author declares `ask-the-human`, so no host 
 **Exists because:** Four times in one session a concept was added to the schema and shown in the renderer while the skill was never told, so every future session kept writing the old shape. And `preview` did not know a ref that `perform` did, so the surface that shows somebody what they are about to agree to refused the one act the feature waits on. No layer-scoped reviewer can see either: both are properties of the whole.
 
 **Reads, in this order:**
+- the product's dimensions, and which combination each screen and sentence says it holds for — a truth with no `holds_for` holds under every one
 - src/core/jobs.ts — the map of areas and layers, to know what everywhere means
 - src/v2/schema.ts — every field an author writes
 - skills/ — whether each field is named as something to write
@@ -529,6 +544,8 @@ Held three ways rather than one: no author declares `ask-the-human`, so no host 
 - test/ — whether any of it is pinned
 
 **A finding is:**
+- a concept present for one combination and absent for another, where nothing says the absence was intended
+- a `holds_for` naming a dimension the product does not declare — it narrows NOTHING, so the variant is shown to every audience with nothing saying so
 - a schema field no skill tells anyone to write
 - a concept the renderer shows and no check can detect the absence of
 - two implementations of one predicate — the gateFor/check divergence shape
@@ -548,12 +565,14 @@ Held three ways rather than one: no author declares `ask-the-human`, so no host 
 **Exists because:** Every bug in this repo was found by a person and prevented by a test written afterwards — and the ones with no test came back. A backtick inside a template literal broke the build six times while two prose warnings sat above it. What a suite does not assert is what regresses.
 
 **Reads, in this order:**
+- the product's dimensions, and which combination each screen and sentence says it holds for — a truth with no `holds_for` holds under every one
 - test/ — what is asserted, and at what grain
 - git log — the defects that have actually happened here
 - src/v2/check.ts — every finding, and whether each is exercised
 - src/v2/acts.ts — every refusal, and whether each is provoked by a test
 
 **A finding is:**
+- a behaviour pinned for one combination and unpinned for another — a count over the feature reports it as covered, and the uncovered audience is the one that ships broken
 - a finding in check.ts that no test provokes
 - a refusal in acts.ts that nothing asserts
 - a test asserting on flattened text, or on the property a script just set, rather than on what a reader sees
@@ -684,12 +703,15 @@ Held three ways rather than one: no author declares `ask-the-human`, so no host 
 **Exists because:** Peter found two dead ends by hand, one after the other, on a corpus all seven other reviewers would have passed: a folder step with no way out, then a folder step with no way on. Every existing reviewer looks at the PARTS — is the concept everywhere, is the claim pinned, could a PM build this screen. A PM can build a screen that goes nowhere, because the screen is fully described. Nobody was looking at the path, and a feature whose steps are each correct and do not join up is a feature nobody can use.
 
 **Reads, in this order:**
+- the product's dimensions, and which combination each screen and sentence says it holds for — a truth with no `holds_for` holds under every one
 - each scope's happy path — what it says somebody accomplishes, and the screens it passes through
 - those screens in order: what a person has when they arrive, and which control takes them on
 - where each control leaves somebody — the `answer` and `after` of the exchange it performs
 - the prototype as rendered, because a path that is described and not walkable is the failure
 
 **A finding is:**
+- a path that completes for one combination and stops for another — read as one feature, the dead end is invisible, which is the exact failure this reviewer exists for
+- a step whose only way on holds for a combination the earlier steps do not
 - a screen in the happy path with no control that leads to the next one
 - a state a control puts somebody in with no way out of it
 - a happy path whose last screen does not reach what `ends_with` claims
@@ -739,12 +761,15 @@ Held three ways rather than one: no author declares `ask-the-human`, so no host 
 **Exists because:** Peter: *"we need to make sure the product truth is consistent itself"* — and nothing did. `consistency` asks the same question about ProductOS and reads only our source; it cannot open a corpus. So a corpus could promise a thing on a feature page and refuse it on the screen that holds it, use one word for two concepts, or carry a rule contradicting a statement, and every check would pass: each file is individually well-formed, and contradiction is a property of the pair. ⛔ The author is the worst possible person to notice, because they know which of the two they meant.
 
 **Reads, in this order:**
+- the product's dimensions, and which combination each screen and sentence says it holds for — a truth with no `holds_for` holds under every one
 - every scope in the corpus — a contradiction is never visible from one
 - the vocabulary across all of them — the same word, and whether it means the same thing twice
 - each statement against the rules and criteria said to govern it
 - what each screen promises against what the feature holding it claims
 
 **A finding is:**
+- two sentences reported as contradicting each other that hold for DIFFERENT combinations — that is not a contradiction, and reporting it costs an author a real argument
+- two sentences that contradict each other under the SAME combination, which the feature's shape hides when the variants are read as alternatives
 - two scopes promising different things about the same screen or the same entity
 - one term carrying two meanings, or two terms carrying one — the first is worse
 - a rule that forbids what a statement elsewhere asserts
@@ -933,7 +958,7 @@ Territory, not ownership. Nobody is assigned an area — an agent reads this to 
 | area | layers | files |
 |---|---|---|
 | **model** | model | `src/v2/schema.ts` `src/v2/load.ts` `src/v2/ref.ts` `src/core/jobs.ts` `src/core/change.ts` `src/core/config.ts` `src/v2/store/schema.ts` |
-| **derive** | derive | `src/v2/grid.ts` `src/v2/stamp.ts` `src/v2/demonstrate.ts` `src/v2/analyse.ts` `src/v2/confidence.ts` `src/v2/settle.ts` `src/v2/acts.ts` `src/v2/record.ts` `src/v2/spoken.ts` `src/v2/connects.ts` `src/v2/derive-states.ts` `src/v2/walk.ts` `src/v2/held.ts` `src/v2/selection.ts` `src/v2/steers.ts` `src/v2/store/access.ts` `src/v2/store/identity.ts` `src/core/learn.ts` `src/core/framework-gaps.ts` `src/adapters/claude.ts` |
+| **derive** | derive | `src/v2/grid.ts` `src/v2/stamp.ts` `src/v2/demonstrate.ts` `src/v2/analyse.ts` `src/v2/confidence.ts` `src/v2/settle.ts` `src/v2/acts.ts` `src/v2/record.ts` `src/v2/spoken.ts` `src/v2/connects.ts` `src/v2/derive-states.ts` `src/v2/walk.ts` `src/v2/held.ts` `src/v2/selection.ts` `src/v2/dimensions.ts` `src/v2/steers.ts` `src/v2/store/access.ts` `src/v2/store/identity.ts` `src/core/learn.ts` `src/core/framework-gaps.ts` `src/adapters/claude.ts` |
 | **generate** | generate | `src/v2/migrate.ts` `src/v2/draw.ts` `src/v2/draw-write.ts` `src/v2/routes.ts` `src/v2/propose.ts` `src/v2/propose-slots.ts` `src/v2/appcss.ts` `src/v2/icons.ts` `src/v2/shell.ts` `src/core/agents-doc.ts` `src/v2/design.ts` `src/v2/compiler.ts` `src/v2/store/watchdog.ts` `src/v2/store/because.ts` `src/v2/store/corpus.ts` `src/v2/store/doc-migrations.ts` `src/v2/store/migrate.ts` `src/v2/store/boot.ts` |
 | **operate** | operate | `Makefile` `Dockerfile` `docker-compose.yml` `docker-compose.remote.yml` `scripts/` |
 | **surface** | surface | `src/v2/page.ts` `src/v2/prototype.ts` `src/v2/serve.ts` `src/v2/intents.ts` `src/ui/server.ts` `src/ui/renderer.ts` `src/v2/store/server.ts` `src/v2/store/instance.ts` `src/v2/store/pushes.ts` `src/v2/store/mcp.ts` `src/v2/store/choose.ts` `src/cli/commands/hosted.ts` `src/v2/packet.ts` `src/v2/notes.ts` `src/v2/watch.ts` `src/v2/log.ts` `src/v2/inbox.ts` `src/v2/presence.ts` `src/v2/identity.ts` `src/v2/client.ts` `src/v2/write.ts` `src/v2/wire.ts` `src/v2/states.ts` `src/v2/moved.ts` `src/cli/commands/v2.ts` `src/cli/commands/todo.ts` `src/v2/store/trace.ts` `src/mcp/v2-tools.ts` |

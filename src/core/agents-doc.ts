@@ -358,6 +358,56 @@ export function agentsDoc(): string {
       "during. An author cannot review their own work, and after a few exchanges there is no reader " +
       "left in a session who has not been told the answer."
   );
+  out.push("");
+  /**
+   * ⛔ ONE STANDING CONSIDERATION, IN THE ONE PLACE EVERY REVIEWER READS.
+   *
+   * Peter: *"So features will rotate around dimensions. Dimensions should be made aware to all the
+   * agents and be a first class consideration"*.
+   *
+   * It is emitted here rather than copied into each role, for the reason the whole document is
+   * generated: twenty hand-written copies of one instruction is twenty things to keep agreeing, and
+   * the copies would diverge before the week was out. A reviewer that has not been told a product
+   * can differ by role will read a feature as though it states one thing for everybody, agree that
+   * it does, and the narrowing nobody noticed will be the thing that ships.
+   */
+  out.push("### ⛔ Every question here is asked per combination, not once");
+  out.push("");
+  out.push(
+    "A product declares **dimensions** — `role`, `product line`, whatever the project names — and " +
+      "any screen or sentence may carry a `holds_for` saying which combination it is promised to. " +
+      "A truth with no `holds_for` holds under **every** combination."
+  );
+  out.push("");
+  out.push(
+    "So the question you own is not asked once over a feature. It is asked once per combination the " +
+      "feature states something for, and the answers differ:"
+  );
+  out.push("");
+  out.push(
+    "- a path that completes for an admin and **stops** for a loan processor is an incomplete path, " +
+      "and reading it as one feature hides that entirely"
+  );
+  out.push(
+    "- two sentences that contradict each other are **not** a contradiction when they hold for " +
+      "different combinations — reporting one is a false finding that costs an author a real argument"
+  );
+  out.push(
+    "- a behaviour pinned for one combination and unpinned for another is unpinned, and a count over " +
+      "the feature reports it as covered"
+  );
+  out.push("");
+  out.push(
+    "⛔ **And the silent failure is a dimension nobody declared.** A `holds_for` naming one narrows " +
+      "nothing — it holds everywhere — so a mistyped variant is shown to every audience with nothing " +
+      "saying so. `v2 check` refuses it; if you are reading a corpus that has not been checked, look."
+  );
+  out.push("");
+  out.push(
+    "⛔ **Derived, never declared.** A feature does not state what it varies by; that is read off the " +
+      "`holds_for` actually present. A corpus claiming otherwise is a second record with no forcing " +
+      "function, and is itself a finding."
+  );
   for (const a of AGENTS) {
     out.push("");
     out.push(`### \`${a.name}\`${a.prompt ? "" : "  — ⛔ no prompt written yet"}`);

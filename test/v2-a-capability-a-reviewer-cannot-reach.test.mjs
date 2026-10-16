@@ -81,6 +81,16 @@ const REACHED_BY = new Map([
    * added a prototype by mistake from a browser had no route back at all.
    */
   ["prototypes", "prototype"],
+  /**
+   * ⛔ WHO A SCREEN IS FOR, AND THE WAY BACK. Peter: *"we need dimensions to carry through to all
+   * features, so we can have different variations PER feature"*.
+   *
+   * This test is what made the intent exist: the field was added, the renderer showed it, the checker
+   * refused a typo in it — and the only way to SET it was to hand-edit a document, which is the
+   * hand-authoring trap this project opens on. `holds-for` with an empty combination takes it back,
+   * for the reason the note above gives about one-way doors.
+   */
+  ["holds_for", "holds-for"],
 ]);
 
 const shapeOf = (name) => {
