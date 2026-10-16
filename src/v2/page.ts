@@ -2861,13 +2861,25 @@ function renderNav(
       // from "has no exchanges" claimed every container in the corpus was on this page, and a leaf
       // scope's page links at a dozen sections it does not contain.
       const holdsIt = contains.has(scope.id);
+      /**
+       * ⛔ EVERY ROW SAYS ITS OWN NAME ON HOVER. Peter: *"also make a hover for each item even with
+       * scrolling on"*.
+       *
+       * The labels no longer truncate, so a long one is reached by scrolling — and scrolling to read
+       * a name is work a hover does for free. It is the plain title rather than the rendered one: a
+       * tooltip is text, and inline formatting in it would arrive as the markup it is written in.
+       *
+       * ⛔ The unlinked variant keeps its own: "not on this page" is why that row cannot be pressed,
+       * which is worth more than repeating the name it is already showing.
+       */
+      const hover = esc(plain(scope.title || scope.id));
       const name =
         scope.id === here
-          ? `<strong>${label}</strong>`
+          ? `<strong title="${hover}">${label}</strong>`
           : holdsIt
-            ? `<a href="#${anchorOf(scope.id)}" data-goto="${esc(scope.id)}">${label}</a>`
+            ? `<a href="#${anchorOf(scope.id)}" data-goto="${esc(scope.id)}" title="${hover}">${label}</a>`
             : base
-              ? `<a href="${esc(base)}/${esc(scope.id)}">${label}</a>`
+              ? `<a href="${esc(base)}/${esc(scope.id)}" title="${hover}">${label}</a>`
               : `<span class="unlinked" title="not on this page">${label}</span>`;
       /**
        * ⛔ A COUNT IS A CHIP, AND A CHIP IS A NUMBER AND A MARK.
@@ -7889,10 +7901,46 @@ export const STYLE = `<style>
    */
   nav.scopes li { border-bottom: 1px solid var(--line); }
   nav.scopes li > ul > li:last-child { border-bottom: 0; }
+  /*
+   * ⛔ THE ROW IS AS WIDE AS WHAT IS IN IT, AND AT LEAST AS WIDE AS THE MENU.
+   *
+   * max-content is what lets the column scroll to a long name instead of cutting it. min-width:
+   * 100% is what keeps the hover band full width anyway — without it a short row's highlight stops
+   * at the end of its text, so the thing under the pointer and the thing lit up are different
+   * shapes, which reads as a rendering fault rather than a hover.
+   */
   nav.scopes .scoperow { display: flex; align-items: center; gap: .3rem;
-    padding: .3rem 0 .3rem calc(var(--d) * .55rem); }
+    width: max-content; min-width: 100%; border-radius: 4px;
+    padding: .3rem .4rem .3rem calc(var(--d) * .55rem + .4rem); }
+  /*
+   * ⛔ AND EVERY ITEM ANSWERS THE POINTER. Peter: *"also make a hover for each item even with
+   * scrolling on"*.
+   *
+   * Only the link reacted before, so the half of the row holding the chips was dead to the pointer —
+   * in a menu you are scrolling sideways, losing track of which line you are on is the whole
+   * difficulty. The band is the row, not the text in it.
+   */
+  nav.scopes .scoperow:hover { background: var(--card); }
+  nav.scopes .scoperow:hover > a { text-decoration: underline; }
+  /*
+   * ⛔ NOTHING IN THE MENU IS CUT OFF. Peter: *"we shouldn't have anything truncated in the menu...
+   * don't truncate, scroll"*.
+   *
+   * An ellipsis destroys the one thing a menu row carries. Two features whose names differ at the
+   * end — and in a real corpus they do, because they are filed under a shared container and named
+   * for what separates them — render as the same row, so the menu stops distinguishing exactly the
+   * items it exists to distinguish.
+   *
+   * ⛔ SO THE ROW KEEPS ITS WIDTH AND THE MENU SCROLLS. flex: 1; min-width: 0 was what made the
+   * label the part that gives: it told the label to absorb the shortfall and permitted it to shrink
+   * below its content. Without them the row is as wide as its contents and the column scrolls
+   * sideways to reach the rest — see the overflow rule in the side-menu block.
+   *
+   * ⛔ nowrap STAYS. Wrapping is the other way to avoid truncating, and it makes a row two or three
+   * lines tall — so a menu of a dozen features becomes a page of prose, which is worse than either.
+   */
   nav.scopes .scoperow > a, nav.scopes .scoperow > strong, nav.scopes .scoperow > .unlinked {
-    flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    flex: 0 0 auto; white-space: nowrap; }
   /*
    * ⛔ COLLAPSING IS THE SIDE MENU'S BEHAVIOUR AND ONLY ITS.
    *
@@ -8073,6 +8121,17 @@ export const STYLE = `<style>
      */
     :root[data-nav="left"] .topframe { overflow-y: auto;
       padding-bottom: calc(4.5rem + var(--bottom-h) + 1rem); }
+    /*
+     * ⛔ AND IT SCROLLS SIDEWAYS TO A LONG NAME RATHER THAN CUTTING IT. Peter: *"don't truncate,
+     * scroll"*.
+     *
+     * The overflow is on the tree, not on the column: putting it on the column would scroll the tabs
+     * and the breadcrumb sideways with it, so choosing an area would move the control you just
+     * pressed. ⛔ And overflow-y: visible with it, or the nested lists get a second vertical
+     * scrollbar inside the one the column already has — a box that scrolls in one axis cannot be
+     * asked to clip in the other.
+     */
+    :root[data-nav="left"] nav.scopes { overflow-x: auto; overflow-y: visible; }
   }
   .prose { margin: .6rem 0 1.4rem; max-width: 42rem; }
   .prose p { margin: .6rem 0; }
