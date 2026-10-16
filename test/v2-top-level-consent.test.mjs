@@ -26,6 +26,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { execFileSync } from "node:child_process";
+import { pressed } from "./support/press.mjs";
 import { loadCorpus } from "../dist/v2/load.js";
 import { resolveRef } from "../dist/v2/ref.js";
 import { stampFor } from "../dist/v2/stamp.js";
@@ -66,6 +67,16 @@ exchanges: []
 const cli = (dir, ...a) =>
   execFileSync("node", [path.resolve("dist/cli/index.js"), "v2", ...a, "--at", dir], { encoding: "utf-8" });
 
+/**
+ * ⛔ THE ACT IS PERFORMED IN PROCESS, THE PAGE IS STILL RENDERED THROUGH THE CLI.
+ *
+ * Accepting used to go through `cli` too, and that is the forgery `principalAtTheShell` closes: a
+ * human `via` recorded from a shell nobody is standing at. `perform` is where every floor lives —
+ * see `support/press.mjs` — and rendering a page claims nothing about anybody agreeing, so it stays
+ * where it was.
+ */
+const agree = (dir, ref, by = "a-person") => pressed(dir, "accept", ref, {}, { by }).said;
+
 test("a section of a product-wide document resolves", () => {
   const c = loadCorpus(corpus());
   assert.deepEqual(c.broken, []);
@@ -94,8 +105,8 @@ test("a name owned by both a document and a feature is refused, not guessed", ()
 
 test("a goal can be agreed to, and the agreement names who", () => {
   const dir = corpus();
-  const out = cli(dir, "accept", "goals#one-place-for-the-truth", "--by", "a-person");
-  assert.match(out, /accepted/);
+  const out = agree(dir, "goals#one-place-for-the-truth");
+  assert.match(out, /accepted/, `the act did not report what it did: ${out}`);
   const st = stampFor(loadCorpus(dir), "goals#one-place-for-the-truth");
   assert.equal(st.state, "accepted");
   assert.equal(st.by, "a-person");
@@ -108,7 +119,7 @@ test("a goal can be agreed to, and the agreement names who", () => {
  */
 test("rewording the section breaks the agreement", () => {
   const dir = corpus();
-  cli(dir, "accept", "goals#one-place-for-the-truth", "--by", "a-person");
+  agree(dir, "goals#one-place-for-the-truth");
   const f = path.join(dir, "charter", "goals.md");
   fs.writeFileSync(
     f,
@@ -122,7 +133,7 @@ test("rewording the section breaks the agreement", () => {
 /** ⛔ A neighbouring section is untouched: these are agreed to one at a time, like every other atom. */
 test("rewording one section leaves its neighbour's agreement standing", () => {
   const dir = corpus();
-  cli(dir, "accept", "goals#nobody-types-twice", "--by", "a-person");
+  agree(dir, "goals#nobody-types-twice");
   const f = path.join(dir, "charter", "goals.md");
   fs.writeFileSync(f, fs.readFileSync(f, "utf-8").replace("never in a chat log", "nowhere else at all"));
   assert.equal(stampFor(loadCorpus(dir), "goals#nobody-types-twice").state, "accepted",

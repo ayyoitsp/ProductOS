@@ -24,7 +24,7 @@ import os from "node:os";
 import { loadCorpus } from "../dist/v2/load.js";
 import { gridFor, stageOf } from "../dist/v2/grid.js";
 import { STAGES } from "../dist/v2/schema.js";
-import { execFileSync } from "node:child_process";
+import { pressed } from "./support/press.mjs";
 
 function seed() {
   const dir = temp("v2stage-");
@@ -121,27 +121,31 @@ test("agreeing to every behaviour is what reaches the builders' stage", () => {
  */
 test("settling, agreeing and reading through is the whole way to the last stage", () => {
   const dir = seed();
-  const at = ["--at", dir];
-  const run = (...args) => execFileSync("node", [path.resolve("dist/cli/index.js"), "v2", ...args], { encoding: "utf-8" });
+  /**
+   * ⛔ IN PROCESS, NOT THROUGH THE CLI — and the floors are still charged, which is the only reason
+   * this test drove the CLI in the first place. `perform` is where every floor lives; a shell
+   * nobody is standing at cannot record a human `via` at all now. See `support/press.mjs`.
+   */
+  const run = (act, ref, body = {}, by = "a-person") => pressed(dir, act, ref, body, { by });
   const now = () => stageOf(loadCorpus(dir), "tasks");
 
   assert.equal(now().stage, "specification");
 
   /** 1. Answer the open question. ⛔ Still specification — nobody has agreed to anything. */
-  run("rule", "tasks#complete-a-task#at_once",
-    "--says", "Whoever presses first claims the task, and the second kid is told it is already done and by whom.",
-    "--because", "In the trial the pain was two kids both believing they had earned the same reward, so the claim has to be visible at once.",
-    "--by", "a-person", ...at);
+  run("rule", "tasks#complete-a-task#at_once", {
+    says: "Whoever presses first claims the task, and the second kid is told it is already done and by whom.",
+    because: "In the trial the pain was two kids both believing they had earned the same reward, so the claim has to be visible at once.",
+  });
   assert.equal(now().stage, "specification", "answering a question is not somebody agreeing to the answer");
   assert.match(now().because, /agreed to/, "the reason no longer says what is actually missing");
 
   /** 2. Product and design sign off. ⛔ THIS is the transition, and it is an accept — nothing else. */
-  run("accept", "tasks#complete-a-task", "--by", "a-person", ...at);
+  run("accept", "tasks#complete-a-task");
   assert.equal(now().stage, "ready for review",
     "agreeing to every behaviour did not reach the builders' stage — the derivation and the acts have diverged");
 
   /** 3. A builder reads it through. */
-  run("read", "tasks", "--buildable", "yes", "--by", "a-builder", ...at);
+  run("read", "tasks", { buildable: true }, "a-builder");
   const built = now();
   assert.equal(built.stage, "ready for build");
   assert.match(built.because, /a-builder/, "the last stage does not say who read it — then it is a badge, not a record");
@@ -150,9 +154,11 @@ test("settling, agreeing and reading through is the whole way to the last stage"
    * ⛔ AND IT GOES BACK. A builder saying it is NOT buildable returns the feature to specification
    * with the blockers named. Not a fourth stage, and never a silent hold — the reason is the point.
    */
-  run("read", "tasks", "--buildable", "no", "--by", "a-builder",
-    "--note", "Nothing says where the claim is recorded when two devices are offline at once.",
-    "--blocked-by", "tasks#complete-a-task#at_once", ...at);
+  run("read", "tasks", {
+    buildable: false,
+    note: "Nothing says where the claim is recorded when two devices are offline at once.",
+    blockedBy: ["tasks#complete-a-task#at_once"],
+  }, "a-builder");
   const back = now();
   assert.equal(back.stage, "specification", "a builder said it was not buildable and the feature stayed ready for build");
   assert.deepEqual(back.blocked_by, ["tasks#complete-a-task#at_once"]);

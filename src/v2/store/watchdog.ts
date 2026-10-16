@@ -20,6 +20,7 @@
  * importable, so nothing that needs testing can live in one.
  */
 import { stuckWrites } from "./instance.js";
+import { sweepScratch } from "./server.js";
 
 /**
  * ⛔ FIVE TIMES THE REFUSAL DEADLINE, NOT EQUAL TO IT.
@@ -53,6 +54,54 @@ export function watchForAStuckWrite(
       );
     }
     end(1);
+  }, everyMs);
+  /** ⛔ Unref'd, so this timer alone never holds the process open. */
+  timer.unref?.();
+  return { stop: () => clearInterval(timer) };
+}
+
+/**
+ * Sweeps abandoned scratch directories WHILE THE INSTANCE RUNS, not only when it starts.
+ *
+ * ⛔ 885 OF THEM TOOK 4100 DOWN, AND THE SYMPTOM WAS A SILENT HANG. Every request materializes the
+ * corpus into its own temp directory. A mutating request removes its own on the way out, and a dirty
+ * shared one is thrown away — but a shared directory that is SUPERSEDED is simply dropped from the
+ * cache, and nothing removes it. The cache loses its reference on four paths: a new fingerprint
+ * replacing `entry.dir`, `forgetDir`, `forgetRead`, and eviction at `READ_CEILING`. The first fires
+ * on every write.
+ *
+ * So one orphan per write accumulated for a day — Bilrost's corpus is 17.5 MB each — until the only
+ * sweeper, which runs at BOOT, had to walk and delete gigabytes before `server.listen`. The instance
+ * logged nothing while doing it, so a hung startup was indistinguishable from a dead process: the
+ * store was reachable, DNS resolved, TCP connected, a query answered in 801ms, and the port was
+ * mapped. All of it fine, and nothing listening.
+ *
+ * ⛔ THE COST OF STARTING GREW WITH HOW LONG IT HAD RUN, which is why it had always worked before.
+ *
+ * ⛔ AND IT IS THE SWEEP RATHER THAN PROMPT REMOVAL, DELIBERATELY. Removing a superseded directory
+ * at the moment it leaves the cache would be cheaper and is not safe: an in-flight request already
+ * holds that path and reads from it for its lifetime, so it needs refcounting on the shared read
+ * path to be correct. `sweepScratch` is already age-gated for exactly this reason — an hour is
+ * longer than any request and shorter than anybody cares about — so running it on a timer bounds
+ * growth to one hour's writes without touching the hot path.
+ */
+const SWEEP_EVERY_MS = 10 * 60 * 1000;
+
+export function sweepScratchWhileRunning(
+  everyMs: number = SWEEP_EVERY_MS,
+  sweep: () => string[] = sweepScratch,
+  say: (s: string) => void = (s) => void process.stderr.write(s),
+): { stop: () => void } {
+  const timer = setInterval(() => {
+    let removed: string[] = [];
+    try {
+      removed = sweep();
+    } catch {
+      /** ⛔ Never throws. A failed cleanup must not take down a healthy instance. */
+      return;
+    }
+    /** ⛔ Silent when there is nothing to say, so the log stays readable. */
+    if (removed.length) say(`[productos] swept ${removed.length} abandoned scratch directories\n`);
   }, everyMs);
   /** ⛔ Unref'd, so this timer alone never holds the process open. */
   timer.unref?.();

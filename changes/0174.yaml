@@ -1,0 +1,13 @@
+id: "0174"
+said: also a usability review - let's get these staged.. we can hash out linear connections later, so ignore those, but we should address how the model stores the usability state
+at: 2026-10-16
+kind: concept
+reaches:
+  model: ""
+  derive: ""
+  generate: ""
+  surface: ""
+  check: ""
+  instruct: ""
+  pin: ""
+waived: {}

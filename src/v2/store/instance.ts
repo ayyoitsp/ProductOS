@@ -768,6 +768,15 @@ export async function instanceRoute(
     try {
       const handled = await v2Route(req, held ? held.proxy : res, addressed.rest, {
         dir,
+        /**
+         * ⛔ WHERE THIS PROJECT IS SERVED FROM, because this is the only thing that knows.
+         *
+         * `addressed.rest` is the path with `/p/<id>` already stripped, so `v2Route` sees `/v2` and
+         * wrote links as `/v2/<scope>` — root-relative, correct for a local server at the root and
+         * a 404 on every hosted page. Peter: *"we should have durable links for everything in
+         * product os"*; they existed, and this is the prefix that was missing from them.
+         */
+        mount: `/p/${addressed.id}`,
         corpusFor,
         who,
         /**

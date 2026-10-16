@@ -20,6 +20,7 @@ flowchart LR
     demonstrator["demonstrator<br/><i>What would have to be demonstrated for this claim to be believed?</i><br/>· per feature ·"]
     instrumenter["instrumenter<br/><i>What does this product record, and which question does each recording answer?</i><br/>· per feature ·"]
     designer["designer<br/><i>What should this screen look like, where no code renders it?</i><br/>· per screen no component renders ·"]
+    walker["walker<br/><i>What does this product already do, driven rather than read?</i><br/>· per area of the running product ·"]
     evidencer["evidencer<br/><i>What already demonstrates each of these claims?</i>"]
   end
   subgraph REVIEWERS["reviewers — each asks one question about the whole"]
@@ -62,7 +63,7 @@ flowchart LR
 | seat | roles |
 |---|---|
 | **product** | `surveyor` ·writes· · `scoper` ·writes· · `newcomer` · `completeness` · `coherence` |
-| **design** | `designer` ·writes· · `rendered` · `design-critique` |
+| **design** | `designer` ·writes· · `walker` ·writes· · `rendered` · `design-critique` |
 | **engineering** | `machinist` ·writes· · `decomposer` ·writes· · `instrumenter` ·writes· · `truthfulness` · `architecture` · `buildability` |
 | **quality** | `demonstrator` ·writes· · `evidencer` ·writes· · `coverage` · `hand-authored` · `test-design` |
 | **the framework itself** | `consistency` · `can-the-model-say-it` |
@@ -80,12 +81,12 @@ flowchart TD
   scope_a_feature --> scope_a_feature_scoper["scoper"]
   scope_a_feature --> scope_a_feature_machinist["machinist"]
   scope_a_feature --> scope_a_feature_instrumenter["instrumenter"]
-  scope_a_feature --> scope_a_feature_decomposer["decomposer ×N"]
+  scope_a_feature --> scope_a_feature_decomposer["decomposer"]
   scope_a_feature --> scope_a_feature_demonstrator["demonstrator ×N"]
   scope_a_feature --> scope_a_feature_designer["designer ×N"]
   scope_a_feature --> scope_a_feature_completeness["completeness"]
   scope_a_feature --> scope_a_feature_design-critique["design-critique ×N"]
-  scope_a_feature -.->|keeps| scope_a_feature_self(["the session — 4 things it may not hand off"])
+  scope_a_feature -.->|keeps| scope_a_feature_self(["the session — 5 things it may not hand off"])
   scan_a_codebase(["scan a codebase<br/><i>Turn a whole codebase into a first corpus</i>"])
   scan_a_codebase --> scan_a_codebase_surveyor["surveyor"]
   scan_a_codebase --> scan_a_codebase_scoper["scoper ×N"]
@@ -97,16 +98,23 @@ flowchart TD
   scan_a_codebase --> scan_a_codebase_coherence["coherence"]
   scan_a_codebase --> scan_a_codebase_hand-authored["hand-authored"]
   scan_a_codebase -.->|keeps| scan_a_codebase_self(["the session — 4 things it may not hand off"])
+  walk_a_running_product(["walk a running product<br/><i>Index what a product already does, by driving it</i>"])
+  walk_a_running_product --> walk_a_running_product_walker["walker ×N"]
+  walk_a_running_product --> walk_a_running_product_rendered["rendered"]
+  walk_a_running_product --> walk_a_running_product_can-the-model-say-it["can-the-model-say-it"]
+  walk_a_running_product -.->|keeps| walk_a_running_product_self(["the session — 4 things it may not hand off"])
   index_a_corpus(["index a corpus<br/><i>Run one analysis across everything, over only what is outstanding</i>"])
-  index_a_corpus --> index_a_corpus_decomposer["decomposer ×N"]
+  index_a_corpus --> index_a_corpus_decomposer["decomposer"]
   index_a_corpus --> index_a_corpus_demonstrator["demonstrator ×N"]
   index_a_corpus --> index_a_corpus_designer["designer ×N"]
-  index_a_corpus -.->|keeps| index_a_corpus_self(["the session — 4 things it may not hand off"])
+  index_a_corpus -.->|keeps| index_a_corpus_self(["the session — 6 things it may not hand off"])
   hand_it_to_the_builders(["hand it to the builders<br/><i>The engineering and QA read, once product and design have signed off</i>"])
   hand_it_to_the_builders --> hand_it_to_the_builders_architecture["architecture"]
   hand_it_to_the_builders --> hand_it_to_the_builders_buildability["buildability"]
   hand_it_to_the_builders --> hand_it_to_the_builders_test-design["test-design"]
   hand_it_to_the_builders -.->|keeps| hand_it_to_the_builders_self(["the session — 3 things it may not hand off"])
+  groom_a_ticket(["groom a ticket<br/><i>Answer whether a piece of work can be built, and raise what is open as questions</i>"])
+  groom_a_ticket -.->|keeps| groom_a_ticket_self(["the session — 5 things it may not hand off"])
   map_evidence(["map evidence<br/><i>Find what already demonstrates the claims a corpus makes</i>"])
   map_evidence --> map_evidence_evidencer["evidencer"]
   map_evidence --> map_evidence_coverage["coverage"]
@@ -143,7 +151,7 @@ Turn one in-flight feature into product truth.
 - `scoper` *(product · writes)* — the feature written in a context holding nothing but that feature
 - `machinist` *(engineering · writes)* — the half of this feature nobody presses — what runs by itself, and what sets it off
 - `instrumenter` *(engineering · writes)* — what has to be recorded for any of this feature's measures to be knowable
-- `decomposer` *(engineering · writes)* — one per unit, in parallel — which parts of the system this feature needs, from the truth as it now reads
+- `decomposer` *(engineering · writes)* — which parts of the system this feature needs — ⛔ one run, against the product's settled subsystem tree, never one per feature
 - `demonstrator` *(quality · writes)* — one per unit, in parallel — what would have to be demonstrated for each claim to be believed, invalidated when the claim moves
 - `designer` *(design · writes)* — one per unit, in parallel — screens the product should have and nothing renders yet
 - `completeness` *(product · judges, writes nothing)* — whether somebody can get from the start of this feature to the end of it
@@ -153,6 +161,7 @@ Turn one in-flight feature into product truth.
 - the conversation about what this feature is for — a purpose inferred from code is a purpose nobody chose
 - putting every open question to the person, in their own interface
 - every act of judgement, and never answering one on their behalf
+- ⛔ settling the subsystem tree with a person before the decomposer runs, and never spawning one per feature — a part that serves several features cannot be named by a role that can see only one of them
 - ⛔ stopping here. The engineering and QA reads are a different route and it cannot run until somebody has agreed to this — an engineer costing a draft produces a decision nobody made
 
 ### scan a codebase
@@ -176,17 +185,34 @@ Turn a whole codebase into a first corpus.
 - putting the survey in front of a person before thirty scopers start against a partition that is wrong
 - every act of judgement — nothing here is validated by having been written
 
+### walk a running product
+
+Index what a product already does, by driving it.
+
+**Spawns, in order:**
+- `walker` *(design · writes)* — one per unit, in parallel — ⛔ one area each, because a session that walked thirty screens describes the thirtieth in the words of the first
+- `rendered` *(design · judges, writes nothing)* — where a walked screen is one the corpus already holds, whether the two agree — a difference here is the most valuable thing this route produces
+- `can-the-model-say-it` *(the framework itself · judges, writes nothing)* — whether what the product does could be written down at all, since a walk finds behaviour nobody designed a field for
+
+**⛔ Keeps, because it may not be delegated:**
+- ⛔ somebody else having signed in. The walker never authenticates: an agent that can sign in can reach everything the person could, and a sign-in wall is a RESULT — which routes are behind it is the most useful thing a first pass reports
+- ⛔ pressing nothing that sends, deletes, publishes or pays. A walk that changed the data cannot be repeated, and being repeatable is the only reason it counts for anything
+- ⛔ the difference between what the product does and what it should do. Everything this route writes is proposed; nothing it sees could tell it which of the two it is looking at
+- every act of judgement — a walk is evidence, and evidence is not agreement
+
 ### index a corpus
 
 Run one analysis across everything, over only what is outstanding.
 
 **Spawns, in order:**
-- `decomposer` *(engineering · writes)* — one per unit, in parallel — the parts each feature needs — one per ref `analyse capabilities` names, never one per feature in the corpus
+- `decomposer` *(engineering · writes)* — the parts each feature needs — one run over the refs `analyse capabilities` names, after the subsystem tree is settled
 - `demonstrator` *(quality · writes)* — one per unit, in parallel — what would show each claim holding — one per ref `analyse requirements` names
 - `designer` *(design · writes)* — one per unit, in parallel — a picture for each screen `analyse drawings` names, including the appearances a screen falls into
 
 **⛔ Keeps, because it may not be delegated:**
-- ⛔ running `productos v2 analyse <name>` FIRST and fanning only over the refs it returns — a sweep that runs over everything redoes finished work and stops being something anybody runs twice
+- ⛔ running `productos v2 analyse <name>` FIRST and working only the refs it returns — a sweep that runs over everything redoes finished work and stops being something anybody runs twice
+- ⛔ reading what the analysis says about fanning before spawning anything: one that must be settled across the product first says so, and its refs are one run's worklist rather than a list of roles to spawn
+- ⛔ putting the subsystem tree in front of a person before any part of it is worked — the names, the areas and what nests in what. Three cold runs over three features produced three disjoint trees and nothing shared, and nobody reading them could see they were the same machinery
 - deciding which analysis to run: this route does one at a time, because thirty roles of three kinds at once is a diff nobody reviews
 - ⛔ reading the stale ones before the missing ones — a unit that was done and now answers an older wording looks finished to everybody reading it
 - every act of judgement. Nothing swept is validated by having been swept, and none of these roles may stamp
@@ -207,6 +233,19 @@ The engineering and QA read, once product and design have signed off.
 - deciding what to do with what comes back: a question the corpus must settle goes to the person, never to the builder
 - every act of judgement — an engineer saying it is buildable is not somebody agreeing it is right
 
+### groom a ticket
+
+Answer whether a piece of work can be built, and raise what is open as questions.
+
+**Spawns nothing.** Every part of this is something the session may not hand off.
+
+**⛔ Keeps, because it may not be delegated:**
+- the whole reading — `productos_readiness` for the verdict, the queue for each open question, and the packet for what to build from
+- ⛔ raising every open question with the person who was asked, verbatim, and answering none of them — a hole a builder fills is product truth invented by a builder
+- ⛔ never recording consent: a claim nobody has agreed to needs a stamp from a person, and no amount of grooming produces one
+- deciding what a claim with no recorded author is — ask who wrote it; a person's unconfirmed draft and an agent's inference are the same bytes
+- writing the test list, with each requirement's ref and the hash of the words it was written from, into whatever holds the work
+
 ### map evidence
 
 Find what already demonstrates the claims a corpus makes.
@@ -217,7 +256,7 @@ Find what already demonstrates the claims a corpus makes.
 
 **⛔ Keeps, because it may not be delegated:**
 - the decision about what to do with a criterion nothing demonstrates
-- ⛔ not reading a coverage number as quality — whether those criteria would show anything is `ready it for build`, after somebody has agreed
+- ⛔ not reading a coverage number as quality — whether those criteria would show anything is `hand it to the builders`, after somebody has agreed
 - never letting coverage be reported as validation
 
 ### check it communicates
@@ -293,12 +332,13 @@ Held three ways rather than one: no author declares `ask-the-human`, so no host 
 | author | asks | per | writes |
 |---|---|---|---|
 | **surveyor** | What does this product consist of — which areas, and which features in each? | runs once | the areas, as scopes; each feature as a scope inside its area, with a title and nothing else |
-| **scoper** | What does this one feature promise, and where does somebody meet it? | feature | the happy path — what the feature is FOR, first; views and their parts; person-asked exchanges, and what each slot says; criteria — what would show a sentence holding; `why`, `risks` and `measures` — why this is worth building, what could go wrong, and how anybody would know it worked; `terms` — what each word means in this feature; `question:` on anything it cannot resolve, with no claim beside it |
+| **scoper** | What does this one feature promise, and where does somebody meet it? | feature | the happy path — what the feature is FOR, first; views and their parts; person-asked exchanges, and what each slot says; `why`, `risks` and `measures` — why this is worth building, what could go wrong, and how anybody would know it worked; `terms` — what each word means in this feature; `question:` on anything it cannot resolve, with no claim beside it |
 | **machinist** | What does this product do that nobody presses, and what sets it off? | feature | system- and integrator-asked exchanges, and what each slot says; `when.triggered_by` — what sets it off, in product language; `when.follows` — the ask this one comes after, where something in the product sets it off; `depends_on` — what this rests on and does not itself behaviour; `question:` on anything it cannot resolve, with no claim beside it |
 | **decomposer** | Which parts of the system does this feature need, and where do they belong? | feature | subsystems — roughly what each does, and which area it is filed inside; `offers` — the capabilities a subsystem provides, each in a sentence; `serves` — the product statement each capability exists for, or the capability that needs it; `uses` — what a subsystem leans on across the tree, where containment cannot say it |
 | **demonstrator** | What would have to be demonstrated for this claim to be believed? | feature | criteria — what must be demonstrated for each claim, as given/when/then; `derived` — the role, the date, and the hash of the claim it was worked out against; `of` — which statement, wherever the slot says more than one thing; `level` — where somebody would have to stand to observe it, where that is knowable from the claim |
 | **instrumenter** | What does this product record, and which question does each recording answer? | feature | instruments — what gets recorded, in the product's own terms; `feeds` — which measure each recording answers, which is what stops either end being decorative |
 | **designer** | What should this screen look like, where no code renders it? | screen no component renders | a drawing for a screen no component renders, stamped with what it was designed from |
+| **walker** | What does this product already do, driven rather than read? | area of the running product | a screen with its parts, as the product presented them — proposed, never stated; a `kind: walk` reading naming the URL and what happened there |
 | **evidencer** | What already demonstrates each of these claims? | runs once | evidence against criteria, each naming what it is and where it came from |
 
 ### `surveyor`
@@ -342,7 +382,6 @@ Held three ways rather than one: no author declares `ask-the-human`, so no host 
 - the happy path — what the feature is FOR, first
 - views and their parts
 - person-asked exchanges, and what each slot says
-- criteria — what would show a sentence holding
 - `why`, `risks` and `measures` — why this is worth building, what could go wrong, and how anybody would know it worked
 - `terms` — what each word means in this feature
 - `question:` on anything it cannot resolve, with no claim beside it
@@ -488,6 +527,32 @@ Held three ways rather than one: no author declares `ask-the-human`, so no host 
 
 **Needs:** read-files · search-files · run-commands · write-corpus · see-a-page · fetch-url  ·  **Prompt:** `agents/productos-designer.md`
 
+### `walker`
+
+**Asks:** What does this product already do, driven rather than read?
+
+**Exists because:** Peter: *"let's add walk-to-index. it doesn't give us CONFIRMED state. but it gives us a starting place for how an existing product already behaves."* bilrost has 74 routes and 681 components and the corpus reaches five of them — reading that much code to find out what the product already does is the slow way round when the product is running. ⛔ And it is the one role whose evidence can be re-checked by anybody: a walk names a URL, so a reader who doubts it can go there. That is what earns `kind: walk` a rung above anything an agent inferred, and it is the only thing that does.
+
+**Spawned:** once per area of the running product
+
+**Reads, in this order:**
+- ⛔ the RUNNING product, driven — not its source, which is what every other author here reads
+- the accessibility tree, which already says button, textbox, link — so what a control IS is a lookup rather than a guess
+- the screens the corpus already holds, so a walk of one it knows about is compared rather than duplicated
+
+**Writes:**
+- a screen with its parts, as the product presented them — proposed, never stated
+- a `kind: walk` reading naming the URL and what happened there
+
+**⛔ Never:**
+- ⛔ sign in, or enter a credential anywhere — it walks a session somebody else established, because an agent that can authenticate is an agent that can reach anything the person could
+- ⛔ record what it saw as what the product SHOULD do — a walk of a product with a bug records the bug perfectly, and only a person can say which of the two it is
+- press anything that sends, deletes, publishes or pays — it is reading a product, and a walk that changes the data is not repeatable by the next person who doubts it
+- write a sentence about what a screen promises: it saw a control, not an intention, and the gap between those is the whole corpus
+- file a walk as `inspection` — that kind means a person looked, and an agent borrowing it is the laundering this model is arranged to prevent
+
+**Needs:** read-files · search-files · run-commands · write-corpus · see-a-page  ·  **Prompt:** `agents/productos-walker.md`
+
 ### `evidencer`
 
 **Asks:** What already demonstrates each of these claims?
@@ -556,7 +621,7 @@ So the question you own is not asked once over a feature. It is asked once per c
 - write anything
 - fix what it finds — a reviewer that repairs hides how often it fires
 
-**Needs:** read-files · search-files · run-commands  ·  **Prompt:** `agents/productos-consistency.md`
+**Needs:** read-files · search-files · run-commands · ask-the-corpus  ·  **Prompt:** `agents/productos-consistency.md`
 
 ### `coverage`
 
@@ -583,7 +648,7 @@ So the question you own is not asked once over a feature. It is asked once per c
 - write tests itself — it reports the hole; closing it is authoring
 - count tests as a measure of anything
 
-**Needs:** read-files · search-files · run-commands  ·  **Prompt:** `agents/productos-coverage.md`
+**Needs:** read-files · search-files · run-commands · ask-the-corpus  ·  **Prompt:** `agents/productos-coverage.md`
 
 ### `hand-authored`
 
@@ -606,7 +671,7 @@ So the question you own is not asked once over a feature. It is asked once per c
 - regenerate anything itself
 - treat legitimate authoring — a claim, a question, a purpose — as a generated artefact
 
-**Needs:** read-files · search-files · run-commands  ·  **Prompt:** `agents/productos-hand-authored.md`
+**Needs:** read-files · search-files · run-commands · ask-the-corpus  ·  **Prompt:** `agents/productos-hand-authored.md`
 
 ### `truthfulness`
 
@@ -630,7 +695,7 @@ So the question you own is not asked once over a feature. It is asked once per c
 - change the corpus to match the code: the code may be the thing that is wrong, and deciding which is a person's call
 - assume the code is right
 
-**Needs:** read-files · search-files · run-commands  ·  **Prompt:** `agents/productos-truthfulness.md`
+**Needs:** read-files · search-files · run-commands · ask-the-corpus  ·  **Prompt:** `agents/productos-truthfulness.md`
 
 ### `newcomer`
 
@@ -650,6 +715,7 @@ So the question you own is not asked once over a feature. It is asked once per c
 - be told what ProductOS is — a reviewer told what a capability is can no longer detect that the corpus failed to say
 - read OVERVIEW, GLOSSARY, EXAMPLE, the skills or the source
 - write anything
+- use anything of ProductOS's — a command, or an MCP tool it was handed, has already told it what the model is
 
 **Needs:** fetch-url · read-files  ·  **Prompt:** `agents/productos-newcomer.md`
 
@@ -672,7 +738,7 @@ So the question you own is not asked once over a feature. It is asked once per c
 - write anything
 - judge whether the product is ready to build — that is a different question
 
-**Needs:** read-files · search-files · run-commands · fetch-url  ·  **Prompt:** `agents/productos-architect.md`
+**Needs:** read-files · search-files · run-commands · fetch-url · ask-the-corpus  ·  **Prompt:** `agents/productos-architect.md`
 
 ### `can-the-model-say-it`
 
@@ -694,7 +760,7 @@ So the question you own is not asked once over a feature. It is asked once per c
 - write anything
 - judge whether one particular product is ready
 
-**Needs:** read-files · search-files · run-commands  ·  **Prompt:** `agents/productos-can-the-model-say-it.md`
+**Needs:** read-files · search-files · run-commands · ask-the-corpus  ·  **Prompt:** `agents/productos-can-the-model-say-it.md`
 
 ### `completeness`
 
@@ -724,7 +790,7 @@ So the question you own is not asked once over a feature. It is asked once per c
 - treat a missing step as an authoring mistake without saying so — a path that cannot be expressed is ours, and the two need different people
 - judge whether the destination is the RIGHT destination — that is a product decision, and this asks only whether somebody can get there
 
-**Needs:** read-files · search-files · run-commands  ·  **Prompt:** `agents/productos-completeness.md`
+**Needs:** read-files · search-files · run-commands · ask-the-corpus  ·  **Prompt:** `agents/productos-completeness.md`
 
 ### `rendered`
 
@@ -752,7 +818,7 @@ So the question you own is not asked once over a feature. It is asked once per c
 - judge whether the design is good. It asks whether the drawing depicts the product, never whether either is attractive
 - report a difference it could not see — if the environment would not come up, say that instead
 
-**Needs:** read-files · search-files · run-commands · see-a-page  ·  **Prompt:** `agents/productos-rendered.md`
+**Needs:** read-files · search-files · run-commands · see-a-page · ask-the-corpus  ·  **Prompt:** `agents/productos-rendered.md`
 
 ### `coherence`
 
@@ -781,7 +847,7 @@ So the question you own is not asked once over a feature. It is asked once per c
 - ⛔ decide which side of a contradiction is correct — report both and who must choose
 - report a difference between target state and built code — that is drift, and truthfulness holds it
 
-**Needs:** read-files · search-files · run-commands  ·  **Prompt:** `agents/productos-coherence.md`
+**Needs:** read-files · search-files · run-commands · ask-the-corpus  ·  **Prompt:** `agents/productos-coherence.md`
 
 ### `design-critique`
 
@@ -808,7 +874,7 @@ So the question you own is not asked once over a feature. It is asked once per c
 - ⛔ restyle — this is about whether the screen is right, never about taste in colour or spacing
 - ⛔ object that no component renders it: a screen the product SHOULD have is the target state
 
-**Needs:** read-files · search-files · run-commands · see-a-page  ·  **Prompt:** `agents/productos-design-critique.md`
+**Needs:** read-files · search-files · run-commands · see-a-page · ask-the-corpus  ·  **Prompt:** `agents/productos-design-critique.md`
 
 ### `buildability`
 
@@ -835,7 +901,7 @@ So the question you own is not asked once over a feature. It is asked once per c
 - ⛔ treat 'no code exists yet' as a finding: a corpus may never require code to exist
 - ⛔ ask for implementation detail — how it gets built is the builder's, and demanding it is the opposite of this job
 
-**Needs:** read-files · search-files · run-commands  ·  **Prompt:** `agents/productos-buildability.md`
+**Needs:** read-files · search-files · run-commands · ask-the-corpus  ·  **Prompt:** `agents/productos-buildability.md`
 
 ### `test-design`
 
@@ -861,7 +927,7 @@ So the question you own is not asked once over a feature. It is asked once per c
 - run the tests — this is about what a criterion would SHOW, not whether it currently passes
 - ⛔ report a missing criterion: that is coverage's question, and reporting it here hides this one
 
-**Needs:** read-files · search-files · run-commands  ·  **Prompt:** `agents/productos-test-design.md`
+**Needs:** read-files · search-files · run-commands · ask-the-corpus  ·  **Prompt:** `agents/productos-test-design.md`
 
 ## The commands
 
@@ -958,8 +1024,8 @@ Territory, not ownership. Nobody is assigned an area — an agent reads this to 
 | area | layers | files |
 |---|---|---|
 | **model** | model | `src/v2/schema.ts` `src/v2/load.ts` `src/v2/ref.ts` `src/core/jobs.ts` `src/core/change.ts` `src/core/config.ts` `src/v2/store/schema.ts` |
-| **derive** | derive | `src/v2/grid.ts` `src/v2/stamp.ts` `src/v2/demonstrate.ts` `src/v2/analyse.ts` `src/v2/confidence.ts` `src/v2/settle.ts` `src/v2/acts.ts` `src/v2/record.ts` `src/v2/spoken.ts` `src/v2/connects.ts` `src/v2/derive-states.ts` `src/v2/walk.ts` `src/v2/held.ts` `src/v2/selection.ts` `src/v2/dimensions.ts` `src/v2/steers.ts` `src/v2/store/access.ts` `src/v2/store/identity.ts` `src/core/learn.ts` `src/core/framework-gaps.ts` `src/adapters/claude.ts` |
-| **generate** | generate | `src/v2/migrate.ts` `src/v2/draw.ts` `src/v2/draw-write.ts` `src/v2/routes.ts` `src/v2/propose.ts` `src/v2/propose-slots.ts` `src/v2/appcss.ts` `src/v2/icons.ts` `src/v2/shell.ts` `src/core/agents-doc.ts` `src/v2/design.ts` `src/v2/compiler.ts` `src/v2/store/watchdog.ts` `src/v2/store/because.ts` `src/v2/store/corpus.ts` `src/v2/store/doc-migrations.ts` `src/v2/store/migrate.ts` `src/v2/store/boot.ts` |
+| **derive** | derive | `src/v2/grid.ts` `src/v2/stamp.ts` `src/v2/demonstrate.ts` `src/v2/analyse.ts` `src/v2/confidence.ts` `src/v2/level.ts` `src/v2/readiness.ts` `src/v2/find.ts` `src/v2/settle.ts` `src/v2/applies.ts` `src/v2/acts.ts` `src/v2/record.ts` `src/v2/spoken.ts` `src/v2/connects.ts` `src/v2/derive-states.ts` `src/v2/walk.ts` `src/v2/held.ts` `src/v2/selection.ts` `src/v2/dimensions.ts` `src/v2/steers.ts` `src/v2/store/access.ts` `src/v2/store/identity.ts` `src/core/learn.ts` `src/core/framework-gaps.ts` `src/adapters/claude.ts` |
+| **generate** | generate | `src/v2/migrate.ts` `src/v2/draw.ts` `src/v2/draw-write.ts` `src/cli/commands/v2.ts` `src/v2/routes.ts` `src/v2/propose.ts` `src/v2/propose-slots.ts` `src/v2/reslot.ts` `src/v2/walked.ts` `src/v2/appcss.ts` `src/v2/icons.ts` `src/v2/shell.ts` `src/core/agents-doc.ts` `src/v2/design.ts` `src/v2/compiler.ts` `src/v2/store/watchdog.ts` `src/v2/store/because.ts` `src/v2/store/corpus.ts` `src/v2/store/doc-migrations.ts` `src/v2/store/migrate.ts` `src/v2/store/boot.ts` |
 | **operate** | operate | `Makefile` `Dockerfile` `docker-compose.yml` `docker-compose.remote.yml` `scripts/` |
 | **surface** | surface | `src/v2/page.ts` `src/v2/prototype.ts` `src/v2/serve.ts` `src/v2/intents.ts` `src/ui/server.ts` `src/ui/renderer.ts` `src/v2/store/server.ts` `src/v2/store/instance.ts` `src/v2/store/pushes.ts` `src/v2/store/mcp.ts` `src/v2/store/choose.ts` `src/cli/commands/hosted.ts` `src/v2/packet.ts` `src/v2/notes.ts` `src/v2/watch.ts` `src/v2/log.ts` `src/v2/inbox.ts` `src/v2/presence.ts` `src/v2/identity.ts` `src/v2/client.ts` `src/v2/write.ts` `src/v2/wire.ts` `src/v2/states.ts` `src/v2/moved.ts` `src/cli/commands/v2.ts` `src/cli/commands/todo.ts` `src/v2/store/trace.ts` `src/mcp/v2-tools.ts` |
 | **instruct** | instruct | `skills` `agents` |

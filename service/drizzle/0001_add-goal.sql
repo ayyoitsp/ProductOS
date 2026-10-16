@@ -1,1 +1,0 @@
-ALTER TABLE "containers" ADD COLUMN "goal" text;

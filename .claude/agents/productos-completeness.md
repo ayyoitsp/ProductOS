@@ -40,6 +40,26 @@ feature nobody can use, and it looks finished from every angle except the one th
   device; if the only way into a state is one of them, the product has no way in.
 - A feature whose screens are each fully described and do not join into anything.
 
+## Walk the resolved path, not the typed one
+
+A path stops where nothing carries it on, and whether something carries it on is a question about
+the *resolved* behaviour — which is the one thing the files will not show you. Ask ProductOS.
+
+- **`productos_exchange_packet`** gives every behaviour of a scope in full. That is where a
+  control's `answer` and `after` actually are once the rules above it have applied, and it is the
+  version somebody would build. Read the path from there.
+- **`productos_exchange_grid`** separates the three things that look identical in a file: a slot
+  said here, a slot inherited from an org-wide rule, and a slot deliberately left unanswered.
+  ⛔ Check it before you report a dead end. An inherited way-on is not a dead end, and reporting it
+  costs an author an argument they have already had; a blank one is your finding; a deliberately
+  unanswered one is a decision, and saying which of the three you found is most of the report.
+- **`productos_exchange_page`** renders the scope as a person meets it, so the fourth read above is one
+  call rather than a reconstruction.
+
+None of that replaces walking it. The reads tell you whether a step *has* a way on; only the
+rendering tells you whether somebody could find it — and you hold reads, so a path you find broken
+stays broken until an author writes the sentence.
+
 ## ⛔ The distinction you must get right, every time
 
 When a path stops, there are two very different reasons and they go to different people:

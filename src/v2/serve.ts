@@ -12,7 +12,8 @@
  */
 import type http from "node:http";
 import { loadCorpus, corpusFiles, notesIn, type Corpus } from "./load.js";
-import { renderScopePage, standalone } from "./page.js";
+import { renderScopePage, standalone, trailsOf } from "./page.js";
+import { SLOTS } from "./schema.js";
 import { perform, preview, payloadFrom, VIA, ACTS, type Act, type Via } from "./acts.js";
 /**
  * ⛔ NOTHING FROM `notes.js` AND NO AUTHORITY CHECK IS IMPORTED HERE ANY MORE, which is the shape
@@ -30,6 +31,28 @@ import { intentNamed, refuseIntent, incomplete, theIntents, describeIntents } fr
 export interface V2Routes {
   /** The corpus directory this server is serving. */
   dir: string;
+  /**
+   * The path this route is mounted under, so a link it writes resolves where the page actually is.
+   *
+   * ⛔ THE PAGE EMITTED 469 FRAGMENTS AND ZERO WORKING LINKS, AND THIS IS WHY.
+   *
+   * Peter: *"we should have durable links for everything in product os. no idea why we use anchors
+   * for everything."* The durable link already existed — `/p/<project>/v2/<scope>` answers 200 — and
+   * `linkBase` was hardcoded `"/v2"`. Root-relative, so hosted it resolved to `/v2/<scope>` and
+   * 404ed, while locally, where the route IS at the root, it was correct. Measured both ways:
+   *
+   *     /p/prj-bks5f4m325/v2/versioned-inputs   200   1978320 bytes
+   *     /v2/versioned-inputs                    404       111 bytes   <- what the page wrote
+   *
+   * ⛔ PASSED IN, NOT DERIVED FROM THE REQUEST, for the same reason `who` and `corpusFor` are: the
+   * caller strips the prefix before handing the path over, so it is the only thing that knows what
+   * it stripped. Re-deriving it here would be a second answer to a question that already has one,
+   * and this file is where the first copy of that mistake was.
+   *
+   * Empty for a local server, which is served at the root — the default, and the case that has
+   * always worked and always hidden this.
+   */
+  mount?: string;
   /**
    * ⛔ WHO IS ASKING, WHEN SOMETHING ABOVE THIS ALREADY KNOWS.
    *
@@ -519,7 +542,7 @@ export async function v2Route(req: http.IncomingMessage, res: http.ServerRespons
       interactive: true,
       records: "http",
       ...styleOf(corpus),
-      linkBase: "/v2",
+      linkBase: `${opts.mount ?? ""}/v2`,
       by: whoIsPressing(req, opts.by),
       recordsTo: `written into ${dir}`,
       only: [view],
@@ -564,7 +587,114 @@ export async function v2Route(req: http.IncomingMessage, res: http.ServerRespons
 
   if (req.method === "GET") {
     const corpus = opts.corpusFor ? opts.corpusFor() : loadCorpus(dir);
-    const scope = p === "/v2" ? undefined : decodeURIComponent(p.slice("/v2/".length));
+    /**
+     * Which scope a menu path names: the deepest segment that is one.
+     *
+     * ⛔ THE URL IS THE MENU PATH NOW. Peter: *"get rid of the fucking anchors. URLs should follow
+     * the menu structure"*, then *"v2/overview, v2/product/{feature}/{subfeature}, etc"*. So the
+     * address carries the whole ancestry, and `/v2/<one-segment>` was only ever the leaf of it.
+     *
+     * ⛔ THE DEEPEST, NOT THE FIRST, because every segment before the last is a scope too — reading
+     * left to right would serve the area whenever somebody asked for a feature inside it.
+     *
+     * ⛔ AND A SEGMENT THAT IS NOT A SCOPE IS NOT AN ERROR. `/v2/overview` names a tab, and the tail
+     * of `…/rent-roll/review-the-rows` names a ref inside a scope — both belong to the browser,
+     * which selects the section and scrolls. The server's only job is to answer with the page that
+     * holds them, so an unrecognised tail falls back to the deepest scope it did recognise rather
+     * than 404ing on an address the page itself wrote.
+     */
+    const segments =
+      p === "/v2" ? [] : p.slice("/v2/".length).split("/").filter(Boolean).map((x) => decodeURIComponent(x));
+    let scope: string | undefined;
+    for (const seg of segments) if (corpus.scopes.some((x) => x.scope.id === seg)) scope = seg;
+
+    /**
+     * ⛔ THE WHOLE CHAIN HAS TO BE THE MENU PATH, OR A WRONG ADDRESS IS INDISTINGUISHABLE FROM A
+     * RIGHT ONE.
+     *
+     * Found by the deploy session, which fetched three addresses and hashed the bodies:
+     *
+     *     /capabilities/deal-pipeline        e2db87c37de0
+     *     /not-an-area/deal-pipeline         e2db87c37de0
+     *     /totally/made/up/deal-pipeline     e2db87c37de0
+     *
+     * Byte-identical. Reading only the deepest recognised segment meant every invented ancestry
+     * served the same page, which undercuts the one claim the address makes — Peter: *"URLs should
+     * follow the menu structure"*. A path that does not follow it must not work.
+     *
+     * ⛔ REDIRECTED RATHER THAN REFUSED, because the leaf really does name the thing and the reader
+     * is not wrong about what they want — they have an address from an older shape, or a hand-typed
+     * one. A 301 to the canonical path fixes their bookmark instead of scolding them, and leaves
+     * exactly one address per page, which is what makes the rest of this checkable.
+     */
+    if (scope) {
+      const canonical = (trailsOf(corpus)[scope] ?? []).map((c) => c.id);
+      const at = segments.indexOf(scope);
+      const wrong = at !== canonical.length - 1 || canonical.some((c, i) => segments[i] !== c);
+      if (canonical.length && wrong) {
+        const tail = segments.slice(at + 1);
+        const to = `${opts.mount ?? ""}/v2/${[...canonical, ...tail].map(encodeURIComponent).join("/")}`;
+        res.writeHead(301, { location: to });
+        res.end();
+        return true;
+      }
+    }
+
+    /**
+     * ⛔ AND A SEGMENT THAT NAMES NOTHING IS A 404, rather than its parent served in silence.
+     *
+     * `/capabilities/not-a-real-feature` answered 200 with the Capabilities page — so a reader who
+     * mistyped a feature saw an area and had no way to know they had not been taken where they
+     * asked. That also walked straight past #174, whose whole point is that a screen which cannot
+     * be shown says which screen it is.
+     *
+     * ⛔ THE TAIL PAST A SCOPE IS A REF, NOT A SCOPE, so it is checked against what that scope
+     * actually holds — an exchange, a view, or one of the named card lists the page renders.
+     */
+    if (segments.length) {
+      const known = new Set(["overview", "prototype", "settings", "subsystems", "walk"]);
+      const sc = scope ? corpus.scopes.find((x) => x.scope.id === scope)?.scope : undefined;
+      const inScope = new Set<string>([
+        ...(sc?.exchanges ?? []).map((e) => e.id),
+        ...(sc?.views ?? []).map((v) => v.id),
+        "why",
+        "risk",
+        "measure",
+        "instrument",
+        ...SLOTS,
+      ]);
+      const tail = scope ? segments.slice(segments.indexOf(scope) + 1) : segments;
+      const lost = tail.filter((seg) => !known.has(seg) && !inScope.has(seg));
+      if (lost.length && !scope) {
+        return (
+          html(
+            res,
+            standalone(
+              "Nothing here",
+              `<main><h1>No page at <code>${lost.map((x) => x.replace(/[<&]/g, "")).join("/")}</code></h1>
+               <p>Nothing in this product is filed under that. <a href="${opts.mount ?? ""}/v2">Start from the overview</a>.</p></main>`
+            ),
+            404
+          ),
+          true
+        );
+      }
+      if (lost.length) {
+        return (
+          html(
+            res,
+            standalone(
+              "Nothing here",
+              `<main><h1>No <code>${lost.map((x) => x.replace(/[<&]/g, "")).join("/")}</code> in ${(sc?.title ?? scope ?? "").replace(/[<&]/g, "")}</h1>
+               <p>That part of the address names nothing here.
+               <a href="${opts.mount ?? ""}/v2/${(trailsOf(corpus)[scope!] ?? []).map((c) => encodeURIComponent(c.id)).join("/")}">Go to ${(sc?.title ?? scope ?? "").replace(/[<&]/g, "")}</a>.</p></main>`
+            ),
+            404
+          ),
+          true
+        );
+      }
+    }
     /**
      * ⛔ `/v2` LANDS ON A REAL SCOPE, NOT AN INDEX OF ONE ITEM. Every scope tree has a root, and
      * the page already renders the whole subtree beneath whatever it is given — so an index page
@@ -584,7 +714,7 @@ export async function v2Route(req: http.IncomingMessage, res: http.ServerRespons
       interactive: true,
       records: "http",
       ...styleOf(corpus),
-      linkBase: "/v2",
+      linkBase: `${opts.mount ?? ""}/v2`,
       by: whoIsPressing(req, opts.by),
       recordsTo: `written into ${dir}`,
       /**

@@ -1,0 +1,8 @@
+id: "0173"
+said: look in downloads for architecture review of productos. we should spawn agents to address all of these in parallel. they're all valid changes to make
+at: 2026-10-16
+kind: instruction
+reaches:
+  instruct: ""
+  pin: ""
+waived: {}

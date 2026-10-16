@@ -250,6 +250,16 @@ interface Ctx {
    * declines, so every state is drawn by the code that draws the screen.
    */
   prefer?: string;
+  /** The view's own words, for choosing among mutually exclusive sibling screens. */
+  screen?: string;
+  /**
+   * The exclusive set being walked: one variable, several literals, one of them drawn.
+   *
+   * ⛔ SET BY THE PARENT, because exclusivity is a fact about SIBLINGS. A single
+   * `{activeTab === 'overview' && …}` read on its own is indistinguishable from any other guard;
+   * what makes it one arm of a switch is the nine beside it testing the same variable.
+   */
+  exclusive?: { on: string; chose: string; where: string };
   /** Sample values for a placeholder, by the identifier that produced it. */
   sample: (hint: string) => string | undefined;
   /** The file being read, so a co-located component resolves before a same-named one elsewhere. */
@@ -452,7 +462,27 @@ function emit(node: TS.Node, ctx: Ctx): string {
    * plausible, completely empty: the thin drawing again, this time produced by the generator.
    */
   const n = ts.isParenthesizedExpression(node) ? node.expression : node;
-  if (ts.isJsxFragment(n)) return n.children.map((c) => emit(c, ctx)).join("");
+  if (ts.isJsxFragment(n)) {
+    /**
+     * ⛔ A FRAGMENT IS A PARENT TOO, AND THIS IS WHERE THE REAL CASE LIVED.
+     *
+     * The first cut of the exclusive-set detection ran only for `JsxElement`, and its fixture
+     * wrapped the tabs in a `<div>`, so it passed. Peter's deal page writes them as
+     * `const tabContent = (<>{activeTab === 'overview' && …}…</>)` — a FRAGMENT assigned to a
+     * const — so on the screen the whole fix existed for, nothing fired and the drawing was
+     * byte-for-byte what it had been. Measured against his file rather than my fixture, which is
+     * the only reason it was caught.
+     */
+    const outer = ctx.exclusive;
+    const set = exclusiveSetOf(n.children, ctx.screen, path.basename(ctx.sameFile ?? "this screen"));
+    if (set) {
+      ctx.exclusive = { on: set.on, chose: set.chose, where: set.where };
+      ctx.forks.push(set);
+    }
+    const out = n.children.map((c) => emit(c, ctx)).join("");
+    ctx.exclusive = outer;
+    return out;
+  }
   if (ts.isJsxText(n)) {
     const t = n.text.replace(/\s+/g, " ");
     return t.trim() ? text(t) : t === " " ? " " : "";
@@ -668,6 +698,32 @@ function emit(node: TS.Node, ctx: Ctx): string {
        * exactly. Kept ALONGSIDE the word lists rather than replacing them, because those also catch
        * guards on props and on values this cannot see a declaration for.
        */
+      /**
+       * ⛔ AN ARM OF AN EXCLUSIVE SET THAT IS NOT THIS SCREEN IS NOT DRAWN AT ALL.
+       *
+       * This is the one Peter was looking at. Ten `{activeTab === '…' && …}` siblings, none of them
+       * matching any guard pattern below, so every one fell through to the unconditional emit at
+       * the bottom and the overview tab's drawing contained all ten panels. It is not a state and
+       * it is not a guard: it is a DIFFERENT SCREEN, which is why it goes to `forks` rather than to
+       * `states` — a reviewer offered it as a state would be told the overview has an Appraisal
+       * mode.
+       */
+      if (ctx.exclusive && ts.isBinaryExpression(e.left)) {
+        const cmp = e.left;
+        const isEq =
+          cmp.operatorToken.kind === ts.SyntaxKind.EqualsEqualsEqualsToken ||
+          cmp.operatorToken.kind === ts.SyntaxKind.EqualsEqualsToken;
+        if (isEq && ts.isStringLiteral(cmp.right) && cmp.left.getText().trim() === ctx.exclusive.on) {
+          if (cmp.right.text !== ctx.exclusive.chose) return "";
+          /** The arm this screen IS: drawn as the screen, with the guard spent. */
+          return emit(
+            ts.isJsxElement(e.right) || ts.isJsxSelfClosingElement(e.right) || ts.isJsxFragment(e.right)
+              ? e.right
+              : ts.factory.createJsxExpression(undefined, e.right),
+            ctx
+          );
+        }
+      }
       const closedAtFirst = ts.isIdentifier(e.left) && falseAtFirst(e.left).has(e.left.text);
       if (closedAtFirst || GUARD.test(asserted(c)) || DOING.test(asserted(c)) || EMPTY.test(c) || OPEN.test(asserted(c))) {
         /** Preferred: this IS the state being drawn, so show what it shows. */
@@ -1062,7 +1118,22 @@ function emit(node: TS.Node, ctx: Ctx): string {
 
   const open = ts.isJsxElement(n) ? n.openingElement : n;
   const tag = open.tagName.getText();
+  /**
+   * ⛔ THE SET IS FOUND HERE, BEFORE ANY CHILD IS DRAWN, because only the parent can see siblings.
+   * It stays in force for this element's subtree and is put back afterwards, so a nested switch —
+   * a tab whose own body switches again — does not inherit the outer tab's choice.
+   */
+  const outerExclusive = ctx.exclusive;
+  if (ts.isJsxElement(n)) {
+    const set = exclusiveSetOf(n.children, ctx.screen, path.basename(ctx.sameFile ?? "this screen"));
+    if (set) {
+      ctx.exclusive = { on: set.on, chose: set.chose, where: set.where };
+      /** ⛔ Reported as a fork, which is the existing channel for "it drew one of several screens". */
+      ctx.forks.push(set);
+    }
+  }
   const children = ts.isJsxElement(n) ? n.children.map((c) => emit(c, ctx)).join("") : "";
+  ctx.exclusive = outerExclusive;
 
   // A component of the app's own: inline what it returns, one level at a time.
   if (/^[A-Z]/.test(tag)) {
@@ -1482,6 +1553,21 @@ export interface DrawOptions {
    * generator should use it rather than ask.
    */
   parts?: WireablePart[];
+  /**
+   * ⛔ WHICH OF A SET OF MUTUALLY EXCLUSIVE SCREENS THIS ONE IS — the view's own words.
+   *
+   * Peter, on a drawn deal overview: *"the prototype for deal overview is nonsensical. there's a
+   * ton of things that are not on the actual overview page. the 'real' overview page ends after
+   * the job market card."* He was exactly right. His deal page renders ten tabs as ten sibling
+   * guards on ONE variable — `activeTab === 'overview'`, `=== 'appraisal'`, `=== 'rent-roll'` and
+   * seven more — and none of them matches any guard pattern in this file, so all ten were emitted
+   * into one drawing. The overview carried the Appraisal, Rent Roll, Documents and Review panels.
+   *
+   * ⛔ WHICH ONE IT IS CANNOT BE READ OUT OF THE CODE, which is the same thing the `forks` comment
+   * above says: it is a fact about the product. So the words come from the TRUTH — the view's id
+   * and title — and the match is reported, never silent.
+   */
+  screen?: string;
   /** Values for expressions, so a placeholder can be a real-looking figure where the author gave one. */
   sample?: Record<string, string>;
   /**
@@ -2362,6 +2448,60 @@ function localRegion(file: string, name: string): Region | undefined {
  * that forks in its own body — the more obvious shape — went unreported, and a test written
  * against the obvious shape is what found it.
  */
+/**
+ * One variable tested against several literals among siblings — a tab strip, a step switch, a
+ * router. Returns the set and which arm this screen is, or nothing where there is no such set.
+ *
+ * ⛔ THREE OR MORE, matching `forkOf` below for the same reason it gives: two arms are routinely a
+ * screen and its empty state, and calling that a set of screens would hide the empty one.
+ *
+ * ⛔ AND THE CHOICE COMES FROM THE VIEW'S WORDS, never from the code. `a-deals-overview` picks
+ * `'overview'` out of ten; a view whose words match nothing takes the first arm AND is reported, so
+ * a drawing of the wrong tab is never silent. Which screen this is, is a fact about the product.
+ */
+function exclusiveSetOf(
+  children: readonly TS.Node[],
+  screen: string | undefined,
+  where: string
+): { on: string; chose: string; others: string[]; where: string } | undefined {
+  const arms: Array<{ on: string; lit: string }> = [];
+  for (const c of children) {
+    if (!ts.isJsxExpression(c) || !c.expression) continue;
+    const e = c.expression;
+    if (!ts.isBinaryExpression(e) || e.operatorToken.kind !== ts.SyntaxKind.AmpersandAmpersandToken) continue;
+    const cmp = e.left;
+    if (!ts.isBinaryExpression(cmp)) continue;
+    if (
+      cmp.operatorToken.kind !== ts.SyntaxKind.EqualsEqualsEqualsToken &&
+      cmp.operatorToken.kind !== ts.SyntaxKind.EqualsEqualsToken
+    )
+      continue;
+    if (!ts.isStringLiteral(cmp.right)) continue;
+    arms.push({ on: cmp.left.getText().trim(), lit: cmp.right.text });
+  }
+  if (arms.length < 3) return undefined;
+  /** ⛔ One variable. Guards on different things are not alternatives to each other. */
+  const on = arms[0]!.on;
+  if (!arms.every((a) => a.on === on)) return undefined;
+  const lits = [...new Set(arms.map((a) => a.lit))];
+  if (lits.length < 3) return undefined;
+  /**
+   * ⛔ WORD-BY-WORD, NOT `includes`. A literal `review` is inside `reviewed` and inside
+   * `peer-review`; matching on substrings picks an arm for a reason nobody can see. Both sides are
+   * cut into words on the separators these names actually use.
+   */
+  const words = new Set((screen ?? "").toLowerCase().split(/[^a-z0-9]+/).filter(Boolean));
+  const scoreOf = (lit: string): number => {
+    const parts = lit.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+    return parts.length && parts.every((w) => words.has(w)) ? parts.length : 0;
+  };
+  const best = lits
+    .map((lit) => ({ lit, score: scoreOf(lit) }))
+    .sort((a, b) => b.score - a.score)[0]!;
+  const chose = best.score > 0 ? best.lit : lits[0]!;
+  return { on, chose, others: lits.filter((l) => l !== chose), where };
+}
+
 function forkOf(
   guards: Array<{ when: string; node: TS.Node }>,
   chosen: TS.Node,
@@ -2558,6 +2698,8 @@ export function drawFromRoute(routeFile: string, opts: DrawOptions = {}): DrawRe
     unresolved: [],
     states: [],
     conditions: [],
+    /** ⛔ The view's words, or an exclusive set has nothing to choose by and takes the first arm. */
+    screen: opts.screen,
     forks: [],
     props: new Map(),
     falsy: new Set(),

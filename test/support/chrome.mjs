@@ -207,6 +207,27 @@ export async function openPage(html, { exe = findBrowser(), url, width, height }
 
   return {
     evaluate,
+    /**
+     * Set the viewport to an exact size, including sizes a window cannot be.
+     *
+     * ⛔ `--window-size=390,844` DOES NOT GIVE YOU A 390px PAGE. Chrome floors a window at about
+     * 500px wide, so a phone-width measurement taken that way reports `innerWidth === 500` and
+     * every assertion about the phone layout is made about a layout no phone ever sees. Asked for
+     * 390, measured 500, and the overflow being hunted begins at 430.
+     *
+     * Device metrics are not a window, so they go where the window cannot. ⛔ And the width is
+     * READ BACK by the caller rather than assumed: a measurement carries its conditions, and the
+     * condition here is the one that was silently wrong.
+     */
+    async resize(width, height = 844) {
+      await cdp.send(
+        "Emulation.setDeviceMetricsOverride",
+        { width, height, deviceScaleFactor: 1, mobile: false },
+        sessionId
+      );
+      /** ⛔ Layout is asynchronous after an override; without this the first read is the old size. */
+      await until(() => evaluate(`window.innerWidth === ${width}`), `the viewport to become ${width}px`);
+    },
     /** Wait for something the page does asynchronously, with the failure naming what never happened. */
     waitFor: (expression, what) => until(() => evaluate(expression), what),
     async close() {

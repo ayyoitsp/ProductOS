@@ -1,0 +1,9 @@
+id: "0169"
+said: uhm.  this feature seems largely broken. let me re-prhase.  get rid of the fucking anchors. URLs should follow the menu structure. [asked for the shape] v2/overview, v2/product/{feature}/{subfeature}, etc
+at: 2026-10-16
+kind: surface
+reaches:
+  surface: addressIn
+  pin: every link is a menu path, and not one of them is an anchor
+waived: {}
+closed: 2026-10-16

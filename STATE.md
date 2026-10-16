@@ -1,11 +1,13 @@
 # Where this is, and what to pick up
 
-A snapshot for somebody arriving with no context. Written 2026-09-18.
+A snapshot for somebody arriving with no context. **Written 2026-10-16**, by counting rather
+than by remembering — the previous version of this file said *"seven skills and two agents"*,
+which had been wrong for weeks.
 
-For the model itself, read [`OVERVIEW.md`](./OVERVIEW.md) (what it is and why it is shaped
-this way), [`GLOSSARY.md`](./GLOSSARY.md) (every term and what it refuses) and
-[`EXAMPLE.md`](./EXAMPLE.md) (the same model as real files). This document does not repeat
-them. It says what state the thing is in, what was just learned, and what is open.
+For the model itself read [`OVERVIEW.md`](./OVERVIEW.md) (what it is and why it is shaped this
+way), [`GLOSSARY.md`](./GLOSSARY.md) (every term and what it refuses) and
+[`EXAMPLE.md`](./EXAMPLE.md) (the same model as real files). This document does not repeat them.
+It says what state the thing is in and what is open.
 
 ---
 
@@ -17,110 +19,85 @@ Everything is judged against these. They are the whole product.
 > **2. The product truth is sufficient to build from — no confusion, no room for
 > interpretation.**
 
-With a corollary on the second — *it should also help validate the truth is COMPLETE* — and
-a constraint on how the first is served: **make it easy to validate, do not overwhelm the
+With a corollary on the second — *it should also help validate the truth is COMPLETE* — and a
+constraint on how the first is served: **make it easy to validate, do not overwhelm the
 reviewer, and record their decisions.**
 
-These are the two things a code repository structurally cannot hold and an agent cannot
-supply for itself. An agent can write a plausible claim; it cannot make a human have agreed
-to it. It can describe what code does; it cannot tell you the description omits the case
-nobody decided, or that one sentence has two builds.
-
-**Corollary worth internalising:** schema work *is* tenet work. A claim with no home cannot
-be validated, and non-redundancy is the primary lever on review cost — so getting the shape
-right is reducing validation burden, not a detour from it.
+**Corollary worth internalising:** schema work *is* tenet work. A claim with no home cannot be
+validated, and non-redundancy is the primary lever on review cost — so getting the shape right
+is reducing validation burden, not a detour from it.
 
 ---
 
-## What exists
+## What exists, measured
 
-A CLI, an MCP server, a rendered product-truth site, seven skills and two agents.
+A CLI, an MCP server, a rendered and publishable product-truth page, **one skill, and 21 role
+definitions** — 8 authors and 13 judges, which is exactly what the registry declares. The skill
+is the single entry point; it routes to the roles and keeps the judgement with the session.
 
 ```bash
 npm install && npm run build
-productos init claude          # installs skills + agents, scaffolds productos/
-productos serve                # the site
-productos check                # the pre-handoff gate
-productos next                 # the decisions waiting on a person, ranked
+productos init claude            # installs the skill + every role, scaffolds a corpus
+productos v2 check --at <corpus> # the pre-handover gate
+productos v2 page <scope>        # the page a person reviews
+productos v2 decide <scope>      # the open questions, with what guessing wrong would cost
+productos v2 grid <scope>        # per ask, which of the eight slots are stated and which are holes
+productos v2 packet <scope>      # the handoff artifact
 ```
 
-**Surfaces, and which tenet each serves:**
+Roughly forty verbs sit under `productos v2`. Five of them are **the acts**: `accept`, `rule`,
+`read`, `waive`, `defer` — a person performs them, and the CLI is how a session records what
+they chose.
+
+**Where each tenet is served:**
 
 | | |
 |---|---|
-| `productos next` · `/_queue` | **1** — the ranked worklist. Every entry is a question with what you need to answer it |
-| `productos decide` (CLI + a button) | **1** — settles an open question, recording who and why |
-| `productos verify` · Accept button | **1** — the validation stamp. **No MCP tool exposes this** |
-| `productos check` | **2** — refuses a corpus before handover |
-| `productos ask ambiguous` · `contradicts` | **2** — records that what is written has two builds |
-| `productos read` | **2** — a person's verdict that they could or could not build from it |
-| readiness blockers on each page | **both** — grouped by which tenet they fail |
+| `v2 decide` · `v2 next` | **1** — what to ask somebody next, each item with drafted options and what it costs to pick wrong |
+| the five acts (CLI + buttons on the page) | **1** — the record of human judgement, each stamped with the surface it came through |
+| `v2 accepted` | **1** — the exact wording somebody agreed to, before anybody rewrites it |
+| `v2 acts` | **1** — how many acts of human judgement this corpus actually carries |
+| `v2 check` | **2** — refuses a corpus before handover, and separates refusals from reports |
+| `v2 grid` | **2** — the blank cells, which is incompleteness as arithmetic |
+| `v2 packet` | **2** — compiled, never written, and it will not compile over an unsettled slot |
+| `v2 notes` · `v2 inbox` · `v2 watch` | the conversation: what people asked to be changed, and the replies |
+| `v2 change` · `v2 steer` · `productos learn` | keeping ourselves honest about the framework |
 | `productos todo` | the record of what the model still cannot express |
 
-`service/` is the hosted Postgres authority, work in progress. The design intent is that the
-database becomes the authority and markdown becomes an export — a product is not a repo.
+**The seed corpus** (`v2-seed`, restorable with `v2 reset`) is deliberately small and is what
+most of the model's refusals were proved against: a pocket-money product in **3 scopes, 5
+screens, 5 asks, 9 org-wide rules, 2 trial readings**, with one genuinely open question in it —
+*can both kids complete the same task, or is it claimed by whoever presses first?*
+
+`demo/` holds **Family Wallet**, an Expo + React Native app used as a dogfooding testbed, with
+its own corpus on the retiring model.
 
 ---
 
-## What was just done, and the method that produced it
+## ⛔ Two models are live, and that is the biggest standing cost
 
-The work was driven by **fresh-eyes review**, and that method is the most transferable thing
-here. Two agent definitions ship in `agents/`:
+The agent surface registers **58 tools: 20 for the Exchange model and 38 for the model it
+replaced.** A client sees both vocabularies side by side. The registry says out loud which
+commands belong to the retiring track, and nothing unregisters the tools.
 
-- **`productos-newcomer`** — a product manager handed a URL and told to build from it, with
-  an explicit prohibition on reading `OVERVIEW.md`, `GLOSSARY.md`, the skills or the source.
-  The ignorance is the instrument: everyone else already knows what the corpus meant to say.
-- **`productos-architect`** — a chief architect asked whether a product's **system
-  capabilities** are right: trace one flow end to end and say where it goes cold; pull every
-  verb the screens attribute to the system and name the page that owns it; judge the
-  boundaries, including the ones to leave alone.
+**The documentation half of that is now done** — this file, [`OVERVIEW.md`](./OVERVIEW.md) and
+[`GLOSSARY.md`](./GLOSSARY.md) describe the Exchange model and define none of the retired
+model's words. **Unregistering the 38 tools is open**, and it matters more than it used to: the
+premise is many Claude Code instances connecting and orienting themselves, and each one meets
+both vocabularies as tool names with no page to disambiguate them.
 
-`skills/productos-pmcheck/SKILL.md` runs them and routes what comes back. Three rules in it
-were learned the hard way:
+### `backend/` — what it is, and why it is still here
 
-1. **Never explain ProductOS to a reviewer.** A reviewer who knows what a capability is can
-   no longer detect that the site failed to tell them.
-2. **Freeze the corpus for the run.** Editing mid-review produced a headline finding that
-   was an artefact of the editing.
-3. **A reviewer who read the feedback queue is no longer independent** — sequence the cold
-   reviewer first.
+| | What it is | Why it is still here |
+|---|---|---|
+| **`backend/`** | **not ProductOS.** It is the Family Wallet demo's API, mirroring the demo app's local ledger as a REST surface so that app can run either fully local or backend-driven | the demo lives here, so its API did too. Nothing in ProductOS depends on it. Whether it moves out is a deliberate question, not a cleanup |
 
-**The pattern worth expecting: ProductOS violates its own rules, and only a reader catches
-it.** Examples found this session, all verified in the code before being fixed:
-
-- Three documents said *"there is no tool a model can call to mark something true."* An MCP
-  tool did exactly that, guarded by a sentence in its own description — which is precisely
-  what the framework's stated principle refuses.
-- A citation regex refused the syntax the glossary prescribes: 13 of 37 citations in a real
-  corpus were reported malformed for following the documentation, and the noise hid five
-  that were genuinely wrong.
-- Four fields invented to catch what nothing computes — `contradicts`, `same_as`,
-  `holds_for`, `suspected_depends_on` — had no writer in any interface. Render-only. The
-  corpus had 1, 1 and 0 of them across 146 behaviors.
-- `productos decide`, the human's verb, was a CLI command **printed as prose on a web page.**
-- Maintainer notes were shipping inside the rendered artifact.
-
-The full log — every change, the reviewer quote that caused it, and the reasoning where a
-judgement was needed — is in `planning/PMCHECK_ITERATION.md` (gitignored; local only).
-
----
-
-## The corpus it was tested against
-
-A real commercial-real-estate lending product, in a private work repo, generously sized:
-**12 features, 14 capabilities, 169 claims, 290 acceptance cases.** Not included here.
-
-The numbers that mattered, because they were invisible from inside any single page:
-
-| | |
-|---|---|
-| screens vs machinery | 111 claims about screens, 58 about what runs underneath (**34%**, up from 24%) |
-| blockers | **250** across 26 pages — of which **5** are the kind that produce wrong software |
-| validated | **0 of 169** |
-
-That last number is the honest state of tenet 1, and it is the most important open problem:
-**the mechanism exists and the motion does not.** There is a button and no reason to press it
-today. `productos next` is a first attempt at the motion.
+The hosted Exchange store is `src/v2/store/`, with the compose files at the repository root, and
+it is now the only one. **The retired store's source has been deleted** — schema, routes, review
+app, its own migrations and its deploy script. Nothing imported it and nothing in the suite read
+it. ⛔ **Deleting it did not stop its deployment**: a container app of that code was running when
+the source went, and tearing it down is a cloud operation nobody has performed. The names needed
+to do it are in the private architecture note, not here.
 
 ---
 
@@ -128,29 +105,37 @@ today. `productos next` is a first attempt at the motion.
 
 **Needs a decision, not implementation:**
 
-1. **The non-functional boundary.** Is a latency budget *refused* as implementation detail,
-   or merely *absent*? The gap log asks the framework this directly and gets no answer, so
-   authors drop the content. Answering it one way in `GLOSSARY.md` also closes two other
-   gaps as explicit refusals — sequencing (plan, not truth) and "risk" (already an undecided
-   behavior, or a decision's accepted cost).
-2. **`holds_over`** — one field for a cross-container invariant. Authorization, tenant
-   isolation and an error vocabulary are all this shape, and each currently becomes a
-   per-feature copy, a non-goal with no test cases, or a glossary line. It is the mirror of
-   `holds_for`.
-3. **A container for a unit of work.** Four independent reviewers asked for it. The argument
-   against is real — a plan changes weekly and truth would rot at that speed — but three of
-   their four needs survive the refusal. A recommendation and the alternatives are in the
-   iteration log.
+1. **The consumer has no route, no role and no tool shape.** Every route, role and gate is aimed
+   at *writing and reviewing* truth. None takes a ticket and answers *"is this groomed — may I
+   build from it?"* Ten routes exist; only two carry a stage, `specification` and `ready for
+   review`, so **`ready for build` has no route at all** even though it is a derived stage the
+   model already computes. The nearest thing is the packet, which is prose for a human rather
+   than data for an agent.
+2. **The three levels a consumer needs — accepted, derived, suggested — exist and are
+   scattered.** Acceptance comes from the stamp, derivation from provenance plus a hash that
+   detects staleness, suggestion from drafted candidates and from observation strength. Over the
+   agent surface none of them is a field: a connecting instance would have to parse prose to
+   learn whether it may build from a sentence.
+3. **Consent over stdio is an honour system, deliberately and in writing.** The act tools take
+   `by` and `via` as arguments and pass them straight through; the hosted path takes all three
+   away from the caller and refuses a human `via` on an agent token. That is defensible with one
+   person at the machine and changes character with many instances connecting, each told to make
+   tickets unambiguous and each therefore tempted to settle what it finds.
+4. **`backend/`** — see the table above. Whether it moves out is Peter's to answer.
+5. **The retired store's container app is still serving.** Its source is gone; the deployment is
+   not, and it holds whatever was written to its database. Tearing it down needs cloud access, so
+   it is a decision plus an action, neither of which belongs to this repository.
 
 **Implementation, no decision needed:**
 
-- `dependency-not-ready` is 37 of 71 completeness blockers and is transitive noise that
-  clears the moment anyone accepts the capabilities. Collapse to one line per dependency.
-- `pricing` is 49 behaviors in 3 features, one of which hangs 25 claims off a single screen.
-  The advisor names it and does not fail the gate, because whether that screen is one or
-  three is a product judgement.
-- The two tenets are not stated as co-equal anywhere in the docs. `README.md` leads with
-  tenet 1 and leaves sufficiency to be inferred from a gate's name.
+- **A route name in the registry does not exist.** Four places send a reader to `ready it for
+  build`; the route is called `hand it to the builders`.
+- **Two roles both declare they write criteria** — the scoper and the demonstrator. The comments
+  say the demonstrator took it over and the scoper's declaration was never trimmed. For *"tests
+  are well defined"* this is the field that matters most.
+- **Two code comments describe a model that has moved.** The verdict header says *"Four"* acts
+  where the enum has five (`waive` was added later and is documented further down the same
+  file); the confidence module says *"all nine of its slots"* where there are eight.
 
 ---
 
@@ -158,11 +143,10 @@ today. `productos next` is a first attempt at the motion.
 
 In [`CLAUDE.md`](./CLAUDE.md), and the three that catch people out:
 
-- **Feedback on the output is a bug report against ProductOS.** Never fix only the corpus:
-  fix the schema, the renderer or the skill, re-run, then verify the regenerated output. The
-  failure mode is subtler than it sounds — it is possible to build the detector, report the
-  reading, and never fix the thing. That happened this session and had to be called out.
-- **The skills are the most-missed layer.** A schema field no skill writes is a field that
-  only ever appears where somebody typed it by hand.
-- **Run `productos check` before asking anyone to review.** An author is the worst possible
-  person to notice what their own corpus fails to say.
+- **Feedback on the output is a bug report against ProductOS.** Never fix only the corpus: fix
+  the schema, the renderer or the skill, re-run, then verify the regenerated output. This was
+  violated four times in one session, which is why it is now a test rather than prose.
+- **The skills are the most-missed layer.** A schema field no skill tells anyone to write is a
+  field that only ever appears where somebody typed it by hand — also a test now.
+- **Run `productos v2 check --at <corpus>` before asking anyone to review.** The `v2` is
+  load-bearing: the older verb takes no `--at` and cannot read an Exchange corpus at all.

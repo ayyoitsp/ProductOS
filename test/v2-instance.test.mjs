@@ -114,7 +114,13 @@ test("an act recorded against an instance lands in the instance's corpus", async
   try {
     const scope = loadCorpus(dir).scopes.find((s) => !s.scope.in).scope.id;
     const before = loadCorpus(dir).verdicts.length;
-    await run(["v2", "read", scope, "--by", "peter", "--buildable", "no", "--via", "cli", "--at", url]);
+    /**
+     * ⛔ `via: agent`, BECAUSE THIS IS ABOUT THE WIRE AND NOT ABOUT WHO AGREED. The CLI refuses a
+     * human `via` from a shell nobody is standing at, and a test runner is exactly that shell —
+     * which is the forgery `principalAtTheShell` closes rather than an obstacle to work around. A
+     * default travels the same route, and the route is what this asserts.
+     */
+    await run(["v2", "read", scope, "--by", "a-session", "--buildable", "no", "--via", "agent", "--at", url]);
     assert.equal(loadCorpus(dir).verdicts.length, before + 1, "the act went somewhere other than the instance");
   } finally {
     await new Promise((r) => server.close(r));
@@ -144,7 +150,8 @@ test("a ruling recorded over the wire keeps what its author rejected", async () 
           "v2", "rule", ref, "--says", "it is exactly what this sentence now says it is",
           "--because", "nobody had answered it and somebody had to",
           "--also-considered", "leaving it to the builder, which loses the guarantee",
-          "--by", "peter", "--via", "cli", "--at", url,
+          /** ⛔ A default over the wire — see the note above. What is under test is the field, not the consent. */
+          "--by", "a-session", "--via", "agent", "--at", url,
         ]);
       } catch {
         // Most slots in the seed refuse a ruling for good reasons of their own. Try the next.

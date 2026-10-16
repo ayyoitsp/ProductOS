@@ -17,6 +17,7 @@ import { compilePacket } from "../../v2/packet.js";
 import { questionsFor, descendants } from "../../v2/settle.js";
 import { perform, preview, payloadFrom, optionText, VIA, type Act, type Via, type Outcome, type Refused } from "../../v2/acts.js";
 import { fileNote, closeNote, replyToNote } from "../../v2/notes.js";
+import { mayRecord, principalAtTheShell } from "../../v2/identity.js";
 import { snapshotStyle, styleOf, styleDrift, styleAt, wearTheme } from "../../v2/appcss.js";
 import { watchCorpus } from "../../v2/watch.js";
 import { inbox } from "../../v2/inbox.js";
@@ -42,7 +43,7 @@ import { AGENTS, AUTHORS, CASCADE, KINDS, SHIMS, shippedRoutes, SKILL, byDiscipl
 /** ⛔ Plain text for a terminal and for JSON — never HTML-escaped, which is the page's business. */
 const plain = (x: unknown): string => String(x ?? "").replace(/\s+/g, " ").trim();
 import { agentsDoc, withPreset } from "../../core/agents-doc.js";
-import { readChanges, writeChange, nextId, verify, missing } from "../../core/change.js";
+import { readChanges, writeChange, nextId, verify, missing, changesWithId, idsInUse } from "../../core/change.js";
 import { writeDrawnReading, writeSketchHtml } from "../../v2/draw-write.js";
 import { whatMoved, repoOf } from "../../v2/moved.js";
 import { HOW } from "../../v2/record.js";
@@ -697,11 +698,36 @@ export function v2Command(): Command {
     }
   };
 
+  /**
+   * ⛔ THE CALL SITE THAT NEVER ASKED `mayRecord`, AND THEREFORE THE LAST WAY TO FORGE AGREEMENT.
+   *
+   * Two sibling doors were shut: an MCP token can no longer record a human `via`, and raw YAML can
+   * no longer claim `hand: person`. Both refusals point at *the person's own CLI* as the honest
+   * route — and an agent holding a Bash tool is holding that same CLI, so it could do exactly what
+   * the other two now refuse, producing a verdict nothing anywhere can distinguish from a press.
+   *
+   * ⛔ IT IS THE SAME BOUNDARY, NOT A THIRD ONE. `principalAtTheShell` answers "who is holding
+   * this?" the way `principalOf` answers it for a request; `mayRecord` is still the one decision.
+   * Which also means `--via agent` is untouched: it is not agreement, it satisfies no gate, and
+   * landing a default so a reviewer has something to disagree with is the designed path.
+   *
+   * ⛔ AND THERE IS NO ESCAPE HATCH, deliberately. A flag or a variable that says "a person really
+   * is here" is a switch the agent sets — the same argument `mintsHumanConsent` makes about a token
+   * scope: a permission that can be granted is one somebody eventually grants. Nothing is blocked
+   * by this; one ROUTE is. The person runs the same command in their own terminal, or presses it on
+   * the page, and the refusal names both.
+   */
   const consentFrom = (o: { by: string; via?: string }) => {
     const via = (o.via ?? "cli") as Via;
     if (!VIA.includes(via)) {
       console.error(pc.red("✗"), `"${o.via}" is not a way consent could have been obtained`);
       console.error(pc.dim(`    one of: ${VIA.join(" · ")}`));
+      process.exit(1);
+    }
+    const refused = mayRecord(principalAtTheShell(), via);
+    if (refused) {
+      console.error(pc.red("✗"), refused.why);
+      for (const d of refused.detail ?? []) console.error(pc.dim(`    ${d}`));
       process.exit(1);
     }
     return { by: o.by, via };
@@ -1844,6 +1870,15 @@ export function v2Command(): Command {
         console.log(pc.dim(id ? `no change "${id}"` : "nothing open"));
         return;
       }
+      /**
+       * ⛔ IT PRINTED TWO RECORDS AND LOOKED LIKE A FEATURE. Asking about one id and being shown two
+       * answers reads as thoroughness; it is the signal that `close` can close the wrong one. Said
+       * out loud here because this is the verb somebody runs first.
+       */
+      if (id && all.length > 1) {
+        console.log(pc.red(`⛔ ${all.length} records answer to "${id}" — one of them has the wrong number.`));
+        console.log(pc.dim("   close is refused for both until that is fixed, because it could close either.\n"));
+      }
       let owed = 0;
       for (const rec of all) {
         const v = verify(root, rec);
@@ -1879,7 +1914,27 @@ export function v2Command(): Command {
      */
     .action((id: string, o: { waive: string[]; because?: string }) => {
       const root = process.cwd();
-      const rec = readChanges(root).find((c) => c.id === id);
+      /**
+       * ⛔ AN ID TWO RECORDS ANSWER TO IS REFUSED, BECAUSE OTHERWISE THE CASCADE IS OFF.
+       *
+       * The deploy session put it better than I had: this refusal is the only thing forcing a piece
+       * of feedback into every layer it affects. `find` takes the first match — so with two records
+       * under one id, a change that reached NOTHING can be closed by satisfying the other one's
+       * layers, and nothing anywhere says so. Four pairs are already in the record:
+       * `changes/0160.yaml` carries `id: "0155"`, and the same for 0156/0157/0158.
+       *
+       * ⛔ REFUSED RATHER THAN DISAMBIGUATED, and that is deliberate. Picking one by filename would
+       * close a record while leaving the collision in place for the next person, which is how four
+       * of them accumulated unnoticed. This names both files and stops.
+       */
+      const sharing = changesWithId(root, id);
+      if (sharing.length > 1) {
+        console.error(pc.red("✗"), `${sharing.length} records answer to "${id}", so closing one would close the wrong one`);
+        console.error(pc.dim("  each needs its own number before either can be closed:"));
+        for (const [n, files] of idsInUse(root)) if (n === id) for (const f of files) console.error(pc.dim(`    changes/${f}`));
+        process.exit(1);
+      }
+      const rec = sharing[0];
       if (!rec) {
         console.error(pc.red("✗"), `no change "${id}"`);
         process.exit(1);
@@ -2867,11 +2922,63 @@ export function v2Command(): Command {
         console.error(pc.red("✗"), "name the screen as <scope>#<view>");
         process.exit(1);
       }
-      const into = path.resolve(o.into ?? ".");
+      /**
+       * ⛔ ONE SCREEN REACHES AN INSTANCE TOO, and this is the half that was missing.
+       *
+       * `--all` has drawn straight onto an instance since `drawEverythingOn`. One screen went
+       * through `path.resolve(o.into)`, which treats a URL as a RELATIVE PATH -- so naming one
+       * screen on a hosted corpus read the checkout, inlined 76 components, drew 331kb, and then
+       * failed with `no view "a-deals-overview" under "deal-overview" in
+       * <cwd>/http:/127.0.0.1:4100/p/prj-bks5f4m325`. A minute of work thrown away on a mangled
+       * path, after printing a green tick twice.
+       *
+       * ⛔ AND `--dry-run` REPORTED SUCCESS, which is what actually cost the time. A dry run never
+       * writes, so the step that would have refused the URL never ran and the output was
+       * indistinguishable from a supported command. Same shape as every other entry in this
+       * project's book of measurements that agreed with what somebody wanted to be true: the
+       * condition under which the check holds -- here, "a write actually happens" -- was the one
+       * condition not present.
+       *
+       * ⛔ SO IT USES THE SEAM THAT ALREADY EXISTS: `Pages` over a held map, the corpus read
+       * through `memoryStore`, and only the documents that moved pushed back through the one door.
+       * Nothing is mirrored to a directory -- a second writable copy of a hosted corpus is the
+       * defect that seam was built to end, and the one Peter has banned by name.
+       */
+      const onInstance = looksLikeInstance(o.into);
+      const inst = onInstance ? instanceOf(o.into!, o.token) : undefined;
+      /** Where the TRUTH is: a directory, or the instance's url for every message it appears in. */
+      const where = onInstance ? o.into!.replace(/\/+$/, "") : path.resolve(o.into ?? ".");
+      /**
+       * Where the CODE is. ⛔ For an instance these cannot be one place, which is the distinction
+       * `drawEverythingOn` already draws: the truth is hosted, the components are in a checkout.
+       */
+      const codeAt = path.resolve(o.code ?? ".");
+      let pages: Pages;
+      if (onInstance) {
+        let files: Record<string, string> = {};
+        try {
+          files = await documents(inst!);
+        } catch (e) {
+          console.error(pc.red("✗"), `could not read the corpus at ${where}: ${(e as Error).message}`);
+          process.exit(1);
+        }
+        if (!Object.keys(files).length) {
+          console.error(pc.red("✗"), `${where} holds no corpus documents`);
+          process.exit(1);
+        }
+        pages = heldPages(files);
+      } else {
+        pages = diskPages(where);
+      }
+      /** The corpus being drawn into, read through whichever side is holding it. */
+      const readCorpus = () =>
+        onInstance ? loadCorpus("", memoryStore("", filesOf(pages))) : loadCorpus(where);
+      /** ⛔ Config comes from the CHECKOUT when truth is hosted — an instance has no config.yaml. */
+      const configAt = onInstance ? codeAt : where;
       let componentsDir: string | undefined;
       let designDir: string | undefined;
       try {
-        const paths = resolvePathsOrThrow(into);
+        const paths = resolvePathsOrThrow(configAt);
         const root = path.dirname(path.dirname(paths.configFile));
         const cfg = readConfig(paths);
         componentsDir = cfg.web.components_dir ? path.resolve(root, cfg.web.components_dir) : undefined;
@@ -2899,11 +3006,14 @@ export function v2Command(): Command {
       let parts: Array<{ id: string; role: string; label?: string; leads_to?: string; decorative?: boolean }> = [];
       /** Whether a hand-drawn sketch sits beside the generated one — see the warning below. */
       let hasAscii = false;
+      /** What the truth calls this screen, which is how an exclusive set of tabs is chosen between. */
+      let viewTitle = "";
       try {
-        const c = loadCorpus(into);
+        const c = readCorpus();
         const sc = c.scopes.find((x) => x.scope.id === scopeId || x.scope.id === scopeId.split("/").pop())?.scope;
         const v = sc?.views.find((x) => x.id === viewId);
         parts = v?.parts ?? [];
+        viewTitle = v?.title ?? "";
         hasAscii = Boolean(v?.sketch);
         /**
          * ⛔ IT GOES THROUGH, AND IT SAYS WHOSE WORK IT IS REPLACING.
@@ -2924,7 +3034,12 @@ export function v2Command(): Command {
       } catch {
         parts = [];
       }
-      const drawn = drawFromRoute(route, { componentsDir, parts });
+      /**
+       * ⛔ THE VIEW'S OWN WORDS GO IN, so a page of mutually exclusive tabs draws THIS one. Its id
+       * and title are what the truth calls this screen; the code cannot say which tab it is.
+       */
+      const screenWords = [scopeId, viewId, viewTitle].filter(Boolean).join(" ");
+      const drawn = drawFromRoute(route, { componentsDir, parts, screen: screenWords });
       if (!drawn.html.trim()) {
         console.error(pc.red("✗"), "nothing could be read out of that component");
         for (const u of drawn.unresolved) console.error(pc.dim(`  ${u}`));
@@ -3045,7 +3160,7 @@ export function v2Command(): Command {
        */
       const already = (() => {
         try {
-          const c = loadCorpus(into);
+          const c = readCorpus();
           const v = c.scopes.find((x) => x.scope.id === scopeId)?.scope.views.find((x) => x.id === viewId);
           return v?.sketch_html ?? "";
         } catch {
@@ -3071,7 +3186,7 @@ export function v2Command(): Command {
       const origin = repoOf(route);
       if (!origin) console.log(pc.yellow("!"), "the component is not in a git repository, so nothing records where this came from");
       const prov = origin ? { from: path.relative(origin.root, route), at: origin.head } : undefined;
-      const written = writeSketchHtml(diskPages(into),
+      const written = writeSketchHtml(pages,
         scopeId,
         viewId,
         drawn.html,
@@ -3080,10 +3195,10 @@ export function v2Command(): Command {
         drawn.drawnStates.map((st) => ({ when: st.when, label: st.label, html: st.html }))
       );
       if (!written) {
-        console.error(pc.red("✗"), `no view "${viewId}" under "${scopeId}" in ${into}`);
+        console.error(pc.red("✗"), `no view "${viewId}" under "${scopeId}" in ${where}`);
         process.exit(1);
       }
-      console.log(pc.dim(`  written into ${path.relative(process.cwd(), written)}`));
+      console.log(pc.dim(`  written into ${onInstance ? written : path.relative(process.cwd(), written)}`));
       /**
        * ⛔ THE DRAWING IS ALSO A READING, AND NOTHING WAS RECORDING IT. The component path and the
        * commit were already known here and went only into the drawing's provenance — so the one unit
@@ -3091,8 +3206,43 @@ export function v2Command(): Command {
        * `readings/` was empty in every corpus. If it can be generated, generate it.
        */
       if (prov) {
-        const recorded = writeDrawnReading(diskPages(into), scopeId, viewId, prov);
-        console.log(pc.dim(`  recorded as a reading in ${path.relative(process.cwd(), recorded)}`));
+        const recorded = writeDrawnReading(pages, scopeId, viewId, prov);
+        console.log(
+          pc.dim(`  recorded as a reading in ${onInstance ? recorded : path.relative(process.cwd(), recorded)}`)
+        );
+      }
+      /**
+       * ⛔ AND ON AN INSTANCE, THE WRITE IS NOT DONE UNTIL IT IS SENT. `heldPages` records what
+       * moved and deliberately posts nothing itself — the caller is the only thing that knows how
+       * to put a document back, and a writer with its own route would be a second client of the
+       * one door. Exactly what `drawEverythingOn` does, for the one-screen case.
+       */
+      if (onInstance) {
+        const moved = (pages as Pages & { moved: () => string[] }).moved();
+        let sent = 0;
+        const failed: Array<{ key: string; why: string }> = [];
+        for (const key of moved) {
+          let out: { ok: boolean; why?: string };
+          try {
+            out = await putDocument(inst!, key, pages.read(key));
+          } catch (e) {
+            out = { ok: false, why: (e as Error).message };
+          }
+          if (out.ok) {
+            sent++;
+            console.log(pc.green("✓"), pc.dim(`${key} → ${where}`));
+          } else {
+            failed.push({ key, why: out.why ?? "refused" });
+            console.error(pc.red("✗"), `${key}: ${out.why ?? "refused"}`);
+          }
+        }
+        console.log(
+          failed.length ? pc.yellow("!") : pc.green("✓"),
+          `${sent} of ${moved.length} document(s) written to ${where}`
+        );
+        /** ⛔ Non-zero, so a half-written screen is not reported as a drawn one. */
+        if (failed.length) process.exitCode = 1;
+        return;
       }
       console.log(pc.dim("  re-run this after the component changes — the drawing is output, not a document"));
     });
@@ -3754,7 +3904,12 @@ function drawEverything(code: string, pages: Pages, corpusAt: string | undefined
     const parts = view.parts ?? [];
     let drawn;
     try {
-      drawn = drawFromRoute(route, { componentsDir: componentsDir ? path.resolve(repoRoot, componentsDir) : undefined, parts });
+      drawn = drawFromRoute(route, {
+        componentsDir: componentsDir ? path.resolve(repoRoot, componentsDir) : undefined,
+        parts,
+        /** ⛔ The sweep names the screen too, or every tabbed page in the corpus draws all its tabs. */
+        screen: [ref.split("#")[0], view.id, view.title].filter(Boolean).join(" "),
+      });
     } catch (e) {
       stuck.push({ ref, why: "no-candidate", detail: `could not read ${path.relative(repoRoot, route)}: ${(e as Error).message}` });
       continue;

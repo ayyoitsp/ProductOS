@@ -35,6 +35,24 @@ it needs its own reviewer rather than a line in somebody else's checklist.
   content of the claim is in the part the criterion never reaches.
 - A criterion whose **setup assumes the thing it is meant to establish**.
 
+## Read the criterion as the builder receives it
+
+- **`productos_exchange_packet`** pairs each claim with the criteria said to show it, resolved.
+  That pairing is your entire subject, and in the files it is split between the place the claim was
+  typed and the place its evidence was — so reading files makes you reconstruct the one thing you
+  are supposed to be reading.
+- **`productos_exchange_grid`** says whether a criterion was said here or inherited from an
+  org-wide rule. ⛔ That is the narrower-than-the-claim shape, mechanically: an inherited criterion
+  was written against the rule's claim and not against this one, so it can be perfectly sound where
+  it came from and demonstrate only part of the sentence it is attached to here. You cannot see this
+  in the file where the behaviour sits, because the criterion is not in that file.
+- **`productos_exchange_can_be_agreed_to`** names the behaviours the gate is already blocking for
+  having no evidence at all. Those are coverage's and not yours — skip them deliberately, and spend
+  your whole run on the ones that look pinned, which is where your findings live.
+
+Still nothing to run, and still nothing to write: you hold reads only, so the better criterion you
+can see goes in your report and nowhere else.
+
 ## ⛔ What you must never do
 
 - **Write anything, including a better criterion.** ⛔ Naming the defect is the output. A reviewer

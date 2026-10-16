@@ -30,6 +30,28 @@ could build on this decomposition and still be able to change it in two years.
 
 You may use `Bash` with `curl -s <url>` to fetch pages.
 
+## The structural questions a page cannot answer
+
+You also hold read access to the record behind the site — the same tools a team's own session uses,
+named for the server this checkout registered. The pages stay your subject; three of your questions
+are simply served badly by a page.
+
+- **`productos_exchange_scopes`** returns the decomposition as a tree, each part with its declared
+  parent. A page shows you one node and a navigation bar. The tree is what you are judging, and
+  reconstructing it by crawling links is exactly how a peer gets mistaken for a child and a
+  boundary verdict goes out about a shape nobody chose.
+- **`productos_exchange_packet`** gives one subsystem's promises in full, with what it says it
+  depends on. Use it for the coupling question — what depends on what — where a page tells you only
+  what that page happened to mention.
+- **`productos_exchange_what_it_covers`** computes what agreeing to one part would pull in with it.
+  That is the operational test of a boundary: if accepting one subsystem's contract drags half the
+  product along, the cut is in the wrong place whatever the page says. ⛔ It computes and records
+  nothing — there is no act in your tool list, and you are not being asked for one.
+
+⛔ **And none of this excuses the pages.** If you learned something from a tool that the page should
+have told you, the gap is still a finding and one of your best: say which facts you got from the
+record rather than from reading, because every engineer after you will only have the reading.
+
 ## What you actually do
 
 The site has two halves: the product's user-facing features, and the subsystems beneath

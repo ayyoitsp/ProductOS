@@ -27,7 +27,7 @@
 import fs from "node:fs";
 import { parseFrontmatter } from "../core/frontmatter.js";
 import YAML from "yaml";
-import { Scope, Rule, type SlotName , saysText, statements} from "./schema.js";
+import { Scope, Rule, type SlotName , saysText, statements, type Authorship} from "./schema.js";
 import { loadCorpus, resolveRules, selectsFor, lineageOf, type Corpus } from "./load.js";
 import { resolveRef } from "./ref.js";
 import { removals, refuseBecause } from "./write.js";
@@ -419,7 +419,19 @@ export function settle(
     /** ⛔ For a `refuses` question: the named cases, which a sentence cannot express. */
     outcomes?: unknown[];
     none?: boolean;
-  } = {}
+  } = {},
+  /**
+   * Which hand supplied the words this is about to write.
+   *
+   * ⛔ PASSED IN, DERIVED FROM THE `via` `mayRecord` ALREADY GUARDS — never read from a flag and
+   * never guessed here. `perform` computes it from the consent it was given, so the one boundary
+   * that stops a token claiming a person AGREED is the same boundary that stops it claiming a
+   * person TYPED. A second gate kept in step by hand is a gate that stops being in step.
+   *
+   * Optional, and absent writes nothing: the honest unknown, which is what every call made before
+   * this existed meant.
+   */
+  wrote?: Authorship
 ): { ok: true; file: string; displaced: string[]; replaced?: string } | { ok: false; why: string } {
   const corpus = loadCorpus(root);
   // ⛔ Through the one resolver. Four call sites used to split on `#` and read index 2, and
@@ -464,7 +476,12 @@ export function settle(
     } else {
       delete o.standing;
       o[asks === "when" ? "when" : "told"] = says;
-      const lost = removals(beforeCase, o, ["standing", asks === "when" ? "when" : "told"]);
+      // ⛔ New words, so the hand that supplied them is recorded with them. Only on this branch:
+      //    ruling `whether` in the affirmative writes no sentence, so nothing about who wrote the
+      //    existing one has changed, and re-stamping authorship for a non-change would stale a
+      //    human's acceptance over a sentence nobody touched.
+      if (wrote) o.wrote = wrote;
+      const lost = removals(beforeCase, o, ["standing", "wrote", asks === "when" ? "when" : "told"]);
       if (lost.length) return { ok: false, why: refuseBecause("Ruling this shared case", ref, lost) };
     }
     const parsed = Rule.safeParse(data);
@@ -484,13 +501,16 @@ export function settle(
     const beforeRule = { ...data };
     delete data.standing;
     data.statement = says;
+    // ⛔ An org-wide sentence reaches every exchange its selector touches, so the hand that
+    //    supplied it travels with it rather than being inferable from nothing.
+    if (wrote) data.wrote = wrote;
     // The demonstration arrives with the ruling, because a decided rule owes one.
     if (about.then)
       data.criteria = [
         ...((data.criteria as unknown[]) ?? []),
         { id: 1, slot: (data.fills as string[] | string)[0] ?? data.fills, kind: "conformance", then: about.then },
       ];
-    const lost = removals(beforeRule, data, ["standing", "statement", "criteria"]);
+    const lost = removals(beforeRule, data, ["standing", "statement", "wrote", "criteria"]);
     if (lost.length) return { ok: false, why: refuseBecause("This ruling", ref, lost) };
     const parsed = Rule.safeParse(data);
     if (!parsed.success)
@@ -588,7 +608,9 @@ export function settle(
     } else {
       delete o.standing;
       o[answerField] = says;
-      const lostHere = removals(beforeCase, o, ["standing", answerField]);
+      // ⛔ Same as the shared case above: recorded where words are written, and only there.
+      if (wrote) o.wrote = wrote;
+      const lostHere = removals(beforeCase, o, ["standing", "wrote", answerField]);
       if (lostHere.length) return { ok: false, why: refuseBecause("Ruling this case", ref, lostHere) };
     }
     const next = { ...data, exchanges: data.exchanges };
@@ -730,8 +752,21 @@ export function settle(
           gone.map((n) => `      productos v2 rule ${ref}#${n} --refuses no --says "…" --because "…" --by <you>`).join("\n"),
       };
   }
-  if (about.outcomes) slot.outcomes = about.outcomes;
-  else if (about.none) slot.none = true;
+  /**
+   * ⛔ THE HAND GOES ON THE GRAIN THE WORDS WENT ON, AND NOWHERE WIDER.
+   *
+   * Writing it on the slot whenever anything here changed would attribute a sentence nobody
+   * touched to whoever ruled a named case — which is the same mis-filing `coveredBy` already paid
+   * for twice, arriving through provenance instead of through a hash.
+   */
+  if (about.outcomes)
+    slot.outcomes = wrote
+      ? (about.outcomes as Array<Record<string, unknown>>).map((o) => ({ ...o, wrote }))
+      : about.outcomes;
+  else if (about.none) {
+    slot.none = true;
+    if (wrote) slot.wrote = wrote;
+  }
   else if (asked?.of && Array.isArray(slot.says)) {
     /**
      * ⛔ ONE STATEMENT, NOT THE WHOLE SLOT (fg-0008).
@@ -759,13 +794,19 @@ export function settle(
           `it says: ${statements.map((x) => x.id).join(", ")}. Re-point the standing, or rule the whole slot`,
       };
     target.says = says;
-  } else slot.says = says;
+    // ⛔ On the statement, not on the slot — its siblings keep whoever wrote them, which is the
+    //    whole reason the field exists at this grain.
+    if (wrote) (target as { wrote?: Authorship }).wrote = wrote;
+  } else {
+    slot.says = says;
+    if (wrote) slot.wrote = wrote;
+  }
   // ⛔ Cleared, then re-derived only from what the person declared in THIS act — the comment
   // above has claimed this since the field existed and the code did not do it, so an
   // `instead_of` authored beside an open slot survived the ruling that replaced its sentence.
   delete slot.instead_of;
   delete slot.defers_to;
-  const lostBySettling = removals(beforeSlot, slot, ["standing", "says", "outcomes", "none", "instead_of", "defers_to"]);
+  const lostBySettling = removals(beforeSlot, slot, ["standing", "says", "wrote", "outcomes", "none", "instead_of", "defers_to"]);
   if (lostBySettling.length) return { ok: false, why: refuseBecause("This ruling", ref, lostBySettling) };
 
   /**

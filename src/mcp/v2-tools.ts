@@ -30,6 +30,8 @@ import { loadCorpus } from "../v2/load.js";
 import { checkCorpus, summarise } from "../v2/check.js";
 import { gridFor, renderGridText, actsFor, gateFor } from "../v2/grid.js";
 import { compilePacket } from "../v2/packet.js";
+import { readinessOf } from "../v2/readiness.js";
+import { find } from "../v2/find.js";
 import { questionsFor, descendants } from "../v2/settle.js";
 import { decisionsUnder, howItWasDecided } from "../v2/record.js";
 import { renderScopePage, standalone } from "../v2/page.js";
@@ -197,6 +199,61 @@ const packetTool = tool(
     const p = compilePacket(loadCorpus(dir), a.scope);
     if (!p) throw new Error(`no scope "${a.scope}"`);
     return { dir, packet: p };
+  }
+);
+
+/**
+ * ⛔ THE WAY IN. Every other Exchange tool takes a ref, and before this there was nowhere refs came
+ * from: `productos_exchange_scopes` returns a tree of ids and counts, so mapping a ticket's own
+ * sentence onto `money#record-spending#after` was the agent's guesswork.
+ *
+ * ⛔ `why` STAYS IN THE PAYLOAD. It is the whole defence against a ranked list nobody can invert —
+ * `Σ(weight × matched) === score` is recomputable by hand from what comes back — and it is what an
+ * agent pastes into a ticket to justify the ref it chose. Trim `text` before dropping it.
+ */
+const findTool = tool(
+  "productos_find",
+  "You have a ticket, an issue, or a sentence in somebody else's words and need this product's address for it. Call this first — every other Exchange tool takes a ref, and this is where refs come from. Returns refs with a snippet, how settled each one is, and why it matched. ⛔ A `ref` here feeds straight into productos_exchange_packet / _questions / _what_it_covers with no translation. ⛔ And `nothing` is an ANSWER, not an empty result: it means this product has no address for the ticket yet, so propose it rather than searching again.",
+  AtDir.extend({
+    query: z.string().describe("the ticket's own words — a sentence, not keywords"),
+    under: z.string().optional().describe("only inside this feature and the ones filed in it"),
+    kinds: z.array(z.string()).optional().describe("statement | refusal | requirement | exchange | screen | part | rule | rule-case | term | purpose | card | section | capability"),
+    limit: z.number().optional(),
+    reaching: z.number().optional().describe("a hit must reach at least this many of your words"),
+  }),
+  (a, paths) => {
+    const dir = dirOf(a, paths);
+    return {
+      dir,
+      ...find(loadCorpus(dir), a.query, {
+        ...(a.limit === undefined ? {} : { limit: a.limit }),
+        ...(a.kinds === undefined ? {} : { kinds: a.kinds as never }),
+        ...(a.under === undefined ? {} : { under: a.under }),
+        ...(a.reaching === undefined ? {} : { reaching: a.reaching }),
+      }),
+    };
+  }
+);
+
+/**
+ * ⛔ THE ONE READ THE MVP'S CONSUMER MAKES, AND IT IS A FIELD RATHER THAN A PREAMBLE.
+ *
+ * The packet already knew the answer and said it as prose inside 22KB of markdown — *"This packet
+ * has 2 holes… Settle them first"*. An agent holding a ticket and deciding whether it may build had
+ * to parse warnings out of a document written for a person to read.
+ *
+ * ⛔ IT TAKES A REF, NEVER A TICKET ID. Peter: *"we can hash out linear connections later, so ignore
+ * those"*. The instance holds its tracker through its own connector; ProductOS answers about truth.
+ */
+const readinessTool = tool(
+  "productos_readiness",
+  "Whether a feature or one behaviour can be built, as a field: ready yes/no and why, every claim with its level (accepted | derived | suggested | open), who wrote it, the questions nobody has answered, and the testing requirements with their ref and the hash of the words each was written from. Call it before starting work. Takes a scope or <scope>#<exchange> — not a ticket id.",
+  AtDir.extend({ ref: z.string() }),
+  (a, paths) => {
+    const dir = dirOf(a, paths);
+    const r = readinessOf(loadCorpus(dir), a.ref);
+    if ("error" in r) throw new Error(r.error);
+    return { dir, ...r };
   }
 );
 
@@ -381,7 +438,7 @@ const readThroughAct = act(
 
 const inboxTool = tool(
   "productos_exchange_inbox",
-  "What has happened since you last looked: presses a person made, questions they answered, and notes asking for a change. ⛔ READING THIS CLAIMS THE WORK IN IT — pass your session id as `claim` and every note you are handed is leased to you, so a second session does not author the same thing. Carry `head` between polls while you are running; carry `next_cursor` if you restarted and lost your place. A note is the ONLY thing here that owes you work: author the change, then close it with productos_exchange_close_note. Everything else is information — the truth already moved.",
+  "What has happened since you last looked: presses a person made, questions they answered, and notes asking for a change. ⛔ READING THIS CLAIMS THE WORK IN IT — pass your session id as `claim` and every note you are handed is leased to you, so a second session does not author the same thing. Carry `head` between polls while you are running; carry `next_cursor` if you restarted and lost your place. A note is the ONLY thing here that owes you work: author the change, then close it through the door — productos_in with intent 'close'. Everything else is information — the truth already moved.",
   AtDir.extend({
     since: z.number().describe("the last position you handled. 0 or absent reads from the beginning").optional(),
     claim: z
@@ -612,9 +669,11 @@ export const RETIRED_LOOP_TOOLS: McpTool[] = [sayOnNoteTool, closeNoteTool];
 
 export const EXCHANGE_READ_TOOLS: McpTool[] = [
   scopesTool,
+  findTool,
   questionsTool,
   gridTool,
   packetTool,
+  readinessTool,
   checkTool,
   recordTool,
   pageTool,

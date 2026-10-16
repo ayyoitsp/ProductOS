@@ -20,8 +20,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { checkCorpus } from "./check.js";
 import { loadCorpus, type Corpus } from "./load.js";
-import { Verdict, type SlotName } from "./schema.js";
-import { gateFor } from "./grid.js";
+import { Verdict, statements, authorshipOf, type SlotName, type Authorship } from "./schema.js";
+import { gateFor, sentencesIn } from "./grid.js";
 import { coveredBy, stampFor, staleReason } from "./stamp.js";
 import { questionsFor, settle, waive as applyWaiver, govern, withdraw as takeOut } from "./settle.js";
 import { resolveRef, nothingToDecide } from "./ref.js";
@@ -97,6 +97,32 @@ export interface Consent {
    */
   relayedBy?: string;
 }
+
+/**
+ * Which hand supplied the words an act is about to write into the corpus.
+ *
+ * ⛔ DERIVED FROM `via`, NEVER TAKEN FROM THE CALLER — and that is the whole of why this field can
+ * never become a second route to looking agreed. `mayRecord` refuses a token that claims a human
+ * `via`; computing authorship from the same value means the one boundary already defended is the
+ * one that answers both questions. A `--hand person` flag would have been a second gate, enforced
+ * nowhere, reachable by anything that can spell.
+ *
+ * ⛔ AND IT IS STILL NOT CONSENT. `person` here says a human typed these words. It says nothing
+ * about anyone having agreed to them — that is `stampFor`, which reads none of this.
+ */
+export const wroteBy = (consent: Consent, from?: string): Authorship =>
+  isHuman(consent.via)
+    ? { hand: "person", as: consent.by, ...(from ? { from } : {}) }
+    : {
+        hand: "agent",
+        as: consent.by,
+        /**
+         * ⛔ ONE SENTENCE, SAID IDENTICALLY, rather than a bespoke one per act. `propose-slots.ts`
+         * holds the same line for the same reason: a sentence this file made up for each occasion
+         * would be indistinguishable from one somebody wrote.
+         */
+        from: from ?? "landed by software as a default a reviewer can disagree with — nobody has read it",
+      };
 
 /**
  * An act that WOULD be honest here, offered instead of the one that was refused.
@@ -275,7 +301,7 @@ export function preview(dir: string, act: Act, payload: Payload): { ok: true; re
     const aim = aimOf(corpus, target);
     if ("ok" in aim) return aim;
     if (!c) return no(`no exchange or rule "${target}"`);
-    return { ok: true, reads: c.reads };
+    return { ok: true, reads: [...c.reads, ...whoseWords(corpus, target)] };
   }
 
   if (act === "read") {
@@ -304,6 +330,61 @@ export function preview(dir: string, act: Act, payload: Payload): { ok: true; re
       ...(target.standing?.question ? [flat(target.standing.question)] : []),
     ],
   };
+}
+
+/**
+ * Whose words these are, said at the moment somebody is asked to agree to them.
+ *
+ * ⛔ THE ONE PLACE A REVIEWER CANNOT GET THIS WRONG LATER. A person about to stamp a sentence is
+ * entitled to know it was worked out by software from a call transcript and that nobody has read
+ * it since — that is the difference between reading a claim and ratifying a guess, and it is
+ * invisible on the page today because "not confirmed" says it for all three cases at once.
+ *
+ * ⛔ APPENDED TO THE PREVIEW, NOT FOLDED INTO `coveredBy`. What a stamp COVERS is the behaviour;
+ * provenance is context for the decision, not part of the sentence — and putting it in the hashed
+ * reading would write it into `covered_text` and make a re-recorded author read as a reworded
+ * claim.
+ */
+function whoseWords(corpus: Corpus, target: string): string[] {
+  const r = resolveRef(corpus, target);
+  if ("error" in r) return [];
+  const ref = r.ref;
+  if (ref.kind === "rule") {
+    const rule = corpus.rules.find((x) => x.rule.id === ref.rule)?.rule;
+    return sayWhoWrote(authorshipOf(rule));
+  }
+  if (ref.kind === "rule-case") {
+    const rule = corpus.rules.find((x) => x.rule.id === ref.rule)?.rule;
+    return sayWhoWrote(authorshipOf((rule?.outcomes ?? []).find((o) => o.name === ref.name), rule));
+  }
+  if (ref.kind !== "slot" && ref.kind !== "statement" && ref.kind !== "case") return [];
+  const ex = corpus.scopes.find((s) => s.scope.id === ref.scope)?.scope.exchanges.find((x) => x.id === ref.exchange);
+  const fill = ex?.slots?.[ref.slot];
+  if (!fill) return [];
+  /** ⛔ Narrowest grain first, through the one precedence rule — see `authorshipOf` in the schema. */
+  const narrower =
+    ref.kind === "statement"
+      ? statements(fill.says).find((x) => x.id === ref.name)
+      : ref.kind === "case"
+        ? (fill.outcomes ?? []).find((o) => o.name === ref.name)
+        : undefined;
+  return sayWhoWrote(authorshipOf(narrower, fill));
+}
+
+/**
+ * ⛔ THREE ANSWERS, AND THE THIRD IS SAID OUT LOUD RATHER THAN LEFT BLANK. A sentence whose author
+ * nobody recorded is the commonest case in a migrated corpus, and silence about it reads exactly
+ * like a person having typed it — which is the conflation this whole field exists to end.
+ */
+function sayWhoWrote(w: ReturnType<typeof authorshipOf>): string[] {
+  if (!w)
+    return ["", "⛔ nobody recorded who wrote this, so there is no telling whether anyone has read it."];
+  if (w.hand === "agent")
+    return [
+      "",
+      `⛔ these words were worked out by ${w.as}, from ${w.from} — nobody has read them.`,
+    ];
+  return ["", `written by ${w.as}${w.from ? ` — ${w.from}` : ""}. ⛔ Written is not agreed.`];
 }
 
 /**
@@ -432,6 +513,26 @@ export function payloadFrom(act: Act, ref: string, body: Record<string, unknown>
  * ⛔ JSON-QUOTED, because these lines carry colons, quotes and em dashes. A naive `- ${line}`
  * produces YAML that will not parse back, which would make the field worse than absent.
  */
+/**
+ * Which press a per-sentence acceptance came from — see the bulk-press block in `doAccept`.
+ *
+ * ⛔ ONE HOME FOR THE WORDING, because a second reader depends on it. The watcher emits a line per
+ * verdict record, so one press on an exchange announced itself nine times — eight of them lines
+ * nobody can act on, which is the exact noise its "one announcement per record, not per file event"
+ * comment exists to prevent. It now stays silent on the children and announces the press, and that
+ * decision is made by reading this.
+ *
+ * ⛔ A `note`, not a new field: nothing gates on it, and inventing a weaker KIND of acceptance is
+ * the design Peter ruled out — *"so acceptance is def at a per-ref level"*. What it records is how
+ * much attention was paid, which `at` (a date) cannot distinguish.
+ */
+export const bulkPressNote = (target: string): string =>
+  `agreed by one press on ${target}, not read one sentence at a time`;
+
+/** Whether an acceptance was written by a press on something above it. */
+export const wasBulkPressed = (note: string | undefined): boolean =>
+  typeof note === "string" && note.startsWith("agreed by one press on ");
+
 function coveredTextLines(cover: { reads?: unknown }, indent = "    "): string[] {
   const reads = Array.isArray(cover.reads) ? (cover.reads as unknown[]).map(String) : [];
   if (!reads.length) return [];
@@ -756,11 +857,74 @@ function doAccept(dir: string, { target }: AcceptPayload, consent: Consent): Out
     /** ⛔ The words, not only their hash — see `covered_text` in the schema. */
     ...coveredTextLines(c, "    "),
   ], consent);
+
+  /**
+   * ⛔ AND ONE RECORD PER SENTENCE BENEATH IT — THE EXCHANGE BUTTON IS A BULK PRESS, NOT A WIDER
+   * KIND OF ACCEPTANCE.
+   *
+   * Peter: *"two ways to 'accept truths' by a human. by UX - there should be a button at the
+   * exchange level and at the per-ref level. this flows straightforward into what is accepted."*
+   * Asked whether the exchange-level press is its own kind of record: *"so acceptance is def at a
+   * per-ref level."*
+   *
+   * What it cost to have only the exchange record: a coding agent asks "can I build this?" one
+   * sentence at a time, because a sentence is what it implements — and every sentence under a
+   * reviewed exchange answered "nobody agreed to me". Pressing the exchange button on the seed left
+   * all fifteen sentences beneath the two offered exchanges reading `never`, so work a person
+   * genuinely did review was reported as unreviewed by the only surface that matters downstream.
+   *
+   * ⛔ AND THE FIX IS NOT REACH. A single record covering sentences it was not written against
+   * would need `stampFor` to walk upward, and then staleness becomes all-or-nothing: the verdict
+   * holds ONE pair of hashes for the whole exchange, so rewording one slot would either break
+   * agreement on seven sentences nobody touched or — far worse — have to be made not to. N records
+   * make a reword break exactly the sentence that moved, with no special case anywhere.
+   *
+   * ⛔ Skipped where a DIRECT acceptance is already current, so a re-press does not pile up
+   * duplicates. A sentence reading accepted `through` a rule still gets its own record: the person
+   * pressed on this exchange, and if that rule's stamp later breaks their agreement to this
+   * sentence should not break with it.
+   */
+  const beneath = aim.kind === "exchange" ? sentencesIn(corpus, target) : [];
+  const covered: string[] = [];
+  for (const r of beneath) {
+    const already = stampFor(corpus, r);
+    if (already.state === "accepted" && !already.through) continue;
+    const cov = coveredBy(corpus, r);
+    if (!cov) continue;
+    writeVerdict(dir, "accepts.yaml", [
+      `  - kind: accept`,
+      `    target: ${r}`,
+      `    by: ${consent.by}`,
+      `    at: ${today()}`,
+      `    via: ${consent.via}`,
+      `    covers_slots: ${cov.slots}`,
+      `    covers_criteria: ${cov.criteria}`,
+      /**
+       * ⛔ WHICH PRESS IT CAME FROM, because one press now writes nine records and nothing else
+       * could tell them apart.
+       *
+       * It is NOT a weaker acceptance and no gate reads it: the person was shown every sentence
+       * under the exchange and agreed to the exchange. But "read eight sentences and agreed to each"
+       * and "agreed to the whole thing at once" are different amounts of attention, and a reader a
+       * year later is entitled to know which — `at` is a date, so the records are otherwise
+       * indistinguishable.
+       */
+      `    note: ${JSON.stringify(bulkPressNote(target))}`,
+      ...coveredTextLines(cov, "    "),
+    ], consent);
+    covered.push(r);
+  }
+
   return {
     ok: true,
     said: `accepted ${target}`,
     detail: [
       ...(rewrote ? [`re-accepted: ${flat(rewrote)}`] : []),
+      ...(covered.length
+        ? [
+            `and each of the ${covered.length} sentence${covered.length === 1 ? "" : "s"} beneath it, on its own record — so a reword breaks agreement to the sentence that moved and nothing else`,
+          ]
+        : []),
       "if any of what you read changes, check refuses this stamp rather than let it read as current",
     ],
   };
@@ -966,14 +1130,32 @@ function doRule(dir: string, o: RulePayload, consent: Consent): Outcome {
    * person decided, the corpus says nobody has, and `check` reports `ruled-but-not-written` at
    * somebody who did everything right.
    */
-  const applied = settle(dir, o.slot, says, consent.by, today(), o.because, {
-    defersTo: o.defersTo,
-    insteadOf: o.insteadOf,
-    then: o.then,
-    refuses: o.refuses,
-    outcomes: pickedOutcomes,
-    none: pickedNone,
-  });
+  const applied = settle(
+    dir,
+    o.slot,
+    says,
+    consent.by,
+    today(),
+    o.because,
+    {
+      defersTo: o.defersTo,
+      insteadOf: o.insteadOf,
+      then: o.then,
+      refuses: o.refuses,
+      outcomes: pickedOutcomes,
+      none: pickedNone,
+    },
+    /**
+     * ⛔ A PICKED OPTION'S WORDS WERE DRAFTED BY SOMETHING ELSE, AND THE RECORD SAYS SO.
+     *
+     * The hand is still the ruler's — a person who picks has READ the sentence, which is exactly
+     * the distinction that decides whether a grooming agent raises a question about it — but the
+     * words are not theirs, and `chose` is the only surviving trace of where they came from once
+     * `standing.candidates` is deleted. Same argument as `option_said` directly above: the
+     * drafter's contribution is kept, attributed to the drafter.
+     */
+    wroteBy(consent, chose ? `the ruler picked ${chose}, drafted for this question` : undefined)
+  );
   if (!applied.ok)
     return no(`that ruling cannot be written in: ${applied.why}`, [
       "nothing has been recorded — fix the slot or the ruling and run it again",

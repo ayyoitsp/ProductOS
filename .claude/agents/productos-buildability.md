@@ -41,6 +41,25 @@ the product.
 - An **ordering or permission assumption that is load-bearing and unwritten** — this screen only
   works if that one ran first, and nothing says so.
 
+## Judge the packet, because the packet is what a builder is handed
+
+- **`productos_exchange_packet`** is the artefact itself: every behaviour in full, the words its
+  sentences use, what demonstrates each, the holes it already knows about, and whether a human read
+  it end to end. ⛔ Start there rather than in the corpus files — and when a fact turns out to be
+  only in a file, that *is* a finding. A builder opens the packet; whatever did not reach it did not
+  reach them, however clearly somebody wrote it somewhere else.
+- **`productos_exchange_questions`** separates your finding from somebody else's. Latitude by
+  omission is yours. A decision already recorded as open, with what it costs to guess wrong, is not
+  a surprise waiting on Monday — it is a question somebody is holding. Report the first, not the
+  second, and say which you found.
+- **`productos_exchange_can_be_agreed_to`** names what is blocking a behaviour. Unsettled is not
+  unbuildable: it tells you which parts are still moving, so you can answer "I could start on these
+  three and not that one" instead of refusing a whole feature.
+
+⛔ **Every one of those changes nothing, `can_be_agreed_to` included — it only reports the gate.**
+Nothing you hold could settle a question, and that is deliberate: an answer you supplied yourself
+would be the exact failure you exist to catch, a decision made by whoever happened to be typing.
+
 ## ⛔ What you must never do
 
 - **Write anything.**

@@ -1,9 +1,76 @@
 id: "0167"
-said: something constantly causes my screen to reload and i go back to 'overview'
+said: uhm, we should have durable links for everything in product os.  no idea why we use anchors for everything.
 at: 2026-10-16
 kind: surface
 reaches:
-  surface: window.showView
-  pin: does not reload a page with nothing to sync
+  surface: urlOf
+  pin: every durable link the served page writes resolves
 waived: {}
 closed: 2026-10-16
+
+# ⛔ APPENDED AFTER `change close`, which drops comments. See 0141 / 0144-0154. ⛔ SIXTH ID COLLISION: another
+# session took 0155 while this was open, and theirs was already on main, so theirs keeps the number.
+#
+# Peter: *"uhm, we should have durable links for everything in product os. no idea why we use
+# anchors for everything."*
+#
+# ⛔ AND THE ANSWER TO "WHY" IS NOT THAT IT WAS A DESIGN CHOICE. Counted on the live page:
+#
+#     href="#at-…"        469
+#     durable links         0
+#
+# `/p/<project>/v2/<scope>` has answered 200 the whole time — 1,978,320 bytes for
+# `versioned-inputs` — so the durable link existed and the page never emitted one. There were two
+# separate reasons, and only fixing both produces a working link:
+#
+#   · `refLink` wrote a fragment whenever the target was on this page, which on a single-page render
+#     is nearly always. The comment above it said why: jumping beats reloading. True, and it does
+#     not follow that the link must be a fragment.
+#   · the one branch that DID write a URL built it from `linkBase: "/v2"`, hardcoded at both render
+#     sites inside `serve.ts`. Root-relative, so hosted it resolved to `/v2/<scope>`:
+#
+#         /p/prj-bks5f4m325/v2/versioned-inputs   200   1978320 bytes
+#         /v2/versioned-inputs                    404       111 bytes   <- what the page wrote
+#
+# ⛔ EIGHTH INSTANCE OF THE CLASS CLAUDE.md OPENS ON. The local server IS mounted at the root, so the
+# broken form was correct in the only environment anybody develops against. `v2Route` now takes a
+# `mount`, and the hosted delegate passes `/p/<id>` — it strips the prefix, so it is the only thing
+# that knows what it stripped, the same argument as `who` and `corpusFor`.
+#
+# ⛔ A PATH FOR THE SCOPE, A FRAGMENT WITHIN IT — the scheme rather than a compromise. A ref below a
+# scope lives ON that scope's page, so its address is that page plus where to look. The server
+# resolves the path; the browser resolves the fragment.
+#
+# ⛔ AND THE FAST JUMP IS KEPT, which is the half the old test was protecting. The click handler now
+# takes any link whose path is the one you are on, or which names a view this page holds, and
+# switches without a reload. Driven, because no markup assertion can see the difference —
+# `scripts/probe-durable.mjs` sets a marker on `window`, presses, and reads it back:
+#
+#     the nav addresses "part-0" as   /p/prj-probe/v2/part-0
+#     after pressing it
+#       address   /p/prj-probe/v2/part-0#at-part-0
+#       showing   ["part-0"]
+#       reloaded  no
+#     opening /p/prj-probe/v2/part-0 cold, in a new page
+#       title     Part 0        views 6
+#
+# ⛔ A TEST ASSERTED THE OPPOSITE AND WAS REWRITTEN RATHER THAN DELETED. "A page navigates within
+# itself" asserted that a SERVED root page links to itself by fragment — the defect, pinned. Its
+# reason was right and its conclusion did not follow, and it could not tell a durable link that
+# jumps from one that reloads, because it only looked at `href`. What replaced it asserts the link
+# shape, that `data-goto` survives alongside it, and that a render with no address still says so.
+#
+# ⛔ AND ONE PIN IS A FETCH, BECAUSE NOTHING ABOUT THE MARKUP WAS WRONG. The link was present,
+# well-formed and named a real scope. Only the server can answer whether that URL is where the page
+# is — so the page is rendered under a mount it is NOT served at, and every link it wrote is
+# fetched with the mount stripped. Verified red with both halves of the defect put back.
+#
+# ⛔ NO BASE STILL MEANS FRAGMENTS, deliberately. `v2 page --out` writes a file and a published
+# artifact is one page; neither has an address to be durable about, and writing a URL there would be
+# the defect rather than the fix.
+#
+# WHAT THIS DOES NOT DO: an exchange, a slot or a question has no servable path of its own — it is
+# addressed as `<base>/<scope>#at-<ref>`. That is durable and shareable, and it is a smaller claim
+# than "a URL per thing". Worth asking Peter which he meant before building the larger one.
+#
+# 1027/1027.
