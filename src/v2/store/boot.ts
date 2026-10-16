@@ -7,7 +7,7 @@
  */
 import { becauseOf } from "./because.js";
 import { startHosted } from "./server.js";
-import { watchForAStuckWrite } from "./watchdog.js";
+import { sweepScratchWhileRunning, watchForAStuckWrite } from "./watchdog.js";
 
 async function main(): Promise<void> {
   const { close } = await startHosted();
@@ -30,6 +30,8 @@ async function main(): Promise<void> {
 
   /** ⛔ See `watchdog.ts`: a write stuck past ten minutes ends this process so the policy restarts it. */
   watchForAStuckWrite();
+  /** ⛔ See `watchdog.ts`: a sweep only at boot let 885 orphans accumulate and then hung the start. */
+  sweepScratchWhileRunning();
 }
 
 main().catch((e: unknown) => {
