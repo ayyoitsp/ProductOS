@@ -3562,7 +3562,24 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
   /** ⛔ From the grids, so the page and the grid cannot disagree about what is empty. */
   const blanks = grids.reduce((n, g) => n + g.counts.blank, 0);
   const written = grids.reduce((n, g) => n + g.counts.stated + g.counts.inherited + g.counts.outOfScope, 0);
-  const agreed = corpus.verdicts.filter((v) => v.kind === "accept" && under(v.target ?? "")).length;
+  /**
+   * ⛔ SENTENCES, FROM THE LIST THAT ALREADY DECIDES WHAT IS OWED — never a count of verdict rows.
+   *
+   * This read `corpus.verdicts.filter(v => v.kind === "accept" && under(v.target))`, which counts
+   * accept rows at ANY grain: an exchange, a slot, one statement, a rule. It was rendered against
+   * `gated.length`, which counts EXCHANGES. So the two halves of one fraction never counted the
+   * same kind of thing, and the word "behaviours" described only the denominator.
+   *
+   * ⛔ IT STOPS BEING A DRIFT AND BECOMES A MULTIPLICATION under per-ref acceptance, which is the
+   * model Peter has confirmed: one press on an exchange writes one ordinary acceptance per sentence
+   * beneath it, so one press turns one row into nine and the seed reads "17 of 20" where it read
+   * "2 of 5".
+   *
+   * `actsFor` computes both halves in the one loop that decides what a settled sentence is, so the
+   * page cannot drift from the queue about it.
+   */
+  const agreed = a.agreed.filter(under).length;
+  const owed = a.written.filter(under).length;
   const stale = a.stale.filter((s) => ids.some((i) => s.where.startsWith(`${i}#`)));
 
   /**
@@ -3713,12 +3730,19 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
                        */
                       gated.length || agreed
                         ? `<p class="gate-note">${
+                            /**
+                             * ⛔ EACH NUMBER SAYS WHAT IT COUNTS. Sentences are agreed; BEHAVIOURS
+                             * are gated. Naming both "behaviours" is what let a numerator of
+                             * verdict rows sit over a denominator of exchanges without anybody
+                             * noticing the fraction was meaningless.
+                             */
                             agreed
-                              ? `<strong>${agreed}</strong> of ${agreed + gated.length} behaviours have been agreed to. `
+                              ? `<strong>${agreed}</strong> of ${agreed + owed} sentences have been agreed to. `
                               : `<strong>Nothing here has been agreed to yet.</strong> `
                           }${
                             gated.length
-                              ? `The other ${gated.length} cannot be, until these ${live.length === 1 ? "is" : "are"} answered — every one of them has a slot waiting on ${live.length === 1 ? "it" : "them"}.`
+                              /** ⛔ `behaviours` said out loud, because the half before it counts sentences. */
+                              ? `${gated.length} behaviour${gated.length === 1 ? "" : "s"} cannot be agreed to at all until these ${live.length === 1 ? "is" : "are"} answered — every one of them has a slot waiting on ${live.length === 1 ? "it" : "them"}.`
                               : ""
                           }</p>`
                         : ""

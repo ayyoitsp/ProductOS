@@ -313,6 +313,22 @@ export interface ActCount {
    * to agree to them. The one figure that says how much review is owed said none was.
    */
   behaviours: string[];
+  /**
+   * Settled sentences somebody HAS agreed to — the other half of `written`.
+   *
+   * ⛔ IT EXISTS SO A FRACTION CAN HAVE TWO HALVES THAT COUNT THE SAME THING. The overview rendered
+   * `"${agreed} of ${agreed + gated.length} behaviours have been agreed to"` where the numerator was
+   * a count of accept VERDICT ROWS at any grain — exchange, slot, statement, rule — and the
+   * denominator counted EXCHANGES. Neither half was what the word "behaviours" described.
+   *
+   * ⛔ AND IT STOPS BEING A DRIFT AND BECOMES A MULTIPLICATION the moment a press on an exchange
+   * writes one ordinary acceptance per sentence beneath it, which is the model Peter has confirmed:
+   * one press turns one row into nine, so the seed would read "17 of 20" where it read "2 of 5".
+   *
+   * Computed in the loop that already decides what is owed, so the two can never disagree about
+   * what a settled sentence is — the alternative was the page re-deriving it and drifting.
+   */
+  agreed: string[];
   /** One accept per exchange whose every slot is stated. */
   acceptable: string[];
   /** Gated: an exchange with an unsettled slot cannot be accepted yet. */
@@ -493,6 +509,7 @@ export function actsFor(corpus: Corpus): ActCount {
   const acceptable: string[] = [];
   const behaviours: string[] = [];
   const written: string[] = [];
+  const agreed: string[] = [];
   const gated: string[] = [];
   const rulings: ActCount["rulings"] = [];
   const deferred: ActCount["deferred"] = [];
@@ -605,7 +622,7 @@ export function actsFor(corpus: Corpus): ActCount {
                 written.push(r);
                 // Offered only once the feature's purpose is agreed — see contextAgreed above.
                 if (contextFor(scope.id).ok) behaviours.push(r);
-              }
+              } else agreed.push(r);
         }
         if (k === "stated" || k === "out_of_scope") continue;
         settled = false;
@@ -666,6 +683,7 @@ export function actsFor(corpus: Corpus): ActCount {
     acceptable,
     behaviours,
     written,
+    agreed,
     ungrounded: corpus.scopes
       .filter(({ scope }) => scope.exchanges.length && !contextFor(scope.id).ok)
       .map(({ scope }) => ({ scope: scope.id, why: contextFor(scope.id).why })),
