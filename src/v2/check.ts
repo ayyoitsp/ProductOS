@@ -562,6 +562,36 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
      * the corpus is target state: refusing it would make describing a screen before its door exists
      * impossible, which is the thing this model exists to allow.
      */
+    /**
+     * ⛔ NO DECLARED DOOR OPENS ONTO THESE, WHICH IS NOT WHAT `no-way-in` MEASURES.
+     *
+     * `no-way-in` asks whether a screen has an inbound edge. This asks whether a PERSON can get
+     * there — reachable from some prototype's `starts_at`. One product area had 133 screens wired
+     * to each other and no prototype opening on any of them, and `no-way-in` reported two screens
+     * from the other area, because the walk infers a door from any screen with nothing leading to
+     * it. Everything looked entered. Nothing was.
+     *
+     * Peter: *"how could you have possibly indexed it with no prototypes?????"* — and the answer
+     * was that the only thing which would have told him measured something else.
+     *
+     * ⛔ A NOTE, NOT A REFUSAL, FOR THE REASON BELOW: a corpus is target state and a screen may be
+     * described before its door exists. ⛔ BUT IT LEADS WITH THE COUNT AND SAYS "nobody can reach",
+     * because the whole failure was a true sentence nobody could act on — "2 screens have no way
+     * in" beside an unenterable product reads as a tidy corpus.
+     */
+    if (walk.unentered.length)
+      add({
+        severity: "note",
+        kind: "nobody-can-reach-this",
+        where: "the product as a walk",
+        what: !(corpus.prototypes ?? []).length
+          ? `no prototype opens on anything, so none of this product's ${walk.unentered.length} screens can be reached by a person — there is no front door at all`
+          : `${walk.unentered.length} of ${walk.steps.size} screens are reached from no prototype's front door: ${walk.unentered.slice(0, 5).join(", ")}${
+              walk.unentered.length > 5 ? `, and ${walk.unentered.length - 5} more` : ""
+            }`,
+        fix: "declare the way in — `productos v2 prototypes new \"<title>\" --starts-at <scope>#<view>` — or lead to these from a screen one already opens on. ⛔ A screen with no inbound edge is NOT a door: the walk infers entries from the graph's shape, so an area wired only to itself reads as entered while nobody can get into it.",
+      });
+
     if (walk.unreachable.length)
       add({
         severity: "note",
@@ -2896,7 +2926,28 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
          * product that HAS the concept, and only a note: the sentence is still the thing a person
          * agrees to, and an author may legitimately not know the role yet.
          */
-        if (model !== "neither" && !held.length && saysText(ex.slots?.may?.says).trim())
+        /**
+         * ⛔ AND A RULE'S `held_by` COUNTS, or writing the sentence once is punished for it.
+         *
+         * Six authors wrote one `may` rule instead of four-to-eight copies — the move this model
+         * asks for — and their exchanges then had no `held_by` of their own, so this finding fired
+         * on every one of them for prose that was not theirs and which they could not fix without
+         * un-writing the rule.
+         */
+        /**
+         * ⛔ COMPUTED HERE WITH `selectsFor`, NOT READ FROM `reach`. `reach` is declared seventy
+         * lines BELOW this block, so referring to it resolved to something unintended rather than
+         * failing — the list came back empty, the finding went on firing, and the build was clean.
+         * A silent wrong answer from a name that looks in scope.
+         */
+        const byRule = corpus.rules
+          .filter(
+            (r) =>
+              r.rule.fills.includes("may") &&
+              selectsFor({ ...r.rule, standing: undefined }, scope, ex, lineageOf(corpus, scope.id), corpus)
+          )
+          .flatMap((r) => r.rule.held_by ?? []);
+        if (model !== "neither" && !held.length && !byRule.length && saysText(ex.slots?.may?.says).trim())
           add({
             severity: "note",
             kind: "who-may-is-only-prose",
@@ -2905,6 +2956,34 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
             fix: `name ${model === "permissions" ? "the permissions" : "the roles"} in \`held_by\`, beside the sentence. ⛔ The sentence stays: it is what somebody agrees to, and the names are what make it answerable from the other end — "what can an underwriter reach"`,
           });
       }
+
+    /**
+     * ⛔ A RULE'S OWN IDS MUST RESOLVE, or the enumeration it exists to provide is decorative.
+     *
+     * Same refusal as on a slot, for the same reason: a name that resolves to nothing reads as a
+     * constraint and enforces none — and a rule's reaches every exchange its selector touches, so
+     * one bad id there is wrong in more places than one bad id on a slot.
+     */
+    for (const { rule } of corpus.rules) {
+      if (!rule.fills.includes("may")) continue;
+      for (const id of rule.held_by ?? [])
+        if (!byId.has(id))
+          add({
+            severity: "refuse",
+            kind: "may-names-nothing",
+            where: `${rule.id}#may`,
+            what: `this rule says only "${id}" may perform what it reaches, and the product has no role or permission by that name`,
+            fix: `add it where the product's roles and permissions are listed, or correct the name. ⛔ A rule reaches every exchange its selector touches, so a name that resolves to nothing is wrong on all of them`,
+          });
+        else if (!wants(byId.get(id)!.kind))
+          add({
+            severity: "note",
+            kind: "an-access-model-this-product-does-not-use",
+            where: `${rule.id}#may`,
+            what: `this rule names the ${byId.get(id)!.kind} "${id}", and this product is configured as access: ${model}`,
+            fix: `either change \`access:\` in the corpus config to the model the product actually has, or say who may in terms of the one it does`,
+          });
+    }
 
     /**
      * ⛔ A ROLE OR PERMISSION NOTHING USES. Dead access is worse than a missing one: it reads as

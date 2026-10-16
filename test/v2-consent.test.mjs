@@ -25,7 +25,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { tools } from "../dist/mcp/tools.js";
-import { EXCHANGE_ACT_TOOLS, EXCHANGE_READ_TOOLS } from "../dist/mcp/v2-tools.js";
+import { EXCHANGE_ACT_TOOLS, EXCHANGE_READ_TOOLS, RETIRED_ACT_TOOLS } from "../dist/mcp/v2-tools.js";
 import { perform, VIA } from "../dist/v2/acts.js";
 import { loadCorpus } from "../dist/v2/load.js";
 
@@ -41,8 +41,15 @@ function seed() {
 const verdictsIn = (dir) => loadCorpus(dir).verdicts;
 
 test("every act tool demands who decided and how their consent was obtained", () => {
-  assert.ok(EXCHANGE_ACT_TOOLS.length === 5, `expected the five acts, saw ${EXCHANGE_ACT_TOOLS.length}`);
-  for (const t of EXCHANGE_ACT_TOOLS) {
+  /**
+   * \u26d4 THE RETIRED TOOLS, NOT THE SURFACE. These five are no longer offered to a model — the
+   * door takes `accept`, `rule`, `waive`, `defer` and `read` — but they still back the HTTP act
+   * routes, and what they demanded is the bar the door is now held to. Asserting it here keeps the
+   * sentence that names the danger: a DEFAULT would make the weakest provenance wear the strongest
+   * name, which is exactly what a bare `accept` through the door used to do.
+   */
+  assert.ok(RETIRED_ACT_TOOLS.length === 5, `expected the five acts, saw ${RETIRED_ACT_TOOLS.length}`);
+  for (const t of RETIRED_ACT_TOOLS) {
     const s = t.inputSchema;
     for (const f of ["by", "via"]) {
       assert.ok(s.properties?.[f], `${t.name} does not take ${f}`);
@@ -130,7 +137,7 @@ test("one act, two callers, identical truth — only via differs", async () => {
   const a = perform(direct, "rule", payload, { by: "peter", via: "cli" });
   assert.equal(a.ok, true, a.why);
 
-  const settle = EXCHANGE_ACT_TOOLS.find((t) => t.name === "productos_exchange_settle");
+  const settle = RETIRED_ACT_TOOLS.find((t) => t.name === "productos_exchange_settle");
   const b = await settle.handler({ ...payload, by: "peter", via: "question", dir: viaMcp }, paths);
   assert.equal(b.ok, true, b.why);
 
@@ -150,7 +157,7 @@ test("one act, two callers, identical truth — only via differs", async () => {
  */
 test("a refusal reaches an MCP caller with the honest exits intact", async () => {
   const dir = seed();
-  const t = EXCHANGE_ACT_TOOLS.find((x) => x.name === "productos_exchange_record_read_through");
+  const t = RETIRED_ACT_TOOLS.find((x) => x.name === "productos_exchange_record_read_through");
   const r = await t.handler({ scope: "tasks", buildable: true, by: "peter", via: "chat", dir }, paths);
   assert.equal(r.ok, false);
   assert.ok(r.instead?.length, "a refusal with no way forward is where reviewers stop reviewing");
@@ -167,10 +174,22 @@ test("v1 behaviour verification is still withheld from models", () => {
 });
 
 /** Every exchange tool is actually registered, or none of the above proves anything. */
-test("the exchange tools are on the MCP surface", () => {
+test("the exchange tools are on the MCP surface, and the retired acts are deliberately not", () => {
   const names = new Set(tools.map((t) => t.name));
-  for (const t of [...EXCHANGE_READ_TOOLS, ...EXCHANGE_ACT_TOOLS])
+  for (const t of EXCHANGE_READ_TOOLS)
     assert.ok(names.has(t.name), `${t.name} is defined and not registered`);
+  /**
+   * \u26d4 BOTH DIRECTIONS, OR THE RETIREMENT IS INVISIBLE HERE. "Defined and not registered" used
+   * to be the only failure this test knew about, and the five acts are now exactly that — on
+   * purpose, because the door takes them and a model offered two names for one act is choosing with
+   * no right answer. Asserting the absence keeps the decision legible from this file rather than
+   * looking like the assertion was quietly dropped when it went red.
+   */
+  for (const t of RETIRED_ACT_TOOLS)
+    assert.ok(
+      !names.has(t.name),
+      `${t.name} is registered again — it is the door's job now, and two names for one act is a decision with no right answer`
+    );
 });
 
 /**

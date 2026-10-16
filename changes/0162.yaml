@@ -1,0 +1,8 @@
+id: "0157"
+said: we're still in unauthenticated mode - let's have the sessions identify the human driving and we'll use that
+at: 2026-10-15
+kind: surface
+reaches:
+  surface: whoDecided
+  pin: the session says who is driving, and that is what is recorded
+waived: {}

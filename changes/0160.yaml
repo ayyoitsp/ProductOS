@@ -1,14 +1,11 @@
-id: "0160"
-said: we need dimensions to carry through to all features, so we can have different variations PER feature. and the dimensions should affect the truths as well
-at: 2026-10-16
-kind: concept
+id: "0155"
+said: |-
+  can we review our 'mcp interface' into the product? I'd like to see how our coding agents would interact with productos
+
+  [shown that 7 of 14 intents have a second, operation-shaped name on the same surface] yes, retire the duplicates.  let's see the final tool list
+at: 2026-10-15
+kind: surface
 reaches:
-  model: holds_for
-  derive: holdsUnder
-  generate: writeHoldsFor
-  surface: chip holds
-  check: a-variant-names-an-undeclared-dimension
-  instruct: A dimension reaches every feature
-  pin: unsaid means everywhere
+  surface: RETIRED_ACT_TOOLS
+  pin: no act has a second name on the surface
 waived: {}
-closed: 2026-10-16
