@@ -138,20 +138,52 @@ console.log(`   address   ${after.path}${after.hash}`);
 console.log(`   showing   ${JSON.stringify(after.showing)}`);
 console.log(`   reloaded  ${after.survived ? "no" : "YES"}`);
 
+/**
+ * ⛔ AND A CONTAINER TOO, BECAUSE THE FEATURE DOES NOT REPRODUCE THE DEFECT AND I ALMOST SHIPPED ON
+ * THAT. A scope with exchanges renders as its own section even when the page is rooted at it, so a
+ * cold load finds a matching data-view and lands correctly whether or not the fix is in. A
+ * CONTAINER has no exchanges and no grid, so it renders only as the page's Overview — which is the
+ * case where the switcher found nothing, fell back, and overwrote the address bar.
+ *
+ * Verified by putting the defect back in dist and watching this line go red while the feature's
+ * line stayed green. A probe that passes on the bug is worth less than no probe.
+ */
+const area = after.path.split("/").slice(0, -1).join("/");
+const areaPage = await openPage(null, { exe, url: `${origin}${area}`, width: 1440, height: 900 });
+await areaPage.waitFor(
+  `document.readyState === "complete" && document.querySelectorAll("section.view").length > 0`,
+  "the container's address to open"
+);
+await new Promise((r) => setTimeout(r, 300));
+const onArea = await areaPage.evaluate(`({ path: location.pathname, title: document.title })`);
+console.log(`\n opening the container at ${area} cold`);
+console.log(`   title     ${onArea.title}`);
+console.log(`   address   ${onArea.path}${onArea.path === area ? "" : "   ⛔ rewritten on arrival"}`);
+await areaPage.close();
+
 /** ⛔ And the address it left behind is opened COLD, in a second page — the whole point of durable. */
 const cold = await openPage(null, { exe, url: `${origin}${after.path}`, width: 1440, height: 900 });
 await cold.waitFor(
   `location.href.indexOf(${JSON.stringify(origin)}) === 0 && document.readyState === "complete"`,
   "the copied address to open"
 );
+/**
+ * ⛔ GIVE THE SWITCHER A TICK BEFORE READING, AND READ THE ADDRESS. The defect the deploy session
+ * found was invisible here: a cold page whose switcher rewrites `location.pathname` to
+ * `/v2/overview` still has the right title and the right sections, so "views > 0" passed on it.
+ * What it destroys is the address — paste the link, lose the link.
+ */
+await new Promise((r) => setTimeout(r, 300));
 const landed = await cold.evaluate(`({
   title: document.title,
+  path: location.pathname,
   views: document.querySelectorAll("section.view").length,
   showing: [...document.querySelectorAll("section.view")].filter((s) => !s.hidden).map((s) => s.dataset.view),
 })`);
 console.log(`\n opening ${after.path} cold, in a new page`);
 console.log(`   title     ${landed.title}`);
 console.log(`   views     ${landed.views}`);
+console.log(`   address   ${landed.path}${landed.path === after.path ? "" : "   ⛔ rewritten on arrival"}`);
 console.log(`   showing   ${JSON.stringify(landed.showing)}`);
 
 console.log("");
@@ -169,6 +201,8 @@ if (!after.survived) ok.push("⛔ pressing a durable link reloaded the page");
 if (after.path.split("/").pop() !== row.goto) ok.push(`⛔ the address bar says ${after.path}, which does not end at ${row.goto}`);
 if (!after.path.startsWith(`${MOUNT}/v2/`)) ok.push(`⛔ the address bar says ${after.path}, not under ${MOUNT}/v2`);
 if (!landed.views) ok.push("⛔ the copied address opened a page with nothing on it");
+if (landed.path !== after.path) ok.push(`⛔ opening ${after.path} cold rewrote the address to ${landed.path}`);
+if (onArea.path !== area) ok.push(`⛔ opening the container at ${area} cold rewrote the address to ${onArea.path}`);
 if (ok.length) ok.forEach((x) => console.log(x));
 else console.log(`✓ durable in the address bar, no reload, and the address opens on its own`);
 

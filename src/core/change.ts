@@ -76,9 +76,66 @@ export function writeChange(root: string, rec: ChangeRecord): string {
   return file;
 }
 
+/**
+ * Every record filed under each id, so a number that two records answer to can be SEEN.
+ *
+ * ⛔ A SHARED ID DOES NOT MAKE A VERB AMBIGUOUS — IT TURNS THE CASCADE OFF.
+ *
+ * The deploy session put it better than I had: `close` is refused while any layer is unreached, and
+ * that refusal is the only thing forcing a piece of feedback into every layer it affects. If two
+ * records answer to one id, the refusal can be satisfied against the OTHER record's layers — so a
+ * change that reached nothing closes cleanly and nothing anywhere says so. The mechanism this whole
+ * file exists to be is the mechanism that fails, silently.
+ *
+ * ⛔ AND IT IS NOT HYPOTHETICAL: four pairs are already in the record. `changes/0160.yaml` carries
+ * `id: "0155"`, and the same for 0156/0157/0158 — a session dodging a filename conflict renamed the
+ * file and left the id inside it. `v2 change check 0155` prints two records today.
+ *
+ * ⛔ THE FILENAME IS CHECKED TOO, because that is the half that produced those four. `writeChange`
+ * always names a file after its id, so a disagreement can only come from a rename after the fact —
+ * which is exactly what a merge conflict tempts somebody into at the end of a long session.
+ */
+export function idsInUse(root: string): Map<string, string[]> {
+  const dir = dirOf(root);
+  const out = new Map<string, string[]>();
+  if (!fs.existsSync(dir)) return out;
+  for (const f of fs.readdirSync(dir).filter((x) => x.endsWith(".yaml"))) {
+    const named = f.replace(/\.yaml$/, "");
+    let inside = named;
+    try {
+      inside = String((YAML.parse(fs.readFileSync(path.join(dir, f), "utf-8")) as { id?: string })?.id ?? named);
+    } catch {
+      /* An unreadable record still occupies its filename — see `nextId`. */
+    }
+    for (const id of new Set([named, inside])) out.set(id, [...(out.get(id) ?? []), f]);
+  }
+  return out;
+}
+
+/** The records answering to an id, which is more than one exactly when something is wrong. */
+export function changesWithId(root: string, id: string): ChangeRecord[] {
+  return readChanges(root).filter((c) => c.id === id);
+}
+
 export function nextId(root: string): string {
-  const seen = readChanges(root).map((c) => parseInt(c.id, 10)).filter((n) => !Number.isNaN(n));
-  return String((seen.length ? Math.max(...seen) : 0) + 1).padStart(4, "0");
+  /**
+   * ⛔ AGAINST BOTH THE FILENAMES AND THE IDS INSIDE THEM, not the maximum of one of them.
+   *
+   * It took `max(internal id) + 1`, so a record renamed to dodge a filename conflict left its
+   * NUMBER free to be handed out again — which is how `0155` ended up on two records. Walking up
+   * from the highest claim until nothing holds the number costs one directory read and cannot
+   * reissue a number anything is already using.
+   *
+   * ⛔ IT IS STILL NOT A CLAIM, AND THAT LIMIT IS WORTH STATING. Two sessions in two worktrees both
+   * read this before either writes, so both can be handed the same number — that is a merge
+   * conflict, which is visible and has been resolved by hand seven times today. What this removes
+   * is the SILENT case: a number reissued because the only record holding it was renamed.
+   */
+  const taken = idsInUse(root);
+  const highest = [...taken.keys()].map((k) => parseInt(k, 10)).filter((n) => !Number.isNaN(n));
+  let n = (highest.length ? Math.max(...highest) : 0) + 1;
+  while (taken.has(String(n).padStart(4, "0"))) n++;
+  return String(n).padStart(4, "0");
 }
 
 /**

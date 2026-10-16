@@ -42,7 +42,7 @@ import { AGENTS, AUTHORS, CASCADE, KINDS, SHIMS, shippedRoutes, SKILL, byDiscipl
 /** ⛔ Plain text for a terminal and for JSON — never HTML-escaped, which is the page's business. */
 const plain = (x: unknown): string => String(x ?? "").replace(/\s+/g, " ").trim();
 import { agentsDoc, withPreset } from "../../core/agents-doc.js";
-import { readChanges, writeChange, nextId, verify, missing } from "../../core/change.js";
+import { readChanges, writeChange, nextId, verify, missing, changesWithId, idsInUse } from "../../core/change.js";
 import { writeDrawnReading, writeSketchHtml } from "../../v2/draw-write.js";
 import { whatMoved, repoOf } from "../../v2/moved.js";
 import { HOW } from "../../v2/record.js";
@@ -1844,6 +1844,15 @@ export function v2Command(): Command {
         console.log(pc.dim(id ? `no change "${id}"` : "nothing open"));
         return;
       }
+      /**
+       * ⛔ IT PRINTED TWO RECORDS AND LOOKED LIKE A FEATURE. Asking about one id and being shown two
+       * answers reads as thoroughness; it is the signal that `close` can close the wrong one. Said
+       * out loud here because this is the verb somebody runs first.
+       */
+      if (id && all.length > 1) {
+        console.log(pc.red(`⛔ ${all.length} records answer to "${id}" — one of them has the wrong number.`));
+        console.log(pc.dim("   close is refused for both until that is fixed, because it could close either.\n"));
+      }
       let owed = 0;
       for (const rec of all) {
         const v = verify(root, rec);
@@ -1879,7 +1888,27 @@ export function v2Command(): Command {
      */
     .action((id: string, o: { waive: string[]; because?: string }) => {
       const root = process.cwd();
-      const rec = readChanges(root).find((c) => c.id === id);
+      /**
+       * ⛔ AN ID TWO RECORDS ANSWER TO IS REFUSED, BECAUSE OTHERWISE THE CASCADE IS OFF.
+       *
+       * The deploy session put it better than I had: this refusal is the only thing forcing a piece
+       * of feedback into every layer it affects. `find` takes the first match — so with two records
+       * under one id, a change that reached NOTHING can be closed by satisfying the other one's
+       * layers, and nothing anywhere says so. Four pairs are already in the record:
+       * `changes/0160.yaml` carries `id: "0155"`, and the same for 0156/0157/0158.
+       *
+       * ⛔ REFUSED RATHER THAN DISAMBIGUATED, and that is deliberate. Picking one by filename would
+       * close a record while leaving the collision in place for the next person, which is how four
+       * of them accumulated unnoticed. This names both files and stops.
+       */
+      const sharing = changesWithId(root, id);
+      if (sharing.length > 1) {
+        console.error(pc.red("✗"), `${sharing.length} records answer to "${id}", so closing one would close the wrong one`);
+        console.error(pc.dim("  each needs its own number before either can be closed:"));
+        for (const [n, files] of idsInUse(root)) if (n === id) for (const f of files) console.error(pc.dim(`    changes/${f}`));
+        process.exit(1);
+      }
+      const rec = sharing[0];
       if (!rec) {
         console.error(pc.red("✗"), `no change "${id}"`);
         process.exit(1);

@@ -7404,6 +7404,31 @@ const VIEW_SWITCH = `<script>
    * ⛔ AND NOTHING RETURNS A FRAGMENT. With no BASE this page has no address at all — a file, or a
    * published artifact — so it keeps whatever it arrived with and nothing is pushed.
    */
+  /**
+   * What this page is rooted at, which is the scope its Overview actually shows.
+   *
+   * ⛔ WITHOUT THIS, EVERY DURABLE LINK DESTROYED ITSELF ON ARRIVAL. A cold load of
+   * /v2/capabilities/deal-pipeline is served a page ROOTED at deal-pipeline — correct content,
+   * correct title, five sections — and that scope renders as the page's Overview rather than as a
+   * section named after itself. So the switcher found no view called deal-pipeline, fell back to
+   * overview, and pushed the address of overview: the address bar became /v2/overview before the
+   * reader had done anything. Paste the link, lose the link.
+   *
+   * ⛔ FOUND BY THE DEPLOY SESSION AGAINST THE HOSTED MOUNT, after my own probe passed. That probe
+   * PRESSES, and pressing exercises the in-page switch where the answer is already in memory. Cold
+   * arrival is the only path where the address is the sole input, and it is every link anybody
+   * bookmarks or is sent. scripts/probe-cold.mjs opens one and looks.
+   *
+   * ⛔ THE SAME ATTRIBUTE THE FETCHES READ, not a second copy — mock-bank carries it because the
+   * section endpoint needs to say which corpus root it is asking about.
+   */
+  const ROOT = (function () {
+    const b = document.getElementById("mock-bank");
+    return (b && b.getAttribute("data-root")) || "";
+  })();
+  /** ⛔ The CORPUS root is the only scope whose section is Overview; see sectionOf in the renderer. */
+  const wholeCorpus = () => !ROOT || sectionOf[ROOT] === "overview";
+
   const addressOf = (name) => {
     /**
      * ⛔ A FRAGMENT WHERE THERE IS NO PATH, which mirrors what the renderer writes. A file and a
@@ -7413,7 +7438,14 @@ const VIEW_SWITCH = `<script>
      * navigates. Getting rid of anchors means getting rid of them where there is an alternative.
      */
     if (!BASE) return name === "overview" ? "#view-overview" : "#at-" + name;
-    const crumbs = trails[name] || [{ id: name }];
+    /**
+     * ⛔ OVERVIEW IS WHATEVER THIS PAGE IS ROOTED AT, so its address is that scope's menu path. Only
+     * on the whole corpus is Overview the word "overview" — everywhere else it is a feature, and
+     * calling it /v2/overview is what threw the reader's address away.
+     */
+    const who = name === "overview" && !wholeCorpus() ? ROOT : name;
+    if (who === "overview") return BASE + "/overview";
+    const crumbs = trails[who] || [{ id: who }];
     return BASE + "/" + crumbs.map(function (c) { return encodeURIComponent(c.id); }).join("/");
   };
 
@@ -7428,6 +7460,12 @@ const VIEW_SWITCH = `<script>
     if (!BASE || pathname.indexOf(BASE) !== 0) return null;
     const segs = pathname.slice(BASE.length).split("/").filter(Boolean).map(decodeURIComponent);
     for (let i = segs.length - 1; i >= 0; i--) {
+      /**
+       * ⛔ A SEGMENT NAMING THIS PAGE'S ROOT IS ITS OVERVIEW. The root does not render as a section
+       * of its own — it IS the Overview — so looking only at data-view found nothing for the very
+       * address that had just been served, which is the whole of the cold-arrival defect.
+       */
+      if (ROOT && segs[i] === ROOT) return "overview";
       if (segs[i] === "overview" || views().some(function (v) { return v.dataset.view === segs[i]; })) return segs[i];
     }
     return null;
