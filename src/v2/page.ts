@@ -68,6 +68,43 @@ const plain = (s: unknown): string => String(s ?? "").replace(/\s+/g, " ").trim(
 const slug = (ref: string): string => ref.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "");
 const anchorOf = (ref: string): string => `at-${slug(ref)}`;
 
+/**
+ * The address of a ref — a whole URL where there is a server, a fragment where there is not.
+ *
+ * ⛔ EVERY LINK ON THE PAGE WAS A FRAGMENT, AND A FRAGMENT IS NOT AN ADDRESS.
+ *
+ * Peter: *"we should have durable links for everything in product os. no idea why we use anchors
+ * for everything."* Counted on the live page: 469 `href="#at-…"` and zero durable links.
+ *
+ * And the answer to "why" is not that it was a design choice. `/p/<project>/v2/<scope>` already
+ * serves that scope's own page — 200, 1.98 MB, today — so the durable link existed and the page
+ * never emitted one. The only code path that would is `refLink`'s cross-page branch, and it was
+ * built from `linkBase: "/v2"`: root-relative, so on the hosted instance it resolved to `/v2/<id>`
+ * and 404ed. Local serving made that look correct. Eighth instance of the class CLAUDE.md opens
+ * on — "the environment convenient to measure in is not the environment the thing lives in".
+ *
+ * ⛔ WHAT A FRAGMENT COSTS is not theoretical: a `#` never reaches the server, so a link to a thing
+ * is indistinguishable from a link to the page it is on. It cannot be served, cannot be redirected,
+ * and tells an instance nothing about what the reader wanted — which is also why the whole corpus
+ * had to ship in one packet before anybody could look at one feature of it.
+ *
+ * ⛔ A PATH FOR THE SCOPE, A FRAGMENT WITHIN IT — and that is the whole scheme rather than a
+ * compromise. A ref below a scope (`money#balance`, a slot, a question) lives ON that scope's page,
+ * so its address is that page plus where to look. The path is what the server resolves and the
+ * fragment is what the browser does, which is the division every addressable document has.
+ *
+ * ⛔ AND NO BASE MEANS NO URL TO GIVE. `v2 page --out` writes a file and a published artifact is one
+ * page; neither has an address to be durable about, so both keep fragments. The rule that a link is
+ * only written where its target will exist is unchanged — see `refLink`.
+ */
+const urlOf = (ref: string, base: string | undefined): string => {
+  const at = `#${anchorOf(ref)}`;
+  if (!base) return at;
+  const scope = ref.split("#")[0]!;
+  /** The scope IS the page, so a ref that is just a scope needs no fragment of its own. */
+  return ref === scope ? `${base}/${encodeURIComponent(scope)}` : `${base}/${encodeURIComponent(scope)}${at}`;
+};
+
 /** What each slot asks. ⛔ Imported meaning, not a third copy — see `SLOT_ASKS` in the schema. */
 const SLOT_LABEL: Record<SlotName, string> = {
   may: "may",
@@ -205,12 +242,17 @@ function refLink(ref: string, ctx: Ctx, label?: string): string {
    * Same-scope-ness was never the property that mattered. Whether the anchor gets rendered is.
    */
   if (within) {
+    /**
+     * ⛔ THE DURABLE FORM EVEN THOUGH THE TARGET IS RIGHT HERE, which is the change Peter asked for.
+     * A reader who has found the thing wants to be able to send somebody to it, and a fragment on
+     * its own is only an address if you already know which page you were on.
+     */
     return ctx.anchors.has(ref)
-      ? `<a href="#${anchorOf(ref)}">${esc(text)}</a>`
+      ? `<a href="${esc(urlOf(ref, ctx.base))}">${esc(text)}</a>`
       : `<span class="unlinked" title="nothing on this page answers that directly">${esc(text)}</span>`;
   }
   if (!ctx.base) return `<span class="unlinked" title="filed under ${esc(scope)}, which this page does not contain">${esc(text)}</span>`;
-  return `<a href="${esc(ctx.base)}/${esc(scope)}#${anchorOf(ref)}">${esc(text)}</a>`;
+  return `<a href="${esc(urlOf(ref, ctx.base))}">${esc(text)}</a>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -1920,7 +1962,16 @@ function renderCard(
   scopeId: string,
   list: "why" | "risk" | "measure" | "instrument",
   card: { id: string; says: string; target?: string; mitigated_by?: string; feeds?: string[] },
-  interactive: boolean
+  interactive: boolean,
+  /**
+   * Where this page is served from, so the measures a card feeds are addressable.
+   *
+   * ⛔ PASSED RATHER THAN DEFAULTED, because a default of "no base" is what silently keeps a
+   * fragment. The two renders that genuinely have no address — a file and a published artifact —
+   * pass `undefined` from the one place that knows it, and there is nowhere else for the answer
+   * to be guessed.
+   */
+  base: string | undefined
 ): string {
   const ref = `${scopeId}#${list}#${card.id}`;
   const st = stampFor(corpus, ref);
@@ -1937,7 +1988,7 @@ function renderCard(
        */
       card.feeds?.length
         ? `<p class="frame-extra"><span class="k">tells us</span> ${card.feeds
-            .map((f) => `<a href="#${anchorOf(`${scopeId}#measure#${f}`)}">${esc(f)}</a>`)
+            .map((f) => `<a href="${esc(urlOf(`${scopeId}#measure#${f}`, base))}">${esc(f)}</a>`)
             .join(", ")}</p>`
         : ""
     }
@@ -2835,7 +2886,7 @@ function renderNav(
         scope.id === here
           ? `<strong>${label}</strong>`
           : holdsIt
-            ? `<a href="#${anchorOf(scope.id)}" data-goto="${esc(scope.id)}">${label}</a>`
+            ? `<a href="${esc(urlOf(scope.id, base))}" data-goto="${esc(scope.id)}">${label}</a>`
             : base
               ? `<a href="${esc(base)}/${esc(scope.id)}">${label}</a>`
               : `<span class="unlinked" title="not on this page">${label}</span>`;
@@ -3321,7 +3372,7 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
          */
         marked("prototype", renderPrototype(protoScreens, protoPromises, theWalk, (corpus.prototypes ?? []), selectionOf(corpus), served)) +
         (full("settings") ? marked("settings", renderSettings(corpus)) : stub("settings", "view-settings", "What steers this", false)) +
-        (full("subsystems") ? marked("subsystems", renderSubsystems(corpus)) : stub("subsystems", "view-subsystems", "How it works", false)) +
+        (full("subsystems") ? marked("subsystems", renderSubsystems(corpus, opts.linkBase)) : stub("subsystems", "view-subsystems", "How it works", false)) +
         `<section class="view" id="view-overview" data-view="overview" data-ref="${esc(scopeId)}" data-label="Overview">
            <div class="sub-view" data-tabs="product" data-sub-view="queue" data-ref="queue" data-label="Queue">
              ${
@@ -3641,7 +3692,7 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
               (() => {
                 const sc = corpus.scopes.find((x) => x.scope.id === g.scope)!.scope;
                 const cards = (list: "why" | "risk" | "measure" | "instrument", held: typeof sc.why) =>
-                  held.map((c) => renderCard(corpus, g.scope, list, c, !!opts.interactive)).join("");
+                  held.map((c) => renderCard(corpus, g.scope, list, c, !!opts.interactive, opts.linkBase)).join("");
                 const none = (what: string, how: string) =>
                   `<p class="owes">Nothing here says ${what}. ${how}</p>`;
                 /** ⛔ Inside the feature's view, so it appears and disappears with the feature. */
@@ -3759,7 +3810,7 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
                     0
                   );
                   const ready = a.acceptable.filter((r: string) => under.some((u) => r.startsWith(`${u}#`))).length;
-                  return `<li><a href="#${anchorOf(k.scope.id)}" data-goto="${esc(k.scope.id)}">${line(
+                  return `<li><a href="${esc(urlOf(k.scope.id, ctx.base))}" data-goto="${esc(k.scope.id)}">${line(
                     k.scope.title || k.scope.id
                   )}</a> <span class="n">${behaviours} behaviour${behaviours === 1 ? "" : "s"}${
                     ready ? ` · ${ready} ready to agree to` : ""
@@ -6819,10 +6870,21 @@ const VIEW_SWITCH = `<script>
      * ⛔ And replaceState when arriving BY history, or going back would push a new entry for the
      * place it just returned to and trap somebody between two views.
      */
-    const at = "#" + (name === "overview" ? "view-overview" : "at-" + name);
+    /**
+     * ⛔ THE WHOLE ADDRESS, NOT JUST THE FRAGMENT. Peter: *"we should have durable links for
+     * everything in product os"*. The address bar is where a reader copies a link from, so moving
+     * within the page has to leave a URL somebody else can open — and /<base>/<scope> is served.
+     *
+     * ⛔ THE FRAGMENT IS KEPT TOO, and it is not redundant. The server resolves the path and the
+     * browser resolves the fragment; arriving at the path alone shows the scope as that page's
+     * Overview, which is right, and arriving with the fragment also puts the reader at the section
+     * on a page that holds several.
+     */
+    const tail = name === "overview" ? "#view-overview" : "#at-" + name;
+    const at = BASE && name !== "overview" ? BASE + "/" + encodeURIComponent(name) + tail : tail;
     try {
       if (fromHistory) history.replaceState(null, "", at);
-      else if (location.hash !== at) history.pushState(null, "", at);
+      else if (location.pathname + location.hash !== at) history.pushState(null, "", at);
     } catch {}
   };
 
@@ -6879,9 +6941,48 @@ const VIEW_SWITCH = `<script>
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") setOpen(false); });
   // ⛔ An anchor from elsewhere on the page — "decide it", a grid row, a blocks ref — must bring its
   // view with it, or following a link inside a hidden section does nothing at all.
+  /**
+   * Where this page is served from, read off the address bar.
+   *
+   * ⛔ THE SAME ANSWER THE FETCHES ALREADY USE, and deliberately not a second derivation — DEFER
+   * computes exactly this and the comment there records what happened when it was read off a link
+   * instead. Empty for a page with no server, which is the case that must keep fragments.
+   */
+  const BASE = (function () {
+    const m = location.pathname.match(/^(.*?\\/v2)(?:\\/|$)/);
+    return m ? m[1] : "";
+  })();
+
   document.addEventListener("click", (e) => {
-    const a = e.target.closest && e.target.closest('a[href^="#"]');
+    const a = e.target.closest && e.target.closest("a[href]");
     if (!a) return;
+    /**
+     * ⛔ A DURABLE LINK TO SOMEWHERE ON THIS PAGE IS STILL A JUMP, NOT A RELOAD.
+     *
+     * Making every ref link a real URL would otherwise trade an instant switch for a full fetch of
+     * a 3 MB page to land on a section already in the document. So: if the link's own path is the
+     * one we are on, or it names a view this page holds, handle it here — and let the browser have
+     * it otherwise, which is what makes the link durable in the first place.
+     */
+    const raw = a.getAttribute("href") || "";
+    if (raw.indexOf("#") !== 0) {
+      let u;
+      try { u = new URL(a.href, location.href); } catch (err) { return; }
+      if (u.origin !== location.origin) return;
+      const named = decodeURIComponent(u.pathname.replace(/^.*\\/v2\\/?/, ""));
+      const holds = named && views().some((v) => v.dataset.view === named);
+      if (u.pathname !== location.pathname && !holds) return;
+      e.preventDefault();
+      if (named) show(named, true);
+      else if (u.hash) {
+        const target = document.querySelector(u.hash);
+        const view = target && target.closest("section.view");
+        if (view && view.hidden) show(view.dataset.view, true);
+        if (target && target.scrollIntoView) target.scrollIntoView({ block: "start" });
+      }
+      window.scrollTo(0, 0);
+      return;
+    }
     /**
      * ⛔ A data-goto ANYWHERE IS HONOURED, not only inside the menu.
      *
@@ -8476,7 +8577,7 @@ function renderSettings(corpus: Corpus): string {
  * the furniture of product truth is the exact mistake `packet.ts` made when it printed "accepted
  * separately" on rules nobody had stamped.
  */
-function renderSubsystems(corpus: Corpus): string {
+function renderSubsystems(corpus: Corpus, base: string | undefined): string {
   if (!corpus.capabilities.length) return "";
   const subs = corpus.capabilities.map((x) => x.capability);
   const titleOf = (id: string) => subs.find((s) => s.id === id)?.title ?? id;
@@ -8493,7 +8594,7 @@ function renderSubsystems(corpus: Corpus): string {
     const [scopeId, exId] = ref.split("#");
     const sc = corpus.scopes.find((s) => s.scope.id === scopeId)?.scope;
     const ex = sc?.exchanges.find((e) => e.id === exId);
-    return `<a href="#${anchorOf(`${scopeId}#${exId}`)}">${line(ex?.title ?? ref)}</a>`;
+    return `<a href="${esc(urlOf(`${scopeId}#${exId}`, base))}">${line(ex?.title ?? ref)}</a>`;
   };
 
   /**
