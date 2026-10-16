@@ -17,6 +17,7 @@ import os from "node:os";
 import { watchCorpus } from "../dist/v2/watch.js";
 import { fileNote } from "../dist/v2/notes.js";
 import { perform } from "../dist/v2/acts.js";
+import { loadCorpus } from "../dist/v2/load.js";
 
 const settle = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -51,8 +52,18 @@ test("it says nothing until something is recorded, then says what", async () => 
   const r = perform(dir, "accept", { target: "money#see-a-balance" }, { by: "dana", via: "page" });
   assert.equal(r.ok, true, r.ok ? "" : r.why);
   await settle(250);
+  /**
+   * ⛔ ONE PRESS, ONE LINE — AND THIS PRESS WRITES EIGHT RECORDS.
+   *
+   * Accepting an exchange records an ordinary acceptance per sentence beneath it, because
+   * acceptance is per-ref. Announcing each would say "dana accepted money#see-a-balance#with"
+   * seven times over for a button pressed once, burying the acts that are somebody's own
+   * judgement — the same defect as announcing a file event instead of a record, one layer up.
+   */
   assert.equal(lines.length, 2, JSON.stringify(lines));
   assert.match(lines[1], /^ACT\s+dana accept money#see-a-balance via page/);
+  const written = loadCorpus(dir).verdicts.filter((v) => v.kind === "accept");
+  assert.ok(written.length > 2, `the press wrote ${written.length} records, so this asserts nothing`);
 
   /**
    * ⛔ ONE ANNOUNCEMENT PER RECORD, NOT PER FILE EVENT. The append-only logs are rewritten wholesale

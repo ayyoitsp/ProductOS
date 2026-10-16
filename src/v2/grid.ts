@@ -504,6 +504,40 @@ export function gateFor(corpus: Corpus, ref: string): GateResult | null {
   return { ok: blocking.length === 0, blocking };
 }
 
+/**
+ * The refs beneath one exchange that a person can be asked about — one per sentence.
+ *
+ * ⛔ ONE ENUMERATION, BECAUSE TWO SURFACES NOW NEED THE SAME LIST. `actsFor` builds the queue from
+ * it and `accept` writes a verdict per entry, so a copy here would be the recurring defect in this
+ * file: `gateFor` diverged from `check` by a single clause and made two seed exchanges permanently
+ * un-acceptable, invisibly, in both directions. A list that decides what a person is asked and a
+ * list that decides what their press covers must be the same list, or a reviewer presses once and
+ * is asked again for the sentence the two disagreed about.
+ *
+ * ⛔ `out_of_scope` is excluded deliberately: latitude is already a recorded act, and asking
+ * somebody to agree to "we deliberately do not answer this" would be asking them to stamp their own
+ * waiver.
+ *
+ * ⛔ ONE PER STATEMENT where a slot says several things, because the cards are one per statement —
+ * counting per slot made the tree say "3 to read" for a feature showing eleven cards.
+ */
+export function sentencesIn(corpus: Corpus, exchange: string): string[] {
+  const [scopeId, exId, ...rest] = exchange.split("#");
+  if (!scopeId || !exId || rest.length) return [];
+  const ex = corpus.scopes.find((s) => s.scope.id === scopeId)?.scope.exchanges.find((e) => e.id === exId);
+  if (!ex) return [];
+  const out: string[] = [];
+  for (const slot of SLOTS) {
+    const fill = ex.slots[slot];
+    if (!fill || fill.standing.kind !== "stated") continue;
+    const said = statements(fill.says);
+    /** A slot that says nothing, refuses nothing and cannot fail is a blank, not a sentence. */
+    if (!(said.length || fill.none || fill.cannot_fail || (fill.outcomes ?? []).length)) continue;
+    out.push(...(said.length > 1 ? said.map((x) => `${exchange}#${slot}#${x.id}`) : [`${exchange}#${slot}`]));
+  }
+  return out;
+}
+
 export function actsFor(corpus: Corpus): ActCount {
   const { inherited, reach } = resolveRules(corpus);
   const acceptable: string[] = [];
@@ -579,6 +613,24 @@ export function actsFor(corpus: Corpus): ActCount {
       // ⛔ A withdrawn behaviour is in no queue at all — not offered for acceptance and not
       // owing a ruling. The finding's fix text claimed both and delivered neither.
       if (existsOf(corpus, scope.id, ex.exists) === "withdrawn") continue;
+      /**
+       * ⛔ A SETTLED SENTENCE NOBODY HAS AGREED TO IS AN ACT SOMEBODY OWES.
+       *
+       * Counting only exchange-grained acceptances reported "0 acts now" over 47 written sentences,
+       * because an exchange is gated until all eight of its slots are settled. The one figure that
+       * says how much review is owed said none was.
+       *
+       * ⛔ NOT OFFERED UNTIL THE CONTEXT IS AGREED. `behaviours` is the list a person is handed —
+       * "one sentence each, settled and not yet agreed to" — so a feature whose purpose nobody has
+       * confirmed must not put its details in it. The sentences are still SHOWN; what is withheld
+       * is the ask.
+       */
+      for (const r of sentencesIn(corpus, ref))
+        if (!isAccepted(r)) {
+          written.push(r);
+          // Offered only once the feature's purpose is agreed — see contextAgreed above.
+          if (contextFor(scope.id).ok) behaviours.push(r);
+        } else agreed.push(r);
       let settled = true;
       for (const slot of SLOTS) {
         const fill = ex.slots[slot];
@@ -589,41 +641,6 @@ export function actsFor(corpus: Corpus): ActCount {
         }
         if (!fill) continue;
         const k = fill.standing.kind;
-        /**
-         * ⛔ A SETTLED SENTENCE NOBODY HAS AGREED TO IS AN ACT SOMEBODY OWES.
-         *
-         * Counting only exchange-grained acceptances reported "0 acts now" over 47 written
-         * sentences, because an exchange is gated until all eight of its slots are settled. The one
-         * figure that says how much review is owed said none was.
-         *
-         * `out_of_scope` is excluded deliberately: latitude is already a recorded act, and asking
-         * somebody to agree to "we deliberately do not answer this" would be asking them to stamp
-         * their own waiver.
-         */
-        if (k === "stated") {
-          /**
-           * ⛔ ONE PER STATEMENT, because the cards are one per statement.
-           *
-           * Counting per slot made the tree say "3 to read" for a feature showing eleven cards. Two
-           * numbers for one thing, on one screen, and the reviewer cannot tell which is the work.
-           */
-          const said = statements(fill.says);
-          const refs = said.length > 1 ? said.map((x) => `${ref}#${slot}#${x.id}`) : [`${ref}#${slot}`];
-          const anything = said.length || fill.none || fill.cannot_fail || (fill.outcomes ?? []).length;
-          /**
-           * ⛔ NOT OFFERED UNTIL THE CONTEXT IS AGREED. `behaviours` is the list a person is handed
-           * — "one sentence each, settled and not yet agreed to" — so a feature whose purpose nobody
-           * has confirmed must not put its details in it. The sentences are still SHOWN; what is
-           * withheld is the ask.
-           */
-          if (anything)
-            for (const r of refs)
-              if (!isAccepted(r)) {
-                written.push(r);
-                // Offered only once the feature's purpose is agreed — see contextAgreed above.
-                if (contextFor(scope.id).ok) behaviours.push(r);
-              } else agreed.push(r);
-        }
         if (k === "stated" || k === "out_of_scope") continue;
         settled = false;
         const slotRef = `${ref}#${slot}`;
