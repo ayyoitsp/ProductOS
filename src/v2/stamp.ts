@@ -612,6 +612,26 @@ function acceptedThroughRule(corpus: Corpus, target: string): StampState | null 
   return { state: "accepted", by: latest.by, at: latest.at, through: rule.id };
 }
 
+/**
+ * ⛔ AND THERE IS NO SUCH THING FOR AN EXCHANGE — A STAMP ANSWERS FOR THE REF IT WAS WRITTEN
+ * AGAINST, AND NOTHING ELSE.
+ *
+ * Peter: *"so acceptance is def at a per-ref level."* The exchange-level button is a bulk press in
+ * the UX, not a wider record: `accept <scope>#<exchange>` writes one ordinary acceptance per
+ * sentence beneath it — see `doAccept` in `acts.ts`. So a slot inside an accepted exchange reads
+ * accepted because somebody's verdict names that slot, not because this function walked upward.
+ *
+ * ⛔ THE REASON IS STALENESS, AND IT IS THE WHOLE POINT OF THIS FILE. A verdict carries ONE pair of
+ * hashes. An exchange's pair covers all eight slots and every criterion filed against any of them,
+ * so a stamp that reached downward could only ever answer all-or-nothing: reword one sentence and
+ * either seven untouched ones lose their agreement, or — the version somebody would reach for to
+ * avoid that — the reword is allowed to inherit an agreement nobody gave it. N records make the
+ * question local: each sentence's own hashes break when that sentence moves.
+ *
+ * The rule case above is NOT this. A rule's sentence IS the slot's entire content, placed there by
+ * the rule's own selector, so recognising one confirmation where its words actually stand is not
+ * reach — and it says `through` so no surface can show it as a direct acceptance.
+ */
 export function stampFor(corpus: Corpus, target: string): StampState {
   /**
    * ⛔ AN AGENT'S RECORD IS NOT AN ACCEPTANCE, AND THIS IS THE ONE PLACE THAT MATTERS.

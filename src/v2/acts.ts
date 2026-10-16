@@ -21,7 +21,7 @@ import path from "node:path";
 import { checkCorpus } from "./check.js";
 import { loadCorpus, type Corpus } from "./load.js";
 import { Verdict, statements, authorshipOf, type SlotName, type Authorship } from "./schema.js";
-import { gateFor } from "./grid.js";
+import { gateFor, sentencesIn } from "./grid.js";
 import { coveredBy, stampFor, staleReason } from "./stamp.js";
 import { questionsFor, settle, waive as applyWaiver, govern, withdraw as takeOut } from "./settle.js";
 import { resolveRef, nothingToDecide } from "./ref.js";
@@ -513,6 +513,26 @@ export function payloadFrom(act: Act, ref: string, body: Record<string, unknown>
  * ⛔ JSON-QUOTED, because these lines carry colons, quotes and em dashes. A naive `- ${line}`
  * produces YAML that will not parse back, which would make the field worse than absent.
  */
+/**
+ * Which press a per-sentence acceptance came from — see the bulk-press block in `doAccept`.
+ *
+ * ⛔ ONE HOME FOR THE WORDING, because a second reader depends on it. The watcher emits a line per
+ * verdict record, so one press on an exchange announced itself nine times — eight of them lines
+ * nobody can act on, which is the exact noise its "one announcement per record, not per file event"
+ * comment exists to prevent. It now stays silent on the children and announces the press, and that
+ * decision is made by reading this.
+ *
+ * ⛔ A `note`, not a new field: nothing gates on it, and inventing a weaker KIND of acceptance is
+ * the design Peter ruled out — *"so acceptance is def at a per-ref level"*. What it records is how
+ * much attention was paid, which `at` (a date) cannot distinguish.
+ */
+export const bulkPressNote = (target: string): string =>
+  `agreed by one press on ${target}, not read one sentence at a time`;
+
+/** Whether an acceptance was written by a press on something above it. */
+export const wasBulkPressed = (note: string | undefined): boolean =>
+  typeof note === "string" && note.startsWith("agreed by one press on ");
+
 function coveredTextLines(cover: { reads?: unknown }, indent = "    "): string[] {
   const reads = Array.isArray(cover.reads) ? (cover.reads as unknown[]).map(String) : [];
   if (!reads.length) return [];
@@ -837,11 +857,74 @@ function doAccept(dir: string, { target }: AcceptPayload, consent: Consent): Out
     /** ⛔ The words, not only their hash — see `covered_text` in the schema. */
     ...coveredTextLines(c, "    "),
   ], consent);
+
+  /**
+   * ⛔ AND ONE RECORD PER SENTENCE BENEATH IT — THE EXCHANGE BUTTON IS A BULK PRESS, NOT A WIDER
+   * KIND OF ACCEPTANCE.
+   *
+   * Peter: *"two ways to 'accept truths' by a human. by UX - there should be a button at the
+   * exchange level and at the per-ref level. this flows straightforward into what is accepted."*
+   * Asked whether the exchange-level press is its own kind of record: *"so acceptance is def at a
+   * per-ref level."*
+   *
+   * What it cost to have only the exchange record: a coding agent asks "can I build this?" one
+   * sentence at a time, because a sentence is what it implements — and every sentence under a
+   * reviewed exchange answered "nobody agreed to me". Pressing the exchange button on the seed left
+   * all fifteen sentences beneath the two offered exchanges reading `never`, so work a person
+   * genuinely did review was reported as unreviewed by the only surface that matters downstream.
+   *
+   * ⛔ AND THE FIX IS NOT REACH. A single record covering sentences it was not written against
+   * would need `stampFor` to walk upward, and then staleness becomes all-or-nothing: the verdict
+   * holds ONE pair of hashes for the whole exchange, so rewording one slot would either break
+   * agreement on seven sentences nobody touched or — far worse — have to be made not to. N records
+   * make a reword break exactly the sentence that moved, with no special case anywhere.
+   *
+   * ⛔ Skipped where a DIRECT acceptance is already current, so a re-press does not pile up
+   * duplicates. A sentence reading accepted `through` a rule still gets its own record: the person
+   * pressed on this exchange, and if that rule's stamp later breaks their agreement to this
+   * sentence should not break with it.
+   */
+  const beneath = aim.kind === "exchange" ? sentencesIn(corpus, target) : [];
+  const covered: string[] = [];
+  for (const r of beneath) {
+    const already = stampFor(corpus, r);
+    if (already.state === "accepted" && !already.through) continue;
+    const cov = coveredBy(corpus, r);
+    if (!cov) continue;
+    writeVerdict(dir, "accepts.yaml", [
+      `  - kind: accept`,
+      `    target: ${r}`,
+      `    by: ${consent.by}`,
+      `    at: ${today()}`,
+      `    via: ${consent.via}`,
+      `    covers_slots: ${cov.slots}`,
+      `    covers_criteria: ${cov.criteria}`,
+      /**
+       * ⛔ WHICH PRESS IT CAME FROM, because one press now writes nine records and nothing else
+       * could tell them apart.
+       *
+       * It is NOT a weaker acceptance and no gate reads it: the person was shown every sentence
+       * under the exchange and agreed to the exchange. But "read eight sentences and agreed to each"
+       * and "agreed to the whole thing at once" are different amounts of attention, and a reader a
+       * year later is entitled to know which — `at` is a date, so the records are otherwise
+       * indistinguishable.
+       */
+      `    note: ${JSON.stringify(bulkPressNote(target))}`,
+      ...coveredTextLines(cov, "    "),
+    ], consent);
+    covered.push(r);
+  }
+
   return {
     ok: true,
     said: `accepted ${target}`,
     detail: [
       ...(rewrote ? [`re-accepted: ${flat(rewrote)}`] : []),
+      ...(covered.length
+        ? [
+            `and each of the ${covered.length} sentence${covered.length === 1 ? "" : "s"} beneath it, on its own record — so a reword breaks agreement to the sentence that moved and nothing else`,
+          ]
+        : []),
       "if any of what you read changes, check refuses this stamp rather than let it read as current",
     ],
   };
