@@ -556,8 +556,18 @@ export function coveredBy(corpus: Corpus, target: string): Covered | null {
 }
 
 export type StampState =
-  /** ⛔ `through` names the RULE whose confirmation covers this ref — see `acceptedThroughRule`. */
-  | { state: "accepted"; by: string; at: string; through?: string }
+  /**
+   * ⛔ `through` names the RULE whose confirmation covers this ref — see `acceptedThroughRule`, and
+   * `Verdict.through` for the other way it gets here: a person stating one sentence that settles
+   * several claims at once.
+   *
+   * ⛔ `read` IS SOFTWARE'S ACCOUNT OF WHY THAT SENTENCE REACHES HERE, AND IT TRAVELS WITH THE NAME
+   * OF WHOEVER READ IT. The acceptance is `by` a person; the reach of it is an inference, and the
+   * two must not be presentable as one sentence. They are one object here so that a surface cannot
+   * take the reasoning without taking the name attached to it — the `chose` / `option_said`
+   * arrangement, one level up.
+   */
+  | { state: "accepted"; by: string; at: string; through?: string; read?: { says: string; by?: string } }
   | { state: "claim-changed"; by: string; at: string }
   | { state: "criteria-changed"; by: string; at: string }
   | { state: "both-changed"; by: string; at: string }
@@ -601,15 +611,46 @@ function acceptedThroughRule(corpus: Corpus, target: string): StampState | null 
   const { inherited } = resolveRules(corpus);
   const rule = inherited.get(target);
   if (!rule) return null;
-  /** ⛔ Direct lookup, not `stampFor` — a rule cannot be inherited from a rule, so there is no recursion. */
-  const accepts = corpus.verdicts.filter((v) => v.kind === "accept" && v.target === rule.id && v.via !== "agent");
-  if (!accepts.length) return null;
+  const stands = ruleStanding(corpus, rule.id);
+  if (stands.standing !== "accepted") return null;
+  return { state: "accepted", by: stands.by, at: stands.at, through: rule.id };
+}
+
+/**
+ * Whether a rule's own sentence is still standing exactly as somebody agreed to it.
+ *
+ * ⛔ ONE PRECONDITION, TWO ROUTES INTO IT — AND THE SECOND IS WHY THIS IS A FUNCTION.
+ *
+ * `acceptedThroughRule` has always asked this: a rule whose statement supplies a slot entirely
+ * reaches that slot, but only while the statement is the one that was confirmed. The second route is
+ * `Verdict.through`: a person states a sentence, software works out which claims it settles, and
+ * each of those claims carries a verdict naming the sentence. That verdict must stand or fall with
+ * the same sentence, by the same test, or there are two answers to one question — and the one that
+ * would have been written by hand is the one that forgets to go stale.
+ *
+ * ⛔ `reworded` AND `never` ARE DIFFERENT ANSWERS AND ARE KEPT APART. Reworded means a person did
+ * agree and what they agreed to has moved, which is a question for them and worth showing with
+ * their name on it. Never means nothing was ever agreed here — no acceptance, or one recorded by
+ * software, or a `through` naming a rule that does not exist. Collapsing them would tell a reviewer
+ * their stale acceptance never happened.
+ *
+ * ⛔ Direct lookup, not `stampFor` — a rule cannot be inherited from a rule, so there is no recursion.
+ */
+type RuleStanding =
+  | { standing: "accepted"; by: string; at: string }
+  | { standing: "reworded" }
+  | { standing: "never" };
+
+function ruleStanding(corpus: Corpus, ruleId: string): RuleStanding {
+  const accepts = corpus.verdicts.filter((v) => v.kind === "accept" && v.target === ruleId && v.via !== "agent");
+  if (!accepts.length) return { standing: "never" };
   const latest = accepts[accepts.length - 1]!;
-  const now = coveredBy(corpus, rule.id);
-  if (!now) return null;
+  const now = coveredBy(corpus, ruleId);
+  /** No such rule — so nothing was accepted on its behalf, whatever a verdict says about it. */
+  if (!now) return { standing: "never" };
   /** ⛔ A reworded rule stops reaching, exactly as a reworded claim stops counting where it was stamped. */
-  if (latest.covers_slots !== now.slots || latest.covers_criteria !== now.criteria) return null;
-  return { state: "accepted", by: latest.by, at: latest.at, through: rule.id };
+  if (latest.covers_slots !== now.slots || latest.covers_criteria !== now.criteria) return { standing: "reworded" };
+  return { standing: "accepted", by: latest.by, at: latest.at };
 }
 
 /**
@@ -650,15 +691,63 @@ export function stampFor(corpus: Corpus, target: string): StampState {
   /** ⛔ Nobody stamped this ref — but a confirmed rule may already supply every word of it. */
   if (!accepts.length) return acceptedThroughRule(corpus, target) ?? { state: "never" };
   const latest = accepts[accepts.length - 1]!;
+  const meta = { by: latest.by, at: latest.at };
+  /**
+   * ⛔ AN ACCEPTANCE REACHED THROUGH A SENTENCE LASTS EXACTLY AS LONG AS THE SENTENCE.
+   *
+   * `Verdict.through` is the second way truth gets accepted: a person states one rule — *"folders
+   * are restricted to be linked to a single deal"* — and every claim that statement verifies is
+   * settled, with their sentence logged as the proof. One human act, N records.
+   *
+   * ⛔ WHICH IS A HOLE UNLESS THIS LINE IS HERE, AND THE HOLE IS THE ONE THIS FILE OPENS ON. The N
+   * records carry their own target's hashes, and a claim the statement reaches need not inherit the
+   * rule — that is the whole point, the sentence verifies a claim written in other words. So
+   * rewording the rule moves NOTHING those verdicts hash: measured on the seed,
+   * `money#record-earning#answer` hashes byte-identically before and after
+   * `a-kid-sees-only-their-own` is reversed. Without this, one sentence settles seven claims and the
+   * seven go on standing after the sentence is reversed or its own acceptance withdrawn — verbatim
+   * the failure the header describes, arriving by a new route and invisible to every existing check.
+   *
+   * ⛔ THE SAME TEST AS `acceptedThroughRule`, THROUGH THE SAME FUNCTION, so the two routes cannot
+   * disagree about when a rule is standing. It needs no extra data: the rule's own verdict carries
+   * its hashes.
+   *
+   * ⛔ AND IT FALLS BACK RATHER THAN REFUSING. A slot whose words the rule supplies entirely is
+   * accepted on the rule's own confirmation anyway — withdrawing the reading must not withdraw that.
+   */
+  if (latest.through) {
+    const stands = ruleStanding(corpus, latest.through);
+    if (stands.standing !== "accepted")
+      return (
+        acceptedThroughRule(corpus, target) ??
+        (stands.standing === "reworded"
+          ? /** They did agree, and what they stated has moved — `staleReason` names a reworded rule. */
+            { state: "claim-changed", ...meta }
+          : /** Nothing a person agreed to stands behind this at all. */
+            { state: "never" })
+      );
+  }
   const now = coveredBy(corpus, target);
   if (!now) return { state: "never" };
   const slotStale = latest.covers_slots !== now.slots;
   const critStale = latest.covers_criteria !== now.criteria;
-  const meta = { by: latest.by, at: latest.at };
   if (slotStale && critStale) return { state: "both-changed", ...meta };
   if (slotStale) return { state: "claim-changed", ...meta };
   if (critStale) return { state: "criteria-changed", ...meta };
-  return { state: "accepted", ...meta };
+  /**
+   * ⛔ Reached-through says so, so no surface can print it as a direct acceptance — and the reading
+   * travels with the name of whoever made it, never with `by`.
+   */
+  return {
+    state: "accepted",
+    ...meta,
+    ...(latest.through
+      ? {
+          through: latest.through,
+          ...(latest.reading ? { read: { says: latest.reading, by: latest.read_by } } : {}),
+        }
+      : {}),
+  };
 }
 
 export function staleReason(s: StampState): string | null {
