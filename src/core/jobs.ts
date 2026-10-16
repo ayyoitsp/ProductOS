@@ -278,6 +278,17 @@ export const AREAS: Area[] = [
        */
       "src/v2/level.ts",
       "src/v2/settle.ts",
+      /**
+       * ⛔ WHICH CLAIMS ONE STATED SENTENCE SETTLES, AND WHICH IT ONLY ASKS ABOUT. Filed under
+       * `derive` rather than beside `acts.ts` because it decides nothing and writes nothing: it
+       * computes, from a sentence and a selector, the list a person reads before they press. The
+       * press itself is an act.
+       *
+       * ⛔ AND IT IS THE FILE ON THIS MAP WHERE AN OVER-REACH WOULD BE INVISIBLE AFTERWARDS — one
+       * human sentence marking many claims accepted — so a reviewer asking "could this record
+       * agreement nobody gave" has exactly one place to look.
+       */
+      "src/v2/applies.ts",
       "src/v2/acts.ts",
       "src/v2/record.ts",
       "src/v2/spoken.ts",
