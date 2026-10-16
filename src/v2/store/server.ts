@@ -273,8 +273,20 @@ export async function migrateWithRetries(
 export async function startHosted(
   config: HostedConfig = configFromEnv(),
 ): Promise<{ server: http.Server; url: string; close: () => Promise<void> }> {
+  /**
+   * ⛔ SAID BEFORE IT HAPPENS, BECAUSE THIS IS WHERE A BOOT HANGS AND IT HUNG SILENTLY. With 885
+   * abandoned directories this walk took longer than anybody waited, and the first line in the log
+   * was still the one from the previous boot — so a startup stuck here looked exactly like a dead
+   * process. Announcing it first turns "nothing is listening and nothing says why" into one line
+   * naming the step.
+   */
+  process.stderr.write("[productos] sweeping abandoned scratch directories\n");
   const swept = sweepScratch();
-  if (swept.length) process.stderr.write(`[productos] swept ${swept.length} abandoned scratch directories\n`);
+  process.stderr.write(
+    swept.length
+      ? `[productos] swept ${swept.length} abandoned scratch directories\n`
+      : "[productos] no abandoned scratch directories\n",
+  );
 
   const { db, close } = openStore(config.databaseUrl);
 
