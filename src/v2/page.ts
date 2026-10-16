@@ -34,6 +34,8 @@ import { wireParts } from "./wire.js";
 import { questionsFor, descendants, type Question } from "./settle.js";
 import { resolveRef } from "./ref.js";
 import { demonstrationOf } from "./demonstrate.js";
+/** ⛔ The packet's own readiness verdict, not a second one — see `readinessOf`. */
+import { readinessOf } from "./packet.js";
 import { decisionsOn, decisionsUnder, howItWasDecided, type Decision } from "./record.js";
 import { holdsOn, whyHeld } from "./held.js";
 import { selectionOf, gapsIn, type Selection, type Option } from "./selection.js";
@@ -296,7 +298,8 @@ export interface PageOptions {
  * is mechanical: a cross-scope target needs a `base`, and without one the ref renders as text.
  */
 function refLink(ref: string, ctx: Ctx, label?: string): string {
-  const text = label ?? ref;
+  /** ⛔ The words, never the address — see `refTitle`. A caller with a better label still wins. */
+  const text = label ?? refTitle(ctx.corpus, ref);
   const scope = ref.split("#")[0]!;
   const within = ctx.here.includes(scope);
   /**
@@ -310,24 +313,78 @@ function refLink(ref: string, ctx: Ctx, label?: string): string {
    *
    * Same-scope-ness was never the property that mattered. Whether the anchor gets rendered is.
    */
-  if (within) {
-    /**
-     * ⛔ THE DURABLE FORM EVEN THOUGH THE TARGET IS RIGHT HERE, which is the change Peter asked for.
-     * A reader who has found the thing wants to be able to send somebody to it, and a fragment on
-     * its own is only an address if you already know which page you were on.
-     */
-    return ctx.anchors.has(ref)
-      ? `<a href="${esc(ctx.url(ref))}">${esc(text)}</a>`
-      : `<span class="unlinked" title="nothing on this page answers that directly">${esc(text)}</span>`;
-  }
-  if (!ctx.base) return `<span class="unlinked" title="filed under ${esc(scope)}, which this page does not contain">${esc(text)}</span>`;
+  /**
+   * ⛔ THE ANCHOR IS ASKED FIRST, BEFORE WHICH SCOPE THIS IS FILED UNDER.
+   *
+   * An org-wide rule's id carries no scope, so `within` was false for every one of them and the
+   * rule's own question card — rendered on this page, with this anchor — came out as unlinked text
+   * saying "filed under …, which this page does not contain". It was on the page.
+   *
+   * ⛔ AND THE DESTINATION IS `ctx.url`, NOT A BARE ANCHOR. The durable form is the menu path, so a
+   * reader who has found the thing can send somebody to it — a fragment on its own is only an
+   * address if you already know which page you were on. Both halves of this were written at once by
+   * different sessions; the ordering fix is one, the URL form is the other.
+   */
+  if (ctx.anchors.has(ref)) return `<a href="${esc(ctx.url(ref))}">${esc(text)}</a>`;
+  if (within) return `<span class="unlinked" title="nothing on this page answers that directly">${esc(text)}</span>`;
+  /** ⛔ No scope id in the tooltip: a title is something a reader sees, and that is an address. */
+  if (!ctx.base) return `<span class="unlinked" title="this page does not contain it">${esc(text)}</span>`;
   return `<a href="${esc(ctx.url(ref))}">${esc(text)}</a>`;
+}
+
+/**
+ * Any ref, in the words somebody wrote — never the address it is filed under.
+ *
+ * ⛔ A REF IS SUBSTRATE AND IT WAS REACHING THE READER. Question cards were headed
+ * `money#record-spending#after`, rules printed their slug under the sentence, and
+ * *"answering this settles 1 other slot"* named the slot by id. Every one of those is an address:
+ * it exists so that two surfaces can agree which thing they mean, and this file's own rule is that
+ * nothing a reader sees mentions the storage.
+ *
+ * ⛔ AND IT FALLS BACK TO WORDS, NOT TO THE REF. A ref this corpus cannot name is a bug in the
+ * corpus or in whoever built the ref — printing it would be the leak this function exists to stop,
+ * dressed up as a diagnostic.
+ */
+function refTitle(corpus: Corpus, ref: string): string {
+  const [sid, eid, slot] = ref.split("#");
+  const sc = corpus.scopes.find((x) => x.scope.id === sid)?.scope;
+  /** A bare rule id — one segment, no scope under it. */
+  if (!eid) {
+    const r = corpus.rules.find((x) => x.rule.id === ref);
+    if (r) return plain(r.rule.statement || r.rule.standing?.question || "a rule that holds everywhere");
+    return plain(sc?.title ?? "somewhere in this product");
+  }
+  const ex = sc?.exchanges.find((x) => x.id === eid);
+  const asks = SLOT_ASKS_SHORT[slot as SlotName];
+  const head = plain(ex?.title ?? "");
+  if (head && asks) return `${head} — ${asks}`;
+  if (head) return head;
+  if (asks) return asks;
+  return plain(sc?.title ?? "somewhere in this product");
+}
+
+/**
+ * The address, behind a press, for whoever needs to carry it somewhere else.
+ *
+ * ⛔ IT IS A COPY BUTTON RATHER THAN TEXT, which is the whole trade. An agent grooming a ticket and
+ * a session running the CLI both need the ref; a person reviewing never does, and it was printed
+ * for both. On a button it costs one press for whoever wants it and no line of the page for
+ * everybody who does not.
+ */
+function copyRef(ref: string): string {
+  return `<button type="button" class="copy-ref" data-copy="${esc(ref)}" title="Copy the address of this, for a ticket or the command line" aria-label="Copy the address of this">copy address</button>`;
 }
 
 // ---------------------------------------------------------------------------
 // The questions — the reviewer's actual work, so they come first.
 
 interface Ctx {
+  /**
+   * ⛔ CARRIED, SO A REF CAN BE TURNED INTO WORDS WHEREVER ONE IS RENDERED. Every helper that draws
+   * a link had the ref and not the corpus, so the only label it could produce was the ref itself —
+   * which is how an address ended up at the head of every question card.
+   */
+  corpus: Corpus;
   base?: string;
   /**
    * The address of a ref, as a path through the menu.
@@ -446,10 +503,26 @@ function renderQuestion(q: Question, i: number, past: Decision[], ctx: Ctx): str
   }
 
   return `
-    <article class="q${q.parked ? " parked" : ""}" id="${anchorOf(q.ref)}" data-ref="${esc(q.ref)}" data-label="${esc(`undecided · ${q.ref}`)}">
+    <article class="q${q.parked ? " parked" : ""}" id="${anchorOf(q.ref)}" data-ref="${esc(q.ref)}" data-label="${esc(`undecided · ${refTitle(ctx.corpus, q.ref)}`)}">
       <header>
-        <span class="ref">${esc(q.ref)}</span>
+        ${
+          /**
+           * ⛔ THE ADDRESS IS GONE FROM THE HEAD OF THE CARD. Every card in the queue was headed
+           * `money#record-spending#after` or `what-a-kid-sees-of-a-sibling` — ids, and the project's
+           * own rule is that the substrate never reaches a reader.
+           *
+           * ⛔ AND NOTHING TOOK ITS PLACE, which is the part worth saying. The obvious repair was to
+           * print the title there instead, and that is a second copy: the question is the heading
+           * immediately below and where it applies is the line under that. A header restating
+           * either would be a third rendering of a fact with one home.
+           *
+           * The ref itself is still reachable — one press, for whoever has to carry it into a
+           * ticket or a command.
+           */
+          ""
+        }
         <span class="kind">${esc(q.kind)}</span>
+        ${copyRef(q.ref)}
         ${q.parked ? `<span class="badge parked">parked</span>` : ""}
         ${
           q.conflictsWith.length
@@ -470,9 +543,16 @@ function renderQuestion(q: Question, i: number, past: Decision[], ctx: Ctx): str
                * wrong: an unsettled rule has no statement, so it governs nothing, so no grid lists
                * it. This card IS the rule's only home on the page.
                */
+              /**
+               * ⛔ AND A RULE'S LABEL IS NOT PRINTED AS IT ARRIVES. `questionsFor` builds it as
+               * *"Every exchange like these: money#see-a-balance"* — a sentence with an address
+               * inside it, which reached the reader intact because this trusted the string. A rule
+               * reaches whatever its selector reaches; the behaviours it is holding up are named,
+               * one per line, by the "answering this settles" list further down this same card.
+               */
               q.ref.includes("#")
                 ? refLink(`${q.scope}#${q.exchange}`, ctx, q.exchangeTitle)
-                : line(q.exchangeTitle)
+                : "every behaviour this rule reaches"
             }${q.slot ? ` · ${esc(SLOT_LABEL[q.slot] ?? q.slot)}` : ""}</p>`
           : ""
       }
@@ -489,7 +569,10 @@ function renderQuestion(q: Question, i: number, past: Decision[], ctx: Ctx): str
         q.blocks.length
           ? `<p class="blocks">answering this settles <strong>${q.blocks.length}</strong> other ${
               q.blocks.length === 1 ? "slot" : "slots"
-            }: ${q.blocks.map((b) => `<code>${refLink(b, ctx)}</code>`).join(" ")}</p>`
+            }: ${
+              /** ⛔ Not in `<code>` any more: these are sentences now, and code type says "address". */
+              q.blocks.map((b) => refLink(b, ctx)).join("; ")
+            }</p>`
           : ""
       }
       ${options ? `<div class="opts">${options}</div>` : ""}
@@ -1698,6 +1781,74 @@ function renderWorklist(
  * So: one sentence, what demonstrates it, where it came from, and the only question a person can
  * answer about it.
  */
+/**
+ * ⛔ THE DECISION FIRST, THEN THE PICTURE.
+ *
+ * A reviewer opening a feature at 1440px met the screen panel, a whole viewport of it, then four
+ * yellow boxes each saying *"Nothing here says…"*, and reached the first thing they could judge on
+ * the second screen. The one fact they came for — can this be built, and what stops it — was not
+ * on the page at all, in any position: the packet had known the answer since it was written and no
+ * rendered surface asked it.
+ *
+ * ⛔ AND IT IS THE PACKET'S ANSWER. `readinessOf` returns the hole list the packet's own banner is
+ * built from, so the page and the artifact a builder receives cannot disagree about whether this is
+ * ready. Counting unsettled slots here instead would have been a second derivation of a verdict
+ * that already exists, which is the defect this project most often finds in itself.
+ *
+ * ⛔ AND NO REF REACHES THE READER. A hole comes back as `record-spending#after` — an address. It
+ * is rendered as the behaviour's title and the slot's question, which is the same fact in the words
+ * somebody can argue with.
+ */
+function featureHead(corpus: Corpus, scopeId: string, title: string, ctx: Ctx): string {
+  const verdict = readinessOf(corpus, scopeId);
+  const open = questionsFor(corpus, scopeId).filter((q) => !q.parked);
+  /**
+   * `<exchange>#<slot>` → the behaviour's own title and what the slot asks.
+   *
+   * ⛔ AN UNRESOLVED HOLE IS DESCRIBED, NEVER PRINTED. The packet addresses a hole by exchange id
+   * because a builder needs the address; a reader must never meet one. So an id this subtree cannot
+   * name comes out as the slot's question alone, which is still true and still actionable — and the
+   * one thing it may not do is fall back to the raw ref.
+   */
+  const under = descendants(corpus, scopeId);
+  const named = (hole: string): string => {
+    const part = / \(part\)$/.test(hole);
+    const [exId, slot] = hole.replace(/ \(part\)$/, "").split("#");
+    const ex = under
+      .flatMap((id) => corpus.scopes.find((s) => s.scope.id === id)?.scope.exchanges ?? [])
+      .find((x) => x.id === exId);
+    const asks = SLOT_ASKS_SHORT[slot as SlotName] ?? "";
+    const tail = `${asks}${part ? ", in part" : ""}`;
+    return ex ? `${plain(ex.title)}${tail ? ` — ${tail}` : ""}` : tail || "something nobody has written down";
+  };
+  const says = verdict
+    ? verdict.ready
+      ? `<p class="verdict ready"><b>Ready to build: yes.</b> Nothing in it is waiting on a decision.</p>`
+      : `<p class="verdict blocked"><b>Ready to build: no.</b> ${verdict.holes.length} thing${
+          verdict.holes.length === 1 ? "" : "s"
+        } here ${verdict.holes.length === 1 ? "is" : "are"} undecided, and anybody who fills ${
+          verdict.holes.length === 1 ? "it" : "one"
+        } in has invented product truth:</p>
+         <ul class="verdict-holes">${verdict.holes.map((h) => `<li>${esc(named(h))}</li>`).join("")}</ul>`
+    : "";
+  /**
+   * ⛔ THE QUESTIONS, NOT A COUNT OF THEM. A number sends a reader looking for the queue; the
+   * questions themselves are the work, and each links to the card that answers it — which is the
+   * part of this product the review called the best thing in it, and is not reproduced here.
+   */
+  const asks = open.length
+    ? `<p class="verdict-asks">${open.length} question${open.length === 1 ? "" : "s"} nobody has answered:</p>
+       <ul class="verdict-qs">${open
+         .map((q) => `<li>${refLink(q.ref, ctx, plain(q.asks).split(/(?<=\?)\s/)[0] ?? plain(q.asks))}</li>`)
+         .join("")}</ul>`
+    : "";
+  return `<header class="feature-head">
+    <h3 class="feature-title">${title}</h3>
+    ${says}
+    ${asks}
+  </header>`;
+}
+
 function renderBehaviours(
   corpus: Corpus,
   scopeId: string,
@@ -1969,9 +2120,27 @@ function renderBehaviours(
    * dynamically and not do the screen reload thing."* The id has to be stable across renders, or a
    * refresh would have nothing to swap into.
    */
+  /**
+   * ⛔ THREE COUNTS DISAGREED AND ALL THREE WERE RIGHT. The tab said Money 21, this heading said 22
+   * behaviours, the sub-tab said Behaviors 4 — and they were counting three different things under
+   * two names:
+   *
+   *   · 4  — behaviours. Four things a person can ask this feature to do.
+   *   · 22 — SENTENCES. Every slot anybody has filled in across those four, which is what this table
+   *          has a row for and what `rows` has always been. Calling them "behaviours" was the bug.
+   *   · 21 — the 22 minus the one nobody has settled: sentences somebody still has to READ. The nav
+   *          chip's own tooltip said "to read" and the pill beside it said nothing.
+   *
+   * ⛔ SO THE FIX IS THE NAMES, NOT THE ARITHMETIC. Forcing them to one number would have deleted
+   * two true facts to make a third one tidy. The behaviour count here is `scope.exchanges.length` —
+   * the same expression the sub-tab reads, so the two cannot drift.
+   */
+  const behaviours = entry.scope.exchanges.length;
   return `<section class="behaviours" data-sync="behaviours-${esc(scopeId)}">
-    <h3 class="sub">${rows.length} behaviour${rows.length === 1 ? "" : "s"} · ${confirmed} confirmed</h3>
-    <p class="what-next">One sentence at a time. ✓ if it is right, ✎ to reword it, 🗑 to take it out. Tap a row for what shows it, the screen, and what has been decided.</p>
+    <h3 class="sub">${rows.length} sentence${rows.length === 1 ? "" : "s"} across ${behaviours} behaviour${
+      behaviours === 1 ? "" : "s"
+    } · ${confirmed} confirmed</h3>
+    <p class="what-next">One sentence at a time. <b>Agree</b> if it is right, <b>Reword</b> to change it, <b>Remove</b> to take it out. Tap a row for what shows it, the screen, and what has been decided.</p>
     <table class="beh-table">
       <thead><tr><th>What the product promises</th><th></th></tr></thead>
       ${bodies}
@@ -2111,10 +2280,15 @@ function renderCard(
     ${confidenceParts(corpus, ref).why}
     ${
       interactive
-        ? `<footer class="beh-acts icons">${
-            ok ? "" : `<button class="act icon" data-act="accept" data-ref="${esc(ref)}" title="That is right">✓</button>`
-          }<button class="act icon" data-act="say" data-ref="${esc(ref)}" title="Reword it">✎</button>${
-            ok ? "" : `<button class="act icon danger" data-act="withdraw" data-ref="${esc(ref)}" title="Take it out">🗑</button>`
+        ? /** ⛔ Labelled, like the rows — one gesture, one meaning, and the same words for it. */
+          `<footer class="beh-acts icons">${
+            ok
+              ? ""
+              : `<button class="act icon" data-act="accept" data-ref="${esc(ref)}" title="That is right"><span class="glyph" aria-hidden="true">✓</span> Agree</button>`
+          }<button class="act icon" data-act="say" data-ref="${esc(ref)}" title="Reword it"><span class="glyph" aria-hidden="true">✎</span> Reword</button>${
+            ok
+              ? ""
+              : `<button class="act icon danger" data-act="withdraw" data-ref="${esc(ref)}" title="Take it out"><span class="glyph" aria-hidden="true">🗑</span> Remove</button>`
           }</footer>`
         : ""
     }
@@ -2174,9 +2348,19 @@ function behRow(
         r.settled ? "" : `<p class="owes">Not settled yet — ${esc(r.standing.replace(/_/g, " "))}. It is in the queue.</p>`
       }</td>
       <td class="row-acts">${
+        /**
+         * ⛔ THE BUTTONS SAY WHAT THEY DO. Three glyphs — ✓, ✎, a bin — on every row of the one
+         * table that IS the review job, and nothing on the page naming any of them. A tooltip is
+         * not a label: it cannot be scanned down a column, it does not survive the screenshot this
+         * corpus gets reviewed in, and on a touch screen it does not exist — the same argument this
+         * file already settled for the confidence chip.
+         *
+         * ⛔ AND THE GLYPH STAYS BESIDE THE WORD. It is what the eye finds on the two-hundredth row;
+         * the word is what tells the first-time reader what it will do.
+         */
         r.settled && interactive
-          ? `${ok ? "" : `<button class="act icon" data-act="accept" data-ref="${esc(r.sref)}" title="That is right — confirm it">✓</button>`}<button class="act icon" data-act="say" data-ref="${esc(r.sref)}" title="Reword it">✎</button>${
-              ok ? "" : `<button class="act icon danger" data-act="withdraw" data-ref="${esc(r.sref)}" title="Take it out — nobody has agreed to this yet">🗑</button>`
+          ? `${ok ? "" : `<button class="act icon" data-act="accept" data-ref="${esc(r.sref)}" title="That is right — confirm it"><span class="glyph" aria-hidden="true">✓</span> Agree</button>`}<button class="act icon" data-act="say" data-ref="${esc(r.sref)}" title="Reword it"><span class="glyph" aria-hidden="true">✎</span> Reword</button>${
+              ok ? "" : `<button class="act icon danger" data-act="withdraw" data-ref="${esc(r.sref)}" title="Take it out — nobody has agreed to this yet"><span class="glyph" aria-hidden="true">🗑</span> Remove</button>`
             }`
           : ""
       }</td>
@@ -2599,7 +2783,15 @@ function renderGroupRules(corpus: Corpus, scopeId: string, ctx: Ctx, homes: Map<
           <p class="beh-where">
             reaches ${hits} behaviour${hits === 1 ? "" : "s"} under ${title}${
               open ? ` · <strong>nobody has answered this</strong>` : ""
-            } · <code>${esc(r.rule.id)}</code>
+            } · ${
+              /**
+               * ⛔ THE SLUG IS GONE FROM UNDER THE SENTENCE. `a-kid-sees-only-their-own` is the
+               * address a rule is filed under, printed directly beneath the words it is filed
+               * under — the reader learns nothing from it and the project's own rule says it may
+               * not be there. Behind the copy button with every other ref.
+               */
+              copyRef(r.rule.id)
+            }
           </p>
           ${
             open
@@ -2618,8 +2810,8 @@ function renderGroupRules(corpus: Corpus, scopeId: string, ctx: Ctx, homes: Map<
                 `<footer class="beh-acts icons">${
                    stampFor(corpus, r.rule.id).state === "accepted"
                      ? ""
-                     : `<button class="act icon" data-act="accept" data-ref="${esc(r.rule.id)}" title="That is right, everywhere">✓</button>`
-                 }<button class="act icon" data-act="say" data-ref="${esc(r.rule.id)}" data-owes="then" title="Reword it">✎</button></footer>`
+                     : `<button class="act icon" data-act="accept" data-ref="${esc(r.rule.id)}" title="That is right, everywhere"><span class="glyph" aria-hidden="true">✓</span> Agree</button>`
+                 }<button class="act icon" data-act="say" data-ref="${esc(r.rule.id)}" data-owes="then" title="Reword it"><span class="glyph" aria-hidden="true">✎</span> Reword</button></footer>`
           }
         </article>`;
       })
@@ -2892,11 +3084,22 @@ function renderExchanges(corpus: Corpus, scopeIds: string[], cellOf: Map<string,
  * both placements; only the stylesheet differs. Two markups for one menu is two things to keep in
  * step, and one of them is always the one nobody opened.
  */
+/**
+ * ⛔ AND THE SCREEN PANEL'S STATE IS READ HERE TOO, FOR THE SAME REASON.
+ *
+ * It starts shut — see `PROTO_FRAME` for why — and deciding that at the bottom of the body paints
+ * a whole viewport of prototype and then takes it away, which is worse than leaving it open. The
+ * two facts share this script because they share the reason: both are the reader's remembered
+ * posture, and both have to be known before the first paint.
+ */
 const NAV_PLACEMENT_BOOT = `<script>
 (function () {
   var p = "top";
+  var proto = null;
   try { p = localStorage.getItem("productos:nav") === "left" ? "left" : "top"; } catch (e) {}
+  try { proto = localStorage.getItem("productos:proto"); } catch (e) {}
   document.documentElement.dataset.nav = p;
+  if (proto === "off" || proto === null) document.documentElement.dataset.proto = "off";
 })();
 </script>`;
 
@@ -3209,7 +3412,13 @@ function renderNav(
   for (const c of inferConnections(corpus).made) derivedGoes.set(c.from, c.to);
   /** Which tabs are areas of the product, and so hold scopes of their own. */
   const areaIds = new Set(corpus.scopes.filter((x) => x.scope.in === rootId).map((x) => x.scope.id));
-  const sections: Array<{ id: string; label: string; toRead?: number }> = [
+  /**
+   * ⛔ EVERY COUNT CARRIES THE NOUN IT IS COUNTING. These five tabs each showed a bare digit and
+   * each was counting something different — screens, habits, capabilities, sentences — so "Money
+   * 21" beside a heading saying 22 and a sub-tab saying 4 read as three answers to one question
+   * when it was one answer each to three. The number cannot say which; `says` does.
+   */
+  const sections: Array<{ id: string; label: string; toRead?: number; says?: string }> = [
     { id: "overview", label: "Overview" },
     /**
      * ⛔ ITS OWN PLACE, BESIDE OVERVIEW. Peter: *"let's add a separate 'top level' menu item for the
@@ -3217,7 +3426,7 @@ function renderNav(
      * the subject and the sentences are what a press gives you. A surface trying to be both puts the
      * screen in a column too narrow to judge.
      */
-    { id: "prototype", label: "Prototype", toRead: protoScreens.length },
+    { id: "prototype", label: "Prototype", toRead: protoScreens.length, says: "screens drawn" },
     /**
      * ⛔ ITS OWN PLACE, AND DELIBERATELY NOT THE CHARTER. Peter, asked where a learned habit gets
      * reviewed: *"A settings surface on the page"*.
@@ -3232,7 +3441,7 @@ function renderNav(
      * is the complaint this file's own nav comment opens on.
      */
     ...(corpus.steers.some((x) => x.steers === "generation")
-      ? [{ id: "settings", label: "What steers this", toRead: inEffect(corpus.steers).length }]
+      ? [{ id: "settings", label: "What steers this", toRead: inEffect(corpus.steers).length, says: "habits in force" }]
       : []),
     /**
      * ⛔ ABSENT WHERE THERE ARE NO SUBSYSTEMS, for the reason the nav comment at the top of this
@@ -3249,6 +3458,7 @@ function renderNav(
             id: "subsystems",
             label: "How it works",
             toRead: corpus.capabilities.reduce((n, c) => n + c.capability.offers.length, 0),
+            says: "things the machinery offers",
           },
         ]
       : []),
@@ -3275,7 +3485,13 @@ function renderNav(
         return { id: x.scope.id, label: line(x.scope.title || x.scope.id), screens, toRead };
       })
       .sort((a, b) => b.screens - a.screens)
-      .map(({ id, label, toRead }) => ({ id, label, toRead })),
+      /**
+       * ⛔ "SENTENCES NOBODY HAS READ", WHICH IS WHAT `written` HAS ALWAYS BEEN. The chip said 21
+       * where the feature's own heading said 22 and its sub-tab said 4, and only one of the three
+       * named what it counted. These are statements somebody still owes a reading to — not
+       * behaviours, which is the sub-tab's number, and not every statement, which is the heading's.
+       */
+      .map(({ id, label, toRead }) => ({ id, label, toRead, says: "sentences nobody has read" })),
   ];
   /** view → the tab it lives under, so the row can show where you are without being told. */
   /**
@@ -3307,11 +3523,22 @@ function renderNav(
    * `data-tabs="product"` is the owner key `showSub` reads and is deliberately unchanged, because
    * renaming it would be a second edit riding along with a layout change.
    */
+  /**
+   * ⛔ A BARE NUMBER ON A TAB IS A COUNT OF NOTHING NAMED.
+   *
+   * Money 21, a heading saying 22, a sub-tab saying 4 — three counts, three different things, and
+   * the only one of the three that said what it was counting was the heading, which said it wrong.
+   * The tree rows beside these have carried a mark and a spoken name since they were built; the
+   * tabs carried the digit alone. Same shape here, so hovering or reading with a screen reader
+   * answers "twenty-one WHAT".
+   */
+  const pill = (n: number, says: string, quiet = true) =>
+    ` <span class="pill${quiet ? " quiet" : ""}" title="${esc(`${n} ${says}`)}" aria-label="${esc(`${n} ${says}`)}">${n}</span>`;
   const OVERVIEW_STRIP =
     `<div class="subtabs" data-tabs="product" hidden><button type="button" class="subtab" data-sub="queue">Queue${
-      open ? ` <span class="pill">${open}</span>` : ""
+      open ? pill(open, open === 1 ? "question nobody has answered" : "questions nobody has answered", false) : ""
     }</button><button type="button" class="subtab" data-sub="screens">Screens${
-      screens ? ` <span class="pill quiet">${screens}</span>` : ""
+      screens ? pill(screens, screens === 1 ? "screen drawn here" : "screens drawn here") : ""
     }</button><button type="button" class="subtab" data-sub="about">${aboutLabel}</button>${charterTabs}</div>`;
 
   return (
@@ -3364,10 +3591,10 @@ function renderNav(
              */
             t.id === "overview"
               ? open
-                ? ` <span class="pill">${open}</span>`
+                ? pill(open, open === 1 ? "question nobody has answered" : "questions nobody has answered", false)
                 : ""
               : t.toRead
-                ? ` <span class="pill quiet">${t.toRead}</span>`
+                ? pill(t.toRead, t.says ?? "here")
                 : ""
           }</button>` +
           /**
@@ -3645,7 +3872,8 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
    * it about where the thing sits.
    */
   const address = addressIn(opts.linkBase, trailsOf(corpus));
-  const ctx: Ctx = { base: opts.linkBase, url: address, here: ids, anchors, served };
+  /** ⛔ `corpus` too: showing a title where a ref used to be needs the thing the ref names. */
+  const ctx: Ctx = { corpus, base: opts.linkBase, url: address, here: ids, anchors, served };
   const body = `
     ${renderNav(
       corpus,
@@ -3717,7 +3945,22 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
            <div class="sub-view" data-tabs="product" data-sub-view="queue" data-ref="queue" data-label="Queue">
              ${
                live.length
-                 ? `<p class="lede"><strong>${live.length}</strong> question${live.length === 1 ? "" : "s"} nobody has answered. Each reaches every behaviour its selector touches, and every one written after it.</p>
+                 ? /**
+                    * ⛔ IT SAID WHAT THE MODEL DOES, NOT WHAT IS HAPPENING. *"Each reaches every
+                    * behaviour its selector touches, and every one written after it"* is true, and
+                    * a selector is a thing in the schema — the reader is a person deciding where to
+                    * spend an hour, and the sentence they need is the consequence: this many
+                    * questions are the reason this many behaviours cannot be agreed to.
+                    *
+                    * ⛔ THE SAME TWO NUMBERS THAT WERE ALREADY HERE, from the same places. The gate
+                    * line below counted them and the lede above it described a mechanism; one
+                    * sentence now carries both, and neither figure is computed twice.
+                    */
+                   `<p class="lede"><strong>${live.length}</strong> question${live.length === 1 ? "" : "s"} nobody has answered${
+                     gated.length
+                       ? `, blocking <strong>${gated.length}</strong> behaviour${gated.length === 1 ? "" : "s"} from being agreed`
+                       : ""
+                   }.</p>
                     ${
                       /**
                        * ⛔ A SHORT QUEUE IS NOT A REVIEWED CORPUS, AND THE PAGE READ AS THOUGH IT WERE.
@@ -3740,6 +3983,13 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
                               ? `<strong>${agreed}</strong> of ${agreed + owed} sentences have been agreed to. `
                               : `<strong>Nothing here has been agreed to yet.</strong> `
                           }${
+                            /**
+                             * ⛔ IT NO LONGER REPEATS THE LINE ABOVE IT. The lede now says how many
+                             * behaviours these questions are blocking; this said the same number
+                             * again in longer words, two lines apart. What it keeps is the part the
+                             * lede cannot carry — every one of them has a slot waiting, which is
+                             * why the queue being short does not mean the corpus is reviewed.
+                             */
                             gated.length
                               /** ⛔ `behaviours` said out loud, because the half before it counts sentences. */
                               ? `${gated.length} behaviour${gated.length === 1 ? "" : "s"} cannot be agreed to at all until these ${live.length === 1 ? "is" : "are"} answered — every one of them has a slot waiting on ${live.length === 1 ? "it" : "them"}.`
@@ -3914,10 +4164,10 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
                        ${
                          opts.interactive
                            ? stampFor(corpus, `${c.charter.id}#${sec.id}`).state === "accepted"
-                             ? `<footer class="beh-acts icons quiet"><button class="act icon" data-act="say" data-ref="${esc(`${c.charter.id}#${sec.id}`)}" title="This needs to change">✎</button></footer>`
+                             ? `<footer class="beh-acts icons quiet"><button class="act icon" data-act="say" data-ref="${esc(`${c.charter.id}#${sec.id}`)}" title="This needs to change"><span class="glyph" aria-hidden="true">✎</span> Reword</button></footer>`
                              : `<footer class="beh-acts icons">
-                                  <button class="act icon" data-act="accept" data-ref="${esc(`${c.charter.id}#${sec.id}`)}" title="That is right">✓</button>
-                                  <button class="act icon" data-act="say" data-ref="${esc(`${c.charter.id}#${sec.id}`)}" title="Reword it">✎</button>
+                                  <button class="act icon" data-act="accept" data-ref="${esc(`${c.charter.id}#${sec.id}`)}" title="That is right"><span class="glyph" aria-hidden="true">✓</span> Agree</button>
+                                  <button class="act icon" data-act="say" data-ref="${esc(`${c.charter.id}#${sec.id}`)}" title="Reword it"><span class="glyph" aria-hidden="true">✎</span> Reword</button>
                                 </footer>`
                            : ""
                        }
@@ -3935,7 +4185,7 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
             !full(g.scope)
               ? stub(g.scope, anchorOf(g.scope), plain(g.title), true)
               : marked(g.scope, `<section class="view framed" id="${anchorOf(g.scope)}" data-view="${esc(g.scope)}" data-ref="${esc(g.scope)}" data-label="${esc(plain(g.title))}">
-            <h3 class="feature-title">${line(g.title)}</h3>
+            ${featureHead(corpus, g.scope, line(g.title), ctx)}
             ${
               /**
                * ⛔ THE STAGE LINE IS GONE FROM HERE. Peter: *"get rid of 'Sepcification 4 unsettled'
@@ -4040,8 +4290,25 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
                 const sc = corpus.scopes.find((x) => x.scope.id === g.scope)!.scope;
                 const cards = (list: "why" | "risk" | "measure" | "instrument", held: typeof sc.why) =>
                   held.map((c) => renderCard(corpus, g.scope, list, c, !!opts.interactive, address)).join("");
-                const none = (what: string, how: string) =>
-                  `<p class="owes">Nothing here says ${what}. ${how}</p>`;
+                /**
+                 * ⛔ AN EMPTY SECTION IS A SUMMARY LINE, NOT FOUR INCHES OF YELLOW.
+                 *
+                 * A new feature has nothing in any of these four, so a reviewer met four warning
+                 * blocks each saying "Nothing here says…" — more of the page than its content, in
+                 * the colour reserved for things that are wrong, about a feature that is merely
+                 * young. ⛔ The absence still has to be sayable: it is a real gap and somebody has
+                 * to fill it. So it is a closed fold, one line, in the position its section would
+                 * have had — the fact kept, the volume cut.
+                 *
+                 * ⛔ AND THE HEADING GOES INSIDE IT. A heading above a collapsed fold is two rows
+                 * for one empty section, which is most of what was wrong with the four boxes.
+                 */
+                const filled = (heading: string, held: string) =>
+                  `<h3 class="sub">${heading}</h3>${held}`;
+                const none = (heading: string, what: string, how: string) =>
+                  `<details class="owes-fold"><summary><span class="owes-head">${heading}</span> <span class="owes-tag">nothing written down</span></summary>
+                     <p class="owes">Nothing here says ${what}. ${how}</p>
+                   </details>`;
                 /** ⛔ Inside the feature's view, so it appears and disappears with the feature. */
                 /**
                  * ⛔ ITS OWN SCROLLER. Peter: *"let's just make it a full on frame - so scrolling
@@ -4057,26 +4324,66 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
                   <div class="subtabs own" data-tabs="${esc(g.scope)}">
                     <button type="button" class="subtab" data-sub="overview">Overview</button>
                     <button type="button" class="subtab" data-sub="metrics">Metrics${
+                      /** ⛔ Named, like every other count — see the heading inside `renderBehaviours`. */
                       sc.measures.length || sc.instruments.length
-                        ? ` <span class="pill quiet">${sc.measures.length + sc.instruments.length}</span>`
+                        ? ` <span class="pill quiet" title="${esc(
+                            `${sc.measures.length + sc.instruments.length} measures and recordings`
+                          )}">${sc.measures.length + sc.instruments.length}</span>`
                         : ""
                     }</button>
                     <button type="button" class="subtab" data-sub="behaviours">Behaviors${
-                      sc.exchanges.length ? ` <span class="pill quiet">${sc.exchanges.length}</span>` : ""
+                      /**
+                       * ⛔ THE ONE OF THE THREE COUNTS THAT WAS ALREADY HONEST — this really is
+                       * behaviours, and the heading inside now says so too rather than calling its
+                       * sentences by this word.
+                       */
+                      sc.exchanges.length
+                        ? ` <span class="pill quiet" title="${esc(
+                            `${sc.exchanges.length} behaviour${sc.exchanges.length === 1 ? "" : "s"}`
+                          )}">${sc.exchanges.length}</span>`
+                        : ""
                     }</button>
                   </div>
                   <div class="sub-view" data-tabs="${esc(g.scope)}" data-sub-view="overview" data-ref="${esc(g.scope)}" data-label="Overview">
                   ${renderHappyPath(corpus, g.scope, ctx, decisionsOn(corpus, `${g.scope}#happy-path`))}
-                  <h3 class="sub">Why this is worth building</h3>
-                  ${sc.why.length ? cards("why", sc.why) : none("what is wrong today", "Every behaviour below is justified against a reason nobody has written down.")}
-                  <h3 class="sub">What could go wrong</h3>
-                  ${sc.risks.length ? cards("risk", sc.risks) : none("what could go wrong", "A risk nobody wrote down is one nobody is watching for.")}
+                  ${
+                    sc.why.length
+                      ? filled("Why this is worth building", cards("why", sc.why))
+                      : none(
+                          "Why this is worth building",
+                          "what is wrong today",
+                          "Every behaviour below is justified against a reason nobody has written down."
+                        )
+                  }
+                  ${
+                    sc.risks.length
+                      ? filled("What could go wrong", cards("risk", sc.risks))
+                      : none(
+                          "What could go wrong",
+                          "what could go wrong",
+                          "A risk nobody wrote down is one nobody is watching for."
+                        )
+                  }
                 </div>
                 <div class="sub-view" data-tabs="${esc(g.scope)}" data-sub-view="metrics" data-ref="${esc(g.scope)}" data-label="Metrics">
-                  <h3 class="sub">How we would know it worked</h3>
-                  ${sc.measures.length ? cards("measure", sc.measures) : none("how anybody would know this worked", "Without one, nothing afterwards can be held against it.")}
-                  <h3 class="sub">What gets recorded</h3>
-                  ${sc.instruments.length ? cards("instrument", sc.instruments) : none("what gets recorded", "A measure nothing records cannot be known.")}
+                  ${
+                    sc.measures.length
+                      ? filled("How we would know it worked", cards("measure", sc.measures))
+                      : none(
+                          "How we would know it worked",
+                          "how anybody would know this worked",
+                          "Without one, nothing afterwards can be held against it."
+                        )
+                  }
+                  ${
+                    sc.instruments.length
+                      ? filled("What gets recorded", cards("instrument", sc.instruments))
+                      : none(
+                          "What gets recorded",
+                          "what gets recorded",
+                          "A measure nothing records cannot be known."
+                        )
+                  }
                 </div>
                 <div class="sub-view" data-tabs="${esc(g.scope)}" data-sub-view="behaviours" data-ref="${esc(g.scope)}" data-label="Behaviors">
             ${
@@ -4204,7 +4511,7 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
     return `${section}${mockBank(corpus, ids, protoScreens, section, scopeId)}`;
   }
 
-  return `${STYLE}${body}${appCssOnce(opts)}${mockBank(corpus, ids, protoScreens, body, scopeId)}${partFacts(corpus, ids)}${renderNotePanel(corpus, ids, opts)}${VIEW_SWITCH}${opts.interactive ? DEFER : ""}${DIM_FILTER}${NAV_PLACE}${PROTO_FRAME}${PROTOTYPE}${DRIVE}${opts.interactive ? liveScript(opts) : INERT}`;
+  return `${STYLE}${body}${appCssOnce(opts)}${mockBank(corpus, ids, protoScreens, body, scopeId)}${partFacts(corpus, ids)}${renderNotePanel(corpus, ids, opts)}${VIEW_SWITCH}${opts.interactive ? DEFER : ""}${DIM_FILTER}${NAV_PLACE}${COPY_REF}${PROTO_FRAME}${PROTOTYPE}${DRIVE}${opts.interactive ? liveScript(opts) : INERT}`;
 }
 
 
@@ -7241,7 +7548,17 @@ const VIEW_SWITCH = `<script>
     window.dispatchEvent(new Event("productos:view"));
     for (const a of menu) a.classList.toggle("on", a.dataset.goto === name);
     if (trail) {
-      const parts = trails[name] || [{ id: name, label: name }];
+      /**
+       * ⛔ A ONE-CRUMB TRAIL IS THE HEADING, SAID TWICE. On the Money page the row read "Money" and
+       * the section heading 37px below it read "Money" — a breadcrumb exists to say where a page is
+       * FILED, and when there is nothing above you it has nothing to say that the page is not
+       * already saying louder. This file's own trail builder already drops the root for the same
+       * reason; it stopped one level short.
+       *
+       * ⛔ THE ROW STAYS. It carries the chevron and the dimension filter, both of which have to be
+       * on every feature page — hiding the row to remove one word would take two controls with it.
+       */
+      const parts = (trails[name] || [{ id: name, label: name }]).length < 2 ? [] : trails[name] || [];
       trail.textContent = "";
       parts.forEach((part, i) => {
         if (i) {
@@ -7751,7 +8068,22 @@ const PROTO_FRAME = `<script>
   const root = document.documentElement;
   try {
     const was = localStorage.getItem("productos:proto");
-    if (was === "off") root.dataset.proto = "off";
+    /**
+     * ⛔ SHUT UNTIL SOMEBODY OPENS IT, because the open state cost the whole first viewport.
+     *
+     * At 1440px the panel took every pixel above the fold — three small sketches and about 900px of
+     * nothing under them — and the first sentence a reviewer could have an opinion about was on the
+     * second screen. The screen is not the job on a feature page: it is evidence, one press away,
+     * and there is a whole Prototype section for looking at drawings.
+     *
+     * ⛔ A REMEMBERED CHOICE STILL WINS, in both directions. This is the default for somebody who
+     * has never touched the grip, not a decision taken away from anybody who has.
+     *
+     * ⛔ ALREADY APPLIED BY THE PLACEMENT BOOT SCRIPT, which runs before the first paint. Repeated here
+     * so this file is readable on its own and so the state is right if the boot script is ever
+     * dropped — it is idempotent either way.
+     */
+    if (was === "off" || was === null) root.dataset.proto = "off";
     /**
      * ⛔ A REMEMBERED SLIVER FROM AN OLDER BUILD IS FORGIVEN. The floor used to be 80px, so somebody
      * who dragged it down then is stuck with an unusable frame for good — a persisted value is a
@@ -7997,6 +8329,37 @@ const NAV_PLACE = `<script>
 })();
 </script>`;
 
+/**
+ * The address, on request.
+ *
+ * ⛔ DELEGATED, AND ON EVERY RENDER — not only the interactive one. Carrying a ref into a ticket is
+ * reading, not recording: a read-only preview and a published artifact both need it, and both
+ * render `INERT`, which disables every `button.act`. This button is deliberately not one.
+ *
+ * ⛔ AND IT FALLS BACK, because `navigator.clipboard` is undefined outside a secure context — which
+ * is exactly where a page saved to a file is opened. A copy button that silently does nothing is
+ * worse than no copy button, so when the API is missing the ref is selected instead and the label
+ * says what happened.
+ */
+const COPY_REF = `<script>
+document.addEventListener("click", function (ev) {
+  const b = ev.target.closest && ev.target.closest("button.copy-ref");
+  if (!b) return;
+  ev.preventDefault();
+  const ref = b.dataset.copy || "";
+  const said = (what) => {
+    const was = b.textContent;
+    b.textContent = what;
+    setTimeout(function () { b.textContent = was; }, 1400);
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(ref).then(function () { said("copied"); }, function () { said(ref); });
+  } else {
+    said(ref);
+  }
+});
+</script>`;
+
 /** ⛔ Visibly inert, not omitted — see `PageOptions.interactive`. */
 const INERT = `<script>
   for (const b of document.querySelectorAll("button.act")) {
@@ -8078,8 +8441,16 @@ export const STYLE = `<style>
     padding: 1.25rem; margin: 0 0 1.25rem; }
   .q > header { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap;
     font-size: .75rem; color: var(--dim); margin-bottom: .4rem; }
-  .q .ref { font-family: ui-monospace, Menlo, monospace; }
+  /** ⛔ Not monospace any more — it is a sentence now, and code type is what says "this is an id". */
+  .q .ref { font-weight: 600; color: var(--ink); }
   .q .kind { border: 1px solid var(--line); border-radius: 99px; padding: .05rem .5rem; }
+  /*
+   * The address, behind a press. ⛔ Quiet by construction: a reviewer never needs it, and the one
+   * reason it is on the page at all is somebody carrying a ref into a ticket or a command.
+   */
+  button.copy-ref { font: inherit; font-size: .72rem; color: var(--dim); background: transparent;
+    border: 1px solid var(--line); border-radius: 99px; padding: .05rem .5rem; cursor: pointer; }
+  button.copy-ref:hover, button.copy-ref:focus-visible { color: var(--ink); border-color: var(--accent); }
   .q .where { color: var(--dim); font-size: .9rem; margin: 0 0 .8rem; }
   .q.parked { opacity: .82; }
   .badge { border-radius: 99px; padding: .05rem .5rem; font-size: .72rem; border: 1px solid var(--line); }
@@ -8103,6 +8474,20 @@ export const STYLE = `<style>
   .blocks { font-size: .9rem; color: var(--dim); }
   .owes { font-size: .88rem; color: var(--warn); background: var(--warn-bg);
     border-radius: 6px; padding: .5rem .7rem; }
+  /*
+   * An empty section, closed. ⛔ The summary is NOT warn-coloured: four of these on a new feature
+   * are the normal state of a corpus somebody is still writing, and spending the alarm colour on
+   * them is how the alarm colour stops meaning anything. The warning is inside, where somebody who
+   * opened it has asked for it.
+   */
+  .owes-fold { margin: 1.1rem 0 0; }
+  .owes-fold > summary { cursor: pointer; list-style: none; font-size: .78rem; font-weight: 600;
+    letter-spacing: .05em; text-transform: uppercase; color: var(--dim); }
+  .owes-fold > summary::-webkit-details-marker { display: none; }
+  .owes-fold > summary::before { content: "▸ "; }
+  .owes-fold[open] > summary::before { content: "▾ "; }
+  .owes-fold .owes-tag { text-transform: none; letter-spacing: 0; font-weight: 400; opacity: .8; }
+  .owes-fold .owes { margin-top: .4rem; }
   .parked-why { font-size: .9rem; color: var(--dim); }
 
   .opts { display: grid; gap: .75rem; margin: 1rem 0; }
@@ -8220,11 +8605,33 @@ export const STYLE = `<style>
   :root[data-proto="off"] .proto-grip::before { display: none; }
   /** ⛔ Small. Peter: *"get rid of that, make the title pretty small."* */
   .feature-title { font-size: 1rem; font-weight: 600; margin: 0 0 .5rem; letter-spacing: -.01em; }
+  /*
+   * ⛔ THE VERDICT IS THE FIRST THING ON A FEATURE, and it is a line rather than a banner.
+   *
+   * A reviewer's question is "can this be built" and the page answered it nowhere — not low down,
+   * not anywhere. ⛔ It is NOT an .alarm: a feature with open questions is the normal state of a
+   * corpus being written, and painting every one of them as an emergency is how a reader learns to
+   * skip the colour that matters.
+   */
+  .feature-head { margin: 0 0 .75rem; }
+  .verdict { margin: 0; font-size: .92rem; }
+  .verdict b { font-weight: 600; }
+  .verdict.ready b { color: var(--ok); }
+  .verdict.blocked b { color: var(--warn); }
+  .verdict-holes, .verdict-qs { margin: .25rem 0 0; padding-left: 1.1rem; font-size: .88rem; }
+  .verdict-holes li { color: var(--warn); margin: .1rem 0; }
+  .verdict-qs li { margin: .1rem 0; }
+  .verdict-asks { margin: .5rem 0 0; font-size: .88rem; color: var(--dim); }
   table.beh-table { width: 100%; border-collapse: collapse; font-size: .92rem; }
   table.beh-table th { text-align: left; font-size: .7rem; letter-spacing: .05em; text-transform: uppercase;
     color: var(--dim); font-weight: 600; padding: .3rem .5rem; border-bottom: 1px solid var(--line); }
   table.beh-table td { padding: .5rem; border-bottom: 1px solid var(--line); vertical-align: top; }
-  table.beh-table td:last-child { width: 5.5rem; text-align: right; white-space: nowrap; }
+  /**
+   * ⛔ WIDER, BECAUSE THE BUTTONS SAY WHAT THEY DO NOW. 5.5rem held three glyphs. Three words need
+   * room, and a nowrap on a column that no longer fits is how a table starts pushing a page
+   * sideways on a phone — which is the other defect in this same pass.
+   */
+  table.beh-table td:last-child { width: 1%; text-align: right; }
   /** ⛔ Inline, at the end of the sentence — an annotation on it rather than a column beside it. */
   /** ⛔ A framing card, the same shape as everything else somebody agrees to on this page. */
   .frame-card { border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: .3rem;
@@ -8328,11 +8735,14 @@ export const STYLE = `<style>
   .moved .k { color: var(--warn); margin: 0 0 .15rem; }
   .moved .gone { color: var(--dim); text-decoration: line-through; margin: .1rem 0; }
   .moved .came { color: var(--ink); margin: .1rem 0; }
-  .row-acts { display: flex; gap: .15rem; justify-content: flex-end; }
-  /** ⛔ One gesture, one meaning: the footers use the same icons as a row. */
-  footer.beh-acts.icons { display: flex; gap: .25rem; margin: .5rem 0 0; }
-  footer.beh-acts.icons .act.icon, .row-acts .act.icon { font: inherit; font-size: .9rem; line-height: 1; padding: .2rem .35rem;
+  .row-acts { display: flex; gap: .25rem; justify-content: flex-end; flex-wrap: wrap; }
+  /** ⛔ One gesture, one meaning: the footers use the same icons AND the same words as a row. */
+  footer.beh-acts.icons { display: flex; gap: .25rem; margin: .5rem 0 0; flex-wrap: wrap; }
+  footer.beh-acts.icons .act.icon, .row-acts .act.icon { font: inherit; font-size: .78rem; line-height: 1.3;
+    padding: .25rem .45rem; white-space: nowrap;
     border: 1px solid var(--line); border-radius: 4px; background: var(--card); color: var(--dim); cursor: pointer; }
+  /** The glyph is what the eye finds on row two hundred; the word is what tells a newcomer. */
+  .act.icon .glyph { font-size: .9rem; }
   footer.beh-acts.icons .act.icon:hover, .row-acts .act.icon:hover { color: var(--ink); border-color: var(--accent); }
   .row-acts .act.icon.danger:hover { color: var(--bad); border-color: var(--bad); }
   .says-edit { width: 100%; font: inherit; font-size: .92rem; padding: .3rem; border: 1px solid var(--accent);
@@ -8508,7 +8918,15 @@ export const STYLE = `<style>
   nav.scopes a.on::before { content: "▸ "; color: var(--accent); }
   .topframe { position: sticky; top: 0; z-index: 8; background: var(--bg);
     border-bottom: 1px solid var(--line); }
-  .topframe .tabs { display: flex; gap: .15rem; max-width: 100%; margin: 0 auto;
+  /**
+   * ⛔ IT WRAPS, BECAUSE AT 390px IT DID NOT AND THE PAGE WENT SIDEWAYS.
+   *
+   * Four tabs and Overview's own strip are one flex row — a display of "contents" on the groups puts
+   * them all in it — and with no wrap the row measured 446px inside a 390px viewport, so the
+   * document itself scrolled horizontally and the last tab was off the right edge. A navigation
+   * you have to scroll to reach is one a phone reader does not know exists.
+   */
+  .topframe .tabs { display: flex; flex-wrap: wrap; gap: .15rem; max-width: 100%; margin: 0 auto;
     padding: .55rem 1.25rem 0; }
   /*
    * ⛔ THE GROUP LEAVES THE LAYOUT IN TOP MODE. A display of "contents" puts the head and the strip back
@@ -8570,8 +8988,15 @@ export const STYLE = `<style>
     /* The column starts below the bar too: a top offset alone does not move a fixed element's inset. */
     :root[data-nav="left"] .topframe { position: fixed; inset: 0 auto 0 0; width: 19rem;
       overflow-y: auto; border-bottom: 0; border-right: 1px solid var(--line); padding-bottom: 2rem; }
-    :root[data-nav="left"] .topframe .tabs { flex-direction: column; align-items: stretch;
-      gap: .1rem; padding: .7rem .9rem .4rem; }
+    /*
+     * ⛔ AND IT DOES NOT WRAP HERE. The row wraps across the top, where running past the right edge
+     * at 390px put a tab off screen. Down the side the same container is a COLUMN inside a
+     * full-height fixed panel, so wrapping means breaking into a second column of tabs — a menu
+     * laid out sideways, and the one measurement that caught it was a long feature name no longer
+     * overflowing the tree it should have.
+     */
+    :root[data-nav="left"] .topframe .tabs { flex-direction: column; flex-wrap: nowrap;
+      align-items: stretch; gap: .1rem; padding: .7rem .9rem .4rem; }
     :root[data-nav="left"] .topframe .tab { text-align: left; border-bottom: 0;
       border-left: 2px solid transparent; border-radius: 0 4px 4px 0; padding: .35rem .6rem; }
     :root[data-nav="left"] .topframe .tab.on { border-left-color: var(--accent); }
@@ -9343,10 +9768,43 @@ export const STYLE = `<style>
   .gated { font-size: .9rem; }
   .gated ul { margin: .3rem 0 0; padding-left: 1.1rem; color: var(--warn); }
   .parked-set { opacity: .9; }
+  /**
+   * ⛔ A PHONE IS A WIDTH SOMEBODY REVIEWS AT, AND THE PAGE DID NOT FIT ONE.
+   *
+   * At 390px the document scrolled sideways, the behaviour table — the thing the page exists for —
+   * ran 88px past its own box with the sentence column cut off at the right edge, and 64px of a
+   * 390px screen went to page padding.
+   *
+   * ⛔ THE BREAKPOINT IS 34rem AND THE MEASUREMENT HAS TO BE TAKEN AT ONE. A headless Chrome window
+   * cannot be made narrower than about 500px, so a window-size flag of 390 measures 500 and reports
+   * a layout no phone ever sees — the probes behind this block set device metrics instead. See
+   * the resize helper in the browser harness.
+   */
   @media (max-width: 34rem) {
     .slot { grid-template-columns: 1fr; gap: .1rem; }
     .opt { grid-template-columns: 1fr; }
     .legend dl { grid-template-columns: 2.5rem 1fr; }
+    /* 4rem of a 390px screen was page margin. */
+    main { padding: 1.25rem .8rem 6rem; }
+    .topframe .tabs { padding: .5rem .6rem 0; }
+    .topframe .subtabs { padding: .35rem .6rem .5rem; }
+    .crumbs { padding: .45rem .8rem .6rem; }
+    /*
+     * ⛔ THE TABLE STOPS BEING A TABLE. Two columns with three labelled buttons in the second one
+     * have a min-content width of about 414px, which is wider than the screen — so the choice is a
+     * sentence cut off at the edge or rows that read top to bottom. ⛔ And the columns were only
+     * ever there to be scanned down; at this width there is one row on screen at a time and there
+     * is nothing to scan.
+     */
+    table.beh-table, table.beh-table tbody, table.beh-table tr, table.beh-table td,
+    table.beh-table th { display: block; width: auto; }
+    table.beh-table thead { display: none; }
+    table.beh-table td:last-child { width: auto; text-align: left; }
+    table.beh-table td { border-bottom: 0; padding: .35rem 0; }
+    table.beh-table tr.beh { border-bottom: 1px solid var(--line); padding: .35rem 0; }
+    .row-acts { justify-content: flex-start; }
+    /* A label above its value, rather than a max-content column squeezing the value to nothing. */
+    dl.happy-io { grid-template-columns: minmax(0, 1fr); }
   }
 </style>`;
 
