@@ -4,7 +4,10 @@
 
 ProductOS holds a structured, validated record of what your product does — what it guarantees, why it works that way, and what's currently in question. Product people define it. Agents build from it. Engineering finds out when a change breaks something the team committed to.
 
-> **Status:** v0.1.0 — early, in active design. The architecture changed substantially in Aug 2026 (standalone hosted service, product-first). Docs reflect the new direction; code is catching up.
+> **Status:** v0.1.0 — early, in active design. The model is the **Exchange** model; an older one
+> (containers, behaviors, test cases, surfaces) is still reachable from the commands and agent tools
+> marked *retiring*, and [`GLOSSARY.md`](./GLOSSARY.md) deliberately defines none of its words.
+> [`STATE.md`](./STATE.md) says what is actually built and what is open.
 
 ## Why
 
@@ -39,8 +42,8 @@ They divide the work cleanly, and the division is visible in the product:
 |---|---|---|
 | **The act** | accepting a claim, settling a question | writing a claim that admits one reading |
 | **Who** | only a person; no tool exposes it to a model | whoever authors, human or agent |
-| **Surfaced by** | `productos next` · the ranked queue | `productos check` · readiness · the audit |
-| **Fails as** | *awaiting review* | *undecided* · *ambiguous* · *contradiction* |
+| **Surfaced by** | `productos v2 decide` · the ranked queue | `productos v2 check` · `productos v2 grid` |
+| **Fails as** | *nobody has stamped this* · *the words moved since* | *open* · *disputed* · *a blank cell* |
 
 ⛔ **The order matters.** Never accept a claim that is contradicted or ambiguous: stamping
 *"this is what we intend"* onto a sentence with two meanings is worse than leaving it
@@ -50,30 +53,41 @@ Start with [`OVERVIEW.md`](./OVERVIEW.md) — the model and why it is shaped thi
 
 ## The model
 
-Three altitudes, one atom:
+**One ask, eight questions about it, and a count of what nobody has answered.**
 
 ```
-Surface     how the user interacts — screens, elements, flow
-Feature     what the user gets                     grouped into feature areas
-Capability  one thing a subsystem promises         grouped into capability systems
+Scope       the only container, at every altitude — the product, a grouping in it, one feature
+  View      a screen, and where an ask arrives: its parts, their conditions, its states
+  Exchange  one ask with exactly one answer — and the unit a human accepts
+    Slot    one of eight questions about it, and the only place a sentence lives
+            may · with · answer · after · refuses · fails · again · at_once
+Rule        a sentence whose subject is a class of exchanges rather than one
+Reading     an observation. Never truth — it explains why the truth is what it is
+Verdict     a human's act: accept · rule · read · defer · waive
 ```
 
-Feature areas sit inside a **product** and **nest as deep as that product needs** —
-products vary enormously in complexity, so a fixed depth would force the real joints
-into names or into one unreadable bag. What bounds it is a target *size*, not a depth
-limit: `productos check` measures every area against it and names the specific edit,
-including which features it would split into a sub-area. A container's id **is** its
-path, so re-filing is `productos move`, which carries the file, the id, the tracking
-sidecar and every edge pointing at it.
+**Scopes nest as deep as the product needs**, because depth is a property of the product. An
+**exchange** is one ask — made by a person, by the system, or by an integrator — and it is the
+unit somebody reads in one sitting and agrees to in one act.
 
-A **Behavior** is a single falsifiable claim — the atom everything hangs off. Behaviors live on features and capabilities, and anchor to a surface when a user action triggers them.
+⛔ **The eight slots are all required, and the count is the point.** A real corpus came out 111
+claims about screens against 58 about the machinery underneath, because a screen-shaped thing
+had a route and a component to read and the machinery had neither. A required skeleton identical
+on both sides means **you cannot be thin without a blank cell showing it** — which is how
+*"incompleteness is countable"* stops being a feeling and becomes arithmetic.
 
-A **Capability** is one thing a subsystem promises — *"classification returns a confidence for every document"*, never *"there's a classification service behind a queue."* Capabilities group into **capability systems** (the subsystem), symmetric to features grouping into **feature areas**. That altitude is where product and engineering negotiate: product owns what is promised, engineering owns how it's kept.
+A slot that nobody has settled carries a **standing**: the question, who owes the answer, what
+it costs to guess wrong, and drafted options with the consequence of each. The AI drafts; the
+human picks.
 
 Two rules govern authoring:
 
-- **Observability** decides what belongs — a detail is truth only if someone the product makes a promise to could distinguish two implementations differing in it. State the observation, never the mechanism.
-- **Trigger** decides where it belongs — user action → feature; input from elsewhere → capability.
+- **Observability** decides what belongs — a detail is truth only if someone the product makes a
+  promise to could distinguish two implementations differing in it. State the observation, never
+  the mechanism.
+- **Non-redundancy** decides where it lives — every fact has exactly one home, others reference
+  it, nothing restates it. This is the primary lever on review cost, and when something true has
+  nowhere to live the answer is a new field, never prose.
 
 ## How it fits together
 
@@ -84,38 +98,52 @@ Two rules govern authoring:
 └─────────────────┘     └────────┬─────────┘     └─────────┬──────────┘
                                  │                          │
                         markdown export              coding agent
-                        AGENTS.md                    CI / reconcile
+                        a publishable page           CI / reconcile
 ```
 
 - **The database is the authority.** Markdown is an export — the portability promise holds (*remove ProductOS and you keep your truth*) without making a repo the authoring surface. A product isn't a repo.
-- **Agents read truth over MCP**, and validated truth is emitted into [`AGENTS.md`](https://agents.md/) — read natively by most major coding agents, so behavior reaches them with no integration.
-- **The packet** is the handoff artifact: behaviors, test cases, applicable context and decisions, and the verified truth a change must not regress. Deliberately no implementation — stack and patterns come from the repo.
+- **Agents read truth over MCP**, and a published page is a review surface a person can use with no
+  checkout at all. A corpus carries the application's own stylesheet with it, so a drawing looks
+  like the product wherever it is read.
+- **[`AGENTS.md`](./AGENTS.md) in this repository is the roles document**, generated from the
+  registry. ⛔ It is not an export of product truth, and nothing writes truth into it — that claim
+  stood here while it was false.
+- **The packet** is the handoff artifact: what a feature is for, each ask with its eight slots, the
+  org-wide rules reaching them, what must be demonstrated, what is deliberately left to the
+  builder, and what nobody has answered. Compiled on demand, and it will not compile over an
+  unsettled slot. Deliberately no implementation — stack and patterns come from the repo.
 
 ## Validation
 
-Agents propose. **Only humans validate** — no tool for a model to do it is exposed, which
-is a property of the tool surface and not a request in a prompt. An agent may *remove* a
-validation stamp (noticing that a claim no longer holds only ever reduces what the corpus
-asserts); it cannot add one.
+Agents propose. **Only humans validate.** The mechanism that enforces it is worth understanding,
+because it changed: a boundary test used to fail the build if *any* agent tool could record an
+act at all, and that boundary was deliberately opened so a person can answer in conversation or
+press a button on a published page. What replaced it is stronger in the way that matters.
 
-State stays deliberately small. Externally: *planned / built / retired*, and *needs review / validated / problem*. One "problem" signal, not a drift taxonomy. Richer structure exists internally and stays out of a reviewer's way.
+**Every act records which surface it came through** — `page`, `question`, `chat`, `cli`, `agent`
+— required and never defaulted, because a default would let the weakest provenance silently wear
+the strongest name. ⛔ **And `via: agent` is structurally incapable of satisfying a gate:**
+software may land a default so a reviewer has something to disagree with rather than a blank, and
+it is filtered out at the one place every gate asks whether something is accepted. So a corpus
+can be read for the *quality* of its validation and not only for its presence.
 
-Invariants are enforced at the tool boundary rather than requested in prompts: an agent can
-ignore an instruction; it cannot ignore a rejected call. What is actually enforced, and
-what is only checked, are deliberately different lists.
+**What a person agreed to is hashed in two halves** — what it says, and what demonstrates it — so
+an acceptance reads back as *accepted*, *the claim changed since*, *the criteria changed since*,
+*both changed*, or *nobody stamped this*. A stamp is never revived by a reword; what is kept is
+the exact text that was hashed, so re-confirming is one glance at a diff.
 
-**Refused at the boundary** — no tool exists for a model to mark a claim validated; a
-behavior may not carry both a claim and a question; an answer must name who decided and
-why; a re-decision of a settled claim is rejected; a container may not be re-filed without
-carrying its id and every edge pointing at it.
+**The stages are derived, never stored** — *specification → ready for review → ready for build*.
+Each is already a fact about the stamps, and a stored stage would let a feature be marked ready
+for build while questions are open. The stage is a report on consent, not a substitute for it.
 
-**Refused before handover** — `productos check` will not pass a corpus with a declared
-contradiction, a reference that resolves to nothing, a grouping with no description, or a
-high audit finding.
+**Refused before handover** — `productos v2 check` will not pass a corpus with a reference that
+resolves to nothing, a slot nobody has filled, a rule that governs nothing or demonstrates
+nothing, a drawing claiming to show something nothing states, or an ask arriving at a control
+that promises nothing.
 
-**Checked and reported, not refused** — the claim linter, the flow rules, size and shape
-advice. These are judgement calls, and a gate that fails on judgement is a gate people
-route around.
+**Checked and reported, not refused** — size and shape advice, and anything resting on a
+judgement call. A gate that fails on judgement is a gate people route around, and a refusal that
+fires on every corpus in existence is one people switch off.
 
 ## Adoption
 
@@ -123,9 +151,18 @@ route around.
 
 Start with the feature you're building now. Grow at the edges. Areas nobody touches stay uncovered, correctly.
 
-## The `demo/` directory
+## What is in here that is not ProductOS
 
 `demo/` contains **Family Wallet** — a small Expo + React Native app used as a dogfooding testbed. Parents manage allowances, track tasks → balances per kid, and can apply interest on selected days. Simple, but with enough real surface (multi-tenant ledger, editable task list, unbounded interest rules, modal flows) to make product truth non-trivial.
+
+`backend/` is **that demo's API**, not ProductOS: it mirrors the app's local ledger as a REST
+surface so the app can run either fully local or backend-driven. Nothing in ProductOS depends on
+it.
+
+`service/` is the **retired** hosted store. It models the replaced schema, cannot read an
+Exchange corpus at all, and is **not deleted because it is still deployed** — tearing it down,
+and deciding what happens to anything in its database, is a deliberate call rather than a
+cleanup. The hosted Exchange store is `src/v2/store/`, with the compose files here at the root.
 
 ## License
 
