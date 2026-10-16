@@ -402,11 +402,27 @@ test("the record: one sentence, one acceptance per claim, each naming the senten
    * `acceptedThroughRule` already requires. The next test proves that, and the `coveredBy` fix
    * belongs in `stamp.ts`.
    */
+  /**
+   * ⛔ AND THE HOLE IS CLOSED, SO THIS ASSERTION IS NOW ITS INVERSE.
+   *
+   * When this test was written, `coveredBy` looked a resolved rule up as `` `${target}#${slot}` ``
+   * while `target` already carried the slot — so at slot grain every inherited rule dropped out of
+   * the hash, and the hash of a slot the sentence entirely supplies was IDENTICAL with the sentence
+   * and without it. The note left here said so, and said it could go once `stamp.ts` was fixed.
+   *
+   * It has been (`6426db5`): the lookup is built from the exchange, not from `target`. So a claim's
+   * own hash now MOVES when the sentence that settles it is reworded, and `through` can lean on it
+   * rather than needing a mechanism of its own.
+   *
+   * Asserted as a difference rather than deleted, because the property is what makes this safe: a
+   * per-claim verdict that did not move with its sentence would survive the sentence being reversed
+   * underneath it.
+   */
   for (const c of rec.claims)
-    assert.equal(
+    assert.notEqual(
       c.covers_slots,
       coveredBy(corpus, c.target).slots,
-      "coveredBy now carries the rule at slot grain — `through` can lean on the claim's own hash, and this note can go",
+      "the claim's hash is the same with the sentence and without it, so a settled claim would outlive the sentence being reworded",
     );
 });
 
