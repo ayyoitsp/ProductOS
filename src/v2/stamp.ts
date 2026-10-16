@@ -385,8 +385,27 @@ export function coveredBy(corpus: Corpus, target: string): Covered | null {
   ];
   for (const slot of (only ? [only] : SLOTS) as readonly SlotName[]) {
     const fill = ex.slots[slot];
-    const inh = inherited.get(`${target}#${slot}`);
-    const cons = constrained.get(`${target}#${slot}`) ?? [];
+    /**
+     * ⛔ BUILT FROM THE EXCHANGE, NEVER FROM `target` — AND THE GRAIN THE PRODUCT RUNS ON WAS THE
+     * ONE THIS GOT WRONG.
+     *
+     * `resolveRules` keys by slot ref. `target` is two segments at exchange grain and THREE or four
+     * at slot grain, so `${target}#${slot}` asked for `money#record-earning#may#may` and missed
+     * every time a reviewer looked at one sentence.
+     *
+     * The exchange-grained call keyed correctly, which is why every surface reviewing a whole
+     * behaviour looked right. Two costs, measured on the pristine seed:
+     *
+     *   1. Accepting `money#record-earning#may` showed the exchange title, two empty strings and
+     *      "nothing here says what would show any of it" — on a slot whose entire content is
+     *      *"Only a parent may change what a kid has"*. A person was asked to agree to a blank.
+     *   2. The hash of a slot a rule entirely supplies was byte-identical with and without the
+     *      rule, so a slot-grained acceptance survived the org-wide sentence beneath it being
+     *      reversed — verbatim the failure this file's own header exists to prevent.
+     */
+    const slotRef = `${scopeId}#${exId}#${slot}`;
+    const inh = inherited.get(slotRef);
+    const cons = constrained.get(slotRef) ?? [];
     const bits: string[] = [slot];
     if (fill) {
       /**
