@@ -3168,6 +3168,58 @@ export const Verdict = z
      * than its own record. Absent means the instance issued the session that pressed the button.
      */
     relayed_by: z.string().optional(),
+    /**
+     * The rule whose statement this acceptance was reached through, rather than pressed on.
+     *
+     * ⛔ ONE HUMAN ACT, N RECORDS — AND THE SENTENCE IS THE ONLY THING THE PERSON DID.
+     *
+     * A person states *"folders are restricted to be linked to a single deal"* once. That sentence
+     * is a rule, and it answers several claims already in the corpus — so each of them is settled,
+     * with their sentence named here as what settled it. The alternative is asking them the same
+     * question once per claim, which is review surface with nothing behind it: the sentence they
+     * agreed to and the sentence they are being asked about are the same string.
+     *
+     * ⛔ IT IS A REFERENCE, NOT A COPY, AND THAT IS WHAT MAKES IT SAFE. `stampFor` grants a verdict
+     * carrying this ONLY while the named rule is itself accepted and unreworded — the same
+     * precondition `acceptedThroughRule` already runs on. Without that, one sentence settles seven
+     * claims and the seven outlive the sentence being reversed, which is verbatim the failure
+     * `stamp.ts`'s header exists to prevent, reached by a new route. It needs no extra data: the
+     * rule's own verdict already carries its hashes.
+     *
+     * ⛔ A RULE ID, AND THE TARGET IS ONE CLAIM. Refined below: three segments, because a settled
+     * sentence is the grain a person reviews at, and a rule id has no `#` in it.
+     */
+    through: z.string().optional(),
+    /**
+     * Software's account of why that sentence settles THIS claim. ⛔ Never the person's words.
+     *
+     * ⛔ THE PERSON'S SENTENCE AND THE REACH OF IT ARE TWO DIFFERENT CLAIMS BY TWO DIFFERENT
+     * AUTHORS, AND A RECORD THAT MERGES THEM IS A RECORD OF CONSENT NOBODY GAVE.
+     *
+     * `through` names what a human stated. Which claims that statement verifies is an inference —
+     * made by software reading both sentences — and it can be wrong in a way the human never said
+     * anything about. Written into `because` or into `says` it would read, in the verdict log and on
+     * every page built from it, as the reasoning of whoever accepted.
+     *
+     * Same precedent, same reason as `chose` / `option_said`: `--pick` used to prepend a model's
+     * `consequence` to a human's `because`, and the log then printed a model's argument under a
+     * person's name. The fix was not to delete the argument but to keep it in its own field,
+     * attributed to whoever made it. This is that field for a reading, and `read_by` is the name.
+     *
+     * So no surface may show this as something a person said. `stampFor` carries it beside the name
+     * of whoever read it that way, never beside `by`.
+     */
+    reading: z.string().optional(),
+    /**
+     * Who read it that way — a model name, or `software` where no judgement was involved.
+     *
+     * ⛔ UNATTRIBUTED, AN INFERENCE READS AS A FACT. `via: agent` exists because software's record
+     * had to be distinguishable from a person's agreement at every gate; this is the same
+     * distinction one level down, inside a verdict a person really did make. The acceptance is
+     * theirs, the reach of it is somebody else's, and a reader who cannot see which model drew it
+     * cannot weigh it.
+     */
+    read_by: z.string().optional(),
     covers_slots: z.string().optional(),
     /**
      * The exact lines that were hashed, as they read when somebody agreed.
@@ -3263,6 +3315,49 @@ export const Verdict = z
   .superRefine((v, ctx) => {
     if (v.kind === "accept" && !v.target)
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["target"], message: "an accept names one exchange or one rule" });
+    /**
+     * ⛔ A READING WITHOUT THE SENTENCE IT READ IS AN INFERENCE WITH NOTHING UNDER IT.
+     *
+     * `reading` says why some sentence settles this claim; `read_by` says who thought so. Neither
+     * means anything without the sentence — and both, standing alone on an acceptance, would read
+     * as the reasoning of whoever accepted, which is the one thing these fields exist to prevent.
+     */
+    for (const f of ["reading", "read_by"] as const)
+      if (v[f] && !v.through)
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [f],
+          message:
+            "name the rule this was reached through — a reading with no statement under it is software's inference presented as somebody's agreement",
+        });
+    if (v.through) {
+      /**
+       * ⛔ ONE CLAIM, AT THE GRAIN A PERSON REVIEWS AT. `stampFor` recognises a rule's reach at
+       * `<scope>#<exchange>#<slot>` and nowhere else — a whole exchange is eight sentences, and one
+       * org-wide statement does not answer all eight. A verdict naming a coarser target would be
+       * written, read by nothing, and look like consent to seven sentences nobody mentioned.
+       */
+      if ((v.target ?? "").split("#").length !== 3)
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["target"],
+          message:
+            "a statement reaches one settled sentence at a time — name it as <scope>#<exchange>#<slot>, not a whole exchange",
+        });
+      /**
+       * ⛔ A RULE ID, NEVER A REF. A rule has no container and no `#`; pointing this at
+       * `<scope>#<exchange>#<slot>` would name a claim as the thing that verifies a claim, and
+       * `stampFor` would find no rule, so the acceptance would silently confer nothing. Whether a
+       * rule with this id EXISTS is enforced where it bites: a `through` naming nothing is never
+       * accepted, because nothing is accepted on its behalf.
+       */
+      if (v.through.includes("#"))
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["through"],
+          message: "name the rule by its id — a statement that settles other claims is a rule, and a rule id has no #",
+        });
+    }
     if (v.kind === "rule") {
       if (!v.settles) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["settles"], message: "a ruling names the slot it settles" });
       /**

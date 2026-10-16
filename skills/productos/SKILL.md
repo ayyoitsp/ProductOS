@@ -325,6 +325,35 @@ anyone to agree to a whole exchange, call **`productos_exchange_what_it_covers`*
 an acceptance used to print what it covered in the same breath as writing it, which left no point
 at which anybody could decline.
 
+### ⛔ The second way truth gets accepted: they state a sentence, and it settles several claims
+
+A person does not only press on one claim at a time. They say a thing — *"folders are restricted to
+be linked to a single deal"* — and that one sentence answers several claims already in the corpus.
+Record the sentence as a **rule**, in their words, and then each claim it reaches is accepted with
+their sentence named as the proof. **One human act, N records.**
+
+What each reached claim's acceptance carries, and why the three are three:
+
+| | holds | whose claim it is |
+| --- | --- | --- |
+| `through:` | the **rule id** whose statement this was reached through, rather than pressed on | **theirs** — it is the sentence they stated |
+| `reading:` | why that sentence settles **this** claim | software's. ⛔ **Never their words** |
+| `read_by:` | who read it that way — a model name, or `software` where no judgement was involved | software's |
+
+⛔ **The sentence is theirs; its reach is an inference, and the two must never share a field.** Write
+the reading into `because` or into the sentence itself and the log prints a model's reasoning under a
+person's name — the `chose` / `option_said` failure, which cost the one floor the strongest act in the
+model has. Keep it in `reading:`, with `read_by:` naming who drew it.
+
+⛔ **And it names ONE claim, at `<scope>#<exchange>#<slot>`.** A whole exchange is eight sentences and
+one org-wide statement does not answer all eight; a coarser target is refused.
+
+⛔ **It lasts exactly as long as the sentence does.** `stampFor` grants a reached-through acceptance
+only while the rule it names is itself accepted and unreworded, so rewording that rule — or
+withdrawing its acceptance — withdraws every claim read through it, at once. Do not re-record the
+reading to make the stamp come back: that is the acceptance surviving a reword, which is the one thing
+the whole stamp mechanism exists to stop. Take the reworded sentence back to the person.
+
 ### When it refuses
 
 Every refusal carries `instead`: the acts that WOULD be honest there. Offer those. **Do not work
