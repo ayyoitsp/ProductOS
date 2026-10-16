@@ -291,7 +291,27 @@ test("a tool that writes lands in the store, under the instance's name, and anno
      * nothing about writing for as long as it was green.
      */
     const after = await loadFromStore(store);
-    assert.equal(after.verdicts.length, before + 1, "the act reported ok and the store did not move");
+    /**
+     * ⛔ MORE THAN BEFORE, NOT EXACTLY ONE MORE — because an acceptance of an exchange is a BULK
+     * PRESS now, and this assertion encoded the old arithmetic.
+     *
+     * Peter: *"so acceptance is def at a per-ref level"*. One press on an exchange writes one
+     * ordinary acceptance per sentence beneath it, each with its own hashes, so a seven-sentence
+     * behaviour lands eight records. The old `before + 1` was not describing a guarantee, it was
+     * describing how many sentences the fixture's exchange happened to have.
+     *
+     * What this test is actually for is unchanged and still asserted below: the write reached the
+     * STORE rather than the scratch directory, under the identity the instance authenticated.
+     */
+    assert.ok(
+      after.verdicts.length > before,
+      "the act reported ok and the store did not move",
+    );
+    /** ⛔ And the press covered the sentences, not just the envelope — the point of the bulk press. */
+    assert.ok(
+      after.verdicts.some((x) => (x.target ?? "").split("#").length === 3),
+      "an exchange was accepted and no sentence beneath it was",
+    );
 
     const v = after.verdicts.at(-1);
     assert.equal(v.by, "a session", "⛔ a name from the wire became the author");

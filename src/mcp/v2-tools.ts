@@ -30,6 +30,7 @@ import { loadCorpus } from "../v2/load.js";
 import { checkCorpus, summarise } from "../v2/check.js";
 import { gridFor, renderGridText, actsFor, gateFor } from "../v2/grid.js";
 import { compilePacket } from "../v2/packet.js";
+import { readinessOf } from "../v2/readiness.js";
 import { questionsFor, descendants } from "../v2/settle.js";
 import { decisionsUnder, howItWasDecided } from "../v2/record.js";
 import { renderScopePage, standalone } from "../v2/page.js";
@@ -197,6 +198,28 @@ const packetTool = tool(
     const p = compilePacket(loadCorpus(dir), a.scope);
     if (!p) throw new Error(`no scope "${a.scope}"`);
     return { dir, packet: p };
+  }
+);
+
+/**
+ * ⛔ THE ONE READ THE MVP'S CONSUMER MAKES, AND IT IS A FIELD RATHER THAN A PREAMBLE.
+ *
+ * The packet already knew the answer and said it as prose inside 22KB of markdown — *"This packet
+ * has 2 holes… Settle them first"*. An agent holding a ticket and deciding whether it may build had
+ * to parse warnings out of a document written for a person to read.
+ *
+ * ⛔ IT TAKES A REF, NEVER A TICKET ID. Peter: *"we can hash out linear connections later, so ignore
+ * those"*. The instance holds its tracker through its own connector; ProductOS answers about truth.
+ */
+const readinessTool = tool(
+  "productos_readiness",
+  "Whether a feature or one behaviour can be built, as a field: ready yes/no and why, every claim with its level (accepted | derived | suggested | open), who wrote it, the questions nobody has answered, and the testing requirements with their ref and the hash of the words each was written from. Call it before starting work. Takes a scope or <scope>#<exchange> — not a ticket id.",
+  AtDir.extend({ ref: z.string() }),
+  (a, paths) => {
+    const dir = dirOf(a, paths);
+    const r = readinessOf(loadCorpus(dir), a.ref);
+    if ("error" in r) throw new Error(r.error);
+    return { dir, ...r };
   }
 );
 
@@ -615,6 +638,7 @@ export const EXCHANGE_READ_TOOLS: McpTool[] = [
   questionsTool,
   gridTool,
   packetTool,
+  readinessTool,
   checkTool,
   recordTool,
   pageTool,
