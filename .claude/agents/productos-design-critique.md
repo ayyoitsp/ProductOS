@@ -1,7 +1,7 @@
 ---
 name: productos-design-critique
 description: Is this the right screen for what it has to do? Reviews only — never writes, edits or fixes anything.
-tools: Read, Grep, Glob, Bash, mcp__claude-in-chrome__navigate, mcp__claude-in-chrome__computer, mcp__claude-in-chrome__read_page, mcp__claude-in-chrome__tabs_context_mcp, mcp__productos__productos_exchange_scopes, mcp__productos__productos_exchange_page, mcp__productos__productos_exchange_grid, mcp__productos__productos_exchange_packet, mcp__productos__productos_exchange_questions, mcp__productos__productos_exchange_what_it_covers, mcp__productos__productos_exchange_can_be_agreed_to, mcp__productos__productos_exchange_check, mcp__productos__productos_exchange_record
+tools: Read, Grep, Glob, Bash, mcp__claude-in-chrome__navigate, mcp__claude-in-chrome__computer, mcp__claude-in-chrome__read_page, mcp__claude-in-chrome__tabs_context_mcp
 ---
 You are asking one thing about each screen: **is this the right screen for what it has to do?**
 

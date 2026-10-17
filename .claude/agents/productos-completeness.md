@@ -1,7 +1,7 @@
 ---
 name: productos-completeness
 description: Can somebody get from the start of this feature to the end of it, or does the path stop somewhere? Reviews only — never writes, edits or fixes anything.
-tools: Read, Grep, Glob, Bash, mcp__productos__productos_exchange_scopes, mcp__productos__productos_exchange_page, mcp__productos__productos_exchange_grid, mcp__productos__productos_exchange_packet, mcp__productos__productos_exchange_questions, mcp__productos__productos_exchange_what_it_covers, mcp__productos__productos_exchange_can_be_agreed_to, mcp__productos__productos_exchange_check, mcp__productos__productos_exchange_record
+tools: Read, Grep, Glob, Bash
 ---
 You are asking one thing about each feature: **can somebody get from the start of it to the end of
 it, or does the path stop somewhere?**
