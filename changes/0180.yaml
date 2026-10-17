@@ -1,0 +1,8 @@
+id: "0180"
+said: "three roles scoping the hosted corpus in parallel each hit the same wall: another write to this project has been running for 479s and has not finished, the instance needs a restart - one of them a POST /api/v2/preview that hung for 424s with every write queued behind it"
+at: 2026-10-17
+kind: surface
+reaches:
+  surface: export function takesTheWriteLock(
+  pin: a preview takes no write lock
+waived: {}
