@@ -307,7 +307,6 @@ export const AREAS: Area[] = [
       "src/v2/applies.ts",
       "src/v2/acts.ts",
       "src/v2/record.ts",
-      "src/v2/spoken.ts",
       "src/v2/connects.ts",
       /**
        * ⛔ A DERIVATION, AND DELIBERATELY NOT BESIDE `states.ts`. That file is surface — it composes
@@ -380,7 +379,7 @@ export const AREAS: Area[] = [
   },
   {
     name: "generate",
-    does: "Produce output from a source — a corpus from a v1 tree, a screen from a component",
+    does: "Produce output from a source — a screen from a component, a drawing from the truth",
     never: [
       "invent: an input it cannot read becomes a marked placeholder, never a guess",
       "drop what it cannot carry silently — it goes to not-carried.yaml, by name",
@@ -782,7 +781,7 @@ export const AGENTS: Agent[] = [
       "written and nothing says so — and when somebody reports it wrong, typing it again is always the " +
       "shortest path.",
     reads: [
-      "src/v2/draw.ts and src/v2/migrate.ts — what CAN be generated",
+      "src/v2/draw.ts — what CAN be generated",
       "the corpus under review — what is actually in it",
       "git log on the corpus — whether a change came from a command or from an editor",
     ],

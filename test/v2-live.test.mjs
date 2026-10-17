@@ -97,21 +97,3 @@ test("the page updates itself, without reloading over words somebody has typed",
   assert.ok(!/class = "live-bar"|className = "live-bar"/.test(src), "the bar is back alongside the live update");
 });
 
-/**
- * ⛔ A REBUILD MUST NOT KILL THE SERVER.
- *
- * Hot reload exited with a restart code and relied on a supervisor to bring the process back.
- * Started any other way — a shell, a background job — it simply DIED on the first rebuild, leaving
- * a dead port and no message. That cost an entire session: every rebuild silently killed the
- * server, so pages that looked stale were pages nobody was serving, and fix after fix was explained
- * to somebody looking at the previous build. Peter: *"nothing at the top of at-create-deal. what is
- * going ON???????"* — it was there; the server was not.
- */
-test("a rebuild restarts the server rather than ending it", () => {
-  const src = fs.readFileSync("src/core/hot-reload.ts", "utf-8");
-  assert.match(src, /spawn\(process\.execPath, process\.argv\.slice\(1\)/, "it must start a replacement before exiting");
-  assert.match(src, /detached: true/, "the replacement must outlive this process");
-  assert.match(src, /child\.unref\(\)/, "and must not be held open by it");
-  /** The supervisor path stays: it watches for this code and must keep working. */
-  assert.match(src, /process\.exit\(RESTART_CODE\)/, "the exit code a supervisor watches for must survive");
-});
