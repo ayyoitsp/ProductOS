@@ -13,6 +13,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import fs from "node:fs";
+import path from "node:path";
 import {
   AGENTS,
   AREAS,
@@ -608,12 +609,92 @@ test("every role's installed definition is committed, and matches its source", (
   assert.deepEqual(
     missing,
     [],
-    "these roles are declared and their installed definition is not committed — run `productos init claude --update` and commit what it writes"
+    "these roles are declared and their installed definition is not committed — run `productos init claude --update`, then commit ONLY the body: see the next assertion for why the tools: line must not be"
   );
   assert.deepEqual(
     stale,
     [],
     "these installed definitions disagree with their source prompt — run `productos init claude --update` rather than editing .claude/agents by hand"
+  );
+
+  /**
+   * ⛔ AND NOT ONE OF THEM CARRIES A CHECKOUT-SPECIFIC MCP SERVER NAME, WHICH IS A HAZARD THE
+   * REMEDY ABOVE USED TO WALK PEOPLE INTO.
+   *
+   * The deploy session hit the staleness failure above, followed its advice — "run `productos init
+   * claude --update` and commit what it writes" — and the installer rewrote TWELVE judge files it
+   * had not asked about:
+   *
+   *     -tools: Read, Grep, Glob, Bash, WebFetch
+   *     +tools: Read, Grep, Glob, Bash, WebFetch, mcp__productos-deploy__productos_exchange_scopes, …
+   *
+   * `productos-deploy` is that worktree's own MCP server. Run here the same command writes
+   * `mcp__productos-the-packet-carries-its-test-requirements__…` — measured, both ways. So the
+   * committed artefact would carry ONE session's server name, and every other checkout's judges
+   * would hold nine tools that do not exist for them. `claude.ts` says this in as many words:
+   * *"a hardcoded `mcp__productos__…` would hand every judge in a worktree nine tools that do not
+   * exist"* — and then the remedy message invited exactly that, one layer over.
+   *
+   * ⛔ THE BODY COMPARISON ABOVE CANNOT SEE IT, deliberately: it strips the generated frontmatter,
+   * because the frontmatter is per-checkout. That is right, and it is precisely why the hazard was
+   * silent — the guarantee that the installed file matches its source is blind to the half of the
+   * file that cannot be universally correct.
+   *
+   * ⛔ WHAT STOPPED A BAD COMMIT WAS A PERSON REMEMBERING. The deploy session's first plan was to
+   * commit whatever the installer wrote — "if it can be generated, generate it" — and what stopped
+   * it was `CLAUDE.md`'s record of an install once reverting `productos-scoper.md` to a `criteria`
+   * section Peter had killed. Prose saved it that time. This is the failing build.
+   *
+   * ⛔ IT DOES NOT ASSERT THE ABSENCE OF ALL MCP TOOLS, which would be a `0` with no failing state
+   * and would also forbid the canonical registration a fresh clone legitimately has. It asserts
+   * that no committed name is for a server OTHER than `productos` — so the main checkout's install
+   * stays committable and a worktree's does not.
+   */
+  /**
+   * ⛔ AND A FILE WITH NO FRONTMATTER AT ALL WAS SKIPPED BY THE LOOP BELOW — `if (!head) continue`.
+   *
+   * The assertion that follows is about a WRONG `tools:` line. The deploy session named the other
+   * half independently: a role committed with no frontmatter, or with the `name:`/`tools:` keys
+   * missing, **passes every check in this file** — the body comparison strips frontmatter on
+   * purpose, and the slug walk skipped anything it could not parse. The host then registers no such
+   * agent, so the role silently does not exist while a green build says it is installed.
+   *
+   * ⛔ THAT IS A CHECK WITH NO FAILING STATE FOR THE THING THE INSTALL IS MOST LIKELY TO GET WRONG,
+   * which is the same shape as `CLAUDE.md`'s "a zero proves nothing unless you can say what a
+   * failing zero looks like". The skip is what made it a zero.
+   *
+   * The two keys are the ones the host reads: `name` is how a role is addressed, `tools` is what it
+   * may do. A role missing `tools` is not a safe role — the host's default is not this registry's.
+   */
+  const headless = [];
+  for (const f of fs.readdirSync(".claude/agents").filter((x) => x.startsWith("productos-") && x.endsWith(".md"))) {
+    const text = fs.readFileSync(path.join(".claude/agents", f), "utf-8");
+    const head = /^---\n([\s\S]*?)\n---/.exec(text);
+    if (!head) {
+      headless.push(`${f} → no frontmatter at all`);
+      continue;
+    }
+    for (const key of ["name", "tools"])
+      if (!new RegExp(`(^|\\n)${key}:`).test(head[1])) headless.push(`${f} → no ${key}:`);
+  }
+  assert.deepEqual(
+    headless,
+    [],
+    "these committed roles carry no usable frontmatter, so the host registers no such agent while every other check here passes — the body comparison strips frontmatter and the slug walk skips what it cannot parse"
+  );
+
+  const perCheckout = [];
+  for (const f of fs.readdirSync(".claude/agents").filter((x) => x.startsWith("productos-") && x.endsWith(".md"))) {
+    const head = /^---\n([\s\S]*?)\n---/.exec(fs.readFileSync(path.join(".claude/agents", f), "utf-8"));
+    if (!head) continue;
+    for (const m of head[1].matchAll(/mcp__([a-z0-9-]+)__/g)) {
+      if (m[1] !== "productos" && m[1].startsWith("productos-")) perCheckout.push(`${f} → ${m[1]}`);
+    }
+  }
+  assert.deepEqual(
+    [...new Set(perCheckout)],
+    [],
+    "these committed roles name one checkout's own MCP server, so every other checkout's judges would hold tools that do not exist — revert the `tools:` line and commit only the body"
   );
 
   /** ⛔ And nothing installed that no role declares — a renamed role leaves its old file behind. */

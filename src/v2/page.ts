@@ -4805,7 +4805,49 @@ if (typeof EventSource !== "undefined") {
       if (!res.ok) return reload();
       const doc = new DOMParser().parseFromString(await res.text(), "text/html");
       const mine = [...document.querySelectorAll("[data-sync]")];
-      if (!mine.length) return reload();
+      /*
+       * ⛔ A PAGE WITH NOTHING TO SYNC MUST NOT RELOAD. Peter: *"something constantly causes my
+       * screen to reload and i go back to 'overview'"*.
+       *
+       * This reloaded, on the reasoning below that a stale page is worse than a flash. True of a page
+       * that WOULD show the change — and the product's own page has no behaviour table at all, so it
+       * has none of these regions and reloaded on every change anybody made anywhere. Including the
+       * board he was standing on while I wrote three prototype assignments into his corpus from a
+       * terminal: three reloads, each one putting him back on Overview.
+       *
+       * ⛔ AND SAYING SO IS NOT OPTIONAL — the rule it is bending is real. A page cannot quietly go on
+       * showing truth that moved, so it says it moved and offers the refresh. The reader keeps their
+       * place and decides; what they lose is the flash, not the warning.
+       */
+      /*
+       * ⛔ A PAGE WITH NO SYNCABLE REGION UPDATES ITSELF — IT DOES NOT RELOAD, AND IT DOES NOT ASK.
+       *
+       * Peter: *"something constantly causes my screen to reload and i go back to 'overview'"*. His
+       * page has ZERO of these regions: 130 views, and sections that large are deferred to stubs,
+       * which is what removes them from the delivered document. So the fallback fired on every change
+       * anybody made anywhere — three prototype writes of mine, three reloads of the page he was
+       * standing on.
+       *
+       * ⛔ AND THE FIRST FIX I WROTE FOR THIS WAS A BAR SAYING "SOMETHING CHANGED · SHOW IT", WHICH HE
+       * HAS ALREADY REFUSED: *"6 changes to the truth under this page {show it} - unnecessary, just
+       * live update as we go..."*. A bar whose only possible answer is "yes, show me the correct page"
+       * is a question not worth asking, and I nearly shipped it back a week later. Merging main is
+       * what caught it — the comment recording his words was four hundred lines from mine.
+       *
+       * So it live-updates: the view a person is looking at is replaced from the fetched document.
+       * ⛔ Only the visible one, because swapping sixty would undo every deferred stub the page has
+       * loaded, and ⛔ the mock figures are re-filled exactly as the region swap below re-fills them.
+       */
+      if (!mine.length) {
+        const here = [...document.querySelectorAll("section.view")].find((v) => !v.hidden);
+        const fresh = here && doc.querySelector('section.view[data-view="' + CSS.escape(here.dataset.view) + '"]');
+        /** ⛔ Reload rather than lie, still — if the view cannot be found, the page must not go stale. */
+        if (!here || !fresh) return reload();
+        here.innerHTML = fresh.innerHTML;
+        if (window.fillCardScreen)
+          for (const f of here.querySelectorAll("figure.card-screen")) window.fillCardScreen(f);
+        return;
+      }
       let swapped = 0;
       for (const region of mine) {
         const fresh = doc.querySelector('[data-sync="' + CSS.escape(region.dataset.sync) + '"]');
@@ -4950,8 +4992,17 @@ if (typeof EventSource !== "undefined") {
     const back = JSON.parse(sessionStorage.getItem("productos-at") || "null");
     if (back) {
       sessionStorage.removeItem("productos-at");
-      const go = back.view && document.querySelector('nav.scopes a[data-goto="' + CSS.escape(back.view) + '"]');
-      if (go) go.click();
+      /*
+       * ⛔ THE SWITCHER, NOT A MENU LINK. See the showView comment for what clicking a link could not
+       * restore: every tab, and the feature you were already on.
+       */
+      if (back.view) {
+        if (window.showView) window.showView(back.view);
+        else {
+          const go = document.querySelector('nav.scopes a[data-goto="' + CSS.escape(back.view) + '"]');
+          if (go) go.click();
+        }
+      }
       if (typeof back.y === "number") window.scrollTo(0, back.y);
     }
   } catch (e) {}
@@ -7696,6 +7747,21 @@ const VIEW_SWITCH = `<script>
    * changes whether the chevron exists, and setOpen is the one place that knows what that means.
    */
   const reask = () => setOpen(!tree || !tree.hidden);
+  /*
+   * ⛔ THE SWITCHER, EXPOSED, BECAUSE THE ALTERNATIVE WAS SIMULATING A PRESS.
+   *
+   * Peter: *"something constantly causes my screen to reload and i go back to 'overview'"*.
+   *
+   * Restoring a reader's place worked by finding the menu link for the view and CLICKING it — so it
+   * could only restore a view that happens to have a row in the menu. Overview, the prototype board
+   * and the settings surfaces are tabs, not rows: there is no link to click, nothing restored, and
+   * the page fell back to its default, which is Overview. That is the whole of what he is seeing.
+   *
+   * ⛔ And my own menu change made it worse: the row for the scope you are ON renders as its name in
+   * bold rather than a link, because a link to where you already are is not a link. So even a
+   * feature view could fail to restore — the one case a reader is most likely to be in.
+   */
+  window.showView = (name) => show(name);
   window.addEventListener("productos:nav", reask);
   window.addEventListener("resize", reask);
 
