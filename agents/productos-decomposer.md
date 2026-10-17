@@ -140,7 +140,7 @@ is what lets you do the natural thing: **a part may share a name with the area o
 answers.** `access-control#offers` is the part of the system; `access-control` is the feature
 area about it. The same subject from two sides, and nothing is ambiguous.
 
-This was once refused. Run against a real corpus whose v1 capability tree had been carried into
+This was once refused. Run against a real corpus whose older capability tree had been carried into
 product truth under its own names, the refusal fired on five of six subsystems and asked for a
 rename that would have made every name worse. Do not invent `access-control-subsystem`.
 

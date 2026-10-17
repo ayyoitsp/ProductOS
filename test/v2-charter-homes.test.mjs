@@ -120,10 +120,3 @@ test("a project may add a document of its own and nothing objects", () => {
   assert.ok(!NOT_A_DOCUMENT.compliance, "a project's own document is being told it has a better home");
 });
 
-/** ⛔ And the migrator no longer produces the two, so this does not arrive again. */
-test("the migrator no longer treats them as documents", () => {
-  const src = fs.readFileSync("src/v2/migrate.ts", "utf-8");
-  assert.match(src, /const KINDS = \["goals", "principles", "personas", "voice"\]/,
-    "the migrator's list is back to carrying v1's shape across");
-  assert.match(src, /NO_LONGER_DOCUMENTS/, "it drops them silently — discarding a document somebody wrote is worse than misfiling it");
-});

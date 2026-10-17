@@ -116,11 +116,10 @@ to do it are in the private architecture note, not here.
    detects staleness, suggestion from drafted candidates and from observation strength. Over the
    agent surface none of them is a field: a connecting instance would have to parse prose to
    learn whether it may build from a sentence.
-3. **Consent over stdio is an honour system, deliberately and in writing.** The act tools take
-   `by` and `via` as arguments and pass them straight through; the hosted path takes all three
-   away from the caller and refuses a human `via` on an agent token. That is defensible with one
-   person at the machine and changes character with many instances connecting, each told to make
-   tickets unambiguous and each therefore tempted to settle what it finds.
+3. **There is no stdio server any more.** Peter: *"there should be no 'v1 anything'. there should
+   be no 'local corpus'. that should be completely stripped"* and *"yes, always hosted server"*. The
+   local server that took `by` and `via` on trust is gone with the v1 tools it carried; Claude
+   reaches a project only at `/p/<project>/mcp`, where a token can never record a person's consent.
 4. **`backend/`** — see the table above. Whether it moves out is Peter's to answer.
 5. **The retired store's container app is still serving.** Its source is gone; the deployment is
    not, and it holds whatever was written to its database. Tearing it down needs cloud access, so

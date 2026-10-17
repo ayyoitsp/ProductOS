@@ -254,7 +254,7 @@ test("MCP's manual and the door's are the same answer from the same generator", 
   const s = await served(dir);
   try {
     const overHttp = await s.get("/api/v2/in");
-    const overMcp = await exchangeTools.find((t) => t.name === "productos_intents").handler({}, { productsDir: dir });
+    const overMcp = await exchangeTools.find((t) => t.name === "productos_intents").handler({}, { root: dir });
     /** ⛔ Two transports, one contract. Two answers here would be two things to keep in step. */
     assert.deepEqual(overMcp.intents, describeIntents());
     assert.deepEqual(

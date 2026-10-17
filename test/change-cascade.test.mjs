@@ -29,9 +29,9 @@ const scratch = () => {
   fs.writeFileSync(path.join(d, "src/v2/schema.ts"), "export const X = { widget: 1 };\n");
   fs.writeFileSync(path.join(d, "src/v2/page.ts"), "function renderWidget() {}\n");
   // ⛔ A concept reaches derive and generate too — it did not, and that is how happy_path skipped
-  // the migrator while the gate that needs it refused every behaviour in a real corpus.
+  // the generator while the gate that needs it refused every behaviour in a real corpus.
   fs.writeFileSync(path.join(d, "src/v2/grid.ts"), "const widgetGate = 1;\n");
-  fs.writeFileSync(path.join(d, "src/v2/migrate.ts"), "carry widgetGate across\n");
+  fs.writeFileSync(path.join(d, "src/v2/draw.ts"), "draw widgetGate\n");
   fs.writeFileSync(path.join(d, "src/v2/check.ts"), 'kind: "no-widget-anywhere",\n');
   fs.writeFileSync(path.join(d, "skills/x/SKILL.md"), "author it as `widget:` in the file\n");
   fs.writeFileSync(path.join(d, "test/widget.test.mjs"), 'test("a widget is offered", () => {});\n');

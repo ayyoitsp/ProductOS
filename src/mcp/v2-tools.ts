@@ -66,7 +66,7 @@ const AtDir = z.object({
   dir: z.string().describe("corpus directory; defaults to <repo>/v2").optional(),
 });
 const dirOf = (args: { dir?: string }, paths: ProductosPaths): string =>
-  args.dir ? path.resolve(args.dir) : path.resolve(path.dirname(paths.productsDir), "..", "v2");
+  args.dir ? path.resolve(args.dir) : path.resolve(paths.root, "..", "v2");
 
 /** ⛔ Shared by every act, so no tool can omit one half of the provenance. */
 const Consent = {

@@ -283,6 +283,13 @@ export type GroupingConfig = z.infer<typeof GroupingConfig>;
 
 export const ProductosConfig = z.object({
   version: z.string().default("0.0.1"),
+  /**
+   * ⛔ WHERE THIS PROJECT'S TRUTH LIVES: a hosted project, as `https://<instance>/p/<project>`.
+   *
+   * Peter: *"yes, always hosted server"*. There is no local corpus to fall back to, so a Claude
+   * session is registered against this address and nothing else. `init claude --at <url>` writes it.
+   */
+  instance: z.string().url().optional(),
   stack: StackConfig.default({
     language: "typescript",
     test_framework: "jest",

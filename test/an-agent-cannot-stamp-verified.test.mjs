@@ -29,82 +29,16 @@
  */
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import fs from "node:fs";
-import path from "node:path";
-import { temp } from "./support/temp.mjs";
 import { exchangeTools } from "../dist/mcp/v2-tools.js";
-import { tools } from "../dist/mcp/tools.js";
-import { loadCorpus } from "../dist/v2/load.js";
-import { readLog } from "../dist/v2/log.js";
-import { readTracking } from "../dist/core/tracking.js";
 
-const door = exchangeTools.find((t) => t.name === "productos_in");
-const REF = "money#see-a-balance";
-/** The door resolves the corpus from `dir` when it is given one; `paths` is never reached. */
-const paths = { productsDir: path.resolve("productos/products") };
-
-function seed() {
-  const dir = temp("agent-cannot-stamp-");
-  fs.cpSync("v2-seed", dir, { recursive: true });
-  return dir;
-}
-
-/** A person the instance authenticated and watched press — what `serve.ts` builds for a real press. */
-const aPerson = { kind: "browser", actor: "peter", session: "s-1", scopes: ["read", "author"] };
-
-const accept = (dir, fields, caller) =>
-  door.handler({ intent: "accept", fields, dir }, paths, caller);
-
-// ---------------------------------------------------------------------------
-// 1. The door, over stdio — where the principal is nobody's press
-// ---------------------------------------------------------------------------
-
-const trackingPaths = (dir) => ({ root: dir, repoRoot: dir });
-const updateTracking = tools.find((t) => t.name === "productos_update_tracking");
-
-test("⛔ `productos_update_tracking` refuses `verified`, and the sidecar carries no stamp", async () => {
-  const dir = temp("agent-cannot-stamp-v1-");
-  const p = trackingPaths(dir);
-
-  const r = await updateTracking.handler(
-    { feature_id: "wallet", behavior_id: "see-a-balance", status: "verified", by: "ai-runtime" },
-    p
-  );
-  assert.equal(r.ok, false, "⛔ a model stamped a behaviour as human-validated");
-  assert.ok(
-    r.detail.some((d) => /productos verify|press/.test(d)),
-    `the refusal does not name a human path: ${JSON.stringify(r.detail)}`
-  );
-
-  const t = readTracking(p, "wallet");
-  assert.equal(t, null, "the refusal wrote a sidecar");
-});
-
-test("the statuses that claim nothing still land, with their history", async () => {
-  /** ⛔ The non-refusal outcome. `contested` can only ever reduce what the corpus claims. */
-  const dir = temp("agent-cannot-stamp-v1-ok-");
-  const p = trackingPaths(dir);
-
-  const r = await updateTracking.handler(
-    { feature_id: "wallet", behavior_id: "see-a-balance", status: "contested", note: "the app shows cents", by: "a session" },
-    p
-  );
-  assert.equal(r.ok, true, JSON.stringify(r));
-
-  const b = readTracking(p, "wallet").behaviors["see-a-balance"];
-  assert.equal(b.status, "contested");
-  assert.equal(b.history.at(-1).action, "contested");
-  assert.ok(!b.verified_by, "⛔ a status that claims nothing still stamped a verifier");
-  assert.ok(!b.last_verified, "⛔ a status that claims nothing still stamped a date");
-});
-
+/** ⛔ The v1 tracking tools this was written against are gone; the general form still holds for the one surface left. */
 test("⛔ and no tool on the surface offers `verified` as something to set", () => {
   /**
    * The general form. The hole was not `update_tracking` specifically — it was one enum copied
    * whole from a schema that has a `verified` in it, which the next tracking tool would do again.
    */
   const offered = [];
-  for (const t of tools)
+  for (const t of exchangeTools)
     for (const [field, spec] of Object.entries(t.inputSchema.properties ?? {}))
       if (Array.isArray(spec.enum) && spec.enum.includes("verified")) offered.push(`${t.name}.${field}`);
   assert.deepEqual(offered, [], "a model is being offered human validation as a value to send");

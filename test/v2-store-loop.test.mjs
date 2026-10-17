@@ -35,7 +35,6 @@ import { accountFor, issueToken, singleAccount } from "../dist/v2/store/identity
 import { importFromDisk, loadFromStore, LOG_FILE } from "../dist/v2/store/corpus.js";
 import { CORPUS_DIRS } from "../dist/v2/load.js";
 import { readLog } from "../dist/v2/log.js";
-import { worthWaking } from "../dist/mcp/server.js";
 
 const CLI = path.resolve("dist/cli/index.js");
 
@@ -191,9 +190,6 @@ test("a note a person files reaches a session, which claims it", async () => {
     assert.equal(work.length, 1, `the note did not reach the session: ${JSON.stringify(inbox.parsed).slice(0, 400)}`);
     assert.equal(work[0].work, notes[0].id);
     assert.match(work[0].says, /this reads thin/);
-
-    /** ⛔ The thing that decides whether a session is woken at all. */
-    assert.equal(worthWaking(inbox.parsed.events), true, "a note did not count as work worth waking for");
 
     // 3. ⛔ The cursor does NOT advance past work that is not done.
     assert.equal(inbox.parsed.next_cursor, 0, "the cursor moved past a note nobody has acted on");

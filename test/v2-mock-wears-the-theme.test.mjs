@@ -24,7 +24,6 @@ import { test } from "node:test";
 import { scopeToShadow, themesIn, appStyleFor, wearTheme, snapshotStyle, styleOf, styleDrift, liftFaces } from "../dist/v2/appcss.js";
 import YAML from "yaml";
 import { renderScopePage } from "../dist/v2/page.js";
-import { renderShell } from "../dist/ui/renderer.js";
 import { loadCorpus } from "../dist/v2/load.js";
 import { everyViewV1 } from "../dist/v2/routes.js";
 import { writeSketchHtml, diskPages } from "../dist/v2/draw-write.js";
@@ -131,38 +130,6 @@ test("every mock on a generated page opts into the product's scheme", () => {
   const bare = renderScopePage(withHtml, scope.scope.id, { linkBase: "/v2", appCss: ":root { --x: 1 }" });
   assert.match(bare, /<div class="proto html">/, "a scheme nobody chose was stamped on a mock");
   assert.match(bare, /<template id="app-css">/, "a scheme nobody chose was published to the hosts");
-});
-
-test("the review tree carries the application's stylesheet with it", () => {
-  /**
-   * ⛔ THE DEFECT PETER WAS LOOKING AT. This tree linked a route that served `web.stylesheet`
-   * alone; the configuration in front of him set `web.stylesheets`, so the link 404ed and every
-   * drawing rendered unstyled. It reads one list now, through the same function the other tree
-   * reads, which is why this asserts on the shell rather than on a route.
-   */
-  const shell = renderShell("x", '<div class="ux-mock"><template><div class="flex">hi</div></template></div>', "", {
-    appCss: "html[data-theme='brand'] { --x: camel } .flex { display: flex }",
-    theme: "brand",
-  });
-  assert.match(shell, /<template id="app-css" data-theme="brand">/, "the application's CSS does not travel with the page");
-  assert.match(shell, /:host\(\[data-theme='brand'\]\)/, "the theme was carried in a form that cannot match");
-  assert.doesNotMatch(shell, /_user-style\.css/, "the page still links a route instead of carrying the bytes");
-
-  const none = renderShell("x", "<p>hi</p>", "");
-  assert.doesNotMatch(none, /<template id="app-css"/, "an empty stylesheet template shipped anyway");
-});
-
-test("a mock's markup never sits loose in the review page", () => {
-  /**
-   * The application's CSS styles `*`, `body` and `:root`. Loose in this document it restyles the
-   * review surface into the thing under review — which happened once and took the page apart.
-   */
-  const shell = renderShell("x", '<div class="ux-mock"><template><div class="flex">hi</div></template></div>', "", {
-    appCss: ".flex { display: flex }",
-  });
-  const mock = /<div class="ux-mock">([\s\S]*?)<\/div>\s*<\/template>/.exec(shell);
-  assert.ok(mock, "the mock is not wrapped in a template at all");
-  assert.match(mock[1], /^<template>/, "the mock's markup is in the page rather than in a template");
 });
 
 test("a project chooses which scheme it wears, and the choice outlives the bytes", () => {

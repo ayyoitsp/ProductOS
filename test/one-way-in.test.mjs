@@ -18,7 +18,7 @@ import { test } from "node:test";
 import fs from "node:fs";
 import path from "node:path";
 import { INTENTS, intentNamed, unwitnessed } from "../dist/v2/intents.js";
-import { tools } from "../dist/mcp/tools.js";
+import { exchangeTools as tools } from "../dist/mcp/v2-tools.js";
 import {
   EXCHANGE_ACT_TOOLS,
   EXCHANGE_LOOP_TOOLS,
