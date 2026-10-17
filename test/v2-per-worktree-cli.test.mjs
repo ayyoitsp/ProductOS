@@ -61,72 +61,37 @@ const git = (cwd, ...args) =>
     stdio: ["ignore", "pipe", "ignore"],
   });
 
-test("the MCP registration names the checkout it was run from, absolutely", () => {
-  const root = fakeCheckout("dev");
-  const reg = mcpServerFor({ root, dev: true });
-
+test("Claude is registered against the hosted project, and against nothing on this machine", () => {
   /**
-   * ⛔ THE BARE NAME IS THE BUG, not a stylistic choice. `command: "productos"` resolves through
-   * the one `npm link` slot, so a worktree's MCP server ran a different worktree's code — and the
-   * registration looked perfectly correct while doing it.
+   * ⛔ Peter: "there should be no 'local corpus'. that should be completely stripped" and "yes,
+   * always hosted server". The registration used to spawn a local server over a directory; now it
+   * names the project's MCP endpoint, and nothing is run here at all.
    */
-  assert.notEqual(reg.command, "productos", "still the bare name — this is the whole defect");
-  assert.ok(path.isAbsolute(reg.command), `the command is not an absolute path: ${reg.command}`);
-  assert.equal(reg.args[0], path.join(root, "bin", "productos.js"));
-  assert.ok(path.isAbsolute(reg.args[0]), "the launcher is not absolute, so it depends on a cwd");
-  assert.deepEqual(reg.args.slice(1), ["serve", "--mcp"]);
-
-  /**
-   * ⛔ IT IS SPAWNED BY `process.execPath`, NOT BY THE LAUNCHER'S SHEBANG. `bin/productos.js`
-   * begins `#!/usr/bin/env node`, which needs `node` on the PATH of whatever spawned it — and the
-   * Claude desktop app, one of the three readers this registers for, is started by the window
-   * server with almost no PATH. The node running the install is a path that is known to exist.
-   */
-  assert.equal(reg.command, process.execPath);
-});
-
-test("a published install keeps the bare name, because that file is shared in a repo", () => {
-  /**
-   * ⛔ THE FIX MUST NOT REACH CONSUMERS. `.mcp.json` is the one a team commits, and an absolute
-   * path to one machine's `node_modules` is a directory none of their teammates has. The ambiguity
-   * being fixed is a DEV ambiguity: several checkouts of ProductOS, one link slot.
-   */
-  const root = fakeCheckout("published");
-  assert.deepEqual(mcpServerFor({ root, dev: false }), {
-    command: "productos",
-    args: ["serve", "--mcp"],
+  const reg = mcpServerFor({ instance: "https://x.productos.dev/p/acme" });
+  assert.deepEqual(reg, {
+    type: "http",
+    url: "https://x.productos.dev/p/acme/mcp",
+    headers: { Authorization: "Bearer ${PRODUCTOS_TOKEN}" },
   });
+  assert.equal(reg.command, undefined, "a registration that spawns a process is a local server again");
 
-  /** ⛔ And a checkout with no launcher to point at falls back rather than naming a missing file. */
-  const bare = tmp("nolauncher");
-  assert.equal(mcpServerFor({ root: bare, dev: true }).command, "productos");
+  /** ⛔ The token is named, never written — `.mcp.json` is the file a team commits. */
+  assert.doesNotMatch(JSON.stringify(reg), /Bearer [A-Za-z0-9]{12,}/);
+
+  /** Whatever form the address arrives in, it lands on the one endpoint. */
+  assert.equal(mcpServerFor({ instance: "https://x.productos.dev/p/acme/" }).url, "https://x.productos.dev/p/acme/mcp");
+  assert.equal(mcpServerFor({ instance: "https://x.productos.dev/p/acme/mcp" }).url, "https://x.productos.dev/p/acme/mcp");
 });
 
-test("the server is told which corpus, by the variable the server actually reads", () => {
-  const root = fakeCheckout("corpus");
-  const project = tmp("project");
-  const reg = mcpServerFor({ root, dev: true, corpusRoot: project });
-
-  /**
-   * ⛔ RUNNING THE RIGHT CODE IS ONLY HALF OF IT, and the other half is the half that was observed.
-   * `wakeOnWork` resolves the corpus from the server process's cwd — and the cwd of a server a host
-   * spawned is the host's business, not ours. `PRODUCTOS_V2_DIR` is the escape hatch that comment
-   * asks for, and until now nothing set it.
-   */
-  assert.equal(reg.env.PRODUCTOS_V2_DIR, path.join(project, "productos", "v2"));
-
-  /**
-   * ⛔ Pinned against the reader, so a rename on either side fails here rather than silently going
-   * back to resolving a corpus from wherever the host happened to be.
-   */
-  const server = fs.readFileSync("src/mcp/server.ts", "utf-8");
-  assert.match(server, /process\.env\.PRODUCTOS_V2_DIR/, "the server no longer reads the variable the install sets");
+test("an address that is not a hosted project is refused, rather than registered and silent", () => {
+  for (const bad of ["./v2", "/Users/me/repo/productos/v2", "https://x.productos.dev", "https://x.productos.dev/acme"])
+    assert.throws(() => mcpServerFor({ instance: bad }), /not a hosted project/, `${bad} was registered`);
 });
 
 test("two checkouts coexist in one config file instead of overwriting each other", () => {
   const file = path.join(tmp("reg"), "nested", ".claude.json");
-  const a = { command: "/a/bin/node", args: ["/a/bin/productos.js", "serve", "--mcp"] };
-  const b = { command: "/b/bin/node", args: ["/b/bin/productos.js", "serve", "--mcp"] };
+  const a = { type: "http", url: "https://a.example/p/one/mcp" };
+  const b = { type: "http", url: "https://b.example/p/two/mcp" };
 
   assert.equal(writeMcpRegistration(file, "productos", a), true);
   assert.equal(writeMcpRegistration(file, "productos-a-branch", b), true);
@@ -324,7 +289,7 @@ test("⛔ uninstalling removes this checkout's registration, not the fixed name"
     assert.ok(un.includes(f), `uninstall does not reach ${f}, where the registration actually is`);
 });
 
-test("the real install writes the absolute command and prunes nothing from a worktree", () => {
+test("the real install registers the hosted project and prunes nothing from a worktree", () => {
   /**
    * ⛔ THE END-TO-END RUN, AGAINST A HOST DIRECTORY THAT IS NOT THE REAL ONE.
    *
@@ -353,7 +318,7 @@ test("the real install writes the absolute command and prunes nothing from a wor
   let r;
   try {
     process.chdir(project);
-    r = installClaudeSkills({ update: true, configRoot: project, home });
+    r = installClaudeSkills({ update: true, configRoot: project, home, instance: "https://x.productos.dev/p/acme" });
   } finally {
     process.chdir(was);
   }
@@ -363,16 +328,10 @@ test("the real install writes the absolute command and prunes nothing from a wor
   assert.deepEqual(Object.keys(doc.mcpServers), [name], "registered under the wrong key");
   const reg = doc.mcpServers[name];
 
-  /**
-   * ⛔ WHAT A SESSION IN THIS DIRECTORY WILL ACTUALLY RUN. `productos` here is the defect: a bare
-   * name resolves through one global `npm link` slot, so the server ran whichever checkout linked
-   * last — and `src/mcp/server.ts:87-95` records what that cost.
-   */
-  assert.equal(reg.args[0], path.join(checkoutRoot(), "bin", "productos.js"));
-  assert.ok(path.isAbsolute(reg.command));
-  assert.equal(reg.env.PRODUCTOS_V2_DIR, path.join(project, "productos", "v2"));
+  /** ⛔ WHAT A SESSION IN THIS DIRECTORY WILL REACH: the hosted project, and no process on this machine. */
+  assert.deepEqual(reg, { type: "http", url: "https://x.productos.dev/p/acme/mcp", headers: { Authorization: "Bearer ${PRODUCTOS_TOKEN}" } });
   assert.equal(r.mcpName, name);
-  assert.ok(r.mcpRuns.includes("bin/productos.js"), `the report does not say what it will run: ${r.mcpRuns}`);
+  assert.equal(r.mcpRuns, "https://x.productos.dev/p/acme/mcp", `the report does not say what it reaches: ${r.mcpRuns}`);
 
   /** ⛔ And the agents went beside the project, not onto the machine — which is a separate rule. */
   assert.equal(r.agentsDir, path.join(project, ".claude", "agents"));

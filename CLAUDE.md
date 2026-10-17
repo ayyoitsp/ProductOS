@@ -217,7 +217,6 @@ mistake sends someone to rearrange a corpus that has no correct arrangement; rep
 an author mistake as a framework gap buries a real fix in our backlog.
 
 ```bash
-productos todo scan     # detect forced fits in this corpus
 productos todo          # read the open gaps
 productos todo add "<what the model can't express>" --forced-into <where it went>
 ```
@@ -230,7 +229,7 @@ becoming the convention.
 compromise looks correct, so the evidence that the framework was deficient disappears
 and the same hole gets rediscovered from scratch next session. The skills have always
 said "don't paper over ambiguity"; that instruction alone has repeatedly not been
-enough, which is why the scan exists.
+enough, which is why recording one comes before the approximate version, not after.
 
 ## ⛔ Product truth is the target state — never gate it on what exists
 
@@ -291,8 +290,6 @@ of the two is current.
 
 ```bash
 productos v2 check --at <corpus>   # structure + every refusal + reference resolution
-# ⛔ The `v2` is load-bearing. Without it this is the v1 verb: no --at, and it cannot
-#    read an Exchange corpus at all. Every session was told to run that one for months.
 ```
 
 **A corpus was handed over for review that contradicted the documented model in four

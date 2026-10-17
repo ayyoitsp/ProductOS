@@ -396,7 +396,6 @@ export const AREAS: Area[] = [
      * `core/change.ts` were added here to stop.
      */
     files: [
-      "src/v2/migrate.ts",
       "src/v2/draw.ts",
       "src/v2/draw-write.ts",
       /**
@@ -537,20 +536,10 @@ export const AREAS: Area[] = [
        */
       "src/v2/intents.ts",
       /**
-       * ⛔ THE PROCESS THAT HOSTS EVERY SURFACE, AND IT WAS ON NO AREA. `v2Route` is mounted here,
-       * the port is bound here, and the one line that told anybody where the page was reachable is
-       * here — which is how a corpus naming a real client came to answer the whole network while
-       * printing "localhost". A file missing from the map is a place no reviewer will look.
+       * ⛔ THE TWO SMALL WRITES, beside the door that routes to them: one suggested claim, one
+       * raised question. Peter: *"WRITE STRAIGHT INTO THE CORPUS as SUGGSTED."*
        */
-      "src/ui/server.ts",
-      /**
-       * ⛔ AND THE TREE THAT SERVER LANDS ON. `/` is this renderer; `/v2` is page.ts. One of them
-       * was on the map and the other was not, and the one that was not spent months rendering
-       * every drawing unstyled — it linked a route that served `web.stylesheet` while the project
-       * in front of it set `web.stylesheets`. A reviewer asked whether a concept is present
-       * everywhere needs both trees on the list, or "everywhere" means "the half somebody added".
-       */
-      "src/ui/renderer.ts",
+      "src/v2/suggest.ts",
       /**
        * ⛔ THE HOSTED SURFACES, WHICH ARE NOW THE PRODUCT RATHER THAN A PREVIEW OF ONE. `serve.ts`
        * said it first — "`productos serve` is not a preview of a hosted thing, it IS the thing" —
@@ -1593,15 +1582,12 @@ export const AUTHORS: Author[] = [
  * shipped with no home or stopped being used.
  *
  * ⛔ AND IT IS NOT A SECOND COPY OF `--help`. A doc listing commands is exactly the thing that
- * rots; what makes this maintained is `who` and `track`, which `--help` cannot know and which are
- * the two questions actually worth asking about a command:
+ * rots; what makes this maintained is `who`, which `--help` cannot know and which is the question
+ * actually worth asking about a command:
  *
  *   who   — a person, or the model. "Never hand a human a flag" is a rule this project keeps, and
  *           it was keepable only by remembering it. A command marked `claude` that turns up in a
  *           skill's instructions to a person is now a visible contradiction.
- *   track — v1 or the Exchange model. Two parallel tracks have been running for months and nothing
- *           said which commands belong to which, so the retired half stayed indistinguishable from
- *           the live half at the only moment it matters: somebody reading the list.
  */
 export interface Verb {
   /** As it is typed. ⛔ Including the parent, because `v2 read` and `read` are different commands. */
@@ -1630,26 +1616,19 @@ export interface Verb {
    * true has nowhere to live, instead of writing it as prose.
    */
   who: "person" | "claude" | "both" | "operator";
-  /** Which of the two parallel models it belongs to. */
-  track: "v1" | "exchange" | "both";
 }
 
 export const COMMANDS: Verb[] = [
   // ─── setting up, and the surfaces a person actually opens ───────────────────────────────────
-  { name: "init", does: "Install ProductOS into an AI runtime and scaffold a corpus", owns: "instruct", who: "claude", track: "both" },
-  { name: "serve", does: "Render product truth as a website, or run the MCP server", owns: "surface", who: "person", track: "both" },
-  { name: "configure", does: "Interactive configuration, section by section", owns: "instruct", who: "person", track: "both" },
-  { name: "doctor", does: "Check the install, the runtime, and the state of the truth", owns: "check", who: "person", track: "both" },
-  { name: "env", does: "Drive a dev environment", owns: "surface", who: "claude", track: "both" },
-  { name: "byok", does: "Toggle and report the state of bring-your-own-key verification", owns: "surface", who: "person", track: "both" },
-  { name: "todo", does: "Framework gaps — where the model could not express what the corpus needed", owns: "check", who: "both", track: "both" },
+  { name: "init", does: "Install ProductOS into an AI runtime and connect it to a hosted project", owns: "instruct", who: "claude" },
+  { name: "todo", does: "Framework gaps — where the model could not express what the corpus needed", owns: "check", who: "both" },
   /**
    * ⛔ `check`, BECAUSE IT DETECTS AND DOES NOT FIX — the same layer `todo` sits in, and for the
    * same reason: both read a record and report what is wrong with the shape of it. Nothing it finds
    * is applied by it, and the only routes onward are `v2 change` and `v2 steer`, both of which
    * require a person.
    */
-  { name: "learn", does: "What the record of feedback says about how this project works — computed, never written back", owns: "check", who: "both", track: "both" },
+  { name: "learn", does: "What the record of feedback says about how this project works — computed, never written back", owns: "check", who: "both" },
 
   // ─── operating a hosted instance ────────────────────────────────────────────────────────────
   /**
@@ -1663,110 +1642,88 @@ export const COMMANDS: Verb[] = [
    * ⛔ AND NONE OF THEM CAN RECORD A VERDICT. Nothing here calls `perform`, because a provisioning
    * tool that could stamp agreement would be a way to mint human consent from a shell.
    */
-  { name: "hosted", does: "Operate a hosted instance: accounts, projects, tokens, and corpus in and out", owns: "surface", who: "operator", track: "exchange" },
-  { name: "hosted doctor", does: "Whether the store can be reached, the schema is current, and what is in it", owns: "check", who: "operator", track: "exchange" },
-  { name: "hosted projects", does: "Every project in the store, with its owner and how much it holds", owns: "surface", who: "operator", track: "exchange" },
-  { name: "hosted project", does: "Create a project, owned by an account that is made if it is new", owns: "surface", who: "operator", track: "exchange" },
-  { name: "hosted token", does: "Issue, list and revoke what something automated holds to reach a project", owns: "surface", who: "operator", track: "exchange" },
+  { name: "hosted", does: "Operate a hosted instance: accounts, projects, tokens, and corpus in and out", owns: "surface", who: "operator" },
+  { name: "hosted doctor", does: "Whether the store can be reached, the schema is current, and what is in it", owns: "check", who: "operator" },
+  { name: "hosted projects", does: "Every project in the store, with its owner and how much it holds", owns: "surface", who: "operator" },
+  { name: "hosted project", does: "Create a project, owned by an account that is made if it is new", owns: "surface", who: "operator" },
+  { name: "hosted token", does: "Issue, list and revoke what something automated holds to reach a project", owns: "surface", who: "operator" },
   /**
    * ⛔ ITS OWN VERB RATHER THAN A FLAG ON `import`, BECAUSE IMPORT CLOBBERS. That one puts every
    * file in a directory, so delivering a style with it would overwrite everything authored on the
    * instance since the corpus arrived — silently, since the result still parses and still renders.
    */
-  { name: "hosted style", does: "Push the application's design libraries into a project, touching no other document", owns: "generate", who: "operator", track: "exchange" },
-  { name: "hosted import", does: "Put a corpus directory into a project on an instance", owns: "generate", who: "operator", track: "exchange" },
-  { name: "hosted export", does: "Write a project's corpus out as a directory, byte for byte", owns: "generate", who: "operator", track: "exchange" },
-  { name: "hosted session", does: "A browser session for one account, which is what makes a press provable", owns: "surface", who: "operator", track: "exchange" },
+  { name: "hosted style", does: "Push the application's design libraries into a project, touching no other document", owns: "generate", who: "operator" },
+  { name: "hosted import", does: "Put a corpus directory into a project on an instance", owns: "generate", who: "operator" },
+  { name: "hosted export", does: "Write a project's corpus out as a directory, byte for byte", owns: "generate", who: "operator" },
+  { name: "hosted session", does: "A browser session for one account, which is what makes a press provable", owns: "surface", who: "operator" },
 
   // ─── the Exchange model ─────────────────────────────────────────────────────────────────────
   /** ⛔ The parent is a command too — `productos v2` with no verb lists the tree. */
-  { name: "v2", does: "The Exchange model — the tree every verb below it hangs from", owns: "surface", who: "both", track: "exchange" },
-  { name: "v2 check", does: "What this corpus refuses, and what it merely reports", owns: "check", who: "claude", track: "exchange" },
-  { name: "v2 forward", does: "Bring a corpus on disk forward to this build's schema", owns: "derive", who: "claude", track: "exchange" },
-  { name: "v2 prototypes", does: "Draw each prototype's chrome, and aim its menu at the screens it names", owns: "generate", who: "claude", track: "exchange" },
-  { name: "v2 inside", does: "Say which screen a screen appears inside — the relation a walk is built from", owns: "generate", who: "claude", track: "exchange" },
-  { name: "v2 grid", does: "The behaviours a scope states, and where each one stands", owns: "derive", who: "claude", track: "exchange" },
-  { name: "v2 accepted", does: "The exact wording somebody has agreed to, before anybody rewrites it", owns: "surface", who: "claude", track: "exchange" },
-  { name: "v2 acts", does: "How many acts of human judgement this corpus carries", owns: "derive", who: "claude", track: "exchange" },
-  { name: "v2 packet", does: "Compile the execution packet for one scope", owns: "generate", who: "claude", track: "exchange" },
+  { name: "v2", does: "The Exchange model — the tree every verb below it hangs from", owns: "surface", who: "both" },
+  { name: "v2 check", does: "What this corpus refuses, and what it merely reports", owns: "check", who: "claude" },
+  { name: "v2 forward", does: "Bring a corpus on disk forward to this build's schema", owns: "derive", who: "claude" },
+  { name: "v2 prototypes", does: "Draw each prototype's chrome, and aim its menu at the screens it names", owns: "generate", who: "claude" },
+  { name: "v2 inside", does: "Say which screen a screen appears inside — the relation a walk is built from", owns: "generate", who: "claude" },
+  { name: "v2 grid", does: "The behaviours a scope states, and where each one stands", owns: "derive", who: "claude" },
+  { name: "v2 accepted", does: "The exact wording somebody has agreed to, before anybody rewrites it", owns: "surface", who: "claude" },
+  { name: "v2 acts", does: "How many acts of human judgement this corpus carries", owns: "derive", who: "claude" },
+  { name: "v2 packet", does: "Compile the execution packet for one scope", owns: "generate", who: "claude" },
   /**
    * ⛔ `claude`, not `person`. Nobody types this: it is how the role working out a test set records
    * which wording it worked from, which is the whole of keeping a derived set idempotent as truth
    * changes.
    */
-  { name: "v2 claim", does: "The hash of what a claim says, for a requirement worked out against it", owns: "derive", who: "claude", track: "exchange" },
+  { name: "v2 claim", does: "The hash of what a claim says, for a requirement worked out against it", owns: "derive", who: "claude" },
   /**
    * ⛔ `derive`, NOT `generate`, AND THE DISTINCTION IS THE WHOLE BOUNDARY. It computes what work
    * an analysis has left and writes nothing — ProductOS cannot spawn a role, the host does. A
    * command that produced the analysis itself would be the hand-authoring trap with a bigger
    * engine.
    */
-  { name: "v2 analyse", does: "What work an analysis has left across a corpus, and which of it is stale", owns: "derive", who: "claude", track: "exchange" },
-  { name: "v2 next", does: "What to ask somebody next about one feature", owns: "derive", who: "claude", track: "exchange" },
-  { name: "v2 page", does: "Render one scope as a page a person can review", owns: "surface", who: "claude", track: "exchange" },
-  { name: "v2 publishable", does: "Emit the interactive page for publishing, if the corpus allows it", owns: "surface", who: "claude", track: "exchange" },
+  { name: "v2 analyse", does: "What work an analysis has left across a corpus, and which of it is stale", owns: "derive", who: "claude" },
+  { name: "v2 next", does: "What to ask somebody next about one feature", owns: "derive", who: "claude" },
+  { name: "v2 page", does: "Render one scope as a page a person can review", owns: "surface", who: "claude" },
+  { name: "v2 publishable", does: "Emit the interactive page for publishing, if the corpus allows it", owns: "surface", who: "claude" },
 
   // the five acts. ⛔ A person performs these; the CLI is how the model records what they chose.
-  { name: "v2 accept", does: "Record that somebody has read one exchange and agrees to it", owns: "derive", who: "claude", track: "exchange" },
-  { name: "v2 rule", does: "Settle an unsettled slot — the ruling, and why", owns: "derive", who: "claude", track: "exchange" },
-  { name: "v2 read", does: "Record that somebody read a scope end to end", owns: "derive", who: "claude", track: "exchange" },
-  { name: "v2 waive", does: "Declare that something is deliberately not answered", owns: "derive", who: "claude", track: "exchange" },
-  { name: "v2 defer", does: "Park a question somebody has read and is not answering yet", owns: "derive", who: "claude", track: "exchange" },
-  { name: "v2 decide", does: "Work one scope's open questions, with what guessing wrong would cost", owns: "surface", who: "claude", track: "exchange" },
+  { name: "v2 accept", does: "Record that somebody has read one exchange and agrees to it", owns: "derive", who: "claude" },
+  { name: "v2 rule", does: "Settle an unsettled slot — the ruling, and why", owns: "derive", who: "claude" },
+  { name: "v2 read", does: "Record that somebody read a scope end to end", owns: "derive", who: "claude" },
+  { name: "v2 waive", does: "Declare that something is deliberately not answered", owns: "derive", who: "claude" },
+  { name: "v2 defer", does: "Park a question somebody has read and is not answering yet", owns: "derive", who: "claude" },
+  { name: "v2 decide", does: "Work one scope's open questions, with what guessing wrong would cost", owns: "surface", who: "claude" },
 
   // generating. ⛔ If it can be generated, generate it — these are why hand-authoring is a defect.
-  { name: "v2 generate", does: "Regenerate everything generable: screens, their states, and the graph", owns: "generate", who: "claude", track: "exchange" },
+  { name: "v2 generate", does: "Regenerate everything generable: screens, their states, and the graph", owns: "generate", who: "claude" },
   /**
    * ⛔ THE ONE GENERATOR THAT NEEDS THE REPOSITORY, WHICH IS WHY IT IS ITS OWN VERB. Every other
    * step reads the corpus; this reads the application's design libraries and copies them in, so a
    * drawing looks like the product on an instance that has no checkout anywhere near it.
    */
-  { name: "v2 style", does: "Copy the application's design libraries into the corpus, and say when they have moved since", owns: "generate", who: "claude", track: "exchange" },
-  { name: "v2 draw", does: "Generate one screen from the codebase", owns: "generate", who: "claude", track: "exchange" },
-  { name: "v2 propose", does: "Generate a screen from a view's own parts, where no code renders it", owns: "generate", who: "claude", track: "exchange" },
-  { name: "v2 connect", does: "Work out what each control leads to, from what the corpus says", owns: "derive", who: "claude", track: "exchange" },
-  { name: "v2 migrate", does: "Convert a v1 corpus into the Exchange model", owns: "generate", who: "claude", track: "exchange" },
-  { name: "v2 moved", does: "Walk what the code has decided since each screen was drawn", owns: "check", who: "claude", track: "exchange" },
+  { name: "v2 style", does: "Copy the application's design libraries into the corpus, and say when they have moved since", owns: "generate", who: "claude" },
+  { name: "v2 draw", does: "Generate one screen from the codebase", owns: "generate", who: "claude" },
+  { name: "v2 propose", does: "Generate a screen from a view's own parts, where no code renders it", owns: "generate", who: "claude" },
+  { name: "v2 connect", does: "Work out what each control leads to, from what the corpus says", owns: "derive", who: "claude" },
+  { name: "v2 moved", does: "Walk what the code has decided since each screen was drawn", owns: "check", who: "claude" },
 
   // the conversation, and keeping ourselves honest
-  { name: "v2 notes", does: "What people asked to be changed, what they were looking at, and the replies", owns: "surface", who: "claude", track: "exchange" },
-  { name: "v2 inbox", does: "What has happened since a given position", owns: "surface", who: "claude", track: "exchange" },
-  { name: "v2 watch", does: "Wait, and print a line whenever somebody records an act or asks for a change", owns: "surface", who: "claude", track: "exchange" },
-  { name: "v2 whoami", does: "What an instance thinks you are, and what it will let you do", owns: "surface", who: "claude", track: "exchange" },
-  { name: "v2 change", does: "Record a piece of feedback and drive it into every layer it must reach", owns: "instruct", who: "claude", track: "exchange" },
+  { name: "v2 notes", does: "What people asked to be changed, what they were looking at, and the replies", owns: "surface", who: "claude" },
+  { name: "v2 inbox", does: "What has happened since a given position", owns: "surface", who: "claude" },
+  { name: "v2 watch", does: "Wait, and print a line whenever somebody records an act or asks for a change", owns: "surface", who: "claude" },
+  { name: "v2 whoami", does: "What an instance thinks you are, and what it will let you do", owns: "surface", who: "claude" },
+  { name: "v2 change", does: "Record a piece of feedback and drive it into every layer it must reach", owns: "instruct", who: "claude" },
   /**
    * ⛔ `instruct`, BECAUSE A GENERATION STEER LANDS IN AN AUTHOR'S INSTRUCTIONS. It is tempting to
    * file this under `surface` — the verb is in the CLI and a person reads the list. But what the
    * verb produces is appended to every author's prompt at install, which makes it the same layer
    * `init` and `v2 change` serve: what a future session will be told.
    */
-  { name: "v2 steer", does: "What this project has learned — written, or noticed from what people did; habits that shape what gets made, never what it promises", owns: "instruct", who: "both", track: "exchange" },
-  { name: "v2 agents", does: "The roles: what each asks, and which skill orchestrates which", owns: "instruct", who: "both", track: "exchange" },
-  { name: "v2 reset", does: "Restore a corpus from the pristine seed, so every run starts identical", owns: "generate", who: "claude", track: "exchange" },
+  { name: "v2 steer", does: "What this project has learned — written, or noticed from what people did; habits that shape what gets made, never what it promises", owns: "instruct", who: "both" },
+  { name: "v2 agents", does: "The roles: what each asks, and which skill orchestrates which", owns: "instruct", who: "both" },
+  { name: "v2 reset", does: "Restore a corpus from the pristine seed, so every run starts identical", owns: "generate", who: "claude" },
 
-  // ─── v1, still here and no longer where the work is ─────────────────────────────────────────
-  { name: "check", does: "Check a v1 corpus against the model", owns: "check", who: "claude", track: "v1" },
-  { name: "product", does: "Inspect v1 product truth and update tracking", owns: "surface", who: "claude", track: "v1" },
-  { name: "area", does: "Show an area's features, flow, and audit roll-up", owns: "surface", who: "claude", track: "v1" },
-  { name: "review", does: "A conversational REPL to edit a v1 feature in plain English", owns: "surface", who: "person", track: "v1" },
-  { name: "scan", does: "LLM-driven scan of a codebase to create a v1 feature", owns: "generate", who: "person", track: "v1" },
-  { name: "move", does: "Re-file a v1 feature or area, repointing every reference", owns: "generate", who: "claude", track: "v1" },
-  { name: "history", does: "Recent snapshots of a v1 feature", owns: "surface", who: "claude", track: "v1" },
-  { name: "undo", does: "Restore a previous on-disk version of a v1 feature", owns: "generate", who: "claude", track: "v1" },
-  { name: "decide", does: "Answer an open question on a v1 behaviour", owns: "derive", who: "claude", track: "v1" },
-  { name: "ask", does: "Raise an ambiguity, a question, or a proposal as a reader", owns: "surface", who: "claude", track: "v1" },
-  { name: "read", does: "Record that somebody read a v1 container end to end", owns: "derive", who: "claude", track: "v1" },
-  { name: "next", does: "The v1 decisions waiting on somebody, ranked", owns: "derive", who: "claude", track: "v1" },
-  { name: "verify", does: "Mark a v1 behaviour as human-validated", owns: "derive", who: "claude", track: "v1" },
-  { name: "unverify", does: "Clear the human-validated stamp on a v1 behaviour", owns: "derive", who: "claude", track: "v1" },
-  { name: "gaps", does: "Gaps in v1 truth, tracking and open feedback", owns: "check", who: "claude", track: "v1" },
-  { name: "feedback", does: "Manage the v1 feedback queue", owns: "surface", who: "claude", track: "v1" },
-  { name: "queue", does: "Inspect and manage the v1 work queue", owns: "surface", who: "claude", track: "v1" },
-  { name: "test", does: "Test scaffolding and result ingestion", owns: "pin", who: "claude", track: "v1" },
 ];
 
-/** ⛔ Said out loud: which commands belong to the track that is no longer where the work is. */
-export const retiring = (): Verb[] => COMMANDS.filter((c) => c.track === "v1");
 
 /** Everything a PERSON is expected to type. ⛔ The rest are the model's, and a skill must not offer them. */
 /**

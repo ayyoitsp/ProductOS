@@ -933,18 +933,13 @@ So the question you own is not asked once over a feature. It is asked once per c
 
 ⛔ **Generated from the registry, and a test walks the real CLI against it.** A declared list nothing compares against `--help` is a second copy of `--help` that rots, which is the failure mode of every document this project has deleted. The test fails both ways: a command that exists and is declared nowhere, and a declaration the CLI no longer has.
 
-What `--help` cannot tell you, and why this exists: **who** types it, and **which track** it belongs to. *Never hand a human a flag* is a rule the skills state and nothing enforced — a command marked `claude` appearing in instructions addressed to a person is now a visible contradiction. And two parallel models have been running for months with nothing saying which commands belong to which.
+What `--help` cannot tell you, and why this exists: **who** types it. *Never hand a human a flag* is a rule the skills state and nothing enforced — a command marked `claude` appearing in instructions addressed to a person is now a visible contradiction.
 
-### Current — 52 commands
+### 46 commands
 
 | command | does | layer | typed by |
 |---|---|---|---|
-| `productos init` | Install ProductOS into an AI runtime and scaffold a corpus | instruct | the model |
-| `productos serve` | Render product truth as a website, or run the MCP server | surface | **a person** |
-| `productos configure` | Interactive configuration, section by section | instruct | **a person** |
-| `productos doctor` | Check the install, the runtime, and the state of the truth | check | **a person** |
-| `productos env` | Drive a dev environment | surface | the model |
-| `productos byok` | Toggle and report the state of bring-your-own-key verification | surface | **a person** |
+| `productos init` | Install ProductOS into an AI runtime and connect it to a hosted project | instruct | the model |
 | `productos todo` | Framework gaps — where the model could not express what the corpus needed | check | either |
 | `productos learn` | What the record of feedback says about how this project works — computed, never written back | check | either |
 | `productos hosted` | Operate a hosted instance: accounts, projects, tokens, and corpus in and out | surface | either |
@@ -981,7 +976,6 @@ What `--help` cannot tell you, and why this exists: **who** types it, and **whic
 | `productos v2 draw` | Generate one screen from the codebase | generate | the model |
 | `productos v2 propose` | Generate a screen from a view's own parts, where no code renders it | generate | the model |
 | `productos v2 connect` | Work out what each control leads to, from what the corpus says | derive | the model |
-| `productos v2 migrate` | Convert a v1 corpus into the Exchange model | generate | the model |
 | `productos v2 moved` | Walk what the code has decided since each screen was drawn | check | the model |
 | `productos v2 notes` | What people asked to be changed, what they were looking at, and the replies | surface | the model |
 | `productos v2 inbox` | What has happened since a given position | surface | the model |
@@ -992,31 +986,6 @@ What `--help` cannot tell you, and why this exists: **who** types it, and **whic
 | `productos v2 agents` | The roles: what each asks, and which skill orchestrates which | instruct | either |
 | `productos v2 reset` | Restore a corpus from the pristine seed, so every run starts identical | generate | the model |
 
-### v1 — 18 commands, on the track the work moved off
-
-⛔ Still registered and still working. They are listed apart because the only thing that used to distinguish them was knowing, and somebody reading the list is exactly who does not.
-
-| command | does | layer | typed by |
-|---|---|---|---|
-| `productos check` | Check a v1 corpus against the model | check | the model |
-| `productos product` | Inspect v1 product truth and update tracking | surface | the model |
-| `productos area` | Show an area's features, flow, and audit roll-up | surface | the model |
-| `productos review` | A conversational REPL to edit a v1 feature in plain English | surface | **a person** |
-| `productos scan` | LLM-driven scan of a codebase to create a v1 feature | generate | **a person** |
-| `productos move` | Re-file a v1 feature or area, repointing every reference | generate | the model |
-| `productos history` | Recent snapshots of a v1 feature | surface | the model |
-| `productos undo` | Restore a previous on-disk version of a v1 feature | generate | the model |
-| `productos decide` | Answer an open question on a v1 behaviour | derive | the model |
-| `productos ask` | Raise an ambiguity, a question, or a proposal as a reader | surface | the model |
-| `productos read` | Record that somebody read a v1 container end to end | derive | the model |
-| `productos next` | The v1 decisions waiting on somebody, ranked | derive | the model |
-| `productos verify` | Mark a v1 behaviour as human-validated | derive | the model |
-| `productos unverify` | Clear the human-validated stamp on a v1 behaviour | derive | the model |
-| `productos gaps` | Gaps in v1 truth, tracking and open feedback | check | the model |
-| `productos feedback` | Manage the v1 feedback queue | surface | the model |
-| `productos queue` | Inspect and manage the v1 work queue | surface | the model |
-| `productos test` | Test scaffolding and result ingestion | pin | the model |
-
 ## The map they read
 
 Territory, not ownership. Nobody is assigned an area — an agent reads this to know what *everywhere* means, and a test asserts every layer is held exactly once and every file in the track is on it. A file missing from the map is a place no agent will look.
@@ -1025,9 +994,9 @@ Territory, not ownership. Nobody is assigned an area — an agent reads this to 
 |---|---|---|
 | **model** | model | `src/v2/schema.ts` `src/v2/load.ts` `src/v2/ref.ts` `src/core/jobs.ts` `src/core/change.ts` `src/core/config.ts` `src/v2/store/schema.ts` |
 | **derive** | derive | `src/v2/grid.ts` `src/v2/stamp.ts` `src/v2/demonstrate.ts` `src/v2/analyse.ts` `src/v2/confidence.ts` `src/v2/level.ts` `src/v2/readiness.ts` `src/v2/find.ts` `src/v2/settle.ts` `src/v2/applies.ts` `src/v2/acts.ts` `src/v2/record.ts` `src/v2/spoken.ts` `src/v2/connects.ts` `src/v2/derive-states.ts` `src/v2/walk.ts` `src/v2/held.ts` `src/v2/selection.ts` `src/v2/dimensions.ts` `src/v2/steers.ts` `src/v2/store/access.ts` `src/v2/store/identity.ts` `src/core/learn.ts` `src/core/framework-gaps.ts` `src/adapters/claude.ts` |
-| **generate** | generate | `src/v2/migrate.ts` `src/v2/draw.ts` `src/v2/draw-write.ts` `src/cli/commands/v2.ts` `src/v2/routes.ts` `src/v2/propose.ts` `src/v2/propose-slots.ts` `src/v2/reslot.ts` `src/v2/walked.ts` `src/v2/appcss.ts` `src/v2/icons.ts` `src/v2/shell.ts` `src/core/agents-doc.ts` `src/v2/design.ts` `src/v2/compiler.ts` `src/v2/store/watchdog.ts` `src/v2/store/because.ts` `src/v2/store/corpus.ts` `src/v2/store/doc-migrations.ts` `src/v2/store/migrate.ts` `src/v2/store/boot.ts` |
+| **generate** | generate | `src/v2/draw.ts` `src/v2/draw-write.ts` `src/cli/commands/v2.ts` `src/v2/routes.ts` `src/v2/propose.ts` `src/v2/propose-slots.ts` `src/v2/reslot.ts` `src/v2/walked.ts` `src/v2/appcss.ts` `src/v2/icons.ts` `src/v2/shell.ts` `src/core/agents-doc.ts` `src/v2/design.ts` `src/v2/compiler.ts` `src/v2/store/watchdog.ts` `src/v2/store/because.ts` `src/v2/store/corpus.ts` `src/v2/store/doc-migrations.ts` `src/v2/store/migrate.ts` `src/v2/store/boot.ts` |
 | **operate** | operate | `Makefile` `Dockerfile` `docker-compose.yml` `docker-compose.remote.yml` `scripts/` |
-| **surface** | surface | `src/v2/page.ts` `src/v2/prototype.ts` `src/v2/serve.ts` `src/v2/intents.ts` `src/ui/server.ts` `src/ui/renderer.ts` `src/v2/store/server.ts` `src/v2/store/instance.ts` `src/v2/store/pushes.ts` `src/v2/store/mcp.ts` `src/v2/store/choose.ts` `src/cli/commands/hosted.ts` `src/v2/packet.ts` `src/v2/notes.ts` `src/v2/watch.ts` `src/v2/log.ts` `src/v2/inbox.ts` `src/v2/presence.ts` `src/v2/identity.ts` `src/v2/client.ts` `src/v2/write.ts` `src/v2/wire.ts` `src/v2/states.ts` `src/v2/moved.ts` `src/cli/commands/v2.ts` `src/cli/commands/todo.ts` `src/v2/store/trace.ts` `src/mcp/v2-tools.ts` |
+| **surface** | surface | `src/v2/page.ts` `src/v2/prototype.ts` `src/v2/serve.ts` `src/v2/intents.ts` `src/v2/suggest.ts` `src/v2/store/server.ts` `src/v2/store/instance.ts` `src/v2/store/pushes.ts` `src/v2/store/mcp.ts` `src/v2/store/choose.ts` `src/cli/commands/hosted.ts` `src/v2/packet.ts` `src/v2/notes.ts` `src/v2/watch.ts` `src/v2/log.ts` `src/v2/inbox.ts` `src/v2/presence.ts` `src/v2/identity.ts` `src/v2/client.ts` `src/v2/write.ts` `src/v2/wire.ts` `src/v2/states.ts` `src/v2/moved.ts` `src/cli/commands/v2.ts` `src/cli/commands/todo.ts` `src/v2/store/trace.ts` `src/mcp/v2-tools.ts` |
 | **instruct** | instruct | `skills` `agents` |
 | **pin** | pin | `test` |
 | **check** | check | `src/v2/check.ts` |

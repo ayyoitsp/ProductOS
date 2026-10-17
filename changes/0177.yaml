@@ -1,0 +1,9 @@
+id: "0177"
+said: there should be no 'v1 anything'. there should be no 'local corpus'. that should be completely stripped / yes, always hosted server / WRITE STRAIGHT INTO THE CORPUS as SUGGSTED. there is no 'HOLD' as a note state.
+at: 2026-10-17
+kind: surface
+reaches:
+  surface: suggestClaim
+  pin: a suggested sentence lands in the slot and reads as suggested
+waived: {}
+closed: 2026-10-17

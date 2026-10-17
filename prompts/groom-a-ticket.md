@@ -12,7 +12,9 @@ there yourself. Nothing below takes an issue id.
 
 ## 1. Find the truth the work touches
 
-Call `productos_exchange_scopes` for the tree of features and behaviours, with counts.
+Call `productos_find` with a sentence from the work item. It answers with refs in the corpus's own
+addresses, best first, each with how settled it is. `productos_exchange_scopes` gives the whole tree
+of features and behaviours when you need to browse instead.
 
 A **scope** is a feature; an **exchange** is one behaviour of it, addressed `<scope>#<exchange>`.
 A behaviour answers up to eight questions about itself, called **slots**: who `may` ask, what they
@@ -65,6 +67,17 @@ Put those in the work item verbatim, with the ref. ⛔ **Do not answer them, do 
 and do not write around them.** A hole a builder fills is product truth invented by a builder, and
 nothing downstream can tell it apart from a decision somebody made.
 
+If grooming turns up a question the truth does not ask yet, **raise it**:
+
+```
+productos_in { intent: "ask", fields: { ref: "<scope>#<exchange>#<slot>", question: "…", asked_of: "<who owes it>",
+               blocks: [], candidates: [{ says: "…", consequence: "…" }, …], cost: "…" } }
+```
+
+It lands in the corpus at once, gates the behaviour, and shows up in that person's queue with your
+drafted answers. Give two drafted answers and a cost when you can see two readings — that is what
+makes it a decision rather than an essay.
+
 If you have learned something that bears on an open question — a transcript, a log, a screen you
 drove — record it as an observation, not as the answer. It is evidence about the question, and the
 person deciding wants to see it.
@@ -96,12 +109,17 @@ the packet is what you build from.
 
 ## If the truth is wrong, or has nowhere to say what you found
 
-Say so where the person is. `productos_in` files a note against the thing you were looking at. Two
-things that are not notes:
+Write it into the corpus as a suggestion. It lands at once, reads as `suggested` until a person agrees
+to it, and never needs to wait in a note:
 
-- **A behaviour the product has and the truth does not** is a gap in the truth. Report it; do not
-  add it. ⛔ The corpus is the **target state** — what the product *should* do — so something being
-  built is not evidence that the truth is wrong, and something being absent is not permission to
-  invent it.
+```
+productos_in { intent: "suggest", fields: { ref: "<scope>#<exchange>#<slot>", says: "…", from: "<what you worked it out from>" } }
+```
+
+- **A behaviour the product has and the truth does not** — suggest it, with `from` naming where you
+  saw it. ⛔ The corpus is the **target state** — what the product *should* do — so something being
+  built is evidence for a suggestion, never a reason to treat it as agreed.
+- **A sentence you think is wrong** — raise it with `ask` on that slot, with `about` naming the part
+  in question. Do not suggest a contradicting sentence beside it.
 - **Something true that the model has no field for** is our problem, not the corpus author's. Name
   it, and name where you were forced to put it instead.

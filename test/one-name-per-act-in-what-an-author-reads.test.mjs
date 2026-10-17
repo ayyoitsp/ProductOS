@@ -26,7 +26,7 @@ import { test } from "node:test";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { tools } from "../dist/mcp/tools.js";
+import { exchangeTools as tools } from "../dist/mcp/v2-tools.js";
 import { INTENTS } from "../dist/v2/intents.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");

@@ -4,9 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolvePathsOrThrow, pathsAtCorpus } from "../../core/paths.js";
-import { listAllContainers } from "../../core/product.js";
 import {
-  detectFrameworkGaps,
   readFrameworkGaps,
   gapsFilePath,
   gapsWhoseFieldShipped,
@@ -122,30 +120,6 @@ export function todoCommand(): Command {
             `fix ProductOS, then correct every \`forced_into\` in one pass.`
         )
       );
-    });
-
-  cmd
-    .command("scan")
-    .description("Look for forced fits in this corpus and record any new ones")
-    .option("--at <corpus>", "The corpus this gap was found in (defaults to the repo you are standing in)")
-    .action((opts: { at?: string }) => {
-      const paths = recordFor(opts);
-      const found = detectFrameworkGaps(listAllContainers(paths));
-      let added = 0;
-      for (const g of found) {
-        if (recordFrameworkGap(paths, g)) added++;
-      }
-
-      // ⛔ And the other direction: gaps that have since been closed by shipped code. The
-      // backlog of what the model cannot express is worthless if a third of it is stale,
-      // and stale in the direction that keeps a compromise alive after the hole closed.
-      warnAboutGapsThatMayBeClosed(readFrameworkGaps(paths));
-      console.log(
-        added === 0
-          ? pc.dim(`Scanned: ${found.length} forced fit(s) found, all already recorded.`)
-          : pc.green(`✓ Recorded ${added} new framework gap${added === 1 ? "" : "s"}.`)
-      );
-      if (found.length) console.log(pc.dim("  productos todo   — to read them"));
     });
 
   cmd

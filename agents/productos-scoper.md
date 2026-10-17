@@ -475,7 +475,7 @@ added.
 
 ### ⛔ Three things authors before you could not say, and wrote badly instead
 
-All three came from one pair of re-scoping runs over v1-migrated features, and each was recorded as
+All three came from one pair of re-scoping runs over carried-over features, and each was recorded as
 a framework gap with `forced_into` naming the damage. They exist now. Use them.
 
 **`no_screen:` — this feature has no screen of its own.** A one-line reason, on the scope:
@@ -610,55 +610,6 @@ weight at all.
 
 So: if you can name the slot it fills and write a given/when/then for it, it is a `Rule`. If you
 cannot, and it still constrains how the product is built, it is a charter section.
-
-## Bringing a v1 corpus across
-
-```bash
-productos v2 migrate --from productos --out v2      # add --force to redo it
-
-### ⛔ `--force` takes what people said as truth, not what v1 remembers
-
-```bash
-productos v2 migrate --from productos --out v2 --force
-```
-
-It rebuilds from v1 — **except any scope somebody has spoken about.** A note filed against it, or a
-stamp a person made on it, holds that scope back exactly as it stands; the rebuild of it is
-discarded and the reason is printed.
-
-**Why, measured:** v1's `deal-pricing.md` carried ninety-seven mentions of staged edits, overrides
-and a publish gate — the model Peter corrected twice, on the page — while v2 had been rewritten to
-say nothing on that screen can be typed into. Rebuilding from v1 restored the rejected shape, and
-the notes recording the rejection were *closed*, so nothing objected. With the human record removed
-from that corpus the rejected wording came back twenty-eight times; with it present, none.
-
-⛔ **A closed request counts, and counts most** — it means the truth was already changed because of
-it, which is exactly what a rebuild throws away. ⛔ **`via: agent` does not count**: software may
-decide, and letting its own verdict hold a scope back would let generated output outrank the corpus
-it came from.
-
-**The cost, stated:** a held scope stops following v1 improvements. The only way it moves after that
-is somebody authoring it here. Say that when you run it.
-
-```
-
-It carries what v1 recorded and **refuses the rest by name**, into `not-carried.yaml`. Read that
-file before anything else: it is the real work queue, and every entry needs a person rather than a
-better script.
-
-⛔ **A migration decides nothing, and the temptation to make it decide is strong.** v1 recorded only
-`answer` — it had no field for who may ask, what they bring, what is left behind, what it refuses,
-what a failure leaves, what a repeat does, or what two at once does. On a real corpus that is
-**one slot in eight**, and the other seven-eighths come across blank.
-
-An earlier version of this migrator could not bear handing over 643 blanks, so it wrote seven open
-org-wide rules — one per unrecorded slot, with a generated question restating the slot's own
-definition, `scope: everywhere`. The result: a tool's invented questions gated every real behaviour in
-the product, and were presented to the reviewer as their own backlog. Peter's reaction on being
-shown it is the shortest summary of the failure: *"it's all generic, org-wide BS?"*
-
-**A blank is a blank.** The count is the finding, and a surface that dresses it up as a queue is
-lying about how much of a product has been written down.
 
 ## When you do not know
 

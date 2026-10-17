@@ -23,7 +23,7 @@ export interface PushState {
   why?: string;
 }
 
-let state: PushState = { why: "the server has not started watching anything yet" };
+let state: PushState = { why: "a hosted project does not push to a session" };
 
 export const setPush = (s: PushState): void => {
   state = s;

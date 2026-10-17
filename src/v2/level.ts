@@ -290,7 +290,10 @@ export function wroteOf(corpus: Corpus, ref: string): Wrote {
         ?.scope.exchanges.find((e) => e.id === got.exchange);
       const fill = ex?.slots?.[got.slot as keyof typeof ex.slots];
       const said = got.kind === "statement"
-        ? statements(fill?.says).find((x) => x.id === (got as { statement?: string }).statement)
+        ? /** ⛔ `name`, which is what `resolveRef` calls a statement's id. This read `.statement`,
+           *  which no ref carries, so every statement's own `wrote` was skipped and an agent's
+           *  sentence reported `unrecorded` beside a person's. Found by `v2-small-writes`. */
+          statements(fill?.says).find((x) => x.id === got.name)
         : undefined;
       const who = authorshipOf(said, fill);
       if (who) return who.hand === "person" ? { is: "a person", by: who.as } : { is: "a role", by: who.as, at: "" };

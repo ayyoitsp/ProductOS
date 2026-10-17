@@ -28,7 +28,7 @@ import { fileURLToPath } from "node:url";
 const SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "src");
 
 /** Every file that builds a stylesheet for a shadow root from a <template>. */
-const CARRIERS = ["v2/page.ts", "ui/renderer.ts"];
+const CARRIERS = ["v2/page.ts"];
 
 for (const rel of CARRIERS) {
   test(`${rel} reads the carried stylesheet as text, not as HTML`, () => {
