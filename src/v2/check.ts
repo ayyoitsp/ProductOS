@@ -190,6 +190,30 @@ function resolveRefSafely(c: Corpus, raw: string) {
 
 const norm = (s?: string) => (s ?? "").replace(/\s+/g, " ").trim();
 
+/**
+ * Every `<scope>#<view>` a corpus points at AS A SCREEN, and what points there.
+ *
+ * ⛔ THESE ARE THE FIELDS THAT MEAN "A SCREEN", and they are what makes a name collision bite: a
+ * part's `leads_to`, an ask arriving on another feature's screen with `view_in`, and a prototype's
+ * `starts_at` — the front door a walk begins at. An `at.view` is not here: it is a structured
+ * field naming the view directly, never a `<scope>#<name>` string resolved against both namespaces.
+ */
+function screenPointersIn(corpus: Corpus): Map<string, string[]> {
+  const out = new Map<string, string[]>();
+  const note = (ref: string | undefined, by: string): void => {
+    if (!ref || !ref.includes("#")) return;
+    out.set(ref, [...(out.get(ref) ?? []), by]);
+  };
+  for (const { scope } of corpus.scopes) {
+    for (const v of scope.views) {
+      for (const p of v.parts ?? []) note(p.leads_to, `${scope.id}#${v.id} ${p.id}`);
+    }
+    for (const ex of scope.exchanges) note(ex.at?.view_in, `${scope.id}#${ex.id}`);
+  }
+  for (const p of corpus.prototypes ?? []) note(p.starts_at, `the ${p.id} prototype's front door`);
+  return out;
+}
+
 export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[] } {
   /**
    * Is there a codebase behind this corpus at all? Decides whether "no screen records its source"
@@ -791,14 +815,39 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
        * ⛔ WITHIN ONE SCOPE ONLY. `a#thing` and `b#thing` resolve perfectly, and refusing a name
        * reused across scopes would ban "balance", "overview" and "settings" from a product.
        */
-      if (scope.views.some((v) => v.id === ex.id))
+      if (scope.views.some((v) => v.id === ex.id)) {
+        /**
+         * ⛔ IT REFUSES WHERE SOMETHING ACTUALLY POINTS AT THE SCREEN, AND NOTES IT OTHERWISE.
+         *
+         * The first cut refused every collision, and on the corpus it was written for that was
+         * sixteen of them — because naming the ask after the screen it lives on is this corpus's
+         * CONVENTION, not an accident. Sixteen refusals saying "this corpus must not be handed
+         * over" about a naming habit is a claim I could not support, so I measured instead.
+         *
+         * `resolveRef` resolves an ambiguous `<scope>#<name>` to the EXCHANGE, every time — proven
+         * on three of them against the live corpus. So the ambiguity is real and its direction is
+         * known: a pointer meaning the SCREEN silently gets the behaviour. What varies is whether
+         * anything points that way yet. On that corpus exactly three did, all at one name, and the
+         * sharpest was a prototype's front door — `starts_at`, which is where a walk begins.
+         *
+         * So: a collision something points at as a screen is a defect today and refuses. One
+         * nothing points at is a trap set for the next author and says so without blocking a
+         * handover. Both are reported; only one claims the corpus is unusable.
+         */
+        const asAScreen = screenPointersIn(corpus);
+        const pointed = asAScreen.get(`${scope.id}#${ex.id}`);
         add({
-          severity: "refuse",
+          severity: pointed ? "refuse" : "note",
           kind: "one-name-two-things",
           where: `${scope.id}#${ex.id}`,
-          what: `"${ex.id}" is both a screen here and an ask here, so one address means two things`,
-          fix: "rename the ask or the screen — everything that points at either of them points with `<scope>#<name>`, and resolves to whichever is looked up first",
+          what:
+            `"${ex.id}" is both a screen here and an ask here, so one address means two things` +
+            (pointed
+              ? ` — and ${pointed.join(", ")} points at it as a screen, which resolves to the ask instead`
+              : ", which nothing points at as a screen yet"),
+          fix: "rename the ask or the screen — everything pointing at either uses `<scope>#<name>`, and that resolves to the ask",
         });
+      }
       const seenCrit = new Set<string>();
       for (const c of ex.criteria) {
         if (seenCrit.has(c.id))
