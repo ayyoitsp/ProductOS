@@ -273,7 +273,33 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
   const add = (f: Finding) => findings.push(f);
 
   for (const b of corpus.broken) {
-    add({ severity: "refuse", kind: "will-not-parse", where: b.file, what: b.why });
+    /**
+     * ⛔ THE SCREEN'S OWN NAME, NEVER THE PATH THE BYTES HAPPENED TO BE AT.
+     *
+     * This printed `b.file`, and on a hosted corpus that is a per-request temp directory:
+     *
+     *     ✗ /var/folders/…/T/productos-instance-bIoD17/corpus/truth/publish-pricing.md will-not-parse
+     *
+     * Not wrong — that is where the bytes were — and unusable by every reader. The directory did
+     * not exist a minute earlier and will not exist a minute later, a person cannot open it, and
+     * the author who has to fix the document is looking for the name of a screen.
+     *
+     * ⛔ A REUSE, NOT A NEW FIELD. `Unloadable` already carries `title`/`id`, recovered before
+     * validation runs — added when the PAGE's alarm had this same defect and Peter asked *"wtf?
+     * overview just disappeared?"*. The page was taught to name the screen and this, the other
+     * surface reporting the same thing, was not. One fix applied to one of two places is how a
+     * defect survives being fixed.
+     *
+     * ⛔ AND THE FALLBACK IS THE BASENAME. A document too malformed to say what it is called must
+     * still be findable: `money.md` is actionable where 94 characters of somebody else's temp root
+     * is not.
+     */
+    add({
+      severity: "refuse",
+      kind: "will-not-parse",
+      where: b.title ?? b.id ?? b.file.split("/").pop() ?? b.file,
+      what: b.why,
+    });
   }
   /**
    * ⛔ NOTHING DERIVED IS REPORTED WHILE A FILE WILL NOT PARSE, because the gate turns into a
