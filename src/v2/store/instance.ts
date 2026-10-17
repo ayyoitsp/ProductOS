@@ -750,7 +750,7 @@ export async function instanceRoute(
     return true;
   }
 
-  const mutating = req.method !== "GET" && req.method !== "HEAD";
+  const mutating = takesTheWriteLock(req.method, addressed.rest);
 
   const run = async (): Promise<boolean> => {
     const { dir, documents: before, logHad, listening: wasListening, shared, corpusFor } = await materializeProject(reached, mutating);
@@ -943,4 +943,44 @@ export async function projectBySlug(
  * ⛔ EXPORTED FOR A TEST, WITH THE CLOCK INJECTABLE. The real wait is two minutes; a test that
  * waited it would be a test nobody runs. The production path never passes the third argument.
  */
+/**
+ * POST routes that read the corpus and change nothing, so they must not hold the project's write
+ * lock while they run.
+ *
+ * ⛔ `/api/v2/preview` IS A READ WEARING POST'S CLOTHES. It exists to show somebody what an act
+ * WOULD do: `preview()` calls `loadCorpus` and returns `{ ok, reads }`. It writes nothing, ever.
+ * It is a POST because it carries a body, which is a fact about HTTP and not about the corpus.
+ */
+const READ_SHAPED_POSTS = new Set(["/api/v2/preview"]);
+
+/**
+ * Whether a request must take the project's write lock.
+ *
+ * ⛔ KEYED ON THE ROUTE, NOT THE METHOD, AND THE METHOD VERSION TOOK THE INSTANCE DOWN FOR MINUTES
+ * AT A TIME. It read `req.method !== "GET" && req.method !== "HEAD"`, so every POST serialized
+ * against every other — and a preview is both the slowest POST and the one that changes nothing.
+ * Two roles working this corpus in parallel reported the same thing independently, hours apart:
+ *
+ *     {"error":"busy","message":"another write to this project has been running for 479s and has
+ *      not finished, so this … the instance needs a restart"}
+ *
+ * and a `POST /api/v2/preview` that hung for 424 seconds with every write to that project queued
+ * behind it. The lock was doing exactly what it was told; what it was told was that a question is
+ * a write.
+ *
+ * ⛔ THE LOCK ITSELF IS RIGHT AND STAYS. Two concurrent writes to one project materialize the same
+ * corpus twice and the second write simply does not contain the first — silent loss, which is the
+ * comment this function sits under. Narrowing which requests take it is not weakening it.
+ *
+ * ⛔ AND IT IS AN ALLOWLIST, not a guess at names. A route added later writes by default; a new
+ * read-shaped POST has to be named here, deliberately, by somebody who checked it writes nothing.
+ * The other direction — assume read, discover it writes — is the silent-loss bug again.
+ */
+export function takesTheWriteLock(method: string | undefined, route: string): boolean {
+  if (method === "GET" || method === "HEAD") return false;
+  /** The route as the allowlist spells it: no query string, no trailing slash. */
+  const path = (route.split("?")[0] ?? "").replace(/\/+$/, "") || "/";
+  return !READ_SHAPED_POSTS.has(path);
+}
+
 export const __serializeForTest = serialize;
