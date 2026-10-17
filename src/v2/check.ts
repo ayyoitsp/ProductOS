@@ -773,6 +773,32 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
           fix: "rename one — a stamp, a deferral or a dispute naming this reaches only one",
         });
       seenEx.add(ex.id);
+      /**
+       * ⛔ A SCREEN AND AN ASK MAY NOT SHARE A NAME, because `<scope>#<name>` addresses both.
+       *
+       * In Peter's corpus `org-loan-terms` had `fannie-program-settings` as its view id AND its
+       * exchange id, so one ref string named a screen and a behaviour at once — and which one a
+       * surface resolved was a matter of which lookup ran first. `at.view`, `leads_to`, a
+       * prototype's `starts_at`, a stamp, a reading's `bears_on`, a criterion's `of` and every
+       * `v2 claim` address all use that one shape.
+       *
+       * ⛔ NOTHING HAPPENED, WHICH IS WHY IT SURVIVED. The corpus loaded, the page rendered, every
+       * check passed. Found by a role scoping the feature, whose own words were *"nothing detects
+       * that collision — worth a check, not a model change"*: the model is right, views and
+       * exchanges are different things, and the gap was that nobody noticed the two namespaces
+       * meeting inside one scope — the only place the address becomes ambiguous.
+       *
+       * ⛔ WITHIN ONE SCOPE ONLY. `a#thing` and `b#thing` resolve perfectly, and refusing a name
+       * reused across scopes would ban "balance", "overview" and "settings" from a product.
+       */
+      if (scope.views.some((v) => v.id === ex.id))
+        add({
+          severity: "refuse",
+          kind: "one-name-two-things",
+          where: `${scope.id}#${ex.id}`,
+          what: `"${ex.id}" is both a screen here and an ask here, so one address means two things`,
+          fix: "rename the ask or the screen — everything that points at either of them points with `<scope>#<name>`, and resolves to whichever is looked up first",
+        });
       const seenCrit = new Set<string>();
       for (const c of ex.criteria) {
         if (seenCrit.has(c.id))

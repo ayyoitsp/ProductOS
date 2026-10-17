@@ -646,6 +646,51 @@ took that exit deleted the agreed clauses without any surface noticing. Each can
 implement*; its `consequence` is the argument. Putting the argument in `says` is the single
 most common way to make a question unanswerable.
 
+### ⛔ A question on a NAMED REFUSAL — the shape that took the corpus down twice in one afternoon
+
+Everything above is shown on `answer`, where the standing sits on the slot. A `refuses` slot is
+different: it holds **named outcomes**, and a question about one of them goes on that outcome.
+
+```yaml
+refuses:
+  outcomes:
+    - id: the-departure-is-no-longer-one-this-version-holds
+      says: >                   # what the product does
+        The ask is turned away and the reader is told the departure is no longer...
+      asks: told                # what is in question: whether / told / which
+      standing:
+        kind: open
+        about: >                # ⛔ REQUIRED, and this is the one that gets missed
+          whether the reader is shown WHICH departures still stand, or only that it failed
+        question: Is the reader shown what stands, or only that it could not be saved?
+        candidates:
+          - replaces: the whole sentence   # ⛔ REQUIRED beside an `about`, on EVERY candidate
+            says: >
+              ...
+```
+
+⛔ **Two of us broke it the same two ways in one afternoon, writing in parallel on one corpus.**
+Both documents stopped parsing, and because a document that will not load makes the whole corpus
+unjudgeable, `check` answered `cannot-judge-this-corpus` and **suppressed every other feature's
+findings** — including the other authors', who had done nothing wrong. One unparseable document is
+not a local mistake.
+
+| what was missing | what the loader says |
+| --- | --- |
+| `about` on a standing beside a named refusal that also `says` something | `exchanges.N.slots.refuses.outcomes.N.standing.about — this named refusal says something AND carries an unsettled standing — say which part of it is in question, or the whole sentence reads unruled and every surface discards it` |
+| `replaces` on a candidate, beside an `about` | `exchanges.N.slots.SLOT.standing.candidates.N.replaces — one thing about an agreed sentence is unruled here, so say whether this option is the whole replacement sentence or only the part in question — picking a fragment deletes the rest of what was agreed` |
+
+⛔ **So read your own document back before you finish.** The write succeeds either way — the door
+takes the bytes and the refusal only appears when something tries to LOAD them:
+
+```bash
+productos v2 check --at <corpus> 2>&1 | head -5
+```
+
+The first line must read `N scopes · N exchanges · …`. If you see `will-not-parse` or
+`cannot-judge-this-corpus`, fix it before you report, and re-read the document from the corpus
+first — other authors may have written while you worked.
+
 Four standings: `stated` · `open` · `disputed` · `out_of_scope`. Anything you cannot settle is
 `open`. `out_of_scope` costs a recorded act (`v2 waive`) and is **not yours to declare**.
 
