@@ -119,7 +119,9 @@ You are the **orchestrator**, and you are the session — not a subagent. That i
 
 *They say:* can I build this · is this groomed · is this ready to build · what are the tests for this · groom this
 
-**Spawn nothing.** Every part of this is something you may not hand off.
+**Spawn, in order:**
+
+- `demonstrator` *(quality · writes)* — the tests for every claim `readiness` lists as untested, one `demonstrate` call each — worked out from the claim as it reads, suggested until somebody agrees to it
 
 **⛔ You keep these yourself:**
 
@@ -128,6 +130,7 @@ You are the **orchestrator**, and you are the session — not a subagent. That i
 - ⛔ never recording consent: a claim nobody has agreed to needs a stamp from a person, and no amount of grooming produces one
 - deciding what a claim with no recorded author is — ask who wrote it; a person's unconfirmed draft and an agent's inference are the same bytes
 - writing the test list, with each requirement's ref and the hash of the words it was written from, into whatever holds the work
+- ⛔ before saying it is ready to build, running `hand it to the builders` — `ready` says every fact is agreed and every claim has a test, not that the tests would prove anything
 
 ### Find what already demonstrates the claims a corpus makes
 
@@ -277,6 +280,23 @@ productos_in { intent: "ask", fields: { ref: "<scope>#<exchange>#<slot>", questi
 - ⛔ **Never a `note` for either.** A note is a request to a person, not truth, and a question filed
   as one is a question no reader of the corpus will ever see. Never `document` for one sentence:
   that replaces the whole file.
+
+And the demonstrator's write — one testing requirement on one claim:
+
+```
+productos_in { intent: "demonstrate", fields: { ref: "<scope>#<exchange>#<slot>[#<statement>]",
+                                                given: "…", when: "…", then: "…", level: "integration" } }
+```
+
+- **`demonstrate`** adds one criterion with `derived: {by, at, from}`, and **the server computes
+  `from`** — the claim's hash as it reads at that moment — so a test cannot be marked current with
+  words it was not written against. `steps` replaces given/when/then where a sequence or two people
+  at once is the wrong shape for three clauses; `id` is the next free number unless given.
+- ⛔ **`derived` means derived from accepted input.** A requirement worked out from a claim nobody
+  has agreed to reads `suggested`, route `worked-out-from-a-draft`, and climbs to `derived` the
+  moment somebody agrees to the claim. Generation is never gated on agreement; only the level is.
+- ⛔ **`readiness` holds `ready` at false while any claim owing a demonstration has none** — they
+  are listed as `untested`, and they are the demonstrator's, never a person's.
 
 - **confirmed** — a person's act. `accept` or `rule`, with a `by` and a `via`.
 - **strength** — `none · one source · corroborated · strongly supported`, derived from the readings

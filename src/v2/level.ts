@@ -69,8 +69,10 @@ export type Route =
   | "accepted-through-a-rule"
   /** An authored requirement inside what somebody read and agreed to. */
   | "inside-an-acceptance"
-  /** Provenance, current with the words it was worked out from. */
+  /** Provenance, current with the words it was worked out from, and those words are agreed. */
   | "worked-out"
+  /** Worked out from words that have not changed — and that nobody has agreed to yet. */
+  | "worked-out-from-a-draft"
   /** It follows from an acceptance — a confirmed happy path names this screen. */
   | "follows-an-acceptance"
   /** The product was seen doing this. */
@@ -418,15 +420,38 @@ function requirementLevel(corpus: Corpus, ref: string, r: Extract<Ref, { kind: "
     );
   if (req.state === "current" && der) {
     const claim = stampFor(corpus, req.claim);
+    /**
+     * ⛔ `derived` MEANS DERIVED FROM ACCEPTED INPUT, SO A TEST WORKED OUT FROM A DRAFT IS A SUGGESTION.
+     *
+     * Peter's MVP names the three levels as *"human accepted, derived (from accepted input),
+     * suggested"*, and asked for *"appropriate test cases … generated based on verified product
+     * truth"*. This used to answer `derived` whatever the claim's state, with "nobody has agreed to
+     * that sentence yet" in `because` — and the gate a consumer applies is the level, not the prose.
+     * So a builder holding a ticket was handed a test for a sentence nobody had agreed to, at the
+     * same level as one for a sentence somebody had.
+     *
+     * ⛔ GENERATION IS NOT GATED, ONLY THE LEVEL. *"test cases should be generated too. they should
+     * just carry an invalidated state"* — the demonstrator still works from the truth as it reads,
+     * and the requirement exists from the moment it does. It climbs to `derived` the moment a person
+     * agrees to the claim, with nothing re-derived, because the hash it was worked out against is
+     * the hash they agreed to.
+     */
+    if (claim.state !== "accepted")
+      return level(
+        corpus,
+        ref,
+        "suggested",
+        "worked-out-from-a-draft",
+        `${der.by} worked this out from ${req.claim} on ${der.at}, and that sentence has not changed since — ` +
+          "but nobody has agreed to it yet, so this tests a draft. It becomes derived when somebody agrees to the claim",
+      );
     return level(
       corpus,
       ref,
       "derived",
       "worked-out",
       `${der.by} worked this out from ${req.claim} on ${der.at}, and that sentence has not changed since — ` +
-        (claim.state === "accepted"
-          ? `${agreedLine(claim.by, claim.at, claim.through)}`
-          : "and nobody has agreed to that sentence yet"),
+        agreedLine(claim.by, claim.at, claim.through),
     );
   }
   /**

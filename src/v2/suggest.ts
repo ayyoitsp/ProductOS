@@ -26,6 +26,7 @@ import YAML from "yaml";
 import { parseFrontmatter } from "../core/frontmatter.js";
 import { Scope, SLOTS as SLOT_NAMES, type SlotName } from "./schema.js";
 import { loadCorpus } from "./load.js";
+import { claimHash, stampFor } from "./stamp.js";
 
 export type Wrote = { ok: true; file: string; ref: string; said: string } | { ok: false; why: string; detail?: string[] };
 
@@ -184,4 +185,73 @@ export function raiseQuestion(
   const saved = save(f);
   if (!saved.ok) return saved;
   return { ok: true, file: f.file, ref: o.ref, said: `asked at ${o.ref} — it is in ${o.asked_of}'s queue until they answer it` };
+}
+
+/**
+ * Add one testing requirement to a claim, worked out from it as it now reads.
+ *
+ * ⛔ THE THIRD SMALL WRITE, AND THE ONE THE DEMONSTRATOR HAD NO WAY TO MAKE. Peter: *"make sure
+ * appropriate test cases are being generated based on verified product truth"*. The demonstrator's
+ * whole output is `criteria` with `derived.from` — and with the corpus hosted, the only way to
+ * write one was the `document` intent, replacing a whole feature in YAML no tool describes, with a
+ * hash the agent had to fetch and copy by hand.
+ *
+ * ⛔ THE HASH IS COMPUTED HERE, NEVER TAKEN FROM THE CALLER. `derived.from` is what decides whether
+ * a test is current with its claim; a caller that supplied it could mark a test written against
+ * yesterday's sentence as current with today's. The server hashes the claim it is about to attach
+ * the requirement to, so the two cannot disagree at the moment of writing.
+ *
+ * ⛔ IT DOES NOT ASK WHETHER THE CLAIM IS AGREED. Peter: *"test cases should be generated too. they
+ * should just carry an invalidated state"*. A requirement on a draft reads `suggested` (see
+ * `requirementLevel`) and climbs to `derived` when somebody agrees to the claim — so writing it
+ * early costs nothing and never hands a builder a test for an unagreed sentence.
+ */
+export function proposeRequirement(
+  root: string,
+  o: { ref: string; then?: string; given?: string; when?: string; steps?: string; level?: string; id?: string; by: string },
+): Wrote {
+  const r = slotRef(o.ref);
+  if ("error" in r) return { ok: false, why: r.error };
+  const then = (o.then ?? "").trim();
+  const steps = (o.steps ?? "").trim();
+  if (!then && !steps)
+    return { ok: false, why: "a requirement needs a `then` (or `steps`) — otherwise nothing is demonstrated", detail: ["the last line has to be something somebody could observe being false"] };
+  const LEVELS = ["unit", "integration", "api", "e2e"];
+  if (o.level && !LEVELS.includes(o.level)) return { ok: false, why: `"${o.level}" is not a level — one of ${LEVELS.join(", ")}, or leave it off` };
+
+  const corpus = loadCorpus(root);
+  const from = claimHash(corpus, o.ref);
+  if (!from) return { ok: false, why: `${o.ref} states nothing to demonstrate`, detail: ["a requirement is worked out from a claim — suggest the claim first (intent: suggest)"] };
+
+  const f = open(root, r.scope, r.exchange);
+  if ("error" in f) return { ok: false, why: f.error };
+  const ex = ((f.data.exchanges ?? []) as Array<Record<string, unknown>>).find((x) => x.id === r.exchange)!;
+  const criteria = ((ex.criteria ??= []) as Array<Record<string, unknown>>);
+  const taken = new Set(criteria.map((c) => String(c.id)));
+  const id = (o.id ?? "").trim() || String(Math.max(0, ...[...taken].map(Number).filter(Number.isFinite)) + 1);
+  if (taken.has(id)) return { ok: false, why: `${r.scope}#${r.exchange} already has a requirement ${id} — ⛔ an id is stable, so a new requirement gets a new one` };
+
+  criteria.push({
+    id,
+    slot: r.slot,
+    ...(r.statement ? { of: r.statement } : {}),
+    ...(o.given?.trim() ? { given: o.given.trim() } : {}),
+    ...(o.when?.trim() ? { when: o.when.trim() } : {}),
+    ...(then ? { then } : {}),
+    ...(steps ? { steps } : {}),
+    ...(o.level ? { level: o.level } : {}),
+    derived: { by: o.by, at: new Date().toISOString().slice(0, 10), from },
+  });
+  const saved = save(f);
+  if (!saved.ok) return saved;
+  const at = `${r.scope}#${r.exchange}#shows#${id}`;
+  const agreed = stampFor(loadCorpus(root), o.ref).state === "accepted";
+  return {
+    ok: true,
+    file: f.file,
+    ref: at,
+    said: agreed
+      ? `requirement ${at} demonstrates ${o.ref}, which somebody agreed to — it reads as derived`
+      : `requirement ${at} demonstrates ${o.ref} — nobody has agreed to that claim yet, so it reads as suggested until somebody does`,
+  };
 }

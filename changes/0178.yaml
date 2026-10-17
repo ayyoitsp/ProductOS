@@ -1,0 +1,11 @@
+id: "0178"
+said: Let's also make sure appropriate test cases are being generated based on verified product truth
+at: 2026-10-17
+kind: derivation
+reaches:
+  derive: worked-out-from-a-draft
+  surface: proposeRequirement
+  check: holds readiness back until one does
+  pin: a requirement worked out from a claim nobody agreed to is suggested, not derived
+waived: {}
+closed: 2026-10-17

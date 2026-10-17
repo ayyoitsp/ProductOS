@@ -57,6 +57,19 @@ clauses — forcing it produces a `when` carrying four actions, which an enginee
 rule is unchanged either way: the last line has to be something somebody could observe being
 false, and a criterion with neither a `then` nor `steps` demonstrates nothing and will not load.
 
+### ⛔ Over a hosted corpus, one requirement is one call — and the server writes `derived`
+
+```
+productos_in { intent: "demonstrate", fields: { ref: "<scope>#<exchange>#<slot>[#<statement>]",
+                                                given: "…", when: "…", then: "…", level: "integration" } }
+```
+
+Give `steps` instead of given/when/then where that shape is wrong, and `id` only to keep one stable.
+The server records `derived: {by, at, from}` itself, hashing the claim as it reads at that moment —
+⛔ you never copy a hash into a hosted corpus. A requirement on a claim nobody has agreed to reads
+`suggested` until somebody does, and `productos_readiness` lists every claim still owing one as
+`untested`; that list is your work.
+
 ### ⛔ `derived.from` is the hash of the claim, and it is the whole of idempotence
 
 Get it by asking, for the exact claim this demonstrates:
@@ -106,8 +119,8 @@ Per claim, and the order is deliberate — the last two are the ones that get sk
   you run after sign-off and must not work anything out from a draft. That was wrong. Peter:
   *"capabilities should be generated based on current truth, have the accepted state feed in. test
   cases should be generated too. they should just carry an invalidated state"*. You work from the
-  truth as it now reads; whether a person has agreed to it is reported beside each requirement, for
-  a reader to weigh. What makes that safe is `derived.from` — a reworded claim leaves its
+  truth as it now reads; whether a person has agreed to it decides the requirement's level — a test
+  on a draft reads `suggested`, and `derived` once somebody agrees to the claim. What makes that safe is `derived.from` — a reworded claim leaves its
   requirements invalidated and named, so deriving early costs a re-derivation and never a wrong
   test nobody can find.
 - **Write a `then` that cannot fail.** Ask it directly: what change to the product would make this

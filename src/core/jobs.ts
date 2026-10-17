@@ -1434,7 +1434,7 @@ export const AUTHORS: Author[] = [
        * kept; with it, unchanged truth yields the same set and a reworded sentence leaves exactly
        * its own requirements pointing at a hash nothing matches.
        */
-      "`derived` — the role, the date, and the hash of the claim it was worked out against",
+      "`derived` — the role, the date, and the hash of the claim it was worked out against. ⛔ Over a hosted corpus it is one `productos_in` call per requirement, intent `demonstrate`, and the server records all three",
       "`of` — which statement, wherever the slot says more than one thing",
       "`level` — where somebody would have to stand to observe it, where that is knowable from the claim",
     ],
@@ -1442,7 +1442,14 @@ export const AUTHORS: Author[] = [
       "write or reword a claim. ⛔ A requirement that needs the sentence to be different is a note addressed to whoever owns the sentence — changing it would be the test deciding the product",
       "assert anything the claim does not say: an engineer implements the `then`, so a word invented here becomes product truth nobody agreed to",
       "demonstrate a claim about refusing with a case that succeeds — the whole content of the claim is in the part a happy path never reaches",
-      "work anything out from a claim nobody has accepted yet",
+      /**
+       * ⛔ THIS LINE USED TO SAY THE OPPOSITE OF THE PROMPT. It read *"work anything out from a
+       * claim nobody has accepted yet"* while `productos-demonstrator.md` said, in Peter's words,
+       * that test cases are generated from current truth and *"just carry an invalidated state"*.
+       * The level is what carries that state now: a test on a draft reads `suggested`.
+       */
+      "stop because a claim is not agreed yet — a test worked out from a draft reads as suggested until somebody agrees to the claim, and climbs to derived with nothing re-derived",
+      "supply the hash itself — `demonstrate` hashes the claim it attaches to, so a test cannot be marked current with words it was not written against",
       "stamp anything walked, validated or accepted",
     ],
     needs: ["read-files", "search-files", "run-commands", "write-corpus"],
@@ -2154,13 +2161,28 @@ export const SHIMS: Shim[] = [
     route: "groom a ticket",
     does: "Answer whether a piece of work can be built, and raise what is open as questions",
     when: "can I build this · is this groomed · is this ready to build · what are the tests for this · groom this",
-    steps: [],
+    /**
+     * ⛔ THIS ROUTE SPAWNED NOBODY, SO "WHAT ARE THE TESTS FOR THIS" WAS ANSWERED WITH WHATEVER HAPPENED
+     * TO BE TYPED. Peter: *"make sure the right agents are reviewing everything for readiness"* and
+     * *"appropriate test cases are being generated based on verified product truth"*. `readiness`
+     * now lists `untested` — claims owing a demonstration that have none — and that list is the
+     * demonstrator's to fill, never a person's and never the grooming session's own guess.
+     *
+     * ⛔ THE JUDGES ARE NOT HERE, AND THAT IS THE GATE AND NOT AN OMISSION. Whether the tests would
+     * prove anything (`test-design`) and whether somebody could start Monday (`buildability`) rule on
+     * the content of truth, so they wait for agreement — `hand it to the builders`, which is gated on
+     * `ready for review`. This route hands over to it rather than repeating it.
+     */
+    steps: [
+      { role: "demonstrator", why: "the tests for every claim `readiness` lists as untested, one `demonstrate` call each — worked out from the claim as it reads, suggested until somebody agrees to it" },
+    ],
     keeps: [
       "the whole reading — `productos_readiness` for the verdict, the queue for each open question, and the packet for what to build from",
       "⛔ raising every open question with the person who was asked, verbatim, and answering none of them — a hole a builder fills is product truth invented by a builder",
       "⛔ never recording consent: a claim nobody has agreed to needs a stamp from a person, and no amount of grooming produces one",
       "deciding what a claim with no recorded author is — ask who wrote it; a person's unconfirmed draft and an agent's inference are the same bytes",
       "writing the test list, with each requirement's ref and the hash of the words it was written from, into whatever holds the work",
+      "⛔ before saying it is ready to build, running `hand it to the builders` — `ready` says every fact is agreed and every claim has a test, not that the tests would prove anything",
     ],
   },
   {

@@ -26,7 +26,7 @@
  */
 import { perform, payloadFrom, VIA, ACTS, OWED, ALSO, type Act, type Via } from "./acts.js";
 import { closeNote, fileNote, replyToNote } from "./notes.js";
-import { suggestClaim, raiseQuestion } from "./suggest.js";
+import { suggestClaim, raiseQuestion, proposeRequirement } from "./suggest.js";
 import { mayRecord, mayRelay, mayClaimHand, type Principal } from "./identity.js";
 import { parseFrontmatter } from "../core/frontmatter.js";
 import YAML from "yaml";
@@ -860,6 +860,39 @@ export const INTENTS: Intent[] = [
       if (!r.ok) return r;
       append(a.dir, { kind: "corpus-changed", at: new Date().toISOString(), by: a.who.actor, via: "agent", ref: r.ref, wrote: keyOf(a.dir, r.file), says: r.said });
       return { ok: true, said: r.said };
+    },
+  },
+  /**
+   * ⛔ ONE TESTING REQUIREMENT, WORKED OUT FROM ONE CLAIM. The demonstrator's write, made small for
+   * the same reason `suggest` was: see `proposeRequirement` for why the hash is the server's.
+   */
+  {
+    name: "demonstrate",
+    gate: "author",
+    does: "Add one testing requirement to a claim — it reads as suggested until a person agrees to the claim it demonstrates",
+    takes: [
+      { name: "ref", says: "The claim it demonstrates, as <scope>#<exchange>#<slot>, or <scope>#<exchange>#<slot>#<statement> where the slot says several things", required: true },
+      { name: "then", says: "What somebody observes when it holds — something that could be seen being false. Or give `steps`", required: false, long: true },
+      { name: "given", says: "The situation it starts from", required: false },
+      { name: "when", says: "The one thing somebody does", required: false },
+      { name: "steps", says: "Numbered steps, only where given/when/then is the wrong shape (two people at once, a sequence)", required: false, long: true },
+      { name: "level", says: "Where somebody stands to observe it: unit | integration | api | e2e. Leave it off when it is an engineering choice", required: false },
+      { name: "id", says: "A stable id. Next free number when absent", required: false },
+    ],
+    run: (a, body) => {
+      const r = proposeRequirement(a.dir, {
+        ref: str(body.ref),
+        then: str(body.then) || undefined,
+        given: str(body.given) || undefined,
+        when: str(body.when) || undefined,
+        steps: str(body.steps) || undefined,
+        level: str(body.level) || undefined,
+        id: str(body.id) || undefined,
+        by: a.who.actor,
+      });
+      if (!r.ok) return r;
+      append(a.dir, { kind: "corpus-changed", at: new Date().toISOString(), by: a.who.actor, via: "agent", ref: r.ref, wrote: keyOf(a.dir, r.file), says: r.said });
+      return { ok: true, said: r.said, ref: r.ref };
     },
   },
   {

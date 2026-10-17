@@ -137,6 +137,20 @@ export interface Readiness {
   /** The test list, in the packet's order. */
   requirements: TestRequirement[];
   /**
+   * Claims that owe a demonstration and have no testing requirement at all.
+   *
+   * ⛔ GATING, BECAUSE A BUILDER WITH NO TEST LIST IS NOT READY — THEY ARE UNCHECKED. Peter: *"make
+   * sure appropriate test cases are being generated based on verified product truth"*. Before this,
+   * `ready` read only the claims and the requirements that existed, so an exchange whose every claim
+   * was agreed and nothing demonstrated came back `ready: true` with "0 testing requirements to
+   * implement" — the one state this list exists to stop reaching a builder. The predicate is
+   * `demonstrationOf`'s `undemonstrated`, the same one `check` and the packet use, so three readers
+   * cannot disagree about whether a claim owes one.
+   *
+   * Routed to the demonstrator, not to a person: nobody authors a criterion.
+   */
+  untested: string[];
+  /**
    * Questions that reach this work without landing on any of its facts.
    *
    * ⛔ REPORTED AND NOT GATING, which is `awaiting`'s distinction and not one invented here. An
@@ -340,11 +354,14 @@ export function readinessOf(corpus: Corpus, ref: string): Readiness | { error: s
 
   /** ⛔ The requirements are `demonstrationOf`'s, so this cannot disagree with the packet or `check`. */
   const requirements: TestRequirement[] = [];
+  const untested: string[] = [];
   for (const s of scopes) {
     const entry = corpus.scopes.find((x) => x.scope.id === s);
     for (const ex of entry?.scope.exchanges ?? []) {
       if (exchange && ex.id !== exchange) continue;
-      for (const req of demonstrationOf(corpus, s, ex.id)?.requirements ?? []) {
+      const shown = demonstrationOf(corpus, s, ex.id);
+      untested.push(...(shown?.undemonstrated ?? []));
+      for (const req of shown?.requirements ?? []) {
         const l = levelOf(corpus, req.ref);
         if ("error" in l) continue;
         const c = req.criterion;
@@ -369,14 +386,14 @@ export function readinessOf(corpus: Corpus, ref: string): Readiness | { error: s
 
   const unbuildable = requirements.filter((r) => !BUILDABLE.includes(r.level));
   const counts = countLevels([...holes, ...unagreed, ...latitude, ...settled, ...requirements]);
-  const ready = holes.length === 0 && unagreed.length === 0 && unbuildable.length === 0;
+  const ready = holes.length === 0 && unagreed.length === 0 && unbuildable.length === 0 && untested.length === 0;
 
   return {
     ref,
     grain,
     title,
     ready,
-    because: verdict({ title, ready, holes, unagreed, latitude, settled, requirements, unbuildable, openElsewhere }),
+    because: verdict({ title, ready, holes, unagreed, latitude, settled, requirements, unbuildable, untested, openElsewhere }),
     counts,
     holes,
     unagreed,
@@ -384,6 +401,7 @@ export function readinessOf(corpus: Corpus, ref: string): Readiness | { error: s
     settled,
     framing,
     requirements,
+    untested,
     openElsewhere,
   };
 }
@@ -414,6 +432,7 @@ function verdict(x: {
   settled: Level[];
   requirements: TestRequirement[];
   unbuildable: TestRequirement[];
+  untested: string[];
   openElsewhere: Nearby[];
 }): string {
   const tests = `${n(x.requirements.length, "testing requirement")} to implement`;
@@ -456,6 +475,10 @@ function verdict(x: {
           : "")
     );
   }
+  if (x.untested.length)
+    why.push(
+      `${n(x.untested.length, "claim")} with nothing that would show ${was(x.untested.length, "it", "them")} holding (${x.untested.join(", ")}) — a demonstrator owes the tests, not a person`
+    );
   return (
     `Not ready to build: ${why.join("; and ")}. ` +
     `${n(x.settled.length, "fact")} ${was(x.settled.length, "is", "are")} agreed, and ${tests}.${extra}`
