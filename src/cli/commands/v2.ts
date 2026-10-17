@@ -487,7 +487,28 @@ export function v2Command(): Command {
        * So the list is the kinds that can carry a hash, and the message names both uses rather
        * than only the one whoever wrote it had in mind.
        */
-      const HASHABLE = ["slot", "statement", "exchange", "capability"] as const;
+      /**
+       * ⛔ AND `rule`, WHICH IS THE THIRD TIME THIS LIST HAS BEEN TOO SHORT. The comment above
+       * records the first two; this one cost 55 requirements their provenance.
+       *
+       * A demonstrator writing the two publish checkpoints put the sentence true of both into
+       * RULES rather than twice into features — which is what this project asks for — and then
+       * reported that every requirement it wrote on a rule carries no `derived` block at all,
+       * because this refused with *"nothing at that grain has wording to hash"*.
+       *
+       * That message asserts something false, and the engine had already settled it: `coveredBy`
+       * is documented as taking "an exchange ref … or a rule id" and answers for one immediately —
+       * `who-may-freeze-a-rent-roll-as-a-version` → `sha256:679c9badd2f0e276`, parts
+       * `["statement", "mode: supplies", "fills: may", "0 criteria"]`. A rule's whole substance IS
+       * wording: its statement, its mode, the slots it fills.
+       *
+       * ⛔ WHAT IT COST: `a-requirement-older-than-its-claim` could never fire on a rule. Reword a
+       * rule's statement and every requirement demonstrating it stayed silently current — and a
+       * stale requirement is the one failure that gets IMPLEMENTED and passes, proving the old
+       * sentence. That asymmetry is exactly why the refusal exists for exchanges, and rules were
+       * exempt from it by accident.
+       */
+      const HASHABLE = ["slot", "statement", "exchange", "capability", "rule"] as const;
       if (!(HASHABLE as readonly string[]).includes(resolved.ref.kind)) {
         console.error(
           pc.red("✗"),
@@ -495,6 +516,7 @@ export function v2Command(): Command {
         );
         console.error(pc.dim("  a requirement is worked out against   <scope>#<exchange>#<slot>[#<statement>]"));
         console.error(pc.dim("  a capability's `serves` may be coarser  <scope>#<exchange>  ·  <subsystem>#offers#<id>"));
+        console.error(pc.dim("  a rule is its own claim                <rule id>"));
         process.exit(1);
       }
       const hash = claimHash(corpus, ref);
