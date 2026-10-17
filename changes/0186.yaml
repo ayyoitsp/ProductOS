@@ -1,0 +1,8 @@
+id: "0186"
+said: "the hosted write route loses characters outside the basic plane - review-the-rows.md carried an emoji inside a sketch, posting the document back stored replacement characters in its place, and because view.sketch feeds claimHash that single write shifted every claim hash in the scope. That, not sentence drift, was the 64-stale report"
+at: 2026-10-17
+kind: surface
+reaches:
+  surface: 'const chunks: Buffer[] = []'
+  pin: a split anywhere in the body is safe
+waived: {}
