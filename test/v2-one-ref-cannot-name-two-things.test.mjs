@@ -54,11 +54,18 @@ function corpusWhereAViewAndAnAskShareAName() {
   return { dir, name: exId, viewId };
 }
 
-test("a view and an exchange sharing a name is refused", () => {
+test("a view and an exchange sharing a name is reported", () => {
   const { dir, name } = corpusWhereAViewAndAnAskShareAName();
   const found = collisions(dir);
   assert.equal(found.length, 1, `expected one collision, got ${JSON.stringify(found)}`);
-  assert.equal(found[0].severity, "refuse");
+  /**
+   * ⛔ A NOTE WHERE NOTHING POINTS AT IT AS A SCREEN. The first cut refused every collision, and
+   * on the corpus this was written for that meant sixteen refusals — because naming the ask after
+   * its screen is that corpus's convention. "This corpus must not be handed over", sixteen times,
+   * about a naming habit, is a claim I could not support. See the refusal case below for the one
+   * that is a defect today.
+   */
+  assert.equal(found[0].severity, "note");
   assert.match(found[0].what, new RegExp(name), "the finding does not name the colliding id");
   /** ⛔ It has to say what breaks, or a reader cannot tell why two names matter. */
   assert.match(
@@ -94,4 +101,31 @@ test("the same name in two different scopes is fine", () => {
       `    asked_by: person\n    reads: []\n    changes: []\n    slots: {}\n    criteria: []\n---\n\n# Somewhere else\n`
   );
   assert.deepEqual(collisions(dir), [], "a name reused in another scope was refused");
+});
+
+test("and it refuses once something points at that name as a screen", () => {
+  /**
+   * ⛔ THE HALF THAT MAKES THE COLLISION A DEFECT RATHER THAN A TRAP.
+   *
+   * `resolveRef` resolves an ambiguous `<scope>#<name>` to the EXCHANGE — measured on three of
+   * them against the live corpus, every time. So a pointer meaning the SCREEN silently gets the
+   * behaviour. On that corpus three such pointers existed, all at one name, and the sharpest was a
+   * prototype's `starts_at`: the front door a walk begins at.
+   */
+  const { dir, name } = corpusWhereAViewAndAnAskShareAName();
+  const money = fs.readFileSync(path.join(dir, "truth", "money.md"), "utf-8");
+  /** Another scope whose part navigates to that screen — the ordinary way one screen reaches another. */
+  fs.writeFileSync(
+    path.join(dir, "truth", "pointer.md"),
+    `---\nid: pointer\ntitle: A screen that goes there\nin: family-wallet\nexists: kept\n` +
+      `views:\n  - id: a-screen\n    title: A screen\n    parts:\n` +
+      `      - id: go-there\n        role: navigates\n        label: Go there\n` +
+      `        leads_to: money#${name}\n---\n\n# A screen that goes there\n`
+  );
+  assert.ok(money.includes(name), "the fixture's colliding name is not in the scope it was written to");
+  const found = collisions(dir);
+  assert.equal(found.length, 1, `expected one collision, got ${JSON.stringify(found)}`);
+  assert.equal(found[0].severity, "refuse", "a collision something navigates to was only noted");
+  assert.match(found[0].what, /points at it as a screen/, "it does not say what points there");
+  assert.match(found[0].what, /go-there/, "it does not name what points there");
 });
