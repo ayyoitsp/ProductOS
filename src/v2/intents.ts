@@ -352,11 +352,37 @@ export const INTENTS: Intent[] = [
       if (key.includes("..") || key.startsWith("/") || path.isAbsolute(key))
         return { ok: false, why: `"${key}" leaves the corpus`, detail: ["a key is relative, inside one of the corpus's own directories"] };
       const dir = key.includes("/") ? key.slice(0, key.indexOf("/")) : "";
-      if (!CORPUS_DIRS.includes(dir as (typeof CORPUS_DIRS)[number]))
+      /**
+       * ⛔ A ROOT-LEVEL `.yaml` IS A CORPUS DOCUMENT, and refusing it cost three roles their findings.
+       *
+       * `corpusFiles` enumerates every root-level `.yaml`/`.yml` BESIDE the eight directories —
+       * `framework-gaps.yaml`, `access.yaml`, `style.yaml` are all real documents that survive a
+       * round trip. This check demanded a directory prefix, which a root-level document has not, so
+       * the door answered `"framework-gaps.yaml" is not part of a corpus` about a file the corpus
+       * was already holding.
+       *
+       * ⛔ WHAT THAT BROKE IS THE RECORD OF WHAT THE MODEL CANNOT SAY. A framework gap is the only
+       * route from "this corpus had to be compromised" to somebody fixing the compromise, and
+       * `forced_into` is what makes the compromise correctable in one pass rather than becoming the
+       * convention. Three roles working the hosted corpus each reported, independently, that they
+       * could not file one — the door refused the document and `todo add --at <url>` resolved the
+       * url as a directory. Each of their gaps survived only because a person read a report.
+       *
+       * ⛔ AND THE ORIGINAL REASON IS KEPT, NOT WAIVED. The comment above is right that a key the
+       * corpus does not enumerate would be "written and then dropped" by `writeBack` with a
+       * cheerful ok. So the test is exactly what `corpusFiles` collects — a directory on the list,
+       * or a root-level yaml — and `README.md` or `gaps/one.yaml` is still refused.
+       */
+      const rootDocument = !key.includes("/") && /\.ya?ml$/.test(key);
+      if (!rootDocument && !CORPUS_DIRS.includes(dir as (typeof CORPUS_DIRS)[number]))
         return {
           ok: false,
           why: `"${key}" is not part of a corpus`,
-          detail: [CORPUS_DIRS.map((d) => `${d}/…`).join(" · "), "⛔ anything else would be written and then dropped"],
+          detail: [
+            CORPUS_DIRS.map((d) => `${d}/…`).join(" · "),
+            "or a .yaml at the corpus root — framework-gaps.yaml, access.yaml, style.yaml",
+            "⛔ anything else would be written and then dropped",
+          ],
         };
       if (!says.trim()) return { ok: false, why: "a document with nothing in it is a deletion — say what it should hold" };
       const full = path.join(a.dir, key);
