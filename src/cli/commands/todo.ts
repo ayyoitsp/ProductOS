@@ -263,10 +263,44 @@ export function todoCommand(): Command {
     .requiredOption("--resolution <why>", "What changed, or why this is not a gap")
     .option("--accepted", "A known limitation we are living with, rather than fixed")
     .option("--wont-fix", "Not going to be addressed")
-    .option("--at <corpus>", "The corpus this gap was found in (defaults to the repo you are standing in)")
-    .action((id: string, opts: { resolution: string; accepted?: boolean; wontFix?: boolean; at?: string }) => {
-      const paths = recordFor(opts);
+    .option("--at <corpus>", "The corpus this gap was found in — a directory, or an instance url (defaults to the repo you are standing in)")
+    .option("--token <t>", "bearer token for an instance (or $PRODUCTOS_TOKEN)")
+    .action(async (id: string, opts: { resolution: string; accepted?: boolean; wontFix?: boolean; at?: string; token?: string }) => {
       const status = opts.wontFix ? "wont-fix" : opts.accepted ? "accepted" : "closed";
+      /**
+       * ⛔ CLOSING REACHES AN INSTANCE TOO, AND LEAVING IT OUT CRASHED.
+       *
+       * `list` and `add` were taught the hosted route when three roles reported they could not file
+       * a gap against the corpus they found it in. `close` was not, so the first attempt to settle
+       * one of those very gaps threw an unhandled Error with a Node stack:
+       *
+       *     Error: No corpus at /Users/peter/…/http:/127.0.0.1:4100/p/prj-bks5f4m325
+       *       at pathsAtCorpus (dist/core/paths.js:42:15)
+       *
+       * Half a fix, and the worse half to leave: a gap that can be recorded and never settled turns
+       * the record into a backlog that only grows — which is the one way this file is designed not
+       * to fail, and the reason `warnAboutGapsThatMayBeClosed` exists at all.
+       *
+       * ⛔ And it threw rather than refusing, which is its own defect. Every other `--at` mistake in
+       * this codebase answers with a sentence.
+       */
+      if (looksLikeInstance(opts.at)) {
+        try {
+          const g = await throughTheDoor(opts.at!, opts.token, (paths) =>
+            settleFrameworkGap(paths, id, status, opts.resolution)
+          );
+          console.log(`${pc.green("✓")} ${g.id} is ${pc.bold(status)} in ${pc.dim(opts.at!)}`);
+          if (g.forced_into) {
+            console.log(pc.yellow(`\n  Still forced, and now fixable in one pass:`));
+            console.log(`  ${g.forced_into}`);
+          }
+        } catch (e) {
+          console.error(pc.red("✗"), (e as Error).message);
+          process.exitCode = 1;
+        }
+        return;
+      }
+      const paths = recordFor(opts);
       try {
         const g = settleFrameworkGap(paths, id, status, opts.resolution);
         console.log(`${pc.green("✓")} ${g.id} is ${pc.bold(status)}`);

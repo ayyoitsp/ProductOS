@@ -118,12 +118,36 @@ const html = (res: http.ServerResponse, body: string, status = 200): void => {
   res.end(body);
 };
 
+/**
+ * The request body, decoded ONCE, after every byte of it has arrived.
+ *
+ * ⛔ IT USED TO BE `let body = ""; req.on("data", (d) => (body += d))`, AND THAT DESTROYED A
+ * CHARACTER WHENEVER ONE STRADDLED A CHUNK BOUNDARY.
+ *
+ * `d` is a Buffer, so `+=` decodes it as UTF-8 once PER CHUNK. A character whose bytes land either
+ * side of a boundary is decoded as two invalid sequences, and every byte of it becomes U+FFFD. One
+ * 4-byte emoji in a drawing came out of the live corpus as four replacement characters:
+ *
+ *     Sizing model ���� Excluded
+ *
+ * ⛔ AND IT WAS DIAGNOSED AS SOMETHING ELSE FIRST, which is what it really cost. A demonstrator's
+ * 64 requirements all read `a-requirement-older-than-its-claim` at once. `view.sketch` feeds
+ * `claimHash`, so mangling one emoji moved every claim hash in that scope — both hashes were real
+ * and the sentences had not moved at all. I theorised sentence drift and sent that role a recipe
+ * for a problem it did not have; the role that found it read the bytes.
+ *
+ * ⛔ IT ONLY BITES LARGE BODIES, which is why nothing caught it for so long. A small body arrives
+ * in one chunk and survives perfectly — emoji, astral plane and CJK all round-tripped through the
+ * live door by hand. The documents that carry drawings are hundreds of kilobytes, so they are the
+ * ones that split, and they are the ones holding the product's pictures.
+ */
 const readJson = (req: http.IncomingMessage): Promise<Record<string, unknown>> =>
   new Promise((resolve, reject) => {
-    let body = "";
-    req.on("data", (d) => (body += d));
+    const chunks: Buffer[] = [];
+    req.on("data", (d) => chunks.push(Buffer.isBuffer(d) ? d : Buffer.from(d)));
     req.on("end", () => {
       try {
+        const body = Buffer.concat(chunks).toString("utf-8");
         resolve(body ? JSON.parse(body) : {});
       } catch (e) {
         reject(e);

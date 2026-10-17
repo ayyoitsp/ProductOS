@@ -115,3 +115,52 @@ test("no corpus is left on this machine", () => {
   const left = fs.readdirSync(work);
   assert.deepEqual(left, [], `it left files behind: ${left.join(", ")}`);
 });
+
+/**
+ * ⛔ AND IT CAN BE SETTLED THERE TOO, WHICH THE FIRST FIX LEFT OUT.
+ *
+ * `list` and `add` were taught the hosted route; `close` was not. So the first attempt to settle
+ * one of the very gaps that fix made recordable threw an unhandled Error with a Node stack:
+ *
+ *     Error: No corpus at /Users/peter/…/http:/127.0.0.1:4100/p/prj-bks5f4m325
+ *       at pathsAtCorpus (dist/core/paths.js:42:15)
+ *
+ * Half a fix, and the worse half to leave: a record that can be written and never settled is a
+ * backlog that only grows, which is the one way this file is designed not to fail.
+ */
+test("a gap can be settled on the instance it was filed against", async () => {
+  const held = {
+    "framework-gaps.yaml": `version: 1
+gaps:
+  - id: fg-0001
+    detected_at: 2026-09-01
+    detector: authored
+    what: something recorded here and since fixed
+    evidence: []
+    forced_into: "a corpus somewhere: the compromise that is now correctable"
+    status: open
+`,
+  };
+  const inst = await fakeInstance(held);
+  const work = temp("v2gapclose-");
+  let out;
+  try {
+    const r = await run("node", [CLI, "todo", "close", "fg-0001", "--resolution", "the model can say it now", "--at", inst.url], {
+      encoding: "utf-8",
+      cwd: work,
+    });
+    out = (r.stdout ?? "") + (r.stderr ?? "");
+  } catch (e) {
+    out = ((e.stdout ?? "") + (e.stderr ?? "")).toString();
+  }
+  await inst.stop();
+
+  assert.doesNotMatch(out, /No corpus at/, `it still resolved the url as a path:\n${out}`);
+  assert.doesNotMatch(out, /at pathsAtCorpus|node:internal/, `it threw instead of answering:\n${out}`);
+  const sent = inst.sent.filter((s) => s.intent === "document").find((d) => d.key === "framework-gaps.yaml");
+  assert.ok(sent, `the settled record was not sent back:\n${out}`);
+  assert.match(sent.says, /status: closed/, "the gap was not marked closed in what was sent");
+  assert.match(sent.says, /the model can say it now/, "the resolution was not recorded");
+  /** ⛔ And it still says what is owed — `forced_into` is why closing a gap is not the end of it. */
+  assert.match(out, /Still forced/, `it did not say what the closed gap left behind:\n${out}`);
+});
