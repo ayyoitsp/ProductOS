@@ -2039,7 +2039,28 @@ function renderBehaviours(
                 ? `<details class="beh-shows"><summary>${shows.length} thing${shows.length === 1 ? "" : "s"} that would show this</summary><ul>${shows
                     .map(
                       (c) =>
-                        `<li>${[c.given && `<span class="g">given</span> ${line(c.given)}`, c.when && `<span class="g">when</span> ${line(c.when)}`, c.then && `<span class="g">then</span> ${line(c.then)}`]
+                        /**
+                         * ⛔ `steps` IS RENDERED, and leaving it out made a requirement an EMPTY
+                         * BULLET. A claim whose demonstration is a sequence — press it three times
+                         * and the order cycles — cannot be said in one `when` without reading as a
+                         * single press, so `Criterion` has always carried `steps` and the
+                         * demonstrator brief's own example uses it. This built the text from
+                         * `given`/`when`/`then` only, so such a requirement rendered as
+                         * `<ul><li></li></ul>` under a summary counting it. The count was honest
+                         * and the list was not: "3 things that would show this" over two sentences
+                         * and a blank line, which tells a reader either something is missing or
+                         * they cannot count.
+                         *
+                         * ⛔ Reported by a demonstrator that wrote one and SAW it on the live page,
+                         * and which kept `steps` rather than reshaping the artefact to suit the
+                         * renderer — the right direction, and why this is a renderer fix.
+                         */
+                        `<li>${[
+                          c.given && `<span class="g">given</span> ${line(c.given)}`,
+                          c.when && `<span class="g">when</span> ${line(c.when)}`,
+                          c.then && `<span class="g">then</span> ${line(c.then)}`,
+                          c.steps && `<span class="g">steps</span> ${line(c.steps)}`,
+                        ]
                           .filter(Boolean)
                           .join(" ")}</li>`
                     )
@@ -3052,6 +3073,8 @@ function renderExchanges(corpus: Corpus, scopeIds: string[], cellOf: Map<string,
             ${c.given ? `<span class="g">given</span> ${line(c.given)}` : ""}
             ${c.when ? `<span class="g">when</span> ${line(c.when)}` : ""}
             ${c.then ? `<span class="g">then</span> ${line(c.then)}` : ""}
+            ${/* ⛔ Both renderings of a requirement, or the one a reader lands on is still blank. */ ""}
+            ${c.steps ? `<span class="g">steps</span> ${line(c.steps)}` : ""}
           </li>`
         )
         .join("");
