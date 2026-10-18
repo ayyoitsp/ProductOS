@@ -64,6 +64,18 @@ test("writing a document in a mirror fails loudly rather than succeeding and bei
   const dir = likeAMirror();
   const doc = path.join(dir, "truth", "money.md");
 
+  /**
+   * ⛔ ROOT WRITES THROUGH A READ-ONLY MODE, SO UNDER ROOT THE WRITE CANNOT BE THE OBSERVATION.
+   * Cloud sandboxes run tests as uid 0, where `appendFileSync` on a 0444 file succeeds and this
+   * test failed on every run whatever `lockMirror` did. What is still checkable there is the lock
+   * itself: no write bit on the document, for owner, group or anybody.
+   */
+  if (process.getuid?.() === 0) {
+    assert.equal(fs.statSync(doc).mode & 0o222, 0, "a mirrored document was left writable");
+    assert.match(fs.readFileSync(doc, "utf-8"), /id: money/);
+    return;
+  }
+
   let code = null;
   try {
     fs.appendFileSync(doc, "\n# a role working here\n");
