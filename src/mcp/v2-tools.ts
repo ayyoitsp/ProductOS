@@ -288,7 +288,7 @@ const checkTool = tool(
  * other read here is a projection, never the bytes. This is the bytes, read-only.
  */
 const documentTool = tool(
-  "productos_exchange_document",
+  "productos_exchange_source",
   "One corpus document exactly as stored — read it before replacing it with productos_in intent `document`, or someone else's edit is overwritten. Without `key`, lists every document's key.",
   AtDir.extend({ key: z.string().describe("e.g. truth/money.md — omit to list every key").optional() }),
   (a, paths) => {

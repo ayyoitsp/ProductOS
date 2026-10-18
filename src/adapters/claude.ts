@@ -109,7 +109,7 @@ const TOOL_FOR: Record<Capability, string[]> = {
    * ⛔ STILL UNREACHABLE FROM A JUDGE: no judge may declare `write-corpus` (a registry test), and
    * `writingToolsIn` counts the door as writing, so the installer refuses a judge that holds it.
    */
-  "write-corpus": ["Write", "Edit", "productos_in", "productos_intents", "productos_exchange_check", "productos_exchange_document"],
+  "write-corpus": ["Write", "Edit", "productos_in", "productos_intents", "productos_exchange_check", "productos_exchange_source"],
   /**
    * ⛔ PRODUCTOS'S OWN SURFACE, READ HALF ONLY — AND NO ROLE COULD REACH IT AT ALL BEFORE THIS.
    *
@@ -140,7 +140,7 @@ const TOOL_FOR: Record<Capability, string[]> = {
     "productos_exchange_can_be_agreed_to",
     "productos_exchange_check",
     "productos_exchange_record",
-    "productos_exchange_document",
+    "productos_exchange_source",
   ],
 };
 

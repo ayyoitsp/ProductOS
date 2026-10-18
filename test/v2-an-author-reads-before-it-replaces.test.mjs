@@ -4,7 +4,7 @@
  * Authors land work through `productos_in { intent: "document" }`, which replaces a whole document.
  * Every other MCP read is a projection — grid, packet, page — so before this an author editing a
  * feature could not see what the project held now, and its write went over whatever a person or
- * another author had changed since. `productos_exchange_document` returns the stored bytes.
+ * another author had changed since. `productos_exchange_source` returns the stored bytes.
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -22,7 +22,7 @@ const seed = () => {
   execFileSync("node", [CLI, "v2", "reset", "--at", dir], { stdio: "pipe" });
   return dir;
 };
-const tool = exchangeTools.find((t) => t.name === "productos_exchange_document");
+const tool = exchangeTools.find((t) => t.name === "productos_exchange_source");
 const read = (dir, args) => tool.handler({ dir, ...args }, { repoRoot: dir, root: dir, configFile: "" });
 
 test("it is a read, offered over MCP, and it returns the stored bytes", async () => {
@@ -55,5 +55,5 @@ test("without a key it lists every document; a key outside the corpus is refused
 });
 
 test("the authors are told to read before they replace", () => {
-  assert.match(whereAnAuthorWrites(), /productos_exchange_document/);
+  assert.match(whereAnAuthorWrites(), /productos_exchange_source/);
 });
