@@ -285,6 +285,102 @@ interface Ctx {
   props: Map<string, string>;
 }
 
+/**
+ * Where a file says a component comes from — read off its own import statements.
+ *
+ * ⛔ THE IMPORT IS THE ANSWER, AND THE DRAWER WAS GUESSING INSTEAD.
+ *
+ * Components were resolved by indexing the route's NEIGHBOURHOOD: every `.tsx` within four
+ * directories, capped at 400 directories, keyed by filename and by exported name. That exists for a
+ * good reason — a wizard beside its route — and it cannot answer for a component that lives
+ * anywhere else. A route's own `import` line says exactly where the file is, and nothing was
+ * reading it.
+ *
+ * ⛔ WHAT IT COST, AND IT IS THE WHOLE COMPLAINT. Peter: *"It's way off, no menus in a lot of
+ * places."* A Next route that delegates its layout — `<AppProvider>{children}</AppProvider>` — drew
+ * as an opaque box with the screen inside it and nothing else: the sidebar, the nav and the header
+ * all live in the provider's own file, which the neighbourhood walk never reached. The one route
+ * that DID draw a menu was the one writing its chrome inline at the call site. So the chrome was
+ * present exactly where a route happened not to factor it out.
+ *
+ * ⛔ Relative and alias both, because a real app uses both in one file. Aliases come from the
+ * nearest `tsconfig.json`'s `paths`, which is the project's own statement of what `@/` means — never
+ * a guess that `@` is `src`, which is true of many projects and false in a way nothing would report.
+ */
+function importedFrom(file: string, tag: string): string | undefined {
+  let text: string;
+  try {
+    text = fs.readFileSync(file, "utf-8");
+  } catch {
+    return undefined;
+  }
+  const src = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  /** The bare name, because `<Foo.Bar/>` is imported as `Foo`. */
+  const want = tag.split(".")[0]!;
+
+  let spec: string | undefined;
+  for (const st of src.statements) {
+    if (!ts.isImportDeclaration(st) || !ts.isStringLiteral(st.moduleSpecifier)) continue;
+    const clause = st.importClause;
+    if (!clause) continue;
+    const named =
+      (clause.name && clause.name.text === want) ||
+      (clause.namedBindings &&
+        ts.isNamedImports(clause.namedBindings) &&
+        clause.namedBindings.elements.some((e) => e.name.text === want)) ||
+      (clause.namedBindings && ts.isNamespaceImport(clause.namedBindings) && clause.namedBindings.name.text === want);
+    if (named) {
+      spec = st.moduleSpecifier.text;
+      break;
+    }
+  }
+  if (!spec) return undefined;
+  /** ⛔ A package import is not a file in this project, and chasing it would leave the project. */
+  if (!spec.startsWith(".") && !spec.startsWith("@/") && !spec.startsWith("~/")) {
+    const mapped = aliasFor(file, spec);
+    if (!mapped) return undefined;
+    return firstThatExists(mapped);
+  }
+  if (spec.startsWith(".")) return firstThatExists(path.resolve(path.dirname(file), spec));
+  const mapped = aliasFor(file, spec);
+  return mapped ? firstThatExists(mapped) : undefined;
+}
+
+/** A module specifier as a real path, using the nearest tsconfig's own `paths`. */
+function aliasFor(from: string, spec: string): string | undefined {
+  for (let dir = path.dirname(from), up = 0; up < 8; up++, dir = path.dirname(dir)) {
+    const cfg = path.join(dir, "tsconfig.json");
+    if (fs.existsSync(cfg)) {
+      try {
+        /** ⛔ Comments are legal in a tsconfig, so it is not JSON. TypeScript's own reader handles it. */
+        const parsed = ts.parseConfigFileTextToJson(cfg, fs.readFileSync(cfg, "utf-8"));
+        const opts = (parsed.config?.compilerOptions ?? {}) as { baseUrl?: string; paths?: Record<string, string[]> };
+        const base = path.resolve(dir, opts.baseUrl ?? ".");
+        for (const [pattern, targets] of Object.entries(opts.paths ?? {})) {
+          const stem = pattern.replace(/\*$/, "");
+          if (!spec.startsWith(stem)) continue;
+          const rest = spec.slice(stem.length);
+          for (const t of targets) return path.resolve(base, t.replace(/\*$/, "") + rest);
+        }
+      } catch {
+        /* a tsconfig this cannot read is one it has no opinion about */
+      }
+      break;
+    }
+    if (path.dirname(dir) === dir) break;
+  }
+  return undefined;
+}
+
+/** The first real file for a specifier with no extension — including a directory's index. */
+function firstThatExists(stem: string): string | undefined {
+  for (const suffix of [".tsx", ".ts", "/index.tsx", "/index.ts"]) {
+    const at = stem + suffix;
+    if (fs.existsSync(at) && fs.statSync(at).isFile()) return at;
+  }
+  return fs.existsSync(stem) && fs.statSync(stem).isFile() ? stem : undefined;
+}
+
 /** A component's own returned JSX, found by name in a file. */
 function returnedJsx(file: string, name?: string): TS.Node | undefined {
   const src = ts.createSourceFile(file, fs.readFileSync(file, "utf-8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
@@ -1143,7 +1239,22 @@ function emit(node: TS.Node, ctx: Ctx): string {
      * resolving only by filename missed every one of them. `FannieMaeProgramSettings` is 1,162
      * lines and generated to 111 bytes: a wrapper, and an unresolved div where the screen was.
      */
-    const file = ctx.sameFile && returnedJsx(ctx.sameFile, tag) ? ctx.sameFile : ctx.resolve(tag);
+    /**
+     * ⛔ THE FILE'S OWN IMPORT BEFORE THE NEIGHBOURHOOD'S GUESS.
+     *
+     * Order matters and this is the order. Same file first, because a thin wrapper over a
+     * co-located component is the common case and the comment above explains it. Then what THIS
+     * file says it imported — the authoritative answer, and the one that reaches a component living
+     * anywhere in the project. Only then the neighbourhood index, which matches by filename and
+     * cannot tell two `Header.tsx` apart.
+     *
+     * ⛔ And it is per-file, not per-route: `ctx.sameFile` is whatever file we are currently inside,
+     * so a provider three levels deep resolves its own imports rather than the route's.
+     */
+    const file =
+      ctx.sameFile && returnedJsx(ctx.sameFile, tag)
+        ? ctx.sameFile
+        : (ctx.sameFile && importedFrom(ctx.sameFile, tag)) || ctx.resolve(tag);
     if (file && ctx.depth < 4) {
       ctx.from.add(path.basename(file));
       const inner = returnedJsx(file, tag) ?? returnedJsx(file);

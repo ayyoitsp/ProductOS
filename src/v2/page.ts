@@ -1085,6 +1085,26 @@ function renderScreens(scope: Scope, ctx: Ctx, scopeId: string, opts: PageOption
   }
   return `
     <section class="screens">
+      ${
+        /**
+         * ⛔ THE DIMENSIONS BELONG WHERE THE DRAWINGS ARE. Peter: *"let's move the dimensions down
+         * into the prototype view on the features"*.
+         *
+         * I had put the filter in the frame, on the reasoning that a filter on one tab filters
+         * nothing — and that answered *"is the dimension filter on every feature page"* by making it
+         * global. Which is a different thing: on the breadcrumb line it is a property of the WHOLE
+         * SITE, sitting above a product page and a settings surface that have no variants to narrow,
+         * and a reader meets it before meeting anything it applies to.
+         *
+         * Here it is beside the screens it changes. ⛔ And that is the reading his own words always
+         * had — a feature's variations are the feature's, so the control for them is the feature's
+         * too.
+         *
+         * ⛔ ABSENT WHERE THE PRODUCT DECLARES NONE, unchanged: a row of empty dropdowns is the "nav
+         * row that does nothing" this file refuses by name.
+         */
+        dimensionFilter(corpus)
+      }
       <!--
         ⛔ NO HEADING AND NO INSTRUCTIONS HERE. Peter: *"remove placeholder text like this: The
         screens these arrive on / Click anything on a screen to see what the product promises
@@ -3738,27 +3758,7 @@ function renderNav(
      * both about getting somewhere else, not because they share an ancestor.
      */
     `<div class="crumbs"><span class="trail"></span>` +
-    /**
-     * ⛔ THE DIMENSION FILTER, ON EVERY PAGE, BECAUSE A FILTER ON ONE TAB FILTERS NOTHING.
-     *
-     * Peter: *"Has anything is the dimension filter on every feature page"* — it was not. The model
-     * reached every truth and the only control that read it was on the prototype board, so a reader
-     * on a feature page could see that a variant existed and could not ask to be shown it.
-     *
-     * ⛔ IT IS IN THE FRAME, which is the part that does not scroll and is on every page by
-     * construction. Rendering it per page would be the same control in a dozen places, and the one
-     * on the board would be a thirteenth copy of the same question.
-     *
-     * ⛔ AND IT IS THE SAME CONTROL THE BOARD USES — `data-walk-dim` — because he already settled
-     * what these are: *"so the prototypes just has chips of which dimension, e.g. role:admin. and
-     * the drop down selectors will be filters"*. One answer, read by the board to pick a prototype
-     * and by the page to narrow what it shows.
-     *
-     * ⛔ ABSENT WHERE A PRODUCT DECLARES NO DIMENSIONS. A row of empty dropdowns is the "nav row that
-     * does nothing" this file refuses by name — it reads as a feature that is broken rather than one
-     * nobody has used yet.
-     */
-    dimensionFilter(corpus) +
+
     /**
      * ⛔ AND NO CHEVRON WHERE THERE IS NO TREE TO SHOW. A control that expands nothing is the thing
      * `check` refuses by name elsewhere in this project — it reads as "there is more here" and then
@@ -8369,8 +8369,18 @@ const PROTO_FRAME = `<script>
  */
 const DIM_FILTER = `<script>
 (function () {
-  const bar = document.querySelector("[data-dimfilter]");
-  if (!bar) return;
+  /*
+   * ⛔ EVERY BAR, NOT THE FIRST ONE. The filter now lives inside each feature's prototype view —
+   * Peter: *"let's move the dimensions down into the prototype view on the features"* — so a page
+   * holding several features holds several bars, one per view, with only the visible view's on
+   * screen.
+   *
+   * This bound a single-element lookup, so it took whichever bar comes first. On any page with
+   * more than one feature that is a HIDDEN bar, and the control the reader can actually see does
+   * nothing at all. The product's own page renders two, which is how this was caught.
+   */
+  const bars = Array.prototype.slice.call(document.querySelectorAll("[data-dimfilter]"));
+  if (!bars.length) return;
   /*
    * ⛔ ITS OWN ATTRIBUTE, NOT THE BOARD'S.
    *
@@ -8379,8 +8389,7 @@ const DIM_FILTER = `<script>
    * jobs: the board's picks WHICH PROTOTYPE to walk and can add a dimension or a value; this one
    * narrows what a page shows. They share the answer, not the markup.
    */
-  const picks = Array.prototype.slice.call(bar.querySelectorAll("[data-dim-filter]"));
-  const said = bar.querySelector("[data-dimhidden]");
+  const picks = Array.prototype.slice.call(document.querySelectorAll("[data-dim-filter]"));
   const KEY = "productos:asked";
 
   const remembered = (function () {
@@ -8423,8 +8432,15 @@ const DIM_FILTER = `<script>
       el.classList.toggle("dimhide", !keep);
       if (!keep) hidden++;
     }
-    if (said) {
-      const chosen = Object.keys(want).length;
+    /*
+     * ⛔ EVERY BAR SAYS THE SAME THING, because the choice is the page's and not one view's. A bar
+     * keeping its own count would disagree with the one beside it the moment a reader switched
+     * features, and two surfaces disagreeing about how much is hidden is worse than neither saying.
+     */
+    const chosen = Object.keys(want).length;
+    for (const b of bars) {
+      const said = b.querySelector("[data-dimhidden]");
+      if (!said) continue;
       said.hidden = !hidden;
       said.textContent = hidden
         ? hidden + " hidden by " + (chosen === 1 ? "this choice" : "these choices")
@@ -8438,7 +8454,18 @@ const DIM_FILTER = `<script>
     /* ⛔ Only a value this dimension still offers — a remembered one that has since been removed
        would narrow the page to nothing and offer no way to see why. */
     if (was) for (const opt of sel.options) if (opt.value === was) sel.value = was;
-    sel.addEventListener("change", apply);
+    sel.addEventListener("change", function () {
+      /*
+       * ⛔ THE OTHER BARS FOLLOW. Several views, several copies of one control: choosing on one and
+       * finding another still reading "any" is the page telling a reader two things about one choice.
+       */
+      const dim = sel.getAttribute("data-dim-filter");
+      for (const other of picks) {
+        if (other === sel || other.getAttribute("data-dim-filter") !== dim) continue;
+        for (const opt of other.options) if (opt.value === sel.value) other.value = sel.value;
+      }
+      apply();
+    });
   }
   apply();
 })();
