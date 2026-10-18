@@ -9029,6 +9029,14 @@ export const STYLE = `<style>
   nav.scopes .scoperow > a, nav.scopes .scoperow > strong, nav.scopes .scoperow > .unlinked {
     flex: 0 0 auto; white-space: nowrap; }
   /*
+   * ⛔ A MENU ITEM IS NOT A LINK IN A PARAGRAPH. Driven and looked at: the area rows rendered with
+   * the document's default anchor styling — underlined, in link colour — so a menu read as body text
+   * somebody had pasted into a column. Underline on hover only, which is where it says "this is
+   * pressable" without saying it twelve times at rest.
+   */
+  nav.scopes .scoperow > a { text-decoration: none; color: inherit; }
+  nav.scopes .scoperow > a:hover { text-decoration: underline; }
+  /*
    * ⛔ COLLAPSING IS THE SIDE MENU'S BEHAVIOUR AND ONLY ITS.
    *
    * Peter: *"you completely broke support for the top menu..... 🤦... are you compeltely unaware of
@@ -9064,9 +9072,17 @@ export const STYLE = `<style>
    * they sat beside, so every row wrapped onto a second line and the menu read as prose.
    */
   nav.scopes .n { font-size: .72rem; color: var(--dim); flex: 0 0 auto;
-    display: inline-flex; align-items: center; gap: .15rem; padding: .05rem .32rem;
-    border: 1px solid var(--line); border-radius: 999px; background: var(--card); }
-  nav.scopes .n .mark { font-size: .7rem; line-height: 1; }
+    display: inline-flex; align-items: baseline; gap: .1rem; padding: .05rem .34rem;
+    border: 1px solid var(--line); border-radius: 999px; background: var(--card);
+    font-variant-numeric: tabular-nums; }
+  /*
+   * ⛔ THE NUMBER IS THE FIGURE AND THE MARK IS ITS UNIT. At an equal size and an equal weight the
+   * chip read as two separate things — "35" and "?" — rather than as one count of one kind, which is
+   * what a chip is for. The figure carries the weight; the mark is quieter and smaller, the way a
+   * unit is set beside a number anywhere else.
+   */
+  nav.scopes .n { font-weight: 600; }
+  nav.scopes .n .mark { font-size: .62rem; line-height: 1; opacity: .75; font-weight: 400; }
   nav.scopes .n.warn { color: var(--warn); }
   nav.scopes .n.ok { color: var(--ok); }
   nav.scopes .grouping { color: var(--dim); }
@@ -9169,10 +9185,16 @@ export const STYLE = `<style>
     :root[data-nav="left"] .topframe .tabgroup { display: block; }
     :root[data-nav="left"] .topframe .tabhead { display: flex; align-items: center; gap: .15rem; }
     :root[data-nav="left"] .topframe .tabhead .tab { flex: 1; }
-    :root[data-nav="left"] .topframe .twisty { display: block; font: inherit; font-size: .7rem;
-      background: none; border: 0; color: var(--dim); cursor: pointer; padding: .2rem .35rem;
-      line-height: 1; border-radius: 4px; }
-    :root[data-nav="left"] .topframe .twisty:hover { color: var(--ink); }
+    /*
+     * ⛔ A CONTROL NOBODY CAN SEE IS A CONTROL NOBODY PRESSES. Driven and looked at: the collapse
+     * chevron rendered as a faint dot at the right edge of the column — present, correct, and
+     * invisible at a glance, which is how a menu comes to look like it cannot fold. Bigger, darker,
+     * and with a hit area rather than a glyph's worth of pixels.
+     */
+    :root[data-nav="left"] .topframe .twisty { display: block; font: inherit; font-size: .85rem;
+      background: none; border: 0; color: var(--ink); opacity: .55; cursor: pointer;
+      padding: .25rem .4rem; line-height: 1; border-radius: 4px; }
+    :root[data-nav="left"] .topframe .twisty:hover { opacity: 1; background: var(--card); }
     /* ⛔ The arrow turns rather than changing character: one glyph, two states, no second string. */
     :root[data-nav="left"] .topframe .twisty[aria-expanded="false"] { transform: rotate(-90deg); }
     /*
