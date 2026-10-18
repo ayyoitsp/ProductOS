@@ -100,6 +100,30 @@ more is the one defect that ships wrong behaviour while looking correct.
 A requirement at `suggested` with `state: "stale"` was worked out from wording that has since
 changed. Do not implement it. Say so, and name the claim.
 
+A requirement at `suggested` with `route: "worked-out-from-a-draft"` tests a claim nobody has agreed
+to yet. ⛔ **Do not implement it either.** It becomes `derived` the moment a person agrees to the claim,
+with nothing rewritten — so what it needs is the stamp on the claim, not a new test.
+
+### When a claim has no test at all
+
+`untested` lists every claim that owes a demonstration and has none, and it holds `ready` at `false`.
+⛔ **Do not write a test of your own into the work item to fill it.** Spawn `productos-demonstrator` on
+the feature; it writes each one back through the door, where the next readiness call sees it:
+
+```
+productos_in { intent: "demonstrate", fields: { ref: "<scope>#<exchange>#<slot>", given: "…", when: "…", then: "…" } }
+```
+
+The server hashes the claim it attaches to, so the requirement is current with exactly the words it
+was worked out from. A test on a claim nobody has agreed to reads `suggested` until somebody does.
+
+### Before you say it is ready
+
+`ready: true` says every fact is agreed and every claim has a test. It does not say the tests would
+prove anything. Run `hand it to the builders` — `test-design` asks whether each requirement would
+show its claim holding or just pass, and `buildability` whether somebody could start on Monday. Put
+what they find in the work item beside the verdict.
+
 Then, for the work you are about to do, call `productos_exchange_packet` on the scope: the full
 behaviours, the words this product uses, the screens the asks arrive on, the org-wide rules that
 govern, and the latitude you have by declaration rather than by silence. Readiness is the verdict;

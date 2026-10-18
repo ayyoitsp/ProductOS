@@ -17,6 +17,7 @@ import { descendants } from "./settle.js";
 import { existsOf } from "./load.js";
 import { stampFor, staleReason, requirementHash } from "./stamp.js";
 import { demonstrationOf } from "./demonstrate.js";
+import { levelOf, LEVEL_WORD } from "./level.js";
 
 /** Whitespace-insensitive, because a reflow is not a change of meaning. */
 const norm = (s: string) => s.replace(/\s+/g, " ").trim();
@@ -371,7 +372,14 @@ function compileOne(corpus: Corpus, scopeId: string): { md: string; holes: strin
       const fill = ex.slots[slot];
       const inh = inherited.get(`${ref}#${slot}`);
       const cons = constrained.get(`${ref}#${slot}`) ?? [];
-      const label = `**${slot}**`;
+      /**
+       * ⛔ EVERY SLOT LINE SAYS HOW SETTLED IT IS, IN `levelOf`'S ANSWER. The exchange's banner says
+       * whether the WHOLE exchange was accepted, which is not whether this sentence was: a slot can be
+       * agreed on its own, or through a rule, or stale under an agreement that still reads accepted
+       * above it. A builder reading one line must not need a second call to tell a draft from it.
+       */
+      const lvl = levelOf(corpus, `${ref}#${slot}`);
+      const label = `**${slot}**${"error" in lvl ? "" : ` *(${LEVEL_WORD[lvl.level]})*`}`;
       // ⛔ Emitted AFTER whatever the slot itself says, on its own line, every time. A
       // constraint the builder has to go and look up in a rule list is a constraint they
       // will not apply — the resolved packet is the entire point of compiling one.

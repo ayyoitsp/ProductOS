@@ -119,7 +119,9 @@ You are the **orchestrator**, and you are the session — not a subagent. That i
 
 *They say:* can I build this · is this groomed · is this ready to build · what are the tests for this · groom this
 
-**Spawn nothing.** Every part of this is something you may not hand off.
+**Spawn, in order:**
+
+- `demonstrator` *(quality · writes)* — the tests for every claim `readiness` lists as untested, one `demonstrate` call each — worked out from the claim as it reads, suggested until somebody agrees to it
 
 **⛔ You keep these yourself:**
 
@@ -128,6 +130,7 @@ You are the **orchestrator**, and you are the session — not a subagent. That i
 - ⛔ never recording consent: a claim nobody has agreed to needs a stamp from a person, and no amount of grooming produces one
 - deciding what a claim with no recorded author is — ask who wrote it; a person's unconfirmed draft and an agent's inference are the same bytes
 - writing the test list, with each requirement's ref and the hash of the words it was written from, into whatever holds the work
+- ⛔ before saying it is ready to build, running `hand it to the builders` — `ready` says every fact is agreed and every claim has a test, not that the tests would prove anything
 
 ### Find what already demonstrates the claims a corpus makes
 
@@ -197,6 +200,8 @@ You are the **orchestrator**, and you are the session — not a subagent. That i
 - the edit itself — one field is not worth a context, and a scoper would rewrite around it
 
 ⛔ **Every author writes and none may settle.** An author may propose, populate, draw and regenerate; it may never produce a verdict, answer an open question, or mark anything validated. None of them can put a question to a person — deliberately, because consent obtained inside a subagent has no record of how it was obtained. What an author cannot resolve comes back to you as a question, and you put it to the person yourself.
+
+⛔ **Every author lands its work in the hosted project, through the one door.** Each document is one call — `productos_in { intent: "document", fields: { key, says } }` — read back with `productos_exchange_check`; a one-sentence or one-question change is a small write through the same door. There is no local corpus to collect afterwards and nothing to import: a draft on disk is not in the product, and `hosted import` is an operator's command, never a step in a route.
 <!-- /productos:preset -->
 
 ## ⛔ A probe is a write, not a request — `Note.probe`
@@ -277,6 +282,23 @@ productos_in { intent: "ask", fields: { ref: "<scope>#<exchange>#<slot>", questi
 - ⛔ **Never a `note` for either.** A note is a request to a person, not truth, and a question filed
   as one is a question no reader of the corpus will ever see. Never `document` for one sentence:
   that replaces the whole file.
+
+And the demonstrator's write — one testing requirement on one claim:
+
+```
+productos_in { intent: "demonstrate", fields: { ref: "<scope>#<exchange>#<slot>[#<statement>]",
+                                                given: "…", when: "…", then: "…", level: "integration" } }
+```
+
+- **`demonstrate`** adds one criterion with `derived: {by, at, from}`, and **the server computes
+  `from`** — the claim's hash as it reads at that moment — so a test cannot be marked current with
+  words it was not written against. `steps` replaces given/when/then where a sequence or two people
+  at once is the wrong shape for three clauses; `id` is the next free number unless given.
+- ⛔ **`derived` means derived from accepted input.** A requirement worked out from a claim nobody
+  has agreed to reads `suggested`, route `worked-out-from-a-draft`, and climbs to `derived` the
+  moment somebody agrees to the claim. Generation is never gated on agreement; only the level is.
+- ⛔ **`readiness` holds `ready` at false while any claim owing a demonstration has none** — they
+  are listed as `untested`, and they are the demonstrator's, never a person's.
 
 - **confirmed** — a person's act. `accept` or `rule`, with a `by` and a `via`.
 - **strength** — `none · one source · corroborated · strongly supported`, derived from the readings
@@ -445,6 +467,14 @@ they read the feature with its screens, they press, the press is written **synch
 because the page holds a connection open — **it tells them when the truth changes underneath**,
 whoever changed it.
 
+**The token comes from the page, not from you.** A session reaches `/p/<project>/mcp` with
+`$PRODUCTOS_TOKEN`, and the person gets one by pressing **Connect Claude Code** on the project's
+page: it shows the token once, with the two lines to paste — `productos init claude --at <project
+url>` and `export PRODUCTOS_TOKEN=<token>`. That token reaches that one project, can read and draft,
+and can never agree to anything or mint another token. When a session has no token, send the person
+to that control; ⛔ never ask them for a database connection string to run `productos hosted token`,
+which is for whoever operates the instance.
+
 **Why it has to be one place.** Reading, deciding and authoring used to live on three surfaces: a
 published page to read, a question interface to decide, a session to author. Every handoff between
 them was a person carrying something by hand, and the one they felt worst was the reload — the
@@ -585,14 +615,19 @@ already exists.
 ⛔ **The two halves have different owners.** A deploy session ships code and reads a number off the
 page; it does **not** redraw, because redrawing is an act on product truth and a session doing that
 without a person is the one thing the corpus is careful to prevent. The drawings are the author's
-half, and the author finishes them:
+half, and the author finishes them — **onto the hosted project, never into a directory**:
 
 ```bash
-productos v2 draw --all --into <corpus>     # the drawings are output; redraw them
-productos v2 prototypes --into <corpus>     # and the chrome
-productos v2 style --into <corpus>          # and the stylesheet snapshot
-productos hosted import <corpus> --into <projectId>
+productos v2 draw --all --into <project url> --token $PRODUCTOS_TOKEN   # the drawings are output; redraw them
+productos v2 prototypes --into <scratch dir>   # and the chrome
+productos v2 style --into <scratch dir>        # and the stylesheet snapshot
 ```
+
+`draw` speaks to an instance. `prototypes` and `style` still write only to a directory, so what they
+write is scratch until it lands: each document they produced goes up through the door, one call each —
+`productos_in { intent: "document", fields: { key: "prototypes.yaml", says: … } }`, the same for
+`style.yaml`. ⛔ **Not `hosted import`.** That is an operator's command and needs the database
+address; an author session has the MCP server and a token, and the door is the whole of its way in.
 
 Then **check a number on the live page that would be different if it had not worked** — not that the
 page returns 200. A corpus was once reported deployed while every drawing on it still came from the
