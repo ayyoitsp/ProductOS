@@ -85,24 +85,61 @@ const pageFor = (c, at) => renderScopePage(c, at, { interactive: true, by: "pete
  */
 const markupOf = (html) => html.replace(/<script[\s\S]*?<\/script>/g, "").replace(/<style[\s\S]*?<\/style>/g, "");
 
-test("⛔ the filter is on a feature's page, not only on the prototype board", () => {
-  const { corpus: c, varied } = corpus();
-
+test("⛔ the filter sits inside the feature's prototype view, not on the breadcrumb line", () => {
   /**
-   * ⛔ THE FEATURE'S OWN PAGE. This is the whole complaint: the control existed, on one tab, and the
-   * page a reviewer actually reads a feature on did not have it.
+   * Peter: *"let's move the dimensions down into the prototype view on the features"*.
+   *
+   * I had put it in the frame, on the reasoning that a filter on one tab filters nothing. That
+   * answered *"is the dimension filter on every feature page"* by making it global — a different
+   * thing: on the breadcrumb line it is a property of the whole SITE, sitting above pages with no
+   * variants to narrow, and a reader meets it before meeting anything it applies to.
+   *
+   * ⛔ SO THE ASSERTION IS ABOUT PLACEMENT, NOT PRESENCE. The old one said only that the markup held
+   * a filter somewhere, which was true before this change and after it — it would have passed on
+   * both designs and so pinned neither.
    */
+  const { corpus: c, varied } = corpus();
   const feature = markupOf(pageFor(c, varied));
+
   assert.match(feature, /data-dimfilter/, "a feature's page has no dimension filter");
   assert.match(feature, /data-dim-filter="role"/, "the filter offers no control for the product's dimension");
   assert.match(feature, /<option value="">any<\/option>/, "the filter has no way to choose nothing");
 
-  /** And the product's own page, since "every page" includes the one above the features. */
-  const root = markupOf(pageFor(c, c.scopes.find((e) => !e.scope.in).scope.id));
-  assert.match(root, /data-dimfilter/, "the product's page has no dimension filter");
+  /** ⛔ Inside the screens section — the prototype view — and not in the crumbs row. */
+  assert.match(
+    feature,
+    /<section class="screens">[\s\S]{0,600}?data-dimfilter/,
+    "the filter is not inside the feature's prototype view"
+  );
+  assert.doesNotMatch(
+    feature,
+    /class="crumbs"[\s\S]{0,400}?data-dimfilter/,
+    "the filter is still on the breadcrumb line"
+  );
 
   /** ⛔ And the truth carries its combination into the page, or there is nothing to filter on. */
   assert.match(feature, /data-holds="/, "no truth on the page states which combination it is for");
+});
+
+test("⛔ a page holding several features wires every bar, not the first", () => {
+  /**
+   * ⛔ THE BUG THE MOVE INTRODUCED, AND THE NUMBER THAT FOUND IT. A container's page renders a
+   * prototype view per child feature, so it carries one bar per feature — the product's page renders
+   * two. The script bound a single-element lookup, which takes whichever comes first in the document;
+   * on any such page that is a HIDDEN bar, and the control the reader can actually see does nothing.
+   */
+  const { corpus: c } = corpus();
+  const rootId = c.scopes.find((e) => !e.scope.in).scope.id;
+  const bars = (markupOf(pageFor(c, rootId)).match(/data-dimfilter/g) || []).length;
+  assert.ok(bars >= 2, `this fixture renders ${bars} bars, so the many-bar case is untested`);
+
+  const script = pageFor(c, rootId);
+  assert.match(script, /querySelectorAll\("\[data-dimfilter\]"\)/, "the script binds one bar rather than every bar");
+  assert.doesNotMatch(
+    script,
+    /querySelector\("\[data-dimfilter\]"\)/,
+    "the script still takes whichever bar comes first, which on this page is a hidden one"
+  );
 });
 
 test("⛔ no filter where a product declares no dimensions", () => {

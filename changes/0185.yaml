@@ -1,0 +1,15 @@
+id: "0185"
+said: "a rule's requirement cannot record the wording it was derived from - v2 claim refuses a rule ('nothing at that grain has wording to hash') so all 11 rule requirements carry no derived block at all, and a-requirement-older-than-its-claim can never fire on one: reword a rule's statement and every requirement demonstrating it stays silently current"
+at: 2026-10-17
+kind: derivation
+reaches:
+  derive: 'export function demonstrationOfRule('
+  surface: 'a rule is its own claim'
+  pin: "a rule's requirement goes stale when the rule is reworded"
+waived:
+  check: >-
+    The refusal already existed and already says the right thing - a-requirement-older-than-its-claim,
+    refusing rather than noting because a stale requirement is the one failure that gets implemented
+    and passes. Nothing in check.ts changed: it walks demonstrations(), and the fix was that
+    demonstrations() never looked at a rule. A new finding here would be a second voice on a fact
+    this one already states.

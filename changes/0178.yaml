@@ -1,11 +1,8 @@
 id: "0178"
-said: Let's also make sure appropriate test cases are being generated based on verified product truth
+said: a demonstrator reported a steps-shaped requirement rendering as an empty bullet on the live page, under a summary counting it
 at: 2026-10-17
-kind: derivation
+kind: surface
 reaches:
-  derive: worked-out-from-a-draft
-  surface: proposeRequirement
-  check: holds readiness back until one does
-  pin: a requirement worked out from a claim nobody agreed to is suggested, not derived
+  surface: c.steps && `<span class="g">steps</span>
+  pin: and no requirement renders as an empty bullet
 waived: {}
-closed: 2026-10-17

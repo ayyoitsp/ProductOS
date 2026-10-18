@@ -1,0 +1,19 @@
+id: "0183"
+said: "16 of them, because naming the ask after its screen is this corpus's convention - and resolveRef resolves an ambiguous ref to the exchange every time, so only the three something points at as a screen are defects today"
+at: 2026-10-17
+kind: derivation
+reaches:
+  check: points at it as a screen
+  pin: and it refuses once something points at that name as a screen
+waived:
+  derive: >-
+    screenPointersIn computes nothing anybody else reads. The derive area owns inherited state that
+    several surfaces ask for - what a stamp covers, how well-supported a statement is, what an
+    analysis has left - and this is a local predicate behind one finding: which refs are pointed at
+    as screens. Putting it in a derive-owned file would make it look like state the corpus holds,
+    when it is a question asked once while judging.
+  surface: >-
+    Both severities reach a reader through the surfaces every finding already uses - the check's
+    output and the page's list, which separate refusals from notes by themselves. The whole point of
+    this change is that one of the two existing severities was the wrong one; a new rendering would
+    be a second home for a distinction those surfaces already draw.

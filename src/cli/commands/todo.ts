@@ -3,7 +3,9 @@ import pc from "picocolors";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import os from "node:os";
 import { resolvePathsOrThrow, pathsAtCorpus } from "../../core/paths.js";
+import { looksLikeInstance, instanceOf, documents, putDocument } from "../../v2/client.js";
 import {
   readFrameworkGaps,
   gapsFilePath,
@@ -69,6 +71,65 @@ function recordFor(opts: { at?: string }) {
 }
 
 /**
+ * The gap record of a HOSTED corpus, read, changed, and sent back through the one door.
+ *
+ * ⛔ THIS EXISTS BECAUSE THREE ROLES IN ONE AFTERNOON COULD NOT FILE WHAT THEY FOUND. Each was
+ * working the hosted corpus, each hit something the model gave them no way to say, and each
+ * reported the same two walls: `--at` resolved the url as a DIRECTORY —
+ * `No corpus at /Users/peter/personal/productos/http:/127.0.0.1:4100/...` — and the door refused
+ * the document. So each wrote the gap into a report and said, correctly, that filing it against
+ * ProductOS's own record instead would put a consumer corpus's findings in the wrong repository,
+ * which is the misfiling `--at` was added to prevent. Their gaps survived only because a person
+ * read a report, and `forced_into` — the field that makes a compromise correctable in one pass
+ * instead of becoming the convention — was never written down at all.
+ *
+ * ⛔ ONE DOCUMENT, NOT A CORPUS. What lands on disk is `framework-gaps.yaml` alone, in a temp
+ * directory thrown away before this returns. A writable local copy of a hosted corpus is the thing
+ * this project forbids by name; a single document held for the length of one call is not that, and
+ * the alternative — reimplementing the numbering, the dedup and the file shape against the wire —
+ * would be the same logic in a second home, which is what `recordFrameworkGap` exists to avoid.
+ */
+async function throughTheDoor<T>(
+  url: string,
+  token: string | undefined,
+  change: (paths: ReturnType<typeof pathsAtCorpus>) => T
+): Promise<T> {
+  const i = instanceOf(url, token);
+  let files: Record<string, string>;
+  try {
+    files = await documents(i);
+  } catch (e) {
+    console.error(pc.red("✗"), `could not read the corpus at ${url}: ${(e as Error).message}`);
+    process.exit(1);
+  }
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "productos-gap-"));
+  try {
+    const key = "framework-gaps.yaml";
+    const was = files[key];
+    if (was !== undefined) fs.writeFileSync(path.join(dir, key), was);
+    const paths = pathsAtCorpus(dir);
+    const out = change(paths);
+    const now = fs.existsSync(path.join(dir, key)) ? fs.readFileSync(path.join(dir, key), "utf-8") : undefined;
+    /** ⛔ Sent only if it moved, so a read never writes and an unchanged record is not rewritten. */
+    if (now !== undefined && now !== was) {
+      const r = await putDocument(i, key, now);
+      if (!r.ok) {
+        console.error(pc.red("✗"), `the gap was not recorded: ${r.why ?? "refused"}`);
+        process.exit(1);
+      }
+      console.log(pc.dim(`  ${key} → ${url}`));
+    }
+    return out;
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+/** Where a gap is being recorded, said in one phrase — a url, or the file it lands in. */
+const recordedIn = (opts: { at?: string }, paths: ReturnType<typeof pathsAtCorpus>): string =>
+  looksLikeInstance(opts.at) ? opts.at! : gapsFilePath(paths);
+
+/**
  * `productos todo` — framework gaps, addressed to ProductOS's developers.
  *
  * Separate from `productos gaps` on purpose. `gaps` is the user's queue: things
@@ -79,20 +140,17 @@ function recordFor(opts: { at?: string }) {
  * gap that is rediscovered from scratch every session, which is exactly how the
  * same five framework holes got hand-patched five separate times.
  */
-export function todoCommand(): Command {
-  const cmd = new Command("todo").description(
-    "Framework gaps — where the model couldn't express what the corpus needed (for ProductOS devs)"
-  );
-
-  cmd
-    .command("list", { isDefault: true })
-    .description("Show recorded framework gaps")
-    .option("--all", "Include closed and won't-fix entries")
-    .option("--at <corpus>", "The corpus this gap was found in (defaults to the repo you are standing in)")
-    .action((opts: { all?: boolean; at?: string }) => {
-      const paths = recordFor(opts);
+/**
+ * The open gaps, printed.
+ *
+ * ⛔ ONE IMPLEMENTATION, because the hosted record and a directory's record are the same record in
+ * two places. A second copy of this printing is a second place for the warning below to go missing
+ * from, and that warning — a finished-looking backlog is the worst way for this file to fail — is
+ * the whole reason the command is not just `cat`.
+ */
+function showGaps(paths: ReturnType<typeof pathsAtCorpus>, all: boolean, where: string): void {
       const gaps = readFrameworkGaps(paths).filter(
-        (g) => opts.all || (g.status !== "closed" && g.status !== "wont-fix")
+        (g) => all || (g.status !== "closed" && g.status !== "wont-fix")
       );
       if (gaps.length === 0) {
         console.log(pc.dim("No open framework gaps. Run `productos todo scan` to look for new ones."));
@@ -116,10 +174,30 @@ export function todoCommand(): Command {
       warnAboutGapsThatMayBeClosed(gaps);
       console.log(
         pc.dim(
-          `\nRecorded in ${paths.root.replace(process.cwd() + "/", "")}/framework-gaps.yaml — ` +
+          `\nRecorded in ${where} — ` +
             `fix ProductOS, then correct every \`forced_into\` in one pass.`
         )
       );
+}
+
+export function todoCommand(): Command {
+  const cmd = new Command("todo").description(
+    "Framework gaps — where the model couldn't express what the corpus needed (for ProductOS devs)"
+  );
+
+  cmd
+    .command("list", { isDefault: true })
+    .description("Show recorded framework gaps")
+    .option("--all", "Include closed and won't-fix entries")
+    .option("--at <corpus>", "The corpus — a directory, or an instance url (defaults to the repo you are standing in)")
+    .option("--token <t>", "bearer token for an instance (or $PRODUCTOS_TOKEN)")
+    .action(async (opts: { all?: boolean; at?: string; token?: string }) => {
+      /** ⛔ Reading a hosted record is the same route; nothing is sent because nothing moves. */
+      if (looksLikeInstance(opts.at)) {
+        return await throughTheDoor(opts.at!, opts.token, (paths) => showGaps(paths, Boolean(opts.all), opts.at!));
+      }
+      const paths = recordFor(opts);
+      return showGaps(paths, Boolean(opts.all), gapsFilePath(paths).replace(process.cwd() + "/", ""));
     });
 
   cmd
@@ -129,8 +207,28 @@ export function todoCommand(): Command {
     .option("--question <q>", "The decision we owe")
     .option("--evidence <ids...>", "Container or behavior ids that show it")
     .option("--forced-into <id>", "Where the content had to go meanwhile")
-    .option("--at <corpus>", "The corpus this gap was found in (defaults to the repo you are standing in)")
-    .action((what: string, opts: { question?: string; evidence?: string[]; forcedInto?: string; at?: string }) => {
+    .option("--at <corpus>", "The corpus this gap was found in — a directory, or an instance url (defaults to the repo you are standing in)")
+    .option("--token <t>", "bearer token for an instance (or $PRODUCTOS_TOKEN)")
+    .action(async (what: string, opts: { question?: string; evidence?: string[]; forcedInto?: string; at?: string; token?: string }) => {
+      /** ⛔ A hosted corpus is reached through the door; a directory is written in place. */
+      if (looksLikeInstance(opts.at)) {
+        const g = await throughTheDoor(opts.at!, opts.token, (paths) =>
+          recordFrameworkGap(paths, {
+            detected_at: new Date().toISOString().slice(0, 10),
+            detector: "authored",
+            what,
+            question: opts.question,
+            evidence: opts.evidence ?? [],
+            forced_into: opts.forcedInto,
+          })
+        );
+        console.log(
+          g
+            ? pc.green("✓") + ` Recorded ${g.id} in ${pc.dim(opts.at!)}`
+            : pc.dim(`Already recorded in ${opts.at}`)
+        );
+        return;
+      }
       const paths = recordFor(opts);
       const g = recordFrameworkGap(paths, {
         detected_at: new Date().toISOString().slice(0, 10),
@@ -165,10 +263,44 @@ export function todoCommand(): Command {
     .requiredOption("--resolution <why>", "What changed, or why this is not a gap")
     .option("--accepted", "A known limitation we are living with, rather than fixed")
     .option("--wont-fix", "Not going to be addressed")
-    .option("--at <corpus>", "The corpus this gap was found in (defaults to the repo you are standing in)")
-    .action((id: string, opts: { resolution: string; accepted?: boolean; wontFix?: boolean; at?: string }) => {
-      const paths = recordFor(opts);
+    .option("--at <corpus>", "The corpus this gap was found in — a directory, or an instance url (defaults to the repo you are standing in)")
+    .option("--token <t>", "bearer token for an instance (or $PRODUCTOS_TOKEN)")
+    .action(async (id: string, opts: { resolution: string; accepted?: boolean; wontFix?: boolean; at?: string; token?: string }) => {
       const status = opts.wontFix ? "wont-fix" : opts.accepted ? "accepted" : "closed";
+      /**
+       * ⛔ CLOSING REACHES AN INSTANCE TOO, AND LEAVING IT OUT CRASHED.
+       *
+       * `list` and `add` were taught the hosted route when three roles reported they could not file
+       * a gap against the corpus they found it in. `close` was not, so the first attempt to settle
+       * one of those very gaps threw an unhandled Error with a Node stack:
+       *
+       *     Error: No corpus at /Users/peter/…/http:/127.0.0.1:4100/p/prj-bks5f4m325
+       *       at pathsAtCorpus (dist/core/paths.js:42:15)
+       *
+       * Half a fix, and the worse half to leave: a gap that can be recorded and never settled turns
+       * the record into a backlog that only grows — which is the one way this file is designed not
+       * to fail, and the reason `warnAboutGapsThatMayBeClosed` exists at all.
+       *
+       * ⛔ And it threw rather than refusing, which is its own defect. Every other `--at` mistake in
+       * this codebase answers with a sentence.
+       */
+      if (looksLikeInstance(opts.at)) {
+        try {
+          const g = await throughTheDoor(opts.at!, opts.token, (paths) =>
+            settleFrameworkGap(paths, id, status, opts.resolution)
+          );
+          console.log(`${pc.green("✓")} ${g.id} is ${pc.bold(status)} in ${pc.dim(opts.at!)}`);
+          if (g.forced_into) {
+            console.log(pc.yellow(`\n  Still forced, and now fixable in one pass:`));
+            console.log(`  ${g.forced_into}`);
+          }
+        } catch (e) {
+          console.error(pc.red("✗"), (e as Error).message);
+          process.exitCode = 1;
+        }
+        return;
+      }
+      const paths = recordFor(opts);
       try {
         const g = settleFrameworkGap(paths, id, status, opts.resolution);
         console.log(`${pc.green("✓")} ${g.id} is ${pc.bold(status)}`);
