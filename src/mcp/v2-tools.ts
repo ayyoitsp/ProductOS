@@ -31,6 +31,7 @@ import { checkCorpus, summarise } from "../v2/check.js";
 import { gridFor, renderGridText, actsFor, gateFor } from "../v2/grid.js";
 import { compilePacket } from "../v2/packet.js";
 import { readinessOf } from "../v2/readiness.js";
+import { levelFields } from "../v2/level.js";
 import { find } from "../v2/find.js";
 import { questionsFor, descendants } from "../v2/settle.js";
 import { decisionsUnder, howItWasDecided } from "../v2/record.js";
@@ -164,19 +165,23 @@ const scopesTool = tool(
 
 const questionsTool = tool(
   "productos_exchange_questions",
-  "What is undecided in one scope and everything beneath it — each question, what it costs to guess wrong, the drafted options with the argument for each, what has actually been observed, and what else answering it would settle. This is what you present to a person; do not answer it for them.",
+  "What is undecided in one scope and everything beneath it — each question with its level, what it costs to guess wrong, the drafted options with the argument for each, what has actually been observed, and what else answering it would settle. This is what you present to a person; do not answer it for them.",
   AtDir.extend({ scope: z.string().describe("scope id") }),
   (a, paths) => {
     const dir = dirOf(a, paths);
     const corpus = loadCorpus(dir);
     if (!corpus.scopes.some((s) => s.scope.id === a.scope)) throw new Error(`no scope "${a.scope}"`);
-    return { dir, scope: a.scope, questions: questionsFor(corpus, a.scope) };
+    return {
+      dir,
+      scope: a.scope,
+      questions: questionsFor(corpus, a.scope).map((q) => ({ ...q, ...levelFields(corpus, q.ref, { because: false }) })),
+    };
   }
 );
 
 const gridTool = tool(
   "productos_exchange_grid",
-  "What a scope behaviours and where each behaviour came from — one row per exchange, one column per slot, marked for said-here, inherited from an org-wide rule, deliberately unanswered, unsettled, or blank.",
+  "What a scope behaviours and where each behaviour came from — one row per exchange, one column per slot, marked for said-here, inherited from an org-wide rule, deliberately unanswered, unsettled, or blank, each led by its level (a agreed, d derived, s suggested, o open).",
   AtDir.extend({ scope: z.string() }),
   (a, paths) => {
     const dir = dirOf(a, paths);
@@ -192,7 +197,7 @@ const gridTool = tool(
 
 const packetTool = tool(
   "productos_exchange_packet",
-  "What a builder receives for one scope: every behaviour in full, the words the sentences use, what demonstrates each, the holes, and whether a human has read it end to end.",
+  "What a builder receives for one scope: every behaviour in full, the words the sentences use, what demonstrates each, the holes, and whether a human has read it end to end. Each slot line says its level.",
   AtDir.extend({ scope: z.string() }),
   (a, paths) => {
     const dir = dirOf(a, paths);
@@ -276,18 +281,20 @@ const checkTool = tool(
 
 const recordTool = tool(
   "productos_exchange_record",
-  "Every act of human judgement recorded against a ref or anything beneath it — who, when, HOW their consent was obtained, what was chosen, the argument for it, and the options that lost. Read this before re-opening a settled question: it exists so decisions are not argued again from nothing.",
+  "Every act of human judgement recorded against a ref or anything beneath it — who, when, HOW their consent was obtained, what was chosen, the argument for it, and the options that lost, each with its ref's level now. Read this before re-opening a settled question: it exists so decisions are not argued again from nothing.",
   AtDir.extend({ ref: z.string().describe("a scope, an exchange, a slot, or a rule id") }),
   (a, paths) => {
     const dir = dirOf(a, paths);
-    const ds = decisionsUnder(loadCorpus(dir), a.ref);
-    return { dir, ref: a.ref, decisions: ds.map((d) => ({ ...d, how: howItWasDecided(d) })) };
+    const corpus = loadCorpus(dir);
+    /** ⛔ `because` stays the person's argument; the level rides beside it, never over it. */
+    const ds = decisionsUnder(corpus, a.ref);
+    return { dir, ref: a.ref, decisions: ds.map((d) => ({ ...d, how: howItWasDecided(d), ...levelFields(corpus, d.ref, { because: false }) })) };
   }
 );
 
 const pageTool = tool(
   "productos_exchange_page",
-  "Render one scope as a self-contained HTML page a person can read — the questions with their options, the grid, every behaviour in full, and what was already decided. Write it to a file and show it to them; it is read-only unless served, so the acts on it are visibly inert.",
+  "Render one scope as a self-contained HTML page a person can read — the questions with their options, the grid, every behaviour in full with its level (data-level), and what was already decided. Write it to a file and show it to them; it is read-only unless served, so the acts on it are visibly inert.",
   AtDir.extend({
     scope: z.string(),
     out: z.string().describe("file path to write the HTML to").optional(),

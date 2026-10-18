@@ -11,6 +11,7 @@ import { SLOTS, type SlotName, type Rule , statements, type Stage} from "./schem
 import { resolveRules, disputeIndex, DOWNSTREAM_OF_ANSWER, answerIsUnknown, lineageOf, type Corpus } from "./load.js";
 import { stampFor, decidedFor } from "./stamp.js";
 import { existsOf } from "./load.js";
+import { levelOf, LEVEL_WORD, type LevelName } from "./level.js";
 
 export interface Cell {
   /** Rules that ADD a requirement to this slot, whatever the slot itself says. */
@@ -22,6 +23,8 @@ export interface Cell {
   mark: string;
   meaning: string;
   rule?: string;
+  /** How settled this slot is — `levelOf`'s answer, never derived from `mark`. */
+  level?: LevelName;
 }
 
 export interface GridRow {
@@ -223,6 +226,16 @@ export function gridFor(corpus: Corpus, scopeId: string): Grid | null {
         };
       }
     }
+    /**
+     * ⛔ THE LEVEL IS `levelOf`'S, ASKED PER CELL AFTER THE MARK IS DECIDED. A mark says where the
+     * words came from; it cannot say whether anybody agreed to them — `✓` is a sentence written
+     * here, agreed or not — so a session reading the grid could not tell an agreed slot from a
+     * draft without a second call. Asked here, never worked out from the mark.
+     */
+    for (const slot of SLOTS) {
+      const l = levelOf(corpus, `${scopeId}#${ex.id}#${slot}`);
+      if (!("error" in l)) cells[slot].level = l.level;
+    }
     rows.push({ exchange: ex.id, title: ex.title, askedBy: ex.asked_by, cells });
   }
   return { scope: scopeId, title: entry.scope.title, rows, rulesUsed, counts, number: ruleNumber };
@@ -247,7 +260,9 @@ export function renderGridText(g: Grid, colour: (s: string, c: string) => string
     // that deferred rendered as a bare `✓` with the rule simply gone from the row, which is
     // indistinguishable from a slot no rule ever reached.
     const held = (c.defersToRules ?? []).map((id) => `≥${shortRule(id, g)}`).join("");
-    return `${base}${plus}${off}${held}`;
+    // ⛔ The level leads, as one lowercase letter of its plain word — see the legend below.
+    const lvl = c.level ? LEVEL_WORD[c.level][0] : "";
+    return `${lvl}${base}${plus}${off}${held}`;
   };
   const cw = Math.max(
     8,
@@ -271,7 +286,10 @@ export function renderGridText(g: Grid, colour: (s: string, c: string) => string
     out.push(`${r.exchange.padEnd(w + 2)}${cells}`);
   }
   out.push("");
-  out.push("✓ stated here   ↑ a rule SUPPLIES it   +Rn a rule also CONSTRAINS it   ∅ deliberately not answered");
+  out.push(
+    `before each mark, how settled it is: ${(Object.values(LEVEL_WORD) as string[]).map((w) => `${w[0]} ${w}`).join("   ")}`
+  );
+  out.push("✓ stated here   ↑ a rule SUPPLIES it  +Rn a rule also CONSTRAINS it   ∅ deliberately not answered");
   out.push("⊗Rn a rule deliberately does NOT apply here, with a reason");
   out.push("≥Rn a rule STILL holds here, and this sentence only narrows it");
   // ⛔ Both meanings, because `none` is legal on two slots and means a different fact on each.

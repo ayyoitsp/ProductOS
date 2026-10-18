@@ -831,3 +831,43 @@ export function countLevels(levels: readonly Level[]): Record<LevelName, number>
   for (const l of levels) out[l.level] += 1;
   return out;
 }
+
+/**
+ * ⛔ THE LEVEL IN THE WORDS A READER SEES, AND ONE PLACE THAT SAYS THEM.
+ *
+ * `accepted` reads as `agreed` because that is what a person did; the other three are already plain.
+ * A route name is never shown in text — `accepted-through-a-rule` is an argument's label, and a
+ * builder reading a packet needs the gate, not the label. Every text surface that prints a level
+ * prints it through this, so a packet and a grid cannot call the same fact two different things.
+ */
+export const LEVEL_WORD: Readonly<Record<LevelName, string>> = {
+  accepted: "agreed",
+  derived: "derived",
+  suggested: "suggested",
+  open: "open",
+};
+
+/**
+ * A level as fields beside a claim another read returns — `levelOf`'s answer and nothing else.
+ *
+ * ⛔ THE GAP THIS CLOSES. `find` and `readiness` carried the level; the record, the questions, the
+ * grid and the packet did not, so a session reading a behaviour through any of those could not tell
+ * an agreed sentence from a draft without a second call. A second call is a step an agent skips.
+ *
+ * ⛔ COMPUTED HERE, NEVER RE-DERIVED BESIDE IT. A read that worked out "agreed" from `stampFor` on
+ * its own would be a second answer to the one question this module exists to answer once — and
+ * would miss the stale and through-a-rule cases that are the whole reason `levelOf` is long.
+ *
+ * ⛔ AN UNADDRESSABLE REF GETS NO FIELDS, NOT A GUESSED LEVEL. A question about a word, or a
+ * read-through of a whole feature, has no level — `levelOf` says why — and inventing one is worse
+ * than the absence. `because` is left off for the reads whose items already explain themselves.
+ */
+export function levelFields(
+  corpus: Corpus,
+  ref: string,
+  { because = true }: { because?: boolean } = {},
+): { level?: LevelName; route?: Route; because?: string } {
+  const l = levelOf(corpus, ref);
+  if ("error" in l) return {};
+  return because ? { level: l.level, route: l.route, because: l.because } : { level: l.level, route: l.route };
+}

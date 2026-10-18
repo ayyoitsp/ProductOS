@@ -30,6 +30,7 @@ import { stampFor, decidedFor, whatChangedSince } from "./stamp.js";
 /** ⛔ The one table of what an act owes. It lived here and no other surface could read it. */
 import { OWED } from "./acts.js";
 import { confidenceOf, whyConfident, discrepancyFor } from "./confidence.js";
+import { levelOf } from "./level.js";
 import { wireParts } from "./wire.js";
 import { questionsFor, descendants, type Question } from "./settle.js";
 import { resolveRef } from "./ref.js";
@@ -2303,7 +2304,15 @@ function confidenceParts(corpus: Corpus, ref: string): { chips: string; why: str
         .join("")}</ul>`
     : "";
 
-  return { chips: `${stampChip}${strengthChip}`, why: `${diff}${why}` };
+  /**
+   * ⛔ THE LEVEL RIDES ON THE STAMP CHIP AS AN ATTRIBUTE, `levelOf`'S AND NO OTHER. The chip's words
+   * say whether a person confirmed it, which cannot tell a derived sentence from a draft; a session
+   * reading this page over MCP needs that without a second call, and a reader does not need a
+   * third pill saying it. Omitted where `levelOf` has no answer, never guessed.
+   */
+  const lv = levelOf(corpus, ref);
+  const levelled = "error" in lv ? stampChip : stampChip.replace("<span ", `<span data-level="${lv.level}" `);
+  return { chips: `${levelled}${strengthChip}`, why: `${diff}${why}` };
 }
 
 function renderCard(
