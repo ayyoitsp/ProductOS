@@ -69,16 +69,6 @@ function pathsFor(dir: string): ProductosPaths {
     repoRoot: dir,
     root,
     configFile: path.join(root, "config.yaml"),
-    contextDir: path.join(root, "context"),
-    productsDir: path.join(root, "products"),
-    capabilitiesDir: path.join(root, "capabilities"),
-    trackingDir: path.join(root, "tracking"),
-    feedbackDir: path.join(root, "feedback"),
-    queueDir: path.join(root, "queue"),
-    localDir: path.join(root, ".local"),
-    cacheDir: path.join(root, ".local", "cache"),
-    blobsDir: path.join(root, ".local", "blobs"),
-    historyDir: path.join(root, ".local", "history"),
   };
 }
 

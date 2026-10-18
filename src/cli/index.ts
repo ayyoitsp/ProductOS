@@ -1,64 +1,29 @@
 import { Command } from "commander";
 import { initCommand } from "./commands/init.js";
-import { serveCommand } from "./commands/serve.js";
-import { productCommand } from "./commands/product.js";
-import { feedbackCommand } from "./commands/feedback.js";
-import { gapsCommand } from "./commands/gaps.js";
-import { doctorCommand } from "./commands/doctor.js";
-import { envCommand } from "./commands/env.js";
-import { byokCommand } from "./commands/byok.js";
-import { configureCommand } from "./commands/configure.js";
-import { scanCommand } from "./commands/scan.js";
-import { reviewCommand } from "./commands/review.js";
-import { areaCommand } from "./commands/area.js";
-import { historyCommand, undoCommand } from "./commands/history.js";
 import { todoCommand } from "./commands/todo.js";
 import { learnCommand } from "./commands/learn.js";
-import { checkCommand } from "./commands/check.js";
-import { moveCommand } from "./commands/move.js";
-import { decideCommand } from "./commands/decide.js";
-import { askCommand, readCommand } from "./commands/ask.js";
-import { nextCommand } from "./commands/next.js";
 import { v2Command } from "./commands/v2.js";
-import { verifyCommand, unverifyCommand } from "./commands/verify.js";
-import { testCommand } from "./commands/test.js";
-import { queueCommand } from "./commands/queue.js";
 import { hostedCommand } from "./commands/hosted.js";
 
+/**
+ * ⛔ FIVE VERBS, AND NONE OF THEM IS THE RETIRED MODEL.
+ *
+ * Peter: *"there should be no 'v1 anything'. there should be no 'local corpus'. that should be
+ * completely stripped"* and *"yes, always hosted server"*. The v1 verbs (product, feedback, area,
+ * scan, review, serve and the rest) read a `productos/products/` tree nothing writes any more, and
+ * `serve` was the one way to look at a corpus from a directory instead of from the instance.
+ */
 const program = new Command();
 
 program
   .name("productos")
-  .description("Product truth for AI-native teams — structured documentation of what your product does, dynamically rendered as a viewable site.")
+  .description("Product truth for AI-native teams — kept on a hosted instance, read and written over MCP, the page, and the page's chat.")
   .version("0.1.0");
 
 program.addCommand(initCommand());
 program.addCommand(hostedCommand());
-program.addCommand(serveCommand());
-program.addCommand(envCommand());
-program.addCommand(productCommand());
-program.addCommand(feedbackCommand());
-program.addCommand(byokCommand());
-program.addCommand(configureCommand());
-program.addCommand(scanCommand());
-program.addCommand(reviewCommand());
-program.addCommand(areaCommand());
-program.addCommand(historyCommand());
-program.addCommand(todoCommand());
 program.addCommand(learnCommand());
-program.addCommand(checkCommand());
-program.addCommand(moveCommand());
-program.addCommand(decideCommand());
-program.addCommand(askCommand());
-program.addCommand(readCommand());
-program.addCommand(nextCommand());
+program.addCommand(todoCommand());
 program.addCommand(v2Command());
-program.addCommand(undoCommand());
-program.addCommand(verifyCommand());
-program.addCommand(unverifyCommand());
-program.addCommand(gapsCommand());
-program.addCommand(testCommand());
-program.addCommand(queueCommand());
-program.addCommand(doctorCommand());
 
 await program.parseAsync(process.argv);

@@ -1,0 +1,9 @@
+id: "0189"
+said: can you spawn a walker to try to walk our existing product and try to align the UX? It's way off, no menus in a lot of places.
+at: 2026-10-18
+kind: generator
+reaches:
+  generate: importedFrom
+  pin: imported from outside the neighbourhood is drawn
+waived: {}
+closed: 2026-10-18

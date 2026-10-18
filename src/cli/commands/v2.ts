@@ -30,7 +30,6 @@ import { walkOf } from "../../v2/walk.js";
 import { axesOf } from "../../v2/schema.js";
 import { writePrototypes, writeWithin, diskPages, heldPages, type Pages } from "../../v2/draw-write.js";
 import { everyView, everyViewV1, isResolved, resolveRoute } from "../../v2/routes.js";
-import { spokenFor } from "../../v2/spoken.js";
 import { idiomOf, proposeScreen } from "../../v2/propose.js";
 import { inEffect, readSteers, declined, wouldReach, reaches, learnFrom } from "../../v2/steers.js";
 import { indexDesignSystem } from "../../v2/design.js";
@@ -48,12 +47,11 @@ import { writeDrawnReading, writeSketchHtml } from "../../v2/draw-write.js";
 import { whatMoved, repoOf } from "../../v2/moved.js";
 import { HOW } from "../../v2/record.js";
 import { renderScopePage, standalone } from "../../v2/page.js";
-import { migrate } from "../../v2/migrate.js";
 import { resolvePathsOrThrow, projectRootOf} from "../../core/paths.js";
 import { readConfig } from "../../core/config.js";
 
 /**
- * `productos v2 …` — the Exchange schema, as a parallel track.
+ * `productos v2 …` — the Exchange schema.
  *
  * ⛔ Parallel on purpose. The point of building this is to compare it against the current
  * model, and ripping out something that works would make the comparison impossible and the
@@ -104,7 +102,7 @@ const warnIfBroken = (corpus: { broken: Array<{ file: string; why: string }> }):
 };
 
 export function v2Command(): Command {
-  const cmd = new Command("v2").description("The Exchange schema (parallel track) — check · grid · acts · packet · reset");
+  const cmd = new Command("v2").description("The Exchange schema — check · grid · acts · packet · reset");
   /**
    * ⛔ THE CORPUS DIRECTORY, AND IT REFUSES RATHER THAN FALLING BACK.
    *
@@ -489,7 +487,28 @@ export function v2Command(): Command {
        * So the list is the kinds that can carry a hash, and the message names both uses rather
        * than only the one whoever wrote it had in mind.
        */
-      const HASHABLE = ["slot", "statement", "exchange", "capability"] as const;
+      /**
+       * ⛔ AND `rule`, WHICH IS THE THIRD TIME THIS LIST HAS BEEN TOO SHORT. The comment above
+       * records the first two; this one cost 55 requirements their provenance.
+       *
+       * A demonstrator writing the two publish checkpoints put the sentence true of both into
+       * RULES rather than twice into features — which is what this project asks for — and then
+       * reported that every requirement it wrote on a rule carries no `derived` block at all,
+       * because this refused with *"nothing at that grain has wording to hash"*.
+       *
+       * That message asserts something false, and the engine had already settled it: `coveredBy`
+       * is documented as taking "an exchange ref … or a rule id" and answers for one immediately —
+       * `who-may-freeze-a-rent-roll-as-a-version` → `sha256:679c9badd2f0e276`, parts
+       * `["statement", "mode: supplies", "fills: may", "0 criteria"]`. A rule's whole substance IS
+       * wording: its statement, its mode, the slots it fills.
+       *
+       * ⛔ WHAT IT COST: `a-requirement-older-than-its-claim` could never fire on a rule. Reword a
+       * rule's statement and every requirement demonstrating it stayed silently current — and a
+       * stale requirement is the one failure that gets IMPLEMENTED and passes, proving the old
+       * sentence. That asymmetry is exactly why the refusal exists for exchanges, and rules were
+       * exempt from it by accident.
+       */
+      const HASHABLE = ["slot", "statement", "exchange", "capability", "rule"] as const;
       if (!(HASHABLE as readonly string[]).includes(resolved.ref.kind)) {
         console.error(
           pc.red("✗"),
@@ -497,6 +516,7 @@ export function v2Command(): Command {
         );
         console.error(pc.dim("  a requirement is worked out against   <scope>#<exchange>#<slot>[#<statement>]"));
         console.error(pc.dim("  a capability's `serves` may be coarser  <scope>#<exchange>  ·  <subsystem>#offers#<id>"));
+        console.error(pc.dim("  a rule is its own claim                <rule id>"));
         process.exit(1);
       }
       const hash = claimHash(corpus, ref);
@@ -1251,163 +1271,6 @@ export function v2Command(): Command {
         console.log(pc.dim("  ⛔ Claude app only. Elsewhere the page says so rather than failing silently."));
       }
       console.log(pc.dim(`  every press is recorded as ${o.by}, via: page`));
-    });
-
-  cmd
-    /**
-     * ⛔ CONVERTS WHAT v1 RECORDED, AND REFUSES THE REST BY NAME.
-     *
-     * v1 only ever recorded answers, so a mechanical fill of eight slots from one claim would
-     * invent seven-eighths of a product's truth in bulk with nobody's name on it. What v1 had no
-     * word for is written as the open question it actually is, and what cannot be carried honestly
-     * lands in `not-carried.yaml` for a person.
-     */
-    .command("migrate")
-    .description("Convert a v1 corpus into the Exchange model, carrying only what v1 recorded")
-    .requiredOption("--from <dir>", "the v1 productos/ directory")
-    .requiredOption("--out <dir>", "where to write the Exchange corpus")
-    .option("--force", "overwrite an existing corpus at --out")
-    .action((o: { from: string; out: string; force?: boolean }) => {
-      const from = path.resolve(o.from);
-      const out = path.resolve(o.out);
-      if (!fs.existsSync(path.join(from, "products")) && !fs.existsSync(path.join(from, "capabilities"))) {
-        console.error(pc.red("✗"), `no v1 corpus at ${o.from} — expected products/ or capabilities/ inside it`);
-        process.exit(1);
-      }
-      // ⛔ Never over an existing corpus without being told. A migration is a bulk write, and the
-      // thing it would overwrite may hold a person's verdicts, which nothing can reconstruct.
-      if (fs.existsSync(path.join(out, "truth")) && !o.force) {
-        console.error(pc.red("✗"), `${o.out} already holds a corpus`);
-        console.error(pc.dim("  migrating over it would overwrite truth, and any verdicts beside it cannot be reconstructed"));
-        console.error(pc.dim("  pass --force if that is what you want"));
-        process.exit(1);
-      }
-      /**
-       * ⛔ EVERYTHING THIS COMMAND WRITES, NOT JUST `truth/`.
-       *
-       * Clearing only truth left the previous run's `rules/` and `charter/` in place, so a
-       * re-migration silently kept files the new run would never have produced. It is how seven
-       * org-wide rules that had been deleted from the migrator went on governing a corpus through
-       * two further runs — invisible, because nothing regenerates a file it no longer writes.
-       *
-       * ⛔ `verdicts/` AND `notes/` ARE NOT TOUCHED, EVER. A person's acts and a person's requests
-       * are the two things in the corpus nothing can reconstruct, and `--force` is about discarding
-       * derived output. `notes/` survived this list by omission rather than by decision until it was
-       * written down here; anyone adding to the list should have to argue past this sentence.
-       */
-      /**
-       * ⛔ AND `truth/` IS NOT ALL DERIVED EITHER, WHICH THIS ASSUMED AND COST TWO SCOPES.
-       *
-       * The paragraph above is right that `--force` discards derived output and that a person's acts
-       * and requests can never be reconstructed. What it missed is that a scope AUTHORED IN v2 —
-       * with no v1 source, because it was written here — is equally unreconstructable and lives in
-       * `truth/`. Two of them, written one afternoon and drawn from the add-in code, were gone the
-       * next morning: deleted by a re-migration that had no way to produce them and no record that
-       * it had removed anything.
-       *
-       * So nothing is deleted outright. The trees are set aside first, and afterwards anything the
-       * run did not produce is PUT BACK and named. A regeneration may discard what it can rebuild;
-       * removing what it cannot is destroying input, and doing it silently is the whole defect.
-       */
-      let setAside: string | undefined;
-      if (o.force) {
-        setAside = path.join(out, ".superseded", new Date().toISOString().replace(/[:.]/g, "-"));
-        for (const d of ["truth", "rules", "charter"]) {
-          const dir = path.join(out, d);
-          if (!fs.existsSync(dir)) continue;
-          const keep = path.join(setAside, d);
-          fs.mkdirSync(path.dirname(keep), { recursive: true });
-          fs.cpSync(dir, keep, { recursive: true });
-          fs.rmSync(dir, { recursive: true, force: true });
-        }
-      }
-      const m = migrate(from, out, new Date().toISOString().slice(0, 10));
-      if (setAside) {
-        /**
-         * ⛔ WHAT A PERSON SAID OUTRANKS WHAT v1 REMEMBERS.
-         *
-         * Peter: *"--force should only take the user feedback and regenerate based on it, taking the
-         * user feedback as truth."*
-         *
-         * v1 is the OLD understanding. Its `deal-pricing.md` still carries ninety-seven mentions of
-         * staged edits, overrides and a publish gate — the model he corrected twice, on the page —
-         * while v2 now says nothing on that screen can be typed into. Rebuilding it from v1 restores
-         * exactly what he rejected, and the notes recording the rejection are CLOSED, so nothing
-         * objects. A regeneration that can undo a human correction is worse than none: the corpus
-         * looks freshly derived and is quietly back to a shape somebody already refused.
-         *
-         * So a scope the human record has touched is put back as it stood, and the rebuild of it is
-         * discarded. The cost is real and stated: such a scope stops picking up genuine v1
-         * improvements, and the only way it moves again is somebody authoring it here.
-         */
-        const held: Array<{ file: string; because: string[] }> = [];
-        for (const sp of spokenFor(out)) {
-          const file = `${sp.scope}.md`;
-          const wasAt = path.join(setAside, "truth", file);
-          if (!fs.existsSync(wasAt)) continue;
-          fs.mkdirSync(path.join(out, "truth"), { recursive: true });
-          fs.cpSync(wasAt, path.join(out, "truth", file));
-          held.push({ file, because: sp.because });
-        }
-        if (held.length) {
-          console.log(pc.cyan("⤺"), `${held.length} scope(s) kept as they stood — somebody has spoken about these, and what they said outranks v1:`);
-          for (const h of held) {
-            console.log(pc.dim(`    truth/${h.file}`));
-            for (const b of h.because) console.log(pc.dim(`      ${b}`));
-          }
-          console.log(pc.dim("  the rebuild of these was discarded. They no longer follow v1 — author them here."));
-        }
-
-        const restored: string[] = [];
-        for (const d of ["truth", "rules", "charter"]) {
-          const was = path.join(setAside, d);
-          if (!fs.existsSync(was)) continue;
-          for (const f of fs.readdirSync(was)) {
-            const back = path.join(out, d, f);
-            if (fs.existsSync(back)) continue;
-            fs.mkdirSync(path.dirname(back), { recursive: true });
-            fs.cpSync(path.join(was, f), back);
-            restored.push(`${d}/${f}`);
-          }
-        }
-        if (restored.length) {
-          console.log(pc.yellow("!"), `kept ${restored.length} file(s) this migration does not produce — written in v2, with no v1 source:`);
-          for (const r of restored) console.log(pc.dim(`    ${r}`));
-          console.log(pc.dim("  they were set aside and put back. A regeneration may discard what it can rebuild, never what it cannot."));
-        }
-      }
-      const c = m.carried;
-      console.log(pc.green("✓"), `${o.out}`);
-      console.log(`  ${c.scopes} scopes · ${c.views} screens · ${c.exchanges} asks · ${c.criteria} criteria`);
-      console.log("");
-      /**
-       * ⛔ THE MEASUREMENT, NOT A BACKLOG. This used to report seven org-wide questions it had
-       * written itself, which read as "answer these and you are done" when what it meant was "one
-       * slot in eight was ever recorded". The number is the finding.
-       */
-      console.log(pc.bold("  What v1 knew, against what this model asks"));
-      const owed = c.exchanges * SLOTS.length;
-      console.log(`    ${pc.green(String(c.answered))} of ${owed} slots carry a sentence v1 recorded`);
-      console.log(
-        `    ${pc.yellow(String(owed - c.answered))} say nothing ${pc.dim("— v1 had no field for them, so nobody ever wrote them down")}`
-      );
-      if (owed)
-        console.log(
-          pc.dim(`    that is ${Math.round((c.answered / owed) * 100)}% of this product written down, which is the measurement`)
-        );
-      console.log(
-        pc.dim("    no questions were invented to stand in for the rest — a blank is what a blank is")
-      );
-      if (m.refused.length) {
-        console.log("");
-        console.log(pc.red(pc.bold(`  ${m.refused.length} things were NOT carried`)) + pc.dim(" — each needs a person, not a better script"));
-        for (const r of m.refused.slice(0, 8)) console.log(`    ${pc.yellow(r.what)} — ${r.why}`);
-        if (m.refused.length > 8) console.log(pc.dim(`    …and ${m.refused.length - 8} more`));
-        console.log(pc.dim(`    all of them: ${path.relative(process.cwd(), path.join(out, "not-carried.yaml"))}`));
-      }
-      console.log("");
-      console.log(pc.dim(`  productos v2 check --at ${o.out}`));
-      console.log(pc.dim(`  productos serve --v2 ${o.out}   → review it at /v2`));
     });
 
   /**

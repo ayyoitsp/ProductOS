@@ -439,32 +439,19 @@ export function agentsDoc(): string {
   );
   out.push("");
   out.push(
-    "What `--help` cannot tell you, and why this exists: **who** types it, and **which track** it " +
-      "belongs to. *Never hand a human a flag* is a rule the skills state and nothing enforced — a " +
-      "command marked `claude` appearing in instructions addressed to a person is now a visible " +
-      "contradiction. And two parallel models have been running for months with nothing saying " +
-      "which commands belong to which."
+    "What `--help` cannot tell you, and why this exists: **who** types it. *Never hand a human a " +
+      "flag* is a rule the skills state and nothing enforced — a command marked `claude` appearing " +
+      "in instructions addressed to a person is now a visible contradiction."
   );
   out.push("");
-  const live = COMMANDS.filter((c) => c.track !== "v1");
-  const old = COMMANDS.filter((c) => c.track === "v1");
   const rows = (xs: typeof COMMANDS): string[] => [
     "| command | does | layer | typed by |",
     "|---|---|---|---|",
     ...xs.map((c) => `| \`productos ${c.name}\` | ${c.does} | ${c.owns} | ${c.who === "claude" ? "the model" : c.who === "person" ? "**a person**" : "either"} |`),
   ];
-  out.push(`### Current — ${live.length} commands`);
+  out.push(`### ${COMMANDS.length} commands`);
   out.push("");
-  out.push(...rows(live));
-  out.push("");
-  out.push(`### v1 — ${old.length} commands, on the track the work moved off`);
-  out.push("");
-  out.push(
-    "⛔ Still registered and still working. They are listed apart because the only thing that used " +
-      "to distinguish them was knowing, and somebody reading the list is exactly who does not."
-  );
-  out.push("");
-  out.push(...rows(old));
+  out.push(...rows(COMMANDS));
 
   out.push("");
   out.push("## The map they read");

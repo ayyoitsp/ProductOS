@@ -475,7 +475,7 @@ added.
 
 ### ⛔ Three things authors before you could not say, and wrote badly instead
 
-All three came from one pair of re-scoping runs over v1-migrated features, and each was recorded as
+All three came from one pair of re-scoping runs over carried-over features, and each was recorded as
 a framework gap with `forced_into` naming the damage. They exist now. Use them.
 
 **`no_screen:` — this feature has no screen of its own.** A one-line reason, on the scope:
@@ -611,55 +611,6 @@ weight at all.
 So: if you can name the slot it fills and write a given/when/then for it, it is a `Rule`. If you
 cannot, and it still constrains how the product is built, it is a charter section.
 
-## Bringing a v1 corpus across
-
-```bash
-productos v2 migrate --from productos --out v2      # add --force to redo it
-
-### ⛔ `--force` takes what people said as truth, not what v1 remembers
-
-```bash
-productos v2 migrate --from productos --out v2 --force
-```
-
-It rebuilds from v1 — **except any scope somebody has spoken about.** A note filed against it, or a
-stamp a person made on it, holds that scope back exactly as it stands; the rebuild of it is
-discarded and the reason is printed.
-
-**Why, measured:** v1's `deal-pricing.md` carried ninety-seven mentions of staged edits, overrides
-and a publish gate — the model Peter corrected twice, on the page — while v2 had been rewritten to
-say nothing on that screen can be typed into. Rebuilding from v1 restored the rejected shape, and
-the notes recording the rejection were *closed*, so nothing objected. With the human record removed
-from that corpus the rejected wording came back twenty-eight times; with it present, none.
-
-⛔ **A closed request counts, and counts most** — it means the truth was already changed because of
-it, which is exactly what a rebuild throws away. ⛔ **`via: agent` does not count**: software may
-decide, and letting its own verdict hold a scope back would let generated output outrank the corpus
-it came from.
-
-**The cost, stated:** a held scope stops following v1 improvements. The only way it moves after that
-is somebody authoring it here. Say that when you run it.
-
-```
-
-It carries what v1 recorded and **refuses the rest by name**, into `not-carried.yaml`. Read that
-file before anything else: it is the real work queue, and every entry needs a person rather than a
-better script.
-
-⛔ **A migration decides nothing, and the temptation to make it decide is strong.** v1 recorded only
-`answer` — it had no field for who may ask, what they bring, what is left behind, what it refuses,
-what a failure leaves, what a repeat does, or what two at once does. On a real corpus that is
-**one slot in eight**, and the other seven-eighths come across blank.
-
-An earlier version of this migrator could not bear handing over 643 blanks, so it wrote seven open
-org-wide rules — one per unrecorded slot, with a generated question restating the slot's own
-definition, `scope: everywhere`. The result: a tool's invented questions gated every real behaviour in
-the product, and were presented to the reviewer as their own backlog. Peter's reaction on being
-shown it is the shortest summary of the failure: *"it's all generic, org-wide BS?"*
-
-**A blank is a blank.** The count is the finding, and a surface that dresses it up as a queue is
-lying about how much of a product has been written down.
-
 ## When you do not know
 
 ⛔ **This is the part that matters, and the part that gets done wrong.** Write the standing,
@@ -694,6 +645,51 @@ picked — the only exit left is retyping the merged sentence at a prompt, and a
 took that exit deleted the agreed clauses without any surface noticing. Each candidate's `says` is a *behaviour a builder could
 implement*; its `consequence` is the argument. Putting the argument in `says` is the single
 most common way to make a question unanswerable.
+
+### ⛔ A question on a NAMED REFUSAL — the shape that took the corpus down twice in one afternoon
+
+Everything above is shown on `answer`, where the standing sits on the slot. A `refuses` slot is
+different: it holds **named outcomes**, and a question about one of them goes on that outcome.
+
+```yaml
+refuses:
+  outcomes:
+    - id: the-departure-is-no-longer-one-this-version-holds
+      says: >                   # what the product does
+        The ask is turned away and the reader is told the departure is no longer...
+      asks: told                # what is in question: whether / told / which
+      standing:
+        kind: open
+        about: >                # ⛔ REQUIRED, and this is the one that gets missed
+          whether the reader is shown WHICH departures still stand, or only that it failed
+        question: Is the reader shown what stands, or only that it could not be saved?
+        candidates:
+          - replaces: the whole sentence   # ⛔ REQUIRED beside an `about`, on EVERY candidate
+            says: >
+              ...
+```
+
+⛔ **Two of us broke it the same two ways in one afternoon, writing in parallel on one corpus.**
+Both documents stopped parsing, and because a document that will not load makes the whole corpus
+unjudgeable, `check` answered `cannot-judge-this-corpus` and **suppressed every other feature's
+findings** — including the other authors', who had done nothing wrong. One unparseable document is
+not a local mistake.
+
+| what was missing | what the loader says |
+| --- | --- |
+| `about` on a standing beside a named refusal that also `says` something | `exchanges.N.slots.refuses.outcomes.N.standing.about — this named refusal says something AND carries an unsettled standing — say which part of it is in question, or the whole sentence reads unruled and every surface discards it` |
+| `replaces` on a candidate, beside an `about` | `exchanges.N.slots.SLOT.standing.candidates.N.replaces — one thing about an agreed sentence is unruled here, so say whether this option is the whole replacement sentence or only the part in question — picking a fragment deletes the rest of what was agreed` |
+
+⛔ **So read your own document back before you finish.** The write succeeds either way — the door
+takes the bytes and the refusal only appears when something tries to LOAD them:
+
+```bash
+productos v2 check --at <corpus> 2>&1 | head -5
+```
+
+The first line must read `N scopes · N exchanges · …`. If you see `will-not-parse` or
+`cannot-judge-this-corpus`, fix it before you report, and re-read the document from the corpus
+first — other authors may have written while you worked.
 
 Four standings: `stated` · `open` · `disputed` · `out_of_scope`. Anything you cannot settle is
 `open`. `out_of_scope` costs a recorded act (`v2 waive`) and is **not yours to declare**.

@@ -26,6 +26,7 @@
  */
 import { perform, payloadFrom, VIA, ACTS, OWED, ALSO, type Act, type Via } from "./acts.js";
 import { closeNote, fileNote, replyToNote } from "./notes.js";
+import { suggestClaim, raiseQuestion } from "./suggest.js";
 import { mayRecord, mayRelay, mayClaimHand, type Principal } from "./identity.js";
 import { parseFrontmatter } from "../core/frontmatter.js";
 import YAML from "yaml";
@@ -351,11 +352,37 @@ export const INTENTS: Intent[] = [
       if (key.includes("..") || key.startsWith("/") || path.isAbsolute(key))
         return { ok: false, why: `"${key}" leaves the corpus`, detail: ["a key is relative, inside one of the corpus's own directories"] };
       const dir = key.includes("/") ? key.slice(0, key.indexOf("/")) : "";
-      if (!CORPUS_DIRS.includes(dir as (typeof CORPUS_DIRS)[number]))
+      /**
+       * ⛔ A ROOT-LEVEL `.yaml` IS A CORPUS DOCUMENT, and refusing it cost three roles their findings.
+       *
+       * `corpusFiles` enumerates every root-level `.yaml`/`.yml` BESIDE the eight directories —
+       * `framework-gaps.yaml`, `access.yaml`, `style.yaml` are all real documents that survive a
+       * round trip. This check demanded a directory prefix, which a root-level document has not, so
+       * the door answered `"framework-gaps.yaml" is not part of a corpus` about a file the corpus
+       * was already holding.
+       *
+       * ⛔ WHAT THAT BROKE IS THE RECORD OF WHAT THE MODEL CANNOT SAY. A framework gap is the only
+       * route from "this corpus had to be compromised" to somebody fixing the compromise, and
+       * `forced_into` is what makes the compromise correctable in one pass rather than becoming the
+       * convention. Three roles working the hosted corpus each reported, independently, that they
+       * could not file one — the door refused the document and `todo add --at <url>` resolved the
+       * url as a directory. Each of their gaps survived only because a person read a report.
+       *
+       * ⛔ AND THE ORIGINAL REASON IS KEPT, NOT WAIVED. The comment above is right that a key the
+       * corpus does not enumerate would be "written and then dropped" by `writeBack` with a
+       * cheerful ok. So the test is exactly what `corpusFiles` collects — a directory on the list,
+       * or a root-level yaml — and `README.md` or `gaps/one.yaml` is still refused.
+       */
+      const rootDocument = !key.includes("/") && /\.ya?ml$/.test(key);
+      if (!rootDocument && !CORPUS_DIRS.includes(dir as (typeof CORPUS_DIRS)[number]))
         return {
           ok: false,
           why: `"${key}" is not part of a corpus`,
-          detail: [CORPUS_DIRS.map((d) => `${d}/…`).join(" · "), "⛔ anything else would be written and then dropped"],
+          detail: [
+            CORPUS_DIRS.map((d) => `${d}/…`).join(" · "),
+            "or a .yaml at the corpus root — framework-gaps.yaml, access.yaml, style.yaml",
+            "⛔ anything else would be written and then dropped",
+          ],
         };
       if (!says.trim()) return { ok: false, why: "a document with nothing in it is a deletion — say what it should hold" };
       const full = path.join(a.dir, key);
@@ -800,6 +827,67 @@ export const INTENTS: Intent[] = [
       };
     },
   },
+  /**
+   * ⛔ THE TWO SMALL WRITES. Peter: *"WRITE STRAIGHT INTO THE CORPUS as SUGGSTED. there is no
+   * 'HOLD' as a note state."* An agent that learned one thing writes one thing — not a whole
+   * document, and not a note to a person. See `suggest.ts` for why neither can look agreed.
+   */
+  {
+    name: "suggest",
+    gate: "author",
+    does: "Add one sentence to a slot, recorded as suggested — it reads as unagreed until a person agrees to it",
+    takes: [
+      { name: "ref", says: "The slot, as <scope>#<exchange>#<slot> — e.g. money#record-spending#after", required: true },
+      { name: "says", says: "The sentence, as the slot would state it", required: true, long: true, floor: 10 },
+      { name: "from", says: "What it was worked out from — the ticket, the transcript, the component", required: true, floor: 10 },
+      { name: "id", says: "A kebab-case id for the statement. Made from the sentence when absent", required: false },
+    ],
+    run: (a, body) => {
+      const r = suggestClaim(a.dir, { ref: str(body.ref), says: str(body.says), from: str(body.from), id: str(body.id) || undefined, as: a.who.actor });
+      if (!r.ok) return r;
+      append(a.dir, { kind: "corpus-changed", at: new Date().toISOString(), by: a.who.actor, via: "agent", ref: r.ref, wrote: keyOf(a.dir, r.file), says: r.said });
+      return { ok: true, said: r.said };
+    },
+  },
+  {
+    name: "ask",
+    gate: "author",
+    does: "Raise one question on a slot, with drafted answers — it gates the behaviour until the person asked answers it",
+    takes: [
+      { name: "ref", says: "The slot, as <scope>#<exchange>#<slot>, or <scope>#<exchange>#<slot>#<statement> when one sentence of several is in question", required: true },
+      { name: "question", says: "The question, as the person who owes it would read it", required: true, floor: 10 },
+      { name: "asked_of", says: "Who owes the answer — a person's handle", required: true },
+      {
+        name: "blocks",
+        says: "What cannot ship until it is answered, as refs. ⛔ [] is a real answer meaning the rest can ship; it is never assumed",
+        required: true,
+      },
+      {
+        name: "candidates",
+        says: 'Drafted answers, each {"says": "…", "consequence": "…"} — two or more need a cost. On `refuses`, an answer is {"outcomes": [{name, when, told}], "consequence": "…"}',
+        required: false,
+      },
+      { name: "cost", says: "What it costs to guess wrong. Required with two or more drafted answers", required: false },
+      { name: "about", says: "Which part of what the slot already says is in question. Required when the slot already says something", required: false },
+    ],
+    run: (a, body) => {
+      const blocks = Array.isArray(body.blocks) ? body.blocks.map(String) : null;
+      if (!blocks) return { ok: false, why: "say what this blocks, as a list of refs — [] when the rest can ship without it" };
+      const r = raiseQuestion(a.dir, {
+        ref: str(body.ref),
+        question: str(body.question),
+        asked_of: str(body.asked_of),
+        blocks,
+        cost: str(body.cost) || undefined,
+        about: str(body.about) || undefined,
+        candidates: Array.isArray(body.candidates) ? body.candidates : undefined,
+        by: a.who.actor,
+      });
+      if (!r.ok) return r;
+      append(a.dir, { kind: "corpus-changed", at: new Date().toISOString(), by: a.who.actor, via: "agent", ref: r.ref, wrote: keyOf(a.dir, r.file), says: r.said });
+      return { ok: true, said: r.said };
+    },
+  },
   {
     name: "say",
     gate: "author",
@@ -1048,7 +1136,7 @@ function gateRefuses(intent: Intent, a: Asking, body: Record<string, unknown>): 
         ? null
         : {
             ok: false,
-            why: `this token may not ${intent.name === "close" ? "close a request" : "reply on a request"}`,
+            why: `this token may not ${intent.name === "close" ? "close a request" : intent.name === "say" ? "reply on a request" : "write to the corpus"}`,
             detail: [`it holds: ${a.who.scopes.join(" · ") || "nothing"}`, "it needs `author`"],
           };
     case "open":

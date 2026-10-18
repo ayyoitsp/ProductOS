@@ -1,9 +1,8 @@
 id: "0178"
-said: can you spawn a walker to try to walk our existing product and try to align the UX? It's way off, no menus in a lot of places.
-at: 2026-10-18
-kind: generator
+said: a demonstrator reported a steps-shaped requirement rendering as an empty bullet on the live page, under a summary counting it
+at: 2026-10-17
+kind: surface
 reaches:
-  generate: importedFrom
-  pin: imported from outside the neighbourhood is drawn
+  surface: c.steps && `<span class="g">steps</span>
+  pin: and no requirement renders as an empty bullet
 waived: {}
-closed: 2026-10-18

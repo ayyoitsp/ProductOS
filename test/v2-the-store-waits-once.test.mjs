@@ -50,16 +50,46 @@ async function storeWithLatency() {
   /** ⛔ Installed AFTER the setup, or the fixture pays the latency and the test takes a minute. */
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   let queries = 0;
+  /**
+   * ⛔ ROUNDS, COUNTED RATHER THAN TIMED — and this is the fix to a test that cried wolf twice.
+   *
+   * The depth of the await chain is what this file is about, and it was inferred from wall clock:
+   * `took < TRIP * 1.8`. That is a true statement about an idle machine and a coin flip on a busy
+   * one. Under four other agents it failed twice in one day with `listening took 355ms with a
+   * 150ms trip`, blocking a deploy once — a green assertion turning red because the scheduler was
+   * late, which teaches a reader to ignore it.
+   *
+   * A wave is exactly what the claim means: queries in flight together cross the network once. So
+   * every transition from nothing-in-flight to something-in-flight is one round, and two
+   * concurrent queries count one where two sequential ones count two. Deterministic, and it still
+   * goes red the moment a reap blocks an answer again.
+   */
+  let inFlight = 0;
+  let waves = 0;
   const realQuery = client.query.bind(client);
   client.query = async (...a) => {
     queries++;
-    await sleep(TRIP);
-    return realQuery(...a);
+    if (inFlight === 0) waves++;
+    inFlight++;
+    try {
+      await sleep(TRIP);
+      return await realQuery(...a);
+    } finally {
+      inFlight--;
+    }
   };
 
   const store = await storeFor(drizzle(client), { kind: "browser", account: who, reach: [] }).project("prj-trip");
   assert.ok(!isRefusal(store), "the fixture could not reach its own project");
-  return { store, counted: () => queries, reset: () => (queries = 0) };
+  return {
+    store,
+    counted: () => queries,
+    rounds: () => waves,
+    reset: () => {
+      queries = 0;
+      waves = 0;
+    },
+  };
 }
 
 const ms = async (fn) => {
@@ -85,15 +115,16 @@ test("the fixture really is paying a trip per query, or nothing below measures a
  * disjoint rows: one takes what is older than the floor, the other reads what is newer.
  */
 test("listening reaps and answers in one round, not two", async () => {
-  const { store, reset } = await storeWithLatency();
+  const { store, counted, rounds, reset } = await storeWithLatency();
   reset();
-  const took = await ms(() => store.listening(120_000));
-  assert.ok(
-    took < TRIP * 1.8,
-    `listening took ${took}ms with a ${TRIP}ms trip — that is two waits, so the reap is still blocking the answer`
+  await store.listening(120_000);
+  /** ⛔ And it did query, or the call is not reaching the store at all. */
+  assert.ok(counted() >= 1, "listening made no query, so it never crossed the network");
+  assert.equal(
+    rounds(),
+    1,
+    `listening crossed the network ${rounds()} times for ${counted()} queries — the reap is blocking the answer again`
   );
-  /** ⛔ And it did cost one, or the call is not reaching the store at all. */
-  assert.ok(took >= TRIP * 0.5, `listening took ${took}ms — it cannot have crossed the network`);
 });
 
 /**
@@ -102,14 +133,15 @@ test("listening reaps and answers in one round, not two", async () => {
  * changed, so a wasted trip there is a wasted trip everywhere.
  */
 test("the fingerprint is one round", async () => {
-  const { store, reset } = await storeWithLatency();
+  const { store, counted, rounds, reset } = await storeWithLatency();
   reset();
-  const took = await ms(() => store.fingerprint());
-  assert.ok(
-    took < TRIP * 1.8,
-    `the fingerprint took ${took}ms with a ${TRIP}ms trip — it is asking twice in series`
+  await store.fingerprint();
+  assert.ok(counted() >= 1, "the fingerprint made no query, so it never crossed the network");
+  assert.equal(
+    rounds(),
+    1,
+    `the fingerprint crossed the network ${rounds()} times for ${counted()} queries — it is asking in series again`
   );
-  assert.ok(took >= TRIP * 0.5, `the fingerprint took ${took}ms — it cannot have crossed the network`);
 });
 
 /** ⛔ And it still answers correctly, because a fast wrong fingerprint serves a stale corpus. */
