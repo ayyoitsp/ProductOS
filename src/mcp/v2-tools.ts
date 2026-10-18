@@ -26,7 +26,7 @@ import { z } from "zod";
 import path from "node:path";
 import fs from "node:fs";
 import type { ProductosPaths } from "../core/paths.js";
-import { loadCorpus } from "../v2/load.js";
+import { loadCorpus, CORPUS_DIRS } from "../v2/load.js";
 import { checkCorpus, summarise } from "../v2/check.js";
 import { gridFor, renderGridText, actsFor, gateFor } from "../v2/grid.js";
 import { compilePacket } from "../v2/packet.js";
@@ -276,6 +276,46 @@ const checkTool = tool(
       notes: findings.filter((f) => f.severity === "note"),
       shape: findings.filter((f) => f.severity === "shape"),
     };
+  }
+);
+
+/**
+ * ⛔ ONE DOCUMENT'S CURRENT BYTES, SO AN AUTHOR READS BEFORE IT REPLACES.
+ *
+ * Authors land their work through `productos_in { intent: "document" }`, which replaces a whole
+ * document. With no way over MCP to read what a document says now, an author editing a feature
+ * somebody else had just changed could only send its own version over the top of theirs — every
+ * other read here is a projection, never the bytes. This is the bytes, read-only.
+ */
+const documentTool = tool(
+  "productos_exchange_document",
+  "One corpus document exactly as stored — read it before replacing it with productos_in intent `document`, or someone else's edit is overwritten. Without `key`, lists every document's key.",
+  AtDir.extend({ key: z.string().describe("e.g. truth/money.md — omit to list every key").optional() }),
+  (a, paths) => {
+    const dir = dirOf(a, paths);
+    const key = (a.key ?? "").trim();
+    if (!key) {
+      const keys: string[] = [];
+      for (const sub of CORPUS_DIRS) {
+        const root = path.join(dir, sub);
+        if (!fs.existsSync(root)) continue;
+        const walk = (d: string): void => {
+          for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+            const full = path.join(d, e.name);
+            if (e.isDirectory()) walk(full);
+            else keys.push(path.relative(dir, full).split(path.sep).join("/"));
+          }
+        };
+        walk(root);
+      }
+      return { dir, keys: keys.sort() };
+    }
+    const top = key.includes("/") ? key.slice(0, key.indexOf("/")) : "";
+    if (key.includes("..") || path.isAbsolute(key) || !(CORPUS_DIRS as readonly string[]).includes(top))
+      return { ok: false, why: `"${key}" is not a document of this corpus`, detail: [CORPUS_DIRS.map((d) => `${d}/…`).join(" · ")] };
+    const full = path.join(dir, key);
+    if (!fs.existsSync(full)) return { ok: false, why: `there is no ${key} yet`, detail: ["writing it with intent `document` creates it"] };
+    return { dir, key, says: fs.readFileSync(full, "utf-8") };
   }
 );
 
@@ -683,6 +723,7 @@ export const EXCHANGE_READ_TOOLS: McpTool[] = [
   readinessTool,
   checkTool,
   recordTool,
+  documentTool,
   pageTool,
   whatItCoversTool,
   gateTool,

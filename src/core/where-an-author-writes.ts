@@ -56,6 +56,11 @@ export function whereAnAuthorWrites(): string {
     `- **\`says\`** — ${fieldOf("document", "says")}. Send all of it: a partial document deletes the rest.`
   );
   out.push(
+    "- **Read it first.** `productos_exchange_document { key }` returns the document exactly as the project " +
+      "holds it now. Change that, not your memory of it — somebody may have pressed something on the page or " +
+      "another author may have written since you last looked, and a whole-document write replaces their work."
+  );
+  out.push(
     "- **Then read it back.** `productos_exchange_check` says what the project now refuses. A refusal is " +
       "yours to fix with another `document` call — never work around one, and never report work landed " +
       "that the check refuses."
