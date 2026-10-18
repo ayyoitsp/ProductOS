@@ -1,4 +1,4 @@
-id: "0194"
+id: "0198"
 said: the other MCP reads — productos_exchange_record, productos_exchange_questions, productos_exchange_grid, productos_exchange_page, and the packet entries for claims — do not return the level, so a session reading a behaviour through them cannot tell an agreed sentence from a draft without a second call
 at: 2026-10-18
 kind: surface

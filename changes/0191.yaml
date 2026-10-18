@@ -1,11 +1,9 @@
 id: "0191"
-said: Let's also make sure appropriate test cases are being generated based on verified product truth
-at: 2026-10-17
-kind: derivation
+said: Fix the defects
+at: 2026-10-18
+kind: surface
 reaches:
-  derive: worked-out-from-a-draft
-  surface: proposeRequirement
-  check: holds readiness back until one does
-  pin: a requirement worked out from a claim nobody agreed to is suggested, not derived
+  surface: AND ANYTHING THAT BECOMES VISIBLE, HOWEVER IT GOT THERE
+  pin: revealing a stub fetches it
 waived: {}
-closed: 2026-10-17
+closed: 2026-10-18

@@ -5313,7 +5313,13 @@ const DEFER = `<script>
 
   document.addEventListener("click", (ev) => {
     for (const el of ev.composedPath ? ev.composedPath() : [ev.target]) {
-      const name = el instanceof Element && el.getAttribute ? el.getAttribute("data-goto") : null;
+      if (!(el instanceof Element) || !el.getAttribute) continue;
+      /**
+       * ⛔ A TAB IS A WAY IN TOO, AND IT WAS NOT ON THIS LIST. One attribute is a menu row; the other
+       * is the row of areas across the top of the frame, which is how most people reach a section at
+       * all. Choosing Product filled nothing and said "Loading this…" indefinitely.
+       */
+      const name = el.getAttribute("data-goto") || el.getAttribute("data-tab");
       if (!name) continue;
       const stub = stubFor(name);
       if (stub) fill(stub);
@@ -5333,6 +5339,34 @@ const DEFER = `<script>
 
   /** And whatever is showing on arrival, if the server deferred it anyway. */
   for (const s of document.querySelectorAll("section.view[data-defer]")) if (!s.hidden) fill(s);
+
+  /**
+   * ⛔ AND ANYTHING THAT BECOMES VISIBLE, HOWEVER IT GOT THERE.
+   *
+   * Peter: *"Loading this…"* — on the Product tab, forever. Not slow: nothing was ever fetched. The
+   * three triggers above are a list of ENTRY POINTS — a menu press, a hash, and whatever was
+   * showing at boot — and the tab row is a fourth one nobody added. A tab carries its own attribute, so
+   * choosing Product revealed the stub and no code anywhere asked for its content. No request, no
+   * failure, no retry button: the one state the error handling below cannot reach, because it only
+   * runs when a fetch was attempted.
+   *
+   * ⛔ SO THE TRIGGER BECOMES THE INVARIANT RATHER THAN A LONGER LIST. "A deferred section that is
+   * visible gets filled" is the thing that was always meant; enumerating the ways a section can
+   * become visible is how this was wrong, and would be wrong again at the next new way in.
+   *
+   * ⛔ The entry points above stay, and that is deliberate — they fill BEFORE the switch, which is
+   * what stops a half-replaced section flashing. This is the backstop, not the mechanism.
+   */
+  if (typeof MutationObserver !== "undefined") {
+    const watcher = new MutationObserver((changes) => {
+      for (const c of changes) {
+        const el = c.target;
+        if (el instanceof Element && el.matches("section.view[data-defer]") && !el.hidden) fill(el);
+      }
+    });
+    for (const s of document.querySelectorAll("section.view[data-defer]"))
+      watcher.observe(s, { attributes: true, attributeFilter: ["hidden"] });
+  }
 
   /* -------------------------------------------------------------- thumbnails */
 
