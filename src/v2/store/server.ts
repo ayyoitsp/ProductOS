@@ -27,6 +27,7 @@ import { migrateAllDocuments } from "./doc-migrations.js";
 import { projects } from "./schema.js";
 import { instanceRoute } from "./instance.js";
 import { projectMcpRoute } from "./mcp.js";
+import { connectRoute } from "./connect.js";
 import { chooseRoute } from "./choose.js";
 import { authIsOff, singleAccount } from "./identity.js";
 
@@ -449,6 +450,8 @@ export async function startHosted(
 
       /** ⛔ MCP first: `/p/<id>/mcp` would otherwise be swallowed by the instance route's catch-all. */
       if (await projectMcpRoute(req, res, pathname, { db, localSession })) return;
+      /** ⛔ Before the instance route too: minting a token never materializes a corpus or takes its lock. */
+      if (await connectRoute(req, res, pathname, { db, localSession })) return;
       if (await instanceRoute(req, res, pathname, { db, localSession })) return;
 
       res.writeHead(404, { "content-type": "application/json" });

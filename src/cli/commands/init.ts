@@ -155,7 +155,12 @@ export function initCommand(): Command {
 
       console.log();
       console.log(pc.bold("Next:"));
-      console.log(`  1. Export ${pc.bold("PRODUCTOS_TOKEN")} — a token for the hosted project.`);
+      /**
+       * ⛔ WHERE THE TOKEN COMES FROM, NOT ONLY THAT ONE IS NEEDED. "Export a token" with no source
+       * sent people to `productos hosted token`, which needs the database — so a project's owner had
+       * no way in. The page mints one for its own project; see `src/v2/store/connect.ts`.
+       */
+      console.log(`  1. Export ${pc.bold("PRODUCTOS_TOKEN")} — press ${pc.bold("Connect Claude Code")} on the project's page to get one.`);
       console.log(`  2. Open Claude Code in this repo and say ${pc.cyan('"Scope the <feature> flow"')} or ${pc.cyan('"groom this ticket"')}.`);
       console.log(`  3. Review on the hosted page, and press what you agree with. ⛔ Nothing is accepted by having been written.`);
     });

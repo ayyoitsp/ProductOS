@@ -3181,6 +3181,100 @@ const NAV_PLACE_BUTTON =
   `</button>`;
 
 /**
+ * ⛔ CONNECT CLAUDE CODE, FROM THE PAGE — because there was no other way a project's owner could.
+ *
+ * Peter, on what blocks the MVP: *"`productos connect` and token issuing from the page"*. A session
+ * reaches a project through `/p/<project>/mcp` with a bearer token, and the only way to get one was a
+ * command that needs the database's connection string. So the owner, on the page they own the
+ * project from, could not connect anything to it.
+ *
+ * ⛔ ONLY WHERE A PROJECT IS IN THE PATH. A local `serve` has no tokens and no MCP endpoint to point
+ * at; a control there would mint something that reaches nothing.
+ *
+ * ⛔ THE SECRET IS ON SCREEN ONCE. The server stores a hash, so the panel says so where the token
+ * appears — a reader who closes it without copying has to make another, and should know that before
+ * they close it rather than after.
+ */
+const servedUnderProject = (base: string | undefined): boolean => /^\/p\/[^/]+\/v2$/.test(base ?? "");
+
+const CONNECT_BUTTON =
+  `<details class="connect" data-ref="connect" data-label="Connect Claude Code">` +
+  `<summary>Connect Claude Code</summary>` +
+  `<div class="connect-panel">` +
+  `<p>Lets a Claude Code session in your repo read this project and draft into it. It cannot agree to anything on your behalf — only you can, here.</p>` +
+  `<button type="button" class="connect-make">Make a token</button>` +
+  `<div class="connect-out" hidden>` +
+  `<p>Run these two lines in your repo. <strong>The token is shown only this once</strong> — copy it before you close this.</p>` +
+  `<pre class="connect-lines"></pre>` +
+  `<div class="connect-acts"><button type="button" class="connect-copy">Copy both lines</button>` +
+  `<button type="button" class="connect-stop">Stop this token</button></div>` +
+  `</div>` +
+  `<p class="connect-said" role="status"></p>` +
+  `</div></details>`;
+
+const CONNECT = `<script>
+(function () {
+  const box = document.querySelector("details.connect");
+  if (!box) return;
+  /* ⛔ Relative to the project, never the root — the page is served under /p/<project>/. */
+  const at = location.pathname.indexOf("/v2");
+  const under = at > 0 ? location.pathname.slice(0, at) : "";
+  const make = box.querySelector(".connect-make");
+  const out = box.querySelector(".connect-out");
+  const lines = box.querySelector(".connect-lines");
+  const said = box.querySelector(".connect-said");
+  const copy = box.querySelector(".connect-copy");
+  const stop = box.querySelector(".connect-stop");
+  let minted = null;
+  make.addEventListener("click", async function () {
+    make.disabled = true;
+    said.textContent = "Making a token…";
+    try {
+      const r = await fetch(under + "/api/v2/tokens", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "{}",
+      });
+      const body = await r.json().catch(function () { return {}; });
+      if (!r.ok || !body.token) throw new Error(body.why || r.statusText || "it was refused");
+      minted = body.id;
+      lines.textContent =
+        "productos init claude --at " + location.origin + under + "\\n" +
+        "export PRODUCTOS_TOKEN=" + body.token;
+      out.hidden = false;
+      make.hidden = true;
+      said.textContent = "Keep the export line wherever your shell keeps its settings, so Claude Code has it when it starts.";
+    } catch (e) {
+      said.textContent = "No token was made: " + e.message;
+      make.disabled = false;
+    }
+  });
+  copy.addEventListener("click", async function () {
+    try {
+      await navigator.clipboard.writeText(lines.textContent);
+      said.textContent = "Copied.";
+    } catch (e) {
+      said.textContent = "Could not copy — select the two lines and copy them yourself.";
+    }
+  });
+  stop.addEventListener("click", async function () {
+    if (!minted) return;
+    const r = await fetch(under + "/api/v2/tokens/" + encodeURIComponent(minted), { method: "DELETE" });
+    if (r.ok) {
+      lines.textContent = "";
+      out.hidden = true;
+      make.hidden = false;
+      make.disabled = false;
+      minted = null;
+      said.textContent = "That token no longer works. Anything using it has been disconnected.";
+    } else {
+      said.textContent = "It was not stopped — try again.";
+    }
+  });
+})();
+<\/script>`;
+
+/**
  * Every scope, as a tree, with how much work each one is holding.
  *
  * ⛔ THE COUNTS ARE ON THE NAV, because "which feature do I look at next" is the first question
@@ -3198,7 +3292,9 @@ function renderNav(
   aboutLabel: string,
   charterTabs: string,
   /** How many screens the subtree draws, so the tab says whether it is worth opening. */
-  screens: number
+  screens: number,
+  /** ⛔ The Connect Claude Code control — only on a live page served under a project. */
+  connect: string = ""
 ): string {
   const kids = (parent?: string) => corpus.scopes.filter((s) => s.scope.in === parent);
   // ⛔ Once for the whole nav. It was called per row, which walks the entire corpus per row.
@@ -3694,7 +3790,7 @@ function renderNav(
           `</div>`
         );
       })
-      .join("")}${NAV_PLACE_BUTTON}</div>` +
+      .join("")}${NAV_PLACE_BUTTON}${connect}</div>` +
     /**
      * ⛔ OVERVIEW'S OWN MENU BELONGS IN THE FRAME, NOT IN THE PAGE.
      *
@@ -3935,7 +4031,8 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
       ids.reduce(
         (n, id) => n + (corpus.scopes.find((s) => s.scope.id === id)?.scope.views.filter((v) => v.exists !== "withdrawn").length ?? 0),
         0
-      )
+      ),
+      opts.interactive && servedUnderProject(opts.linkBase) ? CONNECT_BUTTON : ""
     )}
     <main>
       ${
@@ -4557,7 +4654,7 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
     return `${section}${mockBank(corpus, ids, protoScreens, section, scopeId)}`;
   }
 
-  return `${STYLE}${body}${appCssOnce(opts)}${mockBank(corpus, ids, protoScreens, body, scopeId)}${partFacts(corpus, ids)}${renderNotePanel(corpus, ids, opts)}${VIEW_SWITCH}${opts.interactive ? DEFER : ""}${DIM_FILTER}${NAV_PLACE}${COPY_REF}${PROTO_FRAME}${PROTOTYPE}${DRIVE}${opts.interactive ? liveScript(opts) : INERT}`;
+  return `${STYLE}${body}${appCssOnce(opts)}${mockBank(corpus, ids, protoScreens, body, scopeId)}${partFacts(corpus, ids)}${renderNotePanel(corpus, ids, opts)}${VIEW_SWITCH}${opts.interactive ? DEFER : ""}${opts.interactive && servedUnderProject(opts.linkBase) ? CONNECT : ""}${DIM_FILTER}${NAV_PLACE}${COPY_REF}${PROTO_FRAME}${PROTOTYPE}${DRIVE}${opts.interactive ? liveScript(opts) : INERT}`;
 }
 
 
@@ -9154,6 +9251,25 @@ export const STYLE = `<style>
   @media (max-width: 61.999rem) { .navplace { display: none; } }
   :root[data-nav="left"] .navplace .to-left { display: none; }
   :root[data-nav="left"] .navplace .to-top { display: inline; }
+  /* Connect Claude Code: a small control at the end of the menu row, its panel floating below it. */
+  .connect { position: relative; align-self: center; margin-left: .5rem; font-size: .8rem; }
+  .connect > summary { list-style: none; cursor: pointer; white-space: nowrap; color: var(--dim);
+    border: 1px solid var(--line); border-radius: 6px; padding: .25rem .55rem; }
+  .connect > summary::-webkit-details-marker { display: none; }
+  .connect > summary:hover, .connect[open] > summary { color: var(--ink); border-color: var(--accent); }
+  .connect-panel { position: absolute; right: 0; top: calc(100% + .35rem); z-index: 30;
+    width: min(30rem, calc(100vw - 2rem)); box-sizing: border-box; padding: .8rem .9rem;
+    background: var(--card); border: 1px solid var(--line); border-radius: 8px;
+    box-shadow: 0 6px 24px rgba(0,0,0,.12); color: var(--ink); font-size: .85rem; }
+  .connect-panel p { margin: 0 0 .6rem; }
+  .connect-panel button { font: inherit; cursor: pointer; border: 1px solid var(--line);
+    border-radius: 6px; background: none; color: var(--ink); padding: .3rem .6rem; }
+  .connect-panel .connect-make { border-color: var(--accent); }
+  .connect-lines { margin: 0 0 .6rem; padding: .6rem; overflow-x: auto; white-space: pre;
+    border: 1px solid var(--line); border-radius: 6px; font-size: .78rem; user-select: all; }
+  .connect-acts { display: flex; gap: .5rem; flex-wrap: wrap; margin-bottom: .6rem; }
+  .connect-said:empty { display: none; }
+  @media (max-width: 61.999rem) { .connect { margin-left: auto; } }
   /* ⛔ THE COLUMN NEEDS THE WIDTH TO EXIST. Below this, a 19rem sidebar and a 52rem page cannot
      both fit, and the choice is not the reader's to get wrong — the menu goes back to the top and
      the button simply has no effect until there is room for the other answer. */
@@ -9177,6 +9293,10 @@ export const STYLE = `<style>
     /* First in the column, because the control that moves the menu belongs at the top of it —
        last in a flex row is the right edge, and last in a flex column is the bottom of the page. */
     :root[data-nav="left"] .navplace { order: -1; margin: 0 0 .5rem; align-self: flex-start; }
+    /* Down the side the column scrolls, which would clip a floating panel — so it opens in place. */
+    :root[data-nav="left"] .connect { order: -1; margin: 0 0 .5rem; align-self: stretch; }
+    :root[data-nav="left"] .connect > summary { display: inline-block; }
+    :root[data-nav="left"] .connect-panel { position: static; width: auto; margin-top: .35rem; box-shadow: none; }
     /*
      * ⛔ DOWN THE SIDE, A GROUP IS A GROUP. Peter: *"the expanded menu should be grouped under each
      * main area, just like a standard menu... e.g. product, when selected, should have items under

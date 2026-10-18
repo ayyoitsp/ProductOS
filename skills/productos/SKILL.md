@@ -465,6 +465,14 @@ they read the feature with its screens, they press, the press is written **synch
 because the page holds a connection open — **it tells them when the truth changes underneath**,
 whoever changed it.
 
+**The token comes from the page, not from you.** A session reaches `/p/<project>/mcp` with
+`$PRODUCTOS_TOKEN`, and the person gets one by pressing **Connect Claude Code** on the project's
+page: it shows the token once, with the two lines to paste — `productos init claude --at <project
+url>` and `export PRODUCTOS_TOKEN=<token>`. That token reaches that one project, can read and draft,
+and can never agree to anything or mint another token. When a session has no token, send the person
+to that control; ⛔ never ask them for a database connection string to run `productos hosted token`,
+which is for whoever operates the instance.
+
 **Why it has to be one place.** Reading, deciding and authoring used to live on three surfaces: a
 published page to read, a question interface to decide, a session to author. Every handoff between
 them was a person carrying something by hand, and the one they felt worst was the reload — the

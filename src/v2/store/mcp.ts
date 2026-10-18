@@ -246,7 +246,9 @@ export async function projectMcpRoute(
       {
         ok: false,
         why: "this MCP endpoint needs a credential",
-        detail: ["issue a token for the project and send it as `Authorization: Bearer <token>`"],
+        detail: [
+          "press Connect Claude Code on the project's page for a token, and send it as `Authorization: Bearer <token>`",
+        ],
       },
       401,
     );

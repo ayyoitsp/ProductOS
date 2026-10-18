@@ -560,6 +560,8 @@ export const AREAS: Area[] = [
        */
       "src/v2/store/pushes.ts",
       "src/v2/store/mcp.ts",
+      /** ⛔ How a project's owner connects Claude Code to it — the token the MCP endpoint asks for. */
+      "src/v2/store/connect.ts",
       "src/v2/store/choose.ts",
       "src/cli/commands/hosted.ts",
       "src/v2/packet.ts",
