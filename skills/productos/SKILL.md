@@ -200,6 +200,8 @@ You are the **orchestrator**, and you are the session — not a subagent. That i
 - the edit itself — one field is not worth a context, and a scoper would rewrite around it
 
 ⛔ **Every author writes and none may settle.** An author may propose, populate, draw and regenerate; it may never produce a verdict, answer an open question, or mark anything validated. None of them can put a question to a person — deliberately, because consent obtained inside a subagent has no record of how it was obtained. What an author cannot resolve comes back to you as a question, and you put it to the person yourself.
+
+⛔ **Every author lands its work in the hosted project, through the one door.** Each document is one call — `productos_in { intent: "document", fields: { key, says } }` — read back with `productos_exchange_check`; a one-sentence or one-question change is a small write through the same door. There is no local corpus to collect afterwards and nothing to import: a draft on disk is not in the product, and `hosted import` is an operator's command, never a step in a route.
 <!-- /productos:preset -->
 
 ## ⛔ A probe is a write, not a request — `Note.probe`
@@ -613,14 +615,19 @@ already exists.
 ⛔ **The two halves have different owners.** A deploy session ships code and reads a number off the
 page; it does **not** redraw, because redrawing is an act on product truth and a session doing that
 without a person is the one thing the corpus is careful to prevent. The drawings are the author's
-half, and the author finishes them:
+half, and the author finishes them — **onto the hosted project, never into a directory**:
 
 ```bash
-productos v2 draw --all --into <corpus>     # the drawings are output; redraw them
-productos v2 prototypes --into <corpus>     # and the chrome
-productos v2 style --into <corpus>          # and the stylesheet snapshot
-productos hosted import <corpus> --into <projectId>
+productos v2 draw --all --into <project url> --token $PRODUCTOS_TOKEN   # the drawings are output; redraw them
+productos v2 prototypes --into <scratch dir>   # and the chrome
+productos v2 style --into <scratch dir>        # and the stylesheet snapshot
 ```
+
+`draw` speaks to an instance. `prototypes` and `style` still write only to a directory, so what they
+write is scratch until it lands: each document they produced goes up through the door, one call each —
+`productos_in { intent: "document", fields: { key: "prototypes.yaml", says: … } }`, the same for
+`style.yaml`. ⛔ **Not `hosted import`.** That is an operator's command and needs the database
+address; an author session has the MCP server and a token, and the door is the whole of its way in.
 
 Then **check a number on the live page that would be different if it had not worked** — not that the
 page returns 200. A corpus was once reported deployed while every drawing on it still came from the

@@ -138,7 +138,13 @@ test("a role that can ask the corpus is told what to ask, in its own prompt", ()
  */
 test("a role that cannot ask the corpus is not told to", () => {
   for (const r of ROLES.filter((r) => !r.needs.includes("ask-the-corpus"))) {
-    const named = readsNamedIn(bodyOf(r));
+    /**
+     * ⛔ A READ THE ROLE HOLDS ANOTHER WAY IS RUNNABLE. An author's `write-corpus` carries the door
+     * and `productos_exchange_check`, because the corpus is hosted and a write nobody can read back
+     * is a write nobody knows parsed. What stays refused is a read the role was never handed.
+     */
+    const held = new Set(toolsFor(r.needs, SERVER).filter((t) => t.startsWith(PREFIX)).map((t) => t.slice(PREFIX.length)));
+    const named = readsNamedIn(bodyOf(r)).filter((t) => !held.has(t));
     assert.deepEqual(
       named,
       [],

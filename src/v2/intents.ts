@@ -321,7 +321,15 @@ export const INTENTS: Intent[] = [
   {
     name: "document",
     gate: "author",
-    does: "Write one document of the corpus — truth, a rule, a part, a reading",
+    /**
+     * ⛔ AND IT SAYS WHO IT IS FOR. Peter: *"there should be no 'local corpus'... always hosted
+     * server"*. An author session holds this MCP server and a token and nothing else, so this is
+     * the only way its work reaches the product — one call per document. `hosted import` is an
+     * operator's command and needs a database address no author has.
+     */
+    does:
+      "Write one whole document of the corpus by key — truth, a rule, a part, a reading. ⛔ This is how an author lands its work " +
+      "over MCP: one call per document, straight into the hosted project, with no local copy kept as the truth",
     takes: [
       {
         name: "key",

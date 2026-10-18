@@ -42,6 +42,7 @@ import { AGENTS, AUTHORS, CASCADE, KINDS, SHIMS, shippedRoutes, SKILL, byDiscipl
 /** ⛔ Plain text for a terminal and for JSON — never HTML-escaped, which is the page's business. */
 const plain = (x: unknown): string => String(x ?? "").replace(/\s+/g, " ").trim();
 import { agentsDoc, withPreset } from "../../core/agents-doc.js";
+import { withWhereAnAuthorWrites } from "../../core/where-an-author-writes.js";
 import { readChanges, writeChange, nextId, verify, missing, changesWithId, idsInUse } from "../../core/change.js";
 import { writeDrawnReading, writeSketchHtml } from "../../v2/draw-write.js";
 import { whatMoved, repoOf } from "../../v2/moved.js";
@@ -2040,6 +2041,22 @@ export function v2Command(): Command {
                 )}`
               );
           }
+        }
+        /**
+         * ⛔ AND EVERY AUTHOR'S BRIEF SAYS WHERE ITS WORK LANDS — the hosted project, through the
+         * door. One generated section rather than nine pasted ones; see `where-an-author-writes.ts`.
+         * Walked off `AUTHORS`, so a new author cannot be the one that was never told.
+         */
+        for (const a of AUTHORS) {
+          if (!a.prompt) continue;
+          const file = path.resolve(a.prompt);
+          if (!fs.existsSync(file)) continue;
+          const was = fs.readFileSync(file, "utf-8");
+          const now = withWhereAnAuthorWrites(was);
+          if (now === was) continue;
+          fs.writeFileSync(file, now);
+          wrote++;
+          console.log(pc.green("✓"), `${a.name}  ${pc.dim("where its work lands")}`);
         }
         console.log("");
         console.log(pc.dim(`  ${wrote} rewritten from src/core/jobs.ts — a test fails if one drifts`));

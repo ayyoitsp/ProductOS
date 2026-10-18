@@ -108,6 +108,19 @@ export function presetBlock(shims: Shim[]): string {
       "obtained inside a subagent has no record of how it was obtained. What an author cannot " +
       "resolve comes back to you as a question, and you put it to the person yourself."
   );
+  out.push("");
+  /**
+   * ⛔ AND WHERE WHAT THEY WRITE LANDS. Peter: *"there should be no 'local corpus'... always hosted
+   * server"*. An orchestrator that does not know this waits for a directory and then looks for a way
+   * to import it — which is an operator's command, needing an address no author session holds.
+   */
+  out.push(
+    "⛔ **Every author lands its work in the hosted project, through the one door.** Each document is " +
+      'one call — `productos_in { intent: "document", fields: { key, says } }` — read back with ' +
+      "`productos_exchange_check`; a one-sentence or one-question change is a small write through the " +
+      "same door. There is no local corpus to collect afterwards and nothing to import: a draft on disk " +
+      "is not in the product, and `hosted import` is an operator's command, never a step in a route."
+  );
   out.push(PRESET_CLOSE);
   return out.join("\n");
 }
