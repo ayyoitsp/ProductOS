@@ -48,6 +48,13 @@ const NOT_A_REVIEWERS_FACT = new Map([
   ["shows", "a claim about what a drawing demonstrates, written beside the drawing by whoever drew it"],
   ["drawn_from", "provenance, recorded by the generator"],
   ["drawn_at", "provenance, recorded by the generator"],
+  [
+    "drawn_screen",
+    "provenance, recorded by the generator — which of several screens one component renders this " +
+      "view is, worked out from the view's own title at draw time. ⛔ Deliberately NOT a reviewer's " +
+      "fact: a reviewer who could type it could make the corpus disagree with the drawing beside it, " +
+      "and the way to change it is to name the view after the screen it is and draw again",
+  ],
   ["states", "generated — one drawing per condition found in the code"],
   ["parts", "stamped into the drawing by the generator and read back; a reviewer presses them rather than typing them"],
   ["view_kind", "selectable by a Rule, not a thing somebody sets per screen"],

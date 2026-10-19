@@ -18,7 +18,7 @@
 import { resolveRules, type Corpus } from "./load.js";
 import { scopeToShadow, liftFaces, PANE_FIT } from "./appcss.js";
 import { promisesOf, screensOf, type ProtoPromise, type ProtoScreen } from "./prototype.js";
-import { inferConnections, landingsFor, finishesFor, stateShowing, routeTable, sameRoute } from "./connects.js";
+import { inferConnections, landingsFor, finishesFor, stateShowing, routeTable, screenAnswering } from "./connects.js";
 import { pictureOf, unpicturedParts, STATE_CSS } from "./states.js";
 import { deriveStates } from "./derive-states.js";
 import { walkOf, type Walk } from "./walk.js";
@@ -1036,7 +1036,16 @@ function wireHtml(
   const here = `${scopeId}#${view.id}`;
   return stamped.replace(/<([a-z][a-z0-9]*)\b([^>]*\bdata-goes-to="([^"]+)"[^>]*)>/gi, (whole, tag: string, attrs: string, pushed: string) => {
     if (/\bdata-goes="/.test(attrs)) return whole;
-    const dest = routes.find((r) => r.id !== here && sameRoute(pushed, r.route));
+    /**
+     * ⛔ THE SAME RESOLUTION THE DERIVED CONNECTIONS USE, NOT A SECOND ONE THAT ONLY LOOKS ALIKE.
+     *
+     * This was a path-only match while `connects` had learned to read the query, and the two
+     * disagreeing is worse than either being wrong alone: all eight tabs on the workspace drew as
+     * pressable and all eight went to the same screen. A control that is visibly live and lands
+     * somewhere else teaches a reviewer something false about the product, which is the one
+     * outcome a drawing must never produce.
+     */
+    const dest = screenAnswering(pushed, here, routes);
     if (!dest) return whole;
     /**
      * ⛔ MERGED INTO THE CLASS IT ALREADY HAS, never written beside it. The application's own

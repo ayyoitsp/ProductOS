@@ -123,6 +123,21 @@ export interface Provenance {
   from: string;
   /** The commit that component was at. ⛔ Absent where the repo could not be read, never guessed. */
   at?: string;
+  /**
+   * ⛔ WHICH OF THE SCREENS THAT COMPONENT RENDERS THIS ONE IS — DECIDED AT DRAW TIME AND, UNTIL
+   * NOW, THROWN AWAY.
+   *
+   * One route can render eight screens on one variable. The draw already works out which arm a
+   * view is, from the view's own title, and SAYS so — "drew rent-roll". Then it printed the
+   * sentence and kept nothing, so the corpus held eight screens that were indistinguishable to
+   * everything downstream.
+   *
+   * What that cost: Peter, on the walk, *"not a single tab clickable"*. Every tab in his workspace
+   * pushes the SAME path and differs only by a query value, so resolving a tab press to a screen
+   * is impossible without knowing which screen answers which value. The answer existed for the
+   * length of one console line.
+   */
+  screen?: string;
 }
 
 export interface WrittenState {
@@ -350,7 +365,7 @@ export function writeSketchHtml(
 
     // Drop an existing drawing, whatever its indent.
     // Drop the previous provenance lines too, or a regenerated drawing keeps the old one's.
-    for (const key of ["drawn_from", "drawn_at"]) {
+    for (const key of ["drawn_from", "drawn_at", "drawn_screen"]) {
       const at = lines.findIndex((l, i) => i > start && i < end && new RegExp(`^\\s*${key}:`).test(l));
       if (at >= 0) {
         lines.splice(at, 1);
@@ -435,6 +450,7 @@ export function writeSketchHtml(
        */
       ...(prov ? [`${INDENT}drawn_from: ${JSON.stringify(prov.from)}`] : []),
       ...(prov?.at ? [`${INDENT}drawn_at: ${JSON.stringify(prov.at)}`] : []),
+      ...(prov?.screen ? [`${INDENT}drawn_screen: ${JSON.stringify(prov.screen)}`] : []),
       /**
        * ⛔ THE TEXT FIRST, because it is the one a person reads in a packet and in a terminal, and
        * the HTML below it is one very long line nobody scrolls past.

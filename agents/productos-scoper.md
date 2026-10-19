@@ -1616,12 +1616,28 @@ the imported files in the list instead.
 
 ### ⛔ A drawing records where it came from, so the history can be walked
 
-`draw` writes two fields beside the drawing, and neither is typed:
+`draw` writes three fields beside the drawing, and none of them is typed:
 
 ```yaml
 drawn_from: "frontend/app/components/cre/DealPricingMatrix.tsx"
 drawn_at: "6cb3ba69a3aaff07cd866758664bceca09b3e38f"
+drawn_screen: "rent-roll"
 ```
+
+⛔ **`drawn_screen` is which of several screens one component renders this view IS**, and it is the
+only thing that tells those screens apart. One route can render eight — a deal workspace is eight
+tabs on one address, chosen by `?tab=`. Every one of them is `drawn_from` the same file, so without
+this the corpus holds eight screens nothing downstream can distinguish, and a tab press resolves to
+all of them and to none.
+
+⛔ **You never type it.** `draw` works out which arm a view is from the view's own **title** and
+writes what it chose, so getting it right means naming the view after the screen it is — a view
+called *Rent Roll* is drawn as the rent roll. If the arm it chose is not the screen you meant, the
+draw says so and names the others; point it at the right component rather than editing this field.
+
+⛔ **Two views may not claim the same arm.** Where they do, nothing can resolve a control that
+leads there, and it is reported rather than guessed at — two screens that cannot be told apart is a
+duplication to settle in the truth, not a coin toss to make at render time.
 
 ```bash
 productos v2 moved --at <corpus> --repo <the codebase> --full

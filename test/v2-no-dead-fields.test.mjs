@@ -59,6 +59,13 @@ const SURFACES = [
   //    as `moved.ts` and `wire.ts` above: leaving it out reported a field that is read, and read by
   //    everything that matters, as read by nothing.
   "dimensions.ts",
+  // ⛔ And `connects.ts` is the only reader of `View.drawn_screen` — on purpose, for the same
+  //    reason `dimensions.ts` owns the dimensions. Which of several screens one component renders
+  //    a view IS matters in exactly one place: resolving a control that leads there. One route can
+  //    render eight screens told apart by a query value, and if the page and the derived
+  //    connections answered that question separately they could disagree — which they did, and
+  //    every tab on a workspace drew as pressable and went to the same screen.
+  "connects.ts",
 ]
   .map((f) => fs.readFileSync(path.join("src/v2", f), "utf-8"))
   .concat(fs.readFileSync("src/cli/commands/v2.ts", "utf-8"))

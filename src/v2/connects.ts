@@ -235,14 +235,65 @@ export function sameRoute(pushed: string, served: string): boolean {
  * leads to, and making a drawn control walk on the page — and two copies of a route table is two
  * answers to the same question.
  */
-export function routeTable(corpus: Corpus): Array<{ id: string; route: string }> {
-  const served: Array<{ id: string; route: string }> = [];
+export function routeTable(corpus: Corpus): Array<{ id: string; route: string; screen?: string }> {
+  const served: Array<{ id: string; route: string; screen?: string }> = [];
   for (const s of corpus.scopes)
     for (const v of s.scope.views) {
       const route = v.drawn_from && routeOfFile(v.drawn_from);
-      if (route) served.push({ id: `${s.scope.id}#${v.id}`, route });
+      if (route) served.push({ id: `${s.scope.id}#${v.id}`, route, screen: v.drawn_screen });
     }
   return served;
+}
+
+/**
+ * Which screen answers a pushed address, where several share one path.
+ *
+ * ⛔ A PATH IS NOT ALWAYS THE WHOLE ADDRESS. Peter: *"not a single tab clickable"*. Every tab in
+ * his deal workspace pushes the SAME path and differs only in a query value — eight screens, one
+ * route, `?tab=rent-roll` against `?tab=sizing`. Matching on the path alone answers "all eight" and
+ * "itself" at once, which is no answer: the only candidate excluded is the screen doing the
+ * pushing, so a tab press resolved to nothing and the control stayed inert.
+ *
+ * So where a pushed address carries a query, the value picks between the screens that share the
+ * path, using the arm each one recorded at draw time. ⛔ And where nothing recorded an arm this
+ * returns nothing rather than the first match — eight indistinguishable candidates is exactly the
+ * state that produced a drawing nobody could press, and guessing one would put a tab on the page
+ * that goes somewhere it does not go.
+ */
+export function screenAnswering(
+  pushed: string,
+  from: string,
+  served: Array<{ id: string; route: string; screen?: string }>
+): { id: string; route: string; screen?: string } | undefined {
+  const onPath = served.filter((r) => sameRoute(pushed, r.route));
+  if (!onPath.length) return undefined;
+
+  const query = pushed.indexOf("?") >= 0 ? pushed.slice(pushed.indexOf("?") + 1) : "";
+  if (query) {
+    const values = query
+      .split("&")
+      .map((pair) => pair.slice(pair.indexOf("=") + 1))
+      .filter((v) => v && !v.startsWith(":"));
+    for (const v of values) {
+      const claim = onPath.filter((r) => r.screen === v);
+      if (claim.length === 1) return claim[0];
+      /**
+       * ⛔ TWO SCREENS CLAIMING ONE ARM IS AN AMBIGUITY, NOT A COIN TOSS. It happens here: a
+       * workspace shell and the tab it opens on are both drawn from the same arm of the same
+       * component, so both record "overview". Taking the first put every press of Overview on the
+       * chrome rather than the screen — a control that is visibly live and lands somewhere else,
+       * which teaches a reviewer something false about the product.
+       *
+       * Unresolved is the honest answer, and it is also a finding: two screens that cannot be told
+       * apart is the duplication this corpus already has a note about.
+       */
+      if (claim.length > 1) return undefined;
+    }
+    /** ⛔ A query nothing answers is unresolved, not "whichever shares the path". */
+    if (onPath.length > 1) return undefined;
+  }
+
+  return onPath.find((r) => r.id !== from);
 }
 
 export function navigationsInCode(corpus: Corpus): Map<string, { to: string; route: string }> {
@@ -259,7 +310,7 @@ export function navigationsInCode(corpus: Corpus): Map<string, { to: string; rou
         const part = /\bdata-part="([^"]+)"/.exec(whole)?.[1];
         if (!part) continue;
         const here = `${s.scope.id}#${v.id}`;
-        const dest = served.find((x) => x.id !== here && sameRoute(pushed, x.route));
+        const dest = screenAnswering(pushed, here, served);
         if (dest) found.set(`${here}#${part}`, { to: dest.id, route: pushed });
       }
     }

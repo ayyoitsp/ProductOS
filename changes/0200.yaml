@@ -1,0 +1,9 @@
+id: "0200"
+said: not a single tab clickable, and 'Go to current' just randomly floating in the middle. did you walk the pages and compare or not? I'm confused.
+at: 2026-10-19
+kind: generator
+reaches:
+  generate: valueOfArg
+  pin: a control that calls a prop still says where it goes
+waived: {}
+closed: 2026-10-19
