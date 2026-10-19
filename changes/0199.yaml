@@ -1,0 +1,8 @@
+id: "0199"
+said: when i load up a page, like http://localhost:4100/p/prj-bks5f4m325/v2/product/cre/deal-overview, the menu doesn't expand, and I load a page different than if I went to the menu and cliked through to this via product. what's going on?
+at: 2026-10-19
+kind: surface
+reaches:
+  surface: ""
+  pin: ""
+waived: {}

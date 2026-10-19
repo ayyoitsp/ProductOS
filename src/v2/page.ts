@@ -8073,12 +8073,26 @@ const VIEW_SWITCH = `<script>
     const segs = pathname.slice(BASE.length).split("/").filter(Boolean).map(decodeURIComponent);
     for (let i = segs.length - 1; i >= 0; i--) {
       /**
-       * ⛔ A SEGMENT NAMING THIS PAGE'S ROOT IS ITS OVERVIEW. The root does not render as a section
-       * of its own — it IS the Overview — so looking only at data-view found nothing for the very
-       * address that had just been served, which is the whole of the cold-arrival defect.
+       * ⛔ A REAL SECTION FIRST, AND THE ROOT RULE ONLY WHERE THERE IS NONE — THE ORDER IS THE BUG.
+       *
+       * The root rule is right about the case it was written for: a page's root usually does not
+       * render as a section of its own — it IS the Overview — so looking only at data-view found
+       * nothing for the very address just served, which was the cold-arrival defect.
+       *
+       * ⛔ BUT ITS PREMISE IS FALSE WHENEVER THE ROOT DOES HAVE A SECTION, and asking it first made
+       * it win anyway. Served at /v2/product/cre/deal-overview the document carries BOTH
+       * data-root="deal-overview" AND data-view="deal-overview" — measured on the live instance —
+       * so this returned "overview" and the reader got the question queue from an address naming
+       * the feature. Peter: *"the menu doesn't expand, and I load a page different than if I went
+       * to the menu and cliked through"*. Both halves are this: the menu expands to whatever this
+       * answers, and clicking through switches sections without touching the URL, so one address
+       * showed two different pages depending on how you got there.
+       *
+       * Asking for the section first keeps the original fix — a root with no section of its own
+       * still falls through to "overview" — and stops it overriding a root that has one.
        */
-      if (ROOT && segs[i] === ROOT) return "overview";
       if (segs[i] === "overview" || views().some(function (v) { return v.dataset.view === segs[i]; })) return segs[i];
+      if (ROOT && segs[i] === ROOT) return "overview";
     }
     return null;
   };
