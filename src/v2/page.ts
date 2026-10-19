@@ -18,7 +18,7 @@
 import { resolveRules, type Corpus } from "./load.js";
 import { scopeToShadow, liftFaces, PANE_FIT } from "./appcss.js";
 import { promisesOf, screensOf, type ProtoPromise, type ProtoScreen } from "./prototype.js";
-import { inferConnections, landingsFor, finishesFor, stateShowing } from "./connects.js";
+import { inferConnections, landingsFor, finishesFor, stateShowing, routeTable, sameRoute } from "./connects.js";
 import { pictureOf, unpicturedParts, STATE_CSS } from "./states.js";
 import { deriveStates } from "./derive-states.js";
 import { walkOf, type Walk } from "./walk.js";
@@ -987,7 +987,13 @@ function liveSketch(view: View, matched: Map<string, boolean>): string {
  * ⛔ AN EXPLICIT `data-part` WINS. A generated mock should say which element is which part rather
  * than leave it to a text match, and one that does is exempt from all of this.
  */
-function wireHtml(view: View, matched: Map<string, boolean>, goes?: Map<string, string>, scopeId?: string): string {
+function wireHtml(
+  view: View,
+  matched: Map<string, boolean>,
+  goes?: Map<string, string>,
+  scopeId?: string,
+  routes?: Array<{ id: string; route: string }>
+): string {
   /**
    * ⛔ THE FALLBACK, NOT THE MECHANISM. `draw` writes `data-part` into the corpus at generation
    * time, so a generated drawing arrives already wired. This runs for drawings written before the
@@ -996,15 +1002,53 @@ function wireHtml(view: View, matched: Map<string, boolean>, goes?: Map<string, 
    */
   const wired = wireParts(view.sketch_html!, view.parts);
   for (const id of wired.matched) matched.set(id, true);
-  if (!goes || !scopeId) return wired.html;
   /**
    * ⛔ A DERIVED DESTINATION IS STAMPED ONTO THE DRAWING, NOT INTO THE CORPUS. A control that
    * commits may not carry a `leads_to`, so the walk is worked out from what the corpus says and
    * attached here — the drawing is output, and this is one more thing generated into it.
+   *
+   * ⛔ AND THE TWO KINDS OF DESTINATION ARE INDEPENDENT. This used to return here when no derived
+   * map was passed, which is how BOTH call sites call it — so a drawn navigation, which needs no
+   * derived map at all, was skipped on every screen on the page. Measured: thirty-four drawn
+   * navigations in one deals list and not one of them stamped.
    */
-  return wired.html.replace(/data-part="([^"]+)"/g, (whole, id: string) => {
-    const to = goes.get(`${scopeId}#${view.id}#${id}`);
-    return to ? `${whole} data-goes="${esc(to)}"` : whole;
+  const stamped =
+    goes && scopeId
+      ? wired.html.replace(/data-part="([^"]+)"/g, (whole, id: string) => {
+          const to = goes.get(`${scopeId}#${view.id}#${id}`);
+          return to ? `${whole} data-goes="${esc(to)}"` : whole;
+        })
+      : wired.html;
+  if (!routes?.length) return stamped;
+  /**
+   * ⛔ A CONTROL THE APPLICATION NAVIGATES FROM IS WALKABLE WITHOUT ANYBODY DECLARING IT A PART.
+   *
+   * Peter, on the drawn deals list: *"no deal links are clickable, none of the individual features
+   * got new pages"*. Both halves of that were one defect. The walk ran on declared parts alone, so
+   * a screen reached the corpus with every row the product has and nothing to press, and the only
+   * route to a walkable row was somebody typing out a part and a destination by hand — for each of
+   * a hundred and thirty-four screens.
+   *
+   * The drawer records where a control goes now, so the destination is already on the element. All
+   * that is left is resolving the address to whichever screen answers it, which is the same
+   * question the route table answers for declared parts.
+   */
+  const here = `${scopeId}#${view.id}`;
+  return stamped.replace(/<([a-z][a-z0-9]*)\b([^>]*\bdata-goes-to="([^"]+)"[^>]*)>/gi, (whole, tag: string, attrs: string, pushed: string) => {
+    if (/\bdata-goes="/.test(attrs)) return whole;
+    const dest = routes.find((r) => r.id !== here && sameRoute(pushed, r.route));
+    if (!dest) return whole;
+    /**
+     * ⛔ MERGED INTO THE CLASS IT ALREADY HAS, never written beside it. The application's own
+     * classes are what make the drawing look like the product; a second class attribute is invalid
+     * markup and the browser keeps the first, so appending one would have silently thrown away
+     * either the product's styling or the mark that says this is pressable.
+     */
+    const had = /\bclass="([^"]*)"/.exec(attrs);
+    const marked = had
+      ? attrs.replace(had[0], `class="${had[1]} pt pt-navigates"`)
+      : `${attrs} class="pt pt-navigates"`;
+    return `<${tag}${marked} data-goes="${esc(dest.id)}">`;
   });
 }
 
@@ -1050,6 +1094,8 @@ function goesFor(corpus: Corpus): Map<string, string> {
 
 function renderScreens(scope: Scope, ctx: Ctx, scopeId: string, opts: PageOptions, corpus: Corpus): string {
   const derivedGoes = goesFor(corpus);
+  /** Which screen answers which address — so a drawn navigation can be walked, not just displayed. */
+  const routes = routeTable(corpus);
   /**
    * ⛔ `:root` DOES NOT MATCH INSIDE A SHADOW TREE, so a design system that defines its tokens
    * there would hand the mock a stylesheet of variables that resolve to nothing — every colour and
@@ -1394,7 +1440,7 @@ function renderScreens(scope: Scope, ctx: Ctx, scopeId: string, opts: PageOption
                          : ""
                      }
                    </div>
-                   <div class="state-frame" data-state="0">${asMock(withFinish(withLands(withGoes(wireHtml(v, matched)), 0)))}</div>
+                   <div class="state-frame" data-state="0">${asMock(withFinish(withLands(withGoes(wireHtml(v, matched, undefined, scopeId, routes)), 0)))}</div>
                    ${states
                      .map(
                        (st, i) =>
@@ -1403,7 +1449,7 @@ function renderScreens(scope: Scope, ctx: Ctx, scopeId: string, opts: PageOption
                      .join("")}
                    ${hasDone ? `<div class="state-frame" data-state="${doneAt}" hidden>${doneFrame()}</div>` : ""}
                  </div>`
-              : asMock(wireHtml(v, matched))
+              : asMock(wireHtml(v, matched, undefined, scopeId, routes))
             : v.sketch
               ? `<pre class="proto sketch">${liveSketch(v, matched)}</pre>`
               : `<p class="owes">Nobody has drawn this screen, so there is nothing here to point at.</p>`;
@@ -6605,7 +6651,7 @@ const PROTOTYPE = `<script>
   const controlsIn = (screen) => {
     const out = [...screen.querySelectorAll("button.pt")];
     for (const h of screen.querySelectorAll("div.proto.html"))
-      if (h.shadowRoot) out.push(...h.shadowRoot.querySelectorAll("button.pt, [data-part]"));
+      if (h.shadowRoot) out.push(...h.shadowRoot.querySelectorAll("button.pt, [data-part], [data-goes]"));
     return out;
   };
 
@@ -6687,7 +6733,12 @@ const PROTOTYPE = `<script>
   };
 
   document.addEventListener("click", (ev) => {
-    const btn = inPath(ev, "button.pt, [data-part]");
+    /**
+     * ⛔ A ROW THE APPLICATION NAVIGATES FROM IS A CONTROL, and it is not a button and nobody
+     * declared it a part. Selecting on those two alone is why a drawn deals list had a hundred
+     * rows and nothing to press.
+     */
+    const btn = inPath(ev, "button.pt, [data-part], [data-goes]");
     if (!btn) return;
     ev.preventDefault();
 
