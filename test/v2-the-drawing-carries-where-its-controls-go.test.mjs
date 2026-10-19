@@ -32,7 +32,7 @@ import path from "node:path";
 import { temp } from "./support/temp.mjs";
 
 const { drawFromRoute } = await import("../dist/v2/draw.js");
-const { routeOfFile, sameRoute } = await import("../dist/v2/connects.js");
+const { routeOfFile, sameRoute, screenAnswering } = await import("../dist/v2/connects.js");
 
 /**
  * A component in the idiom the defects were found in: a list declared "as const" beside the page,
@@ -142,4 +142,105 @@ test("⛔ the address a control pushes resolves to the screen that answers it", 
   assert.equal(sameRoute("/borrowers/:id", "/cre-deals/:projectId"), false, "two different screens matched");
   /** A group segment is the router's bookkeeping and names nothing a reader types. */
   assert.equal(routeOfFile("app/(marketing)/pricing/page.tsx"), "/pricing");
+});
+
+
+/**
+ * A tab strip in the idiom the second round of this was found in: the control that navigates does
+ * not navigate — it calls a prop, and every tab pushes the same path with a different query value.
+ */
+function appWithTabs() {
+  const dir = temp("v2-drawn-tabs-");
+  const app = path.join(dir, "app", "deals", "[dealId]");
+  fs.mkdirSync(app, { recursive: true });
+  fs.mkdirSync(path.join(dir, "components"), { recursive: true });
+
+  fs.writeFileSync(
+    path.join(dir, "components", "Shell.tsx"),
+    `export function Shell({ tabs, onSelectTab }: { tabs: readonly { id: string; label: string }[]; onSelectTab: (id: string) => void }) {
+  return <nav>{tabs.map((entry) => <button key={entry.id} onClick={() => onSelectTab(entry.id)}>{entry.label}</button>)}</nav>
+}
+`
+  );
+
+  fs.writeFileSync(
+    path.join(app, "page.tsx"),
+    `import { useRouter } from "next/navigation"
+import { Shell } from "../../../components/Shell"
+
+const TABS = [
+  { id: 'overview', label: 'Overview' },
+  { id: 'rent-roll', label: 'Rent Roll' },
+] as const
+
+export default function Deal() {
+  const router = useRouter()
+  const dealId = useDealId()
+  return <Shell tabs={TABS} onSelectTab={(id) => router.push(\`/deals/\${dealId}?tab=\${id}\`)} />
+}
+`
+  );
+  return path.join(app, "page.tsx");
+}
+
+test("⛔ a control that calls a prop still says where it goes — the push is one frame up", () => {
+  const html = drawFromRoute(appWithTabs(), {}).html ?? "";
+  const goes = [...html.matchAll(/data-goes-to="([^"]+)"/g)].map((m) => m[1]);
+  /**
+   * ⛔ ONE PER TAB, AND DIFFERENT. A component that renders a control is deliberately ignorant of
+   * where it leads — reading the handler at the element finds a call to an unknown function and
+   * stops, which is what left every tab in a drawn workspace inert.
+   */
+  assert.equal(goes.length, 2, `expected one destination per tab, got ${JSON.stringify(goes)}`);
+  assert.ok(goes.includes("/deals/:dealId?tab=overview"), `overview tab goes nowhere — ${JSON.stringify(goes)}`);
+  assert.ok(goes.includes("/deals/:dealId?tab=rent-roll"), `rent roll tab goes nowhere — ${JSON.stringify(goes)}`);
+  /** ⛔ The path is still a picture of the screen: the deal stands for itself, the tab does not. */
+  assert.ok(
+    goes.every((g) => g.includes(":dealId")),
+    "one deal's address was written into the drawing instead of standing for any deal"
+  );
+});
+
+test("⛔ where screens share a path, the query value picks between them", () => {
+  const served = [
+    { id: "deal-workspace#overview-tab", route: "/deals/:id", screen: "overview" },
+    { id: "deal-workspace#rent-roll-tab", route: "/deals/:id", screen: "rent-roll" },
+    { id: "deal-workspace#sizing-tab", route: "/deals/:id", screen: "sizing" },
+  ];
+  const from = "deal-workspace#overview-tab";
+  assert.equal(screenAnswering("/deals/:dealId?tab=rent-roll", from, served)?.id, "deal-workspace#rent-roll-tab");
+  assert.equal(screenAnswering("/deals/:dealId?tab=sizing", from, served)?.id, "deal-workspace#sizing-tab");
+  /**
+   * ⛔ A SCREEN MAY POINT AT ITSELF HERE, because a tab strip is on every tab: pressing Overview
+   * from Overview is a real control, and refusing it would make one tab inert on every screen.
+   */
+  assert.equal(screenAnswering("/deals/:dealId?tab=overview", from, served)?.id, "deal-workspace#overview-tab");
+  /**
+   * ⛔ AND A QUERY NOTHING ANSWERS RESOLVES TO NOTHING, rather than to whichever screen happens to
+   * share the path. Three indistinguishable candidates is the state that produced a drawing nobody
+   * could press; answering one of them anyway puts a tab on the page that goes somewhere it does
+   * not go.
+   */
+  assert.equal(screenAnswering("/deals/:dealId?tab=appraisal", from, served), undefined);
+  /** With nothing recorded about which screen is which, there is no answer to give. */
+  const unlabelled = served.map((r) => ({ id: r.id, route: r.route }));
+  assert.equal(screenAnswering("/deals/:dealId?tab=rent-roll", from, unlabelled), undefined);
+
+  /**
+   * ⛔ TWO SCREENS CLAIMING ONE ARM IS AN AMBIGUITY, NOT A COIN TOSS — and this corpus has one: a
+   * workspace shell and the tab it opens on are drawn from the same arm of the same component, so
+   * both record "overview". Taking the first put every press of Overview on the chrome instead of
+   * the screen, which is a control that is visibly live and lands somewhere else.
+   */
+  const twoClaims = [
+    { id: "deal-workspace#workspace-shell", route: "/deals/:id", screen: "overview" },
+    { id: "deal-workspace#overview-tab", route: "/deals/:id", screen: "overview" },
+    { id: "deal-workspace#rent-roll-tab", route: "/deals/:id", screen: "rent-roll" },
+  ];
+  assert.equal(screenAnswering("/deals/:dealId?tab=overview", from, twoClaims), undefined);
+  /** ⛔ And only that value is poisoned — the arms nobody disputes still resolve. */
+  assert.equal(
+    screenAnswering("/deals/:dealId?tab=rent-roll", from, twoClaims)?.id,
+    "deal-workspace#rent-roll-tab"
+  );
 });

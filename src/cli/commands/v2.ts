@@ -3065,7 +3065,16 @@ export function v2Command(): Command {
       }
       const origin = repoOf(route);
       if (!origin) console.log(pc.yellow("!"), "the component is not in a git repository, so nothing records where this came from");
-      const prov = origin ? { from: path.relative(origin.root, route), at: origin.head } : undefined;
+      /**
+       * ⛔ THE ARM THIS SCREEN IS, KEPT RATHER THAN ONLY ANNOUNCED. The fork on the ROUTE's own
+       * component is the one that says which of several screens this view is; a fork inside a
+       * child component is a state of that child. Without this the corpus holds eight screens
+       * nothing downstream can tell apart — see Provenance.screen.
+       */
+      const ownFork = drawn.forks.find((f) => route.endsWith(f.where) || f.where.endsWith(path.basename(route)));
+      const prov = origin
+        ? { from: path.relative(origin.root, route), at: origin.head, screen: ownFork?.chose }
+        : undefined;
       const written = writeSketchHtml(pages,
         scopeId,
         viewId,

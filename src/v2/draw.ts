@@ -92,15 +92,40 @@ const DROP_PROP = (name: string): boolean =>
  * the value it carries — "/cre-deals/:id" rather than one deal's address — because the drawing is
  * of the screen, not of a row.
  */
-function navTarget(n: TS.Node): string | undefined {
+function navTarget(n: TS.Node, ctx?: Ctx, subs?: Map<string, string>, depth = 0): string | undefined {
+  if (depth > 3) return undefined;
   let found: string | undefined;
   const visit = (node: TS.Node): void => {
     if (found) return;
-    if (ts.isCallExpression(node) && /(^|\.)(push|replace|navigate)$/.test(node.expression.getText())) {
-      const where = node.arguments[0] && routeLiteral(node.arguments[0]!);
-      if (where) {
-        found = where;
-        return;
+    if (ts.isCallExpression(node)) {
+      if (/(^|\.)(push|replace|navigate)$/.test(node.expression.getText())) {
+        const where = node.arguments[0] && routeLiteral(node.arguments[0]!, subs);
+        if (where) {
+          found = where;
+          return;
+        }
+      }
+      /**
+       * ⛔ A CALL TO A HANDLER THIS COMPONENT WAS HANDED IS A NAVIGATION ONE FRAME UP, and the
+       * argument is what decides WHICH screen. onSelectTab(entry.id) carries the tab's own id into
+       * a push that differs only by it — so the parameter is bound to the argument's value before
+       * the body is read, or all eight tabs resolve to the same address.
+       */
+      const callee = ts.isIdentifier(node.expression) ? node.expression.text : undefined;
+      const handler = callee && ctx?.handlers?.get(callee);
+      if (handler && (ts.isArrowFunction(handler) || ts.isFunctionExpression(handler))) {
+        const bound = new Map(subs);
+        handler.parameters.forEach((param, i) => {
+          if (!ts.isIdentifier(param.name)) return;
+          const arg = node.arguments[i];
+          const value = arg && valueOfArg(arg, ctx, subs);
+          if (value != null) bound.set(param.name.text, value);
+        });
+        const deeper = navTarget(handler.body, ctx, bound, depth + 1);
+        if (deeper) {
+          found = deeper;
+          return;
+        }
       }
     }
     node.forEachChild(visit);
@@ -109,25 +134,45 @@ function navTarget(n: TS.Node): string | undefined {
   return found;
 }
 
+/** What an argument is worth, where the drawing knows — a literal, or a field of the item being drawn. */
+function valueOfArg(arg: TS.Expression, ctx?: Ctx, subs?: Map<string, string>): string | undefined {
+  if (ts.isStringLiteral(arg) || ts.isNoSubstitutionTemplateLiteral(arg)) return arg.text;
+  if (ts.isIdentifier(arg) && subs?.has(arg.text)) return subs.get(arg.text);
+  if (
+    ctx?.item &&
+    ts.isPropertyAccessExpression(arg) &&
+    ts.isIdentifier(arg.expression) &&
+    arg.expression.text === ctx.item.name
+  )
+    return ctx.item.fields.get(arg.name.text);
+  return undefined;
+}
+
 /**
  * A path written as a literal or assembled from one, with every substitution standing for a value.
  *
  * ⛔ ONLY AN ABSOLUTE PATH. A handler calling push(somethingComputed) names a destination this
  * cannot know, and guessing one would put a link on the page that goes somewhere invented.
  */
-function routeLiteral(n: TS.Node): string | undefined {
+function routeLiteral(n: TS.Node, subs?: Map<string, string>): string | undefined {
   if (ts.isStringLiteral(n) || ts.isNoSubstitutionTemplateLiteral(n))
     return n.text.startsWith("/") ? n.text : undefined;
   if (ts.isTemplateExpression(n)) {
     let out = n.head.text;
     for (const span of n.templateSpans) {
       const named = span.expression.getText().split(/[^A-Za-z0-9_]+/).filter(Boolean).pop();
-      out += ":" + (named ?? "value") + span.literal.text;
+      /**
+       * ⛔ A SUBSTITUTION WHOSE VALUE IS KNOWN IS WRITTEN OUT, and one whose value is not stands for
+       * itself. Both matter: "/cre-deals/:projectId" is a picture of the screen rather than of one
+       * deal, while "?tab=rent-roll" is the only thing distinguishing eight screens on one path.
+       */
+      const known = named ? subs?.get(named) : undefined;
+      out += (known ?? ":" + (named ?? "value")) + span.literal.text;
     }
     return out.startsWith("/") ? out : undefined;
   }
   /** A ternary navigates two ways; the first arm is still a real destination the other is not. */
-  if (ts.isConditionalExpression(n)) return routeLiteral(n.whenTrue) ?? routeLiteral(n.whenFalse);
+  if (ts.isConditionalExpression(n)) return routeLiteral(n.whenTrue, subs) ?? routeLiteral(n.whenFalse, subs);
   return undefined;
 }
 
@@ -293,6 +338,16 @@ interface Ctx {
    * reason, as `props` carrying bound text into a component that displays it.
    */
   lists?: Map<string, Array<Map<string, string>>>;
+  /**
+   * ⛔ HANDLERS A CALL SITE PASSED DOWN — WHERE THE NAVIGATION ACTUALLY IS.
+   *
+   * Peter, walking the drawn workspace: *"not a single tab clickable"*. The tab's own handler does
+   * not navigate; it calls a prop. The push is one frame up, at the call site, in the function that
+   * prop was bound to. So reading the handler AT THE ELEMENT finds a call to something unknown and
+   * stops — which is every design system in this idiom, where the component that renders a control
+   * is deliberately ignorant of where it leads.
+   */
+  handlers?: Map<string, TS.Expression>;
   depth: number;
   from: Set<string>;
   unresolved: string[];
@@ -1360,6 +1415,7 @@ function emit(node: TS.Node, ctx: Ctx): string {
         const bound = new Map<string, string>();
         /** Lists passed down, under the name the component receiving them uses — see `lists` on Ctx. */
         const handDown = new Map<string, Array<Map<string, string>>>(ctx.lists);
+        const handDownHandlers = new Map<string, TS.Expression>(ctx.handlers);
         /** Props the call site passes as false at rest — see the modal case below. */
         const falsy = new Set<string>();
         for (const a of open.attributes.properties) {
@@ -1404,6 +1460,11 @@ function emit(node: TS.Node, ctx: Ctx): string {
              * the words sat two files away, already resolved.
              */
             else if (ts.isIdentifier(v) && ctx.props.has(v.text)) bound.set(name, ctx.props.get(v.text)!);
+            else if (ts.isArrowFunction(v) || ts.isFunctionExpression(v))
+              /** ⛔ The navigation this component will call but cannot see — see `handlers` on Ctx. */
+              handDownHandlers.set(name, v);
+            else if (ts.isIdentifier(v) && ctx.handlers?.has(v.text))
+              handDownHandlers.set(name, ctx.handlers.get(v.text)!);
             else if (ts.isIdentifier(v) && (ctx.lists?.has(v.text) || (ctx.sameFile && literalItems(v, ctx.sameFile))))
               /** A list, under the name the receiving component calls it — see `lists` on Ctx. */
               handDown.set(name, ctx.lists?.get(v.text) ?? literalItems(v, ctx.sameFile)!);
@@ -1420,7 +1481,7 @@ function emit(node: TS.Node, ctx: Ctx): string {
          */
         if ([...falsy].some((p) => new RegExp(`if\\s*\\(\\s*!\\s*${p}\\s*\\)\\s*return\\s+null`).test(sourceOf(file))))
           return "";
-        const sub: Ctx = { ...ctx, depth: ctx.depth + 1, props: bound, falsy, sameFile: file, lists: handDown };
+        const sub: Ctx = { ...ctx, depth: ctx.depth + 1, props: bound, falsy, sameFile: file, lists: handDown, handlers: handDownHandlers };
         const body = emit(inner, sub);
         // `{children}` inside the primitive is where this element's own children belong.
         if (body.includes("<!--children-->")) return body.replace("<!--children-->", children);
@@ -1652,7 +1713,7 @@ function emit(node: TS.Node, ctx: Ctx): string {
        * where it LEADS is the whole point of a prototype somebody walks.
        */
       if (a.initializer && ts.isJsxExpression(a.initializer) && a.initializer.expression) {
-        const goes = navTarget(a.initializer.expression);
+        const goes = navTarget(a.initializer.expression, ctx);
         if (goes) attrs.push(`data-goes-to="${text(goes)}"`);
       }
       continue;
@@ -1660,7 +1721,7 @@ function emit(node: TS.Node, ctx: Ctx): string {
     /** The same fact written the other way: an anchor or a Link says it in href. */
     if (name === "href" && a.initializer) {
       const expr = ts.isJsxExpression(a.initializer) ? a.initializer.expression : a.initializer;
-      const goes = expr && routeLiteral(expr);
+      const goes = expr && routeLiteral(expr, undefined);
       if (goes) attrs.push(`data-goes-to="${text(goes)}"`);
     }
     if (name === "className") {
