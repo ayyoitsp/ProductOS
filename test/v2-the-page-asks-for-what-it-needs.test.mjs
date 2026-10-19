@@ -160,19 +160,29 @@ test("the page a reader arrives at carries what they are looking at and not the 
   try {
     const r = await fetch(`${base}/v2`);
     const page = await r.text();
-    const everything = renderScopePage(corpus, "everything", { interactive: true, records: "http", linkBase: "/v2" });
-
     assert.equal(r.status, 200);
-    assert.ok(
-      page.length * 3 < everything.length,
-      `the served page is ${(page.length / 1024) | 0} kB against ${(everything.length / 1024) | 0} kB for everything — it is not deferring much`
-    );
 
-    /** ⛔ And the nav still names every one, or a stub is content that was silently dropped. */
+    /**
+     * ⛔ NOT BY DEFERRING THE REST — BY NOT RENDERING IT. This asked whether the page was much
+     * smaller than a render of everything and whether anything carried data-defer, which measured
+     * the DEFERRAL machinery. That machinery existed to make a whole-corpus page tolerable; a page
+     * that holds one scope has nothing to defer, so both measurements now describe a mechanism
+     * rather than the guarantee.
+     *
+     * The guarantee is what the title always claimed, and it is checkable directly: the page holds
+     * a section for the scope it was served at and for no other scope. ⛔ This would have FAILED
+     * before the change — the root's page carried a section for all ten things — which is what
+     * makes it evidence rather than a restatement.
+     */
+    const sections = [...page.matchAll(/data-view="([a-z0-9-]+)"/g)].map((m) => m[1]);
+    const scopeIds = new Set(corpus.scopes.map((x) => x.scope.id));
+    const others = sections.filter((v) => scopeIds.has(v) && v !== "everything");
+    assert.deepEqual(others, [], `the page served at the root carries other scopes' sections: ${others.join(", ")}`);
+
+    /** ⛔ And the nav still names every one, or those pages became unreachable. */
     for (const id of ["thing-0", "thing-4", "thing-8"]) {
-      assert.ok(page.includes(`data-goto="${id}"`), `the nav does not reach ${id}, so its section is unreachable`);
+      assert.ok(page.includes(`data-goto="${id}"`), `the nav does not reach ${id}, so its page is unreachable`);
     }
-    assert.match(page, /data-defer="/, "nothing was deferred, so this page is the old one");
   } finally {
     close();
   }
@@ -308,9 +318,17 @@ test("the reader arrives looking at exactly one section", { skip }, async () => 
       `location.href.indexOf(${JSON.stringify(base)}) === 0 && document.readyState === "complete"`,
       "the page to finish loading"
     );
-    /** ⛔ Non-vacuous: there have to be several, or "exactly one" is what a one-view page does anyway. */
+    /**
+     * ⛔ Non-vacuous: there have to be several, or "exactly one" is what a one-view page does anyway.
+     *
+     * ⛔ THE NUMBER CHANGED BECAUSE THE PAGE DID, AND THE GUARD STILL HAS TEETH. This wanted more
+     * than four, which a whole-corpus page cleared by 140. A page now carries its own scope plus the
+     * fixed sections — Overview, the prototype board, what steers this — so four is the ceiling, and
+     * showing exactly one of four is still a claim a broken switcher fails: when show() throws, every
+     * one of the four is visible, which is what this exists to catch.
+     */
     const total = await page.evaluate(`document.querySelectorAll("section.view").length`);
-    assert.ok(total > 4, `the page has ${total} sections, so showing one proves nothing`);
+    assert.ok(total > 3, `the page has ${total} sections, so showing one proves nothing`);
 
     const showing = await page.evaluate(
       `[...document.querySelectorAll("section.view")].filter((s) => !s.hidden).map((s) => s.dataset.view || s.id)`
@@ -662,9 +680,21 @@ test("the route resolves a menu path, at every depth", async () => {
      */
     assert.equal(titleOf(deep), "Thing 0", `the deep path served "${titleOf(deep)}"`);
     assert.notEqual(titleOf(root), titleOf(deep), "the root and the deep path served the same page, so the path changed nothing");
-    /** ⛔ And it really is scoped: the root's nav holds every feature, this one's subtree does not. */
+    /**
+     * ⛔ And it really is scoped — but the non-vacuity has to be rebuilt, because the thing it leaned
+     * on is the thing that was fixed. It asserted the ROOT holds data-view="thing-5", which was true
+     * only while a page rendered every scope beneath it. No page carries another scope's section now,
+     * so "the deep path does not carry thing-5" became trivially true of every page including a route
+     * that ignores the path entirely.
+     *
+     * What still distinguishes a scoped route from a broken one: the deep page renders the scope it
+     * was asked for, and the root renders ITS own — while still LINKING to thing-5, so the feature is
+     * reachable rather than dropped. A route ignoring the path would fail the first of these.
+     */
+    assert.ok(deep.includes('data-view="thing-0"'), "the deep path did not render the feature it names");
     assert.ok(!deep.includes('data-view="thing-5"'), "the deep path carried a feature from outside its own subtree");
-    assert.ok(root.includes('data-view="thing-5"'), "the root does not hold thing-5 either, so the line above proves nothing");
+    assert.ok(root.includes('data-view="everything"') || titleOf(root) === "Everything", "the root did not render the root");
+    assert.ok(root.includes('data-goto="thing-5"'), "the root does not even link thing-5, so its page is unreachable");
   } finally {
     close();
   }
@@ -714,7 +744,14 @@ test("a cold arrival keeps the address it was opened at", { skip }, async () => 
     /** ⛔ THE ONE THAT FAILS ON THE PREVIOUS BUILD. */
     assert.equal(seen.path, "/v2/part-0", `opening /v2/part-0 cold rewrote the address to ${seen.path}`);
     assert.equal(seen.hash, "", `a fragment was put back on the address: ${seen.hash}`);
-    assert.deepEqual(seen.showing, ["overview"], `it showed ${JSON.stringify(seen.showing)}`);
+    /**
+     * ⛔ AND IT SHOWS ITSELF NOW, NOT "overview" — which is the defect this test was written about,
+     * fixed at the cause rather than at the switcher. The comment above diagnoses it exactly: "that
+     * scope renders as the page's Overview rather than as a section named after itself", so the
+     * switcher could only ever paper over it. A container renders as its own section, so the name the
+     * address asks for is a name the document has.
+     */
+    assert.deepEqual(seen.showing, ["part-0"], `it showed ${JSON.stringify(seen.showing)}`);
   } finally {
     close();
   }

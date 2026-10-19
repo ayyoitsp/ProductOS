@@ -3490,9 +3490,26 @@ function renderNav(
        * which is worth more than repeating the name it is already showing.
        */
       const hover = esc(plain(scope.title || scope.id));
+      /**
+       * ⛔ THE ROW YOU ARE ON IS STILL A LINK, AND MARKED — "a link to where you already are is not
+       * a link" is the decision that broke the menu, in both the ways Peter reported.
+       *
+       * It rendered as its own name in bold with no href and no `data-goto`, so:
+       *
+       *   - nothing on the page said where the reader was. There is no `aria-current` anywhere in
+       *     this renderer, and the one row that should carry it was the one row that could not.
+       *   - `openWhereWeLanded` finds the landing by looking for `a[data-goto]`, so on a cold
+       *     arrival it found nothing, opened nothing, and left the row sitting inside two shut
+       *     containers. Peter, three times: *"the menu doesn't expand"*.
+       *
+       * ⛔ AND IT IS THE END STATE, NOT A PATCH. Under one-address-one-page the menu is just links;
+       * the current one is distinguished by being MARKED rather than by being inert. Measured in a
+       * real browser on a three-level corpus, not reasoned about — the previous three attempts at
+       * this bug were each right about the one case I measured and wrong about the rest.
+       */
       const name =
         scope.id === here
-          ? `<strong title="${hover}">${label}</strong>`
+          ? `<a href="${esc(address(scope.id))}" data-goto="${esc(scope.id)}" aria-current="page" title="${hover}"><strong>${label}</strong></a>`
           : holdsIt
             ? `<a href="${esc(address(scope.id))}" data-goto="${esc(scope.id)}" title="${hover}">${label}</a>`
             : base
@@ -3977,7 +3994,36 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
    * Containers nest without limit, so this has to be the whole subtree or it is a lie about
    * the commonest shape in the model.
    */
-  const grids = ids
+  /**
+   * ⛔ ONE ADDRESS RENDERS ONE PAGE, SO THE SECTIONS ARE THIS SCOPE'S AND NOBODY ELSE'S.
+   *
+   * Peter: *"we need to stop the 'server re-rendering' of anything. we should just be loading data,
+   * rendering the page we're on, no tree walking, nothing."*
+   *
+   * This descended, so an ancestor's document carried a section for every scope beneath it and the
+   * client switched between them in place. That gave **every scope two renderings** — one as a
+   * section on an ancestor's page, one as the landing of its own page — and all four of the things
+   * he reported are that, measured in a real browser on a three-level corpus:
+   *
+   *   via the menu    data-view="rent-roll"     ← a section of the ANCESTOR's document
+   *   the same URL    data-view="overview"      ← its own page's landing
+   *
+   * So "I load a page different than if I went to the menu", and the router that had to reconcile
+   * the two lost the address while doing it. I patched its resolution three times; each patch was
+   * right about the one case I measured and wrong about the others, because the defect is not in
+   * the resolving — it is that there are two things to resolve between.
+   *
+   * ⛔ WITH THE DESCENDANTS GONE THE ROUTER DISABLES ITSELF, which is the point. A menu click is
+   * kept in-page only where the document already holds that view; now it never does, so the link
+   * is a link and the browser navigates. One rendering per address, by construction rather than
+   * by assertion.
+   *
+   * ⛔ AND THE SUBTREE IS STILL COUNTED, just not rendered. `ids` below still feeds the numbers that
+   * say what is underneath this scope — those are facts about this page and a reader needs them.
+   * Narrowing what gets LOADED to match what gets rendered is the next commit and a different
+   * layer; doing both at once would make a correctness fix indistinguishable from a perf change.
+   */
+  const grids = [scopeId]
     .map((id) => gridFor(corpus, id))
     .filter((x): x is Grid => !!x && x.rows.length > 0);
   const cellOf = new Map<string, Cell>();
@@ -4049,12 +4095,24 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
    * how 357 dead anchors reached a real corpus.
    */
   /** Every scope this render emits a view for — leaves with behaviours, and the containers above them. */
-  const containerViews = ids.filter(
-    (id) =>
-      (corpus.scopes.find((s) => s.scope.id === id)?.scope.exchanges.length ?? 0) === 0 &&
-      // ⛔ Not the scope this page is rooted at — that is Overview, and giving it a container view
-      // too rendered its description twice under two headings.
-      id !== scopeId
+  /**
+   * ⛔ THIS SCOPE'S OWN LISTING, AND NO DESCENDANT'S — the same cut as `grids` above.
+   *
+   * It used to emit a listing for every container BENEATH this one, which is half of why an
+   * ancestor's document held a second rendering of each descendant.
+   *
+   * ⛔ AND THE `id !== scopeId` EXCLUSION GOES, which is the half that made a container's own page
+   * empty. A container has no exchanges, so with its descendants' sections gone a page for it would
+   * have had nothing on it at all — the exact objection `renderScopePage` opens with ("a page that
+   * answered for the named scope alone would show a finished-looking product with nothing in it").
+   * The answer is not to re-render the subtree; it is that a grouping's own content is the LISTING
+   * of what is in it, which this already renders as links to their own pages.
+   *
+   * The duplicate-description worry the old comment records was about the corpus root, where the
+   * landing already describes the product. Guarded below rather than by excluding every scope.
+   */
+  const containerViews = [scopeId].filter(
+    (id) => (corpus.scopes.find((s) => s.scope.id === id)?.scope.exchanges.length ?? 0) === 0 && !!entry.scope.in
   );
   const viewed = new Set<string>([...grids.map((g) => g.scope), ...containerViews]);
   const anchors = new Set<string>([
@@ -8025,7 +8083,26 @@ const VIEW_SWITCH = `<script>
        * machinery, while the machinery half looked correct and hid the bug.
        */
       const id = li.dataset.scope;
-      li.hidden = section === "overview" || !id || sectionOf[id] !== section;
+      /**
+       * ⛔ THE LANDING IS NOT A REASON TO HIDE THE MENU. This read
+       * section === "overview" || !id || sectionOf[id] !== section, so whenever the visible
+       * section was the landing, EVERY row in the tree was hidden.
+       *
+       * On the root page that was invisible: /v2 lands on the product overview, where the tabs
+       * are the navigation and the tree is a drill-down nobody has opened yet. But a page served at
+       * ANY deeper address also shows its landing — so on every cold arrival at a real URL this hid
+       * the entire menu. Peter, three times, and the third time with the row already marked current
+       * and its ancestors already open: *"menus not operable, in a shit state again"*, *"the menu
+       * doesn't expand"*.
+       *
+       * ⛔ Measured, not reasoned: with aria-current landing correctly and every ancestor open,
+       * the row was STILL rowVisible: false — which is what sent me here rather than to another
+       * patch of the address resolution.
+       *
+       * So the filter answers only the question it exists for — which half of the product this row
+       * belongs to — and the landing keeps the tree it is standing in.
+       */
+      li.hidden = !id || (section !== "overview" && sectionOf[id] !== section);
       /**
        * ⛔ AND THE AREA ITSELF IS NOT A ROW OF ITS OWN MENU. Peter: *"'Product' itself doesn't need
        * to be a menu item under the 'Product' main tab"*.
@@ -8153,6 +8230,22 @@ const VIEW_SWITCH = `<script>
        */
       if (segs[i] === "overview" || views().some(function (v) { return v.dataset.view === segs[i]; })) return segs[i];
       if (ROOT && segs[i] === ROOT) return "overview";
+      /**
+       * ⛔ A SCOPE THIS PAGE DOES NOT HOLD IS ANOTHER PAGE'S ADDRESS — STOP, DO NOT KEEP WALKING UP.
+       *
+       * Walking from the deepest segment upward is right for a REF below a view
+       * (…/rent-roll/review-the-rows scrolls to the ref inside the view), and wrong the moment a
+       * segment names a scope. Served at /v2/capabilities, a click on a child's row —
+       * /v2/capabilities/access-control — walked past access-control, matched capabilities
+       * because this page holds its own section, and switched to the page it was already on. The
+       * URL never changed and the reader never moved: *"why does the URL NO LONGER CHANGE AFTER I
+       * GO THROUGH THE MENU"*, with the menu working exactly as built.
+       *
+       * sectionOf names every scope in the corpus, so "is this segment a scope" is answerable
+       * here without asking the server. A scope that is not in this document belongs to another
+       * page; returning null hands the link to the browser, which is the whole design.
+       */
+      if (sectionOf[segs[i]] !== undefined) return null;
     }
     return null;
   };
@@ -8205,9 +8298,30 @@ const VIEW_SWITCH = `<script>
      * container's contents list — the only thing a container view has to offer — did nothing: the
      * entry highlighted and the page stayed exactly where it was.
      */
+    /**
+     * ⛔ AND IT IS ONLY HONOURED WHERE THIS DOCUMENT ACTUALLY HOLDS THE SECTION. Otherwise the link
+     * is a link and the browser navigates — which is what makes one address one page.
+     *
+     * This called preventDefault() unconditionally and then asked show() to reveal a section that,
+     * now that a page carries only its own scope, is not here. show() cannot find it, so the URL
+     * was pushed and the screen went blank: *"menus not operable, in a shit state again"*, and
+     * *"why does the URL NO LONGER CHANGE AFTER I GO THROUGH THE MENU"* — the address had moved and
+     * the document had not.
+     *
+     * ⛔ THE ROUTER IS NOT DELETED BY DELETING IT, IT IS DELETED BY GIVING IT NOTHING TO DO. In-page
+     * switching is still exactly right for the sections a page really has (its sub-views, the
+     * prototype pane). What was wrong was it claiming every destination in the corpus, including
+     * the ones it could only fake.
+     */
     if (a.dataset.goto) {
+      const name = a.dataset.goto;
+      const held = document.querySelector(
+        'section.view[data-view="' + (window.CSS && CSS.escape ? CSS.escape(name) : name) + '"]'
+      );
+      /* Not here: let the browser have it. One rendering per address, by construction. */
+      if (!held) return;
       e.preventDefault();
-      show(a.dataset.goto, true);
+      show(name, true);
       window.scrollTo(0, 0);
       return;
     }
