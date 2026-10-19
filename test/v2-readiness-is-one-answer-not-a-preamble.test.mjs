@@ -26,6 +26,7 @@ const { loadCorpus, resolveRules } = await import("../dist/v2/load.js");
 const { readinessOf, groomingPrompt } = await import("../dist/v2/readiness.js");
 const { perform } = await import("../dist/v2/acts.js");
 const { SLOTS } = await import("../dist/v2/schema.js");
+const { claimHash } = await import("../dist/v2/stamp.js");
 
 /** A copy of the shipped seed, with whatever acceptances a case needs recorded through `perform`. */
 const seed = (prefix, agree = () => {}) => {
@@ -99,17 +100,41 @@ test("an exchange with one question owed is not ready, and the question is the o
   assert.doesNotMatch(r.because, /nobody has agreed to/i);
 });
 
-test("an exchange whose every fact is agreed is ready, and nothing is left in any other list", () => {
+test("an exchange whose every fact is agreed is ready once every claim has a test, and nothing is left in any other list", () => {
   const corpus = seed("v2ready-yes-", agreeTo("money#see-a-balance"));
+
+  /**
+   * ⛔ AGREED IS NOT ENOUGH. This test used to assert `ready: true` here, with `at_once` stated,
+   * agreed, and demonstrated by nothing — the exact case Peter's *"appropriate test cases … based on
+   * verified product truth"* is about. It is the demonstrator's to fill, and until it does the
+   * builder has nothing that would show that claim holding.
+   */
+  const short = ok(readinessOf(corpus, "money#see-a-balance"));
+  assert.equal(short.ready, false, "every claim agreed and one with no test at all read as ready to build");
+  assert.deepEqual(short.untested, ["money#see-a-balance#at_once"]);
+  assert.match(short.because, /a demonstrator owes the tests/);
+
+  corpus.scopes
+    .find((s) => s.scope.id === "money")
+    .scope.exchanges.find((e) => e.id === "see-a-balance")
+    .criteria.push({
+      id: "6",
+      slot: "at_once",
+      kind: "instance",
+      then: "both people looking see the same figure",
+      derived: { by: "demonstrator", at: "2026-10-17", from: claimHash(corpus, "money#see-a-balance#at_once") },
+    });
   const r = ok(readinessOf(corpus, "money#see-a-balance"));
 
-  assert.equal(r.ready, true);
+  assert.equal(r.ready, true, r.because);
   assert.deepEqual(r.holes, []);
   assert.deepEqual(r.unagreed, []);
+  assert.deepEqual(r.untested, []);
   assert.equal(r.settled.length, 8);
-  assert.equal(r.requirements.length, 5);
-  assert.equal(r.counts.accepted, 13, "eight slots and five requirements");
-  assert.equal(r.counts.derived + r.counts.suggested + r.counts.open, 0);
+  assert.equal(r.requirements.length, 6);
+  assert.equal(r.counts.accepted, 13, "eight slots and the five requirements the acceptance covered");
+  assert.equal(r.counts.derived, 1, "⛔ the one worked out from an agreed claim, and only because it was agreed");
+  assert.equal(r.counts.suggested + r.counts.open, 0);
 
   /**
    * ⛔ ONE SLOT IS AGREED THROUGH A RULE AND IT COUNTS. `money#see-a-balance` states nothing at

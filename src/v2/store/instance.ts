@@ -50,7 +50,7 @@ const json = (res: http.ServerResponse, body: unknown, status = 200): void => {
 };
 
 const COOKIE = "productos_session";
-const cookieOf = (req: http.IncomingMessage): string | undefined => {
+export const cookieOf = (req: http.IncomingMessage): string | undefined => {
   const raw = String(req.headers.cookie ?? "");
   const hit = raw
     .split(";")

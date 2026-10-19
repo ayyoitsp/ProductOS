@@ -99,7 +99,17 @@ const TOOL_FOR: Record<Capability, string[]> = {
    * capability; `installClaudeAuthors` walks `AUTHORS`. Two interfaces, two required literals, so
    * neither list can quietly acquire a member of the other kind.
    */
-  "write-corpus": ["Write", "Edit"],
+  /**
+   * ⛔ AND THE DOOR, BECAUSE THE CORPUS IS HOSTED. Peter: *"there should be no 'local corpus'...
+   * always hosted server"*. `Write` and `Edit` reach a directory; the truth is in a hosted project,
+   * which an author reaches through `productos_in { intent: "document" }` and nothing else — so an
+   * author holding only the editors did its work on disk and the product never saw it. The manual
+   * and the check come with it: a write nobody can read back is a write nobody knows parsed.
+   *
+   * ⛔ STILL UNREACHABLE FROM A JUDGE: no judge may declare `write-corpus` (a registry test), and
+   * `writingToolsIn` counts the door as writing, so the installer refuses a judge that holds it.
+   */
+  "write-corpus": ["Write", "Edit", "productos_in", "productos_intents", "productos_exchange_check", "productos_exchange_source"],
   /**
    * ⛔ PRODUCTOS'S OWN SURFACE, READ HALF ONLY — AND NO ROLE COULD REACH IT AT ALL BEFORE THIS.
    *
@@ -130,6 +140,7 @@ const TOOL_FOR: Record<Capability, string[]> = {
     "productos_exchange_can_be_agreed_to",
     "productos_exchange_check",
     "productos_exchange_record",
+    "productos_exchange_source",
   ],
 };
 

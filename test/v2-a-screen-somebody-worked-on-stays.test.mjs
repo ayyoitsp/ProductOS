@@ -54,7 +54,14 @@ function corpus() {
   fs.cpSync("v2-seed", dir, { recursive: true });
   fs.mkdirSync(app, { recursive: true });
   fs.writeFileSync(path.join(app, "Balance.tsx"), ONE);
-  const git = (...a) => execFileSync("git", ["-C", app, ...a], { stdio: "ignore" });
+  /**
+   * ⛔ ONE REPOSITORY HOLDING BOTH, WHICH IS THE SHAPE THIS RUNS IN. The fixture used to make `app`
+   * its own repository beside a corpus in no repository at all. `draw <ref> --route` records
+   * `drawn_from` relative to the route's repository, and `draw --all --into <corpus>` resolves it
+   * against the corpus's — so in the fixture they were two different roots, the sweep could never
+   * find the component again, and this test failed on every machine for a reason no product has.
+   */
+  const git = (...a) => execFileSync("git", ["-C", root, ...a], { stdio: "ignore" });
   git("init", "-q");
   git("add", "-A");
   git("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "a component");

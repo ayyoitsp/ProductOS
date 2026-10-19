@@ -100,7 +100,14 @@ const { loadCorpus } = await import("../dist/v2/load.js");
 let PAGE = "";
 
 test("the page's live connection reopens after a 500 kills it", async (t) => {
-  browserOrSkip(t);
+  /**
+   * ⛔ THE ANSWER WAS IGNORED, SO "NO BROWSER" FAILED THE TEST AND THEN HUNG THE FILE. `browserOrSkip`
+   * returns what to do; it never skips on its own. Called for effect, a machine with no browser went
+   * on to start the incident server, threw at `openPage`, and left the server listening until the
+   * file timed out four minutes later.
+   */
+  const { skip } = browserOrSkip();
+  if (skip) return t.skip(skip);
 
   const { execFileSync } = await import("node:child_process");
   const path = await import("node:path");

@@ -1733,8 +1733,13 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
             severity: "note",
             kind: "nothing-demonstrates-this",
             where: `${ref}#${slot}`,
-            what: "stated, and no criterion says what would show it",
-            fix: "write a given/when/then — or `cannot_fail:`/`none:` if there is genuinely nothing to show",
+            what: "stated, and no criterion says what would show it — and it holds readiness back until one does",
+            /**
+             * ⛔ IT USED TO SAY "write a given/when/then", which sent the reader — usually a product
+             * person — to author the one artefact Peter said nobody authors. A missing test is the
+             * demonstrator's, and over a hosted corpus it is one `demonstrate` call.
+             */
+            fix: "have the demonstrator work one out (`productos_in`, intent `demonstrate`) — or `cannot_fail:`/`none:` if there is genuinely nothing to show",
           });
       }
 

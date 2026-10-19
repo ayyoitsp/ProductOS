@@ -114,7 +114,8 @@ flowchart TD
   hand_it_to_the_builders --> hand_it_to_the_builders_test-design["test-design"]
   hand_it_to_the_builders -.->|keeps| hand_it_to_the_builders_self(["the session — 3 things it may not hand off"])
   groom_a_ticket(["groom a ticket<br/><i>Answer whether a piece of work can be built, and raise what is open as questions</i>"])
-  groom_a_ticket -.->|keeps| groom_a_ticket_self(["the session — 5 things it may not hand off"])
+  groom_a_ticket --> groom_a_ticket_demonstrator["demonstrator"]
+  groom_a_ticket -.->|keeps| groom_a_ticket_self(["the session — 6 things it may not hand off"])
   map_evidence(["map evidence<br/><i>Find what already demonstrates the claims a corpus makes</i>"])
   map_evidence --> map_evidence_evidencer["evidencer"]
   map_evidence --> map_evidence_coverage["coverage"]
@@ -237,7 +238,8 @@ The engineering and QA read, once product and design have signed off.
 
 Answer whether a piece of work can be built, and raise what is open as questions.
 
-**Spawns nothing.** Every part of this is something the session may not hand off.
+**Spawns, in order:**
+- `demonstrator` *(quality · writes)* — the tests for every claim `readiness` lists as untested, one `demonstrate` call each — worked out from the claim as it reads, suggested until somebody agrees to it
 
 **⛔ Keeps, because it may not be delegated:**
 - the whole reading — `productos_readiness` for the verdict, the queue for each open question, and the packet for what to build from
@@ -245,6 +247,7 @@ Answer whether a piece of work can be built, and raise what is open as questions
 - ⛔ never recording consent: a claim nobody has agreed to needs a stamp from a person, and no amount of grooming produces one
 - deciding what a claim with no recorded author is — ask who wrote it; a person's unconfirmed draft and an agent's inference are the same bytes
 - writing the test list, with each requirement's ref and the hash of the words it was written from, into whatever holds the work
+- ⛔ before saying it is ready to build, running `hand it to the builders` — `ready` says every fact is agreed and every claim has a test, not that the tests would prove anything
 
 ### map evidence
 
@@ -335,7 +338,7 @@ Held three ways rather than one: no author declares `ask-the-human`, so no host 
 | **scoper** | What does this one feature promise, and where does somebody meet it? | feature | the happy path — what the feature is FOR, first; views and their parts; person-asked exchanges, and what each slot says; `why`, `risks` and `measures` — why this is worth building, what could go wrong, and how anybody would know it worked; `terms` — what each word means in this feature; `question:` on anything it cannot resolve, with no claim beside it |
 | **machinist** | What does this product do that nobody presses, and what sets it off? | feature | system- and integrator-asked exchanges, and what each slot says; `when.triggered_by` — what sets it off, in product language; `when.follows` — the ask this one comes after, where something in the product sets it off; `depends_on` — what this rests on and does not itself behaviour; `question:` on anything it cannot resolve, with no claim beside it |
 | **decomposer** | Which parts of the system does this feature need, and where do they belong? | feature | subsystems — roughly what each does, and which area it is filed inside; `offers` — the capabilities a subsystem provides, each in a sentence; `serves` — the product statement each capability exists for, or the capability that needs it; `uses` — what a subsystem leans on across the tree, where containment cannot say it |
-| **demonstrator** | What would have to be demonstrated for this claim to be believed? | feature | criteria — what must be demonstrated for each claim, as given/when/then; `derived` — the role, the date, and the hash of the claim it was worked out against; `of` — which statement, wherever the slot says more than one thing; `level` — where somebody would have to stand to observe it, where that is knowable from the claim |
+| **demonstrator** | What would have to be demonstrated for this claim to be believed? | feature | criteria — what must be demonstrated for each claim, as given/when/then; `derived` — the role, the date, and the hash of the claim it was worked out against. ⛔ Over a hosted corpus it is one `productos_in` call per requirement, intent `demonstrate`, and the server records all three; `of` — which statement, wherever the slot says more than one thing; `level` — where somebody would have to stand to observe it, where that is knowable from the claim |
 | **instrumenter** | What does this product record, and which question does each recording answer? | feature | instruments — what gets recorded, in the product's own terms; `feeds` — which measure each recording answers, which is what stops either end being decorative |
 | **designer** | What should this screen look like, where no code renders it? | screen no component renders | a drawing for a screen no component renders, stamped with what it was designed from |
 | **walker** | What does this product already do, driven rather than read? | area of the running product | a screen with its parts, as the product presented them — proposed, never stated; a `kind: walk` reading naming the URL and what happened there |
@@ -466,7 +469,7 @@ Held three ways rather than one: no author declares `ask-the-human`, so no host 
 
 **Writes:**
 - criteria — what must be demonstrated for each claim, as given/when/then
-- `derived` — the role, the date, and the hash of the claim it was worked out against
+- `derived` — the role, the date, and the hash of the claim it was worked out against. ⛔ Over a hosted corpus it is one `productos_in` call per requirement, intent `demonstrate`, and the server records all three
 - `of` — which statement, wherever the slot says more than one thing
 - `level` — where somebody would have to stand to observe it, where that is knowable from the claim
 
@@ -474,7 +477,8 @@ Held three ways rather than one: no author declares `ask-the-human`, so no host 
 - write or reword a claim. ⛔ A requirement that needs the sentence to be different is a note addressed to whoever owns the sentence — changing it would be the test deciding the product
 - assert anything the claim does not say: an engineer implements the `then`, so a word invented here becomes product truth nobody agreed to
 - demonstrate a claim about refusing with a case that succeeds — the whole content of the claim is in the part a happy path never reaches
-- work anything out from a claim nobody has accepted yet
+- stop because a claim is not agreed yet — a test worked out from a draft reads as suggested until somebody agrees to the claim, and climbs to derived with nothing re-derived
+- supply the hash itself — `demonstrate` hashes the claim it attaches to, so a test cannot be marked current with words it was not written against
 - stamp anything walked, validated or accepted
 
 **Needs:** read-files · search-files · run-commands · write-corpus  ·  **Prompt:** `agents/productos-demonstrator.md`
@@ -996,7 +1000,7 @@ Territory, not ownership. Nobody is assigned an area — an agent reads this to 
 | **derive** | derive | `src/v2/grid.ts` `src/v2/stamp.ts` `src/v2/demonstrate.ts` `src/v2/analyse.ts` `src/v2/confidence.ts` `src/v2/level.ts` `src/v2/readiness.ts` `src/v2/find.ts` `src/v2/settle.ts` `src/v2/applies.ts` `src/v2/acts.ts` `src/v2/record.ts` `src/v2/connects.ts` `src/v2/derive-states.ts` `src/v2/walk.ts` `src/v2/held.ts` `src/v2/selection.ts` `src/v2/dimensions.ts` `src/v2/steers.ts` `src/v2/store/access.ts` `src/v2/store/identity.ts` `src/core/learn.ts` `src/core/framework-gaps.ts` `src/adapters/claude.ts` |
 | **generate** | generate | `src/v2/draw.ts` `src/v2/draw-write.ts` `src/cli/commands/v2.ts` `src/v2/routes.ts` `src/v2/propose.ts` `src/v2/propose-slots.ts` `src/v2/reslot.ts` `src/v2/walked.ts` `src/v2/appcss.ts` `src/v2/icons.ts` `src/v2/shell.ts` `src/core/agents-doc.ts` `src/v2/design.ts` `src/v2/compiler.ts` `src/v2/store/watchdog.ts` `src/v2/store/because.ts` `src/v2/store/corpus.ts` `src/v2/store/doc-migrations.ts` `src/v2/store/migrate.ts` `src/v2/store/boot.ts` |
 | **operate** | operate | `Makefile` `Dockerfile` `docker-compose.yml` `docker-compose.remote.yml` `scripts/` |
-| **surface** | surface | `src/v2/page.ts` `src/v2/prototype.ts` `src/v2/serve.ts` `src/v2/intents.ts` `src/v2/suggest.ts` `src/v2/store/server.ts` `src/v2/store/instance.ts` `src/v2/store/pushes.ts` `src/v2/store/mcp.ts` `src/v2/store/choose.ts` `src/cli/commands/hosted.ts` `src/v2/packet.ts` `src/v2/notes.ts` `src/v2/watch.ts` `src/v2/log.ts` `src/v2/inbox.ts` `src/v2/presence.ts` `src/v2/identity.ts` `src/v2/client.ts` `src/v2/write.ts` `src/v2/wire.ts` `src/v2/states.ts` `src/v2/moved.ts` `src/cli/commands/v2.ts` `src/cli/commands/todo.ts` `src/v2/store/trace.ts` `src/mcp/v2-tools.ts` |
+| **surface** | surface | `src/v2/page.ts` `src/v2/prototype.ts` `src/v2/serve.ts` `src/v2/intents.ts` `src/v2/suggest.ts` `src/v2/store/server.ts` `src/v2/store/instance.ts` `src/v2/store/pushes.ts` `src/v2/store/mcp.ts` `src/v2/store/connect.ts` `src/v2/store/choose.ts` `src/cli/commands/hosted.ts` `src/v2/packet.ts` `src/v2/notes.ts` `src/v2/watch.ts` `src/v2/log.ts` `src/v2/inbox.ts` `src/v2/presence.ts` `src/v2/identity.ts` `src/v2/client.ts` `src/v2/write.ts` `src/v2/wire.ts` `src/v2/states.ts` `src/v2/moved.ts` `src/cli/commands/v2.ts` `src/cli/commands/todo.ts` `src/v2/store/trace.ts` `src/mcp/v2-tools.ts` |
 | **instruct** | instruct | `skills` `agents` |
 | **pin** | pin | `test` |
 | **check** | check | `src/v2/check.ts` |
