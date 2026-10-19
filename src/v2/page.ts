@@ -8314,6 +8314,48 @@ const VIEW_SWITCH = `<script>
     paintGroups();
   };
   paintGroups();
+  /*
+   * ⛔ THE BRANCH THE ADDRESS LANDS IN IS OPENED ON ARRIVAL. Peter: "uhm, this is much beter, but we
+   * should make sure the menu auto-expands."
+   *
+   * Nothing did this. openOnly is reached from a twisty click and a tab click, neither of which
+   * runs on boot, so a cold arrival showed whatever localStorage remembered. It LOOKED correct on
+   * a profile with nothing collapsed — which is what I measured, and why I first reported it fixed.
+   *
+   * ⛔ AND THE FAILING CASE IS ORDINARY RATHER THAN EXOTIC: openOnly adds every other group to the
+   * shut set, so opening any area collapses the rest. From then on every address inside one of them
+   * arrives with its branch shut and the item invisible — a menu that does not contain the page the
+   * reader is on.
+   *
+   * ⛔ ONLY THE BRANCH THE ADDRESS NAMES, NEVER "OPEN EVERYTHING". Collapsing a group is how somebody
+   * says they are not working in it today; a boot that reopened all of them would make the control
+   * pointless, which is the whole reason shut is remembered at all.
+   *
+   * ⛔ No backticks in this comment: it lives inside the template literal carrying the page's
+   * browser script, and one would end the string. I made this exact mistake earlier today and the
+   * same test caught it both times.
+   */
+  (function openWhereWeLanded() {
+    /*
+     * ⛔ THE PATH'S OWN SEGMENTS, NOT AN ANCHOR. The first version walked .topframe a[href] looking
+     * for the row whose href is this address — and the seed has none: a top-level group carries a
+     * button with data-tab, and only deeper trees render anchors. It compiled, it ran, and it opened
+     * nothing, which is the shape of a fix that is only tested where it happens to apply.
+     *
+     * Every segment of the address is an ancestor, and a group is named after the thing it holds, so
+     * un-shutting each segment opens the whole branch down to the item — one level or four.
+     */
+    var segs = location.pathname.split("/").filter(Boolean).map(decodeURIComponent);
+    var moved = false;
+    for (var t of groupTwisties) {
+      var name = t.dataset.twist;
+      if (segs.indexOf(name) >= 0 && shut.delete(name)) moved = true;
+    }
+    if (moved) {
+      remember();
+      paintGroups();
+    }
+  })();
   for (const t of groupTwisties) {
     t.addEventListener("click", (ev) => {
       ev.stopPropagation();

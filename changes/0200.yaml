@@ -1,9 +1,8 @@
 id: "0200"
-said: not a single tab clickable, and 'Go to current' just randomly floating in the middle. did you walk the pages and compare or not? I'm confused.
+said: uhm, this is much beter, but we should make sure the menu auto-expands.
 at: 2026-10-19
-kind: generator
+kind: surface
 reaches:
-  generate: valueOfArg
-  pin: a control that calls a prop still says where it goes
+  surface: ""
+  pin: ""
 waived: {}
-closed: 2026-10-19
