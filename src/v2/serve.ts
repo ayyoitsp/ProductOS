@@ -432,6 +432,53 @@ export async function v2Route(req: http.IncomingMessage, res: http.ServerRespons
    * ⛔ Every decision about cursors, claiming and what counts as work lives in `inbox`. This
    * handler reads the wire and hands over — the same reason no route here performs an act.
    */
+  /**
+   * ⛔ LOOKING AT THE QUEUE IS A GET, AND IT BEING A POST WAS WHAT STOPPED PETER WRITING.
+   *
+   * Peter: *"page loads are stiill slow, i get stuck and can't even open a page sometimes"*.
+   *
+   * Measured on the live instance — six concurrent polls of this route, which is what the two-way
+   * window produces when more than one session is watching a project:
+   *
+   *     one poll      1.0s
+   *     six at once   0.96 · 1.67 · 2.39 · 3.03 · 3.77 · 4.58s
+   *
+   * A staircase, ~0.7s a step. `takesTheWriteLock` exempts GET and HEAD and one named POST, so every
+   * poll took the project's exclusive write lock for about a second — and anything he PRESSED queued
+   * behind all of them. At 120s `serialize` refuses with "a write has been running for Ns", which is
+   * the four wedged projects that needed a restart earlier the same day. Not a store fault: polling.
+   *
+   * ⛔ AND THE ROUTE COULD NOT SIMPLY JOIN `READ_SHAPED_POSTS`, which was the first thing I tried to
+   * do. A POST carrying `claim` takes a lease — a real write — so exempting the route would let two
+   * sessions claim one note with no lock between them, and `v2-store-loop` has a test for exactly
+   * that. The allowlist's own comment warns about this direction: assume read, discover it writes.
+   *
+   * ⛔ SO THE VERB TELLS THE TRUTH INSTEAD. Reading the queue is a GET and takes no lock; claiming is
+   * a POST and takes one. That is what the lock is keyed on, so nothing had to learn about bodies —
+   * and `readJson` drains the stream, so a body-sniffing lock would have had to be read before the
+   * decision and threaded through every handler.
+   *
+   * ⛔ THE POST PATH STAYS, UNCHANGED, and not only for compatibility: the comment above this handler
+   * is right that a claim must never be a GET, because a read that changes who owns the work would
+   * eventually sit behind a cache. Both shapes answer identically for a plain read.
+   */
+  if (req.method === "GET" && p === "/api/v2/inbox") {
+    const q = new URL(req.url ?? "/", "http://x").searchParams;
+    const limit = q.get("limit");
+    return (
+      json(
+        res,
+        inbox(dir, {
+          since: Number(q.get("since") ?? 0) || 0,
+          /** ⛔ No `claim` on this path, deliberately — that is the whole reason it may skip the lock. */
+          limit: limit === null ? undefined : Number(limit),
+          leaseMs: DEFAULT_LEASE_MS,
+        })
+      ),
+      true
+    );
+  }
+
   if (req.method === "POST" && p === "/api/v2/inbox") {
     const body = await readJson(req);
     const claim = typeof body.claim === "string" && body.claim.trim() ? body.claim.trim() : undefined;
