@@ -7916,6 +7916,21 @@ const VIEW_SWITCH = `<script>
       found = found || mine;
     }
     if (!found) {
+      /**
+       * ⛔ WHERE THERE IS AN ADDRESS, A SECTION THIS PAGE LACKS IS SOMEWHERE ELSE — GO THERE.
+       *
+       * Revealing every section was the right fallback when one document held the whole corpus: a
+       * saved file reads as one long page rather than as a blank panel. On a SERVED page it is now
+       * the worst available outcome — four sections stacked at once, under an address naming none of
+       * them, which is what a reader saw when a tab could not find its target.
+       *
+       * ⛔ Guarded on trails[name], so this only ever follows a name that IS a scope. Navigating
+       * on an unknown name would be a page asking for itself forever.
+       */
+      if (BASE && trails[name]) {
+        location.href = addressOf(name);
+        return;
+      }
       for (const v of all) v.hidden = false;
       /** ⛔ Showing everything means the page scrolls again, so the frame has to let go. */
       delete document.documentElement.dataset.framed;
@@ -8043,8 +8058,28 @@ const VIEW_SWITCH = `<script>
     const at = addressOf(name);
     /** ⛔ Compared against whichever part of the address it IS, or every move pushes a duplicate. */
     const now = at.charAt(0) === "#" ? location.hash : location.pathname;
+    /**
+     * ⛔ A REF TAIL BELONGS TO THIS ADDRESS AND MUST NOT BE THROWN AWAY.
+     *
+     * An address may name a view and then a ref inside it —
+     * /v2/capabilities/document-catalogue/define-a-field-the-product-reads/see-a-fields-definition,
+     * where the last segment is an EXCHANGE and not a scope. The server correctly serves the
+     * owning scope's page. This then wrote addressOf(view) over the top of it, so arriving at a
+     * link to one statement silently became its feature: *"clicked …/see-a-fields-definition,
+     * landed …/define-a-field-the-product-reads"*.
+     *
+     * Reported by the deploy session as the deepest level having no page of its own. It has no page
+     * BY DESIGN — a statement is not a scope — and the defect is that the address stopped saying
+     * which statement. Same class as the bug this whole branch is about: paste the link, lose the
+     * link.
+     *
+     * So an address that is this view PLUS a deeper tail is already correct and is left alone.
+     */
+    const keeps = now.indexOf(at + "/") === 0;
     try {
-      if (fromHistory) history.replaceState(null, "", at);
+      if (keeps) {
+        /* already the right place, said more precisely than addressOf can say it */
+      } else if (fromHistory) history.replaceState(null, "", at);
       else if (now !== at) history.pushState(null, "", at);
     } catch {}
   };
@@ -8088,8 +8123,31 @@ const VIEW_SWITCH = `<script>
    */
   for (const t of tabs)
     t.addEventListener("click", () => {
-      show(t.dataset.tab, false);
-      if (t.dataset.tab !== "overview") setOpen(true);
+      const name = t.dataset.tab;
+      /**
+       * ⛔ A TAB THAT NAMES A SCOPE IS AN ADDRESS, NOT A SWITCH — AND IN TOP MODE THE TABS ARE THE
+       * WHOLE OF THE NAVIGATION.
+       *
+       * The tree is hidden in top mode, which is what the page SHIPS, so all 130 of its links are
+       * 0x0 and a reader has only these four buttons. Product and Capabilities name scopes whose
+       * sections a page no longer carries, so show() could not find them, fell into its no-match
+       * branch and revealed all four sections at once — the address unchanged, no error logged.
+       * Peter: *"hahahahahahaha so broken, can't even get to a single page"*.
+       *
+       * ⛔ A DEAD CONTROL THAT LOGS NOTHING IS THE WORST SHAPE AVAILABLE: it is indistinguishable
+       * from a slow page, so it reads as the whole product being broken rather than as one button.
+       *
+       * ⛔ AND IT IS THE SAME OMISSION AS THE MENU ROW, MISSED IN THE SAME PLACE. I drove the rows
+       * and left the tabs, having told two other sessions to measure in SIDE mode — right for the
+       * claim #226 was making, and it made the default mode the one nobody looked at.
+       *
+       * ⛔ THE DECISION LIVES IN show(), NOT HERE. A guard on this handler was the first fix and it
+       * was a second copy of one rule: "a section this page lacks is somewhere else, so go there".
+       * Disabling it changed nothing, because show() already answers that for every caller — which
+       * is how I found out it was redundant rather than load-bearing.
+       */
+      show(name, false);
+      if (name !== "overview") setOpen(true);
       window.scrollTo(0, 0);
     });
   /**
@@ -8257,6 +8315,30 @@ const VIEW_SWITCH = `<script>
    * answers waiting to drift. CSS.escape is feature-detected because every ref in this model
    * carries a #.
    */
+  /**
+   * Scroll to the ref an address names past its view, if it names one.
+   *
+   * ⛔ ONE COPY, BECAUSE A COLD ARRIVAL NEEDS IT AS MUCH AS A PRESS DOES. This lived only in the
+   * click handler, so following a link to a statement WITHIN the page worked and opening that same
+   * link in a new tab landed at the top of the feature with nothing saying which statement was
+   * meant. A durable link that only works when you were already here is not durable.
+   */
+  const scrollToTail = (pathname, named) => {
+    if (!BASE || pathname.indexOf(BASE) !== 0) return false;
+    const segs = pathname.slice(BASE.length).split("/").filter(Boolean).map(decodeURIComponent);
+    const cut = segs.lastIndexOf(named);
+    if (cut < 0) return false;
+    const tail = segs.slice(cut + 1);
+    if (!tail.length) return false;
+    const want = named + "#" + tail.join("#");
+    const el = [...document.querySelectorAll("[data-ref]")].find(function (x) { return x.dataset.ref === want; });
+    if (el && el.scrollIntoView) {
+      el.scrollIntoView({ block: "start" });
+      return true;
+    }
+    return false;
+  };
+
   const sectionNamed = (name) =>
     document.querySelector('section.view[data-view="' + (window.CSS && CSS.escape ? CSS.escape(name) : name) + '"]');
 
@@ -8335,14 +8417,7 @@ const VIEW_SWITCH = `<script>
        * past the view is the ref — …/rent-roll/review-the-rows — so the element is found by what
        * it IS rather than by an anchor hung off the URL.
        */
-      const segs = u.pathname.slice(BASE.length).split("/").filter(Boolean).map(decodeURIComponent);
-      const cut = segs.lastIndexOf(named);
-      const tail = segs.slice(cut + 1);
-      if (tail.length) {
-        const want = named + "#" + tail.join("#");
-        const el = [...document.querySelectorAll("[data-ref]")].find(function (x) { return x.dataset.ref === want; });
-        if (el && el.scrollIntoView) { el.scrollIntoView({ block: "start" }); return; }
-      }
+      if (scrollToTail(u.pathname, named)) return;
       window.scrollTo(0, 0);
       return;
     }
@@ -8396,7 +8471,11 @@ const VIEW_SWITCH = `<script>
     /** ⛔ The address is the path now; the hash is only read when there is no path to read. */
     const byPath = viewAt(location.pathname);
     const name = byPath || (h === "view-overview" || !h ? "overview" : h.replace(/^at-/, ""));
-    if (sectionNamed(name)) show(name, true, true);
+    if (sectionNamed(name)) {
+      show(name, true, true);
+      /** ⛔ The ref the address names, on arrival — not only when the press happened on this page. */
+      scrollToTail(location.pathname, name);
+    }
   };
   window.addEventListener("popstate", fromAddress);
   window.addEventListener("hashchange", fromAddress);
