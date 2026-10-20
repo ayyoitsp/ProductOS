@@ -228,8 +228,16 @@ export async function openPage(html, { exe = findBrowser(), url, width, height }
       /** ⛔ Layout is asynchronous after an override; without this the first read is the old size. */
       await until(() => evaluate(`window.innerWidth === ${width}`), `the viewport to become ${width}px`);
     },
-    /** Wait for something the page does asynchronously, with the failure naming what never happened. */
-    waitFor: (expression, what) => until(() => evaluate(expression), what),
+    /**
+     * Wait for something the page does asynchronously, with the failure naming what never happened.
+     *
+     * ⛔ THE BUDGET IS THE CALLER'S, because 15s is a claim about the MACHINE and not about the page.
+     * A whole-suite run has many browsers alive at once, and a wait that is generous when a file
+     * runs alone times out in the pack — a flake that reads as a product defect and sends somebody
+     * looking for one. A caller waiting on a first arrival knows it is paying for browser startup
+     * too and can say so.
+     */
+    waitFor: (expression, what, ms) => until(() => evaluate(expression), what, ms),
     async close() {
       try {
         ws.close();

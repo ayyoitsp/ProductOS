@@ -96,6 +96,14 @@ async function serve(dir) {
   return { base: `http://127.0.0.1:${server.address().port}`, close: () => server.close() };
 }
 
+/**
+ * ⛔ A FIRST ARRIVAL PAYS FOR BROWSER STARTUP, AND THE SUITE RUNS MANY AT ONCE. The harness default
+ * of 15s is plenty for this file alone and not for this file inside a full run — one of these timed
+ * out at 16.3s in the pack and passed 11/11 on its own, which is a flake that reads as a product
+ * defect.
+ */
+const ARRIVAL = 60000;
+
 const { dir, corpus } = nestedCorpus();
 const { exe, skip } = browserOrSkip();
 
@@ -188,7 +196,8 @@ for (const tab of ["prototype", "settings", "subsystems", "overview"]) {
     try {
       await page.waitFor(
         `document.readyState === "complete" && document.querySelectorAll("nav.scopes [data-goto]").length > 0`,
-        `the ${tab} page to arrive`
+        `the ${tab} page to arrive`,
+        ARRIVAL
       );
       await sideMenu(page);
       const seen = await page.evaluate(`(() => {
@@ -222,7 +231,8 @@ test("the tree still narrows to the half you are in", { skip }, async () => {
   try {
     await page.waitFor(
       `document.readyState === "complete" && document.querySelectorAll("nav.scopes [data-goto]").length > 0`,
-      "the area page to arrive"
+      "the area page to arrive",
+      ARRIVAL
     );
     await sideMenu(page);
     const seen = await page.evaluate(`(() => {
@@ -282,7 +292,8 @@ for (const target of ["leaf", "middle", "sibling"]) {
         `(() => { const s = document.querySelector('section.view[data-view="${name}"]');
                   return document.readyState === "complete" && !!s && !s.hidden
                          && document.querySelectorAll("[data-goto]").length > 0; })()`,
-        `the page for ${name} to be on screen`
+        `the page for ${name} to be on screen`,
+        ARRIVAL
       );
     const looking = `(() => {
       const vis = [...document.querySelectorAll("section.view")].filter((s) => !s.hidden);
