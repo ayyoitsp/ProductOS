@@ -88,8 +88,15 @@ test("it is findable, and said on the thing itself", () => {
   const why = actsFor(c).ungrounded.find((u) => u.scope === one).why;
   assert.match(why, /written for you by productos-shape/, `the queue hides the default: "${why}"`);
 
-  // And the feature itself says so, loudly enough to be argued with.
-  const html = renderScopePage(c, c.scopes.find((s) => !s.scope.in).scope.id, { linkBase: "/v2" });
+  /**
+   * And the feature itself says so, loudly enough to be argued with.
+   *
+   * ⛔ ON THE FEATURE'S OWN PAGE, which is where the feature is. This asked the ROOT's served page,
+   * and a served page carries only the scope it was asked for — so it was looking for one scope's
+   * mark in another scope's document. "On the thing itself" is what this test is named for, and
+   * naming the owning scope is the literal form of it.
+   */
+  const html = renderScopePage(c, one, { linkBase: "/v2" });
   assert.match(html, /class="decided-for-you"/, "the page does not say a default was written for you");
   assert.match(html, /Nobody has looked at this/, "the page does not say nobody has looked");
   assert.match(html, /productos-shape/, "the page does not say who decided");

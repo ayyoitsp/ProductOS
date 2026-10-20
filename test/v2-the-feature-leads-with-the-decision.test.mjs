@@ -46,7 +46,18 @@ function seed() {
 }
 
 const corpus = seed();
-const html = renderScopePage(corpus, corpus.scopes.find((s) => !s.scope.in).scope.id, {
+/**
+ * ⛔ THE FEATURE'S OWN PAGE, BECAUSE ONE ADDRESS RENDERS ONE PAGE NOW.
+ *
+ * This asked for the ROOT's page and then looked for the Money feature's readiness line, verdict
+ * and claims inside it — which worked only while a page descended and carried a section for every
+ * scope beneath it. That is the architecture Peter had removed: *"just loading data, rendering the
+ * page we're on, no tree walking, nothing."* The root's page is now the root's.
+ *
+ * So these assertions move to where the feature actually lives. They are the same assertions.
+ */
+const FEATURE = "money";
+const html = renderScopePage(corpus, FEATURE, {
   interactive: true,
   by: "a-person",
 });
@@ -345,35 +356,48 @@ test("⛔ in a real browser: a crumb that only repeats the heading is not painte
   );
   const nested = loadCorpus(dir);
   assert.deepEqual(nested.broken, [], "the fixture does not load");
-  const deep = renderScopePage(nested, nested.scopes.find((s) => !s.scope.in).scope.id, {
-    interactive: true,
-    by: "a-person",
-  });
-
-  const page = await openPage(deep, { exe, width: 1440, height: 900 });
-  try {
-    const read = async (goto) => {
-      await page.evaluate(`document.querySelector('[data-goto="${goto}"], [data-tab="${goto}"]').click()`);
-      return page.evaluate(`(() => {
+  /**
+   * ⛔ ONE PAGE PER SCOPE, SO THE TRAIL IS READ ON EACH SCOPE'S OWN PAGE. This rendered the root's
+   * page and clicked between the two features' sections inside it; a page carries only its own
+   * scope now, so there was nothing to click to and the heading it looked for was another page's.
+   *
+   * ⛔ BOTH FAILING STATES SURVIVE THE MOVE, which is the only reason this is the same test: the
+   * shallow page must paint NO trail (one crumb is the heading said twice) and the nested page MUST
+   * paint one. An empty trail is also what a broken trail builder produces, so checking only the
+   * shallow case could not tell a correct trail from no trail at all.
+   */
+  const read = async (scope, title) => {
+    const html = renderScopePage(nested, scope, { interactive: true, by: "a-person" });
+    const page = await openPage(html, { exe, width: 1440, height: 900 });
+    try {
+      /**
+       * ⛔ A FILE RENDER HAS NO ADDRESS, SO NOTHING HAS ASKED FOR A SECTION YET. The trail is
+       * painted by show(), and show() runs on a cold arrival at a URL — which a page opened from
+       * disk never has. Pressing the row for this page's own scope is what a reader does and what
+       * the served page does for them; without it this measured an unpainted trail and reported it
+       * as a missing one.
+       */
+      await page.evaluate(`(document.querySelector('[data-goto="${scope}"]') || document.querySelector('[data-tab="${scope}"]')).click()`);
+      return await page.evaluate(`(() => {
         const t = document.querySelector('.trail');
-        const h = document.querySelector('section.view[data-view="${goto}"] .feature-title');
+        const h = document.querySelector('section.view[data-view="${scope}"] .feature-title');
         return { trail: t ? t.textContent.trim() : null, heading: h ? h.textContent.trim() : null };
       })()`);
-    };
+    } finally {
+      await page.close();
+    }
+  };
 
-    const shallow = await read("money");
-    assert.equal(shallow.heading, "Money", "the feature's own heading is gone");
-    assert.equal(shallow.trail, "", `the crumb row repeats the heading: "${shallow.trail}" over "${shallow.heading}"`);
+  const shallow = await read("money");
+  assert.equal(shallow.heading, "Money", "the feature's own heading is gone");
+  assert.equal(shallow.trail, "", `the crumb row repeats the heading: "${shallow.trail}" over "${shallow.heading}"`);
 
-    const nestedSeen = await read("pocket-money");
-    assert.equal(nestedSeen.heading, "Pocket money");
-    assert.ok(
-      nestedSeen.trail.includes("Money"),
-      `a page two levels down paints no trail at all ("${nestedSeen.trail}") — where it is filed is now unsayable`
-    );
-  } finally {
-    await page.close();
-  }
+  const nestedSeen = await read("pocket-money");
+  assert.equal(nestedSeen.heading, "Pocket money");
+  assert.ok(
+    nestedSeen.trail.includes("Money"),
+    `a page two levels down paints no trail at all ("${nestedSeen.trail}") — where it is filed is now unsayable`
+  );
 });
 
 // ---------------------------------------------------------------------------

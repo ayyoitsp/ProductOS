@@ -160,19 +160,29 @@ test("the page a reader arrives at carries what they are looking at and not the 
   try {
     const r = await fetch(`${base}/v2`);
     const page = await r.text();
-    const everything = renderScopePage(corpus, "everything", { interactive: true, records: "http", linkBase: "/v2" });
-
     assert.equal(r.status, 200);
-    assert.ok(
-      page.length * 3 < everything.length,
-      `the served page is ${(page.length / 1024) | 0} kB against ${(everything.length / 1024) | 0} kB for everything — it is not deferring much`
-    );
 
-    /** ⛔ And the nav still names every one, or a stub is content that was silently dropped. */
+    /**
+     * ⛔ NOT BY DEFERRING THE REST — BY NOT RENDERING IT. This asked whether the page was much
+     * smaller than a render of everything and whether anything carried data-defer, which measured
+     * the DEFERRAL machinery. That machinery existed to make a whole-corpus page tolerable; a page
+     * that holds one scope has nothing to defer, so both measurements now describe a mechanism
+     * rather than the guarantee.
+     *
+     * The guarantee is what the title always claimed, and it is checkable directly: the page holds
+     * a section for the scope it was served at and for no other scope. ⛔ This would have FAILED
+     * before the change — the root's page carried a section for all ten things — which is what
+     * makes it evidence rather than a restatement.
+     */
+    const sections = [...page.matchAll(/data-view="([a-z0-9-]+)"/g)].map((m) => m[1]);
+    const scopeIds = new Set(corpus.scopes.map((x) => x.scope.id));
+    const others = sections.filter((v) => scopeIds.has(v) && v !== "everything");
+    assert.deepEqual(others, [], `the page served at the root carries other scopes' sections: ${others.join(", ")}`);
+
+    /** ⛔ And the nav still names every one, or those pages became unreachable. */
     for (const id of ["thing-0", "thing-4", "thing-8"]) {
-      assert.ok(page.includes(`data-goto="${id}"`), `the nav does not reach ${id}, so its section is unreachable`);
+      assert.ok(page.includes(`data-goto="${id}"`), `the nav does not reach ${id}, so its page is unreachable`);
     }
-    assert.match(page, /data-defer="/, "nothing was deferred, so this page is the old one");
   } finally {
     close();
   }
@@ -194,55 +204,54 @@ test("a view the server cannot render is a 404, not an empty section", async () 
 
 const { exe, skip } = browserOrSkip();
 
-test("switching to a deferred feature fills it in, and what arrives is really on the page", { skip }, async () => {
+test("pressing a feature in the menu lands on its own page, drawing and all", { skip }, async () => {
   const { base, close } = await serve(dir);
   const page = await openPage(null, { exe, url: `${base}/v2` });
   after(() => page.close());
   try {
-    /** It starts as a stub with no content of its own. */
-    const before = await page.evaluate(
-      `(() => { const s = document.querySelector('section.view[data-defer="thing-4"]'); return s ? s.textContent.trim().slice(0, 40) : "NO STUB"; })()`
-    );
-    assert.notEqual(before, "NO STUB", "there is no deferred section to fill — the page did not defer");
+    /**
+     * ⛔ THE PRESS IS A NAVIGATION, NOT A STUB BEING FILLED. This waited for a section carrying
+     * data-defer="thing-4" to be replaced off the wire. A page carries only its own scope now, so
+     * there is no stub for a feature and nothing to fill — the row leads to the feature's own page.
+     *
+     * ⛔ WHAT THIS TEST IS ACTUALLY FOR SURVIVES INTACT, and it is the reason to keep it rather than
+     * delete it: a drawing is only ever visible inside a SHADOW ROOT, and the assertion below is the
+     * one that caught the real bug in the deferral change — asMock wraps every screen in
+     * <template shadowrootmode="open">, which the PARSER turns into a shadow root and innerHTML
+     * silently does not. A section can arrive byte-perfect and inert. Markup assertions pass on that;
+     * computed style does not.
+     */
+    const landed = `(() => { const s = document.querySelector('section.view[data-view="thing-4"]');
+                             return document.readyState === "complete" && !!s && !s.hidden; })()`;
+
+    /** ⛔ Non-vacuous: it must not already be here, or the press exercises no navigation at all. */
+    const alreadyHere = await page.evaluate(`Boolean(document.querySelector('section.view[data-view="thing-4"]'))`);
+    assert.ok(!alreadyHere, "the root's page already holds thing-4, so this proves nothing about navigating to it");
 
     /** The ordinary way in: press the thing in the menu. */
     await page.evaluate(`document.querySelector('nav.scopes a[data-goto="thing-4"]').click()`);
-
-    await page.waitFor(
-      `(() => { const s = document.querySelector('section.view[data-view="thing-4"]'); return !!s && !s.hasAttribute("data-defer"); })()`,
-      "the deferred section to be replaced by the real one"
-    );
+    await page.waitFor(landed, "the feature's own page to arrive");
 
     /**
-     * ⛔ COMPUTED STYLE, NOT MARKUP. A section inserted into the document and left `hidden`, or
-     * inserted with no height, is markup that passes and a page that shows nothing — and that is
-     * precisely what this change could break.
+     * ⛔ COMPUTED STYLE, NOT MARKUP. A section in the document and left `hidden`, or with no height,
+     * is markup that passes and a page that shows nothing.
      */
-      const shown = await page.evaluate(`(() => {
+    const shown = await page.evaluate(`(() => {
       const s = document.querySelector('section.view[data-view="thing-4"]');
       if (!s) return { why: "gone" };
       const cs = getComputedStyle(s);
       return { display: cs.display, visibility: cs.visibility, height: s.getBoundingClientRect().height, text: s.textContent.includes("Thing 4") };
     })()`);
-    assert.notEqual(shown.display, "none", "the fetched section is in the document but display:none");
-    assert.notEqual(shown.visibility, "hidden", "the fetched section is invisible");
-    assert.ok(shown.height > 80, `the fetched section computes to ${shown.height}px tall — nothing is in it`);
-    assert.ok(shown.text, "the fetched section does not name the feature it is for");
+    assert.notEqual(shown.display, "none", "the feature's section is in the document but display:none");
+    assert.notEqual(shown.visibility, "hidden", "the feature's section is invisible");
+    assert.ok(shown.height > 80, `the feature's section computes to ${shown.height}px tall — nothing is in it`);
+    assert.ok(shown.text, "the feature's section does not name the feature it is for");
 
-    /**
-     * ⛔ ITS DRAWING IS IN A SHADOW ROOT, WHICH IS THE ONLY WAY A MOCK IS EVER VISIBLE — and the
-     * host to look at is `div.proto.html`. The element carrying a `productos-mock` class is INSIDE
-     * that shadow root, so a light-DOM query for it returns nothing; an earlier version of this
-     * assertion looked for it and read the empty result as "nothing hydrated".
-     *
-     * This is also the assertion that caught the real bug in this change: `asMock` wraps every
-     * screen in <template shadowrootmode="open">, which the PARSER turns into a shadow root and
-     * `innerHTML` silently does not. The fetched section arrived byte-perfect and inert.
-     */
+    /** ⛔ The drawing hydrates, and the host to look at is `div.proto.html` — the mock is INSIDE it. */
     await page.waitFor(
       `(() => { const s = document.querySelector('section.view[data-view="thing-4"]'); if (!s) return false;
          return [...s.querySelectorAll("div.proto.html")].some((h) => h.shadowRoot && h.shadowRoot.childNodes.length); })()`,
-      "the drawing inside the fetched section to hydrate"
+      "the drawing inside the feature's page to hydrate"
     );
 
     /** ⛔ And it computes a box, because a shadow root full of unstyled nothing would also pass. */
@@ -253,7 +262,7 @@ test("switching to a deferred feature fills it in, and what arrives is really on
       if (!r) return { why: "no row" };
       return { display: getComputedStyle(r).display, height: Math.round(r.getBoundingClientRect().height) };
     })()`);
-    assert.ok(row.height > 4, `a row of the fetched drawing computes to ${JSON.stringify(row)} — it is in the DOM and not laid out`);
+    assert.ok(row.height > 4, `a row of the drawing computes to ${JSON.stringify(row)} — it is in the DOM and not laid out`);
   } finally {
     close();
   }
@@ -308,9 +317,17 @@ test("the reader arrives looking at exactly one section", { skip }, async () => 
       `location.href.indexOf(${JSON.stringify(base)}) === 0 && document.readyState === "complete"`,
       "the page to finish loading"
     );
-    /** ⛔ Non-vacuous: there have to be several, or "exactly one" is what a one-view page does anyway. */
+    /**
+     * ⛔ Non-vacuous: there have to be several, or "exactly one" is what a one-view page does anyway.
+     *
+     * ⛔ THE NUMBER CHANGED BECAUSE THE PAGE DID, AND THE GUARD STILL HAS TEETH. This wanted more
+     * than four, which a whole-corpus page cleared by 140. A page now carries its own scope plus the
+     * fixed sections — Overview, the prototype board, what steers this — so four is the ceiling, and
+     * showing exactly one of four is still a claim a broken switcher fails: when show() throws, every
+     * one of the four is visible, which is what this exists to catch.
+     */
     const total = await page.evaluate(`document.querySelectorAll("section.view").length`);
-    assert.ok(total > 4, `the page has ${total} sections, so showing one proves nothing`);
+    assert.ok(total > 3, `the page has ${total} sections, so showing one proves nothing`);
 
     const showing = await page.evaluate(
       `[...document.querySelectorAll("section.view")].filter((s) => !s.hidden).map((s) => s.dataset.view || s.id)`
@@ -325,31 +342,46 @@ test("the reader arrives looking at exactly one section", { skip }, async () => 
   }
 });
 
-test("going away from a filled section and back shows exactly it, both times", { skip }, async () => {
+test("going away from a container and back shows exactly it, both times", { skip }, async () => {
   const { base, close } = await serve(dir);
   const page = await openPage(null, { exe, url: `${base}/v2`, width: 1440, height: 900 });
   after(() => page.close());
   try {
     /**
-     * ⛔ A CONTAINER, because that is what he was pressing and what states nothing of its own —
-     * `part-0` has no exchanges, so its view is the listing of what is filed under it.
+     * ⛔ PRESSING A ROW IS A NAVIGATION NOW, NOT A SECTION BEING FILLED IN PLACE.
+     *
+     * This waited for a stub carrying data-defer="part-0" to be replaced, and asserted it had been
+     * deferred first so the test could not pass on "a page that never split". Both describe the
+     * deferral machinery, which existed to make a whole-corpus page tolerable — a page that renders
+     * one scope has nothing to defer and no stub to fill.
+     *
+     * ⛔ EVERY ASSERTION SURVIVES THE MOVE, which is why this is the same test and not a new one:
+     * each press must leave EXACTLY its own scope showing, and a container's page must really be the
+     * listing of what is filed under it. Both failing states are intact — several sections visible at
+     * once still fails, and an empty container page still fails. What changed is that the page comes
+     * from the server rather than from a fetch into a stub.
      */
     const showing = `[...document.querySelectorAll("section.view")].filter((s) => !s.hidden).map((s) => s.dataset.view)`;
-    const press = (id) => page.evaluate(`document.querySelector('nav.scopes a[data-goto="${id}"]').click()`);
-    const filled = (id) =>
-      page.waitFor(
-        `(() => { const s = document.querySelector('section.view[data-view="${id}"]'); return !!s && !s.hasAttribute("data-defer"); })()`,
-        `the deferred section for ${id} to be filled`
+    const press = async (id) => {
+      await page.evaluate(`document.querySelector('nav.scopes a[data-goto="${id}"]').click()`);
+      await page.waitFor(
+        `(() => { const s = document.querySelector('section.view[data-view="${id}"]');
+                  return document.readyState === "complete" && !!s && !s.hidden; })()`,
+        `the page for ${id} to arrive`
       );
+    };
 
-    /** ⛔ Non-vacuous: it has to have been DEFERRED, or this test is about a page that never split. */
-    const wasStub = await page.evaluate(
-      `Boolean(document.querySelector('section.view[data-defer="part-0"]'))`
+    /**
+     * ⛔ Non-vacuous: the row has to lead somewhere this document does not already hold, or the
+     * press proves nothing about navigating. This is the inverse of the old guard and checks the
+     * same thing — that the two scopes are not both sitting in one document.
+     */
+    const alreadyHere = await page.evaluate(
+      `Boolean(document.querySelector('section.view[data-view="part-0"]'))`
     );
-    assert.ok(wasStub, "part-0 was not deferred, so nothing here exercises the replacement at all");
+    assert.ok(!alreadyHere, "the root's page already holds part-0's section, so no navigation is being exercised");
 
     await press("part-0");
-    await filled("part-0");
     const first = await page.evaluate(showing);
     assert.deepEqual(first, ["part-0"], `pressing the container left ${JSON.stringify(first)} showing`);
 
@@ -363,13 +395,12 @@ test("going away from a filled section and back shows exactly it, both times", {
     assert.ok(holds.kids > 0, "the container's page lists none of its children");
     assert.ok(holds.height > 80, `the container's page computes to ${holds.height}px — nothing is in it`);
 
-    /** Away. ⛔ THE ONE THAT FAILS ON THE PREVIOUS BUILD: the filled section is never hidden. */
+    /** Away. ⛔ Exactly one thing showing, never the previous page left revealed underneath. */
     await press("thing-1");
-    await filled("thing-1");
     const away = await page.evaluate(showing);
     assert.deepEqual(away, ["thing-1"], `navigating away left ${JSON.stringify(away)} showing at once`);
 
-    /** And back. ⛔ The other half: a filled section matches nothing, so the page reveals all of it. */
+    /** And back. */
     await press("part-0");
     const back = await page.evaluate(showing);
     assert.deepEqual(back, ["part-0"], `coming back left ${JSON.stringify(back)} showing at once`);
@@ -662,9 +693,21 @@ test("the route resolves a menu path, at every depth", async () => {
      */
     assert.equal(titleOf(deep), "Thing 0", `the deep path served "${titleOf(deep)}"`);
     assert.notEqual(titleOf(root), titleOf(deep), "the root and the deep path served the same page, so the path changed nothing");
-    /** ⛔ And it really is scoped: the root's nav holds every feature, this one's subtree does not. */
+    /**
+     * ⛔ And it really is scoped — but the non-vacuity has to be rebuilt, because the thing it leaned
+     * on is the thing that was fixed. It asserted the ROOT holds data-view="thing-5", which was true
+     * only while a page rendered every scope beneath it. No page carries another scope's section now,
+     * so "the deep path does not carry thing-5" became trivially true of every page including a route
+     * that ignores the path entirely.
+     *
+     * What still distinguishes a scoped route from a broken one: the deep page renders the scope it
+     * was asked for, and the root renders ITS own — while still LINKING to thing-5, so the feature is
+     * reachable rather than dropped. A route ignoring the path would fail the first of these.
+     */
+    assert.ok(deep.includes('data-view="thing-0"'), "the deep path did not render the feature it names");
     assert.ok(!deep.includes('data-view="thing-5"'), "the deep path carried a feature from outside its own subtree");
-    assert.ok(root.includes('data-view="thing-5"'), "the root does not hold thing-5 either, so the line above proves nothing");
+    assert.ok(root.includes('data-view="everything"') || titleOf(root) === "Everything", "the root did not render the root");
+    assert.ok(root.includes('data-goto="thing-5"'), "the root does not even link thing-5, so its page is unreachable");
   } finally {
     close();
   }
@@ -714,7 +757,14 @@ test("a cold arrival keeps the address it was opened at", { skip }, async () => 
     /** ⛔ THE ONE THAT FAILS ON THE PREVIOUS BUILD. */
     assert.equal(seen.path, "/v2/part-0", `opening /v2/part-0 cold rewrote the address to ${seen.path}`);
     assert.equal(seen.hash, "", `a fragment was put back on the address: ${seen.hash}`);
-    assert.deepEqual(seen.showing, ["overview"], `it showed ${JSON.stringify(seen.showing)}`);
+    /**
+     * ⛔ AND IT SHOWS ITSELF NOW, NOT "overview" — which is the defect this test was written about,
+     * fixed at the cause rather than at the switcher. The comment above diagnoses it exactly: "that
+     * scope renders as the page's Overview rather than as a section named after itself", so the
+     * switcher could only ever paper over it. A container renders as its own section, so the name the
+     * address asks for is a name the document has.
+     */
+    assert.deepEqual(seen.showing, ["part-0"], `it showed ${JSON.stringify(seen.showing)}`);
   } finally {
     close();
   }
@@ -796,7 +846,18 @@ test("every script the page emits is valid JavaScript", () => {
 
 /** ⛔ The same, for a fragment — it ships no scripts, and shipping one would be a second copy of them. */
 test("a fetched section ships markup only, not another copy of the page's scripts", () => {
-  const frag = renderScopePage(corpus, "everything", {
+  /**
+   * ⛔ ASKED OF THE SCOPE THAT OWNS THE SECTION, which is what the route does. This asked the ROOT's
+   * page for a fragment of thing-3, and the root's page has no thing-3 to give — one address renders
+   * one page. /api/v2/section carries scope AND view, and renders that scope's page narrowed to that
+   * view, so the pairing is what changed rather than the mechanism.
+   *
+   * ⛔ Not "subsystems", which I tried first: it is genuinely deferred, and `renderSubsystems` is
+   * EMPTY for a fixture that declares none — so the sentinels were found, the slice between them was
+   * "", and the assertion below failed on an empty fragment rather than a missing one. A fragment
+   * test needs a view with something in it or it cannot tell those two apart.
+   */
+  const frag = renderScopePage(corpus, "thing-3", {
     interactive: true,
     records: "http",
     linkBase: "/v2",
