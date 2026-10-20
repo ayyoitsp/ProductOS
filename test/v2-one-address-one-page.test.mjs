@@ -48,6 +48,13 @@ function nestedCorpus() {
   w("area", `---\nid: area\ntitle: An Area\nin: whole\nexists: kept\n---\n\nAn area of the product.\n`);
   w("middle", `---\nid: middle\ntitle: A Middle Layer\nin: area\nexists: kept\n---\n\nAn area inside an area.\n`);
   w("sibling", `---\nid: sibling\ntitle: A Sibling\nin: area\nexists: kept\n---\n\nSomething else in the area.\n`);
+  /**
+   * ⛔ A SECOND TOP-LEVEL AREA, so "the tree narrows to the half you are in" has a failing state.
+   * With one half everything belongs to it, narrowing hides nothing, and a filter that had been
+   * switched off entirely would measure identically to a working one.
+   */
+  w("other", `---\nid: other\ntitle: Another Area\nin: whole\nexists: kept\n---\n\nA different half.\n`);
+  w("far", `---\nid: far\ntitle: Something Far\nin: other\nexists: kept\n---\n\nInside the other half.\n`);
 
   const slots = {
     may: "Anybody signed in may do this.",
@@ -125,6 +132,107 @@ test("a served page carries its own scope and nobody else's", async () => {
         assert.ok(page.includes(`data-goto="${other}"`), `${at}'s page cannot reach ${other}`);
       }
     }
+  } finally {
+    close();
+  }
+});
+
+/**
+ * ⛔ AND IT REACHES THE READER, WHICH IS NOT THE SAME CLAIM AS "THE SERVER RENDERED IT".
+ *
+ * Every assertion above passed, the instance served the corrected page in 1.3s, and Peter's own tab
+ * went on showing the defect. The page was sent with NO cache headers — no Cache-Control, no ETag,
+ * no Last-Modified — and a 200 with no freshness information and no validator is heuristically
+ * cacheable, so his browser kept its pre-deploy copy. Measured in his browser: his document had
+ * none of the new markers and still deferred feature sections.
+ *
+ * ⛔ The deploy is only how it announced itself. This corpus changes on every press, so a cacheable
+ * page means a reviewer can agree to a sentence that has already been reworded with nothing on
+ * screen saying so.
+ */
+test("a page of product truth is never cacheable", async () => {
+  const { base, close } = await serve(dir);
+  try {
+    for (const at of ["", "/" + pathTo("leaf")]) {
+      const r = await fetch(`${base}/v2${at}`);
+      assert.equal(r.status, 200, `${at || "/v2"} did not serve`);
+      const cc = r.headers.get("cache-control") ?? "";
+      assert.match(cc, /no-store/, `${at || "/v2"} is cacheable: cache-control: ${JSON.stringify(cc)}`);
+      /**
+       * ⛔ And no validator, because a validator is what makes a conditional request possible and
+       * there is nothing stable to validate against — the page is recomputed from the corpus.
+       */
+      assert.equal(r.headers.get("etag"), null, `${at || "/v2"} sends an ETag, so a browser may revalidate into a stale copy`);
+    }
+  } finally {
+    close();
+  }
+});
+
+/**
+ * ⛔ THE TABS ARE NOT ALL HALVES OF THE PRODUCT, AND THE MENU MUST SURVIVE THE ONES THAT ARE NOT.
+ *
+ * Overview, the prototype board and What steers this are SECTIONS — no scope belongs to any of
+ * them. The tree filter compared every row against the current section, so on all four it hid the
+ * entire menu. Peter, standing on one of them: *"the menu is broken"*, and
+ * *"i'm on another machine, looking at .../v2/prototype"*.
+ *
+ * ⛔ A PREVIOUS ROUND SPECIAL-CASED "overview" BY NAME AND LEFT ITS THREE SIBLINGS BROKEN, which is
+ * why this drives all four rather than the one that was reported.
+ */
+for (const tab of ["prototype", "settings", "subsystems", "overview"]) {
+  test(`/${tab}: a tab no scope belongs to still has a usable menu`, { skip }, async () => {
+    const { base, close } = await serve(dir);
+    const page = await openPage(null, { exe, url: `${base}/v2/${tab}`, width: 1440, height: 1000 });
+    after(() => page.close());
+    try {
+      await page.waitFor(
+        `document.readyState === "complete" && document.querySelectorAll("nav.scopes [data-goto]").length > 0`,
+        `the ${tab} page to arrive`
+      );
+      await sideMenu(page);
+      const seen = await page.evaluate(`(() => {
+        const rows = [...document.querySelectorAll("nav.scopes li")].filter((li) => li.dataset.scope);
+        const tree = document.querySelector("nav.scopes");
+        return {
+          rows: rows.length,
+          hidden: rows.filter((li) => li.hidden).length,
+          laidOut: rows.filter((li) => li.getClientRects().length > 0).length,
+          treeHidden: tree ? tree.hidden : "no tree",
+        };
+      })()`);
+      assert.ok(seen.rows > 0, `the ${tab} page renders no menu rows at all`);
+      assert.equal(seen.hidden, 0, `${seen.hidden} of ${seen.rows} rows are hidden on /${tab} — no scope belongs to it, so there is no half to narrow to`);
+      assert.equal(seen.treeHidden, false, `the tree is hidden on /${tab}, which down the side leaves a column with no way back to it`);
+      assert.ok(seen.laidOut > 0, `every row on /${tab} is laid out nowhere`);
+    } finally {
+      close();
+    }
+  });
+}
+
+/**
+ * ⛔ AND A REAL HALF STILL NARROWS, or the fix above is the filter switched off. Needs two halves in
+ * the fixture to have a failing state at all.
+ */
+test("the tree still narrows to the half you are in", { skip }, async () => {
+  const { base, close } = await serve(dir);
+  const page = await openPage(null, { exe, url: `${base}/v2/${pathTo("area")}`, width: 1440, height: 1000 });
+  after(() => page.close());
+  try {
+    await page.waitFor(
+      `document.readyState === "complete" && document.querySelectorAll("nav.scopes [data-goto]").length > 0`,
+      "the area page to arrive"
+    );
+    await sideMenu(page);
+    const seen = await page.evaluate(`(() => {
+      const rows = [...document.querySelectorAll("nav.scopes li")].filter((li) => li.dataset.scope);
+      return { total: rows.length, hidden: rows.filter((li) => li.hidden).map((li) => li.dataset.scope) };
+    })()`);
+    assert.ok(seen.hidden.length > 0, `standing in one half hid none of ${seen.total} rows — the filter does nothing`);
+    /** The other half's rows are the ones that go, and this half's stay. */
+    assert.ok(seen.hidden.includes("far"), `the other half's rows are still shown: hidden = ${JSON.stringify(seen.hidden)}`);
+    assert.ok(!seen.hidden.includes("leaf"), `this half's own rows were hidden: ${JSON.stringify(seen.hidden)}`);
   } finally {
     close();
   }

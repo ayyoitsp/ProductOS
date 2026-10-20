@@ -7889,10 +7889,19 @@ const VIEW_SWITCH = `<script>
      * was a navigation press. The breakpoint that decides this lives in the stylesheet and is read
      * from there; a second copy of "62rem" in script is two answers to one question, and they drift.
      *
-     * The hidden ATTRIBUTE is the other reason the chevron disappears — Overview has no tree — and that one
-     * must still close.
+     * ⛔ AND IT ASKS THE LAYOUT, NOT THE CHEVRON. This read the chevron's computed display and
+     * excluded the case where its hidden ATTRIBUTE is set, on the grounds that "Overview has no
+     * tree". Overview has a tree now — the filter above keeps every row on a tab no scope belongs
+     * to — so that exclusion closed the column on Overview and on How it works, leaving 19rem of
+     * breadcrumb and no way back. Peter: *"the menu is broken"*.
+     *
+     * Down the side the tree is the menu and there is no control to reopen it, so it is never
+     * closed, whatever the chevron happens to be doing. The breakpoint still lives in the
+     * stylesheet and is still read from there rather than copied: position:fixed is what the side
+     * placement DOES to the frame, so asking for it is asking the cascade.
      */
-    if (c && !c.hidden && getComputedStyle(c).display === "none") open = true;
+    const sideways = frame && getComputedStyle(frame).position === "fixed";
+    if (sideways || (c && !c.hidden && getComputedStyle(c).display === "none")) open = true;
     tree.hidden = !open;
     if (c) c.setAttribute("aria-expanded", String(open));
     frame.classList.toggle("open", open);
@@ -8088,7 +8097,25 @@ const VIEW_SWITCH = `<script>
    * tabs exist to remove, and a reader who has chosen a side has said which one they mean.
    */
   const scopeTree = (section) => {
-    for (const li of tree ? tree.querySelectorAll("li") : []) {
+    const rows = tree ? [...tree.querySelectorAll("li")] : [];
+    /**
+     * ⛔ FILTER ONLY WHERE THERE IS SOMETHING TO FILTER TO, AND ASK THE ROWS RATHER THAN A LIST.
+     *
+     * The tabs are not all halves of the product. Overview, the prototype board and What steers
+     * this are SECTIONS, and no scope belongs to any of them — so comparing every row against the
+     * current section hid the entire tree on all four. Peter, standing on one of them:
+     * *"the menu is broken"*, and *"i'm on another machine, looking at .../v2/prototype"*.
+     *
+     * The previous round of this special-cased "overview" by name and left its three siblings
+     * broken, which is the shape of the bug rather than a fix for it — a list of exceptions is a
+     * list somebody has to remember to extend, and the next tab added breaks it again.
+     *
+     * So it is derived: if no row in the tree belongs to the current section, there is no half being
+     * chosen and nothing to narrow to, and the tree stays whole. A real half still narrows, because
+     * its rows do belong to it.
+     */
+    const narrowing = rows.some((r) => r.dataset.scope && sectionOf[r.dataset.scope] === section);
+    for (const li of rows) {
       /**
        * ⛔ THE ROW SAYS WHICH SCOPE IT IS, rather than the filter inferring it from a link.
        *
@@ -8121,7 +8148,7 @@ const VIEW_SWITCH = `<script>
        * So the filter answers only the question it exists for — which half of the product this row
        * belongs to — and the landing keeps the tree it is standing in.
        */
-      li.hidden = !id || (section !== "overview" && sectionOf[id] !== section);
+      li.hidden = !id || (narrowing && sectionOf[id] !== section);
       /**
        * ⛔ AND THE AREA ITSELF IS NOT A ROW OF ITS OWN MENU. Peter: *"'Product' itself doesn't need
        * to be a menu item under the 'Product' main tab"*.
