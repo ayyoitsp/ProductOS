@@ -1,0 +1,19 @@
+id: "0202"
+said: "i'd like to refocus this session on productOS being able to take this loop: Examine product truth for a feature, determine what needs to be answered, have them ask the user for the answers, but combined in a way that lessens the burden on the user.  pointed, directed questions, 3-4 possible answers (just like claude code).  user can select them, or freeform the answer.  this fills in the product graph.  it should probbaly ask questions about the UX, edge cases, happy path, anything that stands in the way"
+at: 2026-10-20
+kind: concept
+reaches:
+  model: SLOT_ASKED
+  derive: interviewFor
+  surface: interview
+  check: slot-blank
+  instruct: interviewer
+  pin: a blank an existing question already speaks for is not asked a second time
+waived:
+  generate: >
+    The two answers that are not sentences already have generators and this adds none. A screen with
+    nothing drawn routes to `v2 propose` / `v2 draw`, which is named in the act the worklist prints
+    and in the role's own brief; a question's options are written by an author through `ask`, which is
+    deliberately not generated — a sentence software made up is indistinguishable from one somebody
+    agreed to, which is the line `propose-slots.ts` holds and the reason this derivation writes
+    nothing at all.

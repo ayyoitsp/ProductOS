@@ -1,0 +1,21 @@
+id: "0203"
+said: |-
+  what is 'interview', this should be a first class representation in the UX - and claude should ideally be able to access this via mcp
+
+  — and, sharper: we should not be creating command line 'instructions' at this point? it should just be another functionality that could be reachable.  maybe i'm just taking issue with you saying 'producos v2 interview' command line, like no one will ever use the command line
+at: 2026-10-20
+kind: concept
+reaches:
+  model: POLICY_SLOTS
+  derive: interviewFor
+  surface: renderUnasked
+  check: slot-blank
+  instruct: productos_exchange_interview
+  pin: nothing in it is pressable, and it does not look like the queue
+waived:
+  generate: >
+    Nothing new is generated. The derivation writes nothing at all, and the one answer that is not a
+    sentence — a screen with no picture — already routes to the existing drawing generators rather
+    than adding one. The correction in this record was about REACHABILITY, not about producing
+    anything: the same derivation now answers on the page and over MCP instead of only from a
+    checkout.

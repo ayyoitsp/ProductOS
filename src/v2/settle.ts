@@ -99,6 +99,53 @@ export interface Question {
 }
 
 /**
+ * The command that answers one question — ⛔ `null` WHERE NO COMMAND CAN, AND THAT IS THE WHOLE
+ * REASON THIS IS A FUNCTION RATHER THAN A TEMPLATE AT EACH CALL SITE.
+ *
+ * `v2 decide` worked this out inline and the reasoning is long, because four different facts about a
+ * question change the verb it takes: a dispute wants `--stands`, an org-wide rule owes `--then` in
+ * the same act, a case asking `whether` needs `--refuses yes|no`, and a residual on a multi-statement
+ * slot decides whether `--pick` is safe or whether the whole sentence has to be written out.
+ *
+ * ⛔ AND A CONTESTED WORD HAS NO COMMAND AT ALL. `Term.contested` is `{question, with}`, strictly,
+ * so there is nowhere for a candidate to go and no ref a verb accepts — the ref is `<scope>#<word>`
+ * and a multi-word term is not one kebab-case segment. v2.ts records this biting twice: #148 minted
+ * the ref shape, #153 printed `v2 rule` against it, and it fails with `no exchange "where a value
+ * was read from"`. Answering it means choosing a sense and renaming the losing uses across files,
+ * which is authoring and not an act.
+ *
+ * ⛔ SO IT IS EXTRACTED, BECAUSE A SECOND SURFACE REPRODUCED THE DEFECT IMMEDIATELY. `v2 interview`
+ * printed `v2 rule <ref> --pick N` for every drafted question — which is wrong for a rule (no
+ * `--then`), wrong for a dispute (no `--stands`), wrong for a `whether` case (no `--refuses`), and a
+ * command that cannot work for a contested word. Four classes of broken advice, from one surface
+ * re-deriving what another already knew, on the queue a reviewer meets first.
+ */
+export function rulingAct(q: Question, who = "<your name>"): string | null {
+  /** ⛔ First, because everything below it assumes a ref a verb accepts. */
+  if (q.kind === "contested word") return null;
+
+  const stands = q.conflictsWith.length ? ` --stands this` : "";
+  const then = q.needsThen ? ` --then "…what would show it holding…"` : "";
+  const pol = q.asksPolarity ? ` --refuses yes|no` : "";
+  const tail = `${stands}${then}${pol} --because "…" --by ${who}`;
+
+  /**
+   * ⛔ A RESIDUAL — one thing unruled ABOUT a sentence somebody agreed to. `--pick` is safe only
+   * where an option is a whole replacement sentence, or where `of:` names the one statement it
+   * replaces; otherwise picking deletes the siblings, which is the clause loss `--pick` exists to
+   * prevent. See `write.ts` and `Standing.candidates`.
+   */
+  if (q.revises) {
+    if (q.candidatesAreWhole) return `productos v2 rule ${q.ref} --pick N${tail}`;
+    if ((q.saysEach ?? []).some((x) => x.inQuestion)) return `productos v2 rule ${q.ref} --pick N${tail}`;
+    return `productos v2 rule ${q.ref} --says "…the whole sentence…"${tail}`;
+  }
+  if (q.candidates.length) return `productos v2 rule ${q.ref} --pick N${tail}`;
+  /** Nothing drafted: it is answered by writing the sentence. Drafting is authoring, not an act. */
+  return `productos v2 rule ${q.ref} --says "…"${tail}`;
+}
+
+/**
  * This scope and everything filed beneath it.
  *
  * ⛔ THE `in:` TREE WAS DECLARED AND UNIMPLEMENTED, AND IT REPORTED SUCCESS.

@@ -4,6 +4,8 @@ import path from "node:path";
 import { Command } from "commander";
 import pc from "picocolors";
 import { checkCorpus, summarise } from "../../v2/check.js";
+import { interviewFor } from "../../v2/interview.js";
+import { rulingAct } from "../../v2/settle.js";
 import { stampFor, claimHash } from "../../v2/stamp.js";
 import { servesHash } from "../../v2/demonstrate.js";
 import { ANALYSES, sweep, sweeps, outstanding } from "../../v2/analyse.js";
@@ -906,7 +908,14 @@ export function v2Command(): Command {
             // choice — which is what the requirement asks for and what the fragment case
             // could not give.
             console.log(pc.dim("  each option above is the whole sentence, so picking one replaces it cleanly:"));
-            console.log(pc.dim(`    productos v2 rule ${q.ref} --pick N --because "…" --by <your name>`));
+            /**
+             * ⛔ `rulingAct` — ONE HOME, BECAUSE THIS BRANCH OMITTED THE FLAGS THE OTHERS ADD. A
+             * revising question on an org-wide rule still owes `--then`, and one on a disputed slot
+             * still wants `--stands`; these three branches printed neither, so the command was
+             * refused in exactly the cases the long ⛔ above this block is about. Extracting it put
+             * the four facts that change the verb in one place — see `rulingAct` in settle.ts.
+             */
+            console.log(pc.dim(`    ${rulingAct(q)}`));
             console.log(pc.dim(`    or instead: productos v2 rule ${q.ref} --says "…" --because "…" --by <your name>`));
           } else if (each.some((x) => x.inQuestion)) {
             /**
@@ -918,13 +927,11 @@ export function v2Command(): Command {
              * whole time.
              */
             console.log(pc.dim("  each option replaces the marked statement only — the others stand untouched:"));
-            console.log(pc.dim(`    productos v2 rule ${q.ref} --pick N --because "…" --by <your name>`));
+            console.log(pc.dim(`    ${rulingAct(q)}`));
           } else {
             console.log(pc.dim("  the options above answer only the unruled part, and a ruling here becomes the"));
             console.log(pc.dim("  whole sentence — so write the one you want, keeping what is already agreed:"));
-            console.log(
-              pc.dim(`    productos v2 rule ${q.ref} --says "…the whole sentence…" --because "…" --by <your name>`)
-            );
+            console.log(pc.dim(`    ${rulingAct(q)}`));
           }
         } else if (q.candidates.length) {
           console.log("");
@@ -938,17 +945,20 @@ export function v2Command(): Command {
             if (c.consequence) console.log(`       ${pc.dim(`→ ${c.consequence.replace(/\s+/g, " ")}`)}`);
           });
           const stands = q.conflictsWith.length ? ` --stands this` : "";
-          // ⛔ An org-wide ruling owes its demonstration in the same act, so the command
-          // printed has to include it — otherwise the tool refuses what it recommended, which
-          // is the failure this surface was rebuilt to remove.
           const then = q.needsThen ? ` --then "…what would show it holding…"` : "";
           const pol = q.asksPolarity ? ` --refuses yes|no` : "";
           console.log("");
+          /**
+           * ⛔ `--pick 1` RATHER THAN `--pick N` WHERE THERE IS ONE OPTION, which is the one thing
+           * this branch says that `rulingAct` does not — it is advice about reading a list, not a
+           * fact about what the verb accepts.
+           */
+          const act = rulingAct(q)!;
           console.log(
             pc.dim(
               q.candidates.length === 1
-                ? `  take it:    productos v2 rule ${q.ref} --pick 1${stands}${then}${pol} --because "…" --by <your name>`
-                : `  pick one:   productos v2 rule ${q.ref} --pick N${stands}${then}${pol} --because "…" --by <your name>`
+                ? `  take it:    ${act.replace("--pick N", "--pick 1")}`
+                : `  pick one:   ${act}`
             )
           );
           console.log(pc.dim(`  or instead: productos v2 rule ${q.ref} --says "…"${stands}${then}${pol} --because "…" --by <your name>`));
@@ -1005,10 +1015,7 @@ export function v2Command(): Command {
           console.log(pc.dim("  `candidates` to the standing (the productos-exchange skill covers the shape), then"));
           console.log(pc.dim("  pick one. Composing product truth at a prompt is how a decision gets made by"));
           console.log(pc.dim("  whoever is tired."));
-          const stands = q.conflictsWith.length ? ` --stands this` : "";
-          const then = q.needsThen ? ` --then "…what would show it holding…"` : "";
-          const pol = q.asksPolarity ? ` --refuses yes|no` : "";
-          console.log(pc.dim(`  or answer it now: productos v2 rule ${q.ref} --says "…"${stands}${then}${pol} --because "…" --by <your name>`));
+          console.log(pc.dim(`  or answer it now: ${rulingAct(q)}`));
         }
         if (q.kind === "contested word") {
           /**
@@ -1960,6 +1967,127 @@ export function v2Command(): Command {
         console.log(`    ${it.says}`);
         if (!it.shown_by.length) console.log(pc.yellow("    nothing here says what would show this working"));
       }
+    });
+
+  cmd
+    /**
+     * ⛔ THE INTERVIEW — what is still worth asking a person about one feature, folded so they
+     * answer each thing once.
+     *
+     * Peter: *"Examine product truth for a feature, determine what needs to be answered, have them
+     * ask the user for the answers, but combined in a way that lessens the burden on the user.
+     * pointed, directed questions, 3-4 possible answers (just like claude code). user can select
+     * them, or freeform the answer. this fills in the product graph."*
+     *
+     * ⛔ IT IS NOT `next`, AND THE TWO ARE NOT A DUPLICATE PAIR. `next` hands over sentences
+     * somebody has written for a person to AGREE to. This hands over the places where there is no
+     * sentence yet — a different act, a different surface, and the one that had nothing driving it.
+     *
+     * ⛔ AND IT DRAFTS NOTHING. `interview.ts` says where a question belongs and what shape an
+     * answer takes; the options a person picks between are written by an author through the `ask`
+     * intent. See that file's header for why a command may not invent them.
+     */
+    .command("interview")
+    .description("What is still worth asking somebody about one feature, folded so each thing is asked once")
+    .argument("[scope]", "the feature — omit for every feature with something unanswered")
+    .option("--take <n>", "how many questions to hand over", "4")
+    .option("--json", "as data, for driving a question interface")
+    /**
+     * ⛔ `<dir|url>` AND A `--token`, BECAUSE THE ROLE THAT READS THIS HAS NO LOCAL CORPUS.
+     *
+     * `interviewer`'s own brief opens by telling it to run this command, and every author's
+     * generated preamble opens with *"There is no local corpus. The truth lives in the hosted
+     * project."* `openAt` mirrors an instance and reads that, so the capability was there — but a
+     * `--at` documented as a directory, with no `--token` declared at all, is a capability nobody
+     * would try and that commander would refuse if they did.
+     */
+    .option("--at <dir|url>", "corpus directory, or an instance URL", "v2")
+    .option("--token <t>", "bearer token for an instance (or $PRODUCTOS_TOKEN)")
+    .action(async (scopeId: string | undefined, o: { take?: string; json?: boolean; at?: string; token?: string }) => {
+      const dir = await openAt(o);
+      /**
+       * ⛔ NO `checkCorpus` HERE ANY MORE. `interviewFor` reads blanks off the grid, which a loaded
+       * corpus already answers — so this surface, the page and an MCP caller all reach the same
+       * derivation without one of them needing a directory on disk.
+       */
+      const corpus = loadCorpus(dir);
+      refuseIfBroken(corpus, "an interview");
+      const take = Math.max(1, Number(o.take ?? 4));
+
+      if (scopeId && !corpus.scopes.some((x) => x.scope.id === scopeId)) {
+        console.error(pc.red("✗"), `no feature "${scopeId}"`);
+        process.exit(1);
+      }
+      const ids = scopeId
+        ? [scopeId]
+        : corpus.scopes.filter((x) => x.scope.exchanges.length || x.scope.views.length).map((x) => x.scope.id);
+
+      const rounds = ids
+        .map((id) => interviewFor(corpus, id))
+        .filter((x): x is NonNullable<typeof x> => Boolean(x && x.owed.length));
+
+      if (o.json) {
+        console.log(
+          JSON.stringify(
+            scopeId
+              ? rounds[0]
+                ? { ...rounds[0], owed: rounds[0].owed.slice(0, take) }
+                : { scope: scopeId, owed: [], closes: 0 }
+              : rounds.map((r) => ({ ...r, owed: r.owed.slice(0, take) })),
+            null,
+            2
+          )
+        );
+        return;
+      }
+
+      if (!rounds.length) {
+        console.log(
+          pc.green("✓"),
+          scopeId ? `nothing left to ask about ${scopeId}` : "nothing left to ask anywhere in this corpus"
+        );
+        return;
+      }
+
+      for (const r of rounds) {
+        console.log("");
+        /**
+         * ⛔ THE TWO NUMBERS ARE DIFFERENT AND BOTH ARE PRINTED. How many questions somebody is
+         * about to be asked, and how many holes those answers close. They are the same figure only
+         * when nothing folded, and the gap between them IS the thing this command was built for —
+         * a reader who cannot see it has no reason to believe the folding happened.
+         */
+        console.log(
+          pc.bold(r.title) +
+            pc.dim(
+              ` — ${r.owed.length} question${r.owed.length === 1 ? "" : "s"}, closing ${r.closes} hole${
+                r.closes === 1 ? "" : "s"
+              }`
+            ) +
+            (r.gate ? pc.yellow("  · purpose first") : "")
+        );
+        for (const q of r.owed.slice(0, take)) {
+          console.log("");
+          console.log(`  ${pc.cyan(q.asks)}`);
+          console.log(pc.dim(`    ${q.why}`));
+          if (q.fills.length > 1) console.log(pc.dim(`    fills: ${q.fills.join(", ")}`));
+          if (q.cost) console.log(`    ${pc.yellow("guessing wrong costs:")} ${q.cost}`);
+          for (const [n, c] of q.candidates.entries())
+            console.log(
+              `    ${n + 1}. ${c.says ?? (c.none ? "nothing to refuse" : (c.outcomes ?? []).map((x) => x.name).join(", "))}`
+            );
+          /**
+           * ⛔ THE ACT COMES FROM THE DERIVATION, NOT FROM A BRANCH HERE. This printed `ask` for
+           * every undrafted question, including the purpose — which `ask` refuses, because it is
+           * not a slot. Four kinds, four acts, and the one place that knows which is which is the
+           * file that decided the kind.
+           */
+          if (!q.candidates.length) console.log(pc.dim(`    an answer here is: ${q.shape}`));
+          console.log(pc.dim(`    ${q.act}`));
+        }
+      }
+      console.log("");
+      console.log(pc.dim("  options are drafted by an author and picked by a person — productos v2 decide <scope>"));
     });
 
   cmd

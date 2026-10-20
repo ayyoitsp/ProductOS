@@ -34,6 +34,7 @@ import { readinessOf } from "../v2/readiness.js";
 import { levelFields } from "../v2/level.js";
 import { find } from "../v2/find.js";
 import { questionsFor, descendants } from "../v2/settle.js";
+import { interviewFor } from "../v2/interview.js";
 import { decisionsUnder, howItWasDecided } from "../v2/record.js";
 import { renderScopePage, standalone } from "../v2/page.js";
 import { perform, preview, VIA, type Act, type Payload } from "../v2/acts.js";
@@ -176,6 +177,37 @@ const questionsTool = tool(
       scope: a.scope,
       questions: questionsFor(corpus, a.scope).map((q) => ({ ...q, ...levelFields(corpus, q.ref, { because: false }) })),
     };
+  }
+);
+
+/**
+ * ⛔ PETER: *"what is 'interview', this should be a first class representation in the UX - and claude
+ * should ideally be able to access this via mcp"*, and then: *"we should not be creating command line
+ * 'instructions' at this point? it should just be another functionality that could be reachable.
+ * maybe i'm just taking issue with you saying 'productos v2 interview' command line, like no one will
+ * ever use the command line"*.
+ *
+ * He is right, and it is a correction about where a derivation is allowed to land. `interviewFor` was
+ * delivered as a CLI verb with the `interviewer` role's brief telling it to shell out — which is a
+ * capability reachable only from a checkout, aimed at a role whose own preamble opens *"There is no
+ * local corpus."*
+ *
+ * ⛔ AND IT IS DISTINCT FROM `productos_exchange_questions`, WHICH IS THE ONE TO CHECK. That tool
+ * answers *"what has somebody been asked"* — every question already drafted, waiting on a person.
+ * This answers *"what has nobody been asked yet"*, which is the larger set and the one nothing
+ * reached: the blank slots, folded so one answer covers every site blank on the same policy, with
+ * everything an existing question already speaks for removed. A model holding only `questions` sees
+ * an empty queue on a corpus with ninety holes in it.
+ */
+const interviewTool = tool(
+  "productos_exchange_interview",
+  "What is still worth ASKING about one scope and everything beneath it — the holes, folded so each thing is asked once. Distinct from productos_exchange_questions, which returns what has already been drafted and is waiting on a person: this returns what nobody has been asked yet. Each item says the question as a person would read it, every slot one answer would fill, what shape an answer has to take, and the act that moves it along. ⛔ You draft the options and present them; a person chooses. Never answer one for them.",
+  AtDir.extend({ scope: z.string().describe("scope id — its own holes and those of everything filed beneath it") }),
+  (a, paths) => {
+    const dir = dirOf(a, paths);
+    const corpus = loadCorpus(dir);
+    if (!corpus.scopes.some((x) => x.scope.id === a.scope)) throw new Error(`no scope "${a.scope}"`);
+    return { dir, ...interviewFor(corpus, a.scope) };
   }
 );
 
@@ -718,6 +750,8 @@ export const EXCHANGE_READ_TOOLS: McpTool[] = [
   scopesTool,
   findTool,
   questionsTool,
+  /** ⛔ Beside `questions`, because the pair is the point: what has been asked, and what has not. */
+  interviewTool,
   gridTool,
   packetTool,
   readinessTool,

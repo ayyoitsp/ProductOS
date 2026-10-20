@@ -355,6 +355,37 @@ export const SLOT_ASKS_SHORT: Record<SlotName, string> = {
   at_once: "two at once",
 };
 
+/**
+ * The same asks, as a question somebody is actually put in front of.
+ *
+ * ⛔ A THIRD FORM, AND IT BELONGS HERE FOR THE REASON THE COMMENT ABOVE GIVES. `SLOT_ASKS` and
+ * `SLOT_ASKS_SHORT` sit together so *"a change to either is visible against the other"*; this is
+ * the same fact in the third shape a surface needs, so it sits in the same place. A table of
+ * question wordings anywhere else is the drift that comment is about.
+ *
+ * ⛔ AND IT IS NOT DERIVABLE FROM EITHER OF THE OTHER TWO, which is why composing one was wrong.
+ * `SLOT_ASKS` completes *"this slot says ___"*, and its entries are a mix of noun phrases (*"who is
+ * permitted to ask"*) and clauses (*"what happens when it is asked twice"*). The first attempt at
+ * the interview built questions as `what is ${SLOT_ASKS[slot]}?` and produced **"what is what
+ * happens when it is asked twice?"** on two of the eight — a template that reads fine on the slot
+ * you tested and is broken on the others, which is this project's most-repeated defect wearing a
+ * grammar.
+ *
+ * ⛔ POINTED AND IN THE SECOND PERSON. Peter: *"pointed, directed questions"*. These are what a
+ * person reads on a page or in a terminal, so they ask about the product and never about the model
+ * — no slot name, no `asker`, no ref.
+ */
+export const SLOT_ASKED: Record<SlotName, string> = {
+  may: "Who is allowed to do this?",
+  with: "What does somebody have to know before they can do it?",
+  answer: "What do they get back?",
+  after: "What is different afterwards, whether or not they see it?",
+  refuses: "What can this refuse, when does it refuse, and what is the person told?",
+  fails: "What is somebody left with when this cannot be done?",
+  again: "What happens when this is done twice?",
+  at_once: "What happens when two people do this at the same time?",
+};
+
 // ---------------------------------------------------------------------------
 // Standing — the disposition of a slot. One enum; each value demands its companions.
 
@@ -1129,6 +1160,37 @@ export const DEMONSTRABLE_SLOTS: readonly SlotName[] = [
   "again",
   "at_once",
 ];
+
+/**
+ * The five slots whose answer is a POLICY, and the three whose answer is a fact about one ask.
+ *
+ * ⛔ THIS IS WHAT MAKES FOLDING HONEST, AND WITHOUT IT THE FOLD WAS A LIE ON THREE SLOTS.
+ *
+ * `interview.ts` offers several behaviours blank on one slot as ONE question, on the grounds that
+ * the slot IS the question — `SLOT_ASKS.at_once` is one sentence and it is the same sentence at
+ * every site. That holds for what a product does about permission, refusal, failure, repetition and
+ * concurrency: each is a decision taken once and applied, which is exactly why `Rule` exists and
+ * why it can SUPPLY these outright.
+ *
+ * It does not hold for the other three. *"What must be known to ask"*, *"what the asker gets"* and
+ * *"what is true afterwards"* are facts about one ask — three behaviours blank on `after` are blank
+ * on three different questions, and folding them offers one answer for all three. A reviewer who
+ * picked it would have settled two behaviours they were never shown.
+ *
+ * ⛔ READ OFF THE RULES A REAL CORPUS HAS, not reasoned from the names. Every rule in `v2-seed`
+ * SUPPLIES one of these five (`only-a-parent-moves-money` → `may`, `a-repeat-does-nothing-twice` →
+ * `again`, `nothing-half-happens` → `fails`, `amounts-refuse-the-same-way` → `refuses`,
+ * `one-hand-at-a-time` → `at_once`). **No rule anywhere fills `with` or `after`.** `answer` is the
+ * one to look at twice: three rules declare `fills: [answer]` and the grid shows it `✓+R4+R9` at
+ * every site — stated locally and CONSTRAINED by a rule, never supplied by one. A cross-cutting
+ * claim about how a figure reads is not an answer to what the asker gets.
+ *
+ * ⛔ NOT `DEMONSTRABLE_SLOTS` WITH A TWEAK, THOUGH IT IS ONE SLOT AWAY. That set answers "does this
+ * owe a given/when/then"; this one answers "is one answer here an answer everywhere". `answer` owes
+ * a demonstration and does not fold, which is the whole difference — collapsing them would make the
+ * next change to either silently change the other.
+ */
+export const POLICY_SLOTS: readonly SlotName[] = ["may", "refuses", "fails", "again", "at_once"];
 
 /**
  * Whether this slot, as filled, owes a given/when/then of its own.

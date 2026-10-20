@@ -295,6 +295,18 @@ export const AREAS: Area[] = [
       "src/v2/find.ts",
       "src/v2/settle.ts",
       /**
+       * ⛔ `derive`, AND A PROJECTION LIKE `readiness.ts` — IT MUST NEVER BECOME A SECOND ANSWER TO
+       * "WHAT IS A HOLE". The blanks are `check.ts`'s, the purpose gate is `actsFor`'s, the
+       * questions are `questionsFor`'s. What it decides is the one thing nothing else decides: how
+       * FEW times a person has to answer, by folding every site blank on one slot into one question
+       * and dropping every slot an existing question already speaks for.
+       *
+       * ⛔ It writes nothing, which is why it is here and not under `generate`. The options a person
+       * picks between are written by the `interviewer`, through the `ask` intent — because a
+       * sentence software made up is indistinguishable from one somebody agreed to.
+       */
+      "src/v2/interview.ts",
+      /**
        * ⛔ WHICH CLAIMS ONE STATED SENTENCE SETTLES, AND WHICH IT ONLY ASKS ABOUT. Filed under
        * `derive` rather than beside `acts.ts` because it decides nothing and writes nothing: it
        * computes, from a sentence and a selector, the list a person reads before they press. The
@@ -1299,6 +1311,96 @@ export const AUTHORS: Author[] = [
    * Before this, engineering existed in the registry only as judges — `truthfulness`,
    * `architecture`, `buildability` — three roles reviewing work that no engineering role wrote.
    */
+  /**
+   * ⛔ THE ROLE THAT MAKES A HOLE ANSWERABLE, AND THERE WAS NO SUCH ROLE.
+   *
+   * Peter: *"Examine product truth for a feature, determine what needs to be answered, have them ask
+   * the user for the answers, but combined in a way that lessens the burden on the user. pointed,
+   * directed questions, 3-4 possible answers (just like claude code). user can select them, or
+   * freeform the answer."*
+   *
+   * ⛔ EVERY OTHER AUTHOR WRITES SENTENCES, AND A SENTENCE IS THE WRONG SHAPE FOR THE THING NOBODY
+   * HAS DECIDED. Each of them is told to write `question:` where it cannot resolve something — and
+   * that produces a bare question with nothing to pick between, which `Standing.candidates` names as
+   * the state the model used to leave a decider in: *"a page asking 'Can both kids complete the same
+   * task, or is it claimed by whoever presses first?' and no way to tell what either answer would
+   * cost, what else hangs on it, or how to record having chosen. A question a person cannot act on
+   * is not a queue item, it is a decoration."*
+   *
+   * So this role's whole output is the pick-one-of-three — and it is a separate pass for the reason
+   * the surveyor is: drafting answers while writing the feature means doing it in whatever words the
+   * last slot used, for one site at a time, with no view of the three other behaviours blank on the
+   * same question.
+   */
+  {
+    name: "interviewer",
+    discipline: "product",
+    asks: "What has nobody decided here, and what are the three or four answers somebody could pick between?",
+    because:
+      "The answering half of this loop shipped complete and the asking half was hand-typed. Every " +
+      "question in every corpus was invented by whoever had the patience to invent it, so the queue " +
+      "a person works through was never a measure of what was undecided — it was a measure of " +
+      "somebody's stamina. `productos_exchange_interview` now says where the questions are; this " +
+      "writes the answers a person chooses between.",
+    reads: [
+      /**
+       * ⛔ FIRST, AND IT IS THE WHOLE POINT OF THE ROLE EXISTING SEPARATELY. The worklist has
+       * already folded the blanks, so a question covering four behaviours is read as one question.
+       * An author finding holes by eye asks four times.
+       */
+      /**
+       * ⛔ THE MCP TOOL, NOT A SHELL LINE. Peter: *"we should not be creating command line
+       * 'instructions' at this point? it should just be another functionality that could be
+       * reachable... like no one will ever use the command line"* — and this role's own preamble
+       * opens *"There is no local corpus"*, so a CLI instruction here was unfollowable as well as
+       * wrong.
+       */
+      "`productos_exchange_interview { scope }` — the holes, already folded, each saying what shape an answer takes",
+      "its own scope, and the code that implements it where code exists",
+      "what the product already calls these things, so an option is in the words the corpus uses",
+    ],
+    writes: [
+      /**
+       * ⛔ THROUGH `ask`, AND NOT BY EDITING A SCOPE. The intent lands the question `open` with its
+       * candidates, which is the one shape `decide` renders as pressable options and `rule --pick`
+       * settles in one act. A hand-written standing is how a corpus comes to hold two shapes of
+       * question with nothing recording which is right.
+       */
+      "one `open` standing per question, through the `ask` intent — never by editing a scope",
+      "three or four candidate answers on each, every one of them something a reasonable person would choose",
+      "`consequence` on every option — what follows if this is the answer, what it rules out",
+      "`cost` — what it costs to guess wrong, which is what makes the question worth a person's time",
+      "`blocks` — every other slot this one answer settles, which is what `interview` already worked out",
+    ],
+    never: [
+      /**
+       * ⛔ THE ONE THAT MATTERS. A drafted option is indistinguishable from an agreed sentence once
+       * it is in a file, and `propose-slots.ts` holds the same line: *"a sentence this file made up
+       * would be indistinguishable from one somebody agreed to"*.
+       */
+      "settle anything, pick between its own options, or write a sentence anywhere but inside a candidate — the options are offered, and a person chooses",
+      "pad to three or four. Two honest answers are two options; a third invented to fill the list is a decision disguised as a choice, and it is the one a tired reviewer picks",
+      "draft options that differ only in wording — two options with no stated difference in `consequence` is not a choice",
+      "ask about something already asked: `interview` excludes every slot an existing question speaks for, so a second question on one is the same question twice",
+      "stamp anything walked, validated or accepted",
+    ],
+    /**
+     * ⛔ THE ONE AUTHOR THAT DECLARES `ask-the-corpus`, AND IT IS NOT A CONVENIENCE.
+     *
+     * Every other author's input is files — its own scope and the code that implements it. This
+     * one's input is a DERIVATION: the folded worklist, which exists nowhere on disk and is
+     * answered by `productos_exchange_interview`. Without the capability its own brief is
+     * unrunnable, which is exactly what the prompt-names-an-unheld-tool guard reported.
+     *
+     * ⛔ Still an author and still unable to settle anything: `ask-the-corpus` is the read half of
+     * ProductOS's own surface and holds no act. The door it writes through comes from
+     * `write-corpus`, and what it lands there is `open` by construction.
+     */
+    needs: ["read-files", "search-files", "run-commands", "write-corpus", "ask-the-corpus"],
+    each: "feature",
+    authors: true,
+    prompt: "agents/productos-interviewer.md",
+  },
   {
     name: "machinist",
     discipline: "engineering",
@@ -1690,6 +1792,15 @@ export const COMMANDS: Verb[] = [
    */
   { name: "v2 analyse", does: "What work an analysis has left across a corpus, and which of it is stale", owns: "derive", who: "claude" },
   { name: "v2 next", does: "What to ask somebody next about one feature", owns: "derive", who: "claude" },
+  /**
+   * ⛔ `derive`, BESIDE `next`, AND NOT `surface` — WHICH IS WHERE A COMMAND THAT PRINTS QUESTIONS
+   * LOOKS LIKE IT BELONGS. It decides nothing and writes nothing: it takes `check`'s blanks,
+   * `actsFor`'s purpose gate and `questionsFor`'s open questions, and folds them. The thing a
+   * reviewer has to check about it is whether the count it reports can be recomputed from what it
+   * returned — an arithmetic question about a derivation. `decide`, which shows a person each
+   * question and the act that answers it, is the `surface` next to it.
+   */
+  { name: "v2 interview", does: "What is still worth asking somebody about one feature, folded so each thing is asked once", owns: "derive", who: "claude" },
   { name: "v2 page", does: "Render one scope as a page a person can review", owns: "surface", who: "claude" },
   { name: "v2 publishable", does: "Emit the interactive page for publishing, if the corpus allows it", owns: "surface", who: "claude" },
 
@@ -1974,12 +2085,32 @@ export const SHIMS: Shim[] = [
        * the right screens. Both are questions about the truth itself, which is the thing being
        * validated.
        */
+      /**
+       * ⛔ AFTER EVERY AUTHOR AND BEFORE EVERY JUDGE, BECAUSE IT WORKS ON WHAT THEY LEFT.
+       *
+       * Each author above is told to write `question:` where it cannot resolve something, which is
+       * right — a guess reads exactly like a decision. What that produces is a bare question, and
+       * `Standing.candidates` names that state as the one the model used to leave a decider in:
+       * nothing to pick between, no stated cost, no way to record having chosen.
+       *
+       * ⛔ It cannot run earlier: `productos v2 interview` folds the blanks across a feature's
+       * behaviours, so it has to see all of them. Run per-author, it would ask about each site as it
+       * appeared — which is the burden this whole route exists to reduce.
+       */
+      { role: "interviewer", why: "the three or four answers a person could pick between, for everything the authors above left undecided" },
       { role: "completeness", why: "whether somebody can get from the start of this feature to the end of it" },
       { role: "design-critique", fan: true, why: "whether these are the right screens for the job, not just complete ones" },
     ],
     keeps: [
       "the conversation about what this feature is for — a purpose inferred from code is a purpose nobody chose",
-      "putting every open question to the person, in their own interface",
+      /**
+       * ⛔ STILL THE SESSION'S, AND THE INTERVIEWER DOES NOT TAKE IT. The role drafts the options;
+       * putting them to the person is the one job that may never be delegated, because a subagent
+       * is not talking to anybody. Peter: *"pointed, directed questions, 3-4 possible answers (just
+       * like claude code). user can select them, or freeform the answer."* — that is this line,
+       * and the drafted candidates are what make it answerable in one act instead of an essay.
+       */
+      "putting every open question to the person, in their own interface — `productos v2 decide <feature>` is the list, the options are pressable, and `--says` is always there for an answer nobody drafted",
       "every act of judgement, and never answering one on their behalf",
       "⛔ settling the subsystem tree with a person before the decomposer runs, and never spawning one per feature — a part that serves several features cannot be named by a role that can see only one of them",
       "⛔ stopping here. The engineering and QA reads are a different route and it cannot run until somebody has agreed to this — an engineer costing a draft produces a decision nobody made",
@@ -2002,6 +2133,12 @@ export const SHIMS: Shim[] = [
       { role: "evidencer", why: "what the repository already demonstrates, found by somebody who did not write the claims" },
       { role: "completeness", fan: true, why: "every feature walked end to end, because a first corpus is where paths fail to join" },
       { role: "coherence", why: "⛔ the whole corpus at once — thirty scopers writing in isolation is exactly how one word comes to mean two things" },
+      /**
+       * ⛔ FANNED HERE AND NOT THERE, because a first corpus is thirty features' worth of holes and
+       * one context cannot hold them. The fold is per-feature either way — `interview` works at a
+       * feature and its descendants — so fanning costs nothing and collapses nothing.
+       */
+      { role: "interviewer", fan: true, why: "every feature's undecided parts turned into answers a person can pick between" },
       { role: "hand-authored", why: "whether anything was typed that a generator should have produced — on a run this large, nobody would notice" },
     ],
     keeps: [
