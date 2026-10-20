@@ -113,8 +113,33 @@ const json = (res: http.ServerResponse, body: unknown, status = 200): void => {
   res.end(JSON.stringify(body, null, 2));
 };
 
+/**
+ * ⛔ A PAGE OF PRODUCT TRUTH IS NEVER CACHEABLE, AND IT WAS SERVED WITH NO HEADERS AT ALL.
+ *
+ * No `Cache-Control`, no `ETag`, no `Last-Modified` — and a 200 carrying no freshness information
+ * and no validator is HEURISTICALLY cacheable, so a browser is entitled to keep serving its copy.
+ *
+ * What that cost: a render fix shipped, the instance served the corrected page in 1.3s, every drive
+ * passed — and Peter's own tab went on showing the defect. Measured in his browser against the
+ * server's bytes for the same URL: his document had none of the new markers and still deferred
+ * feature sections, which is the previous architecture. He was looking at a page from before the
+ * deploy and reloading did not replace it. *"so broken, can't even get to a single page in
+ * product/capabilities to load"*, about a page that was already fixed.
+ *
+ * ⛔ AND IT IS WORSE THAN A STALE DEPLOY, which is only the way it announced itself. This corpus
+ * changes on every press — an agreement, a note, a redraw — so a cacheable page means a reviewer
+ * can agree to a sentence that has already been reworded, and nothing on screen says so. That is
+ * the one failure this surface cannot have.
+ *
+ * `no-store` rather than `no-cache`: no-cache still stores and revalidates, and there is nothing to
+ * revalidate against without a validator. Nothing here is worth keeping between presses anyway.
+ */
 const html = (res: http.ServerResponse, body: string, status = 200): void => {
-  res.writeHead(status, { "content-type": "text/html; charset=utf-8" });
+  res.writeHead(status, {
+    "content-type": "text/html; charset=utf-8",
+    "cache-control": "no-store, must-revalidate",
+    pragma: "no-cache",
+  });
   res.end(body);
 };
 
