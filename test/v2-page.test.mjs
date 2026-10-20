@@ -292,9 +292,25 @@ test("each feature is its own view, reachable from the menu", () => {
   const navHtml = /<nav class="scopes">[\s\S]*?<\/nav>/.exec(html)[0];
   const menu = [...navHtml.matchAll(/data-goto="([^"]+)"/g)].map((m) => m[1]);
 
+  /**
+   * ⛔ ITS OWN VIEW IS ON ITS OWN PAGE NOW, AND THE MENU IS WHAT MAKES IT REACHABLE FROM HERE.
+   *
+   * This asked the ROOT's served page for a view per descendant, which was the architecture Peter
+   * had removed: *"just loading data, rendering the page we're on, no tree walking, nothing."* On a
+   * served page the root renders the root.
+   *
+   * The claim in the title is unchanged and still checkable in both halves — reachable FROM the menu
+   * here, its own single view THERE. ⛔ And it is a stronger check than the original: that one could
+   * be satisfied by a page carrying a feature's section while the menu row pointed somewhere else,
+   * because it never asked the feature's own address for anything.
+   */
   for (const id of withBehaviours) {
-    assert.ok(views.includes(id), `${id} has behaviours and no view of its own`);
-    assert.ok(menu.includes(id), `${id} has a view and no way to reach it`);
+    assert.ok(menu.includes(id), `${id} has behaviours and no way to reach it from the menu`);
+    const own = [...renderScopePage(corpus, id, { linkBase: "/v2" }).matchAll(/data-view="([^"]+)"/g)].map((m) => m[1]);
+    assert.ok(own.includes(id), `${id} has behaviours and no view of its own on its own page`);
+    assert.equal(own.filter((v) => v === id).length, 1, `${id} renders more than one section claiming it`);
+    const strangers = own.filter((v) => v !== id && withBehaviours.includes(v));
+    assert.deepEqual(strangers, [], `${id}'s page carries other features' sections: ${strangers.join(", ")}`);
   }
   /**
    * ⛔ The queue lives on Overview now, reached by a TAB rather than a row in the tree. Beside the

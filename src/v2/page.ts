@@ -4023,7 +4023,19 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
    * Narrowing what gets LOADED to match what gets rendered is the next commit and a different
    * layer; doing both at once would make a correctness fix indistinguishable from a perf change.
    */
-  const grids = [scopeId]
+  /**
+   * ⛔ ONE SCOPE ONLY WHERE THERE IS SOMEWHERE TO NAVIGATE TO. A page with no address cannot be one
+   * page of many: `v2 page --out` writes a FILE and a published artifact is a single document, with
+   * no server to ask for the next scope. Cutting the subtree out of those leaves a reader with one
+   * feature and a menu full of rows that can never resolve — the standalone render's whole job is to
+   * be complete.
+   *
+   * The same distinction `only` already draws, and for the same reason: the served page defers
+   * because it can fetch, and the standalone page must not because it cannot.
+   */
+  const servedPage = !!opts.linkBase;
+  const renderIds = servedPage ? [scopeId] : ids;
+  const grids = renderIds
     .map((id) => gridFor(corpus, id))
     .filter((x): x is Grid => !!x && x.rows.length > 0);
   const cellOf = new Map<string, Cell>();
@@ -4111,8 +4123,15 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
    * The duplicate-description worry the old comment records was about the corpus root, where the
    * landing already describes the product. Guarded below rather than by excluding every scope.
    */
-  const containerViews = [scopeId].filter(
-    (id) => (corpus.scopes.find((s) => s.scope.id === id)?.scope.exchanges.length ?? 0) === 0 && !!entry.scope.in
+  const containerViews = (servedPage ? [scopeId] : ids).filter(
+    (id) =>
+      (corpus.scopes.find((s) => s.scope.id === id)?.scope.exchanges.length ?? 0) === 0 &&
+      /**
+       * ⛔ On a served page this scope's OWN listing is the thing; on a standalone one it is still
+       * excluded, because there the landing already describes it and rendering both put its
+       * description under two headings.
+       */
+      (servedPage ? !!entry.scope.in : id !== scopeId)
   );
   const viewed = new Set<string>([...grids.map((g) => g.scope), ...containerViews]);
   const anchors = new Set<string>([
@@ -8205,6 +8224,15 @@ const VIEW_SWITCH = `<script>
    * names rent-roll, and every segment before it is a view too. Reading left to right would land
    * a reader on the area every time they asked for a feature inside it.
    */
+  /**
+   * ⛔ ONE PLACE THAT ASKS "DOES THIS DOCUMENT HOLD THAT SECTION", because the answer now decides
+   * whether a press stays here or becomes a navigation — and two copies of the selector is two
+   * answers waiting to drift. CSS.escape is feature-detected because every ref in this model
+   * carries a #.
+   */
+  const sectionNamed = (name) =>
+    document.querySelector('section.view[data-view="' + (window.CSS && CSS.escape ? CSS.escape(name) : name) + '"]');
+
   const viewAt = (pathname) => {
     if (!BASE || pathname.indexOf(BASE) !== 0) return null;
     const segs = pathname.slice(BASE.length).split("/").filter(Boolean).map(decodeURIComponent);
@@ -8315,9 +8343,7 @@ const VIEW_SWITCH = `<script>
      */
     if (a.dataset.goto) {
       const name = a.dataset.goto;
-      const held = document.querySelector(
-        'section.view[data-view="' + (window.CSS && CSS.escape ? CSS.escape(name) : name) + '"]'
-      );
+      const held = sectionNamed(name);
       /* Not here: let the browser have it. One rendering per address, by construction. */
       if (!held) return;
       e.preventDefault();
@@ -8343,8 +8369,7 @@ const VIEW_SWITCH = `<script>
     /** ⛔ The address is the path now; the hash is only read when there is no path to read. */
     const byPath = viewAt(location.pathname);
     const name = byPath || (h === "view-overview" || !h ? "overview" : h.replace(/^at-/, ""));
-    const target = document.querySelector('section.view[data-view="' + (window.CSS && CSS.escape ? CSS.escape(name) : name) + '"]');
-    if (target) show(name, true, true);
+    if (sectionNamed(name)) show(name, true, true);
   };
   window.addEventListener("popstate", fromAddress);
   window.addEventListener("hashchange", fromAddress);
