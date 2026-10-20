@@ -139,11 +139,60 @@ export function demonstrationOf(corpus: Corpus, scopeId: string, exchangeId: str
 
 /** Every exchange in the corpus, in reading order. */
 export function demonstrations(corpus: Corpus): Demonstration[] {
-  return corpus.scopes.flatMap(({ scope }) =>
-    scope.exchanges
-      .map((e) => demonstrationOf(corpus, scope.id, e.id))
-      .filter((d): d is Demonstration => d !== null)
-  );
+  return [
+    ...corpus.scopes.flatMap(({ scope }) =>
+      scope.exchanges
+        .map((e) => demonstrationOf(corpus, scope.id, e.id))
+        .filter((d): d is Demonstration => d !== null)
+    ),
+    ...corpus.rules.map(({ rule }) => demonstrationOfRule(corpus, rule.id)).filter((d): d is Demonstration => d !== null),
+  ];
+}
+
+/**
+ * What a RULE's requirements demonstrate, and whether each still matches the rule as it reads.
+ *
+ * ⛔ WITHOUT THIS, 55 REQUIREMENTS COULD NOT GO STALE. `demonstrations` walked `scope.exchanges`
+ * only, so a rule's criteria were never examined — and this project asks an author to put a
+ * sentence true of several features into a RULE rather than copy it, which means the requirements
+ * most likely to be shared were the ones with no staleness at all. A demonstrator writing the two
+ * publish checkpoints did exactly that, correctly, and reported the hole.
+ *
+ * ⛔ A STALE REQUIREMENT IS THE ONE FAILURE THAT PASSES. It gets implemented and goes green,
+ * proving the sentence that used to be there — which is why `check` refuses rather than notes it
+ * for an exchange. Rules were exempt by accident, not by argument.
+ *
+ * ⛔ THE CLAIM IS THE RULE ITSELF, with no slot segment. A rule says one thing — its `statement`,
+ * its `mode`, the slots it `fills` — and `coveredBy` has always hashed exactly that. There is no
+ * statement grain to narrow to, so `of` has nothing to name here and a requirement's claim is the
+ * rule's id.
+ */
+export function demonstrationOfRule(corpus: Corpus, ruleId: string): Demonstration | null {
+  const rule = corpus.rules.find((r) => r.rule.id === ruleId)?.rule;
+  if (!rule) return null;
+  const now = claimHash(corpus, ruleId);
+  return {
+    ref: ruleId,
+    requirements: rule.criteria.map((c) => ({
+      ref: `${ruleId}#shows#${c.id}`,
+      criterion: c,
+      claim: ruleId,
+      now,
+      state: !c.derived ? "authored" : c.derived.from === now ? "current" : "stale",
+      /**
+       * ⛔ A rule is not stamped, so nothing here can be agreed to yet — and saying `false` is
+       * strictly more than omitting it: the requirement exists, here is what it demonstrates, and
+       * nobody has agreed to that sentence.
+       */
+      agreed: false,
+    })),
+    /**
+     * ⛔ NOT REPORTED AS OWING ONE. `a-rule-that-demonstrates-nothing` already says a rule with no
+     * criteria demonstrates nothing, and a second finding for the same absence would be two voices
+     * on one fact — which is what this file's own header warns against.
+     */
+    undemonstrated: [],
+  };
 }
 
 // ---------------------------------------------------------------------------

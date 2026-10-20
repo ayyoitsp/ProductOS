@@ -1,0 +1,9 @@
+id: "0193"
+said: the deal overview page doesn't even have the right fucking tabs. like what is this? there's no versioning concepts, paging between different rent roll versions, still has this bullshit 'blue harbour, fariveiw court, northwin' tabs at the top? no tabs for any of the verticals? WTF?
+at: 2026-10-19
+kind: generator
+reaches:
+  generate: itemsOf
+  pin: a list written as const is the product's own words
+waived: {}
+closed: 2026-10-19

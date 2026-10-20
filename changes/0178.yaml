@@ -1,0 +1,8 @@
+id: "0178"
+said: a demonstrator reported a steps-shaped requirement rendering as an empty bullet on the live page, under a summary counting it
+at: 2026-10-17
+kind: surface
+reaches:
+  surface: c.steps && `<span class="g">steps</span>
+  pin: and no requirement renders as an empty bullet
+waived: {}

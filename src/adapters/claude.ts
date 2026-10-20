@@ -99,7 +99,17 @@ const TOOL_FOR: Record<Capability, string[]> = {
    * capability; `installClaudeAuthors` walks `AUTHORS`. Two interfaces, two required literals, so
    * neither list can quietly acquire a member of the other kind.
    */
-  "write-corpus": ["Write", "Edit"],
+  /**
+   * ⛔ AND THE DOOR, BECAUSE THE CORPUS IS HOSTED. Peter: *"there should be no 'local corpus'...
+   * always hosted server"*. `Write` and `Edit` reach a directory; the truth is in a hosted project,
+   * which an author reaches through `productos_in { intent: "document" }` and nothing else — so an
+   * author holding only the editors did its work on disk and the product never saw it. The manual
+   * and the check come with it: a write nobody can read back is a write nobody knows parsed.
+   *
+   * ⛔ STILL UNREACHABLE FROM A JUDGE: no judge may declare `write-corpus` (a registry test), and
+   * `writingToolsIn` counts the door as writing, so the installer refuses a judge that holds it.
+   */
+  "write-corpus": ["Write", "Edit", "productos_in", "productos_intents", "productos_exchange_check", "productos_exchange_source"],
   /**
    * ⛔ PRODUCTOS'S OWN SURFACE, READ HALF ONLY — AND NO ROLE COULD REACH IT AT ALL BEFORE THIS.
    *
@@ -130,6 +140,7 @@ const TOOL_FOR: Record<Capability, string[]> = {
     "productos_exchange_can_be_agreed_to",
     "productos_exchange_check",
     "productos_exchange_record",
+    "productos_exchange_source",
   ],
 };
 
@@ -446,7 +457,7 @@ export interface ClaudeInstallResult {
    * going to read the adapter.
    */
   mcpName: string;
-  /** ⛔ And what it will actually run — the whole point is that this is no longer ambiguous. */
+  /** ⛔ The hosted project it reaches — empty when none was named. */
   mcpRuns: string;
   /** True if installed via symlink (dev install) instead of copy. */
   symlinked: boolean;
@@ -571,41 +582,32 @@ export function mcpServerName(root: string = checkoutRoot()): string {
 }
 
 export interface McpRegistration {
-  command: string;
-  args: string[];
-  env?: Record<string, string>;
+  type: "http";
+  url: string;
+  headers?: Record<string, string>;
 }
 
 /**
- * What goes into a host's MCP config so the server runs THIS checkout's code.
+ * What goes into a host's MCP config: the hosted project, and nothing on this machine.
  *
- * ⛔ ABSOLUTE, AND ONLY FOR A DEV INSTALL. A published install's `.mcp.json` is the file a team
- * commits and shares, so `productos` — resolved from the consumer's own PATH or `node_modules` — is
- * the only portable thing to put in it. An absolute path there hands every teammate a directory
- * that does not exist on their machine. The ambiguity this fixes is a *dev* ambiguity: several
- * checkouts of ProductOS, one `npm link` slot.
+ * ⛔ THERE IS NO LOCAL SERVER ANY MORE. Peter: *"there should be no 'local corpus'. that should be
+ * completely stripped"* and *"yes, always hosted server"*. The stdio server this used to register
+ * read a directory on disk and carried the retired v1 tools beside the Exchange ones, and over it an
+ * agent that typed `via: page` was recorded as a person agreeing. The hosted server reads the store,
+ * exposes only the Exchange tools, and refuses human consent from a token, so it is the only way in.
  *
- * ⛔ `process.execPath` RATHER THAN THE LAUNCHER DIRECTLY. `bin/productos.js` starts with
- * `#!/usr/bin/env node`, which needs `node` on the PATH of whatever spawned it — and the Claude
- * desktop app, which is one of the three readers registered below, is launched by the window server
- * with almost no PATH at all. The node already running this install is a path that exists.
+ * ⛔ THE TOKEN IS NEVER WRITTEN. `.mcp.json` is the file a team commits; the header names the
+ * environment variable and Claude Code expands it when it connects.
  */
-export function mcpServerFor(opts: { root?: string; dev: boolean; corpusRoot?: string }): McpRegistration {
-  const root = opts.root ?? checkoutRoot();
-  const launcher = path.join(root, "bin", "productos.js");
-  if (!opts.dev || !fs.existsSync(launcher)) return { command: "productos", args: ["serve", "--mcp"] };
-  const reg: McpRegistration = {
-    command: process.execPath,
-    args: [launcher, "serve", "--mcp"],
+export function mcpServerFor(opts: { instance: string; tokenEnv?: string }): McpRegistration {
+  const base = opts.instance.replace(/\/+$/, "").replace(/\/mcp$/, "");
+  if (!/^https?:\/\/[^/]+\/p\/[^/]+$/.test(base))
+    throw new Error(`"${opts.instance}" is not a hosted project — expected https://<instance>/p/<project>`);
+  return {
+    type: "http",
+    url: `${base}/mcp`,
+    headers: { Authorization: `Bearer \${${opts.tokenEnv ?? "PRODUCTOS_TOKEN"}}` },
   };
-  /**
-   * ⛔ AND IT IS TOLD WHICH CORPUS, because running the right code is only half of it. `wakeOnWork`
-   * in `src/mcp/server.ts` resolves the corpus from the server process's cwd unless
-   * `PRODUCTOS_V2_DIR` names one — and the cwd of a server a host spawned is the host's business,
-   * not ours. That is the exact gap the comment there was written about.
-   */
-  if (opts.corpusRoot) reg.env = { PRODUCTOS_V2_DIR: path.join(path.resolve(opts.corpusRoot), "productos", "v2") };
-  return reg;
 }
 
 /**
@@ -762,6 +764,8 @@ export function installClaudeSkills(
      * one store quietly becomes two. The caller already resolved the corpus — it passes the steers.
      */
     steers?: readonly Steer[];
+    /** The hosted project, as `https://<instance>/p/<project>`. Falls back to the config's `instance`. */
+    instance?: string;
     /**
      * ⛔ THE HOST'S OWN DIRECTORY, OVERRIDABLE — AND THE ONLY REASON IS THAT A TEST MAY NOT WRITE
      * INTO IT. `~/.claude/` is read by every live session on this machine, so running an install to
@@ -887,17 +891,20 @@ export function installClaudeSkills(
    * `mcpServerFor` is where that is now decided and why; `mcpServerName` is why two checkouts can
    * both be in `~/.claude.json` instead of overwriting each other.
    */
-  const server = mcpServerFor({ root: checkout, dev, corpusRoot: opts.configRoot });
   const name = mcpServerName(checkout);
   const wrote: string[] = [];
-  const register = (file: string, make = true): void => {
-    if (writeMcpRegistration(file, name, server, make)) wrote.push(file);
-  };
-
-  const inRepo = fs.existsSync(path.join(process.cwd(), ".git"));
-  if (inRepo) register(path.join(process.cwd(), ".mcp.json"));
-  register(host.userConfig, false);
-  register(host.desktopConfig, false);
+  const instance = opts.instance ?? opts.config?.instance;
+  const server = instance ? mcpServerFor({ instance }) : null;
+  /**
+   * ⛔ PROJECT AND USER SCOPE ONLY. The desktop app's config takes a command to spawn and nothing
+   * else, and there is no longer a local command to give it — the hosted project is reached as a
+   * connector from the app itself.
+   */
+  if (server) {
+    const inRepo = fs.existsSync(path.join(process.cwd(), ".git"));
+    if (inRepo && writeMcpRegistration(path.join(process.cwd(), ".mcp.json"), name, server)) wrote.push(path.join(process.cwd(), ".mcp.json"));
+    if (writeMcpRegistration(host.userConfig, name, server, false)) wrote.push(host.userConfig);
+  }
   void target;
 
   /**
@@ -928,9 +935,9 @@ export function installClaudeSkills(
     installed,
     agents,
     agentsDir: agentsDirFor(opts.configRoot, opts.home),
-    mcpRegisteredAt: wrote.join(", ") || "nowhere — no config file was found to register in",
+    mcpRegisteredAt: wrote.join(", ") || "nowhere — no hosted project was named, so nothing was registered",
     mcpName: name,
-    mcpRuns: [server.command, ...server.args].join(" "),
+    mcpRuns: server ? server.url : "",
     symlinked: dev,
   };
 }

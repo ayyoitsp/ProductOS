@@ -244,8 +244,26 @@ export const documents = async (i: Instance): Promise<Record<string, string>> =>
 export const putDocument = (i: Instance, key: string, says: string): Promise<Outcome> =>
   say_(i, "document", { key, says });
 
-export const inbox = (i: Instance, o: { since?: number; claim?: string; limit?: number }): Promise<unknown> =>
-  call(i, "/api/v2/inbox", { method: "POST", body: JSON.stringify(o) });
+/**
+ * ⛔ A LOOK IS A GET; CLAIMING IS A POST. And the difference is why Peter could not write.
+ *
+ * Every session watching a project polls this. As a POST it took the project's exclusive write lock
+ * for about a second a time — measured as a staircase, six concurrent polls returning 0.96s apart —
+ * so his presses queued behind the watchers, and at 120s the queue refuses outright.
+ *
+ * ⛔ THE SHAPE OF THE CALL IS NOW THE CLAIM ABOUT IT. A caller that passes `claim` is taking a lease
+ * and must serialise; a caller that does not is looking. Deciding it here rather than server-side is
+ * deliberate: the server keys its lock on the verb, so the verb has to be honest at the point where
+ * the intent is actually known.
+ */
+export const inbox = (i: Instance, o: { since?: number; claim?: string; limit?: number }): Promise<unknown> => {
+  if (o.claim) return call(i, "/api/v2/inbox", { method: "POST", body: JSON.stringify(o) });
+  const q = new URLSearchParams();
+  if (o.since !== undefined) q.set("since", String(o.since));
+  if (o.limit !== undefined) q.set("limit", String(o.limit));
+  const query = q.toString();
+  return call(i, `/api/v2/inbox${query ? `?${query}` : ""}`, { method: "GET" });
+};
 
 /**
  * ⛔ THE REPLY, OVER THE WIRE. `notes say` had no remote branch, so against an instance it read the

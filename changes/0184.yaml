@@ -1,0 +1,16 @@
+id: "0184"
+said: "the check printed /var/folders/kt/.../T/productos-instance-bIoD17/corpus/truth/publish-pricing.md will-not-parse - a per-request temp directory nobody can open - and a timing test cried wolf twice under load, blocking a deploy once"
+at: 2026-10-17
+kind: derivation
+reaches:
+  check: b.title ?? b.id ?? b.file.split("/").pop()
+  pin: it names the screen, not the file it happened to be in
+waived:
+  derive: >-
+    Nothing is computed. The name was already carried on Unloadable - recovered before validation
+    runs, added when the page's alarm had this same defect - and the check was reading the wrong
+    field of a record it already had.
+  surface: >-
+    It IS a surface change in spirit: what a reader is shown. The file that shows it is owned by the
+    check area rather than the surface area, which is why this is recorded here, and no page, panel
+    or command output other than this finding's own line changed.

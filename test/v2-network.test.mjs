@@ -86,10 +86,3 @@ test("a remote press records, and the compromise is written down rather than sil
   assert.match(fs.readFileSync(ledger, "utf-8"), /fg-0002/, "fg-0002 is cited in the source and does not exist");
 });
 
-/** ⛔ The banner says where it is reachable, or an exposure nobody chose stays invisible. */
-test("the server says which interfaces it is answering on", () => {
-  const src = fs.readFileSync("src/ui/server.ts", "utf-8");
-  assert.match(src, /on this network/, "the startup banner still claims localhost only");
-  assert.match(src, /--host 127\.0\.0\.1/, "nothing tells anybody how to close it");
-  assert.match(src, /server\.listen\(port, host,/, "the bind address is not a thing anybody can choose");
-});

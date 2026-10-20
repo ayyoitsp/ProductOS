@@ -24,14 +24,14 @@ import { test } from "node:test";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { tools } from "../dist/mcp/tools.js";
+import { exchangeTools as tools } from "../dist/mcp/v2-tools.js";
 import { EXCHANGE_ACT_TOOLS, EXCHANGE_READ_TOOLS, RETIRED_ACT_TOOLS } from "../dist/mcp/v2-tools.js";
 import { perform, VIA } from "../dist/v2/acts.js";
 import { loadCorpus } from "../dist/v2/load.js";
 
 const REASON =
   "A reason long enough to carry the argument, which is the whole price of the strongest act in the schema.";
-const paths = { productsDir: path.resolve("productos/products") };
+const paths = { root: path.resolve("productos") };
 
 function seed() {
   const dir = temp("v2consent-");
@@ -164,13 +164,6 @@ test("a refusal reaches an MCP caller with the honest exits intact", async () =>
   for (const i of r.instead) {
     assert.ok(i.act && i.ref && i.why, `an offered act is incomplete: ${JSON.stringify(i)}`);
   }
-});
-
-/** ⛔ Unchanged: v1 verification is still not a thing a model may do. */
-test("v1 behaviour verification is still withheld from models", () => {
-  // ⛔ `unverify_behavior` IS registered and should be — withdrawing a stamp is not claiming one.
-  const offending = tools.filter((t) => /(^|_)verify_behavior$/i.test(t.name));
-  assert.deepEqual(offending.map((t) => t.name), []);
 });
 
 /** Every exchange tool is actually registered, or none of the above proves anything. */

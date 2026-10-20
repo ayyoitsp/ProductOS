@@ -84,11 +84,22 @@ test("the stylesheet answers for the side placement, and the top one is the defa
 test("a tree whose chevron the stylesheet removed is never collapsed", () => {
   // The breakpoint lives once, in the stylesheet; the script reads the consequence rather than
   // carrying a second copy of the number that would drift away from it.
+  //
+  // ⛔ THE CONSEQUENCE IT READS IS THE FRAME'S POSITION NOW, not the chevron's display. Asking the
+  // chevron meant excluding the case where its hidden ATTRIBUTE is set, and that exclusion closed
+  // the column on Overview and on How it works — 19rem of breadcrumb with no way back to the tree,
+  // which is the exact failure named below. Down the side the tree IS the menu, so it never closes.
+  //
+  // ⛔ AND THIS IS A SOURCE GREP, WHICH IS A WEAK CHECK BY CONSTRUCTION — it would pass on a script
+  // that carries this line and never runs it. The real one is in
+  // `v2-one-address-one-page`, which drives all four fixed tabs in a browser and reads whether the
+  // tree has a box. This stays as the cheap guard that the rule has not been deleted outright.
   assert.match(
     html,
-    /getComputedStyle\(c\)\.display === "none"\) open = true/,
-    "the view switcher can collapse the side menu, leaving a column with no way back to the tree"
+    /getComputedStyle\(frame\)\.position === "fixed"/,
+    "nothing keeps the side menu open, so a view switch can leave a column with no way back to the tree"
   );
+  assert.match(html, /if \(sideways \|\|/, "the side placement is no longer what forces the tree open");
 });
 
 test("the placement is remembered, not re-asked on every feature", () => {

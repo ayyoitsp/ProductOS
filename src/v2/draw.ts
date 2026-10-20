@@ -73,6 +73,110 @@ const DROP_PROP = (name: string): boolean =>
   name.startsWith("data-testid");
 
 /**
+ * ⛔ A CONTROL THAT NAVIGATES IS THE ONE FACT A WALKABLE DRAWING IS MADE OF — AND IT WAS DROPPED.
+ *
+ * Peter, pressing a deal in the drawn deals list: *"prototype doesn't actually walk anyways, no
+ * deal links are clickable"*. He was right, and the cause was one line above this one. Every
+ * handler matches /^on[A-Z]/ and every handler was discarded, so the drawer read this, in his own
+ * deals list, and kept the row while throwing away where the row goes:
+ *
+ *     onClick={() => router.push("/cre-deals/" + deal.id)}
+ *
+ * ⛔ AND NOTHING DOWNSTREAM COULD RECOVER IT. The part list comes from the truth, so a destination
+ * nobody typed by hand does not exist; `connect` works out what a control leads to *from what the
+ * corpus says*, and the corpus said nothing because the generator never wrote it down. A drawing
+ * that mirrors the product's markup and not its navigation is a screenshot, which is exactly what
+ * it looked like.
+ *
+ * So a navigation is read off the handler and recorded on the element. A substitution stands for
+ * the value it carries — "/cre-deals/:id" rather than one deal's address — because the drawing is
+ * of the screen, not of a row.
+ */
+function navTarget(n: TS.Node, ctx?: Ctx, subs?: Map<string, string>, depth = 0): string | undefined {
+  if (depth > 3) return undefined;
+  let found: string | undefined;
+  const visit = (node: TS.Node): void => {
+    if (found) return;
+    if (ts.isCallExpression(node)) {
+      if (/(^|\.)(push|replace|navigate)$/.test(node.expression.getText())) {
+        const where = node.arguments[0] && routeLiteral(node.arguments[0]!, subs);
+        if (where) {
+          found = where;
+          return;
+        }
+      }
+      /**
+       * ⛔ A CALL TO A HANDLER THIS COMPONENT WAS HANDED IS A NAVIGATION ONE FRAME UP, and the
+       * argument is what decides WHICH screen. onSelectTab(entry.id) carries the tab's own id into
+       * a push that differs only by it — so the parameter is bound to the argument's value before
+       * the body is read, or all eight tabs resolve to the same address.
+       */
+      const callee = ts.isIdentifier(node.expression) ? node.expression.text : undefined;
+      const handler = callee && ctx?.handlers?.get(callee);
+      if (handler && (ts.isArrowFunction(handler) || ts.isFunctionExpression(handler))) {
+        const bound = new Map(subs);
+        handler.parameters.forEach((param, i) => {
+          if (!ts.isIdentifier(param.name)) return;
+          const arg = node.arguments[i];
+          const value = arg && valueOfArg(arg, ctx, subs);
+          if (value != null) bound.set(param.name.text, value);
+        });
+        const deeper = navTarget(handler.body, ctx, bound, depth + 1);
+        if (deeper) {
+          found = deeper;
+          return;
+        }
+      }
+    }
+    node.forEachChild(visit);
+  };
+  visit(n);
+  return found;
+}
+
+/** What an argument is worth, where the drawing knows — a literal, or a field of the item being drawn. */
+function valueOfArg(arg: TS.Expression, ctx?: Ctx, subs?: Map<string, string>): string | undefined {
+  if (ts.isStringLiteral(arg) || ts.isNoSubstitutionTemplateLiteral(arg)) return arg.text;
+  if (ts.isIdentifier(arg) && subs?.has(arg.text)) return subs.get(arg.text);
+  if (
+    ctx?.item &&
+    ts.isPropertyAccessExpression(arg) &&
+    ts.isIdentifier(arg.expression) &&
+    arg.expression.text === ctx.item.name
+  )
+    return ctx.item.fields.get(arg.name.text);
+  return undefined;
+}
+
+/**
+ * A path written as a literal or assembled from one, with every substitution standing for a value.
+ *
+ * ⛔ ONLY AN ABSOLUTE PATH. A handler calling push(somethingComputed) names a destination this
+ * cannot know, and guessing one would put a link on the page that goes somewhere invented.
+ */
+function routeLiteral(n: TS.Node, subs?: Map<string, string>): string | undefined {
+  if (ts.isStringLiteral(n) || ts.isNoSubstitutionTemplateLiteral(n))
+    return n.text.startsWith("/") ? n.text : undefined;
+  if (ts.isTemplateExpression(n)) {
+    let out = n.head.text;
+    for (const span of n.templateSpans) {
+      const named = span.expression.getText().split(/[^A-Za-z0-9_]+/).filter(Boolean).pop();
+      /**
+       * ⛔ A SUBSTITUTION WHOSE VALUE IS KNOWN IS WRITTEN OUT, and one whose value is not stands for
+       * itself. Both matter: "/cre-deals/:projectId" is a picture of the screen rather than of one
+       * deal, while "?tab=rent-roll" is the only thing distinguishing eight screens on one path.
+       */
+      const known = named ? subs?.get(named) : undefined;
+      out += (known ?? ":" + (named ?? "value")) + span.literal.text;
+    }
+    return out.startsWith("/") ? out : undefined;
+  }
+  /** A ternary navigates two ways; the first arm is still a real destination the other is not. */
+  if (ts.isConditionalExpression(n)) return routeLiteral(n.whenTrue, subs) ?? routeLiteral(n.whenFalse, subs);
+  return undefined;
+}
+
+/**
  * ⛔ AN ENTITY THE SOURCE ALREADY WROTE IS NOT ESCAPED A SECOND TIME.
  *
  * JSX text is HTML: a component writes `We&apos;ll put the sizing model here` and means an
@@ -215,6 +319,35 @@ interface Ctx {
   falsy: Set<string>;
   /** The element of a resolved list this pass is drawing, and the name the callback gave it. */
   item?: { name: string; fields: Map<string, string> };
+  /**
+   * ⛔ LISTS A CALL SITE HANDED DOWN, BY THE NAME THE RECEIVER KNOWS THEM BY.
+   *
+   * Peter, on his drawn deal page: *"the deal overview page doesn't even have the right fucking
+   * tabs… still has this bullshit 'blue harbour, fairview court, northwind' tabs at the top? no
+   * tabs for any of the verticals?"*. Measured on his file, the drawing had none of Rent Roll,
+   * Operating Statements or Model History, and did have two deal names.
+   *
+   * His page declares the eight tabs as a const beside the component and passes it down. The list
+   * resolver reads an array literal out of the file the map is WRITTEN in — and the map is written
+   * inside the tab strip, one file away, over a parameter. So eight names sitting in the repository
+   * resolved to nothing, the fallback drew the generic three, and the sample values that filled
+   * them came from the only list the drawing had any values for.
+   *
+   * ⛔ IT RESOLVES NOTHING NEW. These are the same object literals `literalItems` already reads,
+   * carried across the one boundary that was dropping them — which is the same fix, and the same
+   * reason, as `props` carrying bound text into a component that displays it.
+   */
+  lists?: Map<string, Array<Map<string, string>>>;
+  /**
+   * ⛔ HANDLERS A CALL SITE PASSED DOWN — WHERE THE NAVIGATION ACTUALLY IS.
+   *
+   * Peter, walking the drawn workspace: *"not a single tab clickable"*. The tab's own handler does
+   * not navigate; it calls a prop. The push is one frame up, at the call site, in the function that
+   * prop was bound to. So reading the handler AT THE ELEMENT finds a call to something unknown and
+   * stops — which is every design system in this idiom, where the component that renders a control
+   * is deliberately ignorant of where it leads.
+   */
+  handlers?: Map<string, TS.Expression>;
   depth: number;
   from: Set<string>;
   unresolved: string[];
@@ -283,6 +416,102 @@ interface Ctx {
    * finished.
    */
   props: Map<string, string>;
+}
+
+/**
+ * Where a file says a component comes from — read off its own import statements.
+ *
+ * ⛔ THE IMPORT IS THE ANSWER, AND THE DRAWER WAS GUESSING INSTEAD.
+ *
+ * Components were resolved by indexing the route's NEIGHBOURHOOD: every `.tsx` within four
+ * directories, capped at 400 directories, keyed by filename and by exported name. That exists for a
+ * good reason — a wizard beside its route — and it cannot answer for a component that lives
+ * anywhere else. A route's own `import` line says exactly where the file is, and nothing was
+ * reading it.
+ *
+ * ⛔ WHAT IT COST, AND IT IS THE WHOLE COMPLAINT. Peter: *"It's way off, no menus in a lot of
+ * places."* A Next route that delegates its layout — `<AppProvider>{children}</AppProvider>` — drew
+ * as an opaque box with the screen inside it and nothing else: the sidebar, the nav and the header
+ * all live in the provider's own file, which the neighbourhood walk never reached. The one route
+ * that DID draw a menu was the one writing its chrome inline at the call site. So the chrome was
+ * present exactly where a route happened not to factor it out.
+ *
+ * ⛔ Relative and alias both, because a real app uses both in one file. Aliases come from the
+ * nearest `tsconfig.json`'s `paths`, which is the project's own statement of what `@/` means — never
+ * a guess that `@` is `src`, which is true of many projects and false in a way nothing would report.
+ */
+function importedFrom(file: string, tag: string): string | undefined {
+  let text: string;
+  try {
+    text = fs.readFileSync(file, "utf-8");
+  } catch {
+    return undefined;
+  }
+  const src = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  /** The bare name, because `<Foo.Bar/>` is imported as `Foo`. */
+  const want = tag.split(".")[0]!;
+
+  let spec: string | undefined;
+  for (const st of src.statements) {
+    if (!ts.isImportDeclaration(st) || !ts.isStringLiteral(st.moduleSpecifier)) continue;
+    const clause = st.importClause;
+    if (!clause) continue;
+    const named =
+      (clause.name && clause.name.text === want) ||
+      (clause.namedBindings &&
+        ts.isNamedImports(clause.namedBindings) &&
+        clause.namedBindings.elements.some((e) => e.name.text === want)) ||
+      (clause.namedBindings && ts.isNamespaceImport(clause.namedBindings) && clause.namedBindings.name.text === want);
+    if (named) {
+      spec = st.moduleSpecifier.text;
+      break;
+    }
+  }
+  if (!spec) return undefined;
+  /** ⛔ A package import is not a file in this project, and chasing it would leave the project. */
+  if (!spec.startsWith(".") && !spec.startsWith("@/") && !spec.startsWith("~/")) {
+    const mapped = aliasFor(file, spec);
+    if (!mapped) return undefined;
+    return firstThatExists(mapped);
+  }
+  if (spec.startsWith(".")) return firstThatExists(path.resolve(path.dirname(file), spec));
+  const mapped = aliasFor(file, spec);
+  return mapped ? firstThatExists(mapped) : undefined;
+}
+
+/** A module specifier as a real path, using the nearest tsconfig's own `paths`. */
+function aliasFor(from: string, spec: string): string | undefined {
+  for (let dir = path.dirname(from), up = 0; up < 8; up++, dir = path.dirname(dir)) {
+    const cfg = path.join(dir, "tsconfig.json");
+    if (fs.existsSync(cfg)) {
+      try {
+        /** ⛔ Comments are legal in a tsconfig, so it is not JSON. TypeScript's own reader handles it. */
+        const parsed = ts.parseConfigFileTextToJson(cfg, fs.readFileSync(cfg, "utf-8"));
+        const opts = (parsed.config?.compilerOptions ?? {}) as { baseUrl?: string; paths?: Record<string, string[]> };
+        const base = path.resolve(dir, opts.baseUrl ?? ".");
+        for (const [pattern, targets] of Object.entries(opts.paths ?? {})) {
+          const stem = pattern.replace(/\*$/, "");
+          if (!spec.startsWith(stem)) continue;
+          const rest = spec.slice(stem.length);
+          for (const t of targets) return path.resolve(base, t.replace(/\*$/, "") + rest);
+        }
+      } catch {
+        /* a tsconfig this cannot read is one it has no opinion about */
+      }
+      break;
+    }
+    if (path.dirname(dir) === dir) break;
+  }
+  return undefined;
+}
+
+/** The first real file for a specifier with no extension — including a directory's index. */
+function firstThatExists(stem: string): string | undefined {
+  for (const suffix of [".tsx", ".ts", "/index.tsx", "/index.ts"]) {
+    const at = stem + suffix;
+    if (fs.existsSync(at) && fs.statSync(at).isFile()) return at;
+  }
+  return fs.existsSync(stem) && fs.statSync(stem).isFile() ? stem : undefined;
 }
 
 /** A component's own returned JSX, found by name in a file. */
@@ -859,8 +1088,11 @@ function emit(node: TS.Node, ctx: Ctx): string {
            * figure written in the source was never a guess.
            */
           const param = cb.parameters[0];
-          const items = ts.isIdentifier(e.expression.expression)
-            ? literalItems(e.expression.expression, ctx.sameFile)
+          const over = e.expression.expression;
+          const items = ts.isIdentifier(over)
+            ? (ctx.lists?.get(over.text) ??
+              literalItems(over, ctx.sameFile) ??
+              listBehind(over.text, ctx.sameFile, ctx.lists))
             : undefined;
           if (items?.length && param && ts.isIdentifier(param.name)) {
             const name = param.name.text;
@@ -1143,7 +1375,22 @@ function emit(node: TS.Node, ctx: Ctx): string {
      * resolving only by filename missed every one of them. `FannieMaeProgramSettings` is 1,162
      * lines and generated to 111 bytes: a wrapper, and an unresolved div where the screen was.
      */
-    const file = ctx.sameFile && returnedJsx(ctx.sameFile, tag) ? ctx.sameFile : ctx.resolve(tag);
+    /**
+     * ⛔ THE FILE'S OWN IMPORT BEFORE THE NEIGHBOURHOOD'S GUESS.
+     *
+     * Order matters and this is the order. Same file first, because a thin wrapper over a
+     * co-located component is the common case and the comment above explains it. Then what THIS
+     * file says it imported — the authoritative answer, and the one that reaches a component living
+     * anywhere in the project. Only then the neighbourhood index, which matches by filename and
+     * cannot tell two `Header.tsx` apart.
+     *
+     * ⛔ And it is per-file, not per-route: `ctx.sameFile` is whatever file we are currently inside,
+     * so a provider three levels deep resolves its own imports rather than the route's.
+     */
+    const file =
+      ctx.sameFile && returnedJsx(ctx.sameFile, tag)
+        ? ctx.sameFile
+        : (ctx.sameFile && importedFrom(ctx.sameFile, tag)) || ctx.resolve(tag);
     if (file && ctx.depth < 4) {
       ctx.from.add(path.basename(file));
       const inner = returnedJsx(file, tag) ?? returnedJsx(file);
@@ -1166,6 +1413,9 @@ function emit(node: TS.Node, ctx: Ctx): string {
         if (fork) ctx.forks.push(fork);
         /** Bind what the call site passes, so the primitive renders the application's own words. */
         const bound = new Map<string, string>();
+        /** Lists passed down, under the name the component receiving them uses — see `lists` on Ctx. */
+        const handDown = new Map<string, Array<Map<string, string>>>(ctx.lists);
+        const handDownHandlers = new Map<string, TS.Expression>(ctx.handlers);
         /** Props the call site passes as false at rest — see the modal case below. */
         const falsy = new Set<string>();
         for (const a of open.attributes.properties) {
@@ -1210,6 +1460,14 @@ function emit(node: TS.Node, ctx: Ctx): string {
              * the words sat two files away, already resolved.
              */
             else if (ts.isIdentifier(v) && ctx.props.has(v.text)) bound.set(name, ctx.props.get(v.text)!);
+            else if (ts.isArrowFunction(v) || ts.isFunctionExpression(v))
+              /** ⛔ The navigation this component will call but cannot see — see `handlers` on Ctx. */
+              handDownHandlers.set(name, v);
+            else if (ts.isIdentifier(v) && ctx.handlers?.has(v.text))
+              handDownHandlers.set(name, ctx.handlers.get(v.text)!);
+            else if (ts.isIdentifier(v) && (ctx.lists?.has(v.text) || (ctx.sameFile && literalItems(v, ctx.sameFile))))
+              /** A list, under the name the receiving component calls it — see `lists` on Ctx. */
+              handDown.set(name, ctx.lists?.get(v.text) ?? literalItems(v, ctx.sameFile)!);
             else if (ts.isIdentifier(v) && ctx.sameFile) {
               const local = localJsx(ctx.sameFile, v.text);
               if (local) bound.set(name, emit(local, { ...ctx, depth: ctx.depth + 1 }));
@@ -1223,7 +1481,7 @@ function emit(node: TS.Node, ctx: Ctx): string {
          */
         if ([...falsy].some((p) => new RegExp(`if\\s*\\(\\s*!\\s*${p}\\s*\\)\\s*return\\s+null`).test(sourceOf(file))))
           return "";
-        const sub: Ctx = { ...ctx, depth: ctx.depth + 1, props: bound, falsy, sameFile: file };
+        const sub: Ctx = { ...ctx, depth: ctx.depth + 1, props: bound, falsy, sameFile: file, lists: handDown, handlers: handDownHandlers };
         const body = emit(inner, sub);
         // `{children}` inside the primitive is where this element's own children belong.
         if (body.includes("<!--children-->")) return body.replace("<!--children-->", children);
@@ -1449,7 +1707,23 @@ function emit(node: TS.Node, ctx: Ctx): string {
   for (const a of open.attributes.properties) {
     if (!ts.isJsxAttribute(a)) continue;
     const name = a.name.getText();
-    if (DROP_PROP(name)) continue;
+    if (DROP_PROP(name)) {
+      /**
+       * ⛔ DROPPED, BUT READ FIRST. A handler is not markup and does not belong in the drawing —
+       * where it LEADS is the whole point of a prototype somebody walks.
+       */
+      if (a.initializer && ts.isJsxExpression(a.initializer) && a.initializer.expression) {
+        const goes = navTarget(a.initializer.expression, ctx);
+        if (goes) attrs.push(`data-goes-to="${text(goes)}"`);
+      }
+      continue;
+    }
+    /** The same fact written the other way: an anchor or a Link says it in href. */
+    if (name === "href" && a.initializer) {
+      const expr = ts.isJsxExpression(a.initializer) ? a.initializer.expression : a.initializer;
+      const goes = expr && routeLiteral(expr, undefined);
+      if (goes) attrs.push(`data-goes-to="${text(goes)}"`);
+    }
     if (name === "className") {
       const cls = classOf(a.initializer);
       if (cls) attrs.push(`class="${text(cls)}"`);
@@ -1634,6 +1908,60 @@ function sourceOf(file: string): string {
  * ⛔ ONE IMPORT DEEP AND LITERALS ONLY. This is a reader, not an evaluator: a value that is not a
  * string or number in the source is left out, and the caller falls back to drawing the shape.
  */
+/**
+ * The list behind a local that was derived from one a caller handed down.
+ *
+ * ⛔ A LIST IS STILL THAT LIST AFTER THE COMPONENT RECEIVING IT REORDERS IT. Peter's deal page
+ * declares its eight tabs beside the component and passes them to the workspace shell. The shell
+ * does not map over what it was given — it maps over a reordering of it, because the analyst can
+ * drag the strip:
+ *
+ *     const orderedTabs = useMemo(() => tabOrder.sort([...tabs]), [tabOrder, tabs])
+ *
+ * `literalItems` already follows one list into another through filter, map, slice and sort, and
+ * every one of those is a call ON the list. This one is a call on something else, TAKING the list,
+ * wrapped in a memo — so the chain broke, the strip fell through to the generic three rows, and
+ * the only values the drawing had to fill them with were deal names. He saw it immediately:
+ * *"still has this bullshit 'blue harbour, fairview court, northwind' tabs at the top?"*
+ *
+ * ⛔ STILL INVENTING NOTHING, and deliberately indifferent to what the derivation DOES. Narrowing
+ * by a filter this cannot evaluate would draw a tab the reader does not have — which is why this
+ * only ever returns items that are written down in the source, and why a list it cannot trace back
+ * keeps the old behaviour rather than getting a guess.
+ */
+function listBehind(
+  name: string,
+  file: string | undefined,
+  handed: Map<string, Array<Map<string, string>>> | undefined
+): Array<Map<string, string>> | undefined {
+  if (!file || !handed?.size) return undefined;
+  const direct = handed.get(name);
+  if (direct) return direct;
+
+  const sf = ts.createSourceFile(file, sourceOf(file), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let init: TS.Expression | undefined;
+  const find = (n: TS.Node): void => {
+    if (init) return;
+    if (ts.isVariableDeclaration(n) && ts.isIdentifier(n.name) && n.name.text === name && n.initializer)
+      init = n.initializer;
+    else ts.forEachChild(n, find);
+  };
+  ts.forEachChild(sf, find);
+  if (!init) return undefined;
+
+  let found: Array<Map<string, string>> | undefined;
+  const look = (n: TS.Node): void => {
+    if (found) return;
+    if (ts.isIdentifier(n) && handed.has(n.text)) {
+      found = handed.get(n.text);
+      return;
+    }
+    ts.forEachChild(n, look);
+  };
+  look(init);
+  return found;
+}
+
 function literalItems(name: TS.Identifier, fromFile?: string, depth = 0): Array<Map<string, string>> | undefined {
   if (depth > 4) return undefined;
   const sf = name.getSourceFile();
@@ -1688,9 +2016,28 @@ function literalItems(name: TS.Identifier, fromFile?: string, depth = 0): Array<
 
 /** An array literal's object literals, as plain string fields. */
 function itemsOf(e: TS.Expression): Array<Map<string, string>> | undefined {
-  if (!ts.isArrayLiteralExpression(e)) return undefined;
+  /**
+   * ⛔ "as const" IS HOW THIS LIST IS WRITTEN IN TYPESCRIPT, AND IT MADE THE LIST INVISIBLE.
+   *
+   * Peter, on his drawn deal page: *"there's no versioning concepts… no tabs for any of the
+   * verticals? WTF?"*. His eight tabs — Overview, Properties, Rent Roll, Operating Statements,
+   * Sizing, Model History, Documents, Activity — are an array of object literals ending in
+   * "as const", which is the ordinary way to declare one and the reason its ids are usable as a
+   * type. That suffix wraps the array in an assertion node; this function asked whether it had an
+   * array literal, got no, and every tab in the product fell through to the generic three rows.
+   * The values filling them came from the only sample pool there was, so a deal workspace drew
+   * three tabs named after deals.
+   *
+   * ⛔ AND THE SHAPE OF IT MATTERS MORE THAN THE TAB STRIP. An assertion changes the type and never
+   * the value, so anywhere a product writes its own words this way — nav items, stages, statuses,
+   * column sets — the drawing silently invented three of something instead of reading what is
+   * there.
+   */
+  const bare =
+    ts.isAsExpression(e) || ts.isTypeAssertionExpression(e) || ts.isParenthesizedExpression(e) ? e.expression : e;
+  if (!ts.isArrayLiteralExpression(bare)) return undefined;
   const out: Array<Map<string, string>> = [];
-  for (const el of e.elements) {
+  for (const el of bare.elements) {
     if (!ts.isObjectLiteralExpression(el)) continue;
     const fields = new Map<string, string>();
     for (const pr of el.properties) {

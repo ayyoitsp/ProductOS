@@ -1,5 +1,38 @@
 You are writing the product truth for **one feature**. Not two, not the area around it — one.
 
+<!-- productos:where-you-write -->
+## ⛔ Where your work lands — the hosted project, through one door
+
+> Generated — do not edit between the markers. `productos v2 agents --presets` rewrites it, and a test fails if it drifts.
+
+**There is no local corpus.** The truth lives in the hosted project, and you reach it through ProductOS's MCP server. Every document you write goes there, straight, one call per document:
+
+```
+productos_in { intent: "document", fields: { key: "truth/<scope>.md", says: "<the whole document>" } }
+```
+
+- **`key`** — Which document, relative to the corpus root — e.g. truth/money.md. One of: truth / drawings / rules / charter / readings / notes / verdicts / capabilities / steers. Root-level `.yaml` documents (`prototypes.yaml`, `style.yaml`, `framework-gaps.yaml`) are keys too. The paths in this brief are keys, not places on disk.
+- **`says`** — The whole document. ⛔ Replaces it — this is not a patch. ⛔ And it is the document's own bytes, so a `wrote:` in it is a claim the caller typed rather than one anything derived: `hand: person` is refused on a token, which may write `hand: agent` with `from:` instead. Send all of it: a partial document deletes the rest.
+- **Read it first.** `productos_exchange_source { key }` returns the document exactly as the project holds it now. Change that, not your memory of it — somebody may have pressed something on the page or another author may have written since you last looked, and a whole-document write replaces their work.
+- **Then read it back.** `productos_exchange_check` says what the project now refuses. A refusal is yours to fix with another `document` call — never work around one, and never report work landed that the check refuses.
+- **Never keep a local copy as the truth.** A file you draft on disk is scratch: it is not in the product until the door answered `ok`, and once it has, the hosted one is the only one. Do not hand anybody a directory to import — importing is an operator's command, and it needs a database address no author holds.
+- **A generator pushes the same way.** Where a command draws for you, point it at the instance: `productos v2 draw --all --into <project url> --token $PRODUCTOS_TOKEN`.
+
+**A small change is a small write.** One sentence or one question is not a whole document:
+
+- `productos_in { intent: "splits-on" }` — Say what this product's prototypes are alternatives about — one axis, or several. Takes `axes`.
+- `productos_in { intent: "prototype" }` — Declare a way through the product, or say where an existing one sits. Takes `id`, `title`?, `startsAt`?, `is`?, `shellFrom`?, `remove`?.
+- `productos_in { intent: "inside" }` — Say which screen a screen appears inside — or take that back. Takes `view`, `of`?.
+- `productos_in { intent: "holds-for" }` — Say which combination of the product's dimensions a screen is for — or take it back. Takes `view`, `is`?.
+- `productos_in { intent: "suggest" }` — Add one sentence to a slot, recorded as suggested — it reads as unagreed until a person agrees to it. Takes `ref`, `says`, `from`, `id`?.
+- `productos_in { intent: "ask" }` — Raise one question on a slot, with drafted answers — it gates the behaviour until the person asked answers it. Takes `ref`, `question`, `asked_of`, `blocks`, `candidates`?, `cost`?, `about`?.
+- `productos_in { intent: "demonstrate" }` — Add one testing requirement to a claim — it reads as suggested until a person agrees to the claim it demonstrates. Takes `ref`, `then`?, `given`?, `when`?, `steps`?, `level`?, `id`?.
+- `productos_in { intent: "say" }` — Answer on a filed request without deciding it is finished. Takes `note`, `says`, `by`?.
+- `productos_in { intent: "close" }` — Answer a filed request and take it off the queue. Takes `note`, `outcome`.
+
+Call `productos_intents` when a field is unclear — it is generated from the same registry as the door. ⛔ **Nothing you write is agreed.** Your token carries an author's authority: your own words, claiming nothing about what anybody agreed to. `accept`, `rule`, `read`, `waive`, `defer`, `withdraw` are a person's acts: your token cannot record one as a person's, and one recorded `via: agent` counts as nobody's agreement.
+<!-- /productos:where-you-write -->
+
 ## What you are producing
 
 A scope: what this feature is for, the screens somebody meets it on, and what the product promises
@@ -475,7 +508,7 @@ added.
 
 ### ⛔ Three things authors before you could not say, and wrote badly instead
 
-All three came from one pair of re-scoping runs over v1-migrated features, and each was recorded as
+All three came from one pair of re-scoping runs over carried-over features, and each was recorded as
 a framework gap with `forced_into` naming the damage. They exist now. Use them.
 
 **`no_screen:` — this feature has no screen of its own.** A one-line reason, on the scope:
@@ -611,55 +644,6 @@ weight at all.
 So: if you can name the slot it fills and write a given/when/then for it, it is a `Rule`. If you
 cannot, and it still constrains how the product is built, it is a charter section.
 
-## Bringing a v1 corpus across
-
-```bash
-productos v2 migrate --from productos --out v2      # add --force to redo it
-
-### ⛔ `--force` takes what people said as truth, not what v1 remembers
-
-```bash
-productos v2 migrate --from productos --out v2 --force
-```
-
-It rebuilds from v1 — **except any scope somebody has spoken about.** A note filed against it, or a
-stamp a person made on it, holds that scope back exactly as it stands; the rebuild of it is
-discarded and the reason is printed.
-
-**Why, measured:** v1's `deal-pricing.md` carried ninety-seven mentions of staged edits, overrides
-and a publish gate — the model Peter corrected twice, on the page — while v2 had been rewritten to
-say nothing on that screen can be typed into. Rebuilding from v1 restored the rejected shape, and
-the notes recording the rejection were *closed*, so nothing objected. With the human record removed
-from that corpus the rejected wording came back twenty-eight times; with it present, none.
-
-⛔ **A closed request counts, and counts most** — it means the truth was already changed because of
-it, which is exactly what a rebuild throws away. ⛔ **`via: agent` does not count**: software may
-decide, and letting its own verdict hold a scope back would let generated output outrank the corpus
-it came from.
-
-**The cost, stated:** a held scope stops following v1 improvements. The only way it moves after that
-is somebody authoring it here. Say that when you run it.
-
-```
-
-It carries what v1 recorded and **refuses the rest by name**, into `not-carried.yaml`. Read that
-file before anything else: it is the real work queue, and every entry needs a person rather than a
-better script.
-
-⛔ **A migration decides nothing, and the temptation to make it decide is strong.** v1 recorded only
-`answer` — it had no field for who may ask, what they bring, what is left behind, what it refuses,
-what a failure leaves, what a repeat does, or what two at once does. On a real corpus that is
-**one slot in eight**, and the other seven-eighths come across blank.
-
-An earlier version of this migrator could not bear handing over 643 blanks, so it wrote seven open
-org-wide rules — one per unrecorded slot, with a generated question restating the slot's own
-definition, `scope: everywhere`. The result: a tool's invented questions gated every real behaviour in
-the product, and were presented to the reviewer as their own backlog. Peter's reaction on being
-shown it is the shortest summary of the failure: *"it's all generic, org-wide BS?"*
-
-**A blank is a blank.** The count is the finding, and a surface that dresses it up as a queue is
-lying about how much of a product has been written down.
-
 ## When you do not know
 
 ⛔ **This is the part that matters, and the part that gets done wrong.** Write the standing,
@@ -694,6 +678,51 @@ picked — the only exit left is retyping the merged sentence at a prompt, and a
 took that exit deleted the agreed clauses without any surface noticing. Each candidate's `says` is a *behaviour a builder could
 implement*; its `consequence` is the argument. Putting the argument in `says` is the single
 most common way to make a question unanswerable.
+
+### ⛔ A question on a NAMED REFUSAL — the shape that took the corpus down twice in one afternoon
+
+Everything above is shown on `answer`, where the standing sits on the slot. A `refuses` slot is
+different: it holds **named outcomes**, and a question about one of them goes on that outcome.
+
+```yaml
+refuses:
+  outcomes:
+    - id: the-departure-is-no-longer-one-this-version-holds
+      says: >                   # what the product does
+        The ask is turned away and the reader is told the departure is no longer...
+      asks: told                # what is in question: whether / told / which
+      standing:
+        kind: open
+        about: >                # ⛔ REQUIRED, and this is the one that gets missed
+          whether the reader is shown WHICH departures still stand, or only that it failed
+        question: Is the reader shown what stands, or only that it could not be saved?
+        candidates:
+          - replaces: the whole sentence   # ⛔ REQUIRED beside an `about`, on EVERY candidate
+            says: >
+              ...
+```
+
+⛔ **Two of us broke it the same two ways in one afternoon, writing in parallel on one corpus.**
+Both documents stopped parsing, and because a document that will not load makes the whole corpus
+unjudgeable, `check` answered `cannot-judge-this-corpus` and **suppressed every other feature's
+findings** — including the other authors', who had done nothing wrong. One unparseable document is
+not a local mistake.
+
+| what was missing | what the loader says |
+| --- | --- |
+| `about` on a standing beside a named refusal that also `says` something | `exchanges.N.slots.refuses.outcomes.N.standing.about — this named refusal says something AND carries an unsettled standing — say which part of it is in question, or the whole sentence reads unruled and every surface discards it` |
+| `replaces` on a candidate, beside an `about` | `exchanges.N.slots.SLOT.standing.candidates.N.replaces — one thing about an agreed sentence is unruled here, so say whether this option is the whole replacement sentence or only the part in question — picking a fragment deletes the rest of what was agreed` |
+
+⛔ **So read your own document back before you finish.** The write succeeds either way — the door
+takes the bytes and the refusal only appears when something tries to LOAD them:
+
+```bash
+productos v2 check --at <corpus> 2>&1 | head -5
+```
+
+The first line must read `N scopes · N exchanges · …`. If you see `will-not-parse` or
+`cannot-judge-this-corpus`, fix it before you report, and re-read the document from the corpus
+first — other authors may have written while you worked.
 
 Four standings: `stated` · `open` · `disputed` · `out_of_scope`. Anything you cannot settle is
 `open`. `out_of_scope` costs a recorded act (`v2 waive`) and is **not yours to declare**.
@@ -1587,12 +1616,28 @@ the imported files in the list instead.
 
 ### ⛔ A drawing records where it came from, so the history can be walked
 
-`draw` writes two fields beside the drawing, and neither is typed:
+`draw` writes three fields beside the drawing, and none of them is typed:
 
 ```yaml
 drawn_from: "frontend/app/components/cre/DealPricingMatrix.tsx"
 drawn_at: "6cb3ba69a3aaff07cd866758664bceca09b3e38f"
+drawn_screen: "rent-roll"
 ```
+
+⛔ **`drawn_screen` is which of several screens one component renders this view IS**, and it is the
+only thing that tells those screens apart. One route can render eight — a deal workspace is eight
+tabs on one address, chosen by `?tab=`. Every one of them is `drawn_from` the same file, so without
+this the corpus holds eight screens nothing downstream can distinguish, and a tab press resolves to
+all of them and to none.
+
+⛔ **You never type it.** `draw` works out which arm a view is from the view's own **title** and
+writes what it chose, so getting it right means naming the view after the screen it is — a view
+called *Rent Roll* is drawn as the rent roll. If the arm it chose is not the screen you meant, the
+draw says so and names the others; point it at the right component rather than editing this field.
+
+⛔ **Two views may not claim the same arm.** Where they do, nothing can resolve a control that
+leads there, and it is reported rather than guessed at — two screens that cannot be told apart is a
+duplication to settle in the truth, not a coin toss to make at render time.
 
 ```bash
 productos v2 moved --at <corpus> --repo <the codebase> --full

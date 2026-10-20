@@ -205,16 +205,24 @@ test("⛔ a stale agreement to a rule does not reach the slots that rule supplie
 
 /* ───────────────────────── derived ───────────────────────── */
 
-test("a requirement worked out from the claim as it now reads is derived, and says from what", () => {
+test("a requirement worked out from an agreed claim as it now reads is derived, and says from what", () => {
+  const { corpus } = seeded();
+  const c1 = exchangeIn(corpus, "money", "see-a-balance").criteria.find((x) => x.id === "1");
+  c1.derived = { by: "productos-demonstrator", at: "2026-10-01", from: claimHash(corpus, ANSWER) };
+  const l = ok(levelOf(withVerdicts(corpus, [accepting(corpus, ANSWER)]), "money#see-a-balance#shows#1"));
+  assert.equal(l.level, "derived");
+  assert.equal(l.route, "worked-out");
+  assert.match(l.because, new RegExp(`productos-demonstrator worked this out from ${ANSWER} on 2026-10-01`));
+});
+
+test("⛔ a requirement worked out from a claim nobody has agreed to is a suggestion — derived means from accepted input", () => {
   const { corpus } = seeded();
   const c1 = exchangeIn(corpus, "money", "see-a-balance").criteria.find((x) => x.id === "1");
   c1.derived = { by: "productos-demonstrator", at: "2026-10-01", from: claimHash(corpus, ANSWER) };
   const l = ok(levelOf(corpus, "money#see-a-balance#shows#1"));
-  assert.equal(l.level, "derived");
-  assert.equal(l.route, "worked-out");
-  assert.match(l.because, new RegExp(`productos-demonstrator worked this out from ${ANSWER} on 2026-10-01`));
-  /** ⛔ And it says that nobody has agreed to the claim, which is what decides how much to lean on it. */
-  assert.match(l.because, /nobody has agreed to that sentence yet/);
+  assert.equal(l.level, "suggested", "⛔ a test for a draft passed the gate a builder applies");
+  assert.equal(l.route, "worked-out-from-a-draft");
+  assert.match(l.because, /nobody has agreed to it yet/);
 });
 
 test("⛔ a requirement worked out from words that have since changed is a suggestion again", () => {

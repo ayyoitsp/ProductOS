@@ -168,6 +168,155 @@ function weightedOf(scope: Scope, view: View): Map<string, number> {
  * two-to-one call reported as confidently as five-to-nothing is how a wrong arrow gets drawn on a
  * map somebody then trusts.
  */
+/**
+ * ⛔ THE ROUTE A FILE SERVES, so a navigation in the code can be matched to the screen it reaches.
+ *
+ * A drawn view records the file it came from. An application's router turns that path into an
+ * address, and the two halves of a walk are exactly these: the address a control pushes, and the
+ * file that answers it. Group segments are the router's own bookkeeping and name nothing.
+ */
+export function routeOfFile(drawnFrom: string): string | undefined {
+  /**
+   * ⛔ THE ROUTER'S ROOT IS A SEGMENT, NOT A SUBSTRING. Splitting on a slash-wrapped "app" missed
+   * every path that BEGINS at it — "app/(marketing)/pricing/page.tsx" is how a corpus records a
+   * file relative to a frontend root, and it resolved to nothing at all.
+   */
+  const whole = drawnFrom.replace(/\\/g, "/");
+  const segs0 = whole.split("/");
+  const root = segs0.lastIndexOf("app");
+  if (root === -1) return undefined;
+  const at = segs0.slice(root + 1).join("/");
+  if (!at) return undefined;
+  const segs = at
+    .replace(/\/(page|route|layout)\.(t|j)sx?$/, "")
+    .split("/")
+    .filter((x) => x && !/^\(.*\)$/.test(x))
+    .map((x) => x.replace(/^\[\.*(.+?)\]$/, ":$1"));
+  return "/" + segs.join("/");
+}
+
+/**
+ * Whether a pushed address is answered by a file's route.
+ *
+ * ⛔ A PARAMETER MATCHES A PARAMETER, WHATEVER EITHER IS CALLED. The code pushes the address with
+ * the name it has to hand — deal.id — while the route names the same slot projectId. Comparing
+ * those as words would say a deals list leads nowhere while staring at the link that proves it
+ * does.
+ */
+export function sameRoute(pushed: string, served: string): boolean {
+  const cut = (r: string) => r.split("?")[0]!.replace(/\/$/, "").split("/").filter(Boolean);
+  const a = cut(pushed);
+  const b = cut(served);
+  if (a.length !== b.length) return false;
+  return a.every((seg, i) => {
+    const other = b[i]!;
+    const bothStand = seg.startsWith(":") && other.startsWith(":");
+    return bothStand || seg === other;
+  });
+}
+
+/**
+ * ⛔ WHERE A CONTROL GOES IS A FACT IN THE CODE, NOT A VERB IN A PARAGRAPH.
+ *
+ * Peter: *"prototype doesn't actually walk anyways, no deal links are clickable"*. Under it was a
+ * generator that discarded every handler, so the only record of a destination was whatever prose
+ * happened to mention one — which is why the scoring below exists at all, and why it has needed
+ * five separate rules to stop it inventing links. His deals list says where it goes in one line,
+ * an onClick that pushes the address of one deal.
+ *
+ * The drawer records that now, and a destination read off the code outranks anything a sentence
+ * suggests. ⛔ It does not REPLACE the scoring: a screen nothing was drawn from has no code to
+ * read, and target state is allowed to describe a product that does not exist yet.
+ */
+/**
+ * Every screen that answers an address, so a pushed address can be matched to one.
+ *
+ * ⛔ SHARED RATHER THAN RE-DERIVED. Two things need this — working out what a declared control
+ * leads to, and making a drawn control walk on the page — and two copies of a route table is two
+ * answers to the same question.
+ */
+export function routeTable(corpus: Corpus): Array<{ id: string; route: string; screen?: string }> {
+  const served: Array<{ id: string; route: string; screen?: string }> = [];
+  for (const s of corpus.scopes)
+    for (const v of s.scope.views) {
+      const route = v.drawn_from && routeOfFile(v.drawn_from);
+      if (route) served.push({ id: `${s.scope.id}#${v.id}`, route, screen: v.drawn_screen });
+    }
+  return served;
+}
+
+/**
+ * Which screen answers a pushed address, where several share one path.
+ *
+ * ⛔ A PATH IS NOT ALWAYS THE WHOLE ADDRESS. Peter: *"not a single tab clickable"*. Every tab in
+ * his deal workspace pushes the SAME path and differs only in a query value — eight screens, one
+ * route, `?tab=rent-roll` against `?tab=sizing`. Matching on the path alone answers "all eight" and
+ * "itself" at once, which is no answer: the only candidate excluded is the screen doing the
+ * pushing, so a tab press resolved to nothing and the control stayed inert.
+ *
+ * So where a pushed address carries a query, the value picks between the screens that share the
+ * path, using the arm each one recorded at draw time. ⛔ And where nothing recorded an arm this
+ * returns nothing rather than the first match — eight indistinguishable candidates is exactly the
+ * state that produced a drawing nobody could press, and guessing one would put a tab on the page
+ * that goes somewhere it does not go.
+ */
+export function screenAnswering(
+  pushed: string,
+  from: string,
+  served: Array<{ id: string; route: string; screen?: string }>
+): { id: string; route: string; screen?: string } | undefined {
+  const onPath = served.filter((r) => sameRoute(pushed, r.route));
+  if (!onPath.length) return undefined;
+
+  const query = pushed.indexOf("?") >= 0 ? pushed.slice(pushed.indexOf("?") + 1) : "";
+  if (query) {
+    const values = query
+      .split("&")
+      .map((pair) => pair.slice(pair.indexOf("=") + 1))
+      .filter((v) => v && !v.startsWith(":"));
+    for (const v of values) {
+      const claim = onPath.filter((r) => r.screen === v);
+      if (claim.length === 1) return claim[0];
+      /**
+       * ⛔ TWO SCREENS CLAIMING ONE ARM IS AN AMBIGUITY, NOT A COIN TOSS. It happens here: a
+       * workspace shell and the tab it opens on are both drawn from the same arm of the same
+       * component, so both record "overview". Taking the first put every press of Overview on the
+       * chrome rather than the screen — a control that is visibly live and lands somewhere else,
+       * which teaches a reviewer something false about the product.
+       *
+       * Unresolved is the honest answer, and it is also a finding: two screens that cannot be told
+       * apart is the duplication this corpus already has a note about.
+       */
+      if (claim.length > 1) return undefined;
+    }
+    /** ⛔ A query nothing answers is unresolved, not "whichever shares the path". */
+    if (onPath.length > 1) return undefined;
+  }
+
+  return onPath.find((r) => r.id !== from);
+}
+
+export function navigationsInCode(corpus: Corpus): Map<string, { to: string; route: string }> {
+  const served = routeTable(corpus);
+
+  const found = new Map<string, { to: string; route: string }>();
+  for (const s of corpus.scopes)
+    for (const v of s.scope.views) {
+      const html = v.sketch_html;
+      if (!html) continue;
+      for (const m of html.matchAll(/<[^>]*\bdata-goes-to="([^"]+)"[^>]*>/g)) {
+        const whole = m[0]!;
+        const pushed = m[1]!;
+        const part = /\bdata-part="([^"]+)"/.exec(whole)?.[1];
+        if (!part) continue;
+        const here = `${s.scope.id}#${v.id}`;
+        const dest = screenAnswering(pushed, here, served);
+        if (dest) found.set(`${here}#${part}`, { to: dest.id, route: pushed });
+      }
+    }
+  return found;
+}
+
 export function inferConnections(corpus: Corpus): { made: Connection[]; missed: Unconnected[] } {
   const screens: Array<{ id: string; scope: Scope; view: View; weights: Map<string, number> }> = [];
   for (const s of corpus.scopes)
@@ -176,11 +325,26 @@ export function inferConnections(corpus: Corpus): { made: Connection[]; missed: 
 
   const made: Connection[] = [];
   const missed: Unconnected[] = [];
+  const codeSays = navigationsInCode(corpus);
 
   for (const s of corpus.scopes)
     for (const v of s.scope.views)
       for (const p of v.parts ?? []) {
         if (p.leads_to) continue;
+        /**
+         * ⛔ ASKED OF THE CODE BEFORE IT IS GUESSED AT. Where the application itself navigates is
+         * not a close call to be scored against sentences — it is the answer.
+         */
+        const inCode = codeSays.get(`${s.scope.id}#${v.id}#${p.id}`);
+        if (inCode) {
+          made.push({
+            from: `${s.scope.id}#${v.id}#${p.id}`,
+            to: inCode.to,
+            because: [`this control navigates to ${inCode.route} in the code this screen was drawn from`],
+            score: 1,
+          });
+          continue;
+        }
         /**
          * ⛔ A RETURNING CONTROL HAS ALREADY SAID WHERE IT GOES — back to this screen as it was.
          * Scoring it against other screens gave Back and "Choose Different Folder" a destination on

@@ -18,7 +18,7 @@
 import { resolveRules, type Corpus } from "./load.js";
 import { scopeToShadow, liftFaces, PANE_FIT } from "./appcss.js";
 import { promisesOf, screensOf, type ProtoPromise, type ProtoScreen } from "./prototype.js";
-import { inferConnections, landingsFor, finishesFor, stateShowing } from "./connects.js";
+import { inferConnections, landingsFor, finishesFor, stateShowing, routeTable, screenAnswering } from "./connects.js";
 import { pictureOf, unpicturedParts, STATE_CSS } from "./states.js";
 import { deriveStates } from "./derive-states.js";
 import { walkOf, type Walk } from "./walk.js";
@@ -30,6 +30,7 @@ import { stampFor, decidedFor, whatChangedSince } from "./stamp.js";
 /** ⛔ The one table of what an act owes. It lived here and no other surface could read it. */
 import { OWED } from "./acts.js";
 import { confidenceOf, whyConfident, discrepancyFor } from "./confidence.js";
+import { levelOf } from "./level.js";
 import { wireParts } from "./wire.js";
 import { questionsFor, descendants, type Question } from "./settle.js";
 import { resolveRef } from "./ref.js";
@@ -986,7 +987,13 @@ function liveSketch(view: View, matched: Map<string, boolean>): string {
  * ⛔ AN EXPLICIT `data-part` WINS. A generated mock should say which element is which part rather
  * than leave it to a text match, and one that does is exempt from all of this.
  */
-function wireHtml(view: View, matched: Map<string, boolean>, goes?: Map<string, string>, scopeId?: string): string {
+function wireHtml(
+  view: View,
+  matched: Map<string, boolean>,
+  goes?: Map<string, string>,
+  scopeId?: string,
+  routes?: Array<{ id: string; route: string }>
+): string {
   /**
    * ⛔ THE FALLBACK, NOT THE MECHANISM. `draw` writes `data-part` into the corpus at generation
    * time, so a generated drawing arrives already wired. This runs for drawings written before the
@@ -995,15 +1002,62 @@ function wireHtml(view: View, matched: Map<string, boolean>, goes?: Map<string, 
    */
   const wired = wireParts(view.sketch_html!, view.parts);
   for (const id of wired.matched) matched.set(id, true);
-  if (!goes || !scopeId) return wired.html;
   /**
    * ⛔ A DERIVED DESTINATION IS STAMPED ONTO THE DRAWING, NOT INTO THE CORPUS. A control that
    * commits may not carry a `leads_to`, so the walk is worked out from what the corpus says and
    * attached here — the drawing is output, and this is one more thing generated into it.
+   *
+   * ⛔ AND THE TWO KINDS OF DESTINATION ARE INDEPENDENT. This used to return here when no derived
+   * map was passed, which is how BOTH call sites call it — so a drawn navigation, which needs no
+   * derived map at all, was skipped on every screen on the page. Measured: thirty-four drawn
+   * navigations in one deals list and not one of them stamped.
    */
-  return wired.html.replace(/data-part="([^"]+)"/g, (whole, id: string) => {
-    const to = goes.get(`${scopeId}#${view.id}#${id}`);
-    return to ? `${whole} data-goes="${esc(to)}"` : whole;
+  const stamped =
+    goes && scopeId
+      ? wired.html.replace(/data-part="([^"]+)"/g, (whole, id: string) => {
+          const to = goes.get(`${scopeId}#${view.id}#${id}`);
+          return to ? `${whole} data-goes="${esc(to)}"` : whole;
+        })
+      : wired.html;
+  if (!routes?.length) return stamped;
+  /**
+   * ⛔ A CONTROL THE APPLICATION NAVIGATES FROM IS WALKABLE WITHOUT ANYBODY DECLARING IT A PART.
+   *
+   * Peter, on the drawn deals list: *"no deal links are clickable, none of the individual features
+   * got new pages"*. Both halves of that were one defect. The walk ran on declared parts alone, so
+   * a screen reached the corpus with every row the product has and nothing to press, and the only
+   * route to a walkable row was somebody typing out a part and a destination by hand — for each of
+   * a hundred and thirty-four screens.
+   *
+   * The drawer records where a control goes now, so the destination is already on the element. All
+   * that is left is resolving the address to whichever screen answers it, which is the same
+   * question the route table answers for declared parts.
+   */
+  const here = `${scopeId}#${view.id}`;
+  return stamped.replace(/<([a-z][a-z0-9]*)\b([^>]*\bdata-goes-to="([^"]+)"[^>]*)>/gi, (whole, tag: string, attrs: string, pushed: string) => {
+    if (/\bdata-goes="/.test(attrs)) return whole;
+    /**
+     * ⛔ THE SAME RESOLUTION THE DERIVED CONNECTIONS USE, NOT A SECOND ONE THAT ONLY LOOKS ALIKE.
+     *
+     * This was a path-only match while `connects` had learned to read the query, and the two
+     * disagreeing is worse than either being wrong alone: all eight tabs on the workspace drew as
+     * pressable and all eight went to the same screen. A control that is visibly live and lands
+     * somewhere else teaches a reviewer something false about the product, which is the one
+     * outcome a drawing must never produce.
+     */
+    const dest = screenAnswering(pushed, here, routes);
+    if (!dest) return whole;
+    /**
+     * ⛔ MERGED INTO THE CLASS IT ALREADY HAS, never written beside it. The application's own
+     * classes are what make the drawing look like the product; a second class attribute is invalid
+     * markup and the browser keeps the first, so appending one would have silently thrown away
+     * either the product's styling or the mark that says this is pressable.
+     */
+    const had = /\bclass="([^"]*)"/.exec(attrs);
+    const marked = had
+      ? attrs.replace(had[0], `class="${had[1]} pt pt-navigates"`)
+      : `${attrs} class="pt pt-navigates"`;
+    return `<${tag}${marked} data-goes="${esc(dest.id)}">`;
   });
 }
 
@@ -1049,6 +1103,8 @@ function goesFor(corpus: Corpus): Map<string, string> {
 
 function renderScreens(scope: Scope, ctx: Ctx, scopeId: string, opts: PageOptions, corpus: Corpus): string {
   const derivedGoes = goesFor(corpus);
+  /** Which screen answers which address — so a drawn navigation can be walked, not just displayed. */
+  const routes = routeTable(corpus);
   /**
    * ⛔ `:root` DOES NOT MATCH INSIDE A SHADOW TREE, so a design system that defines its tokens
    * there would hand the mock a stylesheet of variables that resolve to nothing — every colour and
@@ -1085,6 +1141,26 @@ function renderScreens(scope: Scope, ctx: Ctx, scopeId: string, opts: PageOption
   }
   return `
     <section class="screens">
+      ${
+        /**
+         * ⛔ THE DIMENSIONS BELONG WHERE THE DRAWINGS ARE. Peter: *"let's move the dimensions down
+         * into the prototype view on the features"*.
+         *
+         * I had put the filter in the frame, on the reasoning that a filter on one tab filters
+         * nothing — and that answered *"is the dimension filter on every feature page"* by making it
+         * global. Which is a different thing: on the breadcrumb line it is a property of the WHOLE
+         * SITE, sitting above a product page and a settings surface that have no variants to narrow,
+         * and a reader meets it before meeting anything it applies to.
+         *
+         * Here it is beside the screens it changes. ⛔ And that is the reading his own words always
+         * had — a feature's variations are the feature's, so the control for them is the feature's
+         * too.
+         *
+         * ⛔ ABSENT WHERE THE PRODUCT DECLARES NONE, unchanged: a row of empty dropdowns is the "nav
+         * row that does nothing" this file refuses by name.
+         */
+        dimensionFilter(corpus)
+      }
       <!--
         ⛔ NO HEADING AND NO INSTRUCTIONS HERE. Peter: *"remove placeholder text like this: The
         screens these arrive on / Click anything on a screen to see what the product promises
@@ -1373,7 +1449,7 @@ function renderScreens(scope: Scope, ctx: Ctx, scopeId: string, opts: PageOption
                          : ""
                      }
                    </div>
-                   <div class="state-frame" data-state="0">${asMock(withFinish(withLands(withGoes(wireHtml(v, matched)), 0)))}</div>
+                   <div class="state-frame" data-state="0">${asMock(withFinish(withLands(withGoes(wireHtml(v, matched, undefined, scopeId, routes)), 0)))}</div>
                    ${states
                      .map(
                        (st, i) =>
@@ -1382,7 +1458,7 @@ function renderScreens(scope: Scope, ctx: Ctx, scopeId: string, opts: PageOption
                      .join("")}
                    ${hasDone ? `<div class="state-frame" data-state="${doneAt}" hidden>${doneFrame()}</div>` : ""}
                  </div>`
-              : asMock(wireHtml(v, matched))
+              : asMock(wireHtml(v, matched, undefined, scopeId, routes))
             : v.sketch
               ? `<pre class="proto sketch">${liveSketch(v, matched)}</pre>`
               : `<p class="owes">Nobody has drawn this screen, so there is nothing here to point at.</p>`;
@@ -2039,7 +2115,28 @@ function renderBehaviours(
                 ? `<details class="beh-shows"><summary>${shows.length} thing${shows.length === 1 ? "" : "s"} that would show this</summary><ul>${shows
                     .map(
                       (c) =>
-                        `<li>${[c.given && `<span class="g">given</span> ${line(c.given)}`, c.when && `<span class="g">when</span> ${line(c.when)}`, c.then && `<span class="g">then</span> ${line(c.then)}`]
+                        /**
+                         * ⛔ `steps` IS RENDERED, and leaving it out made a requirement an EMPTY
+                         * BULLET. A claim whose demonstration is a sequence — press it three times
+                         * and the order cycles — cannot be said in one `when` without reading as a
+                         * single press, so `Criterion` has always carried `steps` and the
+                         * demonstrator brief's own example uses it. This built the text from
+                         * `given`/`when`/`then` only, so such a requirement rendered as
+                         * `<ul><li></li></ul>` under a summary counting it. The count was honest
+                         * and the list was not: "3 things that would show this" over two sentences
+                         * and a blank line, which tells a reader either something is missing or
+                         * they cannot count.
+                         *
+                         * ⛔ Reported by a demonstrator that wrote one and SAW it on the live page,
+                         * and which kept `steps` rather than reshaping the artefact to suit the
+                         * renderer — the right direction, and why this is a renderer fix.
+                         */
+                        `<li>${[
+                          c.given && `<span class="g">given</span> ${line(c.given)}`,
+                          c.when && `<span class="g">when</span> ${line(c.when)}`,
+                          c.then && `<span class="g">then</span> ${line(c.then)}`,
+                          c.steps && `<span class="g">steps</span> ${line(c.steps)}`,
+                        ]
                           .filter(Boolean)
                           .join(" ")}</li>`
                     )
@@ -2262,7 +2359,15 @@ function confidenceParts(corpus: Corpus, ref: string): { chips: string; why: str
         .join("")}</ul>`
     : "";
 
-  return { chips: `${stampChip}${strengthChip}`, why: `${diff}${why}` };
+  /**
+   * ⛔ THE LEVEL RIDES ON THE STAMP CHIP AS AN ATTRIBUTE, `levelOf`'S AND NO OTHER. The chip's words
+   * say whether a person confirmed it, which cannot tell a derived sentence from a draft; a session
+   * reading this page over MCP needs that without a second call, and a reader does not need a
+   * third pill saying it. Omitted where `levelOf` has no answer, never guessed.
+   */
+  const lv = levelOf(corpus, ref);
+  const levelled = "error" in lv ? stampChip : stampChip.replace("<span ", `<span data-level="${lv.level}" `);
+  return { chips: `${levelled}${strengthChip}`, why: `${diff}${why}` };
 }
 
 function renderCard(
@@ -3052,6 +3157,8 @@ function renderExchanges(corpus: Corpus, scopeIds: string[], cellOf: Map<string,
             ${c.given ? `<span class="g">given</span> ${line(c.given)}` : ""}
             ${c.when ? `<span class="g">when</span> ${line(c.when)}` : ""}
             ${c.then ? `<span class="g">then</span> ${line(c.then)}` : ""}
+            ${/* ⛔ Both renderings of a requirement, or the one a reader lands on is still blank. */ ""}
+            ${c.steps ? `<span class="g">steps</span> ${line(c.steps)}` : ""}
           </li>`
         )
         .join("");
@@ -3138,6 +3245,100 @@ const NAV_PLACE_BUTTON =
   `</button>`;
 
 /**
+ * ⛔ CONNECT CLAUDE CODE, FROM THE PAGE — because there was no other way a project's owner could.
+ *
+ * Peter, on what blocks the MVP: *"`productos connect` and token issuing from the page"*. A session
+ * reaches a project through `/p/<project>/mcp` with a bearer token, and the only way to get one was a
+ * command that needs the database's connection string. So the owner, on the page they own the
+ * project from, could not connect anything to it.
+ *
+ * ⛔ ONLY WHERE A PROJECT IS IN THE PATH. A local `serve` has no tokens and no MCP endpoint to point
+ * at; a control there would mint something that reaches nothing.
+ *
+ * ⛔ THE SECRET IS ON SCREEN ONCE. The server stores a hash, so the panel says so where the token
+ * appears — a reader who closes it without copying has to make another, and should know that before
+ * they close it rather than after.
+ */
+const servedUnderProject = (base: string | undefined): boolean => /^\/p\/[^/]+\/v2$/.test(base ?? "");
+
+const CONNECT_BUTTON =
+  `<details class="connect" data-ref="connect" data-label="Connect Claude Code">` +
+  `<summary>Connect Claude Code</summary>` +
+  `<div class="connect-panel">` +
+  `<p>Lets a Claude Code session in your repo read this project and draft into it. It cannot agree to anything on your behalf — only you can, here.</p>` +
+  `<button type="button" class="connect-make">Make a token</button>` +
+  `<div class="connect-out" hidden>` +
+  `<p>Run these two lines in your repo. <strong>The token is shown only this once</strong> — copy it before you close this.</p>` +
+  `<pre class="connect-lines"></pre>` +
+  `<div class="connect-acts"><button type="button" class="connect-copy">Copy both lines</button>` +
+  `<button type="button" class="connect-stop">Stop this token</button></div>` +
+  `</div>` +
+  `<p class="connect-said" role="status"></p>` +
+  `</div></details>`;
+
+const CONNECT = `<script>
+(function () {
+  const box = document.querySelector("details.connect");
+  if (!box) return;
+  /* ⛔ Relative to the project, never the root — the page is served under /p/<project>/. */
+  const at = location.pathname.indexOf("/v2");
+  const under = at > 0 ? location.pathname.slice(0, at) : "";
+  const make = box.querySelector(".connect-make");
+  const out = box.querySelector(".connect-out");
+  const lines = box.querySelector(".connect-lines");
+  const said = box.querySelector(".connect-said");
+  const copy = box.querySelector(".connect-copy");
+  const stop = box.querySelector(".connect-stop");
+  let minted = null;
+  make.addEventListener("click", async function () {
+    make.disabled = true;
+    said.textContent = "Making a token…";
+    try {
+      const r = await fetch(under + "/api/v2/tokens", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "{}",
+      });
+      const body = await r.json().catch(function () { return {}; });
+      if (!r.ok || !body.token) throw new Error(body.why || r.statusText || "it was refused");
+      minted = body.id;
+      lines.textContent =
+        "productos init claude --at " + location.origin + under + "\\n" +
+        "export PRODUCTOS_TOKEN=" + body.token;
+      out.hidden = false;
+      make.hidden = true;
+      said.textContent = "Keep the export line wherever your shell keeps its settings, so Claude Code has it when it starts.";
+    } catch (e) {
+      said.textContent = "No token was made: " + e.message;
+      make.disabled = false;
+    }
+  });
+  copy.addEventListener("click", async function () {
+    try {
+      await navigator.clipboard.writeText(lines.textContent);
+      said.textContent = "Copied.";
+    } catch (e) {
+      said.textContent = "Could not copy — select the two lines and copy them yourself.";
+    }
+  });
+  stop.addEventListener("click", async function () {
+    if (!minted) return;
+    const r = await fetch(under + "/api/v2/tokens/" + encodeURIComponent(minted), { method: "DELETE" });
+    if (r.ok) {
+      lines.textContent = "";
+      out.hidden = true;
+      make.hidden = false;
+      make.disabled = false;
+      minted = null;
+      said.textContent = "That token no longer works. Anything using it has been disconnected.";
+    } else {
+      said.textContent = "It was not stopped — try again.";
+    }
+  });
+})();
+<\/script>`;
+
+/**
  * Every scope, as a tree, with how much work each one is holding.
  *
  * ⛔ THE COUNTS ARE ON THE NAV, because "which feature do I look at next" is the first question
@@ -3155,7 +3356,9 @@ function renderNav(
   aboutLabel: string,
   charterTabs: string,
   /** How many screens the subtree draws, so the tab says whether it is worth opening. */
-  screens: number
+  screens: number,
+  /** ⛔ The Connect Claude Code control — only on a live page served under a project. */
+  connect: string = ""
 ): string {
   const kids = (parent?: string) => corpus.scopes.filter((s) => s.scope.in === parent);
   // ⛔ Once for the whole nav. It was called per row, which walks the entire corpus per row.
@@ -3287,9 +3490,26 @@ function renderNav(
        * which is worth more than repeating the name it is already showing.
        */
       const hover = esc(plain(scope.title || scope.id));
+      /**
+       * ⛔ THE ROW YOU ARE ON IS STILL A LINK, AND MARKED — "a link to where you already are is not
+       * a link" is the decision that broke the menu, in both the ways Peter reported.
+       *
+       * It rendered as its own name in bold with no href and no `data-goto`, so:
+       *
+       *   - nothing on the page said where the reader was. There is no `aria-current` anywhere in
+       *     this renderer, and the one row that should carry it was the one row that could not.
+       *   - `openWhereWeLanded` finds the landing by looking for `a[data-goto]`, so on a cold
+       *     arrival it found nothing, opened nothing, and left the row sitting inside two shut
+       *     containers. Peter, three times: *"the menu doesn't expand"*.
+       *
+       * ⛔ AND IT IS THE END STATE, NOT A PATCH. Under one-address-one-page the menu is just links;
+       * the current one is distinguished by being MARKED rather than by being inert. Measured in a
+       * real browser on a three-level corpus, not reasoned about — the previous three attempts at
+       * this bug were each right about the one case I measured and wrong about the rest.
+       */
       const name =
         scope.id === here
-          ? `<strong title="${hover}">${label}</strong>`
+          ? `<a href="${esc(address(scope.id))}" data-goto="${esc(scope.id)}" aria-current="page" title="${hover}"><strong>${label}</strong></a>`
           : holdsIt
             ? `<a href="${esc(address(scope.id))}" data-goto="${esc(scope.id)}" title="${hover}">${label}</a>`
             : base
@@ -3651,7 +3871,7 @@ function renderNav(
           `</div>`
         );
       })
-      .join("")}${NAV_PLACE_BUTTON}</div>` +
+      .join("")}${NAV_PLACE_BUTTON}${connect}</div>` +
     /**
      * ⛔ OVERVIEW'S OWN MENU BELONGS IN THE FRAME, NOT IN THE PAGE.
      *
@@ -3715,27 +3935,7 @@ function renderNav(
      * both about getting somewhere else, not because they share an ancestor.
      */
     `<div class="crumbs"><span class="trail"></span>` +
-    /**
-     * ⛔ THE DIMENSION FILTER, ON EVERY PAGE, BECAUSE A FILTER ON ONE TAB FILTERS NOTHING.
-     *
-     * Peter: *"Has anything is the dimension filter on every feature page"* — it was not. The model
-     * reached every truth and the only control that read it was on the prototype board, so a reader
-     * on a feature page could see that a variant existed and could not ask to be shown it.
-     *
-     * ⛔ IT IS IN THE FRAME, which is the part that does not scroll and is on every page by
-     * construction. Rendering it per page would be the same control in a dozen places, and the one
-     * on the board would be a thirteenth copy of the same question.
-     *
-     * ⛔ AND IT IS THE SAME CONTROL THE BOARD USES — `data-walk-dim` — because he already settled
-     * what these are: *"so the prototypes just has chips of which dimension, e.g. role:admin. and
-     * the drop down selectors will be filters"*. One answer, read by the board to pick a prototype
-     * and by the page to narrow what it shows.
-     *
-     * ⛔ ABSENT WHERE A PRODUCT DECLARES NO DIMENSIONS. A row of empty dropdowns is the "nav row that
-     * does nothing" this file refuses by name — it reads as a feature that is broken rather than one
-     * nobody has used yet.
-     */
-    dimensionFilter(corpus) +
+
     /**
      * ⛔ AND NO CHEVRON WHERE THERE IS NO TREE TO SHOW. A control that expands nothing is the thing
      * `check` refuses by name elsewhere in this project — it reads as "there is more here" and then
@@ -3794,7 +3994,48 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
    * Containers nest without limit, so this has to be the whole subtree or it is a lie about
    * the commonest shape in the model.
    */
-  const grids = ids
+  /**
+   * ⛔ ONE ADDRESS RENDERS ONE PAGE, SO THE SECTIONS ARE THIS SCOPE'S AND NOBODY ELSE'S.
+   *
+   * Peter: *"we need to stop the 'server re-rendering' of anything. we should just be loading data,
+   * rendering the page we're on, no tree walking, nothing."*
+   *
+   * This descended, so an ancestor's document carried a section for every scope beneath it and the
+   * client switched between them in place. That gave **every scope two renderings** — one as a
+   * section on an ancestor's page, one as the landing of its own page — and all four of the things
+   * he reported are that, measured in a real browser on a three-level corpus:
+   *
+   *   via the menu    data-view="rent-roll"     ← a section of the ANCESTOR's document
+   *   the same URL    data-view="overview"      ← its own page's landing
+   *
+   * So "I load a page different than if I went to the menu", and the router that had to reconcile
+   * the two lost the address while doing it. I patched its resolution three times; each patch was
+   * right about the one case I measured and wrong about the others, because the defect is not in
+   * the resolving — it is that there are two things to resolve between.
+   *
+   * ⛔ WITH THE DESCENDANTS GONE THE ROUTER DISABLES ITSELF, which is the point. A menu click is
+   * kept in-page only where the document already holds that view; now it never does, so the link
+   * is a link and the browser navigates. One rendering per address, by construction rather than
+   * by assertion.
+   *
+   * ⛔ AND THE SUBTREE IS STILL COUNTED, just not rendered. `ids` below still feeds the numbers that
+   * say what is underneath this scope — those are facts about this page and a reader needs them.
+   * Narrowing what gets LOADED to match what gets rendered is the next commit and a different
+   * layer; doing both at once would make a correctness fix indistinguishable from a perf change.
+   */
+  /**
+   * ⛔ ONE SCOPE ONLY WHERE THERE IS SOMEWHERE TO NAVIGATE TO. A page with no address cannot be one
+   * page of many: `v2 page --out` writes a FILE and a published artifact is a single document, with
+   * no server to ask for the next scope. Cutting the subtree out of those leaves a reader with one
+   * feature and a menu full of rows that can never resolve — the standalone render's whole job is to
+   * be complete.
+   *
+   * The same distinction `only` already draws, and for the same reason: the served page defers
+   * because it can fetch, and the standalone page must not because it cannot.
+   */
+  const servedPage = !!opts.linkBase;
+  const renderIds = servedPage ? [scopeId] : ids;
+  const grids = renderIds
     .map((id) => gridFor(corpus, id))
     .filter((x): x is Grid => !!x && x.rows.length > 0);
   const cellOf = new Map<string, Cell>();
@@ -3866,12 +4107,31 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
    * how 357 dead anchors reached a real corpus.
    */
   /** Every scope this render emits a view for — leaves with behaviours, and the containers above them. */
-  const containerViews = ids.filter(
+  /**
+   * ⛔ THIS SCOPE'S OWN LISTING, AND NO DESCENDANT'S — the same cut as `grids` above.
+   *
+   * It used to emit a listing for every container BENEATH this one, which is half of why an
+   * ancestor's document held a second rendering of each descendant.
+   *
+   * ⛔ AND THE `id !== scopeId` EXCLUSION GOES, which is the half that made a container's own page
+   * empty. A container has no exchanges, so with its descendants' sections gone a page for it would
+   * have had nothing on it at all — the exact objection `renderScopePage` opens with ("a page that
+   * answered for the named scope alone would show a finished-looking product with nothing in it").
+   * The answer is not to re-render the subtree; it is that a grouping's own content is the LISTING
+   * of what is in it, which this already renders as links to their own pages.
+   *
+   * The duplicate-description worry the old comment records was about the corpus root, where the
+   * landing already describes the product. Guarded below rather than by excluding every scope.
+   */
+  const containerViews = (servedPage ? [scopeId] : ids).filter(
     (id) =>
       (corpus.scopes.find((s) => s.scope.id === id)?.scope.exchanges.length ?? 0) === 0 &&
-      // ⛔ Not the scope this page is rooted at — that is Overview, and giving it a container view
-      // too rendered its description twice under two headings.
-      id !== scopeId
+      /**
+       * ⛔ On a served page this scope's OWN listing is the thing; on a standalone one it is still
+       * excluded, because there the landing already describes it and rendering both put its
+       * description under two headings.
+       */
+      (servedPage ? !!entry.scope.in : id !== scopeId)
   );
   const viewed = new Set<string>([...grids.map((g) => g.scope), ...containerViews]);
   const anchors = new Set<string>([
@@ -3912,7 +4172,8 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
       ids.reduce(
         (n, id) => n + (corpus.scopes.find((s) => s.scope.id === id)?.scope.views.filter((v) => v.exists !== "withdrawn").length ?? 0),
         0
-      )
+      ),
+      opts.interactive && servedUnderProject(opts.linkBase) ? CONNECT_BUTTON : ""
     )}
     <main>
       ${
@@ -4534,7 +4795,7 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
     return `${section}${mockBank(corpus, ids, protoScreens, section, scopeId)}`;
   }
 
-  return `${STYLE}${body}${appCssOnce(opts)}${mockBank(corpus, ids, protoScreens, body, scopeId)}${partFacts(corpus, ids)}${renderNotePanel(corpus, ids, opts)}${VIEW_SWITCH}${opts.interactive ? DEFER : ""}${DIM_FILTER}${NAV_PLACE}${COPY_REF}${PROTO_FRAME}${PROTOTYPE}${DRIVE}${opts.interactive ? liveScript(opts) : INERT}`;
+  return `${STYLE}${body}${appCssOnce(opts)}${mockBank(corpus, ids, protoScreens, body, scopeId)}${partFacts(corpus, ids)}${renderNotePanel(corpus, ids, opts)}${VIEW_SWITCH}${opts.interactive ? DEFER : ""}${opts.interactive && servedUnderProject(opts.linkBase) ? CONNECT : ""}${DIM_FILTER}${NAV_PLACE}${COPY_REF}${PROTO_FRAME}${PROTOTYPE}${DRIVE}${opts.interactive ? liveScript(opts) : INERT}`;
 }
 
 
@@ -5184,7 +5445,13 @@ const DEFER = `<script>
 
   document.addEventListener("click", (ev) => {
     for (const el of ev.composedPath ? ev.composedPath() : [ev.target]) {
-      const name = el instanceof Element && el.getAttribute ? el.getAttribute("data-goto") : null;
+      if (!(el instanceof Element) || !el.getAttribute) continue;
+      /**
+       * ⛔ A TAB IS A WAY IN TOO, AND IT WAS NOT ON THIS LIST. One attribute is a menu row; the other
+       * is the row of areas across the top of the frame, which is how most people reach a section at
+       * all. Choosing Product filled nothing and said "Loading this…" indefinitely.
+       */
+      const name = el.getAttribute("data-goto") || el.getAttribute("data-tab");
       if (!name) continue;
       const stub = stubFor(name);
       if (stub) fill(stub);
@@ -5204,6 +5471,34 @@ const DEFER = `<script>
 
   /** And whatever is showing on arrival, if the server deferred it anyway. */
   for (const s of document.querySelectorAll("section.view[data-defer]")) if (!s.hidden) fill(s);
+
+  /**
+   * ⛔ AND ANYTHING THAT BECOMES VISIBLE, HOWEVER IT GOT THERE.
+   *
+   * Peter: *"Loading this…"* — on the Product tab, forever. Not slow: nothing was ever fetched. The
+   * three triggers above are a list of ENTRY POINTS — a menu press, a hash, and whatever was
+   * showing at boot — and the tab row is a fourth one nobody added. A tab carries its own attribute, so
+   * choosing Product revealed the stub and no code anywhere asked for its content. No request, no
+   * failure, no retry button: the one state the error handling below cannot reach, because it only
+   * runs when a fetch was attempted.
+   *
+   * ⛔ SO THE TRIGGER BECOMES THE INVARIANT RATHER THAN A LONGER LIST. "A deferred section that is
+   * visible gets filled" is the thing that was always meant; enumerating the ways a section can
+   * become visible is how this was wrong, and would be wrong again at the next new way in.
+   *
+   * ⛔ The entry points above stay, and that is deliberate — they fill BEFORE the switch, which is
+   * what stops a half-replaced section flashing. This is the backstop, not the mechanism.
+   */
+  if (typeof MutationObserver !== "undefined") {
+    const watcher = new MutationObserver((changes) => {
+      for (const c of changes) {
+        const el = c.target;
+        if (el instanceof Element && el.matches("section.view[data-defer]") && !el.hidden) fill(el);
+      }
+    });
+    for (const s of document.querySelectorAll("section.view[data-defer]"))
+      watcher.observe(s, { attributes: true, attributeFilter: ["hidden"] });
+  }
 
   /* -------------------------------------------------------------- thumbnails */
 
@@ -6442,7 +6737,7 @@ const PROTOTYPE = `<script>
   const controlsIn = (screen) => {
     const out = [...screen.querySelectorAll("button.pt")];
     for (const h of screen.querySelectorAll("div.proto.html"))
-      if (h.shadowRoot) out.push(...h.shadowRoot.querySelectorAll("button.pt, [data-part]"));
+      if (h.shadowRoot) out.push(...h.shadowRoot.querySelectorAll("button.pt, [data-part], [data-goes]"));
     return out;
   };
 
@@ -6524,7 +6819,12 @@ const PROTOTYPE = `<script>
   };
 
   document.addEventListener("click", (ev) => {
-    const btn = inPath(ev, "button.pt, [data-part]");
+    /**
+     * ⛔ A ROW THE APPLICATION NAVIGATES FROM IS A CONTROL, and it is not a button and nobody
+     * declared it a part. Selecting on those two alone is why a drawn deals list had a hundred
+     * rows and nothing to press.
+     */
+    const btn = inPath(ev, "button.pt, [data-part], [data-goes]");
     if (!btn) return;
     ev.preventDefault();
 
@@ -7589,10 +7889,19 @@ const VIEW_SWITCH = `<script>
      * was a navigation press. The breakpoint that decides this lives in the stylesheet and is read
      * from there; a second copy of "62rem" in script is two answers to one question, and they drift.
      *
-     * The hidden ATTRIBUTE is the other reason the chevron disappears — Overview has no tree — and that one
-     * must still close.
+     * ⛔ AND IT ASKS THE LAYOUT, NOT THE CHEVRON. This read the chevron's computed display and
+     * excluded the case where its hidden ATTRIBUTE is set, on the grounds that "Overview has no
+     * tree". Overview has a tree now — the filter above keeps every row on a tab no scope belongs
+     * to — so that exclusion closed the column on Overview and on How it works, leaving 19rem of
+     * breadcrumb and no way back. Peter: *"the menu is broken"*.
+     *
+     * Down the side the tree is the menu and there is no control to reopen it, so it is never
+     * closed, whatever the chevron happens to be doing. The breakpoint still lives in the
+     * stylesheet and is still read from there rather than copied: position:fixed is what the side
+     * placement DOES to the frame, so asking for it is asking the cascade.
      */
-    if (c && !c.hidden && getComputedStyle(c).display === "none") open = true;
+    const sideways = frame && getComputedStyle(frame).position === "fixed";
+    if (sideways || (c && !c.hidden && getComputedStyle(c).display === "none")) open = true;
     tree.hidden = !open;
     if (c) c.setAttribute("aria-expanded", String(open));
     frame.classList.toggle("open", open);
@@ -7607,6 +7916,21 @@ const VIEW_SWITCH = `<script>
       found = found || mine;
     }
     if (!found) {
+      /**
+       * ⛔ WHERE THERE IS AN ADDRESS, A SECTION THIS PAGE LACKS IS SOMEWHERE ELSE — GO THERE.
+       *
+       * Revealing every section was the right fallback when one document held the whole corpus: a
+       * saved file reads as one long page rather than as a blank panel. On a SERVED page it is now
+       * the worst available outcome — four sections stacked at once, under an address naming none of
+       * them, which is what a reader saw when a tab could not find its target.
+       *
+       * ⛔ Guarded on trails[name], so this only ever follows a name that IS a scope. Navigating
+       * on an unknown name would be a page asking for itself forever.
+       */
+      if (BASE && trails[name]) {
+        location.href = addressOf(name);
+        return;
+      }
       for (const v of all) v.hidden = false;
       /** ⛔ Showing everything means the page scrolls again, so the frame has to let go. */
       delete document.documentElement.dataset.framed;
@@ -7734,8 +8058,28 @@ const VIEW_SWITCH = `<script>
     const at = addressOf(name);
     /** ⛔ Compared against whichever part of the address it IS, or every move pushes a duplicate. */
     const now = at.charAt(0) === "#" ? location.hash : location.pathname;
+    /**
+     * ⛔ A REF TAIL BELONGS TO THIS ADDRESS AND MUST NOT BE THROWN AWAY.
+     *
+     * An address may name a view and then a ref inside it —
+     * /v2/capabilities/document-catalogue/define-a-field-the-product-reads/see-a-fields-definition,
+     * where the last segment is an EXCHANGE and not a scope. The server correctly serves the
+     * owning scope's page. This then wrote addressOf(view) over the top of it, so arriving at a
+     * link to one statement silently became its feature: *"clicked …/see-a-fields-definition,
+     * landed …/define-a-field-the-product-reads"*.
+     *
+     * Reported by the deploy session as the deepest level having no page of its own. It has no page
+     * BY DESIGN — a statement is not a scope — and the defect is that the address stopped saying
+     * which statement. Same class as the bug this whole branch is about: paste the link, lose the
+     * link.
+     *
+     * So an address that is this view PLUS a deeper tail is already correct and is left alone.
+     */
+    const keeps = now.indexOf(at + "/") === 0;
     try {
-      if (fromHistory) history.replaceState(null, "", at);
+      if (keeps) {
+        /* already the right place, said more precisely than addressOf can say it */
+      } else if (fromHistory) history.replaceState(null, "", at);
       else if (now !== at) history.pushState(null, "", at);
     } catch {}
   };
@@ -7779,8 +8123,31 @@ const VIEW_SWITCH = `<script>
    */
   for (const t of tabs)
     t.addEventListener("click", () => {
-      show(t.dataset.tab, false);
-      if (t.dataset.tab !== "overview") setOpen(true);
+      const name = t.dataset.tab;
+      /**
+       * ⛔ A TAB THAT NAMES A SCOPE IS AN ADDRESS, NOT A SWITCH — AND IN TOP MODE THE TABS ARE THE
+       * WHOLE OF THE NAVIGATION.
+       *
+       * The tree is hidden in top mode, which is what the page SHIPS, so all 130 of its links are
+       * 0x0 and a reader has only these four buttons. Product and Capabilities name scopes whose
+       * sections a page no longer carries, so show() could not find them, fell into its no-match
+       * branch and revealed all four sections at once — the address unchanged, no error logged.
+       * Peter: *"hahahahahahaha so broken, can't even get to a single page"*.
+       *
+       * ⛔ A DEAD CONTROL THAT LOGS NOTHING IS THE WORST SHAPE AVAILABLE: it is indistinguishable
+       * from a slow page, so it reads as the whole product being broken rather than as one button.
+       *
+       * ⛔ AND IT IS THE SAME OMISSION AS THE MENU ROW, MISSED IN THE SAME PLACE. I drove the rows
+       * and left the tabs, having told two other sessions to measure in SIDE mode — right for the
+       * claim #226 was making, and it made the default mode the one nobody looked at.
+       *
+       * ⛔ THE DECISION LIVES IN show(), NOT HERE. A guard on this handler was the first fix and it
+       * was a second copy of one rule: "a section this page lacks is somewhere else, so go there".
+       * Disabling it changed nothing, because show() already answers that for every caller — which
+       * is how I found out it was redundant rather than load-bearing.
+       */
+      show(name, false);
+      if (name !== "overview") setOpen(true);
       window.scrollTo(0, 0);
     });
   /**
@@ -7788,7 +8155,25 @@ const VIEW_SWITCH = `<script>
    * tabs exist to remove, and a reader who has chosen a side has said which one they mean.
    */
   const scopeTree = (section) => {
-    for (const li of tree ? tree.querySelectorAll("li") : []) {
+    const rows = tree ? [...tree.querySelectorAll("li")] : [];
+    /**
+     * ⛔ FILTER ONLY WHERE THERE IS SOMETHING TO FILTER TO, AND ASK THE ROWS RATHER THAN A LIST.
+     *
+     * The tabs are not all halves of the product. Overview, the prototype board and What steers
+     * this are SECTIONS, and no scope belongs to any of them — so comparing every row against the
+     * current section hid the entire tree on all four. Peter, standing on one of them:
+     * *"the menu is broken"*, and *"i'm on another machine, looking at .../v2/prototype"*.
+     *
+     * The previous round of this special-cased "overview" by name and left its three siblings
+     * broken, which is the shape of the bug rather than a fix for it — a list of exceptions is a
+     * list somebody has to remember to extend, and the next tab added breaks it again.
+     *
+     * So it is derived: if no row in the tree belongs to the current section, there is no half being
+     * chosen and nothing to narrow to, and the tree stays whole. A real half still narrows, because
+     * its rows do belong to it.
+     */
+    const narrowing = rows.some((r) => r.dataset.scope && sectionOf[r.dataset.scope] === section);
+    for (const li of rows) {
       /**
        * ⛔ THE ROW SAYS WHICH SCOPE IT IS, rather than the filter inferring it from a link.
        *
@@ -7802,7 +8187,26 @@ const VIEW_SWITCH = `<script>
        * machinery, while the machinery half looked correct and hid the bug.
        */
       const id = li.dataset.scope;
-      li.hidden = section === "overview" || !id || sectionOf[id] !== section;
+      /**
+       * ⛔ THE LANDING IS NOT A REASON TO HIDE THE MENU. This read
+       * section === "overview" || !id || sectionOf[id] !== section, so whenever the visible
+       * section was the landing, EVERY row in the tree was hidden.
+       *
+       * On the root page that was invisible: /v2 lands on the product overview, where the tabs
+       * are the navigation and the tree is a drill-down nobody has opened yet. But a page served at
+       * ANY deeper address also shows its landing — so on every cold arrival at a real URL this hid
+       * the entire menu. Peter, three times, and the third time with the row already marked current
+       * and its ancestors already open: *"menus not operable, in a shit state again"*, *"the menu
+       * doesn't expand"*.
+       *
+       * ⛔ Measured, not reasoned: with aria-current landing correctly and every ancestor open,
+       * the row was STILL rowVisible: false — which is what sent me here rather than to another
+       * patch of the address resolution.
+       *
+       * So the filter answers only the question it exists for — which half of the product this row
+       * belongs to — and the landing keeps the tree it is standing in.
+       */
+      li.hidden = !id || (narrowing && sectionOf[id] !== section);
       /**
        * ⛔ AND THE AREA ITSELF IS NOT A ROW OF ITS OWN MENU. Peter: *"'Product' itself doesn't need
        * to be a menu item under the 'Product' main tab"*.
@@ -7905,17 +8309,80 @@ const VIEW_SWITCH = `<script>
    * names rent-roll, and every segment before it is a view too. Reading left to right would land
    * a reader on the area every time they asked for a feature inside it.
    */
+  /**
+   * ⛔ ONE PLACE THAT ASKS "DOES THIS DOCUMENT HOLD THAT SECTION", because the answer now decides
+   * whether a press stays here or becomes a navigation — and two copies of the selector is two
+   * answers waiting to drift. CSS.escape is feature-detected because every ref in this model
+   * carries a #.
+   */
+  /**
+   * Scroll to the ref an address names past its view, if it names one.
+   *
+   * ⛔ ONE COPY, BECAUSE A COLD ARRIVAL NEEDS IT AS MUCH AS A PRESS DOES. This lived only in the
+   * click handler, so following a link to a statement WITHIN the page worked and opening that same
+   * link in a new tab landed at the top of the feature with nothing saying which statement was
+   * meant. A durable link that only works when you were already here is not durable.
+   */
+  const scrollToTail = (pathname, named) => {
+    if (!BASE || pathname.indexOf(BASE) !== 0) return false;
+    const segs = pathname.slice(BASE.length).split("/").filter(Boolean).map(decodeURIComponent);
+    const cut = segs.lastIndexOf(named);
+    if (cut < 0) return false;
+    const tail = segs.slice(cut + 1);
+    if (!tail.length) return false;
+    const want = named + "#" + tail.join("#");
+    const el = [...document.querySelectorAll("[data-ref]")].find(function (x) { return x.dataset.ref === want; });
+    if (el && el.scrollIntoView) {
+      el.scrollIntoView({ block: "start" });
+      return true;
+    }
+    return false;
+  };
+
+  const sectionNamed = (name) =>
+    document.querySelector('section.view[data-view="' + (window.CSS && CSS.escape ? CSS.escape(name) : name) + '"]');
+
   const viewAt = (pathname) => {
     if (!BASE || pathname.indexOf(BASE) !== 0) return null;
     const segs = pathname.slice(BASE.length).split("/").filter(Boolean).map(decodeURIComponent);
     for (let i = segs.length - 1; i >= 0; i--) {
       /**
-       * ⛔ A SEGMENT NAMING THIS PAGE'S ROOT IS ITS OVERVIEW. The root does not render as a section
-       * of its own — it IS the Overview — so looking only at data-view found nothing for the very
-       * address that had just been served, which is the whole of the cold-arrival defect.
+       * ⛔ A REAL SECTION FIRST, AND THE ROOT RULE ONLY WHERE THERE IS NONE — THE ORDER IS THE BUG.
+       *
+       * The root rule is right about the case it was written for: a page's root usually does not
+       * render as a section of its own — it IS the Overview — so looking only at data-view found
+       * nothing for the very address just served, which was the cold-arrival defect.
+       *
+       * ⛔ BUT ITS PREMISE IS FALSE WHENEVER THE ROOT DOES HAVE A SECTION, and asking it first made
+       * it win anyway. Served at /v2/product/cre/deal-overview the document carries BOTH
+       * data-root="deal-overview" AND data-view="deal-overview" — measured on the live instance —
+       * so this returned "overview" and the reader got the question queue from an address naming
+       * the feature. Peter: *"the menu doesn't expand, and I load a page different than if I went
+       * to the menu and cliked through"*. Both halves are this: the menu expands to whatever this
+       * answers, and clicking through switches sections without touching the URL, so one address
+       * showed two different pages depending on how you got there.
+       *
+       * Asking for the section first keeps the original fix — a root with no section of its own
+       * still falls through to "overview" — and stops it overriding a root that has one.
        */
-      if (ROOT && segs[i] === ROOT) return "overview";
       if (segs[i] === "overview" || views().some(function (v) { return v.dataset.view === segs[i]; })) return segs[i];
+      if (ROOT && segs[i] === ROOT) return "overview";
+      /**
+       * ⛔ A SCOPE THIS PAGE DOES NOT HOLD IS ANOTHER PAGE'S ADDRESS — STOP, DO NOT KEEP WALKING UP.
+       *
+       * Walking from the deepest segment upward is right for a REF below a view
+       * (…/rent-roll/review-the-rows scrolls to the ref inside the view), and wrong the moment a
+       * segment names a scope. Served at /v2/capabilities, a click on a child's row —
+       * /v2/capabilities/access-control — walked past access-control, matched capabilities
+       * because this page holds its own section, and switched to the page it was already on. The
+       * URL never changed and the reader never moved: *"why does the URL NO LONGER CHANGE AFTER I
+       * GO THROUGH THE MENU"*, with the menu working exactly as built.
+       *
+       * sectionOf names every scope in the corpus, so "is this segment a scope" is answerable
+       * here without asking the server. A scope that is not in this document belongs to another
+       * page; returning null hands the link to the browser, which is the whole design.
+       */
+      if (sectionOf[segs[i]] !== undefined) return null;
     }
     return null;
   };
@@ -7950,14 +8417,7 @@ const VIEW_SWITCH = `<script>
        * past the view is the ref — …/rent-roll/review-the-rows — so the element is found by what
        * it IS rather than by an anchor hung off the URL.
        */
-      const segs = u.pathname.slice(BASE.length).split("/").filter(Boolean).map(decodeURIComponent);
-      const cut = segs.lastIndexOf(named);
-      const tail = segs.slice(cut + 1);
-      if (tail.length) {
-        const want = named + "#" + tail.join("#");
-        const el = [...document.querySelectorAll("[data-ref]")].find(function (x) { return x.dataset.ref === want; });
-        if (el && el.scrollIntoView) { el.scrollIntoView({ block: "start" }); return; }
-      }
+      if (scrollToTail(u.pathname, named)) return;
       window.scrollTo(0, 0);
       return;
     }
@@ -7968,9 +8428,28 @@ const VIEW_SWITCH = `<script>
      * container's contents list — the only thing a container view has to offer — did nothing: the
      * entry highlighted and the page stayed exactly where it was.
      */
+    /**
+     * ⛔ AND IT IS ONLY HONOURED WHERE THIS DOCUMENT ACTUALLY HOLDS THE SECTION. Otherwise the link
+     * is a link and the browser navigates — which is what makes one address one page.
+     *
+     * This called preventDefault() unconditionally and then asked show() to reveal a section that,
+     * now that a page carries only its own scope, is not here. show() cannot find it, so the URL
+     * was pushed and the screen went blank: *"menus not operable, in a shit state again"*, and
+     * *"why does the URL NO LONGER CHANGE AFTER I GO THROUGH THE MENU"* — the address had moved and
+     * the document had not.
+     *
+     * ⛔ THE ROUTER IS NOT DELETED BY DELETING IT, IT IS DELETED BY GIVING IT NOTHING TO DO. In-page
+     * switching is still exactly right for the sections a page really has (its sub-views, the
+     * prototype pane). What was wrong was it claiming every destination in the corpus, including
+     * the ones it could only fake.
+     */
     if (a.dataset.goto) {
+      const name = a.dataset.goto;
+      const held = sectionNamed(name);
+      /* Not here: let the browser have it. One rendering per address, by construction. */
+      if (!held) return;
       e.preventDefault();
-      show(a.dataset.goto, true);
+      show(name, true);
       window.scrollTo(0, 0);
       return;
     }
@@ -7992,8 +8471,11 @@ const VIEW_SWITCH = `<script>
     /** ⛔ The address is the path now; the hash is only read when there is no path to read. */
     const byPath = viewAt(location.pathname);
     const name = byPath || (h === "view-overview" || !h ? "overview" : h.replace(/^at-/, ""));
-    const target = document.querySelector('section.view[data-view="' + (window.CSS && CSS.escape ? CSS.escape(name) : name) + '"]');
-    if (target) show(name, true, true);
+    if (sectionNamed(name)) {
+      show(name, true, true);
+      /** ⛔ The ref the address names, on arrival — not only when the press happened on this page. */
+      scrollToTail(location.pathname, name);
+    }
   };
   window.addEventListener("popstate", fromAddress);
   window.addEventListener("hashchange", fromAddress);
@@ -8077,6 +8559,48 @@ const VIEW_SWITCH = `<script>
     paintGroups();
   };
   paintGroups();
+  /*
+   * ⛔ THE BRANCH THE ADDRESS LANDS IN IS OPENED ON ARRIVAL. Peter: "uhm, this is much beter, but we
+   * should make sure the menu auto-expands."
+   *
+   * Nothing did this. openOnly is reached from a twisty click and a tab click, neither of which
+   * runs on boot, so a cold arrival showed whatever localStorage remembered. It LOOKED correct on
+   * a profile with nothing collapsed — which is what I measured, and why I first reported it fixed.
+   *
+   * ⛔ AND THE FAILING CASE IS ORDINARY RATHER THAN EXOTIC: openOnly adds every other group to the
+   * shut set, so opening any area collapses the rest. From then on every address inside one of them
+   * arrives with its branch shut and the item invisible — a menu that does not contain the page the
+   * reader is on.
+   *
+   * ⛔ ONLY THE BRANCH THE ADDRESS NAMES, NEVER "OPEN EVERYTHING". Collapsing a group is how somebody
+   * says they are not working in it today; a boot that reopened all of them would make the control
+   * pointless, which is the whole reason shut is remembered at all.
+   *
+   * ⛔ No backticks in this comment: it lives inside the template literal carrying the page's
+   * browser script, and one would end the string. I made this exact mistake earlier today and the
+   * same test caught it both times.
+   */
+  (function openWhereWeLanded() {
+    /*
+     * ⛔ THE PATH'S OWN SEGMENTS, NOT AN ANCHOR. The first version walked .topframe a[href] looking
+     * for the row whose href is this address — and the seed has none: a top-level group carries a
+     * button with data-tab, and only deeper trees render anchors. It compiled, it ran, and it opened
+     * nothing, which is the shape of a fix that is only tested where it happens to apply.
+     *
+     * Every segment of the address is an ancestor, and a group is named after the thing it holds, so
+     * un-shutting each segment opens the whole branch down to the item — one level or four.
+     */
+    var segs = location.pathname.split("/").filter(Boolean).map(decodeURIComponent);
+    var moved = false;
+    for (var t of groupTwisties) {
+      var name = t.dataset.twist;
+      if (segs.indexOf(name) >= 0 && shut.delete(name)) moved = true;
+    }
+    if (moved) {
+      remember();
+      paintGroups();
+    }
+  })();
   for (const t of groupTwisties) {
     t.addEventListener("click", (ev) => {
       ev.stopPropagation();
@@ -8346,8 +8870,18 @@ const PROTO_FRAME = `<script>
  */
 const DIM_FILTER = `<script>
 (function () {
-  const bar = document.querySelector("[data-dimfilter]");
-  if (!bar) return;
+  /*
+   * ⛔ EVERY BAR, NOT THE FIRST ONE. The filter now lives inside each feature's prototype view —
+   * Peter: *"let's move the dimensions down into the prototype view on the features"* — so a page
+   * holding several features holds several bars, one per view, with only the visible view's on
+   * screen.
+   *
+   * This bound a single-element lookup, so it took whichever bar comes first. On any page with
+   * more than one feature that is a HIDDEN bar, and the control the reader can actually see does
+   * nothing at all. The product's own page renders two, which is how this was caught.
+   */
+  const bars = Array.prototype.slice.call(document.querySelectorAll("[data-dimfilter]"));
+  if (!bars.length) return;
   /*
    * ⛔ ITS OWN ATTRIBUTE, NOT THE BOARD'S.
    *
@@ -8356,8 +8890,7 @@ const DIM_FILTER = `<script>
    * jobs: the board's picks WHICH PROTOTYPE to walk and can add a dimension or a value; this one
    * narrows what a page shows. They share the answer, not the markup.
    */
-  const picks = Array.prototype.slice.call(bar.querySelectorAll("[data-dim-filter]"));
-  const said = bar.querySelector("[data-dimhidden]");
+  const picks = Array.prototype.slice.call(document.querySelectorAll("[data-dim-filter]"));
   const KEY = "productos:asked";
 
   const remembered = (function () {
@@ -8400,8 +8933,15 @@ const DIM_FILTER = `<script>
       el.classList.toggle("dimhide", !keep);
       if (!keep) hidden++;
     }
-    if (said) {
-      const chosen = Object.keys(want).length;
+    /*
+     * ⛔ EVERY BAR SAYS THE SAME THING, because the choice is the page's and not one view's. A bar
+     * keeping its own count would disagree with the one beside it the moment a reader switched
+     * features, and two surfaces disagreeing about how much is hidden is worse than neither saying.
+     */
+    const chosen = Object.keys(want).length;
+    for (const b of bars) {
+      const said = b.querySelector("[data-dimhidden]");
+      if (!said) continue;
       said.hidden = !hidden;
       said.textContent = hidden
         ? hidden + " hidden by " + (chosen === 1 ? "this choice" : "these choices")
@@ -8415,7 +8955,18 @@ const DIM_FILTER = `<script>
     /* ⛔ Only a value this dimension still offers — a remembered one that has since been removed
        would narrow the page to nothing and offer no way to see why. */
     if (was) for (const opt of sel.options) if (opt.value === was) sel.value = was;
-    sel.addEventListener("change", apply);
+    sel.addEventListener("change", function () {
+      /*
+       * ⛔ THE OTHER BARS FOLLOW. Several views, several copies of one control: choosing on one and
+       * finding another still reading "any" is the page telling a reader two things about one choice.
+       */
+      const dim = sel.getAttribute("data-dim-filter");
+      for (const other of picks) {
+        if (other === sel || other.getAttribute("data-dim-filter") !== dim) continue;
+        for (const opt of other.options) if (opt.value === sel.value) other.value = sel.value;
+      }
+      apply();
+    });
   }
   apply();
 })();
@@ -8979,6 +9530,14 @@ export const STYLE = `<style>
   nav.scopes .scoperow > a, nav.scopes .scoperow > strong, nav.scopes .scoperow > .unlinked {
     flex: 0 0 auto; white-space: nowrap; }
   /*
+   * ⛔ A MENU ITEM IS NOT A LINK IN A PARAGRAPH. Driven and looked at: the area rows rendered with
+   * the document's default anchor styling — underlined, in link colour — so a menu read as body text
+   * somebody had pasted into a column. Underline on hover only, which is where it says "this is
+   * pressable" without saying it twelve times at rest.
+   */
+  nav.scopes .scoperow > a { text-decoration: none; color: inherit; }
+  nav.scopes .scoperow > a:hover { text-decoration: underline; }
+  /*
    * ⛔ COLLAPSING IS THE SIDE MENU'S BEHAVIOUR AND ONLY ITS.
    *
    * Peter: *"you completely broke support for the top menu..... 🤦... are you compeltely unaware of
@@ -9014,9 +9573,17 @@ export const STYLE = `<style>
    * they sat beside, so every row wrapped onto a second line and the menu read as prose.
    */
   nav.scopes .n { font-size: .72rem; color: var(--dim); flex: 0 0 auto;
-    display: inline-flex; align-items: center; gap: .15rem; padding: .05rem .32rem;
-    border: 1px solid var(--line); border-radius: 999px; background: var(--card); }
-  nav.scopes .n .mark { font-size: .7rem; line-height: 1; }
+    display: inline-flex; align-items: baseline; gap: .1rem; padding: .05rem .34rem;
+    border: 1px solid var(--line); border-radius: 999px; background: var(--card);
+    font-variant-numeric: tabular-nums; }
+  /*
+   * ⛔ THE NUMBER IS THE FIGURE AND THE MARK IS ITS UNIT. At an equal size and an equal weight the
+   * chip read as two separate things — "35" and "?" — rather than as one count of one kind, which is
+   * what a chip is for. The figure carries the weight; the mark is quieter and smaller, the way a
+   * unit is set beside a number anywhere else.
+   */
+  nav.scopes .n { font-weight: 600; }
+  nav.scopes .n .mark { font-size: .62rem; line-height: 1; opacity: .75; font-weight: 400; }
   nav.scopes .n.warn { color: var(--warn); }
   nav.scopes .n.ok { color: var(--ok); }
   nav.scopes .grouping { color: var(--dim); }
@@ -9088,6 +9655,25 @@ export const STYLE = `<style>
   @media (max-width: 61.999rem) { .navplace { display: none; } }
   :root[data-nav="left"] .navplace .to-left { display: none; }
   :root[data-nav="left"] .navplace .to-top { display: inline; }
+  /* Connect Claude Code: a small control at the end of the menu row, its panel floating below it. */
+  .connect { position: relative; align-self: center; margin-left: .5rem; font-size: .8rem; }
+  .connect > summary { list-style: none; cursor: pointer; white-space: nowrap; color: var(--dim);
+    border: 1px solid var(--line); border-radius: 6px; padding: .25rem .55rem; }
+  .connect > summary::-webkit-details-marker { display: none; }
+  .connect > summary:hover, .connect[open] > summary { color: var(--ink); border-color: var(--accent); }
+  .connect-panel { position: absolute; right: 0; top: calc(100% + .35rem); z-index: 30;
+    width: min(30rem, calc(100vw - 2rem)); box-sizing: border-box; padding: .8rem .9rem;
+    background: var(--card); border: 1px solid var(--line); border-radius: 8px;
+    box-shadow: 0 6px 24px rgba(0,0,0,.12); color: var(--ink); font-size: .85rem; }
+  .connect-panel p { margin: 0 0 .6rem; }
+  .connect-panel button { font: inherit; cursor: pointer; border: 1px solid var(--line);
+    border-radius: 6px; background: none; color: var(--ink); padding: .3rem .6rem; }
+  .connect-panel .connect-make { border-color: var(--accent); }
+  .connect-lines { margin: 0 0 .6rem; padding: .6rem; overflow-x: auto; white-space: pre;
+    border: 1px solid var(--line); border-radius: 6px; font-size: .78rem; user-select: all; }
+  .connect-acts { display: flex; gap: .5rem; flex-wrap: wrap; margin-bottom: .6rem; }
+  .connect-said:empty { display: none; }
+  @media (max-width: 61.999rem) { .connect { margin-left: auto; } }
   /* ⛔ THE COLUMN NEEDS THE WIDTH TO EXIST. Below this, a 19rem sidebar and a 52rem page cannot
      both fit, and the choice is not the reader's to get wrong — the menu goes back to the top and
      the button simply has no effect until there is room for the other answer. */
@@ -9111,6 +9697,10 @@ export const STYLE = `<style>
     /* First in the column, because the control that moves the menu belongs at the top of it —
        last in a flex row is the right edge, and last in a flex column is the bottom of the page. */
     :root[data-nav="left"] .navplace { order: -1; margin: 0 0 .5rem; align-self: flex-start; }
+    /* Down the side the column scrolls, which would clip a floating panel — so it opens in place. */
+    :root[data-nav="left"] .connect { order: -1; margin: 0 0 .5rem; align-self: stretch; }
+    :root[data-nav="left"] .connect > summary { display: inline-block; }
+    :root[data-nav="left"] .connect-panel { position: static; width: auto; margin-top: .35rem; box-shadow: none; }
     /*
      * ⛔ DOWN THE SIDE, A GROUP IS A GROUP. Peter: *"the expanded menu should be grouped under each
      * main area, just like a standard menu... e.g. product, when selected, should have items under
@@ -9119,10 +9709,16 @@ export const STYLE = `<style>
     :root[data-nav="left"] .topframe .tabgroup { display: block; }
     :root[data-nav="left"] .topframe .tabhead { display: flex; align-items: center; gap: .15rem; }
     :root[data-nav="left"] .topframe .tabhead .tab { flex: 1; }
-    :root[data-nav="left"] .topframe .twisty { display: block; font: inherit; font-size: .7rem;
-      background: none; border: 0; color: var(--dim); cursor: pointer; padding: .2rem .35rem;
-      line-height: 1; border-radius: 4px; }
-    :root[data-nav="left"] .topframe .twisty:hover { color: var(--ink); }
+    /*
+     * ⛔ A CONTROL NOBODY CAN SEE IS A CONTROL NOBODY PRESSES. Driven and looked at: the collapse
+     * chevron rendered as a faint dot at the right edge of the column — present, correct, and
+     * invisible at a glance, which is how a menu comes to look like it cannot fold. Bigger, darker,
+     * and with a hit area rather than a glyph's worth of pixels.
+     */
+    :root[data-nav="left"] .topframe .twisty { display: block; font: inherit; font-size: .85rem;
+      background: none; border: 0; color: var(--ink); opacity: .55; cursor: pointer;
+      padding: .25rem .4rem; line-height: 1; border-radius: 4px; }
+    :root[data-nav="left"] .topframe .twisty:hover { opacity: 1; background: var(--card); }
     /* ⛔ The arrow turns rather than changing character: one glyph, two states, no second string. */
     :root[data-nav="left"] .topframe .twisty[aria-expanded="false"] { transform: rotate(-90deg); }
     /*

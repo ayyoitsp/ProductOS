@@ -1,0 +1,9 @@
+id: "0192"
+said: prototype doesn't actually walk anyways, no deal links are clickable, none of the individual features got new pages
+at: 2026-10-19
+kind: generator
+reaches:
+  generate: navTarget
+  pin: a control that navigates says where it goes
+waived: {}
+closed: 2026-10-19

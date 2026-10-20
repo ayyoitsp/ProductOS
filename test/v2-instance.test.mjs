@@ -23,7 +23,6 @@ import { execFileSync, execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { v2Route } from "../dist/v2/serve.js";
 import { loadCorpus, corpusFiles, memoryStore } from "../dist/v2/load.js";
-import { worthWaking } from "../dist/mcp/server.js";
 import { working } from "../dist/v2/presence.js";
 import { inbox } from "../dist/v2/inbox.js";
 
@@ -181,17 +180,6 @@ test("the page can tell nobody is working from somebody working", () => {
   const dir2 = instance();
   inbox(dir2, {});
   assert.deepEqual(working(dir2), []);
-});
-
-test("a session is woken for work and not for information", () => {
-  assert.equal(worthWaking([{ work: "n-1" }]), true);
-  /**
-   * ⛔ Peter: "Stop the monitor now." Forty wakes that report nothing is what that was, and a press
-   * means the truth already moved — there is nothing for a session to do about it.
-   */
-  assert.equal(worthWaking([{}, {}, {}]), false, "three presses woke a session that had nothing to do");
-  assert.equal(worthWaking([{}, { work: "n-2" }]), true, "a note riding behind two presses was swallowed");
-  assert.equal(worthWaking([]), false);
 });
 
 test("an instance says what it thinks you are, and that it cannot make you a person", async () => {

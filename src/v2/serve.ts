@@ -113,17 +113,66 @@ const json = (res: http.ServerResponse, body: unknown, status = 200): void => {
   res.end(JSON.stringify(body, null, 2));
 };
 
+/**
+ * ⛔ A PAGE OF PRODUCT TRUTH IS NEVER CACHEABLE, AND IT WAS SERVED WITH NO HEADERS AT ALL.
+ *
+ * No `Cache-Control`, no `ETag`, no `Last-Modified` — and a 200 carrying no freshness information
+ * and no validator is HEURISTICALLY cacheable, so a browser is entitled to keep serving its copy.
+ *
+ * What that cost: a render fix shipped, the instance served the corrected page in 1.3s, every drive
+ * passed — and Peter's own tab went on showing the defect. Measured in his browser against the
+ * server's bytes for the same URL: his document had none of the new markers and still deferred
+ * feature sections, which is the previous architecture. He was looking at a page from before the
+ * deploy and reloading did not replace it. *"so broken, can't even get to a single page in
+ * product/capabilities to load"*, about a page that was already fixed.
+ *
+ * ⛔ AND IT IS WORSE THAN A STALE DEPLOY, which is only the way it announced itself. This corpus
+ * changes on every press — an agreement, a note, a redraw — so a cacheable page means a reviewer
+ * can agree to a sentence that has already been reworded, and nothing on screen says so. That is
+ * the one failure this surface cannot have.
+ *
+ * `no-store` rather than `no-cache`: no-cache still stores and revalidates, and there is nothing to
+ * revalidate against without a validator. Nothing here is worth keeping between presses anyway.
+ */
 const html = (res: http.ServerResponse, body: string, status = 200): void => {
-  res.writeHead(status, { "content-type": "text/html; charset=utf-8" });
+  res.writeHead(status, {
+    "content-type": "text/html; charset=utf-8",
+    "cache-control": "no-store, must-revalidate",
+    pragma: "no-cache",
+  });
   res.end(body);
 };
 
+/**
+ * The request body, decoded ONCE, after every byte of it has arrived.
+ *
+ * ⛔ IT USED TO BE `let body = ""; req.on("data", (d) => (body += d))`, AND THAT DESTROYED A
+ * CHARACTER WHENEVER ONE STRADDLED A CHUNK BOUNDARY.
+ *
+ * `d` is a Buffer, so `+=` decodes it as UTF-8 once PER CHUNK. A character whose bytes land either
+ * side of a boundary is decoded as two invalid sequences, and every byte of it becomes U+FFFD. One
+ * 4-byte emoji in a drawing came out of the live corpus as four replacement characters:
+ *
+ *     Sizing model ���� Excluded
+ *
+ * ⛔ AND IT WAS DIAGNOSED AS SOMETHING ELSE FIRST, which is what it really cost. A demonstrator's
+ * 64 requirements all read `a-requirement-older-than-its-claim` at once. `view.sketch` feeds
+ * `claimHash`, so mangling one emoji moved every claim hash in that scope — both hashes were real
+ * and the sentences had not moved at all. I theorised sentence drift and sent that role a recipe
+ * for a problem it did not have; the role that found it read the bytes.
+ *
+ * ⛔ IT ONLY BITES LARGE BODIES, which is why nothing caught it for so long. A small body arrives
+ * in one chunk and survives perfectly — emoji, astral plane and CJK all round-tripped through the
+ * live door by hand. The documents that carry drawings are hundreds of kilobytes, so they are the
+ * ones that split, and they are the ones holding the product's pictures.
+ */
 const readJson = (req: http.IncomingMessage): Promise<Record<string, unknown>> =>
   new Promise((resolve, reject) => {
-    let body = "";
-    req.on("data", (d) => (body += d));
+    const chunks: Buffer[] = [];
+    req.on("data", (d) => chunks.push(Buffer.isBuffer(d) ? d : Buffer.from(d)));
     req.on("end", () => {
       try {
+        const body = Buffer.concat(chunks).toString("utf-8");
         resolve(body ? JSON.parse(body) : {});
       } catch (e) {
         reject(e);
@@ -408,6 +457,53 @@ export async function v2Route(req: http.IncomingMessage, res: http.ServerRespons
    * ⛔ Every decision about cursors, claiming and what counts as work lives in `inbox`. This
    * handler reads the wire and hands over — the same reason no route here performs an act.
    */
+  /**
+   * ⛔ LOOKING AT THE QUEUE IS A GET, AND IT BEING A POST WAS WHAT STOPPED PETER WRITING.
+   *
+   * Peter: *"page loads are stiill slow, i get stuck and can't even open a page sometimes"*.
+   *
+   * Measured on the live instance — six concurrent polls of this route, which is what the two-way
+   * window produces when more than one session is watching a project:
+   *
+   *     one poll      1.0s
+   *     six at once   0.96 · 1.67 · 2.39 · 3.03 · 3.77 · 4.58s
+   *
+   * A staircase, ~0.7s a step. `takesTheWriteLock` exempts GET and HEAD and one named POST, so every
+   * poll took the project's exclusive write lock for about a second — and anything he PRESSED queued
+   * behind all of them. At 120s `serialize` refuses with "a write has been running for Ns", which is
+   * the four wedged projects that needed a restart earlier the same day. Not a store fault: polling.
+   *
+   * ⛔ AND THE ROUTE COULD NOT SIMPLY JOIN `READ_SHAPED_POSTS`, which was the first thing I tried to
+   * do. A POST carrying `claim` takes a lease — a real write — so exempting the route would let two
+   * sessions claim one note with no lock between them, and `v2-store-loop` has a test for exactly
+   * that. The allowlist's own comment warns about this direction: assume read, discover it writes.
+   *
+   * ⛔ SO THE VERB TELLS THE TRUTH INSTEAD. Reading the queue is a GET and takes no lock; claiming is
+   * a POST and takes one. That is what the lock is keyed on, so nothing had to learn about bodies —
+   * and `readJson` drains the stream, so a body-sniffing lock would have had to be read before the
+   * decision and threaded through every handler.
+   *
+   * ⛔ THE POST PATH STAYS, UNCHANGED, and not only for compatibility: the comment above this handler
+   * is right that a claim must never be a GET, because a read that changes who owns the work would
+   * eventually sit behind a cache. Both shapes answer identically for a plain read.
+   */
+  if (req.method === "GET" && p === "/api/v2/inbox") {
+    const q = new URL(req.url ?? "/", "http://x").searchParams;
+    const limit = q.get("limit");
+    return (
+      json(
+        res,
+        inbox(dir, {
+          since: Number(q.get("since") ?? 0) || 0,
+          /** ⛔ No `claim` on this path, deliberately — that is the whole reason it may skip the lock. */
+          limit: limit === null ? undefined : Number(limit),
+          leaseMs: DEFAULT_LEASE_MS,
+        })
+      ),
+      true
+    );
+  }
+
   if (req.method === "POST" && p === "/api/v2/inbox") {
     const body = await readJson(req);
     const claim = typeof body.claim === "string" && body.claim.trim() ? body.claim.trim() : undefined;

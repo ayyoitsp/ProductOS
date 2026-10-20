@@ -1,9 +1,9 @@
 # ProductOS dev Makefile — semantic targets so you don't have to remember npm scripts.
 #
 # Most-used:
-#   make            — start dev:serve (auto-restarts on src/ change, no dist/ needed)
+#   make            — list the targets
+#   make up         — build and start the hosted instance (ProductOS + Postgres), wait until healthy
 #   make watch      — run tsc --watch in this terminal (keeps dist/ fresh for the linked `productos` binary)
-#   make all        — build dist/ + start watch + start dev:serve in parallel
 #
 # Setup-y:
 #   make install    — npm install
@@ -15,7 +15,7 @@
 #   make clean      — rm -rf dist/ node_modules/.cache
 #   make doctor     — sanity check: node version, productos on PATH, dist/ exists
 
-.PHONY: default help install link build watch dev dev-serve typecheck all clean doctor \
+.PHONY: default help install link build watch typecheck clean doctor \
         up down logs rebuild restart nuke psql hosted-doctor seed shell hosted-help \
         stacks migrations-check dev-guard staging-guard deploy deploy-check suite-now backup restore up-remote down-remote logs-remote remote-doctor checkpoint projects session
 
@@ -113,13 +113,11 @@ $(error STAGING=1 but .env names no DATABASE_URL — cp .env.example .env and se
 endif
 endif
 
-default: dev-serve
+default: help
 
 help:
 	@echo "ProductOS dev targets:"
-	@echo "  make            → dev-serve (run from source, auto-restart on save)"
 	@echo "  make watch      → keep dist/ fresh as you edit src/"
-	@echo "  make all        → build + watch + dev-serve (3 procs in parallel)"
 	@echo "  make build      → one-shot build dist/"
 	@echo "  make typecheck  → tsc --noEmit"
 	@echo "  make install    → npm install"
@@ -170,25 +168,8 @@ build:
 watch:
 	npm run watch
 
-# dev-serve runs the CLI directly from source via tsx watch. No dist/ required;
-# the process restarts whenever any imported src/ file changes. Use this when
-# you're iterating on renderer/server code and want fast turnaround.
-dev: dev-serve
-dev-serve:
-	npm run dev:serve
-
 typecheck:
 	npm run typecheck
-
-# Run everything in parallel: a one-shot build (so dist/ exists), then keep
-# dist/ fresh AND keep the live server running. Two long-running procs.
-# Ctrl-C kills both because make forwards SIGINT to the process group.
-all: build
-	@echo "Starting tsc --watch + dev-serve in parallel."
-	@echo "Ctrl-C to stop both."
-	@trap 'kill 0' INT; \
-		(npm run watch &) ; \
-		npm run dev:serve
 
 clean:
 	rm -rf dist node_modules/.cache

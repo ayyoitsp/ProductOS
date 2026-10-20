@@ -69,8 +69,10 @@ export type Route =
   | "accepted-through-a-rule"
   /** An authored requirement inside what somebody read and agreed to. */
   | "inside-an-acceptance"
-  /** Provenance, current with the words it was worked out from. */
+  /** Provenance, current with the words it was worked out from, and those words are agreed. */
   | "worked-out"
+  /** Worked out from words that have not changed — and that nobody has agreed to yet. */
+  | "worked-out-from-a-draft"
   /** It follows from an acceptance — a confirmed happy path names this screen. */
   | "follows-an-acceptance"
   /** The product was seen doing this. */
@@ -290,7 +292,10 @@ export function wroteOf(corpus: Corpus, ref: string): Wrote {
         ?.scope.exchanges.find((e) => e.id === got.exchange);
       const fill = ex?.slots?.[got.slot as keyof typeof ex.slots];
       const said = got.kind === "statement"
-        ? statements(fill?.says).find((x) => x.id === (got as { statement?: string }).statement)
+        ? /** ⛔ `name`, which is what `resolveRef` calls a statement's id. This read `.statement`,
+           *  which no ref carries, so every statement's own `wrote` was skipped and an agent's
+           *  sentence reported `unrecorded` beside a person's. Found by `v2-small-writes`. */
+          statements(fill?.says).find((x) => x.id === got.name)
         : undefined;
       const who = authorshipOf(said, fill);
       if (who) return who.hand === "person" ? { is: "a person", by: who.as } : { is: "a role", by: who.as, at: "" };
@@ -415,15 +420,38 @@ function requirementLevel(corpus: Corpus, ref: string, r: Extract<Ref, { kind: "
     );
   if (req.state === "current" && der) {
     const claim = stampFor(corpus, req.claim);
+    /**
+     * ⛔ `derived` MEANS DERIVED FROM ACCEPTED INPUT, SO A TEST WORKED OUT FROM A DRAFT IS A SUGGESTION.
+     *
+     * Peter's MVP names the three levels as *"human accepted, derived (from accepted input),
+     * suggested"*, and asked for *"appropriate test cases … generated based on verified product
+     * truth"*. This used to answer `derived` whatever the claim's state, with "nobody has agreed to
+     * that sentence yet" in `because` — and the gate a consumer applies is the level, not the prose.
+     * So a builder holding a ticket was handed a test for a sentence nobody had agreed to, at the
+     * same level as one for a sentence somebody had.
+     *
+     * ⛔ GENERATION IS NOT GATED, ONLY THE LEVEL. *"test cases should be generated too. they should
+     * just carry an invalidated state"* — the demonstrator still works from the truth as it reads,
+     * and the requirement exists from the moment it does. It climbs to `derived` the moment a person
+     * agrees to the claim, with nothing re-derived, because the hash it was worked out against is
+     * the hash they agreed to.
+     */
+    if (claim.state !== "accepted")
+      return level(
+        corpus,
+        ref,
+        "suggested",
+        "worked-out-from-a-draft",
+        `${der.by} worked this out from ${req.claim} on ${der.at}, and that sentence has not changed since — ` +
+          "but nobody has agreed to it yet, so this tests a draft. It becomes derived when somebody agrees to the claim",
+      );
     return level(
       corpus,
       ref,
       "derived",
       "worked-out",
       `${der.by} worked this out from ${req.claim} on ${der.at}, and that sentence has not changed since — ` +
-        (claim.state === "accepted"
-          ? `${agreedLine(claim.by, claim.at, claim.through)}`
-          : "and nobody has agreed to that sentence yet"),
+        agreedLine(claim.by, claim.at, claim.through),
     );
   }
   /**
@@ -802,4 +830,44 @@ export function countLevels(levels: readonly Level[]): Record<LevelName, number>
   const out: Record<LevelName, number> = { accepted: 0, derived: 0, suggested: 0, open: 0 };
   for (const l of levels) out[l.level] += 1;
   return out;
+}
+
+/**
+ * ⛔ THE LEVEL IN THE WORDS A READER SEES, AND ONE PLACE THAT SAYS THEM.
+ *
+ * `accepted` reads as `agreed` because that is what a person did; the other three are already plain.
+ * A route name is never shown in text — `accepted-through-a-rule` is an argument's label, and a
+ * builder reading a packet needs the gate, not the label. Every text surface that prints a level
+ * prints it through this, so a packet and a grid cannot call the same fact two different things.
+ */
+export const LEVEL_WORD: Readonly<Record<LevelName, string>> = {
+  accepted: "agreed",
+  derived: "derived",
+  suggested: "suggested",
+  open: "open",
+};
+
+/**
+ * A level as fields beside a claim another read returns — `levelOf`'s answer and nothing else.
+ *
+ * ⛔ THE GAP THIS CLOSES. `find` and `readiness` carried the level; the record, the questions, the
+ * grid and the packet did not, so a session reading a behaviour through any of those could not tell
+ * an agreed sentence from a draft without a second call. A second call is a step an agent skips.
+ *
+ * ⛔ COMPUTED HERE, NEVER RE-DERIVED BESIDE IT. A read that worked out "agreed" from `stampFor` on
+ * its own would be a second answer to the one question this module exists to answer once — and
+ * would miss the stale and through-a-rule cases that are the whole reason `levelOf` is long.
+ *
+ * ⛔ AN UNADDRESSABLE REF GETS NO FIELDS, NOT A GUESSED LEVEL. A question about a word, or a
+ * read-through of a whole feature, has no level — `levelOf` says why — and inventing one is worse
+ * than the absence. `because` is left off for the reads whose items already explain themselves.
+ */
+export function levelFields(
+  corpus: Corpus,
+  ref: string,
+  { because = true }: { because?: boolean } = {},
+): { level?: LevelName; route?: Route; because?: string } {
+  const l = levelOf(corpus, ref);
+  if ("error" in l) return {};
+  return because ? { level: l.level, route: l.route, because: l.because } : { level: l.level, route: l.route };
 }

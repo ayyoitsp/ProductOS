@@ -4,10 +4,9 @@
 
 ProductOS holds a structured, validated record of what your product does — what it guarantees, why it works that way, and what's currently in question. Product people define it. Agents build from it. Engineering finds out when a change breaks something the team committed to.
 
-> **Status:** v0.1.0 — early, in active design. The model is the **Exchange** model; an older one
-> (containers, behaviors, test cases, surfaces) is still reachable from the commands and agent tools
-> marked *retiring*, and [`GLOSSARY.md`](./GLOSSARY.md) deliberately defines none of its words.
-> [`STATE.md`](./STATE.md) says what is actually built and what is open.
+> **Status:** v0.1.0 — early, in active design. The model is the **Exchange** model, and the truth
+> lives on a hosted project: people reach it over MCP from Claude, on the page, and in the page's
+> chat. [`STATE.md`](./STATE.md) says what is actually built and what is open.
 
 ## Why
 

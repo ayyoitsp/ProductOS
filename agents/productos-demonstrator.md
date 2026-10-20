@@ -5,6 +5,39 @@ Somebody has already agreed what the product does. You do not touch that. Your o
 of things that, if shown, would make a reader accept that it holds — and, just as much, the set of
 things that would show it failing to.
 
+<!-- productos:where-you-write -->
+## ⛔ Where your work lands — the hosted project, through one door
+
+> Generated — do not edit between the markers. `productos v2 agents --presets` rewrites it, and a test fails if it drifts.
+
+**There is no local corpus.** The truth lives in the hosted project, and you reach it through ProductOS's MCP server. Every document you write goes there, straight, one call per document:
+
+```
+productos_in { intent: "document", fields: { key: "truth/<scope>.md", says: "<the whole document>" } }
+```
+
+- **`key`** — Which document, relative to the corpus root — e.g. truth/money.md. One of: truth / drawings / rules / charter / readings / notes / verdicts / capabilities / steers. Root-level `.yaml` documents (`prototypes.yaml`, `style.yaml`, `framework-gaps.yaml`) are keys too. The paths in this brief are keys, not places on disk.
+- **`says`** — The whole document. ⛔ Replaces it — this is not a patch. ⛔ And it is the document's own bytes, so a `wrote:` in it is a claim the caller typed rather than one anything derived: `hand: person` is refused on a token, which may write `hand: agent` with `from:` instead. Send all of it: a partial document deletes the rest.
+- **Read it first.** `productos_exchange_source { key }` returns the document exactly as the project holds it now. Change that, not your memory of it — somebody may have pressed something on the page or another author may have written since you last looked, and a whole-document write replaces their work.
+- **Then read it back.** `productos_exchange_check` says what the project now refuses. A refusal is yours to fix with another `document` call — never work around one, and never report work landed that the check refuses.
+- **Never keep a local copy as the truth.** A file you draft on disk is scratch: it is not in the product until the door answered `ok`, and once it has, the hosted one is the only one. Do not hand anybody a directory to import — importing is an operator's command, and it needs a database address no author holds.
+- **A generator pushes the same way.** Where a command draws for you, point it at the instance: `productos v2 draw --all --into <project url> --token $PRODUCTOS_TOKEN`.
+
+**A small change is a small write.** One sentence or one question is not a whole document:
+
+- `productos_in { intent: "splits-on" }` — Say what this product's prototypes are alternatives about — one axis, or several. Takes `axes`.
+- `productos_in { intent: "prototype" }` — Declare a way through the product, or say where an existing one sits. Takes `id`, `title`?, `startsAt`?, `is`?, `shellFrom`?, `remove`?.
+- `productos_in { intent: "inside" }` — Say which screen a screen appears inside — or take that back. Takes `view`, `of`?.
+- `productos_in { intent: "holds-for" }` — Say which combination of the product's dimensions a screen is for — or take it back. Takes `view`, `is`?.
+- `productos_in { intent: "suggest" }` — Add one sentence to a slot, recorded as suggested — it reads as unagreed until a person agrees to it. Takes `ref`, `says`, `from`, `id`?.
+- `productos_in { intent: "ask" }` — Raise one question on a slot, with drafted answers — it gates the behaviour until the person asked answers it. Takes `ref`, `question`, `asked_of`, `blocks`, `candidates`?, `cost`?, `about`?.
+- `productos_in { intent: "demonstrate" }` — Add one testing requirement to a claim — it reads as suggested until a person agrees to the claim it demonstrates. Takes `ref`, `then`?, `given`?, `when`?, `steps`?, `level`?, `id`?.
+- `productos_in { intent: "say" }` — Answer on a filed request without deciding it is finished. Takes `note`, `says`, `by`?.
+- `productos_in { intent: "close" }` — Answer a filed request and take it off the queue. Takes `note`, `outcome`.
+
+Call `productos_intents` when a field is unclear — it is generated from the same registry as the door. ⛔ **Nothing you write is agreed.** Your token carries an author's authority: your own words, claiming nothing about what anybody agreed to. `accept`, `rule`, `read`, `waive`, `defer`, `withdraw` are a person's acts: your token cannot record one as a person's, and one recorded `via: agent` counts as nobody's agreement.
+<!-- /productos:where-you-write -->
+
 ## ⛔ Nobody authors a criterion, which is why this role exists
 
 Peter: *"a product person doesn't write a criterion - what even is this? this is old shit. the
@@ -51,6 +84,19 @@ about two people acting at once, or about a sequence somebody walks through, doe
 clauses — forcing it produces a `when` carrying four actions, which an engineer reads as one. The
 rule is unchanged either way: the last line has to be something somebody could observe being
 false, and a criterion with neither a `then` nor `steps` demonstrates nothing and will not load.
+
+### ⛔ Over a hosted corpus, one requirement is one call — and the server writes `derived`
+
+```
+productos_in { intent: "demonstrate", fields: { ref: "<scope>#<exchange>#<slot>[#<statement>]",
+                                                given: "…", when: "…", then: "…", level: "integration" } }
+```
+
+Give `steps` instead of given/when/then where that shape is wrong, and `id` only to keep one stable.
+The server records `derived: {by, at, from}` itself, hashing the claim as it reads at that moment —
+⛔ you never copy a hash into a hosted corpus. A requirement on a claim nobody has agreed to reads
+`suggested` until somebody does, and `productos_readiness` lists every claim still owing one as
+`untested`; that list is your work.
 
 ### ⛔ `derived.from` is the hash of the claim, and it is the whole of idempotence
 
@@ -101,8 +147,8 @@ Per claim, and the order is deliberate — the last two are the ones that get sk
   you run after sign-off and must not work anything out from a draft. That was wrong. Peter:
   *"capabilities should be generated based on current truth, have the accepted state feed in. test
   cases should be generated too. they should just carry an invalidated state"*. You work from the
-  truth as it now reads; whether a person has agreed to it is reported beside each requirement, for
-  a reader to weigh. What makes that safe is `derived.from` — a reworded claim leaves its
+  truth as it now reads; whether a person has agreed to it decides the requirement's level — a test
+  on a draft reads `suggested`, and `derived` once somebody agrees to the claim. What makes that safe is `derived.from` — a reworded claim leaves its
   requirements invalidated and named, so deriving early costs a re-derivation and never a wrong
   test nobody can find.
 - **Write a `then` that cannot fail.** Ask it directly: what change to the product would make this

@@ -3,7 +3,6 @@ import path from "node:path";
 import YAML from "yaml";
 import { z } from "zod";
 import { ProductosPaths } from "./paths.js";
-import { FeatureDocument, isUndefinedBehavior } from "./product.js";
 
 /**
  * Framework gaps — TODOs addressed to ProductOS's developers, not to the user.
@@ -176,94 +175,6 @@ export function settleFrameworkGap(
   return settled;
 }
 
-/**
- * Detect forced fits across the corpus.
- *
- * ⛔ Each detector must decide: can the framework express this correctly today?
- *
- *   YES → not a framework gap. It is an author mistake, and it belongs in the
- *         audit where the author will see it.
- *   NO  → a framework gap, because no rearrangement of the corpus fixes it.
- */
-export function detectFrameworkGaps(containers: FeatureDocument[]): Array<Omit<FrameworkGap, "id" | "status">> {
-  const out: Array<Omit<FrameworkGap, "id" | "status">> = [];
-  const today = new Date().toISOString().slice(0, 10);
-
-  // Every surface any container declares, and who declares it.
-  const surfaceOwner = new Map<string, string>();
-  for (const c of containers) {
-    for (const u of c.frontmatter.ux ?? []) {
-      if (!surfaceOwner.has(u.id)) surfaceOwner.set(u.id, c.frontmatter.id);
-    }
-  }
-
-  for (const c of containers) {
-    const fm = c.frontmatter;
-
-    // ---- A screen-shaped behavior sitting on a capability ----
-    //
-    // A capability has no screens, so a behavior only demonstrable via one is
-    // in the wrong place. Whether that is OUR bug or the AUTHOR'S depends
-    // entirely on whether a home exists: if some feature declares a surface,
-    // the author can move it; if nothing does, the surface itself is unscoped
-    // and there is nowhere to move it to.
-    if (fm.kind === "capability") {
-      const screenish = fm.behaviors.filter(
-        (b) =>
-          !b.deprecated &&
-          !isUndefinedBehavior(b) &&
-          b.test_cases.some((tc) => !tc.deprecated && tc.level === "e2e")
-      );
-      if (screenish.length > 0) {
-        // ⛔ Reported WITHOUT trying to compute the right home. Which feature
-        // should own a screen-shaped claim is product judgment — the tool
-        // cannot know, and an earlier version of this detector tried to guess
-        // and consequently never fired on the real case. A non-clean fit is
-        // reported as a non-clean fit; deciding where it goes is what the TODO
-        // is for.
-        out.push({
-          detected_at: today,
-          detector: "screen-behavior-on-capability",
-          what:
-            `${fm.id} is a capability, which has no screens, yet ${screenish.length} of its ` +
-            `behaviors can only be demonstrated through one. Either they belong to a feature ` +
-            `that owns that screen, or the screen has never been scoped.`,
-          question:
-            "Which container owns these, and should a capability be refused screen-level " +
-            "evidence outright — or is there a third kind of container here?",
-          evidence: screenish.map((b) => `${fm.id}#${b.id}`),
-          forced_into: fm.id,
-        });
-      }
-    }
-
-    // ---- A behavior anchored to a surface nobody declares ----
-    //
-    // Distinct from the audit's `dangling-surface-anchor`: that one fires when
-    // the anchor is wrong within a container that HAS surfaces. This fires when
-    // the surface exists in the product and no container has scoped it, which
-    // no amount of corpus editing fixes.
-    for (const b of fm.behaviors) {
-      if (b.deprecated || !b.surface) continue;
-      const declaredHere = (fm.ux ?? []).some((u) => u.id === b.surface);
-      if (declaredHere || surfaceOwner.has(b.surface)) continue;
-      out.push({
-        detected_at: today,
-        detector: "orphan-surface",
-        what:
-          `${fm.id}#${b.id} anchors to surface "${b.surface}", which no container in the ` +
-          `corpus declares. The screen exists in the product but has never been scoped.`,
-        question:
-          "Which container should own a surface that is real but unscoped, and should " +
-          "anchoring to it be blocked until it is?",
-        evidence: [`${fm.id}#${b.id}`],
-        forced_into: fm.id,
-      });
-    }
-  }
-
-  return out;
-}
 
 /**
  * Open gaps whose named field has since shipped.

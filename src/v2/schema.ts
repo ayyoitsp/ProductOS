@@ -2208,6 +2208,12 @@ export const View = z.object({
   view_kind: z.string().optional().describe("form · list · detail · modal · strip — selectable by a Rule"),
   exists: z.enum(["intended", "kept", "withdrawn"]).optional(),
   /* ⛔ `runtime` REMOVED. Read by nothing, and what it meant was never written down. */
+  drawn_screen: z
+    .string()
+    .optional()
+    .describe(
+      "Which of a set of mutually exclusive screens one component renders this view IS — the arm the draw matched"
+    ),
   sketch: z.string().optional(),
   sketch_html: z.string().optional(),
   /**
