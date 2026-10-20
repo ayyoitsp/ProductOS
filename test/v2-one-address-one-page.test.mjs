@@ -248,6 +248,111 @@ test("the tree still narrows to the half you are in", { skip }, async () => {
   }
 });
 
+/**
+ * ⛔ TOP MODE IS WHAT THE PAGE SHIPS, AND IN TOP MODE THE TABS ARE THE WHOLE OF THE NAVIGATION.
+ *
+ * The tree is hidden up there, so every one of its links is 0x0 and a reader has only the tab row.
+ * Product and Capabilities name SCOPES, whose sections a page no longer carries — so the switcher
+ * could not find them, fell into its no-match branch and revealed every section at once, under an
+ * address that never moved. No error, no navigation. Peter: *"hahahahahahaha so broken, can't even
+ * get to a single page"*.
+ *
+ * ⛔ AND IT IS THE SAME OMISSION AS THE MENU ROW, IN THE MODE I TOLD TWO OTHER SESSIONS NOT TO
+ * MEASURE. Driving side mode was right for what the previous change claimed, and it made the
+ * default the one nobody looked at. Nothing is forced here.
+ */
+test("in the mode the page ships, a tab naming a scope goes there", { skip }, async () => {
+  const { base, close } = await serve(dir);
+  const page = await openPage(null, { exe, url: `${base}/v2`, width: 1440, height: 1000 });
+  after(() => page.close());
+  try {
+    await page.waitFor(`document.readyState === "complete" && document.querySelectorAll("[data-tab]").length > 0`, "the tab row", ARRIVAL);
+
+    /** ⛔ Non-vacuous on two counts: this really is top mode, and the tree really is unusable in it. */
+    const mode = await page.evaluate(`(() => ({
+      nav: document.documentElement.getAttribute("data-nav"),
+      treeLinks: document.querySelectorAll("nav.scopes a[data-goto]").length,
+      treeLinksWithBoxes: [...document.querySelectorAll("nav.scopes a[data-goto]")].filter((a) => a.getClientRects().length).length,
+    }))()`);
+    assert.notEqual(mode.nav, "left", "this is not the shipped mode, so it does not measure the shipped navigation");
+    assert.ok(mode.treeLinks > 0, "there are no tree links at all, so their being unreachable proves nothing");
+    assert.equal(mode.treeLinksWithBoxes, 0, "the tree is reachable in top mode, so the tabs are not the only way through");
+
+    /** The tab for a scope this document does not hold — which is every scope tab now. */
+    const tab = await page.evaluate(`(() => {
+      const fixed = ["overview", "prototype", "settings", "subsystems"];
+      const t = [...document.querySelectorAll("[data-tab]")].find((x) => !fixed.includes(x.dataset.tab));
+      if (!t) return null;
+      return { name: t.dataset.tab, held: !!document.querySelector('section.view[data-view="' + t.dataset.tab + '"]') };
+    })()`);
+    assert.ok(tab, "there is no tab naming a scope, so there is nothing to press");
+    assert.equal(tab.held, false, `this page already holds ${tab.name}, so pressing its tab exercises no navigation`);
+
+    const before = await page.evaluate("location.pathname");
+    await page.evaluate(`document.querySelector('[data-tab="${tab.name}"]').click()`);
+    await page.waitFor(
+      `(() => { const s = document.querySelector('section.view[data-view="${tab.name}"]');
+                return document.readyState === "complete" && !!s && !s.hidden; })()`,
+      `the page for ${tab.name} to arrive`,
+      ARRIVAL
+    );
+
+    const after = await page.evaluate(`(() => ({
+      path: location.pathname,
+      showing: [...document.querySelectorAll("section.view")].filter((s) => !s.hidden).map((s) => s.dataset.view),
+    }))()`);
+    assert.notEqual(after.path, before, `pressing the ${tab.name} tab left the address at ${after.path}`);
+    assert.deepEqual(after.showing, [tab.name], `it showed ${JSON.stringify(after.showing)} — more than one means the no-match branch revealed everything`);
+  } finally {
+    close();
+  }
+});
+
+/**
+ * ⛔ AN ADDRESS MAY NAME A STATEMENT INSIDE A FEATURE, AND IT MUST KEEP SAYING WHICH.
+ *
+ * The last segment of …/leaf/do-it is an EXCHANGE, not a scope, so the server correctly serves the
+ * owning scope's page — a statement has no page of its own. The defect was that arriving there
+ * rewrote the address to the feature's, because show() wrote addressOf(view) over the top of it.
+ * Reported from the live instance as the deepest level losing its last segment:
+ * *"clicked …/see-a-fields-definition, landed …/define-a-field-the-product-reads"*.
+ *
+ * Paste the link, lose the link — the same class as the bug this file was opened for.
+ */
+test("an address naming a statement inside a feature keeps it", { skip }, async () => {
+  const { base, close } = await serve(dir);
+  const at = `${base}/v2/${pathTo("leaf")}/do-it`;
+  const page = await openPage(null, { exe, url: at, width: 1440, height: 1000 });
+  after(() => page.close());
+  try {
+    await page.waitFor(
+      `(() => { const s = document.querySelector('section.view[data-view="leaf"]');
+                return document.readyState === "complete" && !!s && !s.hidden; })()`,
+      "the leaf's page to arrive",
+      ARRIVAL
+    );
+    /** ⛔ Settle first: the rewrite this guards against happens during hydration, not before it. */
+    await new Promise((r) => setTimeout(r, 1500));
+
+    const seen = await page.evaluate(`(() => ({
+      path: location.pathname,
+      showing: [...document.querySelectorAll("section.view")].filter((s) => !s.hidden).map((s) => s.dataset.view),
+      refOnPage: !![...document.querySelectorAll("[data-ref]")].find((x) => x.dataset.ref === "leaf#do-it"),
+    }))()`);
+
+    assert.deepEqual(seen.showing, ["leaf"], `a statement's address showed ${JSON.stringify(seen.showing)} rather than its feature`);
+    /** ⛔ Non-vacuous: the statement has to actually be on that page, or there was nothing to keep. */
+    assert.ok(seen.refOnPage, "the feature's page does not carry the statement the address names");
+    assert.equal(
+      seen.path,
+      new URL(at).pathname,
+      `the address was rewritten from ${new URL(at).pathname} to ${seen.path} — the statement it named is gone`
+    );
+  } finally {
+    close();
+  }
+});
+
 /** The menu path for a scope, which is what the renderer writes and what a reader bookmarks. */
 function pathTo(id) {
   const trail = [];
