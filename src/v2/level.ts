@@ -32,7 +32,7 @@ import { resolveRules, type Corpus } from "./load.js";
 import { SLOTS, statements, authorshipOf, type Reading, type SlotName, type Standing } from "./schema.js";
 import { decidedFor, staleReason, stampFor } from "./stamp.js";
 import { resolveRef, type Ref } from "./ref.js";
-import { confidenceOf, discrepancyFor, inheritedFor, supportFor } from "./confidence.js";
+import { confidenceOf, discrepancyFor, inheritedFor, supportFor, strengthOf, sourcesOf } from "./confidence.js";
 import { demonstrationOf, derivedCapabilities } from "./demonstrate.js";
 import { THE_GENERATOR } from "./held.js";
 
@@ -49,7 +49,12 @@ import { THE_GENERATOR } from "./held.js";
  * goes to a reviewer as something to agree with or correct, `open` goes to whoever was asked. A
  * level that collapsed them would hand a decider thirty sentences nobody has questioned.
  */
-export type LevelName = "accepted" | "derived" | "suggested" | "open";
+export type LevelName =
+  | "accepted"
+  | "strongly-supported"
+  | "corroborated"
+  | "one-source"
+  | "none";
 
 /**
  * How it reached that level — ⛔ SO THE THREE ZONES SURVIVE FOUR NAMES.
@@ -162,6 +167,13 @@ export interface Level {
   ref: string;
   level: LevelName;
   route: Route;
+  /**
+   * A person owes an answer here — ⛔ BESIDE THE SCALE, NEVER ON IT. See `OWED`.
+   *
+   * Absent rather than `false`, so a consumer that does not route decisions never reads it and a
+   * corpus with nothing owed carries nothing extra.
+   */
+  owed?: true;
   /**
    * Why it has that level, in one sentence a person can read.
    *
@@ -316,20 +328,191 @@ export function wroteOf(corpus: Corpus, ref: string): Wrote {
 const CANNOT_TELL = " ⛔ Nothing records who wrote it, so a person's unconfirmed draft and an agent's inference read the same here.";
 const UNRECORDED_MATTERS: ReadonlyArray<Route> = ["written", "inferred", "drafted", "unruled"];
 
+/**
+ * The routes that mean a person owes an answer — ⛔ A FLAG BESIDE THE SCALE, NOT A RUNG ON IT.
+ *
+ * Peter, asked what an unanswered question should report once `open` stopped being a level:
+ * *"Lowest, but flagged separately"*. Which is right, and it is the same argument `confidence.ts`
+ * makes about `observed`: how well supported something is and whether somebody owes a decision are
+ * two different questions, and a ladder that answers both means neither.
+ *
+ * ⛔ `latitude` IS DELIBERATELY ABSENT, and `readiness.ts` already said why: `out_of_scope` is
+ * nothing to build from AND nobody owing an answer — a declaration a builder relies on rather than
+ * a question to put to a person.
+ */
+export const OWED: ReadonlyArray<Route> = ["unruled", "drafted"];
+
+/**
+ * What each argument is worth, as a rung — ⛔ THE ROUTE IS THE ARGUMENT, THE RUNG IS ITS WORTH.
+ *
+ * Peter, when I claimed the distinction could not survive the collapse: *"i don't understand -
+ * doesn't worked-out -> derived just have higher confidence than worked-out-from-draft?"* — which
+ * is the answer, and my question was the wrong question. I had tried to compute the rung from
+ * support COUNT alone, and support counting cannot see whether the words a derivation came from
+ * were agreed to. But a scale does not have to be a count: a derivation from an acceptance is
+ * simply worth more than a derivation from a draft, and both are worth something.
+ *
+ * ⛔ WHICH MEANS NO DISTINCTION IS LOST — the four old names carried exactly this, badly. `derived`
+ * was "worth building from" and `suggested` was "not", with no room between them, so `observed` and
+ * `stale-acceptance` had to be shoved into one or the other. Here they differ.
+ *
+ * ⛔ AND IT IS NOT A SECOND LADDER. The rungs are `confidence.ts`'s own `Strength` values; this
+ * table says which rung an argument starts at, and `rungOf` lets observed support RAISE it. Nothing
+ * here invents a name, and nothing lowers a rung — a claim with three readings behind it is not
+ * made weaker by also having provenance.
+ */
+const WORTH: Readonly<Record<Route, LevelName>> = {
+  /** ⛔ The three a person's agreement produces. Unreachable from here — see `level`. */
+  "accepted-here": "accepted",
+  "accepted-through-a-rule": "accepted",
+  "inside-an-acceptance": "accepted",
+
+  /**
+   * Worked out from words somebody agreed to, and current with them. The old `derived`, and the
+   * reason Peter's rule — *"a ticket is groomed when nothing it touches is below derived"* — still
+   * has a line to draw: this is above it and the draft case below.
+   */
+  "worked-out": "corroborated",
+  /** It follows from an acceptance — a confirmed happy path names this screen. */
+  "follows-an-acceptance": "corroborated",
+  /**
+   * The product was seen doing it.
+   *
+   * ⛔ `corroborated` AND NOT `one-source`, THOUGH IT IS LITERALLY ONE READING. Peter, when
+   * observation was added: *"it should also have a level of confirmation that is higher than 'LLM
+   * generated'"*. An observation is falsifiable — anybody can re-run it — which is what makes it
+   * worth more than an inference with the same arithmetic behind it.
+   */
+  observed: "corroborated",
+
+  /**
+   * Provenance, but from words nobody has agreed to.
+   *
+   * ⛔ BELOW THE GATE ON PURPOSE. `v2-how-established-is-this` pins it: *"a test for a draft passed
+   * the gate a builder applies"* is the failure. It is worth MORE than nothing — something worked
+   * it out and said from what — and less than a derivation from agreed words.
+   */
+  "worked-out-from-a-draft": "one-source",
+  /** Somebody agreed, and the words moved. The agreement is real and no longer covers this. */
+  "stale-acceptance": "one-source",
+  /** Something worked it out, and the words it came from moved. */
+  "stale-derivation": "one-source",
+  /** Software landed a default so a reviewer has something to disagree with. */
+  "landed-by-software": "one-source",
+  /** Readings bear on it, and a reading is never truth. */
+  inferred: "one-source",
+
+  /** It is written down and nothing else is true of it. */
+  written: "none",
+  /**
+   * ⛔ THE TWO SOMEBODY OWES AN ANSWER ON REPORT NOTHING, WHATEVER SUPPORTS THEM — and leaving this
+   * to the support count was a gate regression I nearly shipped. `tasks#complete-a-task#at_once`
+   * has an unanswered question AND an observation bearing on it, so counting put it at `one-source`,
+   * which `BUILDABLE` admits. A builder must never be handed a sentence nobody has decided because
+   * the product happens to already do something.
+   *
+   * ⛔ The support is not hidden, it is in `because`: "N observations bear on it … so the product
+   * does something nobody has decided." Peter asked for this shape by name: *"Lowest, but flagged
+   * separately"*.
+   */
+  unruled: "none",
+  drafted: "none",
+  /** Nothing to build from AND nobody owes an answer — a declaration, not a question. */
+  latitude: "none",
+};
+
+/** ⛔ The scale, weakest first, so "raise, never lower" is one comparison and not a table. */
+const RUNGS: ReadonlyArray<LevelName> = ["none", "one-source", "corroborated", "strongly-supported"];
+
+/**
+ * What this argument is worth, raised by whatever has actually been observed about it.
+ *
+ * ⛔ RAISED AND NEVER LOWERED. `strengthOf` answers "how many independent sources", which is a real
+ * question and an incomplete one — a claim with three readings is stronger than one with a single
+ * reading, and a claim with provenance from an acceptance is stronger than either arithmetic knows.
+ * Taking the higher of the two is the only combination that cannot make a claim weaker by learning
+ * something new about it.
+ */
+const rungOf = (corpus: Corpus, ref: string, route: Route): LevelName => {
+  const base = WORTH[route];
+  /** ⛔ An owed question is not raised by support — see the note on `unruled` above. */
+  if (OWED.includes(route)) return base;
+
+  const counted = strengthOf(sourcesOf(supportFor(corpus, ref)), inheritedFor(corpus, ref).length);
+
+  /**
+   * ⛔ SUPPORT REFINES THE RUNG; IT NEVER CROSSES THE GATE. A quantity must not outrank a kind.
+   *
+   * The first cut took the higher of the two outright, and `the product being seen doing it is
+   * derived, AND READING THE CODE ABOUT IT IS NOT` caught it: enough code reads raised an inference
+   * to `strongly-supported`, which `BUILDABLE` admits. So three readings of the implementation
+   * would have made a claim buildable that nothing has agreed to and the product has not been seen
+   * doing — and `CLAUDE.md` is explicit that what was built is drift and never authority.
+   *
+   * This is the same line `confidence.ts` draws and says out loud: *"a different kind of claim
+   * cannot be a rung on a quantity ladder without making the ladder mean two things"*. So the ROUTE
+   * decides which side of the gate a claim is on, and the count decides how strong it is on that
+   * side. Below the gate, support can reach `one-source` and no further; at or above it, support can
+   * reach `strongly-supported`.
+   */
+  const ceiling: LevelName = RUNGS.indexOf(base) >= RUNGS.indexOf("corroborated") ? "strongly-supported" : "one-source";
+  const raised = RUNGS.indexOf(counted) > RUNGS.indexOf(base) ? counted : base;
+  return RUNGS.indexOf(raised) > RUNGS.indexOf(ceiling) ? ceiling : raised;
+};
+
+/**
+ * ⛔ A CONSTRUCTION SAYS ONLY WHETHER A PERSON AGREED. Everything else is the scale, computed here
+ * so no call site can put a claim on a rung it did not earn.
+ *
+ * Peter: *"I think we probably just need a confidence scale for derived, and get rid of
+ * suggested/open"*, and then: *"we should just be distilling slightly differently"* — which is the
+ * accurate description. Every ingredient was already here and correct; what was wrong was four
+ * invented names sitting on top of a scale that already existed. `derived`, `suggested` and `open`
+ * were this file's own vocabulary, and a reader had to learn it before the numbers meant anything.
+ *
+ * ⛔ `accepted` IS STILL NOT A RUNG ANYTHING HERE CAN REACH. It is `stampFor`'s answer and
+ * `stampFor` filters `via: agent` at the source — so the one thing that cannot be earned by support
+ * stays unearnable, which is the line both this file and `confidence.ts` were already drawing.
+ */
 const level = (
   corpus: Corpus,
   ref: string,
-  level: LevelName,
+  agreed: "accepted" | "unaccepted",
   route: Route,
   because: string,
   stale?: Level["stale"],
 ): Level => {
   const wrote = wroteOf(corpus, ref);
+  /**
+   * ⛔ A QUESTION SOMEBODY OWES REPORTS THE LOWEST RUNG, WHATEVER SUPPORTS IT — and leaving this
+   * out was a gate regression I nearly shipped, caught by running it rather than reading it.
+   *
+   * `tasks#complete-a-task#at_once` has an unanswered question AND an observation bearing on it, so
+   * the support count put it at `one-source` — which `BUILDABLE` admits. On the old scale `open`
+   * outranked everything, so it was correctly unbuildable. A builder must never be handed a
+   * sentence nobody has decided because the product happens to already do something.
+   *
+   * ⛔ AND THE SUPPORT IS NOT HIDDEN, it is in `because`: "N observations bear on it … so the
+   * product does something nobody has decided." That sentence is the reason this is safe to report
+   * as `none` rather than dishonest — the reader is told what exists and why it does not count yet.
+   *
+   * Peter asked for exactly this shape: *"Lowest, but flagged separately"*.
+   */
+  const name: LevelName = agreed === "accepted" ? "accepted" : rungOf(corpus, ref, route);
   const said =
-    level === "suggested" && wrote.is === "unrecorded" && UNRECORDED_MATTERS.includes(route)
+    name !== "accepted" && wrote.is === "unrecorded" && UNRECORDED_MATTERS.includes(route)
       ? because + CANNOT_TELL
       : because;
-  return stale ? { ref, level, route, because: said, wrote, stale } : { ref, level, route, because: said, wrote };
+  const owed = OWED.includes(route) || undefined;
+  return {
+    ref,
+    level: name,
+    route,
+    because: said,
+    wrote,
+    ...(owed ? { owed } : {}),
+    ...(stale ? { stale } : {}),
+  };
 };
 
 /** `peter accepted this on 2026-10-05`, and the one place that phrasing is composed. */
@@ -364,17 +547,17 @@ function fromStanding(corpus: Corpus, ref: string, standing: Standing): Level | 
       return level(
         corpus,
         ref,
-        "suggested",
+        "unaccepted",
         "drafted",
         `${n} answer${n === 1 ? " has" : "s have"} been drafted and nobody has chosen${asked}: ${question}${about}${agreed}`,
       );
-    return level(corpus, ref, "open", "unruled", `Nobody has answered this${asked}: ${question}${about}${agreed}`);
+    return level(corpus, ref, "unaccepted", "unruled", `Nobody has answered this${asked}: ${question}${about}${agreed}`);
   }
   if (standing.kind === "disputed")
     return level(
       corpus,
       ref,
-      "open",
+      "unaccepted",
       "unruled",
       `This cannot hold with ${(standing.targets ?? []).join(", ") || "something unnamed"} — ${
         standing.because ?? "nothing says why"
@@ -396,7 +579,7 @@ function latitude(corpus: Corpus, ref: string, standing: Standing): Level {
   return level(
     corpus,
     ref,
-    "open",
+    "unaccepted",
     "latitude",
     `Deliberately not answered here — ${standing.answered_by ?? "nobody named"} decided on ${
       standing.answered_at ?? "no date"
@@ -408,13 +591,13 @@ function latitude(corpus: Corpus, ref: string, standing: Standing): Level {
 function requirementLevel(corpus: Corpus, ref: string, r: Extract<Ref, { kind: "requirement" }>): Level {
   const d = demonstrationOf(corpus, r.scope, r.exchange);
   const req = d?.requirements.find((x) => x.ref === ref);
-  if (!req) return level(corpus, ref, "suggested", "written", "This requirement is not in the corpus any more");
+  if (!req) return level(corpus, ref, "unaccepted", "written", "This requirement is not in the corpus any more");
   const der = req.criterion.derived;
   if (req.state === "stale" && der)
     return level(
       corpus,
       ref,
-      "suggested",
+      "unaccepted",
       "stale-derivation",
       `${der.by} worked this out from ${req.claim} on ${der.at}, and those words have changed since — it demonstrates the sentence as it read then`,
     );
@@ -440,7 +623,7 @@ function requirementLevel(corpus: Corpus, ref: string, r: Extract<Ref, { kind: "
       return level(
         corpus,
         ref,
-        "suggested",
+        "unaccepted",
         "worked-out-from-a-draft",
         `${der.by} worked this out from ${req.claim} on ${der.at}, and that sentence has not changed since — ` +
           "but nobody has agreed to it yet, so this tests a draft. It becomes derived when somebody agrees to the claim",
@@ -448,7 +631,7 @@ function requirementLevel(corpus: Corpus, ref: string, r: Extract<Ref, { kind: "
     return level(
       corpus,
       ref,
-      "derived",
+      "unaccepted",
       "worked-out",
       `${der.by} worked this out from ${req.claim} on ${der.at}, and that sentence has not changed since — ` +
         agreedLine(claim.by, claim.at, claim.through),
@@ -485,7 +668,7 @@ function requirementLevel(corpus: Corpus, ref: string, r: Extract<Ref, { kind: "
       return level(
         corpus,
         ref,
-        "suggested",
+        "unaccepted",
         "stale-acceptance",
         `Nobody derived this, and the acceptance of ${target} that covered it no longer holds — ${staleReason(st)}`,
         st.state,
@@ -494,7 +677,7 @@ function requirementLevel(corpus: Corpus, ref: string, r: Extract<Ref, { kind: "
   return level(
     corpus,
     ref,
-    "suggested",
+    "unaccepted",
     "written",
     "Somebody typed this and nothing says which words it was written against, so nothing can tell whether it is current with the claim",
   );
@@ -503,13 +686,13 @@ function requirementLevel(corpus: Corpus, ref: string, r: Extract<Ref, { kind: "
 /** A part of the system beneath the product. ⛔ Nothing agrees to one; it is derived or it is not. */
 function capabilityLevel(corpus: Corpus, ref: string): Level {
   const d = derivedCapabilities(corpus).find((x) => x.ref === ref);
-  if (!d) return level(corpus, ref, "suggested", "written", "This part is not in the corpus any more");
+  if (!d) return level(corpus, ref, "unaccepted", "written", "This part is not in the corpus any more");
   const der = d.offering.derived;
   if (d.state === "stale" && der)
     return level(
       corpus,
       ref,
-      "suggested",
+      "unaccepted",
       "stale-derivation",
       `${der.by} worked this part out on ${der.at} from what it serves, and that truth has changed since`,
     );
@@ -517,14 +700,14 @@ function capabilityLevel(corpus: Corpus, ref: string): Level {
     return level(
       corpus,
       ref,
-      "derived",
+      "unaccepted",
       "worked-out",
       `${der.by} worked this part out on ${der.at} from ${d.offering.serves.join(", ")}, which has not changed since`,
     );
   return level(
     corpus,
     ref,
-    "suggested",
+    "unaccepted",
     "written",
     "Nothing says what this part was worked out from, so nothing can tell whether it is current with the truth it serves",
   );
@@ -557,7 +740,7 @@ function blankSlot(corpus: Corpus, ref: string): Level | null {
   return level(
     corpus,
     ref,
-    "open",
+    "unaccepted",
     "unruled",
     `Nothing here says what happens, and no rule supplies it.` +
       (adds.length ? ` The rule ${adds.map((x) => x.id).join(", ")} constrains it without answering it.` : "") +
@@ -648,7 +831,7 @@ export function levelOf(corpus: Corpus, ref: string): Level | { error: string } 
   }
   /** ⛔ THE RULE THIS FILE IS ARRANGED AROUND. One sentence, and it is `staleReason`'s. */
   if (stamp.state !== "never")
-    return level(corpus, ref, "suggested", "stale-acceptance", staleReason(stamp) ?? "", stamp.state);
+    return level(corpus, ref, "unaccepted", "stale-acceptance", staleReason(stamp) ?? "", stamp.state);
 
   /**
    * ⛔ A STALE AGREEMENT TO A RULE DOES NOT REACH THE SLOTS THE RULE SUPPLIES, and `stampFor` says
@@ -663,7 +846,7 @@ export function levelOf(corpus: Corpus, ref: string): Level | { error: string } 
       return level(
         corpus,
         ref,
-        "suggested",
+        "unaccepted",
         "stale-acceptance",
         `Every word of this comes from the rule ${rule.id}, and the agreement to that rule no longer holds — ${staleReason(
           st,
@@ -687,7 +870,7 @@ export function levelOf(corpus: Corpus, ref: string): Level | { error: string } 
     return level(
       corpus,
       ref,
-      "derived",
+      "unaccepted",
       "follows-an-acceptance",
       `This follows from ${follows.from}, which is accepted — ${follows.because}`,
     );
@@ -699,7 +882,7 @@ export function levelOf(corpus: Corpus, ref: string): Level | { error: string } 
     return level(
       corpus,
       ref,
-      "derived",
+      "unaccepted",
       "observed",
       `The product was seen doing this — ${seen
         .map((s) => `${s.basis.kind} at ${s.basis.ref}${s.basis.at ? ` on ${s.basis.at}` : ""}`)
@@ -758,16 +941,16 @@ export function levelOf(corpus: Corpus, ref: string): Level | { error: string } 
     return level(
       corpus,
       ref,
-      "suggested",
+      "unaccepted",
       "landed-by-software",
       `${landed.by} landed this for you on ${landed.at} and nobody has looked at it.${read}${borrowed}${inside}`,
     );
   if (own.length || c.contained.length)
-    return level(corpus, ref, "suggested", "inferred", `Nobody has agreed to this.${read}${borrowed}${inside}`);
+    return level(corpus, ref, "unaccepted", "inferred", `Nobody has agreed to this.${read}${borrowed}${inside}`);
   return level(
     corpus,
     ref,
-    "suggested",
+    "unaccepted",
     "written",
     (rule
       ? `Every word of this comes from the rule ${rule.id}, and nobody has agreed to that rule either`
@@ -827,7 +1010,13 @@ export function levelsIn(corpus: Corpus): Level[] {
 
 /** How many facts stand at each level. ⛔ Arithmetic over `levelsIn`, so it cannot disagree with it. */
 export function countLevels(levels: readonly Level[]): Record<LevelName, number> {
-  const out: Record<LevelName, number> = { accepted: 0, derived: 0, suggested: 0, open: 0 };
+  const out: Record<LevelName, number> = {
+    accepted: 0,
+    "strongly-supported": 0,
+    corroborated: 0,
+    "one-source": 0,
+    none: 0,
+  };
   for (const l of levels) out[l.level] += 1;
   return out;
 }
@@ -842,9 +1031,20 @@ export function countLevels(levels: readonly Level[]): Record<LevelName, number>
  */
 export const LEVEL_WORD: Readonly<Record<LevelName, string>> = {
   accepted: "agreed",
-  derived: "derived",
-  suggested: "suggested",
-  open: "open",
+  "strongly-supported": "strongly supported",
+  corroborated: "corroborated",
+  "one-source": "one source",
+  /**
+   * ⛔ "unsupported", NOT "suggested" — and not "nothing supports it" either, which was the first
+   * try and is a sentence rather than a chip. The bottom rung appears on a grid cell and a
+   * behaviour row, where it has about one word of room.
+   *
+   * ⛔ AND DELIBERATELY NOT THE OLD WORD. Keeping "suggested" as the display word for `none` would
+   * have left a reader seeing exactly what they saw before, which would make this change invisible
+   * where it matters most — the surfaces. "unsupported" is also the more accurate English: it says
+   * what is missing rather than how the sentence came to be there.
+   */
+  none: "unsupported",
 };
 
 /**

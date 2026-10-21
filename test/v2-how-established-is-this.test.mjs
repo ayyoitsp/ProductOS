@@ -25,6 +25,8 @@
  * the one function that refuses an agent.
  */
 import assert from "node:assert/strict";
+/** ⛔ The gate itself, so "below it" is asserted against the real set and not a literal. */
+const { BUILDABLE } = await import("../dist/v2/readiness.js");
 import fs from "node:fs";
 import { test } from "node:test";
 import { temp } from "./support/temp.mjs";
@@ -95,7 +97,7 @@ test("⛔ an agent cannot reach accepted, however correctly it records the verdi
 
   const l = ok(levelOf(c, ANSWER));
   assert.notEqual(l.level, "accepted", "⛔ software produced an acceptance");
-  assert.equal(l.level, "suggested");
+  assert.equal(l.level, "one-source");
   assert.equal(l.route, "landed-by-software");
   /** ⛔ And it says so on the thing itself: a default nobody can see is a default nobody overrides. */
   assert.match(l.because, /productos-scoper landed this for you on 2026-10-02 and nobody has looked at it/);
@@ -148,7 +150,7 @@ test("⛔ a reworded claim turns an acceptance back into a suggestion", () => {
     "Whatever the storage layer makes cheapest, shown however it comes out.";
   const l = ok(levelOf(withVerdicts(corpus, [v]), ANSWER));
 
-  assert.equal(l.level, "suggested", "⛔ a consumer was told it could build from older words");
+  assert.equal(l.level, "one-source", "⛔ a consumer was told it could build from older words");
   assert.notEqual(l.level, "accepted");
   assert.equal(l.route, "stale-acceptance");
   assert.equal(l.stale, "claim-changed");
@@ -168,7 +170,7 @@ test("⛔ a criterion added after an acceptance turns it back into a suggestion"
     then: "they are shown it",
   });
   const l = ok(levelOf(withVerdicts(corpus, [v]), EXCHANGE));
-  assert.equal(l.level, "suggested");
+  assert.equal(l.level, "one-source");
   assert.equal(l.route, "stale-acceptance");
   assert.equal(l.stale, "criteria-changed");
   assert.match(l.because, /its criteria have changed since/);
@@ -181,7 +183,7 @@ test("⛔ both halves moving says both moved, rather than picking one", () => {
   ex.slots.answer.says = "Something else entirely.";
   ex.criteria.push({ id: "98", slot: "answer", kind: "instance", then: "something else is shown" });
   const l = ok(levelOf(withVerdicts(corpus, [v]), EXCHANGE));
-  assert.equal(l.level, "suggested");
+  assert.equal(l.level, "one-source");
   assert.equal(l.stale, "both-changed");
   assert.match(l.because, /both what it states and what demonstrates it have changed since/);
 });
@@ -198,7 +200,7 @@ test("⛔ a stale agreement to a rule does not reach the slots that rule supplie
   corpus.rules.find((r) => r.rule.id === RULE).rule.statement =
     "Anybody signed in on the shared device may move money, including a kid.";
   const l = ok(levelOf(withVerdicts(corpus, [v]), MAY));
-  assert.equal(l.level, "suggested", "⛔ a reworded rule went on supplying an accepted sentence");
+  assert.equal(l.level, "one-source", "⛔ a reworded rule went on supplying an accepted sentence");
   assert.equal(l.route, "stale-acceptance");
   assert.match(l.because, new RegExp(`Every word of this comes from the rule ${RULE}, and the agreement to that rule no longer holds`));
 });
@@ -210,7 +212,7 @@ test("a requirement worked out from an agreed claim as it now reads is derived, 
   const c1 = exchangeIn(corpus, "money", "see-a-balance").criteria.find((x) => x.id === "1");
   c1.derived = { by: "productos-demonstrator", at: "2026-10-01", from: claimHash(corpus, ANSWER) };
   const l = ok(levelOf(withVerdicts(corpus, [accepting(corpus, ANSWER)]), "money#see-a-balance#shows#1"));
-  assert.equal(l.level, "derived");
+  assert.equal(l.level, "corroborated");
   assert.equal(l.route, "worked-out");
   assert.match(l.because, new RegExp(`productos-demonstrator worked this out from ${ANSWER} on 2026-10-01`));
 });
@@ -220,7 +222,7 @@ test("⛔ a requirement worked out from a claim nobody has agreed to is a sugges
   const c1 = exchangeIn(corpus, "money", "see-a-balance").criteria.find((x) => x.id === "1");
   c1.derived = { by: "productos-demonstrator", at: "2026-10-01", from: claimHash(corpus, ANSWER) };
   const l = ok(levelOf(corpus, "money#see-a-balance#shows#1"));
-  assert.equal(l.level, "suggested", "⛔ a test for a draft passed the gate a builder applies");
+  assert.equal(l.level, "one-source", "⛔ a test for a draft passed the gate a builder applies");
   assert.equal(l.route, "worked-out-from-a-draft");
   assert.match(l.because, /nobody has agreed to it yet/);
 });
@@ -232,7 +234,7 @@ test("⛔ a requirement worked out from words that have since changed is a sugge
   /** The claim moves after the test was worked out from it. */
   exchangeIn(corpus, "money", "see-a-balance").slots.answer.says = "Only the amount, and nothing about where it came from.";
   const l = ok(levelOf(corpus, "money#see-a-balance#shows#1"));
-  assert.equal(l.level, "suggested", "⛔ a builder was handed a test for a claim nobody makes");
+  assert.equal(l.level, "one-source", "⛔ a builder was handed a test for a claim nobody makes");
   assert.equal(l.route, "stale-derivation");
   assert.match(l.because, /those words have changed since — it demonstrates the sentence as it read then/);
 });
@@ -263,7 +265,7 @@ test("an authored requirement inside an acceptance was read and agreed to", () =
     from: claimHash(other, ANSWER),
   };
   const withBoth = withVerdicts(other, [accepting(other, ANSWER)]);
-  assert.equal(ok(levelOf(withBoth, "money#see-a-balance#shows#1")).level, "derived");
+  assert.equal(ok(levelOf(withBoth, "money#see-a-balance#shows#1")).level, "corroborated");
 });
 
 test("a screen on an accepted happy path follows from it", () => {
@@ -275,7 +277,7 @@ test("a screen on an accepted happy path follows from it", () => {
   const { corpus } = seeded();
   const c = withVerdicts(corpus, [accepting(corpus, "money#happy-path")]);
   const l = ok(levelOf(c, "money#balance"));
-  assert.equal(l.level, "derived");
+  assert.equal(l.level, "corroborated");
   assert.equal(l.route, "follows-an-acceptance");
   assert.match(l.because, /follows from money#happy-path, which is accepted — on the happy path, through: balance/);
 });
@@ -296,7 +298,7 @@ test("the product being seen doing it is derived, and reading the code about it 
   const { corpus } = seeded();
   const watched = withReadings(corpus, [reading("saw-it", AGAIN, "a second look, on a parent's phone", "inspection", { at: "2026-10-04" })]);
   const l = ok(levelOf(watched, AGAIN));
-  assert.equal(l.level, "derived");
+  assert.equal(l.level, "corroborated");
   assert.equal(l.route, "observed");
   assert.match(l.because, /The product was seen doing this — inspection at a second look, on a parent's phone on 2026-10-04/);
   /** ⛔ And it says the other half, every time. */
@@ -304,7 +306,7 @@ test("the product being seen doing it is derived, and reading the code about it 
 
   for (const kind of ["code", "trial", "interview", "support"]) {
     const inferred = ok(levelOf(withReadings(corpus, [reading(`r-${kind}`, AGAIN, "src/money.ts:40", kind)]), AGAIN));
-    assert.equal(inferred.level, "suggested", `a ${kind} reading reached ${inferred.level}`);
+    assert.equal(inferred.level, "one-source", `a ${kind} reading reached ${inferred.level}`);
     assert.equal(inferred.route, "inferred");
   }
   assert.ok(!SEEN_RUNNING.includes("code"), "⛔ reading the source counted as watching the product");
@@ -318,14 +320,23 @@ test("the product being seen doing it is derived, and reading the code about it 
    */
   assert.ok(SEEN_RUNNING.includes("walk"), "⛔ a walk of the running product did not count as watching it");
   const walked = ok(levelOf(withReadings(corpus, [reading("walked-it", AGAIN, "http://localhost:3001/wallet", "walk", { at: "2026-10-05" })]), AGAIN));
-  assert.equal(walked.level, "derived", "a walk of the running product did not reach derived");
+  assert.equal(walked.level, "corroborated", "a walk of the running product did not reach derived");
   assert.equal(walked.route, "observed");
   assert.match(walked.because, /The product was seen doing this — walk at http:\/\/localhost:3001\/wallet on 2026-10-05/);
   /** ⛔ And never above it: a walk cannot say anybody agreed. */
   assert.match(walked.because, /Nobody has agreed that it should/);
-  /** ⛔ However many of them there are. The cap is the point, in both zones. */
+  /**
+   * ⛔ HOWEVER MANY OF THEM THERE ARE — AND THE CAP IS NOW THE POINT IN A SHARPER WAY.
+   *
+   * Twelve code readings is `strongly-supported` by arithmetic alone, and `strongly-supported` is
+   * above the gate. The first cut of the scale took the higher of route-worth and support-count
+   * outright, and this assertion is what caught it: an agent reading the repository twelve times
+   * would have made a claim groomable. Support now refines the rung WITHIN the side of the gate the
+   * route puts it on, so twelve code reads reach `one-source` and stop.
+   */
   const many = Array.from({ length: 12 }, (_, i) => reading(`c${i}`, AGAIN, `src/a.ts:${i}`));
-  assert.equal(ok(levelOf(withReadings(corpus, many), AGAIN)).level, "suggested");
+  assert.equal(ok(levelOf(withReadings(corpus, many), AGAIN)).level, "one-source");
+  assert.ok(!BUILDABLE.includes(ok(levelOf(withReadings(corpus, many), AGAIN)).level), "code reads reached the gate");
 });
 
 test("⛔ the generator's own drawing is not the product being seen", () => {
@@ -347,7 +358,7 @@ test("⛔ the generator's own drawing is not the product being seen", () => {
   assert.equal(seenRunning(drawn, "money#balance").length, 0, "⛔ the generator's reading counted as an observation");
   const l = ok(levelOf(drawn, "money#balance"));
   assert.notEqual(l.route, "observed");
-  assert.equal(l.level, "suggested");
+  assert.equal(l.level, "one-source");
   assert.equal(l.route, "inferred");
 
   /** A person who looked at the same screen is a different matter, and reads as one. */
@@ -368,7 +379,7 @@ test("⛔ support borrowed from a neighbour never reaches derived, and says it i
     [accepting(corpus, ANSWER)],
   );
   const l = ok(levelOf(c, AGAIN));
-  assert.equal(l.level, "suggested", "⛔ borrowed support reached derived");
+  assert.equal(l.level, "one-source", "⛔ borrowed support reached derived");
   assert.equal(l.route, "inferred");
   assert.match(l.because, /Nobody has read this statement itself — its support is borrowed from/);
 });
@@ -378,7 +389,7 @@ test("⛔ support borrowed from a neighbour never reaches derived, and says it i
 test("drafted answers on an open question are a suggestion, never the answer", () => {
   const { corpus } = seeded();
   const l = ok(levelOf(corpus, "money#record-spending#after"));
-  assert.equal(l.level, "suggested");
+  assert.equal(l.level, "none");
   assert.equal(l.route, "drafted");
   assert.match(l.because, /2 answers have been drafted and nobody has chosen, asked of peter/);
   /** ⛔ The question itself, because that is what a consumer puts to a person. */
@@ -390,7 +401,7 @@ test("drafted answers on an open question are a suggestion, never the answer", (
 test("an open question nobody has drafted an answer to is open", () => {
   const { corpus } = seeded();
   const l = ok(levelOf(corpus, "tasks#complete-a-task#at_once"));
-  assert.equal(l.level, "open");
+  assert.equal(l.level, "none");
   assert.equal(l.route, "unruled");
   assert.match(l.because, /Nobody has answered this, asked of product/);
 });
@@ -408,7 +419,7 @@ test("⛔ an acceptance under a live question does not settle it, and is not thr
   const c = withVerdicts(corpus, [accepting(corpus, ref)]);
   const l = ok(levelOf(c, ref));
   assert.notEqual(l.level, "accepted", "⛔ a live question was stamped away");
-  assert.equal(l.level, "suggested");
+  assert.equal(l.level, "none");
   assert.match(l.because, /peter accepted these words on 2026-10-05, and that does not answer it/);
 });
 
@@ -428,7 +439,7 @@ test("deliberately unanswered is nobody's question, and it is not an acceptance"
     answered_at: "2026-09-20",
   };
   const l = ok(levelOf(corpus, ref));
-  assert.equal(l.level, "open");
+  assert.equal(l.level, "none");
   assert.equal(l.route, "latitude");
   assert.match(l.because, /Deliberately not answered here — peter decided on 2026-09-20/);
 
@@ -446,7 +457,7 @@ test("a slot the product does something about and nobody has decided is open", (
    */
   const { corpus } = seeded();
   const l = ok(levelOf(corpus, "money#record-spending#refuses"));
-  assert.equal(l.level, "open");
+  assert.equal(l.level, "none");
   assert.equal(l.route, "unruled");
   assert.match(l.because, /Nothing here says what happens, and no rule supplies it/);
   assert.match(l.because, /amounts-refuse-the-same-way constrains it without answering it/);
@@ -467,15 +478,35 @@ test("a ref that is not in the corpus gets a reason rather than a level", () => 
 test("every fact in the shipped seed gets a level, and the pristine one is a corpus nobody has agreed to", () => {
   /**
    * ⛔ THE DISTRIBUTION IS THE POINT, not the total. A corpus nobody has touched must not be able to
-   * look like one somebody has read: 73 of its 74 facts are drafted or written and the other is a
-   * question. `accepted` and `derived` are both ZERO, on a corpus with nine rules, five exchanges,
-   * twenty-two requirements and two recorded observations — because a level is a report on consent
-   * and no amount of content substitutes for it.
+   * look like one somebody has read: every one of its 74 facts sits at the bottom rung, on a corpus
+   * with nine rules, five exchanges, twenty-two requirements and two recorded observations — because
+   * a level is a report on consent and no amount of content substitutes for it.
+   *
+   * ⛔ 74 AT `none` IS MORE HONEST THAN THE 73-AND-1 IT REPLACES. The old scale split this into
+   * `suggested` and `open`, which read as two different degrees of established-ness and were not:
+   * both are "nothing supports this", differing only in whether somebody owes an answer. That is
+   * now the `owed` flag, asserted below — so the same two facts are reported, and the rung no
+   * longer implies a difference in support that does not exist.
    */
   const { corpus } = seeded();
   const all = levelsIn(corpus);
   assert.equal(all.length, 74, "the seed's shape changed — read the new distribution before editing this number");
-  assert.deepEqual(countLevels(all), { accepted: 0, derived: 0, suggested: 73, open: 1 });
+  assert.deepEqual(countLevels(all), {
+    accepted: 0,
+    "strongly-supported": 0,
+    corroborated: 0,
+    "one-source": 0,
+    none: 74,
+  });
+  /**
+   * ⛔ AND WHO OWES SOMETHING, WHICH IS THE HALF THE RUNG NO LONGER CARRIES. Four of the 74: one
+   * unruled slot and three with answers drafted against them. Peter asked for exactly this shape —
+   * *"Lowest, but flagged separately"* — and without this line the collapse WOULD have lost the
+   * distinction, rather than moving it.
+   */
+  assert.equal(all.filter((l) => l.owed).length, 4, "nothing says who owes an answer");
+  /** ⛔ Non-vacuous: the flag is not simply on everything at the bottom rung. */
+  assert.ok(all.filter((l) => !l.owed).length > 60, "the owed flag is on nearly everything, so it distinguishes nothing");
   /** Every one of them carries its reason: a level with no argument behind it is a badge. */
   for (const l of all) assert.ok(l.because.length > 20, `${l.ref} has no reason: ${JSON.stringify(l.because)}`);
 
@@ -486,7 +517,13 @@ test("every fact in the shipped seed gets a level, and the pristine one is a cor
     accepting(corpus, RULE),
   ]);
   const moved = levelsIn(after);
-  assert.deepEqual(countLevels(moved), { accepted: 9, derived: 0, suggested: 64, open: 1 });
+  assert.deepEqual(countLevels(moved), {
+    accepted: 9,
+    "strongly-supported": 0,
+    corroborated: 0,
+    "one-source": 0,
+    none: 65,
+  });
   const routes = {};
   for (const l of moved) routes[l.route] = (routes[l.route] ?? 0) + 1;
   /**
@@ -504,10 +541,28 @@ test("every fact in the shipped seed gets a level, and the pristine one is a cor
     unruled: 1,
     written: 61,
   });
-  assert.equal(countLevels(moved).open, 1, "an acceptance answered a question it was not about");
+  /**
+   * ⛔ `open` IS NOT A LEVEL ANY MORE, AND THE COUNT IS 4 RATHER THAN 1 BECAUSE THE FLAG IS WIDER.
+   *
+   * The old `open` level held only `unruled`. `drafted` — a question with answers written against
+   * it and nobody choosing — read `suggested`, which `readiness.ts` had to work around: its
+   * `A_QUESTION` list is `["unruled", "drafted"]` precisely because *"a hole list built from
+   * `level === "open"` would have dropped the seed's two best questions"*. The flag is that list,
+   * so the workaround and the model now agree.
+   *
+   * The property is unchanged and is the point: three acceptances answered none of them.
+   */
+  assert.equal(moved.filter((l) => l.owed).length, 4, "an acceptance answered a question it was not about");
   /** ⛔ And the slots of the accepted exchange say so without claiming it. */
   const slot = ok(levelOf(after, ANSWER));
-  assert.equal(slot.level, "suggested");
+  /**
+   * ⛔ `none`, AND THE `because` IS WHY THAT IS NOT A DEMOTION. A slot covered by an acceptance of
+   * its EXCHANGE is not a slot anybody agreed to — the sentence below says so in words — and the
+   * old scale had only `suggested` to put it on, which read as "somebody wrote this" rather than
+   * "an acceptance exists and does not cover these words". The rung is the same claim; the reason
+   * beside it is what distinguishes the two, which is why `because` is required on every level.
+   */
+  assert.equal(slot.level, "none");
   assert.match(slot.because, /peter accepted the whole of money#see-a-balance on 2026-10-05, which covered these words/);
   assert.match(slot.because, /an acceptance of the exchange, and not of this sentence/);
 });

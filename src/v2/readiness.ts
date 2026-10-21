@@ -32,7 +32,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolveRules, type Corpus } from "./load.js";
 import { SLOTS, type SlotName } from "./schema.js";
-import { countLevels, levelOf, levelsIn, type Level, type LevelName, type Route, type Wrote } from "./level.js";
+import { countLevels, levelOf, levelsIn, type Level, type LevelName, type Route, type Wrote, OWED } from "./level.js";
 import { gridFor } from "./grid.js";
 import { descendants, questionsFor, type Question } from "./settle.js";
 import { demonstrationOf, type RequirementState } from "./demonstrate.js";
@@ -47,23 +47,45 @@ import { resolveRef } from "./ref.js";
  * and not a number — an ordering invented here would be a second scale, and the next name added to
  * `level.ts` would silently land on whichever side the arithmetic happened to put it.
  */
-export const BUILDABLE: ReadonlyArray<LevelName> = ["accepted", "derived"];
+/**
+ * ⛔ THE LINE FALLS WHERE `derived` / `suggested` FELL, AND THAT IS WHY THE SCALE HAS FOUR RUNGS
+ * RATHER THAN TWO.
+ *
+ * Peter's rule is unchanged: *"A ticket is groomed when nothing it touches is below `derived`."*
+ * What `derived` meant — worked out from agreed words, following an acceptance, or the product
+ * seen doing it — is `corroborated` in `level.ts`'s `WORTH` table. What `suggested` meant is
+ * `one-source` and below: a derivation from a draft, a stale agreement, an inference.
+ *
+ * ⛔ SO `one-source` IS DELIBERATELY OUTSIDE. It is not "a bit buildable": a requirement worked out
+ * from words nobody agreed to is the exact case `v2-how-established-is-this` pins as *"a test for a
+ * draft passed the gate a builder applies"*. The rung says it is worth more than nothing, which is
+ * true, and the gate says it is not enough, which is also true.
+ *
+ * ⛔ STILL WRITTEN AS A SET AND NOT A COMPARISON, which is this file's own ⛔ and survives the
+ * change: the scale is ordered, so `>= "one-source"` would compile and would silently re-admit
+ * whatever rung somebody adds next. A set has to be edited on purpose.
+ */
+export const BUILDABLE: ReadonlyArray<LevelName> = ["accepted", "strongly-supported", "corroborated"];
 
 /**
- * The routes that mean somebody owes an answer.
+ * The routes that mean somebody owes an answer — ⛔ `level.ts`'s LIST, NOT A SECOND COPY OF IT.
  *
- * ⛔ IT IS THE ROUTE AND NOT THE LEVEL, AND THAT IS NOT A SHORTCUT — IT IS THE MODEL. An open slot
- * with answers drafted against it reads `suggested` on purpose (`level.ts`: *"`open` IS RESERVED FOR
- * A QUESTION SOMEBODY OWES"*, and a draft is something written). So a hole list built from
- * `level === "open"` would have dropped the seed's two best questions — the ones that arrive with
- * options and the cost of guessing wrong — and reported them beside thirty sentences nobody has
- * questioned.
+ * This file held `["unruled", "drafted"]` and explained itself by what the OLD scale could not do:
+ * an open slot with answers drafted against it read `suggested`, so *"a hole list built from the
+ * `open` level would have dropped the seed's two best questions — the ones that arrive with options
+ * and the cost of guessing wrong"*. That workaround was right and it is now the model: collapsing
+ * the four level names put the question onto `Level.owed`, whose routes are exactly this list.
  *
- * ⛔ `latitude` IS NOT HERE. `out_of_scope` is `open` with `route: "latitude"` — nothing to build
- * from AND nobody owes an answer, which is a declaration a builder relies on rather than a question
- * to put to a person. The packet says the same thing in words: **"This is your latitude."**
+ * ⛔ SO IT IS RE-EXPORTED RATHER THAN RESTATED. Two copies of "which routes are a question" would
+ * agree today and drift the first time a route is added — and `level.ts` is where the flag is set,
+ * so it is where the list belongs. Kept under this name because `groomingPrompt` and the holes list
+ * read it, and a rename would be churn with no reader.
+ *
+ * ⛔ `latitude` IS STILL ABSENT, for the reason it always was: `out_of_scope` is nothing to build
+ * from AND nobody owing an answer — a declaration a builder relies on rather than a question to put
+ * to a person. The packet says the same thing in words: **"This is your latitude."**
  */
-export const A_QUESTION: ReadonlyArray<Route> = ["unruled", "drafted"];
+export const A_QUESTION: ReadonlyArray<Route> = OWED;
 
 /**
  * Lists a scope holds that nobody implements — ⛔ REPORTED AND NEVER GATED.

@@ -24,7 +24,7 @@ import { temp } from "./support/temp.mjs";
 import { intentNamed, refuseIntent, incomplete } from "../dist/v2/intents.js";
 import { loadCorpus } from "../dist/v2/load.js";
 import { levelOf } from "../dist/v2/level.js";
-import { readinessOf } from "../dist/v2/readiness.js";
+import { readinessOf, BUILDABLE } from "../dist/v2/readiness.js";
 import { claimHash } from "../dist/v2/stamp.js";
 
 const CLI = path.resolve("dist/cli/index.js");
@@ -77,13 +77,13 @@ test("⛔ a requirement worked out from a claim nobody agreed to is suggested, n
   assert.equal(r.ok, true, JSON.stringify(r));
 
   const l = levelOf(loadCorpus(dir), r.ref);
-  assert.equal(l.level, "suggested", "⛔ a builder was handed a test for a sentence nobody agreed to, at the level of one somebody did");
+  assert.equal(l.level, "one-source", "⛔ a builder was handed a test for a sentence nobody agreed to, at the level of one somebody did");
   assert.equal(l.route, "worked-out-from-a-draft");
   assert.match(l.because, /nobody has agreed to it yet/);
 
   const ready = readinessOf(loadCorpus(dir), "money#record-spending");
   const mine = ready.requirements.find((q) => q.ref === r.ref);
-  assert.equal(mine.level, "suggested");
+  assert.ok(!BUILDABLE.includes(mine.level), `a requirement from an unagreed claim reads ${mine.level}`);
   assert.equal(ready.ready, false);
 });
 
@@ -91,13 +91,13 @@ test("the same requirement climbs to derived the moment a person agrees to its c
   const dir = seed();
   const r = say("demonstrate", { ref: `${EX}#at_once`, then: "both people looking see the same figure" }, agent(dir));
   assert.equal(r.ok, true, JSON.stringify(r));
-  assert.equal(levelOf(loadCorpus(dir), r.ref).level, "suggested");
+  assert.ok(!BUILDABLE.includes(levelOf(loadCorpus(dir), r.ref).level), "it passed the gate a builder applies");
 
   const agreed = say("accept", { ref: EX, via: "page" }, person(dir));
   assert.equal(agreed.ok, true, JSON.stringify(agreed));
 
   const l = levelOf(loadCorpus(dir), r.ref);
-  assert.equal(l.level, "derived");
+  assert.equal(l.level, "corroborated");
   assert.equal(l.route, "worked-out");
   assert.match(l.because, /peter accepted/);
 });
@@ -135,7 +135,7 @@ test("⛔ the whole loop: not ready, a person agrees, the demonstrator fills the
   assert.equal(after.ready, true, after.because);
   assert.deepEqual(after.untested, []);
   const added = after.requirements.find((q) => q.ref === r.ref);
-  assert.equal(added.level, "derived");
+  assert.ok(BUILDABLE.includes(added.level), `a requirement from an agreed claim reads ${added.level}`);
   assert.equal(added.state, "current");
   assert.match(after.because, /^Ready to build/);
 });

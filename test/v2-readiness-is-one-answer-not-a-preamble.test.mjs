@@ -23,7 +23,7 @@ import fs from "node:fs";
 import { temp } from "./support/temp.mjs";
 
 const { loadCorpus, resolveRules } = await import("../dist/v2/load.js");
-const { readinessOf, groomingPrompt } = await import("../dist/v2/readiness.js");
+const { readinessOf, groomingPrompt, BUILDABLE } = await import("../dist/v2/readiness.js");
 const { perform } = await import("../dist/v2/acts.js");
 const { SLOTS } = await import("../dist/v2/schema.js");
 const { claimHash } = await import("../dist/v2/stamp.js");
@@ -57,17 +57,27 @@ test("a scope nobody has agreed to is not ready, and says every claim is unagree
   assert.equal(r.ready, false);
   /** ⛔ Nothing is OPEN here — nobody has been asked anything about this exchange. */
   assert.deepEqual(r.holes, []);
-  assert.equal(r.counts.open, 0);
+  /** ⛔ `counts` is keyed on the rungs now, and nothing here is agreed — `holes: []` is the owed half. */
+  assert.equal(r.counts.accepted, 0);
   /** Seven slots the exchange states, none of them agreed. `refuses` comes from a rule's cases. */
   assert.equal(r.unagreed.length, 7);
   assert.equal(r.settled.length, 0);
   /** ⛔ And the test list is still there — an unagreed exchange still has requirements. */
   assert.equal(r.requirements.length, 7);
   assert.ok(
-    r.requirements.every((x) => x.level === "suggested"),
+    r.requirements.every((x) => !BUILDABLE.includes(x.level)),
     "a requirement typed by hand under no acceptance is not buildable"
   );
-  assert.equal(r.counts.suggested, 14, "seven slots and seven requirements, all below `derived`");
+  /**
+   * ⛔ ALL FOURTEEN BELOW THE GATE, SUMMED ACROSS THE RUNGS RATHER THAN READ OFF ONE NAME. `suggested`
+   * was a single bucket; the scale splits it, so the claim "seven slots and seven requirements, none
+   * of them buildable" is now arithmetic over the rungs the gate excludes — which is the claim that
+   * was always meant, and it no longer depends on them all landing on the same rung.
+   */
+  const below = Object.entries(r.counts)
+    .filter(([name]) => !BUILDABLE.includes(name))
+    .reduce((n, [, got]) => n + got, 0);
+  assert.equal(below, 14, "seven slots and seven requirements, none of them buildable");
 
   /** ⛔ THE SENTENCE A PERSON READS HAS TO NAME WHICH OF THE TWO IT IS. */
   assert.match(r.because, /nobody has agreed/i);
@@ -92,7 +102,9 @@ test("an exchange with one question owed is not ready, and the question is the o
 
   assert.equal(r.holes.length, 1);
   assert.equal(r.holes[0].ref, "tasks#complete-a-task#at_once");
-  assert.equal(r.holes[0].level, "open");
+  /** ⛔ `open` is not a level now; a hole is the lowest rung PLUS the flag — both asserted. */
+  assert.equal(r.holes[0].level, "none");
+  assert.ok(r.holes[0].owed, "a hole does not say anybody owes an answer");
   assert.equal(r.holes[0].route, "unruled");
   assert.match(r.holes[0].because, /Two kids are shown the same task/);
 
@@ -133,8 +145,18 @@ test("an exchange whose every fact is agreed is ready once every claim has a tes
   assert.equal(r.settled.length, 8);
   assert.equal(r.requirements.length, 6);
   assert.equal(r.counts.accepted, 13, "eight slots and the five requirements the acceptance covered");
-  assert.equal(r.counts.derived, 1, "⛔ the one worked out from an agreed claim, and only because it was agreed");
-  assert.equal(r.counts.suggested + r.counts.open, 0);
+  /**
+   * ⛔ THE ONE WORKED OUT FROM AN AGREED CLAIM, AND IT IS `corroborated` RATHER THAN A NAME OF ITS
+   * OWN. `derived` was the whole middle of the old scale; here it is the rung `WORTH` gives
+   * `worked-out`, and the point of the assertion is unchanged — it is above the gate ONLY because
+   * the claim it came from was agreed.
+   */
+  assert.equal(r.counts.corroborated, 1, "⛔ the one worked out from an agreed claim, and only because it was agreed");
+  /** ⛔ And nothing at all is left below the gate. */
+  const below = Object.entries(r.counts)
+    .filter(([name]) => !BUILDABLE.includes(name))
+    .reduce((n, [, got]) => n + got, 0);
+  assert.equal(below, 0);
 
   /**
    * ⛔ ONE SLOT IS AGREED THROUGH A RULE AND IT COUNTS. `money#see-a-balance` states nothing at
@@ -166,7 +188,7 @@ test("a slot with drafted answers is a hole, not an unagreed claim", () => {
     "the two slots a person owes an answer on are the holes"
   );
   for (const h of r.holes) {
-    assert.equal(h.level, "suggested", "a drafted answer is something written, so the level says so");
+    assert.equal(h.level, "none", "a drafted answer is something written, so the level says so");
     assert.equal(h.route, "drafted");
     assert.ok(!r.unagreed.some((u) => u.ref === h.ref), "a question must not also be filed as an unagreed claim");
   }

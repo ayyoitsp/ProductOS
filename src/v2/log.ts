@@ -161,18 +161,56 @@ export function watchLog(
     timer = setTimeout(sweep, 60);
   };
 
+  /**
+   * ⛔ THE FILE, NOT ITS DIRECTORY — AND THE DIRECTORY WATCH REPORTED NOTHING AT ALL ON macOS.
+   *
+   * Measured, because this had been "the mechanism" for months and was not one:
+   *
+   *     platform              darwin
+   *     append → dir watch    0 events
+   *     append → file watch   1 event
+   *     new file → dir watch  0 events     <- it failed at its own stated purpose too
+   *
+   * So on every Mac the only thing that ever fired was the interval below, which was 30 seconds.
+   * "A change made anywhere reaches a page somebody has open" meant up to half a minute — on the
+   * surface whose whole design rests on the page updating itself, and on the machine everybody
+   * develops against.
+   *
+   * ⛔ AND THE TEST FOR IT WAS HANGING RATHER THAN FAILING, which is why nobody knew. `v2-live` tore
+   * down its SSE request and its server on the LAST LINE OF THE BODY, so the failed assertion
+   * skipped both and the process hung with the event loop held open — reporting nothing at all
+   * through a gate that captures output. Fixing the teardown is what made this visible.
+   *
+   * ⛔ THE FILE IS CREATED SO IT CAN BE WATCHED. `fs.watch` throws on a path that does not exist,
+   * and the log does not exist until something is recorded — which is exactly when a reader is
+   * waiting. An empty file is what `readLog` already returns `[]` for, so nothing downstream can
+   * tell the difference.
+   */
   let watcher: fs.FSWatcher | undefined;
   try {
-    watcher = fs.watch(path.dirname(file), { persistent: true }, bump);
+    if (!fs.existsSync(file)) fs.writeFileSync(file, "");
+    watcher = fs.watch(file, { persistent: true }, bump);
   } catch {
-    // Some filesystems cannot watch. The interval below is the floor, not the mechanism.
+    // Some filesystems cannot watch at all. The interval below is then the whole mechanism.
   }
   /**
-   * ⛔ A SLOW BACKSTOP, AND IT IS NOT THE MECHANISM. fs.watch misses events over some network and
-   * container filesystems, and a reader that has silently stopped noticing is worse than one that
-   * never started — it looks up to date. Costs a file read in a process that is already running.
+   * ⛔ A BACKSTOP THAT IS ACTUALLY A BACKSTOP — 30 SECONDS WAS A SECOND BUG HIDING BEHIND THE FIRST.
+   *
+   * The reasoning for a long period was sound when the watch was believed to work: fs.watch misses
+   * events over some network and container filesystems, and a reader that has silently stopped
+   * noticing is worse than one that never started, because it looks up to date. But a period only
+   * has to be slow enough not to matter and fast enough to be a floor rather than the answer.
+   *
+   * ⛔ AND AN APPEND-ONLY LOG CAN STILL BREAK A FILE WATCH. `v2-watch` records that these logs are
+   * "rewritten wholesale on a close" — a rewrite-and-rename replaces the inode the watch holds, and
+   * the handle then watches a file nobody writes to again. That case is real, silent, and exactly
+   * what this interval is for, so it must be short enough that a reader notices within a second
+   * rather than within a minute.
+   *
+   * One read of a small file per second, in a process that is already running and already holding a
+   * connection open — which is the trade the old comment described and then did not take.
    */
-  const floor = setInterval(sweep, 30_000);
+  const floor = setInterval(sweep, 1_000);
 
   return {
     stop: () => {
