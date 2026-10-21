@@ -23,13 +23,14 @@ const CLI = path.resolve("dist/cli/index.js");
 const { v2Route } = await import(path.resolve("dist/v2/serve.js"));
 const { renderScopePage } = await import(path.resolve("dist/v2/page.js"));
 const { loadCorpus } = await import(path.resolve("dist/v2/load.js"));
+import { arrives } from "./support/settle.mjs";
 
 const root = temp("productos-live-");
 const dir = path.join(root, "v2");
 execFileSync("node", [CLI, "v2", "reset", "--at", dir], { stdio: "pipe" });
 const SCOPE = loadCorpus(dir).scopes.find((s) => !s.scope.in).scope.id;
 
-test("a change made anywhere reaches a page somebody has open", async () => {
+test("a change made anywhere reaches a page somebody has open", async (t) => {
   const server = http.createServer(async (req, res) => {
     if (await v2Route(req, res, new URL(req.url, "http://x").pathname, { dir })) return;
     res.writeHead(404).end();
@@ -43,19 +44,41 @@ test("a change made anywhere reaches a page somebody has open", async () => {
     assert.match(res.headers["content-type"], /event-stream/);
     res.on("data", (c) => got.push(c.toString()));
   });
-  await new Promise((r) => setTimeout(r, 500));
+
+  /**
+   * ⛔ REGISTERED BEFORE ANYTHING CAN THROW, AND THAT IS THE WHOLE FIX.
+   *
+   * `req.destroy()` and `server.close()` used to be the last two lines of the body. An SSE request
+   * is a connection held open BY DESIGN and a listening server holds the event loop — so a failed
+   * assertion skipped both and the process hung forever instead of failing. A hang reports nothing
+   * through `suite-now`, which captures output: four gate attempts, zero bytes, no test named, and
+   * it took isolating the suite file by file to find which one. `v2-deploy-gate` records the cost.
+   *
+   * ⛔ The order matters: the connection first, then the server. Closing a server with a live
+   * request on it waits for the request.
+   */
+  t.after(async () => {
+    req.destroy();
+    await new Promise((r) => server.close(r));
+  });
+
+  /** ⛔ Waited for, not slept through — the stream has to be open before anything is announced. */
+  await arrives(() => got.length > 0 || req.destroyed, "the stream to open");
 
   // Somebody else changes the truth: a Claude session, another window, the CLI. Same corpus.
   execFileSync("node", [CLI, "v2", "notes", "add", "the page should hear about this",
     "--about", SCOPE, "--by", "tester", "--via", "chat", "--at", dir], { stdio: "pipe" });
-  await new Promise((r) => setTimeout(r, 1200));
+
+  /**
+   * ⛔ THE CONDITION, NOT 1200ms. Under load the announcement had not arrived inside the sleep, the
+   * assertion below failed, and the failure became a hang. This returns the moment it arrives —
+   * faster on a quiet machine and correct on a busy one.
+   */
+  await arrives(() => got.join("").includes("event: changed"), "the open page to be told");
 
   const stream = got.join("");
   assert.match(stream, /event: changed/, `nobody told the open page. stream: ${JSON.stringify(stream)}`);
   assert.match(stream, /the page should hear about this/, "told, but not what changed");
-
-  req.destroy();
-  await new Promise((r) => server.close(r));
 });
 
 test("a served page listens; a standalone file does not pretend to", () => {
