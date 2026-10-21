@@ -239,7 +239,7 @@ The engineering and QA read, once product and design have signed off.
 Answer whether a piece of work can be built, and raise what is open as questions.
 
 **Spawns, in order:**
-- `demonstrator` *(quality · writes)* — the tests for every claim `readiness` lists as untested, one `demonstrate` call each — worked out from the claim as it reads, suggested until somebody agrees to it
+- `demonstrator` *(quality · writes)* — the tests for every claim `readiness` lists as untested, one `demonstrate` call each — worked out from the claim as it reads, and below the line a builder applies until somebody agrees to it
 
 **⛔ Keeps, because it may not be delegated:**
 - the whole reading — `productos_readiness` for the verdict, the queue for each open question, and the packet for what to build from
@@ -477,7 +477,7 @@ Held three ways rather than one: no author declares `ask-the-human`, so no host 
 - write or reword a claim. ⛔ A requirement that needs the sentence to be different is a note addressed to whoever owns the sentence — changing it would be the test deciding the product
 - assert anything the claim does not say: an engineer implements the `then`, so a word invented here becomes product truth nobody agreed to
 - demonstrate a claim about refusing with a case that succeeds — the whole content of the claim is in the part a happy path never reaches
-- stop because a claim is not agreed yet — a test worked out from a draft reads as suggested until somebody agrees to the claim, and climbs to derived with nothing re-derived
+- stop because a claim is not agreed yet — a test worked out from a draft sits below the line a builder applies until somebody agrees to the claim, and climbs above it with nothing re-derived
 - supply the hash itself — `demonstrate` hashes the claim it attaches to, so a test cannot be marked current with words it was not written against
 - stamp anything walked, validated or accepted
 

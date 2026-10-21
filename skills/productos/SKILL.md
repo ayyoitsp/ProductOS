@@ -121,7 +121,7 @@ You are the **orchestrator**, and you are the session — not a subagent. That i
 
 **Spawn, in order:**
 
-- `demonstrator` *(quality · writes)* — the tests for every claim `readiness` lists as untested, one `demonstrate` call each — worked out from the claim as it reads, suggested until somebody agrees to it
+- `demonstrator` *(quality · writes)* — the tests for every claim `readiness` lists as untested, one `demonstrate` call each — worked out from the claim as it reads, and below the line a builder applies until somebody agrees to it
 
 **⛔ You keep these yourself:**
 
@@ -273,11 +273,12 @@ productos_in { intent: "ask", fields: { ref: "<scope>#<exchange>#<slot>", questi
                                         blocks: [], candidates: [{ says: "…", consequence: "…" }], cost: "…" } }
 ```
 
-- **`suggest`** adds one sentence to a slot with `wrote: {hand: agent, from}`. It reads as
-  `suggested` everywhere, counts as unagreed in readiness, and stales any stamp on that slot,
-  because nobody agreed to the new words. It adds; it never replaces what the slot already says.
-- **`ask`** sets the slot `open` with drafted answers, so the behaviour is gated and the question is
-  in the queue of the person it is asked of. `about` says which part of an existing sentence is in
+- **`suggest`** adds one sentence to a slot with `wrote: {hand: agent, from}`. It reads at the
+  bottom of the scale — `unsupported` — counts as unagreed in readiness, and stales any stamp on
+  that slot, because nobody agreed to the new words. It adds; it never replaces what the slot says.
+- **`ask`** sets the slot's standing to a question with drafted answers, so the behaviour is gated
+  and the question is in the queue of the person it is asked of. It reads `unsupported` **and
+  carries `owed`** — see the scale below. `about` says which part of an existing sentence is in
   question; `blocks: []` is a real answer meaning the rest can ship.
 - ⛔ **Never a `note` for either.** A note is a request to a person, not truth, and a question filed
   as one is a question no reader of the corpus will ever see. Never `document` for one sentence:
@@ -294,15 +295,49 @@ productos_in { intent: "demonstrate", fields: { ref: "<scope>#<exchange>#<slot>[
   `from`** — the claim's hash as it reads at that moment — so a test cannot be marked current with
   words it was not written against. `steps` replaces given/when/then where a sequence or two people
   at once is the wrong shape for three clauses; `id` is the next free number unless given.
-- ⛔ **`derived` means derived from accepted input.** A requirement worked out from a claim nobody
-  has agreed to reads `suggested`, route `worked-out-from-a-draft`, and climbs to `derived` the
-  moment somebody agrees to the claim. Generation is never gated on agreement; only the level is.
+- ⛔ **A derivation is only worth what it was derived FROM.** A requirement worked out from a claim
+  nobody has agreed to reads `one-source`, route `worked-out-from-a-draft` — below the line a
+  builder applies — and climbs to `corroborated` the moment somebody agrees to the claim, with
+  nothing re-derived. Generation is never gated on agreement; only the level is.
 - ⛔ **`readiness` holds `ready` at false while any claim owing a demonstration has none** — they
   are listed as `untested`, and they are the demonstrator's, never a person's.
 
-- **confirmed** — a person's act. `accept` or `rule`, with a `by` and a `via`.
-- **strength** — `none · one source · corroborated · strongly supported`, derived from the readings
-  bearing on it. The top of this is BELOW the line; no amount of it ever becomes confirmed.
+### How established a fact is — ⛔ ONE SCALE, AND `accepted` IS NOT A RUNG ANYTHING EARNS
+
+Peter: *"I think we probably just need a confidence scale for derived, and get rid of
+suggested/open"*. There used to be two vocabularies for this — four invented level names on top of
+a strength scale that already existed — and a reader had to learn both. There is one now:
+
+| rung | means | buildable |
+| --- | --- | --- |
+| `accepted` | a person read **these words** and agreed | yes |
+| `strongly-supported` | several independent sources, or an observation with more behind it | yes |
+| `corroborated` | worked out from agreed words, follows an acceptance, or **the product was seen doing it** | yes |
+| `one-source` | worked out from a draft, a stale agreement, or an inference | **no** |
+| `none` | nothing supports it | **no** |
+
+⛔ **`accepted` cannot be reached from below.** It is `stampFor`'s answer and that filters
+`via: agent` at the source. No count of readings, no provenance and no amount of inheritance
+reaches it — which is tenet 1 in the one place a consumer reads.
+
+⛔ **The ROUTE decides which side of the line; support decides the rung on that side.** A quantity
+must never outrank a kind: twelve readings of the implementation do not make a claim buildable,
+because what was built is drift and never authority. `route` says which argument produced the rung
+and `because` says it in a sentence.
+
+⛔ **A stale agreement drops to `one-source`, not `accepted` with a warning.** You agreed to words;
+the words moved; a builder must never build from that.
+
+⛔ **`owed` is a flag beside the scale, never a rung.** A slot with a question somebody owes reads
+`none` **and** carries `owed`, however much supports it — otherwise the product already doing
+something would make an undecided sentence buildable. How well-supported a thing is and whether
+somebody owes a decision are two questions, and a ladder answering both answers neither.
+
+⛔ **And `wrote` is a third thing again.** The scale says how established; `wrote` says whose hand —
+`hand: person | agent`, with `as` naming whom and `agent` having to say what it worked `from`. An
+agent's inference and a person's unconfirmed draft can sit on the same rung and need opposite
+handling: raise the first as a question in the ticket, stamp the second. Absence means unknown and
+is never read as a person.
 
 `productos v2 decide <scope>` now asks **least-supported first**: a statement nothing backs is where
 a person's answer is the only thing that will settle it, and one three sources already agree about

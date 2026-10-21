@@ -535,7 +535,7 @@ export const AREAS: Area[] = [
        */
       "src/v2/intents.ts",
       /**
-       * ⛔ THE TWO SMALL WRITES, beside the door that routes to them: one suggested claim, one
+       * ⛔ THE TWO SMALL WRITES, beside the door that routes to them: one proposed claim, one
        * raised question. Peter: *"WRITE STRAIGHT INTO THE CORPUS as SUGGSTED."*
        */
       "src/v2/suggest.ts",
@@ -1448,9 +1448,10 @@ export const AUTHORS: Author[] = [
        * ⛔ THIS LINE USED TO SAY THE OPPOSITE OF THE PROMPT. It read *"work anything out from a
        * claim nobody has accepted yet"* while `productos-demonstrator.md` said, in Peter's words,
        * that test cases are generated from current truth and *"just carry an invalidated state"*.
-       * The level is what carries that state now: a test on a draft reads `suggested`.
+       * The level is what carries that state now: a test on a draft reads `one-source`, which is
+       * below the line a builder applies, and climbs to `corroborated` when the claim is agreed.
        */
-      "stop because a claim is not agreed yet — a test worked out from a draft reads as suggested until somebody agrees to the claim, and climbs to derived with nothing re-derived",
+      "stop because a claim is not agreed yet — a test worked out from a draft sits below the line a builder applies until somebody agrees to the claim, and climbs above it with nothing re-derived",
       "supply the hash itself — `demonstrate` hashes the claim it attaches to, so a test cannot be marked current with words it was not written against",
       "stamp anything walked, validated or accepted",
     ],
@@ -2176,7 +2177,7 @@ export const SHIMS: Shim[] = [
      * `ready for review`. This route hands over to it rather than repeating it.
      */
     steps: [
-      { role: "demonstrator", why: "the tests for every claim `readiness` lists as untested, one `demonstrate` call each — worked out from the claim as it reads, suggested until somebody agrees to it" },
+      { role: "demonstrator", why: "the tests for every claim `readiness` lists as untested, one `demonstrate` call each — worked out from the claim as it reads, and below the line a builder applies until somebody agrees to it" },
     ],
     keeps: [
       "the whole reading — `productos_readiness` for the verdict, the queue for each open question, and the packet for what to build from",

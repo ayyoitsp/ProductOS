@@ -1,0 +1,71 @@
+id: "0202"
+said: I think we probably just need a confidence scale for derived, and get rid of suggested/open, along with attributions / "can't we migrate?" / "we should keep the authorship, we shouldn't lose that" / "i don't understand - doesn't worked-out -> derived just have higher confidence than worked-out-from-draft?" / "we should just be distilling slightly differently" / [asked what an unanswered question reports] "Lowest, but flagged separately"
+at: 2026-10-20
+kind: concept
+reaches:
+  derive: rungOf
+  surface: LEVEL_WORD
+  check: ""
+  instruct: strongly-supported
+  pin: nothing in the source or the skills names an old level as a level
+waived:
+  model: 'Nothing is stored, so there is nothing in the schema to change — and that is the property this whole module is built on. A level is computed from `stampFor`, `Standing`, `Authorship` and the readings; every one of those already existed and not one of them moved. A schema field holding a rung would be exactly what `level.ts` refuses in its first paragraph: "a stored level is a word that was true when it was written and unfalsifiable afterwards — and a level is exactly the kind of thing somebody sets by hand to get a ticket through a gate." Reaching this layer would mean having broken the change.'
+  generate: "A generator writes corpus content, and no generator writes or reads a level. Verified by looking rather than assumed: `draw.ts`, `draw-write.ts`, `propose.ts`, `routes.ts` and `cli/commands/v2.ts` are the generate files and not one of them names a rung. The nearest thing was prose in `src/core/jobs.ts` teaching the old names, which is the registry AGENTS.md is generated from — that was corrected and the document regenerated, which the drift test holds."
+  check: "No corpus becomes wrong by this, which is the test for whether a check belongs. `check.ts` reports author mistakes, and an author writes no level — so there is nothing in a corpus a detector could find and nothing an author could act on if it fired. The risk this change actually carries is a SECOND SCALE surviving somewhere in the codebase, which is a fact about the source rather than about anybody's truth, and it is pinned: `nothing in the source or the skills names an old level as a level`, verified red by putting one comparison back into `grid.ts`."
+closed: 2026-10-20
+
+# ⛔ APPENDED AFTER `change close`, which drops comments. See 0141 / 0144-0170.
+#
+# ⛔ "WE SHOULD JUST BE DISTILLING SLIGHTLY DIFFERENTLY" IS THE ACCURATE DESCRIPTION, and I needed
+# telling twice. Every ingredient already existed and was right: `confidence.ts` had the rungs,
+# `stampFor` had the human line, `Standing` had the open questions, `Authorship` had the hand. What
+# `level.ts` added was FOUR INVENTED NAMES on top of all of it, so a reader had to learn a second
+# vocabulary before the first meant anything. `SKILL.md` taught both — the four names in one
+# section and `none · one source · corroborated · strongly supported` thirty lines later, as though
+# they were different facts about a claim.
+#
+# THE SCALE NOW, with the route deciding which side of the gate and support deciding the rung:
+#
+#     accepted             a person read THESE words and agreed       buildable
+#     strongly-supported   several independent sources                buildable
+#     corroborated         worked out from agreed words, follows an
+#                          acceptance, or the product was SEEN         buildable
+#     one-source           from a draft, a stale agreement, inference  NOT
+#     none                 nothing supports it                        NOT
+#
+# ⛔ I WAS WRONG TWICE AND HE CORRECTED BOTH. First I told him attributions "promise a distinction
+# they cannot make" — reading `level.ts`'s own stale comment and my script's 100% `unrecorded`
+# instead of the schema, where `Authorship {hand, as, from}` is live at four grains and gated so a
+# token cannot claim a person typed it. I measured the seed and reported it as the model, which is
+# the error this whole week has been about. He said: *"we should keep the authorship, we shouldn't
+# lose that"* — and his reason is the better one: *"when source attributions change, we can
+# re-assess each item."*
+#
+# Then I claimed the collapse could not carry `worked-out` vs `worked-out-from-a-draft`. He:
+# *"i don't understand - doesn't worked-out -> derived just have higher confidence than
+# worked-out-from-draft?"* Which is the answer. I had been trying to compute the rung from support
+# COUNT, which cannot see whether the source was agreed — but a scale does not have to be a count.
+#
+# ⛔ TWO REAL BUGS, BOTH FOUND BY RUNNING IT AND NEITHER BY READING IT:
+#
+#   · an UNANSWERED QUESTION with an observation on it reached `one-source` — buildable. Under
+#     `open` it was correctly not. `tasks#complete-a-task#at_once` is the instance. An owed route
+#     now reports the bottom rung whatever supports it, with the observations still named in
+#     `because`, which is the shape he asked for: *"Lowest, but flagged separately"*.
+#   · TWELVE CODE READS raised an inference to `strongly-supported` — above the gate. A quantity
+#     outranking a kind, and CLAUDE.md is explicit that what was built is drift and never authority.
+#     Caught by the test named `the product being seen doing it is derived, AND READING THE CODE
+#     ABOUT IT IS NOT`. Support now refines the rung within the side the route picks.
+#
+# ⛔ AND THE PINS MOVED FROM THE RUNG TO THE GATE WHERE THAT IS WHAT THEY WERE ABOUT. Twelve
+# assertions across five files said `level === "suggested"`, which was one name doing two jobs —
+# how established, and whether a builder may act. They assert the gate now; the exact rung of every
+# route is pinned exhaustively in `v2-how-established-is-this`, which is 23/23.
+#
+# ⛔ `A_QUESTION` IS RE-EXPORTED RATHER THAN RESTATED. `readiness.ts` held `["unruled", "drafted"]`
+# with a comment explaining what the OLD scale could not do. That workaround is now the model —
+# `Level.owed` — so the list has one home. Found by the new pin catching its own stale comment.
+#
+# 1395/1399 at load 52/136/158. The four failures are `v2-watch` and `v2-live`, which HANG rather
+# than fail and contain zero references to levels; `v2-deploy-gate` names the first by that exact
+# test title as the one that ate four gate attempts.
