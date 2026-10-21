@@ -2083,7 +2083,21 @@ export function v2Command(): Command {
            * file that decided the kind.
            */
           if (!q.candidates.length) console.log(pc.dim(`    an answer here is: ${q.shape}`));
-          console.log(pc.dim(`    ${q.act}`));
+          /**
+           * ⛔ IT PRINTED THE WORD `null`. A contested word has no act — no verb accepts its ref
+           * and no field holds a candidate — so `rulingAct` returns null, correctly, and this
+           * interpolated it. Four surfaces in a row have now printed something unusable in this
+           * one spot; the honest line is the one `decide` already gives, which says what the
+           * ruling CONSISTS of rather than offering a command that fails.
+           */
+          console.log(
+            pc.dim(
+              `    ${
+                q.act ??
+                "no command answers this one: say which sense wins, then the features using the other names are corrected to match — authoring across files, not an act"
+              }`
+            )
+          );
         }
       }
       console.log("");

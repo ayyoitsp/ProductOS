@@ -1815,8 +1815,17 @@ function partFacts(corpus: Corpus, ids: string[]): string {
  */
 function renderUnasked(corpus: Corpus, scopeId: string, ctx: Ctx): string {
   const it = interviewFor(corpus, scopeId);
-  /** ⛔ The purpose gate is the queue's own business; this is about the detail behind it. */
-  if (!it || it.gate) return "";
+  if (!it) return "";
+  /**
+   * ⛔ IT USED TO RETURN NOTHING ON ANY FEATURE WITH NO AGREED PURPOSE — the same defect as the
+   * derivation's, in the surface, and on a corpus with 102 such features that is the whole page.
+   *
+   * The comment here said "the purpose gate is the queue's own business; this is about the detail
+   * behind it", which sounds right and had it exactly backwards: a feature nobody has agreed a
+   * purpose for is the one where knowing what is still unsaid matters MOST, because that is what
+   * somebody weighs before agreeing to anything. Withholding it meant the page's honest answer to
+   * "what is undecided here" was blank precisely where it was largest.
+   */
   const unasked = it.owed.filter((o) => o.owes === "blank" || o.owes === "screen");
   if (!unasked.length) return "";
 

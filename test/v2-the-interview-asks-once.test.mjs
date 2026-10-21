@@ -374,16 +374,60 @@ test("⛔ it drafts no answers, and that is not an oversight", () => {
   for (const o of it.owed) assert.ok(o.shape.length > 20, `${o.ref} says nothing about what an answer has to be`);
 });
 
-test("⛔ nothing is asked about a feature whose purpose nobody has agreed to", () => {
+test("⛔ the purpose leads and does not suppress — this test used to assert the defect", () => {
   /**
-   * ⛔ THE SAME GATE `actsFor` HOLDS, for its reason: agreeing to a detail of a purpose nobody has
-   * confirmed spends review on a sentence about to change. A second answer to "is this feature
-   * grounded" is how the first one stops being believed.
+   * ⛔ THIS TEST PINNED THE BUG, AND IT PASSED ALL SESSION.
+   *
+   * It asserted `owed.length === 1` on an unagreed purpose — "the detail questions were offered
+   * beside the purpose they depend on" as the failure message, i.e. it was built to FAIL if the
+   * questions showed up. So the single most valuable thing the feature could do was forbidden by
+   * its own pin, and nothing could ever have caught it.
+   *
+   * Peter, on his corpus: *"we have almost ZERO human validated truths. there are a TON of features
+   * with behaviors. the goal is to GET HUMAN VALIDATIONS. how can there be ZERO to operate on? do
+   * you not understand the feature you are building?"*
+   *
+   * Measured there: **1,560 questions a person owed, 1,421 already carrying drafted options, and
+   * the interview returned 4** — because 102 features had no agreed purpose and this behaviour
+   * dropped everything beneath each one.
+   *
+   * ⛔ THE GATE WAS COPIED FROM THE WRONG ACT. `actsFor` withholds behaviours from being OFFERED
+   * FOR ACCEPTANCE until a purpose is agreed, which is right. An open QUESTION is not an
+   * acceptance: it is a decision somebody owes, it gates the behaviour whether or not anybody looks
+   * at it, and `v2 decide` has never withheld one. So the purpose goes FIRST — it is still the most
+   * valuable thing to agree — and the rest follows it.
    */
-  const it = round(corpus()).it;
-  assert.equal(it.gate, "purpose");
-  assert.equal(it.owed.length, 1, "the detail questions were offered beside the purpose they depend on");
-  assert.equal(it.owed[0].owes, "purpose");
+  const dir = corpus();
+
+  /** An unagreed purpose, and a question drafted underneath it. */
+  const r = raiseQuestion(dir, {
+    ref: "chores#offer-a-job#again",
+    question: "What happens when a parent offers the same job twice?",
+    asked_of: "peter",
+    blocks: [],
+    cost: "Guessing wrong either puts a job on a kid's list nobody offered, or loses a real second job.",
+    candidates: [
+      { says: "Each offer stands on its own.", consequence: "The list matches a parent who really offered twice; a double-press costs a kid." },
+      { says: "The same job on the same day records once.", consequence: "A double-press is harmless; a real second offer needs something changed first." },
+    ],
+    by: "a-drafting-agent",
+  });
+  assert.equal(r.ok, true, `the fixture could not be drafted: ${r.ok === false ? r.why : ""}`);
+
+  const it = round(dir).it;
+  assert.equal(it.gate, "purpose", "nothing says the purpose is still what to agree first");
+  assert.equal(it.owed[0].owes, "purpose", "the purpose is not the first thing asked");
+
+  /** ⛔ THE ASSERTION THAT WAS BACKWARDS. The question a person owes is still on the list. */
+  const drafted = it.owed.filter((o) => o.owes === "drafted");
+  assert.equal(drafted.length, 1, "a question a person owes was hidden behind an unagreed purpose");
+  assert.equal(drafted[0].candidates.length, 2, "it came back without the options somebody drafted");
+
+  /** And the blanks are there too, so the whole feature is visible rather than one line of it. */
+  assert.ok(
+    it.owed.filter((o) => o.owes === "blank").length >= 2,
+    `only ${it.owed.length} thing(s) offered on a feature with nine blanks and a drafted question`
+  );
 });
 
 test("the command prints both numbers, because they are the only evidence the fold happened", () => {

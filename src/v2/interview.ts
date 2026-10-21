@@ -181,8 +181,24 @@ function pressFor(q: Question): string | null {
  */
 function across(titles: string[], feature: string): string {
   if (titles.length === 1) return titles[0]!;
-  if (titles.length <= 3) return titles.join(", ");
-  return `all ${titles.length} behaviours in ${feature}`;
+  /**
+   * ⛔ ON LENGTH, NOT ON COUNT — AND THE COUNT RULE PRODUCED THIS, ON A REAL CORPUS:
+   *
+   *   "The stages returned are the ones this organization uses, in the order, A deal's stage is
+   *    always one of the stages its organization uses. A de — Who is allowed to do this?"
+   *
+   * Two behaviours, so under three, so joined. But a behaviour's `title` is not reliably a label:
+   * plenty of real ones are whole sentences, and gluing two with a comma makes a header nobody
+   * reads — the question itself ends up past the fold, which is the one thing on the line that
+   * matters.
+   *
+   * ⛔ AND THE NAMES ARE NOT LOST WHEN THEY ARE DROPPED. `fills` carries every ref, the page renders
+   * them as links under the question, and the CLI prints them on the next line. This is a choice
+   * about the HEADER only: a reader sees the question first and what it covers immediately after.
+   */
+  const joined = titles.join(", ");
+  if (joined.length <= 72) return joined;
+  return `${titles.length} behaviours in ${feature}`;
 }
 
 /**
@@ -392,15 +408,34 @@ export function interviewFor(corpus: Corpus, scopeId: string): Interview | null 
   const ids = descendants(corpus, scopeId);
 
   const acts = actsFor(corpus);
+  /**
+   * The purpose, where nobody has agreed one — ⛔ FIRST IN THE LIST, AND IT NO LONGER EMPTIES IT.
+   *
+   * Peter: *"we have almost ZERO human validated truths. there are a TON of features with
+   * behaviors. the goal is to GET HUMAN VALIDATIONS. how can there be ZERO to operate on? do you
+   * not understand the feature you are building?"*
+   *
+   * ⛔ MEASURED ON HIS CORPUS: **1,560 questions a person owes, 1,421 of them already carrying
+   * drafted options, and this returned 4.** 102 features had no agreed purpose, and for every one
+   * of them this returned the purpose question ALONE and dropped everything beneath it.
+   *
+   * ⛔ THE GATE WAS COPIED FROM THE WRONG PLACE. `actsFor` withholds a feature's behaviours from
+   * being OFFERED FOR ACCEPTANCE until its purpose is agreed, and that is right: agreeing to a
+   * detail of a purpose nobody confirmed spends review on a sentence about to change. An open
+   * QUESTION is not an acceptance. It is a decision somebody owes, it gates the behaviour whether
+   * or not anybody looks at it, and answering it is how the purpose becomes answerable in the first
+   * place. `v2 decide` has never gated them, which is why `decide` showed three questions on the
+   * seed where this showed one.
+   *
+   * So the purpose leads — it is still the most valuable thing to agree first, and `gate` still
+   * says so — and the questions a person owes follow it instead of being hidden behind it.
+   */
   const ungrounded = acts.ungrounded.find((u) => ids.includes(u.scope));
+  const purpose: Owed[] = [];
   if (ungrounded) {
     const sc = corpus.scopes.find((x) => x.scope.id === ungrounded.scope)?.scope;
     const hp = sc?.happy_path;
-    return {
-      scope: scopeId,
-      title,
-      gate: "purpose",
-      owed: [
+    purpose.push(
         {
           ref: `${ungrounded.scope}#happy-path`,
           owes: "purpose",
@@ -419,12 +454,10 @@ export function interviewFor(corpus: Corpus, scopeId: string): Interview | null 
            * ref that resolves to nothing.
            */
           act: hp
-            ? `a person agrees to this on the page — ⛔ nobody else can, and nothing beneath it is offered until they have`
+            ? `a person agrees to this on the page — ⛔ nobody else can, and its behaviours are not offered for acceptance until they have`
             : `nothing says what this feature is for — an author writes the happy path before anybody can agree to it`,
-        },
-      ],
-      closes: 1,
-    };
+        }
+    );
   }
 
   /**
@@ -471,6 +504,17 @@ export function interviewFor(corpus: Corpus, scopeId: string): Interview | null 
    * and the questions that fold several sites are exactly the ones worth a person's attention
    * first. Ties keep corpus order, so two equal questions never swap places between runs.
    */
-  const owed = [...drafted, ...rest].sort((a, b) => b.fills.length - a.fills.length);
-  return { scope: scopeId, title, owed, closes: new Set(owed.flatMap((o) => o.fills)).size };
+  /**
+   * ⛔ THE PURPOSE IS PREPENDED, NOT SORTED IN. It is worth agreeing before any detail of the
+   * feature and it fills exactly one slot, so any ordering by reach would bury it — which is the
+   * opposite of the gate's point. It leads; the rest competes on what one answer closes.
+   */
+  const owed = [...purpose, ...[...drafted, ...rest].sort((a, b) => b.fills.length - a.fills.length)];
+  return {
+    scope: scopeId,
+    title,
+    ...(ungrounded ? { gate: "purpose" as const } : {}),
+    owed,
+    closes: new Set(owed.flatMap((o) => o.fills)).size,
+  };
 }
