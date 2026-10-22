@@ -257,7 +257,14 @@ test("⛔ and a merge with nothing to add is refused rather than rewording the q
     by: "x",
   });
   assert.equal(r.ok, false);
-  assert.match(r.detail.join(" "), /send `candidates`/, "it does not say what the only available addition is");
+  /**
+   * ⛔ TWO THINGS CAN BE ADDED NOW, not one. `candidates` adds an answer; `blocks` says which other
+   * questions this one answer settles — the act that closed fg-0004. The refusal names both, because
+   * a drafter told only about candidates leaves two questions unlinked and a person answers them
+   * into a contradiction.
+   */
+  assert.match(r.detail.join(" "), /`candidates`/, "it does not say another answer can be added");
+  assert.match(r.detail.join(" "), /`blocks`/, "it does not say the questions this one settles can be named");
   assert.match(r.detail.join(" "), /not reworded from here/, "nothing says the question is not rewritten under somebody");
 });
 

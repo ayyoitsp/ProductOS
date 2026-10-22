@@ -212,26 +212,57 @@ export function raiseQuestion(
      */
     const have = Array.isArray(was.candidates) ? (was.candidates as unknown[]) : [];
     const adding = o.candidates ?? [];
-    if (!adding.length)
+    /**
+     * ⛔ `blocks` ON AN EXISTING QUESTION — THE ACT THAT SAYS "THESE ARE ONE DECISION", AND THE ONE
+     * THING THE INTERVIEWER COULD NOT DO.
+     *
+     * Peter, on being handed four questions where two were the same decision: *"the whole point of
+     * the feature is to reduce the operator load. it could even be more than one question. that's
+     * the intelligence we need from the interviewer."*
+     *
+     * `blocks` is the model's own way to say *"answering this settles that"*, and the worklist folds
+     * questions that name each other into one item. But it could only be set when a question was
+     * CREATED — so a role noticing afterwards that two existing questions are one had nowhere to
+     * record it, and both kept their `blocks: []`, which positively asserts each settles nothing but
+     * itself. Recorded as fg-0004 until now.
+     *
+     * ⛔ UNIONED, NEVER REPLACED, for the reason candidates are. A later reader adding a third ref
+     * must not be able to drop the two already named, and `[]` is a real answer meaning "the rest
+     * can ship without this" — so an empty list sent here adds nothing rather than erasing what is
+     * there.
+     *
+     * ⛔ AND IT IS THE ONLY JUDGEMENT IN THIS FILE. Which questions are one decision cannot be
+     * computed — it is a reading of what two sentences mean, which is why it is an author's act
+     * recorded in a field and not a similarity score. See the worklist's fold for what it does with
+     * the field once it is honest.
+     */
+    const alsoBlocks = (o.blocks ?? []).filter((b) => b !== o.ref);
+    if (!adding.length && !alsoBlocks.length)
       return {
         ok: false,
         why: `${o.ref} is already ${was.kind}${was.question ? `: "${String(was.question).trim()}"` : ""}`,
         detail: [
-          "it is already asked, so the only thing to add here is another answer — send `candidates`",
+          "it is already asked, so there are two things to add here: another answer (`candidates`), or the other questions this one answer settles (`blocks`)",
           "⛔ the question itself is not reworded from here: a question somebody has been weighing is not rewritten under them",
         ],
       };
-    was.candidates = [...have, ...adding];
+    if (adding.length) was.candidates = [...have, ...adding];
+    if (alsoBlocks.length) {
+      const held = Array.isArray(was.blocks) ? (was.blocks as string[]) : [];
+      was.blocks = [...new Set([...held, ...alsoBlocks])];
+    }
     if (o.cost && !was.cost) was.cost = o.cost.trim();
     const savedMerge = save(f);
     if (!savedMerge.ok) return savedMerge;
+    const said = [
+      adding.length ? `${adding.length} answer${adding.length === 1 ? "" : "s"}` : "",
+      alsoBlocks.length ? `${alsoBlocks.length} question${alsoBlocks.length === 1 ? "" : "s"} this one settles` : "",
+    ].filter(Boolean);
     return {
       ok: true,
       file: f.file,
       ref: o.ref,
-      said: `added ${adding.length} answer${adding.length === 1 ? "" : "s"} to the question at ${o.ref} — ${
-        (was.candidates as unknown[]).length
-      } now on the table`,
+      said: `added ${said.join(" and ")} to the question at ${o.ref}`,
     };
   }
   fill.standing = {

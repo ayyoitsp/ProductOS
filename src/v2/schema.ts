@@ -518,7 +518,29 @@ export const Standing = z
              * action; `only the part in question` is honest about being a fragment, and
              * `decide` then asks for the merged sentence and shows what is being replaced.
              */
-            replaces: z.enum(["the whole sentence", "only the part in question"]).optional(),
+            /**
+             * ⛔ A THIRD VALUE, BECAUSE THE MODEL COULD SAY "THIS SENTENCE IS WRONG" AND NOT "A
+             * SENTENCE IS MISSING" — AND THE SECOND IS THE SHAPE OF EVERY JUDGE FINDING.
+             *
+             * Recorded as fg-0001 after it bit on Peter's own first answer. The question sat on
+             * `pl-start-a-deal#resume-a-deal-already-started#answer`, a slot saying three separately
+             * identified things. Its `about` was *"whether a processor is offered deals that somebody
+             * else started"* — which is not any of the three. So `of` could not be set (there is no
+             * statement to name), and the only write `settle` offered was the no-`of` branch, which
+             * replaces the whole slot with one string.
+             *
+             * He chose an option. It was refused: *"a ruling here becomes the whole sentence, so
+             * picking an option that answers only the unruled part would delete the rest"*. His
+             * decision stood and the slot did not say it.
+             *
+             * ⛔ `adds a statement` IS THE HONEST THIRD CASE. The option is neither a replacement for
+             * the slot nor a rewrite of one sentence in it — it is a new sentence to sit beside the
+             * others. `settle` appends it with its own id and leaves every sibling byte-identical,
+             * which is exactly what the `of` branch already proves is possible.
+             */
+            replaces: z
+              .enum(["the whole sentence", "only the part in question", "adds a statement"])
+              .optional(),
             /**
              * ⛔ FOR A `refuses` QUESTION, because `refuses` was unsettleable by any command.
              *

@@ -45,6 +45,7 @@
 import type { Corpus } from "./load.js";
 import type { Finding } from "./check.js";
 import { actsFor, gridFor } from "./grid.js";
+import { ANALYSES } from "./analyse.js";
 import { descendants, questionsFor, rulingAct, type Question } from "./settle.js";
 import { POLICY_SLOTS, SLOT_ASKED, SLOT_ASKS_SHORT, SLOTS, statements, type SlotName } from "./schema.js";
 
@@ -108,7 +109,31 @@ export type Owes =
    * `nothing-demonstrates-this` are a demonstrator's queue, not this one, and putting them here
    * would bury the handful that stop a feature being askable at all.
    */
-  | "unanchored";
+  | "unanchored"
+  /**
+   * Nothing says what parts this product consists of — ⛔ ONE QUESTION FOR THE WHOLE PRODUCT, and
+   * the largest load reduction in the file.
+   *
+   * Peter: *"this should also apply to capabilities, so we should test that"*.
+   *
+   * ⛔ IT CANNOT BE A SLOT QUESTION, AND THAT IS THE SCHEMA'S DECISION RATHER THAN A LIMITATION.
+   * `CapabilityOffering` carries no standing contract and its comment says *"there must not be"*,
+   * on his own words: *"capabilities are like object oriented design. just designing the
+   * subsystems, roughly what they do. that's it."* A subsystem sketch is the opposite kind of
+   * artefact from a falsifiable promise, so no question lives on one.
+   *
+   * ⛔ BUT THE DECISION UNDERNEATH IS STILL UNMADE AND NOBODY IS BEING ASKED. Measured on his
+   * corpus: **131 features, zero capabilities, every single feature reported "missing — no part of
+   * the system says it serves anything this feature promises"**. That is not 131 questions. It is
+   * one — *what are the parts* — and `ANALYSES.capabilities` already says so in `settleFirst`:
+   * *"a subsystem serves many features, so which parts exist is not a per-feature question"*, with
+   * the measurement behind it (three decomposers fanned cold produced three disjoint trees and zero
+   * shared parts).
+   *
+   * So it is asked once, at the product root, and a hundred and thirty-one missing capabilities
+   * become one thing to decide.
+   */
+  | "parts";
 
 export interface Owed {
   /**
@@ -318,12 +343,18 @@ export function contextFor(
   corpus: Corpus,
   scopeId: string,
   exchangeId: string | undefined,
-  skip: SlotName | undefined
+  skip: SlotName | undefined,
+  /**
+   * The slot a question is ABOUT — ⛔ shown in full, uncapped, because a reader deciding what a new
+   * sentence carves out of has to see every sibling it will sit beside. Two of nine is a reading
+   * budget for background; it is not enough when the background IS the question.
+   */
+  inFull?: SlotName
 ): Owed["about"] {
   const sc = corpus.scopes.find((x) => x.scope.id === scopeId)?.scope;
   const ex = exchangeId ? sc?.exchanges.find((e) => e.id === exchangeId) : undefined;
   const already: Array<{ asks: string; says: string; more?: number }> = [];
-  for (const slot of GROUNDING) {
+  for (const slot of [...new Set([...(inFull ? [inFull] : []), ...GROUNDING])]) {
     if (slot === skip) continue;
     const fill = ex?.slots?.[slot];
     if (!fill || fill.standing?.kind === "open") continue;
@@ -340,7 +371,8 @@ export function contextFor(
      * than all of it — and the full slot is rendered on the same page, a few lines down.
      */
     const said = statements(fill.says).map((x) => plain(x.says)).filter(Boolean);
-    const shown = said.slice(0, GROUNDING_STATEMENTS);
+    /** ⛔ Uncapped for the slot in question — see `inFull`. */
+    const shown = slot === inFull ? said : said.slice(0, GROUNDING_STATEMENTS);
     if (shown.length) {
       for (const [i, says] of shown.entries())
         already.push({
@@ -689,6 +721,45 @@ function unanchored(findings: Finding[], scopeIds: string[]): Owed[] {
     });
 }
 
+/**
+ * The subsystem tree, where nothing says what parts the product has.
+ *
+ * ⛔ AT THE ROOT ONLY. A feature cannot answer "what are this product's parts" and asking it there
+ * would put the same question on every one of them — which is the arithmetic this whole file exists
+ * to avoid, and `settleFirst` already names the reason.
+ *
+ * ⛔ AND ONLY WHILE IT IS GENUINELY UNSETTLED. One capability anywhere means somebody has started,
+ * and from then on it is the decomposer's per-feature work rather than a question for a person.
+ */
+function parts(corpus: Corpus, scopeId: string): Owed[] {
+  /** ⛔ The root is the scope nothing is filed inside. A leaf asking this would be nonsense. */
+  const isRoot = !corpus.scopes.find((x) => x.scope.id === scopeId)?.scope.in;
+  if (!isRoot) return [];
+  const sweep = ANALYSES.find((a) => a.name === "capabilities");
+  if (!sweep?.settleFirst) return [];
+  if (corpus.capabilities.length) return [];
+
+  const features = corpus.scopes.filter((x) => x.scope.exchanges.length).length;
+  return [
+    {
+      ref: scopeId,
+      owes: "parts" as const,
+      asks: `What parts does this product consist of — which subsystems, in which areas, and what nests inside what?`,
+      why: `${features} features promise things and nothing says which part of the system serves any of them — so this is one decision standing in front of all ${features}`,
+      shape: plain(sweep.settleFirst.what),
+      fills: [scopeId],
+      candidates: [],
+      about: contextFor(corpus, scopeId, undefined, undefined),
+      /**
+       * ⛔ SETTLED WITH A PERSON BEFORE ANY DECOMPOSER RUNS, which is the one instruction
+       * `settleFirst` exists to carry — and the route's own `keeps` already says the session holds
+       * it. A decomposer fanned before this produces one tree per feature.
+       */
+      act: `a person settles the subsystem tree with the session first — ⛔ ${plain(sweep.settleFirst.because)}`,
+    },
+  ];
+}
+
 /** Screens with nothing drawn. ⛔ The UX half, and a drawing is not a sentence — see `shape`. */
 function undrawn(corpus: Corpus, scopeIds: string[]): Owed[] {
   const out: Owed[] = [];
@@ -872,7 +943,19 @@ export function interviewFor(corpus: Corpus, scopeId: string, findings: Finding[
        * feature, and what the rule reaches is already in `fills`.
        */
       about: {
-        ...contextFor(corpus, q.scope, q.ref.includes("#") ? q.exchange : undefined, q.slot),
+        /**
+         * ⛔ `undefined` RATHER THAN `q.slot` — THE SLOT THE QUESTION IS ABOUT IS THE CONTEXT, and
+         * skipping it is why Peter was asked a question with nothing to read against it.
+         *
+         * He was shown the question, the cost and two options, and not the three sentences the slot
+         * already says — which are exactly what the question carves out of. His words: *"I think the
+         * interviewer can provide more background to the question."*
+         *
+         * The skip was right for a BLANK slot: there is nothing there, and showing the slot's own
+         * ask back is noise. It is wrong for a residual, where the agreed sentences are the whole
+         * frame — the page has always shown them (`saysEach`), and this surface dropped them.
+         */
+        ...contextFor(corpus, q.scope, q.ref.includes("#") ? q.exchange : undefined, undefined, q.slot),
         /**
          * The agreed sentence a residual is about, so nobody rules on a fragment blind.
          *
@@ -916,7 +999,48 @@ export function interviewFor(corpus: Corpus, scopeId: string, findings: Finding[
    * `blocks`. See `blanks`'s `spokenFor` for what asking these twice looked like.
    */
   const spokenFor = new Set(drafted.flatMap((d) => d.fills));
+
+  /**
+   * Questions that settle each other, put as ONE — ⛔ THE REPETITION PETER WAS ACTUALLY ASKED.
+   *
+   * He was handed four questions and said: *"I'm not convinced I couldn't have been asked less
+   * questions for what i answered"*. He was right. Two of the four were one decision — whether an
+   * unfinished deal belongs to the person who started it or to the organisation — asked once at
+   * `resume-a-deal-already-started#answer` and again at `make-a-place-for-the-deal#at_once`, where
+   * the options read *"only ever offered back to the person who started it"* against *"belongs to
+   * the lender rather than to a person"*. Two of the four pressable combinations were flat
+   * contradictions.
+   *
+   * ⛔ THE FOLD ABOVE COULD NOT SEE IT. `blanks` merges sites that are blank on the SAME SLOT,
+   * because there the slot is literally the question. These were different slots on different
+   * behaviours, so nothing joined them.
+   *
+   * ⛔ AND IT IS `blocks`, NOT A SIMILARITY SCORE. The model already has one way to say "answering
+   * this settles that", and it is a field an author fills in — `Standing.blocks`, where `[]` means
+   * "the rest can ship without this" and is never assumed. So two questions are one when either
+   * names the other, and nothing here guesses. A derivation that matched on wording would be
+   * inventing a relationship between two people's sentences, which is the whole thing this file
+   * refuses to do.
+   *
+   * ⛔ WHAT IT DOES NOT FIX: the two in his corpus both carry `blocks: []`, because nobody filled
+   * them in. That is fg-0004 — there is no act for "these two existing questions are one" — and the
+   * interviewer's brief now says to fill `blocks` when it drafts a pair. This makes the fold work
+   * the moment the field is honest; it cannot retro-fit a relationship nobody recorded.
+   */
+  const leads = new Map<string, Owed>();
+  const folded: Owed[] = [];
+  for (const d of drafted) {
+    /** The question that already speaks for this one, where one does. */
+    const under = d.fills.map((f) => leads.get(f)).find(Boolean);
+    if (under) {
+      under.fills = [...new Set([...under.fills, ...d.fills])];
+      continue;
+    }
+    folded.push(d);
+    for (const f of d.fills) leads.set(f, d);
+  }
   const rest = [
+    ...parts(corpus, scopeId),
     ...found(corpus, ids),
     ...blanks(corpus, ids, title, spokenFor),
     ...undrawn(corpus, ids),
@@ -934,7 +1058,7 @@ export function interviewFor(corpus: Corpus, scopeId: string, findings: Finding[
    * feature and it fills exactly one slot, so any ordering by reach would bury it — which is the
    * opposite of the gate's point. It leads; the rest competes on what one answer closes.
    */
-  const owed = [...purpose, ...[...drafted, ...rest].sort((a, b) => b.fills.length - a.fills.length)];
+  const owed = [...purpose, ...[...folded, ...rest].sort((a, b) => b.fills.length - a.fills.length)];
   return {
     scope: scopeId,
     title,

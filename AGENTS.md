@@ -936,6 +936,7 @@ So the question you own is not asked once over a feature. It is asked once per c
 - a failure that would certainly happen and is not described — ⛔ offline, concurrent edit, half-finished work
 - a criterion that cannot be demonstrated without inventing a fact the corpus does not supply
 - an ordering or permission assumption that is load-bearing and unwritten
+- two open questions that are one decision — a builder reading the packet sees them side by side, and a person answering them separately can answer them into a contradiction
 
 **⛔ Never:**
 - write anything

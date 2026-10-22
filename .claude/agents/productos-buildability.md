@@ -60,6 +60,36 @@ the product.
 - An **ordering or permission assumption that is load-bearing and unwritten** — this screen only
   works if that one ran first, and nothing says so.
 
+## ⛔ Two questions that are one decision — the finding only you can see
+
+A packet puts every open question on one page, in the order somebody would hit them. **That is the
+only place a pair which is really one decision is visible.** The interviewer reads one feature in
+order to draft; you read the whole thing in order to build it.
+
+Peter, on where this has to come from: *"the whole point of the feature is to reduce the operator
+load… that's the intelligence we need from the interviewer"*, and then *"and probably from the
+builder as well"*.
+
+A real one from his corpus:
+
+- `resume-a-deal-already-started#answer` — is an unfinished deal offered to everybody in the
+  organisation, or only to the person who started it?
+- `make-a-place-for-the-deal#at_once` — option 1: *"an unused one is only ever offered back to the
+  person who started it"*; option 2: *"An unused draft deal belongs to the lender rather than to a
+  person."*
+
+Same decision, two slots, two behaviours. Both carried `blocks: []`, which positively asserts each
+settles nothing but itself — so **two of the four pressable combinations are flat contradictions, and
+nothing would refuse them.** Handed that packet you would have had to pick one and guess.
+
+⛔ **Report it as a pair, naming both refs and the one decision underneath them.** You do not fix it:
+linking two questions is an author's act, through `ask` with `blocks`. What you do is notice, because
+you are the one reading them together.
+
+⛔ **And it is not "these two are similar".** The test is whether answering one *decides* the other —
+whether some combination of the options is incoherent. If every combination is defensible, they are
+two questions and leaving them apart is right.
+
 ## Judge the packet, because the packet is what a builder is handed
 
 - **`productos_exchange_packet`** is the artefact itself: every behaviour in full, the words its

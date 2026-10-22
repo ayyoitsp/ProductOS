@@ -24,10 +24,10 @@
  * a classifier that mis-reads a sentence as `accept` mints consent nobody gave. A caller says which
  * intent it means, and an unknown one is refused with the list.
  */
-import { perform, payloadFrom, VIA, ACTS, OWED, ALSO, type Act, type Via } from "./acts.js";
+import { perform, payloadFrom, VIA, ACTS, OWED, ALSO, type Act, type Via, isHuman } from "./acts.js";
 import { closeNote, fileNote, replyToNote } from "./notes.js";
 import { suggestClaim, raiseQuestion, proposeRequirement } from "./suggest.js";
-import { mayRecord, mayRelay, mayClaimHand, type Principal } from "./identity.js";
+import { mayRecord, mayRelay, mayClaimHand, watchedAPerson, type Principal } from "./identity.js";
 import { parseFrontmatter } from "../core/frontmatter.js";
 import YAML from "yaml";
 import { authIsOff } from "./store/identity.js";
@@ -321,11 +321,45 @@ export const INTENTS: Intent[] = [
       if (!NOTE_VIA.includes(via))
         return { ok: false, why: `"${via}" is not a way a request could have arrived`, detail: [NOTE_VIA.join(" · ")] };
       /**
-       * ⛔ THROUGH `mayRecord`, so a session cannot file a request as though somebody pressed it.
-       * A note is not consent and this is not the consent gate — it is the same question one notch
-       * down: did a person do this, or did software.
+       * ⛔ `mayRelay`, NOT `mayRecord` — AND MY FIRST VERSION OF THIS GOT IT WRONG IN A WAY THAT
+       * BLOCKED THE CASE IT WAS WRITTEN FOR.
+       *
+       * The two gates answer different questions:
+       *
+       *   `mayRecord`  may this principal claim a person AGREED? — consent, and no token ever may
+       *   `mayRelay`   may this principal carry what somebody else said? — relay, which is a scope
+       *
+       * A note is a REQUEST. `via: chat` on one says *where the request arrived from*, not that
+       * anybody agreed to anything — and carrying what a person said in a conversation is precisely
+       * what a session is for. Gated on `mayRecord`, every such note came back **"a token cannot
+       * record \"chat\" — that claims a person agreed"**, which is true of a verdict and false of
+       * a request. Found immediately: three of Peter's own answers, relayed from this session,
+       * refused on the grounds that he had not agreed to having said them.
+       *
+       * ⛔ AND A HUMAN `via` STILL COSTS SOMETHING. It needs `relay`, so a read-or-author token
+       * cannot put words in a person's mouth; what it can do is file under `agent`, as itself.
        */
-      const forged = mayRecord(a.who, via);
+      /**
+       * ⛔ A HUMAN `via` IS EITHER A PRESS THIS INSTANCE WATCHED, OR A RELAY — and my first two
+       * attempts each got one of those halves wrong.
+       *
+       *   first:  `mayRecord` for everything — refused a session carrying what Peter said in chat,
+       *           on the grounds that he had not agreed to having said it. A note is a REQUEST;
+       *           `via: chat` says where it arrived from, not that anybody agreed to anything.
+       *   second: `mayRelay` for every human `via` — which made a PERSON pressing on the page prove
+       *           they held a relay scope. A browser principal holds none, so the ordinary case —
+       *           somebody filing a request on their own product — came back *"this token may not
+       *           carry somebody else's press"*. Caught by the store suite, four tests over.
+       *
+       * ⛔ SO BOTH DOORS, AND NEITHER ALONE. `watchedAPerson` is the one that makes a browser press
+       * free: the instance saw it happen, so there is nothing to relay. Anything else asserting a
+       * human `via` is speaking for somebody who is not here, and that is exactly what `relay` is.
+       */
+      const forged = isHuman(via)
+        ? watchedAPerson(a.who.kind)
+          ? null
+          : mayRelay(a.who)
+        : mayRecord(a.who, via);
       if (forged) return forged;
       return fileNote(a.dir, {
         about: str(body.about),

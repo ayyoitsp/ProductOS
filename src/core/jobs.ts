@@ -1090,6 +1090,26 @@ export const AGENTS: Agent[] = [
       "a failure that would certainly happen and is not described — ⛔ offline, concurrent edit, half-finished work",
       "a criterion that cannot be demonstrated without inventing a fact the corpus does not supply",
       "an ordering or permission assumption that is load-bearing and unwritten",
+      /**
+       * ⛔ TWO QUESTIONS THAT ARE ONE DECISION — AND A BUILDER IS THE ONE WHO SEES IT.
+       *
+       * Peter, on where the combining intelligence has to come from: *"the whole point of the
+       * feature is to reduce the operator load. it could even be more than one question. that's the
+       * intelligence we need from the interviewer"*, then *"and probably from the builder as well"*.
+       *
+       * He is right that it is a builder's finding and not only an author's. The interviewer reads
+       * one feature in order to draft; a builder reads the PACKET, which puts every open question on
+       * one page in the order somebody would hit them — so a pair that is one decision in two slots
+       * is visible from here and from almost nowhere else.
+       *
+       * Measured on his own corpus: `resume-a-deal-already-started#answer` asks whether an
+       * unfinished deal is offered org-wide or only to its starter, and
+       * `make-a-place-for-the-deal#at_once` offers *"only ever offered back to the person who
+       * started it"* against *"belongs to the lender rather than to a person"*. Both carried
+       * `blocks: []`. Two of the four pressable combinations were flat contradictions, and a builder
+       * handed that packet would have had to pick one and guess.
+       */
+      "two open questions that are one decision — a builder reading the packet sees them side by side, and a person answering them separately can answer them into a contradiction",
     ],
     never: [
       "write anything",

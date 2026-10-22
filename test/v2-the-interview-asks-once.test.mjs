@@ -154,7 +154,14 @@ test("⛔ three behaviours blank on one slot are one question, not three", () =>
     [3, 3, 3],
     "a folded question does not say how many slots it fills, so nothing records that answering once is enough"
   );
-  assert.equal(it.closes, 9, "`closes` is not the number of holes these answers would shut");
+  /**
+   * ⛔ NINE BLANKS PLUS THE SUBSYSTEM TREE. This fixture is a root scope with no capabilities, so the
+   * worklist also asks what parts the product consists of — one question standing in front of every
+   * feature, which is the whole point of that kind. Counted apart so a change to either is visible.
+   */
+  const parts = it.owed.filter((o) => o.owes === "parts");
+  assert.equal(parts.length, 1, "a root with no capabilities is not asked what its parts are");
+  assert.equal(it.closes, 9 + parts.length, "`closes` is not the number of holes these answers would shut");
 });
 
 test("⛔ a blank an existing question already speaks for is not asked a second time", () => {
@@ -445,10 +452,10 @@ test("the command prints both numbers, because they are the only evidence the fo
   const dir = corpus();
   agreeThePurpose(dir);
   const out = execFileSync("node", [CLI, "v2", "interview", "chores", "--at", dir], { encoding: "utf-8" });
-  assert.match(out, /3 questions, closing 9 holes/, `the header does not report the fold:\n${out}`);
+  assert.match(out, /4 questions, closing 10 holes/, `the header does not report the fold:\n${out}`);
   /** ⛔ And `--take` changes how much is shown, never what is claimed. */
   const one = execFileSync("node", [CLI, "v2", "interview", "chores", "--at", dir, "--take", "1"], { encoding: "utf-8" });
-  assert.match(one, /3 questions, closing 9 holes/, "`--take` rewrote the tally instead of the page");
+  assert.match(one, /4 questions, closing 10 holes/, "`--take` rewrote the tally instead of the page");
   /**
    * ⛔ COUNTED OFF THE DATA, NOT OFF THE PROSE. This matched `fills:` in the printed output and
    * broke the moment that line was reworded into "answering it once settles 3" — asserting on a
@@ -460,7 +467,7 @@ test("the command prints both numbers, because they are the only evidence the fo
     execFileSync("node", [CLI, "v2", "interview", "chores", "--at", dir, "--take", "1", "--json"], { encoding: "utf-8" })
   );
   assert.equal(shown.owed.length, 1, `--take 1 handed over ${shown.owed.length} questions`);
-  assert.equal(shown.closes, 9, "`--take` changed what the round claims to close, not just how much it shows");
+  assert.equal(shown.closes, 10, "`--take` changed what the round claims to close, not just how much it shows");
 });
 
 test("⛔ a policy slot folds and a per-behaviour slot does not, in one corpus", () => {
