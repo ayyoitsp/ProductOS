@@ -26,6 +26,8 @@ const { loadCorpus } = await import(path.resolve("dist/v2/load.js"));
 const { checkCorpus } = await import(path.resolve("dist/v2/check.js"));
 const { coveredBy } = await import(path.resolve("dist/v2/stamp.js"));
 const { raiseQuestion } = await import(path.resolve("dist/v2/suggest.js"));
+const { fileNote, closeNote } = await import(path.resolve("dist/v2/notes.js"));
+const { Note } = await import(path.resolve("dist/v2/schema.js"));
 const { interviewFor } = await import(path.resolve("dist/v2/interview.js"));
 const { POLICY_SLOTS, DEMONSTRABLE_SLOTS, SLOTS } = await import(path.resolve("dist/v2/schema.js"));
 const { gridFor } = await import(path.resolve("dist/v2/grid.js"));
@@ -438,7 +440,18 @@ test("the command prints both numbers, because they are the only evidence the fo
   /** ⛔ And `--take` changes how much is shown, never what is claimed. */
   const one = execFileSync("node", [CLI, "v2", "interview", "chores", "--at", dir, "--take", "1"], { encoding: "utf-8" });
   assert.match(one, /3 questions, closing 9 holes/, "`--take` rewrote the tally instead of the page");
-  assert.equal((one.match(/fills:/g) ?? []).length, 1, "`--take 1` printed more than one question");
+  /**
+   * ⛔ COUNTED OFF THE DATA, NOT OFF THE PROSE. This matched `fills:` in the printed output and
+   * broke the moment that line was reworded into "answering it once settles 3" — asserting on a
+   * label that exists to be readable makes every wording change look like a behaviour change. And
+   * its failure message said "more than one" while the count was zero, so it was only ever right
+   * in one direction.
+   */
+  const shown = JSON.parse(
+    execFileSync("node", [CLI, "v2", "interview", "chores", "--at", dir, "--take", "1", "--json"], { encoding: "utf-8" })
+  );
+  assert.equal(shown.owed.length, 1, `--take 1 handed over ${shown.owed.length} questions`);
+  assert.equal(shown.closes, 9, "`--take` changed what the round claims to close, not just how much it shows");
 });
 
 test("⛔ a policy slot folds and a per-behaviour slot does not, in one corpus", () => {
@@ -548,4 +561,187 @@ test("⛔ the grid and the check agree about what a blank is, which is what lets
     [...fromCheck].sort(),
     "the grid and the check disagree about what a blank is, so the interview is now asking about a different set than the one check refuses"
   );
+});
+
+test("⛔ every question says where it sits and what is already true around it", () => {
+  /**
+   * ⛔ IT ARRIVED NAKED, AND EVERYTHING IT NEEDED WAS THREE LINES AWAY IN THE CORPUS.
+   *
+   * Peter, handed a real one: *"i don't know if this is good. I need context for the questions
+   * being asked, not a question out of the blue about a behavior of a feature. always give context
+   * in the question"*, then *"explain the question"*.
+   *
+   * What he saw was the question and nothing else — no feature, no behaviour, no statement it was
+   * about, nowhere it happens. The derivation was built around *what to ask* and carried none of
+   * *what you need in order to answer*.
+   */
+  const dir = corpus();
+  agreeThePurpose(dir);
+  const it = round(dir).it;
+
+  for (const o of it.owed) {
+    assert.ok(o.about, `${o.ref} carries no context at all`);
+    assert.equal(o.about.feature, "Chores", `${o.ref} does not say which feature it belongs to`);
+    assert.ok(o.about.purpose, `${o.ref} does not say what the feature is for`);
+  }
+
+  /** A question about a behaviour names the behaviour and says what it gives back. */
+  const onABehaviour = it.owed.find((o) => o.owes === "blank" && o.fills[0].endsWith("#at_once"));
+  assert.match(onABehaviour.about.behaviour, /A parent offers a job/, "the behaviour is not named");
+  assert.match(onABehaviour.about.met_at, /The list/, "nowhere says where somebody meets it");
+  const gives = onABehaviour.about.already.find((x) => /what they get/.test(x.asks));
+  assert.ok(gives, "nothing says what this behaviour does, so a question about any other slot is unmoored");
+  assert.match(gives.says, /shown on the list/);
+});
+
+test("⛔ the context is what grounds the behaviour, not all eight slots", () => {
+  /**
+   * ⛔ THE FIRST FIX OVERSHOT AND BECAME THE SAME DEFECT. Printing every slot put a question about
+   * pinning a figure under four hundred words of refusals, concurrency and failure handling — all
+   * true, none of it bearing on the decision, and all of it ahead of the question. "No context"
+   * became "context nobody will read".
+   *
+   * ⛔ AND THE SLOT IN QUESTION IS NEVER SHOWN AS SETTLED. Repeating it under "what is already
+   * settled here" is how a reader comes to believe the thing they are being asked about is decided.
+   */
+  const dir = corpus();
+  agreeThePurpose(dir);
+  const it = round(dir).it;
+
+  for (const o of it.owed) {
+    if (o.owes === "purpose" || o.owes === "screen") continue;
+    assert.ok(
+      o.about.already.length <= 2,
+      `${o.ref} carries ${o.about.already.length} grounding lines — the whole behaviour is being printed again`
+    );
+    const asked = o.fills[0].split("#")[2];
+    const label = { answer: "what they get", after: "what is different afterwards" }[asked];
+    if (label)
+      assert.ok(
+        !o.about.already.some((x) => x.asks === label),
+        `${o.ref} shows the slot in question as already settled`
+      );
+  }
+});
+
+test("⛔ a judge's finding reaches the queue, carrying what a builder would assume", () => {
+  /**
+   * ⛔ THE HALF THE STRUCTURE CANNOT SEE. Peter: *"is this running through our agent that checks if
+   * things are 'buildable' - our indexed truths and suggestions aren't necessarily
+   * 'comprehensive'"*, then *"let's go B. and the buildability question should be run again before
+   * the interviewer"*.
+   *
+   * Measured on his corpus: 422 `nothing-demonstrates-this`, 130 `who-may-is-only-prose`, 64 of 350
+   * behaviours with no criterion — against 26 blank slots. Everything the interview could see was
+   * the small half, because a blank slot and a raised standing are the only holes a SHAPE exposes.
+   * A behaviour nobody wrote, a path that stops, a permission assumption that is load-bearing and
+   * unwritten — none of those is a hole anything could count.
+   *
+   * ⛔ AND THE JUDGE STILL WRITES NOTHING. *"A reviewer that can write is a reviewer that repairs
+   * what it finds, which hides how often it fires."* A session records the finding as a `review`
+   * note; this is the note arriving as something an author can draft options from.
+   */
+  const dir = corpus();
+  agreeThePurpose(dir);
+  const before = round(dir).it.owed.length;
+
+  const r = fileNote(dir, {
+    about: "chores#offer-a-job",
+    says: "Nothing says which of the list and the job's own screen owns the kid's place in the list after they mark something done.",
+    assumed: "that the list reloads from the top, so a kid who has just done the third of five jobs loses their place",
+    by: "productos-buildability",
+    via: "review",
+    at: "2026-10-21",
+  });
+  assert.equal(r.ok, true, `the finding could not be filed: ${r.ok === false ? r.why : ""}`);
+
+  const it = round(dir).it;
+  assert.equal(it.owed.length, before + 1, "a stored finding did not reach the queue");
+  const f = it.owed.find((o) => o.owes === "found");
+  assert.ok(f, "nothing in the queue is a finding");
+  assert.match(f.asks, /owns the kid's place/, "the finding itself is missing");
+  /** ⛔ The assumption is the risk, and it has to reach the reader as what WOULD happen. */
+  assert.match(f.why, /would assume that the list reloads from the top/, `the assumption did not survive: ${f.why}`);
+  assert.match(f.shape, /the assumption above is one of them/, "nothing tells a drafter the assumption is a candidate");
+  assert.match(f.act, /"intent":"ask"/, "the act does not route to the one thing that drafts a question");
+  assert.match(f.act, /close the finding/, "nothing says to close it, so the finding and its question both sit in the queue");
+  /** And it is grounded like every other question. */
+  assert.equal(f.about.feature, "Chores");
+  assert.match(f.about.behaviour, /A parent offers a job/);
+});
+
+test("⛔ a finding somebody has drained is not asked about again", () => {
+  /**
+   * ⛔ THE SAME DEDUP AS A BLANK AN EXISTING QUESTION SPEAKS FOR, from the other direction. A
+   * finding left open beside the question it produced is one gap in the queue twice.
+   */
+  const dir = corpus();
+  agreeThePurpose(dir);
+  const r = fileNote(dir, {
+    about: "chores#offer-a-job",
+    says: "Nothing says what happens to a job a parent offers twice by accident.",
+    assumed: "that both stand, so a kid sees the same job on their list two lines apart",
+    by: "productos-buildability",
+    via: "review",
+    at: "2026-10-21",
+  });
+  assert.equal(r.ok, true);
+  assert.equal(round(dir).it.owed.filter((o) => o.owes === "found").length, 1);
+
+  closeNote(dir, r.note.id, "became the question on chores#offer-a-job#again");
+  assert.equal(
+    round(dir).it.owed.filter((o) => o.owes === "found").length,
+    0,
+    "a closed finding is still being offered, so the gap is in the queue twice"
+  );
+});
+
+test("⛔ a review finding with no assumption is refused, and an assumption from anywhere else is too", () => {
+  /**
+   * ⛔ BOTH DIRECTIONS. A reviewer naming a gap without saying what happens if it stays open has
+   * filed a worry — and a queue of worries is what `decide` calls a decoration. The converse is
+   * worse in kind: `assumed` on a note from `chat` would be putting words in the mouth of whoever
+   * filed it, which is the "did i send that request" confusion with a hundred times the volume.
+   */
+  const base = { id: "n-1", about: "chores#offer-a-job", says: "something is unsaid here", by: "x", at: "2026-10-21", state: "open" };
+
+  const noAssumption = Note.safeParse({ ...base, via: "review" });
+  assert.equal(noAssumption.success, false, "a review finding with no assumption parsed");
+  assert.match(noAssumption.error.issues[0].message, /what somebody would assume/);
+
+  const borrowed = Note.safeParse({ ...base, via: "chat", assumed: "that somebody will work it out" });
+  assert.equal(borrowed.success, false, "an assumption was accepted on a note a person filed");
+  assert.match(borrowed.error.issues[0].message, /putting words in the mouth/);
+
+  assert.equal(Note.safeParse({ ...base, via: "review", assumed: "that the list reloads from the top" }).success, true);
+  assert.equal(Note.safeParse({ ...base, via: "chat" }).success, true);
+});
+
+test("⛔ the assumption reaches disk — four layers agreed and one wrote the file", () => {
+  /**
+   * ⛔ `probe` DID THIS ONCE AND ITS COMMENT IN `notes.ts` IS ABOUT HAVING MISSED IT: *"I added
+   * `probe` to the schema, to the intent and to `Filing`, and the write path still dropped it
+   * here"*. `assumed` went into the schema, the refinement, `Filing` and the assembly — and not
+   * into `asYaml`. It failed loudly rather than silently, because the schema requires it on a
+   * review note, so the row came back as a parse refusal and took the whole notes file with it.
+   */
+  const dir = corpus();
+  const r = fileNote(dir, {
+    about: "chores#offer-a-job",
+    says: "Nothing says where the kid's place in the list lives.",
+    assumed: "that it is not kept at all",
+    by: "productos-buildability",
+    via: "review",
+    at: "2026-10-21",
+  });
+  assert.equal(r.ok, true);
+
+  const onDisk = fs.readFileSync(path.join(dir, "notes", "notes.yaml"), "utf-8");
+  assert.match(onDisk, /assumed: "that it is not kept at all"/, "the assumption never reached the file");
+
+  /** ⛔ And it loads back — a row the writer produced that the reader refuses is worse than a drop. */
+  const { corpus: c } = checkCorpus(dir);
+  const back = c.notes.find((n) => n.id === r.note.id);
+  assert.ok(back, `the note did not load back: ${c.broken.map((b) => b.why).join("; ")}`);
+  assert.equal(back.assumed, "that it is not kept at all");
 });

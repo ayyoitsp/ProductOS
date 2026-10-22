@@ -2097,7 +2097,47 @@ export const SHIMS: Shim[] = [
        * behaviours, so it has to see all of them. Run per-author, it would ask about each site as it
        * appeared — which is the burden this whole route exists to reduce.
        */
-      { role: "interviewer", why: "the three or four answers a person could pick between, for everything the authors above left undecided" },
+      /**
+       * ⛔ BUILDABILITY RUNS HERE, BEFORE ANYBODY HAS AGREED TO THIS DRAFT — AND THE ⛔ FORTY LINES
+       * ABOVE ARGUES AGAINST IT. Both are Peter's, and the later one wins; this comment exists so
+       * the next session reverts neither by accident.
+       *
+       * ⛔ WHAT THE OLDER RULE SAYS, AND IT IS NOT WRONG. Engineering and QA wait for
+       * `ready for review` because an engineer's read of a draft comes back phrased as fact, and a
+       * session then builds toward a shape nobody validated. His words: *"we need to a rough scope,
+       * nail down human truth before we need to involve engineers/qa"*. Two tests hold it, and the
+       * first names *"is this buildable"* as the canonical thing that must wait.
+       *
+       * ⛔ WHAT CHANGED IS A NUMBER, NOT AN ARGUMENT. Measured on his own corpus: **1 of 131
+       * features is past that gate.** So the one role that can find what is MISSING — as against
+       * what is blank — could run on one feature, and only ever on features already validated,
+       * which is backwards: a finding is what should inform the validation. Against that, 422
+       * `nothing-demonstrates-this` and 64 of 350 behaviours with no criterion at all, none of
+       * which any other role can see.
+       *
+       * Offered the three ways out — split the role so only the findings run early, exempt it
+       * outright, or leave it gated — he chose: *"Exempt it — just run it early: buildability runs
+       * in the authoring route as it is today, verdict and all."*
+       *
+       * ⛔ AND THE PROTECTION MOVED RATHER THAN BEING GIVEN UP, which is the part the first version
+       * of this comment got wrong — it said the risk was "live and named" and left it there.
+       *
+       * Peter: *"uhm, what? why? buildability should take validation into account. if a verdict has
+       * low confidence/no agreement, why the fuck would it trust it?"*
+       *
+       * The gate was a crude proxy for "do not trust unagreed truth", applied to a whole feature
+       * from outside. The corpus answers it per SENTENCE and always has — `levelOf` returns
+       * `accepted | derived | suggested | open`, and the packet prints that word on every slot line.
+       * No judge had ever been told. `what-a-judge-reads.ts` now tells all of them, in one generated
+       * section, including that a draft's unfinishedness is not a defect — so a verdict here arrives
+       * carrying what stands behind each sentence it was reached from.
+       *
+       * ⛔ THAT IS WHAT MAKES RUNNING EARLY SAFE, and it is pinned: if the sentence about not
+       * reporting unfinishedness leaves that block, `a-judge-knows-how-settled-what-it-reads-is`
+       * fails, and this exemption is unguarded again.
+       */
+      { role: "buildability", why: "what somebody starting Monday would hit, and what they would assume unasked — the half no other role can see" },
+      { role: "interviewer", why: "the three or four answers a person could pick between — drains the findings above first, then the slots the authors left undecided" },
       { role: "completeness", why: "whether somebody can get from the start of this feature to the end of it" },
       { role: "design-critique", fan: true, why: "whether these are the right screens for the job, not just complete ones" },
     ],
@@ -2111,6 +2151,12 @@ export const SHIMS: Shim[] = [
        * and the drafted candidates are what make it answerable in one act instead of an essay.
        */
       "putting every open question to the person, in their own interface — `productos v2 decide <feature>` is the list, the options are pressable, and `--says` is always there for an answer nobody drafted",
+      /**
+       * ⛔ THE SESSION WRITES THE FINDINGS DOWN, BECAUSE THE JUDGE MAY NOT AND NOBODY ELSE WAS
+       * THERE. This is the one step of option B that cannot be delegated: a judge returns text, and
+       * if nothing records it the whole pass is lost the moment the context is.
+       */
+      "⛔ writing down what the judges found, as `review` notes carrying what a builder would assume unasked — a judge may never write, so a finding nobody records is a finding that did not happen",
       "every act of judgement, and never answering one on their behalf",
       "⛔ settling the subsystem tree with a person before the decomposer runs, and never spawning one per feature — a part that serves several features cannot be named by a role that can see only one of them",
       "⛔ stopping here. The engineering and QA reads are a different route and it cannot run until somebody has agreed to this — an engineer costing a draft produces a decision nobody made",

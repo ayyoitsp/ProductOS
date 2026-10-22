@@ -33,7 +33,7 @@ import { confidenceOf, whyConfident, discrepancyFor } from "./confidence.js";
 import { levelOf } from "./level.js";
 import { wireParts } from "./wire.js";
 import { questionsFor, descendants, type Question } from "./settle.js";
-import { interviewFor } from "./interview.js";
+import { interviewFor, contextFor as interviewContext } from "./interview.js";
 import { resolveRef } from "./ref.js";
 import { demonstrationOf } from "./demonstrate.js";
 /** ⛔ The packet's own readiness verdict, not a second one — see `readinessOf`. */
@@ -557,6 +557,36 @@ function renderQuestion(q: Question, i: number, past: Decision[], ctx: Ctx): str
                 : "every behaviour this rule reaches"
             }${q.slot ? ` · ${esc(SLOT_LABEL[q.slot] ?? q.slot)}` : ""}</p>`
           : ""
+      }
+      ${
+        /**
+         * ⛔ WHAT THE FEATURE IS FOR, AND WHAT THIS BEHAVIOUR GIVES BACK — THE QUESTION ARRIVED
+         * WITH NEITHER.
+         *
+         * Peter: *"I need context for the questions being asked, not a question out of the blue
+         * about a behavior of a feature. always give context in the question"*, and *"explain the
+         * question"*.
+         *
+         * The card had the question, the address of the behaviour, and the slot's label. That is
+         * where it is, not what it is about: a reader met *"Does pinning a worked-out figure by
+         * hand make it settled?"* with no statement of what the feature is for and no sentence
+         * saying what the behaviour does, both of which are in the corpus three lines away.
+         *
+         * ⛔ TWO SLOTS, NOT EIGHT — see `GROUNDING` in interview.ts for what printing all of them
+         * did. `revises` already renders the statements being ruled on, directly below this, so
+         * this is deliberately only the grounding a reader needs to judge those.
+         */
+        (() => {
+          const a = interviewContext(ctx.corpus, q.scope, q.ref.includes("#") ? q.exchange : undefined, q.slot);
+          const rows = [
+            ...(a.purpose ? [{ k: "what this feature is for", v: a.purpose }] : []),
+            ...a.already.map((x) => ({ k: x.asks, v: x.says })),
+          ];
+          if (!rows.length) return "";
+          return `<div class="q-ctx">${rows
+            .map((r) => `<p><span class="k">${esc(r.k)}</span> ${line(r.v)}</p>`)
+            .join("")}</div>`;
+        })()
       }
       ${acts.join("")}
       ${q.cost ? `<div class="cost"><p class="k">what guessing wrong costs</p><p>${line(q.cost)}</p></div>` : ""}
@@ -10468,6 +10498,14 @@ export const STYLE = `<style>
    * So: a list, offset by a rule down the left, in the dimmer register the page already uses for
    * things that are context rather than acts.
    */
+  /**
+   * ⛔ CONTEXT READS AS CONTEXT. It sits above the options and below the question, dimmer than
+   * both, with each line labelled by what it answers — so a reader can skip it once they know the
+   * feature and cannot mistake it for something being decided.
+   */
+  .q-ctx { margin: .6rem 0 1rem; font-size: .9rem; color: var(--dim); }
+  .q-ctx p { margin: .2rem 0; }
+  .q-ctx .k { color: var(--ink); opacity: .75; }
   .unasked { margin-top: 2rem; padding-left: .9rem; border-left: 2px solid var(--line); }
   .unasked h3 { margin: 0 0 .4rem; font-size: 1rem; }
   .unasked .note { color: var(--dim); font-size: .9rem; margin: .5rem 0 0; }

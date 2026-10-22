@@ -45,6 +45,7 @@ import { AGENTS, AUTHORS, CASCADE, KINDS, SHIMS, shippedRoutes, SKILL, byDiscipl
 const plain = (x: unknown): string => String(x ?? "").replace(/\s+/g, " ").trim();
 import { agentsDoc, withPreset } from "../../core/agents-doc.js";
 import { withWhereAnAuthorWrites } from "../../core/where-an-author-writes.js";
+import { withWhatAJudgeReads } from "../../core/what-a-judge-reads.js";
 import { readChanges, writeChange, nextId, verify, missing, changesWithId, idsInUse } from "../../core/change.js";
 import { writeDrawnReading, writeSketchHtml } from "../../v2/draw-write.js";
 import { whatMoved, repoOf } from "../../v2/moved.js";
@@ -2068,14 +2069,66 @@ export function v2Command(): Command {
         );
         for (const q of r.owed.slice(0, take)) {
           console.log("");
-          console.log(`  ${pc.cyan(q.asks)}`);
+          /**
+           * ⛔ THE CONTEXT COMES BEFORE THE QUESTION, because that is the order somebody reads in.
+           *
+           * Peter, handed a question with none of this: *"I need context for the questions being
+           * asked, not a question out of the blue about a behavior of a feature. always give
+           * context in the question"*, and *"explain the question"*.
+           *
+           * Where it is, what the feature is for, which behaviour, what that behaviour already
+           * says — then the question. Printed after it, every line of this is something a reader
+           * has to hold the question in their head to make sense of.
+           */
+          const a = q.about;
+          const where = [a.behaviour, a.met_at && `on ${a.met_at}`].filter(Boolean).join(" · ");
+          if (where) console.log(pc.dim(`  ${where}`));
+          else if (a.feature !== r.title) console.log(pc.dim(`  ${a.feature}`));
+          /**
+           * ⛔ NOT ON THE PURPOSE QUESTION ITSELF, where the purpose is the SUBJECT and not the
+           * context — it printed the same sentence twice, once as "what this feature is for" and
+           * again under "what is already settled here". Same rule as `skip` for a slot: the thing
+           * in question never appears as something already settled.
+           */
+          if (a.purpose && q.owes !== "purpose") console.log(pc.dim(`  what this feature is for: ${a.purpose}`));
+          console.log("");
+          /** ⛔ Line by line — a case-grained question is several, and they are not one sentence. */
+          for (const l of q.asks.split("\n")) console.log(`  ${pc.cyan(l)}`);
+          /**
+           * ⛔ WHY THE QUESTION EXISTS, NOT WHAT STATE THE QUEUE IS IN. `why` used to read "2
+           * answers are on the table and nobody has picked", which tells a reader about the tool
+           * rather than about the decision in front of them. It still prints, below the thing that
+           * explains the question.
+           */
+          if (a.in_question) console.log(pc.dim(`    one thing about it is unruled: ${a.in_question}`));
+          if (a.already.length) {
+            console.log(pc.dim(`    what is already settled here:`));
+            for (const x of a.already)
+              console.log(
+                pc.dim(
+                  `      ${x.asks ? `${x.asks}: ` : "  "}${x.says}${x.more ? ` (+${x.more} more sentence${x.more === 1 ? "" : "s"})` : ""}`
+                )
+              );
+          }
           console.log(pc.dim(`    ${q.why}`));
-          if (q.fills.length > 1) console.log(pc.dim(`    fills: ${q.fills.join(", ")}`));
+          if (q.fills.length > 1) console.log(pc.dim(`    answering it once settles ${q.fills.length}`));
           if (q.cost) console.log(`    ${pc.yellow("guessing wrong costs:")} ${q.cost}`);
-          for (const [n, c] of q.candidates.entries())
-            console.log(
-              `    ${n + 1}. ${c.says ?? (c.none ? "nothing to refuse" : (c.outcomes ?? []).map((x) => x.name).join(", "))}`
-            );
+          /**
+           * ⛔ `optionText`, NOT A SECOND RENDERING — AND THE SECOND ONE WAS UNCHOOSABLE.
+           *
+           * This mapped a `refuses` option to its case NAMES, so a real question on the deals list
+           * offered "1. not-theirs-to-start" and "2. nothing to refuse" and a reader had no way to
+           * tell what either would do: the `when` it fires and what the person is TOLD — the whole
+           * content of the answer — were dropped. `acts.ts` has held the one rendering since the
+           * slot became settleable, carrying the ⛔ about why a sentence is wrong there.
+           *
+           * ⛔ AND THE CONSEQUENCE IS PRINTED, because an option without the argument for it is a
+           * coin toss. `Standing.candidates` requires it for that reason; this threw it away.
+           */
+          for (const [n, c] of q.candidates.entries()) {
+            console.log(`    ${n + 1}. ${optionText(c)}`);
+            if (c.consequence) console.log(pc.dim(`       → ${plain(c.consequence)}`));
+          }
           /**
            * ⛔ THE ACT COMES FROM THE DERIVATION, NOT FROM A BRANCH HERE. This printed `ask` for
            * every undrafted question, including the purpose — which `ask` refuses, because it is
@@ -2199,6 +2252,44 @@ export function v2Command(): Command {
           fs.writeFileSync(file, now);
           wrote++;
           console.log(pc.green("✓"), `${a.name}  ${pc.dim("where its work lands")}`);
+        }
+        /**
+         * ⛔ AND EVERY JUDGE'S BRIEF SAYS HOW SETTLED WHAT IT READS IS.
+         *
+         * Peter: *"buildability should take validation into account. if a verdict has low
+         * confidence/no agreement, why the fuck would it trust it?"*
+         *
+         * Measured before writing it: all ten authors' briefs mention what is agreed and what is
+         * not, because the block above tells them. **None of the fifteen judges did.** So every
+         * reviewer read a corpus as though every sentence were equally established — and the packet
+         * has printed the level on each slot line the whole time. Walked off `AGENTS` for the same
+         * reason the authors are walked off `AUTHORS`: a new judge cannot be the one nobody told.
+         */
+        for (const a of AGENTS) {
+          if (!a.prompt) continue;
+          /**
+           * ⛔ EVERY JUDGE BUT THE NEWCOMER, AND THE FIRST RUN OF THIS WROTE INTO IT.
+           *
+           * `newcomer` is a product manager handed a URL and told to build from it, with no
+           * knowledge of ProductOS — that is its entire value, and `ask-the-corpus` carries the same
+           * refusal for the same reason: *"a role holding `productos_exchange_*` has been told what
+           * the model is by its own tool list, and can no longer detect that the page failed to
+           * say"*. A section explaining levels, the packet and three tool names would have told it
+           * the model in prose instead, which is worse because it reads as help.
+           *
+           * ⛔ IT DOES NOT NEED THE SECTION EITHER. The question it answers is whether a PUBLISHED
+           * corpus communicates, and a published page already says what is agreed and what is not —
+           * if it does not, that is the finding.
+           */
+          if (!a.needs.includes("ask-the-corpus")) continue;
+          const file = path.resolve(a.prompt);
+          if (!fs.existsSync(file)) continue;
+          const was = fs.readFileSync(file, "utf-8");
+          const now = withWhatAJudgeReads(was);
+          if (now === was) continue;
+          fs.writeFileSync(file, now);
+          wrote++;
+          console.log(pc.green("✓"), `${a.name}  ${pc.dim("how settled what it reads is")}`);
         }
         console.log("");
         console.log(pc.dim(`  ${wrote} rewritten from src/core/jobs.ts — a test fails if one drifts`));

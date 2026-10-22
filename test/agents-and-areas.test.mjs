@@ -538,6 +538,33 @@ test("engineering and QA do not read truth nobody has agreed to", () => {
       "architecture",
       "consistency",
       "can-the-model-say-it",
+      /**
+       * ⛔ THE ONE EXEMPTION THAT DOES NOT FIT THE RULE ABOVE, AND IT IS A DECISION RATHER THAN A
+       * CATEGORY.
+       *
+       * Everything else here reports a mechanical property of the artefact. `buildability` rules on
+       * the CONTENT — the comment above names *"is this buildable"* as the canonical thing that must
+       * wait, and it is right about what the role does.
+       *
+       * ⛔ IT IS HERE BECAUSE OF A MEASUREMENT. On Peter's corpus **1 of 131 features is past
+       * `ready for review`**, so the only role that can find what is MISSING rather than what is
+       * blank could run on one feature — and only on features already validated, which is backwards.
+       * Shown the three ways out (split the role so only its findings run early, exempt it, leave it
+       * gated) he chose: *"Exempt it — just run it early: buildability runs in the authoring route as
+       * it is today, verdict and all."*
+       *
+       * ⛔ AND SOMETHING DOES REPLACE THE PROTECTION — this note first said nothing did. Peter:
+       * *"buildability should take validation into account. if a verdict has low confidence/no
+       * agreement, why the fuck would it trust it?"* The gate was a whole-feature proxy for what the
+       * corpus answers per sentence; `what-a-judge-reads.ts` now tells every judge the level of what
+       * it is reading, and that a draft's unfinishedness is not a defect.
+       *
+       * ⛔ SO DO NOT WIDEN THIS LIST AGAIN ON THIS REASONING. The argument that let `buildability`
+       * through is that the judge now weighs what stands behind each sentence — which is a property
+       * of the generated section, not of this role. A role added here without that section is
+       * exempted from the gate AND blind to what it reads.
+       */
+      "buildability",
     ]);
     for (const st of sh.steps) {
       if (!waits.has(st.role) || allowed.has(st.role)) continue;

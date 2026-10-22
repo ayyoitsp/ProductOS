@@ -45,7 +45,7 @@
 import type { Corpus } from "./load.js";
 import { actsFor, gridFor } from "./grid.js";
 import { descendants, questionsFor, rulingAct, type Question } from "./settle.js";
-import { POLICY_SLOTS, SLOT_ASKED, SLOTS, type SlotName } from "./schema.js";
+import { POLICY_SLOTS, SLOT_ASKED, SLOT_ASKS_SHORT, SLOTS, statements, type SlotName } from "./schema.js";
 
 const plain = (x: unknown): string => String(x ?? "").replace(/\s+/g, " ").trim();
 
@@ -61,7 +61,28 @@ export type Owes =
   /** A question already drafted and waiting on the person it is asked of — `questionsFor`. */
   | "drafted"
   /** A screen with nothing drawn. ⛔ The UX, and the one that is not a sentence. */
-  | "screen";
+  | "screen"
+  /**
+   * A judge found something and nobody has turned it into a question yet — ⛔ THE ONE KIND THAT
+   * COMES FROM OUTSIDE THE STRUCTURE.
+   *
+   * Peter: *"is this running through our agent that checks if things are 'buildable' - our indexed
+   * truths and suggestions aren't necessarily 'comprehensive'"*, then *"let's go B. and the
+   * buildability question should be run again before the interviewer"*.
+   *
+   * ⛔ EVERY OTHER KIND IS A HOLE THE SHAPE EXPOSES — an empty slot, a standing somebody raised, a
+   * screen with no picture. None of them can see a behaviour nobody wrote, a path that stops, or a
+   * permission assumption that is load-bearing and unwritten. Measured on his corpus: 422
+   * `nothing-demonstrates-this`, 130 `who-may-is-only-prose`, 64 of 350 behaviours with no
+   * criterion at all — and 26 blank slots. The structural holes are the small half.
+   *
+   * ⛔ AND IT ARRIVES AS A NOTE, WHICH IS WHY THIS IS A FIFTH KIND RATHER THAN A SIXTH DERIVATION.
+   * A judge may never write — *"a reviewer that can write is a reviewer that repairs what it finds,
+   * which hides how often it fires"* — so its finding is recorded by a session as a `review` note,
+   * carrying what a builder would assume if nobody answered. This is that note, waiting for an
+   * author to turn it into options.
+   */
+  | "found";
 
 export interface Owed {
   /**
@@ -89,6 +110,43 @@ export interface Owed {
   candidates: Question["candidates"];
   /** What it costs to guess wrong, where the standing says. */
   cost?: string;
+  /**
+   * Where this question sits, and what is already true around it — ⛔ WITHOUT IT THE QUESTION
+   * ARRIVES OUT OF NOWHERE.
+   *
+   * Peter, handed a real one: *"i don't know if this is good. I need context for the questions
+   * being asked, not a question out of the blue about a behavior of a feature. always give
+   * context in the question"* — and *"explain the question"*.
+   *
+   * What he was shown: *"Does pinning a worked-out figure by hand make it settled, or does the
+   * figure keep saying what can be said about the figures behind it with the person's number on
+   * top?"* and nothing else. No feature, no behaviour, no statement it is about, nowhere it
+   * happens. Everything needed to answer it was in the corpus and this threw it away — the
+   * derivation was built around *what to ask* and never carried *what you need in order to answer*.
+   *
+   * ⛔ IT IS A PROJECTION OF THE CORPUS AND NOT A SECOND RECORD OF IT. Every field is somebody
+   * else's sentence, carried verbatim: the feature's own title and purpose, the behaviour's title,
+   * what its slots already say, the screen it names. Nothing here is summarised, because a summary
+   * is where the context quietly becomes a different claim from the truth it is context for.
+   */
+  about: {
+    /** The feature, in its own words. */
+    feature: string;
+    /** What the feature is FOR — the one thing agreed before anything in it. */
+    purpose?: string;
+    /** The behaviour this question is about. */
+    behaviour?: string;
+    /** Where somebody meets it, where the corpus says. */
+    met_at?: string;
+    /**
+     * What this behaviour ALREADY says, slot by slot — ⛔ THE ANCHOR, and the single most missed
+     * piece. A question about what happens on a second press is unanswerable until you know what
+     * the first press does, and that sentence is three lines away in the corpus.
+     */
+    already: Array<{ asks: string; says: string; more?: number }>;
+    /** The statement in question, where one thing about an agreed sentence is unruled. */
+    in_question?: string;
+  };
   /**
    * What moves this question along, or `null` where nothing a caller can do does — ⛔ AND IT IS
    * NEVER A SHELL COMMAND.
@@ -168,6 +226,107 @@ function pressFor(q: Question): string | null {
       : "the person presses one of the options, or writes their own"
     : "nothing is drafted, so the person writes the answer — or an author drafts options first";
   return [`a person answers this${q.candidates.length ? " on the page" : ""}: ${how}`, ...owes].join("; and it owes ");
+}
+
+/**
+ * What establishes what a behaviour IS — ⛔ TWO SLOTS, NOT EIGHT, AND THE FIRST VERSION PRINTED
+ * EIGHT.
+ *
+ * With all of them, a question about pinning a figure arrived under four hundred words: every
+ * refusal, both concurrency sentences, what a failure leaves, who may ask. All true, all
+ * irrelevant to the thing being decided, and all ahead of the question — so the fix for "no
+ * context" became "context nobody will read", which is the same defect with more text.
+ *
+ * `answer` is what somebody gets and `after` is what changed. Between them they say what the
+ * behaviour does, which is the thing a reader needs in order to judge a question about any OTHER
+ * slot of it. The slot in question is skipped, and where it is a residual its own statements are
+ * added by the caller — those are the sentences being ruled on, so they are context of a different
+ * and higher kind.
+ */
+const GROUNDING: readonly SlotName[] = ["answer", "after"];
+
+/**
+ * How many of a slot's statements are shown as grounding.
+ *
+ * ⛔ TWO, AND IT IS A READING BUDGET RATHER THAN A FACT ABOUT THE CORPUS. The point of grounding is
+ * that a reader knows what the behaviour does before being asked about one corner of it; the first
+ * statement of `answer` nearly always says that, and the ninth never does. Anything dropped is
+ * counted in `more`.
+ */
+const GROUNDING_STATEMENTS = 2;
+
+/**
+ * The context one question needs, read off the corpus — ⛔ CARRIED, NEVER SUMMARISED.
+ *
+ * `already` is the part that matters most and it deliberately omits the slot being asked about:
+ * what is in question is the question, and repeating it under "this already says" is how a reader
+ * comes to believe it is settled.
+ */
+export function contextFor(
+  corpus: Corpus,
+  scopeId: string,
+  exchangeId: string | undefined,
+  skip: SlotName | undefined
+): Owed["about"] {
+  const sc = corpus.scopes.find((x) => x.scope.id === scopeId)?.scope;
+  const ex = exchangeId ? sc?.exchanges.find((e) => e.id === exchangeId) : undefined;
+  const already: Array<{ asks: string; says: string; more?: number }> = [];
+  for (const slot of GROUNDING) {
+    if (slot === skip) continue;
+    const fill = ex?.slots?.[slot];
+    if (!fill || fill.standing?.kind === "open") continue;
+    /**
+     * ⛔ STATEMENT BY STATEMENT, AND CAPPED, BECAUSE ONE SLOT CAN BE THE WHOLE SPEC.
+     *
+     * `saysText` joins every statement with a space, which is right for hashing and wrong for
+     * showing somebody context — `deal-list#deals-list#answer` is NINE statements and 2,023
+     * characters, and it arrived as one 300-word paragraph above a question about pagination. The
+     * fix for "no context" had become a wall nobody reads, again.
+     *
+     * ⛔ AND THE CAP IS REPORTED, never silent. `more` carries how many statements are not shown,
+     * so a reader can see that what they are looking at is the opening of a longer claim rather
+     * than all of it — and the full slot is rendered on the same page, a few lines down.
+     */
+    const said = statements(fill.says).map((x) => plain(x.says)).filter(Boolean);
+    const shown = said.slice(0, GROUNDING_STATEMENTS);
+    if (shown.length) {
+      for (const [i, says] of shown.entries())
+        already.push({
+          asks: i === 0 ? SLOT_ASKS_SHORT[slot] : "",
+          says,
+          ...(i === shown.length - 1 && said.length > shown.length ? { more: said.length - shown.length } : {}),
+        });
+      continue;
+    }
+    const says = fill.none
+      ? "nothing happens"
+      : fill.cannot_fail
+        ? "this cannot fail"
+        : (fill.outcomes ?? []).length
+          ? (fill.outcomes ?? []).map((o) => `refuses ${o.name} when ${plain(o.when)} — ${plain(o.told)}`).join("; ")
+          : "";
+    if (says) already.push({ asks: SLOT_ASKS_SHORT[slot], says });
+  }
+  /**
+   * ⛔ THE SCREEN IS NAMED IN THE WORDS A READER USES, never as a view id. `at.view` may carry
+   * `<scope>#<view>` where the screen belongs to another feature — see its ⛔ in the schema — so
+   * the id is resolved before it is shown and dropped if it resolves to nothing.
+   */
+  const viewRef = ex?.at?.view;
+  let metAt: string | undefined;
+  if (viewRef) {
+    const [a, b] = viewRef.includes("#") ? viewRef.split("#") : [scopeId, viewRef];
+    const owner = corpus.scopes.find((x) => x.scope.id === a)?.scope;
+    const v = owner?.views.find((x) => x.id === b);
+    if (v) metAt = plain(v.title || v.id) + (a !== scopeId ? ` (in ${plain(owner?.title || a)})` : "");
+  }
+  return {
+    feature: plain(sc?.title || scopeId),
+    purpose: sc?.happy_path ? plain(sc.happy_path.accomplishes) : undefined,
+    behaviour: ex ? plain(ex.title || ex.id) : undefined,
+    met_at: metAt,
+    already,
+  };
 }
 
 /**
@@ -327,6 +486,12 @@ function blanks(
       fills: refs,
       candidates: [],
       /**
+       * ⛔ THE CONTEXT IS THE FIRST SITE'S. A folded question is written at one slot and `fills`
+       * names the rest, so the behaviour shown is the one the answer lands on — and `skip` is the
+       * slot in question, which must not appear under "this already says".
+       */
+      about: contextFor(corpus, refs[0]!.split("#")[0]!, refs[0]!.split("#")[1], slot),
+      /**
        * ⛔ THROUGH THE DOOR, AND NAMED AS SUCH, BECAUSE THE CLI CANNOT DO THIS.
        *
        * `ask` is an intent; intents are reached through `productos_in` and the CLI reaches none of
@@ -354,6 +519,63 @@ function blanks(
   return out;
 }
 
+/**
+ * Findings a judge recorded and nobody has drafted a question from.
+ *
+ * ⛔ `via: "review"` AND NOT `by`, because the role name is free text on a note and the surface is
+ * not. A note from `chat` is somebody asking for a change; a note from `review` is nobody asking —
+ * a judge read the corpus and a session wrote down what it found. Telling those apart is the whole
+ * reason the value exists.
+ *
+ * ⛔ AND ONLY WHILE IT IS OPEN. A finding that has become a question is closed with an `outcome`
+ * naming it, which is what stops the same gap being asked about twice — the dedup this file already
+ * does for a slot an existing question speaks for, arriving from the other direction.
+ */
+function found(corpus: Corpus, scopeIds: string[]): Owed[] {
+  return corpus.notes
+    .filter((n) => n.via === "review" && n.state === "open" && !n.probe)
+    .filter((n) => scopeIds.includes(n.about.split("#")[0]!))
+    .map((n) => {
+      const [scopeId, exchangeId] = n.about.split("#");
+      return {
+        ref: n.about,
+        owes: "found" as const,
+        asks: plain(n.says),
+        /**
+         * ⛔ THE ASSUMPTION IS THE WHY, and it is the reason this is worth a person's time rather
+         * than a reviewer's observation. `buildability`: *"the assumption is the actual risk, not
+         * the question"*.
+         */
+        /**
+         * ⛔ `assume`, BECAUSE THE FIELD IS A `that`-CLAUSE. Buildability's brief asks for what
+         * somebody "would probably assume", so a real one reads *"that a removed stage in an
+         * address is treated as no filter at all"* — and the template without the verb produced
+         * **"a builder would that a removed stage…"**. The field's own name says which verb it
+         * wants.
+         */
+        why: `nobody has answered this, so a builder would assume ${plain(n.assumed ?? "something")}`,
+        shape:
+          "a question with three or four answers a person can pick between — ⛔ the assumption above is one of them, because it is what ships if nobody chooses",
+        fills: [n.about],
+        candidates: [],
+        about: contextFor(corpus, scopeId!, exchangeId, undefined),
+        /**
+         * ⛔ AN AUTHOR'S ACT, through the same door a blank goes through — and the note is closed in
+         * the same breath, naming the question it became. A finding left open beside the question it
+         * produced is the same thing in the queue twice.
+         */
+        act: `productos_in ${JSON.stringify({
+          intent: "ask",
+          ref: n.about,
+          question: "<the finding, as the person who owes it would read it>",
+          asked_of: "<who owes it>",
+          blocks: [],
+          candidates: "<3-4 answers, one of them what a builder would assume today>",
+        })} — then close the finding, naming the question it became`,
+      };
+    });
+}
+
 /** Screens with nothing drawn. ⛔ The UX half, and a drawing is not a sentence — see `shape`. */
 function undrawn(corpus: Corpus, scopeIds: string[]): Owed[] {
   const out: Owed[] = [];
@@ -378,6 +600,8 @@ function undrawn(corpus: Corpus, scopeIds: string[]): Owed[] {
           "the parts somebody meets on it and what each one is for — ⛔ not markup: the drawing is generated by `v2 propose` or `v2 draw` from the parts, never typed",
         fills: [`${id}#${v.id}`],
         candidates: [],
+        /** ⛔ No behaviour and no `already` — a screen is not an ask, so there is no slot to show. */
+        about: contextFor(corpus, id, undefined, undefined),
         /**
          * ⛔ THE GENERATOR, NAMED RATHER THAN SHELLED. Drawing is the one of the four that is
          * neither an author's sentence nor a person's press: the picture is produced from the
@@ -448,6 +672,37 @@ export function interviewFor(corpus: Corpus, scopeId: string): Interview | null 
           fills: [`${ungrounded.scope}#happy-path`],
           candidates: [],
           /**
+           * ⛔ THE PURPOSE QUESTION ARRIVED WITH NOTHING TO READ, which is the worst case of the
+           * whole defect: it asks *"is this what X is for?"* and did not show what X says it is
+           * for. `v2 next` printed the four parts of the happy path for exactly this reason and
+           * this was written without looking at it.
+           *
+           * `already` carries them as the four things they are, so somebody can disagree with one
+           * rather than with a paragraph.
+           */
+          about: {
+            feature: plain(sc?.title || ungrounded.scope),
+            purpose: hp ? plain(hp.accomplishes) : undefined,
+            already: hp
+              ? [
+                  { asks: "what it gets done", says: plain(hp.accomplishes) },
+                  { asks: "what they arrive with", says: plain(hp.brings) },
+                  { asks: "what they leave with", says: plain(hp.ends_with) },
+                  ...(hp.through.length
+                    ? [
+                        {
+                          asks: "the screens, in order",
+                          says: hp.through
+                            .map((v) => plain(sc?.views.find((x) => x.id === v)?.title || v))
+                            .join(" → "),
+                        },
+                      ]
+                    : []),
+                  ...(hp.not ? [{ asks: "deliberately not part of it", says: plain(hp.not) }] : []),
+                ]
+              : [],
+          },
+          /**
            * ⛔ TWO DIFFERENT ACTS BEHIND ONE `owes`, and the distinction is the one `contextAgreed`
            * in grid.ts already draws: a purpose nobody has agreed to is AGREED, and a feature with
            * no purpose at all has nothing to agree to. Printing `accept` in the second case names a
@@ -472,7 +727,17 @@ export function interviewFor(corpus: Corpus, scopeId: string): Interview | null 
     .map((q) => ({
       ref: q.ref,
       owes: "drafted" as const,
-      asks: plain(q.asks),
+      /**
+       * ⛔ NOT `plain()`. A case-grained question is BUILT from several lines — `questionsFor`
+       * joins "The case X — when Y — is not ruled.", "In question: …" and the question itself with
+       * newlines — and collapsing whitespace welded them into one run-on sentence on a real corpus:
+       * *"…or simply answered with a table that has no rows in it When somebody opens an address
+       * for page 40 of a 12-page list…"*.
+       *
+       * The newlines are the structure of the question. `decide` prints them line by line and this
+       * destroyed them before anything could.
+       */
+      asks: q.asks.replace(/[ \t]+/g, " ").trim(),
       why: q.candidates.length
         ? `${q.candidates.length} answer${q.candidates.length === 1 ? " is" : "s are"} on the table and nobody has picked`
         : "it is asked and nothing is drafted against it",
@@ -480,6 +745,41 @@ export function interviewFor(corpus: Corpus, scopeId: string): Interview | null 
       fills: [q.ref, ...q.blocks],
       candidates: q.candidates,
       cost: q.cost,
+      /**
+       * ⛔ A RULE-GRAINED QUESTION HAS NO BEHAVIOUR OF ITS OWN, and `q.exchange` carries a
+       * human-readable label there rather than an id — `questionsFor` builds it as *"(an org-wide
+       * rule)"*. Passing that as an exchange id finds nothing, which is correct: the context is the
+       * feature, and what the rule reaches is already in `fills`.
+       */
+      about: {
+        ...contextFor(corpus, q.scope, q.ref.includes("#") ? q.exchange : undefined, q.slot),
+        /**
+         * The agreed sentence a residual is about, so nobody rules on a fragment blind.
+         *
+         * ⛔ NOT WHERE THE QUESTION ALREADY SAYS IT. For a case-grained question `questionsFor`
+         * puts `In question: …` INSIDE `asks`, so carrying it here printed the same sentence twice,
+         * two lines apart — which reads as two different things being unruled.
+         */
+        in_question: q.about && !q.asks.includes(q.about) ? plain(q.about) : undefined,
+        ...(q.saysEach?.length
+          ? {
+              already: [
+                ...q.saysEach.map((x) => ({
+                  asks: x.inQuestion ? "this statement — the one in question" : "it also says",
+                  says: plain(x.says),
+                })),
+                ...contextFor(corpus, q.scope, q.ref.includes("#") ? q.exchange : undefined, q.slot).already,
+              ],
+            }
+          : q.revises
+            ? {
+                already: [
+                  { asks: "this slot already says", says: plain(q.revises) },
+                  ...contextFor(corpus, q.scope, q.ref.includes("#") ? q.exchange : undefined, q.slot).already,
+                ],
+              }
+            : {}),
+      },
       /**
        * ⛔ A PRESS, AND WHAT THE PRESS OWES — NOT A COMMAND, because ruling is a person's act and no
        * caller of this may perform one. `rulingAct` is still the one home for WHICH companions the
@@ -496,7 +796,7 @@ export function interviewFor(corpus: Corpus, scopeId: string): Interview | null 
    * `blocks`. See `blanks`'s `spokenFor` for what asking these twice looked like.
    */
   const spokenFor = new Set(drafted.flatMap((d) => d.fills));
-  const rest = [...blanks(corpus, ids, title, spokenFor), ...undrawn(corpus, ids)];
+  const rest = [...found(corpus, ids), ...blanks(corpus, ids, title, spokenFor), ...undrawn(corpus, ids)];
 
   /**
    * ⛔ ORDERED BY WHAT ONE ANSWER CLOSES, DESCENDING — which is the only ordering that acts on what

@@ -85,10 +85,11 @@ flowchart TD
   scope_a_feature --> scope_a_feature_decomposer["decomposer"]
   scope_a_feature --> scope_a_feature_demonstrator["demonstrator ×N"]
   scope_a_feature --> scope_a_feature_designer["designer ×N"]
+  scope_a_feature --> scope_a_feature_buildability["buildability"]
   scope_a_feature --> scope_a_feature_interviewer["interviewer"]
   scope_a_feature --> scope_a_feature_completeness["completeness"]
   scope_a_feature --> scope_a_feature_design-critique["design-critique ×N"]
-  scope_a_feature -.->|keeps| scope_a_feature_self(["the session — 5 things it may not hand off"])
+  scope_a_feature -.->|keeps| scope_a_feature_self(["the session — 6 things it may not hand off"])
   scan_a_codebase(["scan a codebase<br/><i>Turn a whole codebase into a first corpus</i>"])
   scan_a_codebase --> scan_a_codebase_surveyor["surveyor"]
   scan_a_codebase --> scan_a_codebase_scoper["scoper ×N"]
@@ -158,13 +159,15 @@ Turn one in-flight feature into product truth.
 - `decomposer` *(engineering · writes)* — which parts of the system this feature needs — ⛔ one run, against the product's settled subsystem tree, never one per feature
 - `demonstrator` *(quality · writes)* — one per unit, in parallel — what would have to be demonstrated for each claim to be believed, invalidated when the claim moves
 - `designer` *(design · writes)* — one per unit, in parallel — screens the product should have and nothing renders yet
-- `interviewer` *(product · writes)* — the three or four answers a person could pick between, for everything the authors above left undecided
+- `buildability` *(engineering · judges, writes nothing)* — what somebody starting Monday would hit, and what they would assume unasked — the half no other role can see
+- `interviewer` *(product · writes)* — the three or four answers a person could pick between — drains the findings above first, then the slots the authors left undecided
 - `completeness` *(product · judges, writes nothing)* — whether somebody can get from the start of this feature to the end of it
 - `design-critique` *(design · judges, writes nothing)* — one per unit, in parallel — whether these are the right screens for the job, not just complete ones
 
 **⛔ Keeps, because it may not be delegated:**
 - the conversation about what this feature is for — a purpose inferred from code is a purpose nobody chose
 - putting every open question to the person, in their own interface — `productos v2 decide <feature>` is the list, the options are pressable, and `--says` is always there for an answer nobody drafted
+- ⛔ writing down what the judges found, as `review` notes carrying what a builder would assume unasked — a judge may never write, so a finding nobody records is a finding that did not happen
 - every act of judgement, and never answering one on their behalf
 - ⛔ settling the subsystem tree with a person before the decomposer runs, and never spawning one per feature — a part that serves several features cannot be named by a role that can see only one of them
 - ⛔ stopping here. The engineering and QA reads are a different route and it cannot run until somebody has agreed to this — an engineer costing a draft produces a decision nobody made

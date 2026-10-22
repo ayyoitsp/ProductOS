@@ -50,6 +50,15 @@ const asYaml = (n: NoteT): string =>
      * and `probe: false` on thousands of rows is noise that says nothing.
      */
     ...(n.probe ? [`    probe: true`] : []),
+    /**
+     * ⛔ THE FOURTH LAYER, AND THE COMMENT DIRECTLY ABOVE IS ABOUT HAVING MISSED IT ONCE ALREADY.
+     *
+     * `assumed` went into the schema, the refinement, `Filing` and the assembly — and not here. The
+     * difference from `probe` is only in how it failed: `Note.assumed` is required on a `review`
+     * note, so the row written without it came back from `loadCorpus` as a parse refusal and took
+     * the whole file with it. A louder failure than a silent one, and the same omission.
+     */
+    ...(n.assumed ? [`    assumed: ${JSON.stringify(n.assumed)}`] : []),
     ...(n.outcome ? [`    outcome: ${JSON.stringify(n.outcome)}`] : []),
     /** ⛔ Every reply kept, in order. A thread with the middle removed is a thread that lies. */
     ...(n.replies?.length
@@ -88,6 +97,16 @@ export interface Filing {
    * rather than just counting what a person is shown.
    */
   probe?: boolean;
+  /**
+   * What somebody would do if nobody answered this — ⛔ CARRIED HERE FOR THE REASON `probe` IS, and
+   * the comment above is the precedent: *"I added this to the schema and the intent and forgot this
+   * type, so `probe: true` was accepted at the door and dropped on the way to disk"*.
+   *
+   * `Note.assumed` refuses a `review` note without it, so forgetting it here would not have gone to
+   * disk silently — it would have made every finding unfileable. Which is the better failure, and
+   * still not one to ship.
+   */
+  assumed?: string;
 }
 
 /**
@@ -127,6 +146,7 @@ export function fileNote(dir: string, f: Filing): Filed | NotFiled {
     state: "open" as const,
     /** ⛔ Only where the caller said so. Absent on every ordinary note rather than `false`. */
     ...(f.probe === true ? { probe: true as const } : {}),
+    ...(f.assumed?.trim() ? { assumed: f.assumed.trim() } : {}),
   };
   const parsed = Note.safeParse(candidate);
   if (!parsed.success)

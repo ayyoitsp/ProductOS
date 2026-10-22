@@ -3662,8 +3662,35 @@ export const Note = z
     says: z.string().min(1, "an empty note is a click nobody can act on"),
     by: z.string().min(1),
     at: z.string(),
-    /** ⛔ Which surface it came from, for the same reason a verdict records it. */
-    via: z.enum(["page", "question", "chat", "cli"]),
+    /**
+     * ⛔ Which surface it came from, for the same reason a verdict records it.
+     *
+     * ⛔ `review` IS NOT A SURFACE AND THAT IS THE POINT. The other four are places a PERSON was
+     * standing. `review` says no person asked for this at all: a judge found it while reading, and
+     * a session wrote it down. Peter's own worry about the queue was *"and what are those 6
+     * requests, i did not send any requests"* — five probes rendered as five people asking him for
+     * changes. A judge's finding filed as `chat` would be the same confusion with a hundred times
+     * the volume, and the one thing a reader must be able to tell is whether somebody asked.
+     */
+    via: z.enum(["page", "question", "chat", "cli", "review"]),
+    /**
+     * What somebody would do if nobody answered this — ⛔ THE RISK, AND IT IS NOT THE FINDING.
+     *
+     * `productos-buildability` has said this from the day it was written: its output is *"the
+     * questions somebody would hit in their first day, each with what they would probably assume if
+     * nobody answered — because the assumption is the actual risk, not the question."* That second
+     * half had nowhere to live, so every finding it ever produced arrived as prose and the part
+     * carrying the risk was the part most easily dropped in the retelling.
+     *
+     * ⛔ AND IT IS WHAT MAKES A FINDING ANSWERABLE. An assumption is a candidate answer that nobody
+     * chose — which is exactly the shape `Standing.candidates` wants, and the reason a stored
+     * finding can become a question somebody picks between rather than an essay somebody rewrites.
+     *
+     * ⛔ REQUIRED ON A `review` NOTE. A reviewer that names a gap without saying what would happen
+     * if it stayed open has filed a worry, not a finding — and a queue of worries is the thing
+     * `decide` calls a decoration.
+     */
+    assumed: z.string().min(10).optional(),
     /**
      * ⛔ CLOSING A NOTE SAYS WHAT WAS DONE, or the queue becomes a list nobody trusts.
      *
@@ -3748,6 +3775,32 @@ export const Note = z
   })
   .strict()
   .superRefine((n, ctx) => {
+    /**
+     * ⛔ A REVIEW FINDING OWES ITS ASSUMPTION, and a note that owes nothing is a worry.
+     *
+     * The one thing that makes a judge's finding worth a person's attention is what happens if it
+     * stays open — `buildability`'s own brief: *"the assumption is the actual risk, not the
+     * question"*. Without it a reader has a gap named at them and no way to weigh it, and the
+     * interviewer has nothing to draft an option from.
+     *
+     * ⛔ REFUSED RATHER THAN NOTED, because the alternative is a queue that fills with reviewer
+     * observations nobody can act on — which is how 1,560 real questions came to be invisible
+     * behind noise once already.
+     */
+    if (n.via === "review" && !n.assumed)
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["assumed"],
+        message:
+          "a review finding has to say what somebody would assume if nobody answered it — that is the risk, and without it this is a worry rather than a finding",
+      });
+    /** ⛔ And the converse: nobody but a reviewer is in a position to say what a builder would assume. */
+    if (n.assumed && n.via !== "review")
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["assumed"],
+        message: `"assumed" is what a reviewer found somebody would do unasked — on a note from ${n.via} it would be putting words in the mouth of whoever filed it`,
+      });
     if (n.state === "done" && !n.outcome)
       ctx.addIssue({
         code: z.ZodIssueCode.custom,

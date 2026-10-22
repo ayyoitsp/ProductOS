@@ -72,6 +72,17 @@ It has already done two things you must not redo:
   everything in its `blocks` — is gone from the list. A question you raise on one of those is the
   same question twice.
 
+⛔ **Work the `found` items first.** Those are findings a judge recorded — `buildability` reading the
+feature from a builder's seat and naming what it could not start without. They come with `why`
+already saying what somebody would assume unasked, **and that assumption is one of your options**,
+because it is what ships if nobody chooses. They are first because they are the half nothing else can
+see: a blank slot and a raised standing are the only holes the shape exposes, and a behaviour nobody
+wrote, a path that stops, or a permission assumption that is load-bearing and unwritten are none of
+those.
+
+⛔ **And close each finding as you draft it**, naming the question it became — a finding left open
+beside its own question is one gap in the queue twice.
+
 Each item says `asks` (the question as a person reads it), `fills` (every slot one answer settles),
 `shape` (what an answer there has to **be** — read this one carefully, see below), and `act` (what
 moves it along, which is an `ask` call where it is yours and a person's press where it is not).

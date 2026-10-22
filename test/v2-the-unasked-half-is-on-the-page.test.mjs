@@ -212,3 +212,48 @@ test("⛔ nothing in it is pressable, and it does not look like the queue", { sk
     await p.close();
   }
 });
+
+test("⛔ a question on the page carries its context, and it reads as context", { skip }, async () => {
+  /**
+   * ⛔ ON COMPUTED STYLE, because the risk is not whether the words are there. It is whether a
+   * reader can tell the grounding apart from the thing being decided — context that looks like an
+   * option is worse than no context, since it reads as an answer somebody already gave.
+   */
+  const p = await openPage(render(withOneDrafted(page())), { exe });
+  try {
+    const n = await p.evaluate("document.querySelectorAll('.q .q-ctx').length");
+    assert.ok(n >= 1, "no question on the page carries any context");
+
+    const text = await p.evaluate(
+      "document.querySelector('.q .q-ctx')?.textContent.replace(/\\s+/g,' ').trim()"
+    );
+    assert.match(text, /what this feature is for/, `the context does not say what the feature is for: ${text}`);
+    assert.match(text, /kid's list/, "it does not carry the feature's own words");
+
+    /** ⛔ Dimmer than the question above it, and not wearing an option's treatment. */
+    const style = await p.evaluate(`(() => {
+      const c = getComputedStyle(document.querySelector('.q .q-ctx'));
+      const h = getComputedStyle(document.querySelector('.q h3'));
+      const o = document.querySelector('.q .opt');
+      const os = o ? getComputedStyle(o) : null;
+      return { ctx: c.color, ctxSize: parseFloat(c.fontSize), ask: h.color, askSize: parseFloat(h.fontSize),
+               ctxBorder: parseFloat(c.borderTopWidth), optBorder: os ? parseFloat(os.borderTopWidth) : null };
+    })()`);
+    assert.notEqual(style.ctx, style.ask, "the context renders in the same ink as the question, so neither leads");
+    assert.ok(style.ctxSize < style.askSize, "the context is not smaller than the question it grounds");
+    /**
+     * ⛔ THE BORDER IS THE DISCRIMINATOR, NOT THE BACKGROUND — the first version of this compared
+     * backgrounds and both are transparent, so it failed on correct output. An option is a BOX: a
+     * border, a radius, padding and a number down the left. Context that grew one would read as a
+     * fourth thing to choose.
+     */
+    assert.ok(style.optBorder > 0, "an option stopped being boxed, so this is comparing against nothing");
+    assert.equal(style.ctxBorder, 0, "the context is boxed like an option, so it reads as something to choose");
+
+    /** ⛔ And nothing in it is pressable — it is something to read, not something to choose. */
+    const pressable = await p.evaluate("document.querySelectorAll('.q .q-ctx button, .q .q-ctx [data-act]').length");
+    assert.equal(pressable, 0, "the context offers something to press");
+  } finally {
+    await p.close();
+  }
+});
