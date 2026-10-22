@@ -60,10 +60,29 @@ export type Via = "page" | "question" | "chat" | "cli" | "agent";
 export const VIA: readonly Via[] = ["page", "question", "chat", "cli", "agent"] as const;
 
 /**
+ * Every way a PERSON did something, named — ⛔ POSITIVELY, BECAUSE THE NEGATIVE BROKE THE MOMENT
+ * THERE WAS A SECOND NON-HUMAN VALUE.
+ *
+ * This was `via !== "agent"`, which is correct for the five values consent has and silently wrong
+ * for anything added beside them. `Note.via` now carries `review` — a judge found it and a session
+ * wrote it down, so nobody asked for it at all — and under the negative reading `review` counted as
+ * HUMAN. `mayRecord` would then have refused a token filing a finding, on the grounds that it was
+ * claiming a person did something.
+ *
+ * ⛔ SO THE SET IS THE LIST, and a value added to either vocabulary without being added here is a
+ * type error rather than a guess. A reviewer's finding and software's default are the two things
+ * nobody pressed; everything else is somebody at a page, a question, a chat or a terminal.
+ */
+const BY_A_PERSON = ["page", "question", "chat", "cli"] as const;
+
+/**
  * ⛔ WHAT A PERSON DID, as opposed to what something decided on their behalf. Every gate asks this
  * rather than asking whether a record exists.
+ *
+ * ⛔ TAKES EITHER VOCABULARY. Consent and a filed request ask the same question of a principal —
+ * did a person do this — over two value sets that overlap but are not equal. See `NOTE_VIA`.
  */
-export const isHuman = (via: Via): boolean => via !== "agent";
+export const isHuman = (via: Via | "review"): boolean => (BY_A_PERSON as readonly string[]).includes(via);
 
 export type Act = "accept" | "rule" | "read" | "waive" | "defer" | "withdraw";
 

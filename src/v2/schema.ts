@@ -3654,6 +3654,26 @@ export const NOT_A_DOCUMENT: Record<string, string> = {
  * almost nothing an hour later. The ref they were looking at is captured with the words, because
  * reconstructing it is the part nobody can do afterwards.
  */
+/**
+ * How a REQUEST arrived — ⛔ A DIFFERENT QUESTION FROM HOW CONSENT WAS OBTAINED, which is why this
+ * is not `VIA`.
+ *
+ * `Verdict.via` asks *how was this person's agreement obtained*, and every value has to be a way a
+ * human could have agreed. A note is not consent: it asks *how did this request reach us*, and two
+ * of its answers have no meaning on a verdict at all —
+ *
+ *   `agent`   software asked for this change on its own behalf. A probe, or a session relaying.
+ *   `review`  ⛔ NOBODY ASKED. A judge found it while reading and a session wrote it down. It owes
+ *             `assumed`, and it is the one value the interviewer drafts questions from.
+ *
+ * ⛔ AND IT WAS THREE HAND-WRITTEN LISTS BEFORE THIS. `VIA` in acts.ts, one inline enum on the
+ * reading, one on the note — and adding `review` to only the note's left the door validating
+ * against `VIA`, so the value the schema accepted was refused one layer out: *"review is not a way
+ * a request could have arrived"*, listing the five that are not it. Found by driving the door.
+ */
+export const NOTE_VIA = ["page", "question", "chat", "cli", "agent", "review"] as const;
+export type NoteVia = (typeof NOTE_VIA)[number];
+
 export const Note = z
   .object({
     id: z.string().min(1),
@@ -3672,7 +3692,7 @@ export const Note = z
      * changes. A judge's finding filed as `chat` would be the same confusion with a hundred times
      * the volume, and the one thing a reader must be able to tell is whether somebody asked.
      */
-    via: z.enum(["page", "question", "chat", "cli", "review"]),
+    via: z.enum(NOTE_VIA),
     /**
      * What somebody would do if nobody answered this — ⛔ THE RISK, AND IT IS NOT THE FINDING.
      *

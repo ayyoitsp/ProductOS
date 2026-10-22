@@ -2007,11 +2007,12 @@ export function v2Command(): Command {
     .action(async (scopeId: string | undefined, o: { take?: string; json?: boolean; at?: string; token?: string }) => {
       const dir = await openAt(o);
       /**
-       * ⛔ NO `checkCorpus` HERE ANY MORE. `interviewFor` reads blanks off the grid, which a loaded
-       * corpus already answers — so this surface, the page and an MCP caller all reach the same
-       * derivation without one of them needing a directory on disk.
+       * ⛔ WITH THE FINDINGS, BECAUSE THIS SURFACE'S READER IS AN AGENT. Blanks come off the grid,
+       * which a loaded corpus answers — but `unanchored` is `check`'s own refusals, and they are an
+       * author's work before they are anybody's question. The page deliberately does not pass them;
+       * see `interviewFor`.
        */
-      const corpus = loadCorpus(dir);
+      const { corpus, findings } = checkCorpus(dir);
       refuseIfBroken(corpus, "an interview");
       const take = Math.max(1, Number(o.take ?? 4));
 
@@ -2024,7 +2025,7 @@ export function v2Command(): Command {
         : corpus.scopes.filter((x) => x.scope.exchanges.length || x.scope.views.length).map((x) => x.scope.id);
 
       const rounds = ids
-        .map((id) => interviewFor(corpus, id))
+        .map((id) => interviewFor(corpus, id, findings))
         .filter((x): x is NonNullable<typeof x> => Boolean(x && x.owed.length));
 
       if (o.json) {

@@ -43,6 +43,7 @@
  * and lands them `open`. The human picks. That division is the project's oldest.
  */
 import type { Corpus } from "./load.js";
+import type { Finding } from "./check.js";
 import { actsFor, gridFor } from "./grid.js";
 import { descendants, questionsFor, rulingAct, type Question } from "./settle.js";
 import { POLICY_SLOTS, SLOT_ASKED, SLOT_ASKS_SHORT, SLOTS, statements, type SlotName } from "./schema.js";
@@ -82,7 +83,32 @@ export type Owes =
    * carrying what a builder would assume if nobody answered. This is that note, waiting for an
    * author to turn it into options.
    */
-  | "found";
+  | "found"
+  /**
+   * A hole `check` found mechanically and nothing put in front of anybody — ⛔ THE LARGEST UNREAD
+   * SIGNAL IN A REAL CORPUS.
+   *
+   * Peter, shown a control that does something and has no behaviour: *"this is exactly something
+   * the interviewer should be asking, right?"*
+   *
+   * He is right that it should be asked, and it reached no surface at all. `check` refuses
+   * `deal-pricing#deal-pricing-grid#back-to-current` — *"Go to current commits — pressing it
+   * changes something — and nothing says what happens. No behaviour is anchored at it at all"* —
+   * and it is not a blank slot, not a standing, not an undrawn screen, so the interview reported it
+   * in no form. It was the ONLY refusal in that feature.
+   *
+   * ⛔ AND IT IS NOT A QUESTION YET, WHICH IS THE HONEST PART. Every one of these fixes is addressed
+   * to an AUTHOR — *"say where it ends in the `after` slot"*, *"state it in the `answer` of an
+   * exchange at this control"*. A control with no behaviour needs the behaviour written before the
+   * question about it has anywhere to live (fg-0001, one grain up). So these arrive as work that
+   * has to happen BEFORE a person can be asked, named as such, rather than dressed up as something
+   * pressable.
+   *
+   * ⛔ AND ONLY THE KINDS THAT ARE NOBODY'S DECISION YET — see `UNANCHORED`. The 422
+   * `nothing-demonstrates-this` are a demonstrator's queue, not this one, and putting them here
+   * would bury the handful that stop a feature being askable at all.
+   */
+  | "unanchored";
 
 export interface Owed {
   /**
@@ -254,6 +280,32 @@ const GROUNDING: readonly SlotName[] = ["answer", "after"];
  * counted in `more`.
  */
 const GROUNDING_STATEMENTS = 2;
+
+/**
+ * The `check` kinds that stop a feature being ASKABLE — ⛔ A SHORT LIST, DELIBERATELY.
+ *
+ * A real corpus produces twenty-two kinds of finding and 1,400 of them. Most are an author's or a
+ * demonstrator's queue: 422 `nothing-demonstrates-this` want a criterion, 130
+ * `who-may-is-only-prose` want prose restructured, 73 `a-requirement-older-than-its-claim` want
+ * re-deriving. None of those stops anybody deciding anything, and routing them here would bury the
+ * few that do under the many that do not — which is the failure this whole derivation exists to
+ * avoid, arriving through generosity instead of blindness.
+ *
+ * These are the ones where **the product does something and nothing anywhere says what**:
+ *
+ *   `pressing-this-promises-nothing`  a control commits and no behaviour is anchored at it at all
+ *   `pressing-this-moves-nothing`     a control commits and nothing says where it leaves anybody
+ *   `states-no-behaviour`             a screen a person meets, and the feature states nothing it does
+ *
+ * ⛔ AND NOT THE ONES ALREADY IN THE QUEUE. `slot-open`, `outcome-open`, `an-org-wide-question`,
+ * `slots-waiting-on-this-question` and `slot-blank` are every other kind this file already reports,
+ * by their own routes — listing them here would put each in the worklist twice.
+ */
+const UNANCHORED: readonly string[] = [
+  "pressing-this-promises-nothing",
+  "pressing-this-moves-nothing",
+  "states-no-behaviour",
+];
 
 /**
  * The context one question needs, read off the corpus — ⛔ CARRIED, NEVER SUMMARISED.
@@ -505,13 +557,28 @@ function blanks(
        * That is the division this whole file is built on, so the act it prints has to be the
        * author's.
        */
+      /**
+       * ⛔ `fields`, NOT FLAT — AND THIS IS THE FOURTH TIME THIS SURFACE HAS PRINTED AN ACT THE
+       * TOOL REFUSES, at the line already carrying a ⛔ about having fixed it once.
+       *
+       * The door's schema is `{dir?, intent, fields}` with `additionalProperties: false`, so flat
+       * fields are dropped before the handler sees them — and the refusal then reads **"ask needs
+       * `ref`, `question`, `asked_of`, `blocks`"**, naming the four fields the caller DID supply.
+       * So it points at the wrong cause and the natural next move is to retype them rather than
+       * wrap them.
+       *
+       * Found by running the interviewer against a live instance for the first time: *"The
+       * worklist instructs a caller to make a call the door refuses."*
+       */
       act: `productos_in ${JSON.stringify({
         intent: "ask",
-        ref: refs[0],
-        question: "<the question, in the words the person reads>",
-        asked_of: "<who owes it>",
-        blocks: refs.slice(1),
-        candidates: "<3-4 drafted answers, each with its consequence>",
+        fields: {
+          ref: refs[0],
+          question: "<the question, in the words the person reads>",
+          asked_of: "<who owes it>",
+          blocks: refs.slice(1),
+          candidates: "<3-4 drafted answers, each with its consequence>",
+        },
       })}`,
     });
     }
@@ -564,14 +631,60 @@ function found(corpus: Corpus, scopeIds: string[]): Owed[] {
          * the same breath, naming the question it became. A finding left open beside the question it
          * produced is the same thing in the queue twice.
          */
+        /**
+         * ⛔ AND THE NOTE'S OWN ID, because "close the finding" was unfollowable without it. `close`
+         * takes the note's id; `Owed.ref` is the note's `about`, which is a slot ref. The
+         * interviewer reported it exactly: *"Following the instruction requires an id the worklist
+         * does not hand you."*
+         */
         act: `productos_in ${JSON.stringify({
           intent: "ask",
-          ref: n.about,
-          question: "<the finding, as the person who owes it would read it>",
-          asked_of: "<who owes it>",
-          blocks: [],
-          candidates: "<3-4 answers, one of them what a builder would assume today>",
-        })} — then close the finding, naming the question it became`,
+          fields: {
+            ref: n.about,
+            question: "<the finding, as the person who owes it would read it>",
+            asked_of: "<who owes it>",
+            blocks: [],
+            candidates: "<3-4 answers, one of them what a builder would assume today>",
+          },
+        })} — then productos_in ${JSON.stringify({
+          intent: "close",
+          fields: { note: n.id, outcome: "<the question it became>" },
+        })}`,
+      };
+    });
+}
+
+/**
+ * Holes `check` found that nothing put in front of anybody — see `UNANCHORED` for which kinds.
+ *
+ * ⛔ REPORTED AS WORK, NOT AS A QUESTION, because every one of these fixes is addressed to an
+ * author. `check`'s own text says it: *"state it in the `answer` of an exchange at this control"*,
+ * *"say where it ends in the `after` slot"*. The behaviour has to exist before a question about it
+ * has anywhere to live — which is fg-0001 one grain up, an absence with no address.
+ */
+function unanchored(findings: Finding[], scopeIds: string[]): Owed[] {
+  return findings
+    .filter((f) => UNANCHORED.includes(f.kind))
+    .filter((f) => scopeIds.includes(f.where.split("#")[0]!))
+    .map((f) => {
+      const [scopeId, exchangeId] = f.where.split("#");
+      return {
+        ref: f.where,
+        owes: "unanchored" as const,
+        asks: plain(f.what),
+        why: "the product does this and nothing anywhere says what it does — so there is nothing yet for anybody to answer",
+        /** ⛔ `check`'s own fix, verbatim. A second wording of it here would be a second instruction. */
+        shape: plain(f.fix),
+        fills: [f.where],
+        candidates: [],
+        /** ⛔ Filled by the caller, which holds the corpus — see where this is mapped. */
+        about: { feature: scopeId!, already: [] },
+        /**
+         * ⛔ AN AUTHOR'S WRITE, AND A WHOLE DOCUMENT — which is the scoper's act, not the
+         * interviewer's. Naming the role is the honest act here: an interviewer that wrote an
+         * exchange would be authoring the behaviour it was supposed to ask about.
+         */
+        act: "an author states the behaviour at this control first — `scoper` writes it, through the `document` intent — and only then is there something to ask about",
       };
     });
 }
@@ -618,13 +731,20 @@ function undrawn(corpus: Corpus, scopeIds: string[]): Owed[] {
 /**
  * What to ask next about one feature, and how few times to ask it.
  *
- * ⛔ A CORPUS AND A SCOPE, AND NOTHING ELSE — so every surface can reach it. Peter: *"this should be
+ * ⛔ A CORPUS AND A SCOPE — so every surface can reach it.
+ *
+ * ⛔ `findings` IS OPTIONAL AND THE SURFACES DIFFER ON PURPOSE. What it adds is `unanchored` — holes
+ * `check` found that are an AUTHOR's work before they are anybody's question. The CLI and the MCP
+ * tool pass them, because their reader is an agent about to do that work. The page does not, and
+ * that is not an oversight: the page is where a person presses, and nothing in this list is
+ * pressable. Showing it there would add rows a reviewer cannot act on to the one surface whose
+ * whole job is rows they can. Peter: *"this should be
  * a first class representation in the UX - and claude should ideally be able to access this via
  * mcp"*, and *"no one will ever use the command line"*. A derivation that needs `checkCorpus`'s
  * findings needs a directory on disk, which the page does not have and a hosted caller does not
  * either. See `blanks` for why the grid is the honest source rather than the convenient one.
  */
-export function interviewFor(corpus: Corpus, scopeId: string): Interview | null {
+export function interviewFor(corpus: Corpus, scopeId: string, findings: Finding[] = []): Interview | null {
   const entry = corpus.scopes.find((x) => x.scope.id === scopeId);
   if (!entry) return null;
   const title = plain(entry.scope.title || scopeId);
@@ -796,7 +916,12 @@ export function interviewFor(corpus: Corpus, scopeId: string): Interview | null 
    * `blocks`. See `blanks`'s `spokenFor` for what asking these twice looked like.
    */
   const spokenFor = new Set(drafted.flatMap((d) => d.fills));
-  const rest = [...found(corpus, ids), ...blanks(corpus, ids, title, spokenFor), ...undrawn(corpus, ids)];
+  const rest = [
+    ...found(corpus, ids),
+    ...blanks(corpus, ids, title, spokenFor),
+    ...undrawn(corpus, ids),
+    ...unanchored(findings, ids).map((o) => ({ ...o, about: contextFor(corpus, o.ref.split("#")[0]!, o.ref.split("#")[1], undefined) })),
+  ];
 
   /**
    * ⛔ ORDERED BY WHAT ONE ANSWER CLOSES, DESCENDING — which is the only ordering that acts on what

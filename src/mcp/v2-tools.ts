@@ -205,9 +205,10 @@ const interviewTool = tool(
   AtDir.extend({ scope: z.string().describe("scope id — its own holes and those of everything filed beneath it") }),
   (a, paths) => {
     const dir = dirOf(a, paths);
-    const corpus = loadCorpus(dir);
+    /** ⛔ With the findings — an agent calling this is the one that does the authoring work they name. */
+    const { corpus, findings } = checkCorpus(dir);
     if (!corpus.scopes.some((x) => x.scope.id === a.scope)) throw new Error(`no scope "${a.scope}"`);
-    return { dir, ...interviewFor(corpus, a.scope) };
+    return { dir, ...interviewFor(corpus, a.scope, findings) };
   }
 );
 

@@ -164,12 +164,76 @@ export function raiseQuestion(
   if ("error" in f) return { ok: false, why: f.error };
   const fill = (f.slots[r.slot] ??= {});
   const was = fill.standing as Record<string, unknown> | undefined;
-  if (was && was.kind && was.kind !== "stated")
+  /**
+   * ⛔ "ONE QUESTION PER SLOT" WAS NEVER A PRODUCT RULE — it was `SlotFill.standing` being one
+   * object, and the refusal it produced said so as though it were a decision.
+   *
+   * Peter, on the two things it cost: *"per my original prompt - questions should seek to answer
+   * MULTIPLE questions in an EFFICIENT manner. no idea why this limitation would exist"* and
+   * *"again, one question per slot is not a requirement"*.
+   *
+   * Two separate failures came out of that one refusal, and they need different answers:
+   *
+   *  1. **A missing option could never be added.** A question drafted with two candidates was frozen
+   *     at whatever its first drafter wrote. `ask` was the only route, it refused an open slot, and
+   *     the refusal's own advice — *"reword the one that is there"* — is not an act anything
+   *     implements. So a judge's finding became a question, and if one of its options was wrong
+   *     nobody could fix it.
+   *  2. **A second question about a DIFFERENT statement had nowhere to go.** An eleven-statement
+   *     slot can hold eleven genuinely separate questions and could hold one, serialised for no
+   *     product reason.
+   *
+   * ⛔ THIS FIXES (1) HERE AND REPORTS (2) HONESTLY. Adding to the question that is there is a
+   * merge, which needs no new grain. Two questions at once needs a standing per STATEMENT — the
+   * fourth grain, which `refineStanding` was built to make cheap — and that is a model change, not
+   * a merge. Pretending otherwise by overwriting the first question would lose it silently, which
+   * is worse than the limit.
+   */
+  if (was && was.kind && was.kind !== "stated") {
+    const sameThing = !r.statement || was.of === r.statement;
+    /**
+     * ⛔ A DIFFERENT STATEMENT IS A DIFFERENT QUESTION, and merging into the one that is there
+     * would answer the wrong thing. Named as the gap it is rather than refused as a rule.
+     */
+    if (!sameThing)
+      return {
+        ok: false,
+        why: `${o.ref} already carries a question about "${String(was.of)}", and this one is about "${r.statement}"`,
+        detail: [
+          "a slot holds one standing, so two questions about two statements cannot both sit here yet",
+          "⛔ this is a limit of the model and not a rule about questions — recorded as a framework gap",
+          "meanwhile: settle the one that is there, or ask this at the slot as a whole",
+        ],
+      };
+    /**
+     * ⛔ THE SAME QUESTION, WITH MORE ON THE TABLE. Candidates are appended, not replaced — a
+     * drafter adding a third reading must not be able to delete the two a person has been weighing.
+     * Everything else about the standing is left exactly as it was asked, including who owes it.
+     */
+    const have = Array.isArray(was.candidates) ? (was.candidates as unknown[]) : [];
+    const adding = o.candidates ?? [];
+    if (!adding.length)
+      return {
+        ok: false,
+        why: `${o.ref} is already ${was.kind}${was.question ? `: "${String(was.question).trim()}"` : ""}`,
+        detail: [
+          "it is already asked, so the only thing to add here is another answer — send `candidates`",
+          "⛔ the question itself is not reworded from here: a question somebody has been weighing is not rewritten under them",
+        ],
+      };
+    was.candidates = [...have, ...adding];
+    if (o.cost && !was.cost) was.cost = o.cost.trim();
+    const savedMerge = save(f);
+    if (!savedMerge.ok) return savedMerge;
     return {
-      ok: false,
-      why: `${o.ref} is already ${was.kind}${was.question ? `: "${String(was.question).trim()}"` : ""}`,
-      detail: ["one question per slot — answer or reword the one that is there"],
+      ok: true,
+      file: f.file,
+      ref: o.ref,
+      said: `added ${adding.length} answer${adding.length === 1 ? "" : "s"} to the question at ${o.ref} — ${
+        (was.candidates as unknown[]).length
+      } now on the table`,
     };
+  }
   fill.standing = {
     kind: "open",
     question: o.question.trim(),

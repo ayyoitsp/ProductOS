@@ -11,7 +11,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import { Note, type Note as NoteT } from "./schema.js";
+import { Note, type Note as NoteT, type NoteVia } from "./schema.js";
 import type { Via } from "./acts.js";
 import { loadCorpus } from "./load.js";
 import { append } from "./log.js";
@@ -83,7 +83,9 @@ export interface Filing {
   about: string;
   says: string;
   by: string;
-  via: Via;
+  /** ⛔ `NoteVia`, not `Via` — see `NOTE_VIA`. A request is not consent, and two of a note's
+   *  answers (`agent`, `review`) are not ways anybody could have agreed to anything. */
+  via: NoteVia;
   /** The day it was asked for. Supplied by the caller because a carried-in row already has one. */
   at: string;
   /** The id from the row it was carried in under, so carrying the same row twice files one note. */

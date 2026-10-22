@@ -318,10 +318,19 @@ test("⛔ no act is a shell command, and an author's act is one it can actually 
     if (o.owes === "blank") {
       /** ⛔ Through the door, because drafting is an intent and an author's act. */
       assert.match(o.act, /^productos_in \{/, `a blank at ${o.ref} does not route through the one way in`);
-      const body = JSON.parse(o.act.slice("productos_in ".length));
+      /**
+       * ⛔ THROUGH `fields`, which is the shape the door takes. This read them flat — and so did the
+       * act, which is why the door refused it: `productos_in`'s schema is `{dir?, intent, fields}`
+       * with `additionalProperties: false`, so flat fields are dropped before the handler sees them.
+       */
+      const body = JSON.parse(o.act.slice("productos_in ".length).split(" — ")[0]);
       assert.equal(body.intent, "ask");
-      assert.ok(Array.isArray(body.blocks), "`blocks` is not a list — `ask` requires it and never assumes it");
-      assert.ok("question" in body && "asked_of" in body && "candidates" in body, "the act omits a field `ask` requires");
+      assert.ok(body.fields, "the act puts its fields beside `intent`, where the door drops them");
+      assert.ok(Array.isArray(body.fields.blocks), "`blocks` is not a list — `ask` requires it and never assumes it");
+      assert.ok(
+        "question" in body.fields && "asked_of" in body.fields && "candidates" in body.fields,
+        "the act omits a field `ask` requires"
+      );
     }
     /** ⛔ A ruling is a person's, and the act has to say so rather than hand anybody a verb. */
     if (o.owes === "drafted") assert.match(o.act, /a person answers this/, `a ruling at ${o.ref} reads as somebody else's act`);
@@ -664,7 +673,13 @@ test("⛔ a judge's finding reaches the queue, carrying what a builder would ass
   assert.match(f.why, /would assume that the list reloads from the top/, `the assumption did not survive: ${f.why}`);
   assert.match(f.shape, /the assumption above is one of them/, "nothing tells a drafter the assumption is a candidate");
   assert.match(f.act, /"intent":"ask"/, "the act does not route to the one thing that drafts a question");
-  assert.match(f.act, /close the finding/, "nothing says to close it, so the finding and its question both sit in the queue");
+  /**
+   * ⛔ ASSERTED ON THE CALL, NOT ON THE PROSE. This matched the phrase "close the finding", which
+   * the act carried while the instruction was unfollowable — `close` takes the note's id and the
+   * worklist handed over none. The act now carries the call itself, with the id in it.
+   */
+  assert.match(f.act, /"intent":"close"/, "nothing in the act closes the finding, so it and its question both sit in the queue");
+  assert.match(f.act, /"note":"n-/, "the close call carries no note id, so following it is impossible");
   /** And it is grounded like every other question. */
   assert.equal(f.about.feature, "Chores");
   assert.match(f.about.behaviour, /A parent offers a job/);

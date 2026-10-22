@@ -37,7 +37,7 @@ import { CORPUS_DIRS, loadCorpus } from "./load.js";
 import { append } from "./log.js";
 import { writePrototypes, writeWithin, diskPages, writeHoldsFor } from "./draw-write.js";
 import { walkOf } from "./walk.js";
-import { axesOf, answersOf, HANDS, type Hand } from "./schema.js";
+import { axesOf, answersOf, HANDS, NOTE_VIA, type Hand, type NoteVia } from "./schema.js";
 import { dimensionsOf, sayCombination, variesBy } from "./dimensions.js";
 import { doorOpensOn, theOnlyScreenIn, screensIn } from "./selection.js";
 
@@ -281,17 +281,63 @@ export const INTENTS: Intent[] = [
           "write through the whole path, which is the point of it",
         required: false,
       },
+      /**
+       * ⛔ `via` AND `assumed` WERE MISSING, AND THAT MADE A WHOLE FEATURE UNREACHABLE.
+       *
+       * This hardcoded `via: "page"` and exposed neither field, so **no caller of the door could
+       * file a `review` finding** — the judge → note → interviewer path had exactly one working
+       * route, `fileNote` called in-process, which a session against a hosted project does not
+       * have. Found by running the interviewer against a live instance: *"no MCP caller can create
+       * one, and an interviewer that notices a hole the worklist cannot see has nowhere to record
+       * it."*
+       *
+       * ⛔ AND THE HARDCODE WAS A FORGERY IN ITSELF. Every note through the door claimed a person
+       * pressed it on a page. That is the *"and what are those 6 requests, i did not send any
+       * requests"* confusion with the door's volume behind it — so `via` now goes through
+       * `mayRecord`, the same gate that stops a token claiming somebody agreed.
+       */
+      {
+        name: "via",
+        says: `How it arrived: ${NOTE_VIA.join(" | ")}. Defaults to \`agent\` for a session and \`page\` for a press. ⛔ \`review\` is a judge's finding a session wrote down, and it owes \`assumed\``,
+        required: false,
+      },
+      {
+        name: "assumed",
+        says:
+          "⛔ Required on `review`, forbidden elsewhere. What somebody would do if nobody answered " +
+          "this, as a `that…` clause — the risk, which is what makes a finding worth a person's " +
+          "time rather than a worry. It becomes one of the options when this is drafted into a question",
+        required: false,
+      },
     ],
-    run: (a, body) =>
-      fileNote(a.dir, {
+    run: (a, body) => {
+      /**
+       * ⛔ THE DEFAULT IS WHAT THE CALLER IS, never what reads best. A browser press is a person on
+       * a page; anything else is software, and `agent` is the honest word for it.
+       */
+      /** ⛔ `NOTE_VIA`, not `VIA` — a request is not consent, and two of its answers are not ways
+       *  anybody could have agreed. See `NOTE_VIA` for what the door refused when this read `VIA`. */
+      const via = (str(body.via) || (a.who.kind === "browser" ? "page" : "agent")) as NoteVia;
+      if (!NOTE_VIA.includes(via))
+        return { ok: false, why: `"${via}" is not a way a request could have arrived`, detail: [NOTE_VIA.join(" · ")] };
+      /**
+       * ⛔ THROUGH `mayRecord`, so a session cannot file a request as though somebody pressed it.
+       * A note is not consent and this is not the consent gate — it is the same question one notch
+       * down: did a person do this, or did software.
+       */
+      const forged = mayRecord(a.who, via);
+      if (forged) return forged;
+      return fileNote(a.dir, {
         about: str(body.about),
         says: str(body.says),
         by: str(body.by) || a.pressing,
-        via: "page",
+        via,
         at: new Date().toISOString().slice(0, 10),
         /** ⛔ Only ever true where somebody said so. An inferred probe is a request discarded. */
         ...(body.probe === true ? { probe: true as const } : {}),
-      }),
+        ...(str(body.assumed) ? { assumed: str(body.assumed) } : {}),
+      });
+    },
   },
   /**
    * ⛔ AN INTENT, NOT AN ENDPOINT — and I said we needed an endpoint before the door existed.

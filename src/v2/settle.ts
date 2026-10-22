@@ -421,8 +421,33 @@ function questionsIn(corpus: Corpus, scopeId: string): Question[] {
         saysEach: s.about
           ? statements(fill.says).map((x) => ({ says: x.says, inQuestion: Boolean(s.of) && x.id === s.of }))
           : undefined,
+        /**
+         * ⛔ `of` WINS OVER WHAT A CANDIDATE CLAIMS, AND IT DID NOT — SO THE PAGE TOLD A READER THE
+         * OPPOSITE OF WHAT THE BUTTON DOES.
+         *
+         * This read only the candidates' own `replaces`. But `settle` scopes the replacement by
+         * `standing.of` when it is set: it rewrites that statement's `says` and leaves its siblings
+         * byte-identical (fg-0008, forty lines down). So a standing with `of` AND candidates
+         * declaring `the whole sentence` set this true, and the page then printed *"Each option is
+         * the whole sentence, so picking one replaces it cleanly"* above two statements, one of them
+         * marked `this one is unruled`.
+         *
+         * Read live off `deal-pricing#deal-pricing-grid#at_once` on a running instance. The
+         * honest branch — *"Each option replaces the marked statement only. The others stand exactly
+         * as they are."* — sits one `else if` below and was unreachable, because `candidatesAreWhole`
+         * is tested first.
+         *
+         * ⛔ IT OVER-WARNS RATHER THAN DESTROYING ANYTHING, which is why nothing caught it: the
+         * press is safe and the sentence describing it is wrong. A reviewer who cares about the
+         * other statements declines to press — which is the failure the ⛔ above `saysEach` records
+         * fixing, arriving through the flag instead of through the markup.
+         *
+         * Found by running the `interviewer` against a live instance for the first time.
+         */
         candidatesAreWhole:
-          (s.candidates ?? []).length > 0 && (s.candidates ?? []).every((c) => c.replaces === "the whole sentence"),
+          !s.of &&
+          (s.candidates ?? []).length > 0 &&
+          (s.candidates ?? []).every((c) => c.replaces === "the whole sentence"),
         about: s.about,
         /**
          * ⛔ The corpus held the evidence for the question and withheld it at the moment of
