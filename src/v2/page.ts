@@ -1837,12 +1837,22 @@ function partFacts(corpus: Corpus, ids: string[]): string {
           goes: pt.leads_to ?? null,
           at: own,
           ofScreen: pt.role === "commits" && !own.length ? statedAt(scope, v.id, undefined) : [],
-          slots: SLOT_ASKS_SHORT,
         };
       }
     }
   }
-  return `<script type="application/json" id="part-facts">${JSON.stringify(facts).replace(/</g, "\\u003c")}</script>`;
+  /**
+   * ⛔ THE SLOT NAMES ARE THE PAGE'S, NOT EACH PART'S — AND THIS WAS A THIRD OF THE BLOB.
+   *
+   * `slots: SLOT_ASKS_SHORT` sat on every entry, so one 226-byte map shipped 1,126 times on the
+   * product page: 254 KB of the 764 KB, all of it the same bytes. It reads as per-part data and
+   * never was — every part has the identical map, because it is what the SLOTS are called.
+   *
+   * ⛔ `parts` AND `slots` AS SEPARATE KEYS, NOT A RESERVED PART NAME. Hanging the map off something
+   * like `__slots` inside the same object means a view called `__slots` silently eats it, and view
+   * ids are author-supplied.
+   */
+  return `<script type="application/json" id="part-facts">${JSON.stringify({ parts: facts, slots: SLOT_ASKS_SHORT }).replace(/</g, "\\u003c")}</script>`;
 }
 
 /**
@@ -6902,7 +6912,20 @@ const PROTOTYPE = `<script>
   const blob = document.getElementById("part-facts");
   if (!blob) return;
   let FACTS = {};
-  try { FACTS = JSON.parse(blob.textContent || "{}"); } catch (e) { return; }
+  let SLOTS = {};
+  try {
+    const d = JSON.parse(blob.textContent || "{}");
+    /**
+     * ⛔ EITHER SHAPE, BECAUSE A PUBLISHED PAGE IS A FILE SOMEBODY ALREADY HAS. An artifact rendered
+     * before the slot map was hoisted carries the parts at the top level and the map on each entry;
+     * it is static HTML on claude.ai and no deploy reaches it. Reading only the new shape would
+     * leave every control on those pages answering "nothing describes this".
+     */
+    FACTS = d.parts || d;
+    SLOTS = d.slots || {};
+  } catch (e) { return; }
+  /** The map is the page's; an older blob kept a copy per part, so fall back to the entry's own. */
+  const slotName = (f, slot) => (SLOTS && SLOTS[slot]) || (f && f.slots && f.slots[slot]) || slot;
 
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
@@ -7023,7 +7046,7 @@ const PROTOTYPE = `<script>
             esc(x.title) +
             "</p>" +
             x.said
-              .map((sd) => '<p class="pt-said"><span class="slot">' + esc(f.slots[sd.slot] || sd.slot) + "</span> " + esc(sd.text) + "</p>")
+              .map((sd) => '<p class="pt-said"><span class="slot">' + esc(slotName(f, sd.slot)) + "</span> " + esc(sd.text) + "</p>")
               .join("")
         )
         .join("");
@@ -7039,8 +7062,8 @@ const PROTOTYPE = `<script>
     }
     return head + f.at.map((a) => {
       const said = (a.said || []).map((s) =>
-        '<li><span class="g">' + esc((f.slots && f.slots[s.slot]) || s.slot) + '</span> ' + esc(s.text) + '</li>').join("");
-      const blank = (a.blank || []).map((b) => esc((f.slots && f.slots[b]) || b)).join(" · ");
+        '<li><span class="g">' + esc(slotName(f, s.slot)) + '</span> ' + esc(s.text) + '</li>').join("");
+      const blank = (a.blank || []).map((b) => esc(slotName(f, b))).join(" · ");
       return '<div class="pt-ex"><p class="pt-ex-t">' + esc(a.title) + ' <code>' + esc(a.ref) + '</code></p>' +
         (said ? '<ul class="pt-said">' + said + "</ul>" : "") +
         (blank ? '<p class="none">says nothing about: ' + blank + "</p>" : "") + "</div>";
