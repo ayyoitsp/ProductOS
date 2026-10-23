@@ -1,0 +1,14 @@
+id: "0203"
+said: "did you create CapabilityOffering? is that supposed to be the new capability tree? i'm confused / yes, but also fix the tooling.  every claude session connecting to staging is confused by the # of capabilities, if they even exist / while you're there, seems like our renderer is rendering our capabilities as a feature, which is wrong - should have its own view, specific to the contracts it provides / to be clear, i expect there to ONLY be a v2 subsystem/capability tree after this and no confusion, with the existing capabilities migrated to v2"
+at: 2026-10-23
+kind: concept
+reaches:
+  model: export const Subsystem
+  derive: export function capabilityTree
+  generate: 0002-carried-capabilities-become-subsystems
+  surface: productos_capability_tree
+  check: a-capability-that-serves-nothing
+  instruct: Parts converted from an older tree are where you start
+  pin: after conversion there is one tree, and no Capabilities area
+waived: {}
+closed: 2026-10-23

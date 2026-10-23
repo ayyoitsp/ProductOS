@@ -41,6 +41,7 @@ import { decisionsOn, decisionsUnder, howItWasDecided, type Decision } from "./r
 import { holdsOn, whyHeld } from "./held.js";
 import { selectionOf, gapsIn, type Selection, type Option } from "./selection.js";
 import { dimensionsOf, sayCombination, variesBy } from "./dimensions.js";
+import { capabilityTree } from "./subsystems.js";
 
 const esc = (s: unknown): string =>
   String(s ?? "")
@@ -3695,12 +3696,17 @@ function renderNav(
      * next" is answered by how much is said inside, and a container holding four parts that each
      * offer nothing should not read as four things to go and look at.
      */
-    ...(corpus.capabilities.length
+    /**
+     * ⛔ AND PRESENT WHEN AN OLDER TREE WAS CARRIED INTO PRODUCT TRUTH, even with nothing in this
+     * one. That is the corpus where a reader most needs to be told which "capabilities" is which —
+     * Peter: *"every claude session connecting to staging is confused by the # of capabilities"*.
+     */
+    ...(corpus.subsystems.length || capabilityTree(corpus).carried.length
       ? [
           {
             id: "subsystems",
             label: "How it works",
-            toRead: corpus.capabilities.reduce((n, c) => n + c.capability.offers.length, 0),
+            toRead: corpus.subsystems.reduce((n, c) => n + c.subsystem.offers.length, 0),
             says: "things the machinery offers",
           },
         ]
@@ -10473,6 +10479,8 @@ export const STYLE = `<style>
   .cap-list li { margin: .4rem 0; }
   .cap-does { display: block; }
   .cap-serves { display: block; font-size: .85rem; color: var(--dim); }
+  .subsys-relied { margin: .35rem 0; font-size: .85rem; color: var(--dim); }
+  .cap-terms { margin: .3rem 0 0; padding-left: 1rem; font-size: .82rem; color: var(--dim); }
   .cap-up { font-style: italic; }
   .cap-dead { color: var(--warn, #b4541f); }
   .g { font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; color: var(--dim); margin: 0 .25rem; }
@@ -10638,8 +10646,9 @@ function renderSettings(corpus: Corpus): string {
  * separately" on rules nobody had stamped.
  */
 function renderSubsystems(corpus: Corpus, address: (ref: string) => string): string {
-  if (!corpus.capabilities.length) return "";
-  const subs = corpus.capabilities.map((x) => x.capability);
+  const tree = capabilityTree(corpus);
+  if (!corpus.subsystems.length && !tree.carried.length) return "";
+  const subs = corpus.subsystems.map((x) => x.subsystem);
   const titleOf = (id: string) => subs.find((s) => s.id === id)?.title ?? id;
 
   /** What a `serves` ref actually says, so a reader is not left holding an address. */
@@ -10668,7 +10677,36 @@ function renderSubsystems(corpus: Corpus, address: (ref: string) => string): str
    * so it was passing on containment while claiming to measure the indent. The mechanism was
    * redundant and the test was measuring the wrong thing — one defect, visible from two sides.
    */
-  const one = (s: (typeof subs)[number]): string => `
+  /**
+   * ⛔ A CAPABILITY IS SHOWN AS A CONTRACT — WHAT IT GIVES, TO WHOM, AND HOW YOU WOULD KNOW — NOT AS A
+   * FEATURE. Peter: *"seems like our renderer is rendering our capabilities as a feature, which is
+   * wrong - should have its own view, specific to the contracts it provides"*. What converting the
+   * older tree carried word for word (when it is called, the tests it had) lives in the part's body
+   * under one heading per capability, and is read back here beside the capability it belongs to.
+   */
+  const carriedFor = (sid: string): Map<string, string[]> => {
+    const body = corpus.subsystems.find((x) => x.subsystem.id === sid)?.body ?? "";
+    const out = new Map<string, string[]>();
+    const at = body.indexOf("## Carried from the earlier capability tree");
+    if (at < 0) return out;
+    for (const block of body.slice(at).split(/\n### /).slice(1)) {
+      const [head, ...rest] = block.split("\n");
+      out.set(head!.trim(), rest.map((l) => l.replace(/^-\s*/, "").trim()).filter(Boolean));
+    }
+    return out;
+  };
+  /** Who leans on a part: the features that say they rest on it, and the parts that use it. */
+  const reliedOnBy = (sid: string): string[] => [
+    ...corpus.scopes
+      .filter(({ scope }) => scope.depends_on.some((d) => d === `${sid}#offers` || d.startsWith(`${sid}#offers#`)))
+      .map(({ scope }) => `<a href="${esc(address(scope.id))}">${line(scope.title)}</a>`),
+    ...subs.filter((x) => x.uses.includes(sid)).map((x) => `<strong>${line(x.title)}</strong>`),
+  ];
+
+  const one = (s: (typeof subs)[number]): string => {
+    const carried = carriedFor(s.id);
+    const relied = reliedOnBy(s.id);
+    return `
     <article class="subsys" data-ref="${esc(s.id)}">
       <header>
         <h3>${line(s.title)}</h3>
@@ -10680,15 +10718,25 @@ function renderSubsystems(corpus: Corpus, address: (ref: string) => string): str
           ? `<p class="subsys-uses">leans on ${s.uses.map((u) => `<strong>${line(titleOf(u))}</strong>`).join(", ")}</p>`
           : ""
       }
+      ${relied.length ? `<p class="subsys-relied">relied on by ${relied.join(", ")}</p>` : ""}
       ${
         s.offers.length
           ? `<ul class="cap-list">${s.offers
               .map(
                 (o) => `
-            <li>
+            <li class="contract" data-ref="${esc(`${s.id}#offers#${o.id}`)}">
               <code class="creq">${esc(`${s.id}#offers#${o.id}`)}</code>
               <span class="cap-does">${line(o.does)}</span>
-              <span class="cap-serves">for ${o.serves.map(servedText).join(", ")}</span>
+              ${
+                o.serves.length
+                  ? `<span class="cap-serves">for ${o.serves.map(servedText).join(", ")}</span>`
+                  : `<span class="cap-serves cap-dead">serves nothing yet — nobody has said what this is for</span>`
+              }
+              ${
+                (carried.get(o.id) ?? []).length
+                  ? `<ul class="cap-terms">${(carried.get(o.id) ?? []).map((t) => `<li>${line(t)}</li>`).join("")}</ul>`
+                  : ""
+              }
             </li>`
               )
               .join("")}</ul>`
@@ -10699,6 +10747,7 @@ function renderSubsystems(corpus: Corpus, address: (ref: string) => string): str
         .map((x) => one(x))
         .join("")}
     </article>`;
+  };
 
   /** ⛔ Orphans render too. A subsystem filed inside nothing is a `check` refusal, not a reason to
    *  hide it — a page that silently drops it is a page that disagrees with the check. */
@@ -10710,6 +10759,7 @@ function renderSubsystems(corpus: Corpus, address: (ref: string) => string): str
     ⛔ <strong>Not product truth, and nobody has agreed to any of it.</strong> This is engineering's
     answer to what the product promised — each part says what it exists to serve, and you can follow
     that back to the behaviour that required it. What the product commits to is on the features.</p>
+    <p class="subsys-count" data-subsystems="${tree.counts.subsystems}" data-capabilities="${tree.counts.capabilities}" data-carried="${tree.carried.length}">${line(tree.says)}</p>
     ${roots.map((s) => one(s)).join("")}
   </section>`;
 }

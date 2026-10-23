@@ -96,7 +96,7 @@ test("a document written through the one door reaches the store and loads as a c
     const corpus = await loadFromStore(store);
     assert.deepEqual(corpus.broken, [], `the written document does not parse: ${JSON.stringify(corpus.broken)}`);
     assert.deepEqual(
-      corpus.capabilities.map((c) => c.capability.id),
+      corpus.subsystems.map((c) => c.subsystem.id),
       ["ledger"],
       "the part is in the store and not in the corpus"
     );

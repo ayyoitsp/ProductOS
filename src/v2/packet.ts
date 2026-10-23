@@ -198,7 +198,9 @@ function compileOne(corpus: Corpus, scopeId: string): { md: string; holes: strin
     out.push("");
     for (const d of entry.scope.depends_on) {
       const dep = corpus.scopes.find((s) => s.scope.id === d);
-      out.push(`- **${dep?.scope.title ?? d}** (\`${d}\`) — its behaviours are its own; do not re-decide them here`);
+      /** ⛔ A part of the system is named by its title, like a scope — not left as an address. */
+      const part = corpus.subsystems.find((x) => d === `${x.subsystem.id}#offers` || d.startsWith(`${x.subsystem.id}#offers#`));
+      out.push(`- **${dep?.scope.title ?? part?.subsystem.title ?? d}** (\`${d}\`) — its behaviours are its own; do not re-decide them here`);
     }
     out.push("");
   }

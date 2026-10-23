@@ -92,6 +92,7 @@ You are the **orchestrator**, and you are the session — not a subagent. That i
 
 - ⛔ running `productos v2 analyse <name>` FIRST and working only the refs it returns — a sweep that runs over everything redoes finished work and stops being something anybody runs twice
 - ⛔ reading what the analysis says about fanning before spawning anything: one that must be settled across the product first says so, and its refs are one run's worklist rather than a list of roles to spawn
+- ⛔ saying how many capabilities there are only from `productos_capability_tree` or the first line `analyse capabilities` prints — a product area called Capabilities is an older tree carried into product truth, its scopes are not subsystems, and counting either half alone is how sessions on a migrated corpus reported none and then dozens
 - ⛔ putting the subsystem tree in front of a person before any part of it is worked — the names, the areas and what nests in what. Three cold runs over three features produced three disjoint trees and nothing shared, and nobody reading them could see they were the same machinery
 - deciding which analysis to run: this route does one at a time, because thirty roles of three kinds at once is a diff nobody reviews
 - ⛔ reading the stale ones before the missing ones — a unit that was done and now answers an older wording looks finished to everybody reading it
