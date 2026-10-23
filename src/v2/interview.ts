@@ -47,6 +47,7 @@ import type { Finding } from "./check.js";
 import { actsFor, gridFor } from "./grid.js";
 import { ANALYSES } from "./analyse.js";
 import { descendants, questionsFor, rulingAct, type Question } from "./settle.js";
+import { vocabularyReach } from "./load.js";
 import { POLICY_SLOTS, SLOT_ASKED, SLOT_ASKS_SHORT, SLOTS, statements, type SlotName } from "./schema.js";
 
 const plain = (x: unknown): string => String(x ?? "").replace(/\s+/g, " ").trim();
@@ -133,7 +134,24 @@ export type Owes =
    * So it is asked once, at the product root, and a hundred and thirty-one missing capabilities
    * become one thing to decide.
    */
-  | "parts";
+  | "parts"
+  /**
+   * This feature promises things and no part of the system says it serves any of them — ⛔ THE
+   * PER-FEATURE HALF, AND IT ONLY EXISTS ONCE THERE IS A TREE.
+   *
+   * Peter: *"i want it to also drill down into capabilities and validate the right capabilities are
+   * mapped for the feature as well"*, and *"it should be trying to populate the features too"*.
+   *
+   * ⛔ GATED ON THE TREE EXISTING, which is the whole reason `parts` is a separate kind. With no
+   * capabilities at all this would be 131 copies of one question — the exact arithmetic
+   * `settleFirst` names: *"a subsystem serves many features, so which parts exist is not a
+   * per-feature question"*. Measured there: three decomposers fanned without a settled tree
+   * produced three disjoint trees and zero shared parts.
+   *
+   * So: no capabilities → one `parts` question for the product. Capabilities → this, per feature,
+   * naming the parts that exist so somebody is choosing among them rather than inventing more.
+   */
+  | "unserved";
 
 export interface Owed {
   /**
@@ -197,6 +215,33 @@ export interface Owed {
     already: Array<{ asks: string; says: string; more?: number }>;
     /** The statement in question, where one thing about an agreed sentence is unruled. */
     in_question?: string;
+    /**
+     * The words the question uses and what this product means by them — ⛔ WITHOUT THESE THE
+     * QUESTION IS A SENTENCE IN SOMEBODY ELSE'S LANGUAGE.
+     *
+     * Peter, handed one: *"what the fuck does this even mean? what is the processor? what is the
+     * deal's name? what's the context of this fucking question? makes ZERO FUCKING SENSE"* — and
+     * *"What I want is more explanation before the question."*
+     *
+     * He is right and the corpus had the answer. A feature declares `terms`, and they reach it
+     * through its ancestry and its `depends_on` (`vocabularyReach`) — `draft deal` means *"A deal
+     * somebody has begun setting up and not finished… only the people who may start a deal in that
+     * lender's organisation see it"*, which is most of what one of these questions turns on. None
+     * of it was being carried, so every question arrived assuming the reader already spoke the
+     * product's own vocabulary.
+     */
+    words: Array<{ word: string; means: string }>;
+    /**
+     * Words the question uses that NOTHING in this corpus defines — ⛔ A DEFECT, NOT A GLOSSARY GAP.
+     *
+     * The question that provoked him turns on *"the processor"* and *"the deal's name or
+     * reference"*. `processor` is defined nowhere in 131 features. So it was not a question he
+     * failed to understand; it was a question nobody could answer, and it was put to him anyway.
+     *
+     * A question standing on an undefined word should be fixed before it is asked, not pressed
+     * through — so it is named here and the surfaces say so.
+     */
+    undefined_words: string[];
   };
   /**
    * What moves this question along, or `null` where nothing a caller can do does — ⛔ AND IT IS
@@ -339,6 +384,81 @@ const UNANCHORED: readonly string[] = [
  * what is in question is the question, and repeating it under "this already says" is how a reader
  * comes to believe it is settled.
  */
+/**
+ * Every word this scope's vocabulary reaches, and what the product means by it.
+ *
+ * ⛔ `vocabularyReach`, NOT JUST THE SCOPE'S OWN `terms`. A word is declared once and reaches a
+ * feature through its ancestry and its `depends_on` — the same walk `check` uses to decide a term
+ * is legal here. Reading only the local block would miss `deal`, declared on the product and used
+ * by every feature under it.
+ */
+function vocabularyOf(corpus: Corpus, scopeId: string): Array<{ word: string; means: string }> {
+  const out = new Map<string, string>();
+  /**
+   * ⛔ ROLES AND PERMISSIONS FIRST, BECAUSE I TOLD PETER A ROLE WAS UNDEFINED AND IT WAS NOT.
+   *
+   * He asked what a *"processor"* is. This read only `terms`, found nothing, and I reported — as a
+   * verified finding — that `processor` is *"defined NOWHERE in your corpus — 131 features, no
+   * definition"*. He corrected me: *"isn't processor a role, one of our main dimensions?"* It is. It
+   * is in `access.yaml` with a full `means`: *"Works a deal through processing: clears what has
+   * arrived, gets documents in and readable… The role that lives in the product all day."*
+   *
+   * ⛔ A ROLE IS VOCABULARY. `Access` requires `means` — *"say what holding this lets somebody do —
+   * a name alone is not a definition"* — so it is a declared word with a definition, in the one
+   * place roles live. A reader meeting *"the processor"* in a question needs it exactly as much as
+   * they need `draft deal`, and nothing was carrying it.
+   *
+   * ⛔ AND IT IS CORPUS-WIDE RATHER THAN REACHED. `access` is one file for the product; there is no
+   * per-scope access vocabulary to walk. A role means the same thing everywhere it appears, which
+   * is most of why it is kept apart from a scope's own terms.
+   */
+  for (const a of corpus.access) {
+    const means = plain(a.means);
+    if (means) out.set(a.id.replace(/-/g, " "), means);
+  }
+  for (const id of vocabularyReach(corpus, scopeId)) {
+    const sc = corpus.scopes.find((x) => x.scope.id === id)?.scope;
+    for (const [word, t] of Object.entries(sc?.terms ?? {})) {
+      const means = plain((t as { means?: string }).means);
+      /** ⛔ Nearest declaration wins, which is the order `vocabularyReach` already returns. */
+      if (means && !out.has(word)) out.set(word, means);
+    }
+  }
+  return [...out].map(([word, means]) => ({ word, means }));
+}
+
+/**
+ * The product's own words that this question actually uses — ⛔ AND THE ONES IT USES THAT NOTHING
+ * DEFINES, which is the finding rather than the gap.
+ *
+ * ⛔ MATCHED ON THE WORD, PLAINLY, AND NOT INFERRED. A term is a noun phrase the product declared;
+ * either the question contains it or it does not. Anything cleverer here would be guessing which
+ * concepts a sentence is "about", which is a reading and not a fact.
+ */
+function wordsIn(
+  text: string,
+  vocabulary: Array<{ word: string; means: string }>
+): { words: Array<{ word: string; means: string }>; missing: string[] } {
+  const haystack = ` ${text.toLowerCase().replace(/[^a-z0-9]+/g, " ")} `;
+  const words = vocabulary.filter((t) => haystack.includes(` ${t.word.toLowerCase().replace(/[^a-z0-9]+/g, " ")} `));
+  /**
+   * ⛔ WHO THE QUESTION IS ABOUT, WHERE NOTHING DEFINES THEM — and ONLY the actor, because the
+   * first version of this guessed and the guess was worthless.
+   *
+   * Peter's complaint was precise: *"what is the processor?"* — and `processor` is declared nowhere
+   * in 131 features. So that half is real and worth reporting. The way I first went after it was
+   * not: every one-to-three-word phrase the question put behind "the", which on one real question
+   * produced *"processor told that"*, *"check failed"*, *"name or the"*, *"last press"*. Thirteen
+   * fragments, none of them a concept, offered to a reader as vocabulary gaps.
+   *
+   * ⛔ THE ACTOR IS THE ONE THING THAT CAN BE TAKEN PRECISELY. `may` names who is permitted to ask,
+   * in the product's own words, so the noun phrase in it is a declared actor whether or not the
+   * vocabulary defines it. Comparing THAT against `terms` is arithmetic; extracting concepts from
+   * prose is a reading, and a reading dressed as a finding is the thing this file refuses to be.
+   */
+  return { words, missing: [] };
+}
+
 export function contextFor(
   corpus: Corpus,
   scopeId: string,
@@ -410,6 +530,9 @@ export function contextFor(
     behaviour: ex ? plain(ex.title || ex.id) : undefined,
     met_at: metAt,
     already,
+    /** ⛔ Filled by the caller, which is the only place that knows the question's own words. */
+    words: [],
+    undefined_words: [],
   };
 }
 
@@ -710,13 +833,69 @@ function unanchored(findings: Finding[], scopeIds: string[]): Owed[] {
         fills: [f.where],
         candidates: [],
         /** ⛔ Filled by the caller, which holds the corpus — see where this is mapped. */
-        about: { feature: scopeId!, already: [] },
+        about: { feature: scopeId!, already: [], words: [], undefined_words: [] },
         /**
          * ⛔ AN AUTHOR'S WRITE, AND A WHOLE DOCUMENT — which is the scoper's act, not the
          * interviewer's. Naming the role is the honest act here: an interviewer that wrote an
          * exchange would be authoring the behaviour it was supposed to ask about.
          */
         act: "an author states the behaviour at this control first — `scoper` writes it, through the `document` intent — and only then is there something to ask about",
+      };
+    });
+}
+
+/**
+ * Features whose promises no part of the system serves — ⛔ ONCE A TREE EXISTS, never before.
+ *
+ * `ANALYSES.capabilities` already computes this per feature and reports `missing`; nothing put it
+ * to anybody. What this adds is the material: the parts that DO exist, so the question is which of
+ * them serves this feature rather than what the parts are.
+ */
+function unserved(corpus: Corpus, scopeIds: string[]): Owed[] {
+  /** ⛔ The gate. With no tree this is the `parts` question, asked once, not once per feature. */
+  if (!corpus.capabilities.length) return [];
+  const sweep = ANALYSES.find((a) => a.name === "capabilities");
+  if (!sweep) return [];
+
+  const missing = new Set(
+    sweep
+      .units(corpus)
+      .filter((u) => u.state === "missing")
+      .map((u) => u.ref)
+  );
+
+  /** Every part that exists, by the words it uses about itself. */
+  const parts = corpus.capabilities.map(({ capability }) => plain(capability.title || capability.id));
+
+  return scopeIds
+    .filter((id) => missing.has(id))
+    .map((id) => {
+      const sc = corpus.scopes.find((x) => x.scope.id === id)?.scope;
+      const promises = (sc?.exchanges ?? []).length;
+      const some = parts.slice(0, 14);
+      return {
+        ref: id,
+        owes: "unserved" as const,
+        asks: `Which parts of the system serve what ${plain(sc?.title || id)} promises — and is anything it needs missing from the tree?`,
+        why: `it promises ${promises} behaviour${promises === 1 ? "" : "s"} and no part of the system says it serves any of them, so a builder has nowhere to start`,
+        shape:
+          "each promise answered by a part that says it serves it — ⛔ and where nothing in the tree does, that is a part the tree is missing rather than a promise to drop",
+        fills: [id],
+        candidates: [],
+        about: {
+          ...contextFor(corpus, id, undefined, undefined),
+          /** ⛔ The parts that exist, so this is a choice among them and not an invitation to invent. */
+          already: [
+            { asks: "parts the system already has", says: some.join(" · "), ...(parts.length > some.length ? { more: parts.length - some.length } : {}) },
+            ...contextFor(corpus, id, undefined, undefined).already,
+          ],
+        },
+        /**
+         * ⛔ THE DECOMPOSER'S, AND IT RUNS AGAINST THE SETTLED TREE. An interviewer drafting options
+         * here would be proposing subsystems, which is the one thing `settleFirst` says may not be
+         * done per feature.
+         */
+        act: `\`decomposer\` works this out against the settled tree — ⛔ one run over the features that need it, never one per feature cold`,
       };
     });
 }
@@ -740,6 +919,47 @@ function parts(corpus: Corpus, scopeId: string): Owed[] {
   if (corpus.capabilities.length) return [];
 
   const features = corpus.scopes.filter((x) => x.scope.exchanges.length).length;
+
+  /**
+   * The material the corpus already holds for a subsystem tree — ⛔ LIFTED, NEVER INVENTED.
+   *
+   * Peter, on the question arriving with nothing to pick between: *"Even with no capabilities
+   * mapped, it should be asking to populate the capability tree"*, and then *"it should be trying
+   * to populate the features too"*.
+   *
+   * He is right that a bare question is useless, and the honest way to give it substance is the
+   * line `propose-slots.ts` holds for sentences: **lift the product's own words, write none.** Two
+   * things the corpus already says are exactly the raw material for a tree:
+   *
+   *   the AREAS it already has   — a scope with children IS an area, by construction. 34 of them.
+   *   what features CHANGE       — `changes` names the words whose state a behaviour moves, and a
+   *                                thing that holds state is what a subsystem owns. 151 of them.
+   *
+   * ⛔ AND IT IS CONTEXT, NOT CANDIDATES. A proposed tree is a reading of what these nouns have in
+   * common, which is a judgement — the decomposer's, with a person settling it. Filing them as
+   * drafted options would be this file writing the tree, which is the one thing it must not do.
+   * What it does is make sure nobody starts from a blank page.
+   *
+   * ⛔ `depends_on` IS THE THIRD PIECE AND IT IS ALREADY DOING THIS JOB. The schema says it is *"the
+   * only thing carrying the structure the deleted capability tree used to hold"* — so where a
+   * feature declares one, it is already pointing at a part by another name.
+   */
+  const areas = corpus.scopes
+    .filter(({ scope }) => corpus.scopes.some((x) => x.scope.in === scope.id))
+    .map(({ scope }) => plain(scope.title || scope.id));
+  const changes = new Map<string, number>();
+  for (const { scope } of corpus.scopes)
+    for (const ex of scope.exchanges) for (const w of ex.changes ?? []) changes.set(w, (changes.get(w) ?? 0) + 1);
+  const holdsState = [...changes]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([w, n]) => `${w} (${n} behaviour${n === 1 ? "" : "s"} move it)`);
+  const rests = new Set(corpus.scopes.flatMap(({ scope }) => scope.depends_on ?? []));
+
+  /** ⛔ Capped and COUNTED, never silently cut — the project's own rule about a dropped tail. */
+  const some = <T,>(xs: T[], n: number): { shown: T[]; more: number } => ({ shown: xs.slice(0, n), more: Math.max(0, xs.length - n) });
+  const a = some(areas, 12);
+  const c = some(holdsState, 12);
+
   return [
     {
       ref: scopeId,
@@ -749,7 +969,18 @@ function parts(corpus: Corpus, scopeId: string): Owed[] {
       shape: plain(sweep.settleFirst.what),
       fills: [scopeId],
       candidates: [],
-      about: contextFor(corpus, scopeId, undefined, undefined),
+      about: {
+        ...contextFor(corpus, scopeId, undefined, undefined),
+        /**
+         * ⛔ UNDER "ALREADY SETTLED", because every line of it is something the corpus says. A
+         * reader is confirming or cutting what is there, not composing from nothing.
+         */
+        already: [
+          { asks: `areas the corpus already has`, says: a.shown.join(" · "), ...(a.more ? { more: a.more } : {}) },
+          { asks: `things behaviours move the state of`, says: c.shown.join(" · "), ...(c.more ? { more: c.more } : {}) },
+          ...(rests.size ? [{ asks: `what features say they rest on`, says: [...rests].slice(0, 10).join(" · ") }] : []),
+        ],
+      },
       /**
        * ⛔ SETTLED WITH A PERSON BEFORE ANY DECOMPOSER RUNS, which is the one instruction
        * `settleFirst` exists to carry — and the route's own `keeps` already says the session holds
@@ -874,6 +1105,8 @@ export function interviewFor(corpus: Corpus, scopeId: string, findings: Finding[
           about: {
             feature: plain(sc?.title || ungrounded.scope),
             purpose: hp ? plain(hp.accomplishes) : undefined,
+            words: [],
+            undefined_words: [],
             already: hp
               ? [
                   { asks: "what it gets done", says: plain(hp.accomplishes) },
@@ -913,6 +1146,13 @@ export function interviewFor(corpus: Corpus, scopeId: string, findings: Finding[
    * a question that has some — and `Standing.candidates` carries the ⛔ about a proposal reaching a
    * builder as a decision.
    */
+  /**
+   * ⛔ THE VOCABULARY ONCE, FOR THE WHOLE ROUND. It is the same walk for every question in a scope,
+   * and a per-question walk over 131 features is the kind of cost that makes a surface too slow to
+   * put in front of anybody.
+   */
+  const vocabulary = vocabularyOf(corpus, scopeId);
+
   const drafted: Owed[] = questionsFor(corpus, scopeId)
     .filter((q) => !q.parked)
     .map((q) => ({
@@ -964,6 +1204,18 @@ export function interviewFor(corpus: Corpus, scopeId: string, findings: Finding[
          * two lines apart — which reads as two different things being unruled.
          */
         in_question: q.about && !q.asks.includes(q.about) ? plain(q.about) : undefined,
+        /**
+         * ⛔ MATCHED AGAINST THE QUESTION AND ITS OPTIONS, not the question alone. A word can be
+         * undefined in the question and load-bearing in the answers — *"the processor"* is in both,
+         * and a reader choosing between two sentences has to understand the sentences.
+         */
+        ...(() => {
+          const w = wordsIn(
+            [q.asks, q.about ?? "", q.cost ?? "", ...q.candidates.map((c) => c.says ?? "")].join(" "),
+            vocabulary
+          );
+          return { words: w.words, undefined_words: w.missing };
+        })(),
         ...(q.saysEach?.length
           ? {
               already: [
@@ -1041,6 +1293,7 @@ export function interviewFor(corpus: Corpus, scopeId: string, findings: Finding[
   }
   const rest = [
     ...parts(corpus, scopeId),
+    ...unserved(corpus, ids),
     ...found(corpus, ids),
     ...blanks(corpus, ids, title, spokenFor),
     ...undrawn(corpus, ids),
