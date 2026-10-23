@@ -100,10 +100,10 @@ const kinds = (dir) => checkCorpus(dir).findings.map((f) => f.kind);
 test("a corpus carries its subsystems, nested, and each one is addressable", () => {
   const corpus = loadCorpus(withCapabilities());
   assert.deepEqual(corpus.broken, [], "the capability layer would not load");
-  assert.equal(corpus.capabilities.length, 3);
+  assert.equal(corpus.subsystems.length, 3);
 
   // ⛔ Nesting, which is the shape Peter asked for: "same nested structure as product".
-  const byId = new Map(corpus.capabilities.map((c) => [c.capability.id, c.capability]));
+  const byId = new Map(corpus.subsystems.map((c) => [c.subsystem.id, c.subsystem]));
   assert.equal(byId.get("ledger").in, "records");
   assert.equal(byId.get("clock").in, "records");
   assert.equal(byId.get("records").in, undefined);
@@ -137,7 +137,7 @@ test("a corpus carries its subsystems, nested, and each one is addressable", () 
  */
 test("a capability's hash moves when what it does moves, and when what it serves moves", () => {
   const corpus = loadCorpus(withCapabilities());
-  const cap = corpus.capabilities.find((c) => c.capability.id === "ledger").capability.offers[0];
+  const cap = corpus.subsystems.find((c) => c.subsystem.id === "ledger").subsystem.offers[0];
   const before = capabilityHash(cap);
 
   assert.notEqual(capabilityHash({ ...cap, does: "Appends two movements." }), before, "rewording what it does left the hash alone");

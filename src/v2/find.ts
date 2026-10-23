@@ -539,18 +539,18 @@ function unitsIn(corpus: Corpus): Unit[] {
         ],
       });
 
-  for (const { capability } of corpus.capabilities)
-    for (const o of capability.offers)
+  for (const { subsystem } of corpus.subsystems)
+    for (const o of subsystem.offers)
       out.push({
-        ref: `${capability.id}#offers#${o.id}`,
+        ref: `${subsystem.id}#offers#${o.id}`,
         kind: "capability",
-        title: `${o.id} — ${capability.title}`,
-        in: capability.title,
+        title: `${o.id} — ${subsystem.title}`,
+        in: subsystem.title,
         says: o.does,
         fields: [
           ...own("what it says", o.does),
           ...own("its own id", o.id),
-          ...around(`${capability.title} ${capability.id}`),
+          ...around(`${subsystem.title} ${subsystem.id}`),
         ],
       });
 

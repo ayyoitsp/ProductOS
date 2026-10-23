@@ -23,7 +23,7 @@
  * it is countable, none of it needs a model, and without it "re-derive the tests" means throwing
  * the previous answer away every time truth moves by a comma.
  */
-import { DEMONSTRABLE_SLOTS, owesDemonstration, statements, type Criterion, type CapabilityOffering, type SlotName } from "./schema.js";
+import { DEMONSTRABLE_SLOTS, owesDemonstration, statements, type Criterion, type Capability, type SlotName } from "./schema.js";
 import { resolveRules, type Corpus } from "./load.js";
 import { claimHash, capabilityHash, stampFor } from "./stamp.js";
 import { resolveRef } from "./ref.js";
@@ -217,7 +217,7 @@ export function servesHash(corpus: Corpus, serves: readonly string[]): string {
     if ("error" in r) return `${s}=gone`;
     if (r.ref.kind === "capability") {
       const { subsystem, capability } = r.ref;
-      const sub = corpus.capabilities.find((c) => c.capability.id === subsystem)?.capability;
+      const sub = corpus.subsystems.find((c) => c.subsystem.id === subsystem)?.subsystem;
       const o = sub?.offers.find((x) => x.id === capability);
       /** ⛔ Its `derived` is excluded: a neighbour being re-derived is not this part changing. */
       return `${s}=${o ? capabilityHash({ ...o, derived: undefined }) : "gone"}`;
@@ -231,7 +231,7 @@ export interface DerivedCapability {
   /** `<subsystem>#offers#<id>` */
   ref: string;
   subsystem: string;
-  offering: CapabilityOffering;
+  offering: Capability;
   state: RequirementState;
   now: string;
   /** ⛔ Whether anybody has agreed to the truth this part answers. Reported, never required. */
@@ -239,12 +239,12 @@ export interface DerivedCapability {
 }
 
 export function derivedCapabilities(corpus: Corpus): DerivedCapability[] {
-  return corpus.capabilities.flatMap(({ capability }) =>
-    capability.offers.map((o) => {
+  return corpus.subsystems.flatMap(({ subsystem }) =>
+    subsystem.offers.map((o) => {
       const now = servesHash(corpus, o.serves);
       return {
-        ref: `${capability.id}#offers#${o.id}`,
-        subsystem: capability.id,
+        ref: `${subsystem.id}#offers#${o.id}`,
+        subsystem: subsystem.id,
         offering: o,
         now,
         state: (!o.derived ? "authored" : o.derived.from === now ? "current" : "stale") as RequirementState,
