@@ -53,6 +53,15 @@ export interface Conversion {
     respelled: string[];
     /** Other documents that still name a converted ask by its old address, for a person to look at. */
     stillNamed: string[];
+    /**
+     * Documents whose `depends_on` could not be re-spelled in place, so the frontmatter WAS
+     * reserialised and their requirements will read as stale.
+     *
+     * ⛔ REPORTED, BECAUSE A SILENT RESERIALISE IS THE DEFECT THIS FIELD EXISTS TO SURFACE. Empty on
+     * the real corpus; a non-empty list is a document shape the in-place edit does not handle yet,
+     * and somebody has to see it rather than discover it as 260 invalidated validations.
+     */
+    reserialised: string[];
   };
 }
 
@@ -67,6 +76,80 @@ const write = (data: Record<string, unknown>, body: string): string =>
   `---\n${YAML.stringify(data, { lineWidth: 96, blockQuote: "literal" })}---\n\n${body.trim()}\n`;
 
 const flat = (s: string): string => s.replace(/\s+/g, " ").trim();
+
+/**
+ * One `depends_on` entry re-spelled, IN PLACE, leaving every other byte of the document alone.
+ *
+ * ⛔ WHY THIS EXISTS RATHER THAN A RESERIALISE, AND IT COST 260 OF PETER'S VALIDATIONS TO FIND.
+ *
+ * Re-spelling a dependency used to go through `write()`, which runs the whole frontmatter back
+ * through `YAML.stringify`. That reformats everything it touches: prose re-wraps at `lineWidth`,
+ * and every flow sequence `[a, b]` becomes a block sequence. `truth/map-the-statement.md` — a
+ * feature filed under `operating-statements`, with nothing to do with the capability tree — came
+ * out with 497 changed lines to re-spell ONE entry.
+ *
+ * A requirement is pinned to the wording of the claim it was worked out against, so a reworded
+ * claim refuses with `a-requirement-older-than-its-claim`. Re-wrapping a line IS a rewording as
+ * far as that check can tell. Measured on the real corpus: refusals 222 → 561, of which +260 were
+ * requirements invalidated by nothing but line wrapping, on features nobody converted.
+ *
+ * ⛔ AND `0001-drop-walked` ALREADY KNEW. Its comment says a YAML-reserialise "would reformat every
+ * document it touched and lose comment placement and key order", which is why it deletes whole
+ * lines instead. This rule ignored its own neighbour's warning.
+ *
+ * So: find the `depends_on` block in the frontmatter and rewrite only the scalar that matched.
+ * Both styles are in use — 23 documents flow, 31 block — so both are handled, and anything this
+ * cannot place with certainty is left for the caller to fall back on.
+ */
+export function respellDependsOn(source: string, from: string, to: string): string | null {
+  const fm = /^---\n([\s\S]*?)\n---/.exec(source);
+  if (!fm) return null;
+  /** Where the frontmatter body starts in `source` — after the opening `---\n`. */
+  const base = 4;
+  const head = fm[1]!;
+  const lines = head.split("\n");
+
+  /** The offset of each line within `source`, so an edit can be placed exactly. */
+  const offsets: number[] = [];
+  for (let i = 0, at = base; i < lines.length; i++) {
+    offsets.push(at);
+    at += lines[i]!.length + 1;
+  }
+
+  const key = lines.findIndex((l) => /^depends_on:[ \t]*/.test(l));
+  if (key === -1) return null;
+
+  /** The exact scalar and nothing containing it — `pin-a-version` must not match `pin-a-version-2`. */
+  const quoted = from.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const exact = new RegExp(`(^|[\\[,]\\s*|-\\s+)(${quoted})(?=\\s*(?:[\\],]|$))`);
+
+  const place = (lineNo: number): string | null => {
+    const m = exact.exec(lines[lineNo]!);
+    if (!m) return null;
+    const at = offsets[lineNo]! + m.index + m[1]!.length;
+    return source.slice(0, at) + to + source.slice(at + from.length);
+  };
+
+  const inline = lines[key]!.slice("depends_on:".length).trim();
+  /** Flow style on the key's own line: `depends_on: [a, b]`. */
+  if (inline.startsWith("[")) return place(key);
+  /** Anything else on that line is a shape this does not claim to understand. */
+  if (inline) return null;
+
+  /**
+   * Block style. Only the lines indented under the key — the next line at column zero ends the
+   * block, or an edit could reach into an unrelated field holding the same word.
+   */
+  for (let i = key + 1; i < lines.length; i++) {
+    const line = lines[i]!;
+    if (line.trim() && !/^[ \t]/.test(line)) break;
+    if (!/^[ \t]*-/.test(line)) continue;
+    const out = place(i);
+    if (out) return out;
+  }
+  return null;
+}
+
 
 /** The first paragraph of a body, as a sentence about what the part is. */
 const firstParagraph = (body: string): string =>
@@ -193,6 +276,7 @@ export function convertCarriedCapabilities(
       keptAsProduct: [],
       servesNothing: [],
       respelled: [],
+      reserialised: [],
       stillNamed: [],
     },
   };
@@ -336,11 +420,24 @@ export function convertCarriedCapabilities(
       moved = true;
       return now;
     });
-    if (moved)
-      out.put[d.key] = write(
-        { ...d.data, depends_on: [...new Set(next)] },
-        d.body,
-      );
+    if (moved) {
+      /**
+       * ⛔ IN PLACE, AND THE RESERIALISE IS THE FALLBACK — see `respellDependsOn`. A feature whose
+       * only change is one dependency's spelling must come out byte-identical everywhere else, or
+       * every requirement on it reads as older than a claim nobody reworded.
+       */
+      let edited: string | null = out.put[d.key] ?? files[d.key] ?? null;
+      for (const one of out.report.respelled) {
+        if (!one.startsWith(`${d.key}: `)) continue;
+        const [was, now] = one.slice(d.key.length + 2).split(" → ");
+        if (!edited || !was || !now) { edited = null; break; }
+        const next = respellDependsOn(edited, was, now);
+        if (next === null) { edited = null; break; }
+        edited = next;
+      }
+      out.put[d.key] = edited ?? write({ ...d.data, depends_on: [...new Set(next)] }, d.body);
+      if (!edited) out.report.reserialised.push(d.key);
+    }
   }
 
   // ---- anything else still naming a converted ask by its old address ----
