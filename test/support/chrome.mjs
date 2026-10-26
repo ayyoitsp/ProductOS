@@ -135,6 +135,55 @@ const until = async (fn, what, ms = 15000) => {
  *
  * Default unchanged, so every existing test measures exactly what it measured before.
  */
+/**
+ * Every browser this process started and has not reaped yet.
+ *
+ * ⛔ THE SUITE LEFT 378 CHROME PROCESSES HOLDING 19.9 GB, AND IT TOOK THE MACHINE WITH IT.
+ *
+ * Twice in one day the Docker daemon stopped answering — `docker ps` hanging past 120s — and the
+ * instance Peter reviews on went down with it. Load 528, swap 35.3 GB of 36.9 used. The cause was
+ * neither Docker nor the deploy: it was this file, across repeated suite runs.
+ *
+ * ⛔ AND `close()` IS NOT THE LEAK — measured: 10 processes while open, 0 after. The leak is every
+ * path that never REACHES close():
+ *
+ *   · `openPage` throwing after the spawn — no debugging endpoint, or the WebSocket refusing. The
+ *     caller never receives a handle, so nobody can close what was already started.
+ *   · a run interrupted or killed part-way, which is what a session red-checking a test does over
+ *     and over.
+ *
+ * `temp()` already settled this shape for DIRECTORIES — "a trailing rmSync sits at the end of the
+ * test, so it is not reached when an assertion fails". The same argument holds for a process, and
+ * nothing was applying it.
+ *
+ * So: one registry, one exit hook, and a kill that takes the CHILDREN with it.
+ */
+const alive = new Set();
+let reaping = false;
+const reapAll = () => {
+  if (reaping) return;
+  reaping = true;
+  for (const kill of [...alive]) {
+    try {
+      kill();
+    } catch {
+      /* a browser already gone is the outcome we wanted */
+    }
+  }
+  alive.clear();
+};
+/**
+ * ⛔ ON SIGNALS TOO, NOT ONLY `exit`. Ctrl-C or a `kill` on the test runner never fires `exit`, and
+ * an interrupted run is the one that leaks hardest — which is how this reached 378.
+ */
+process.once("exit", reapAll);
+for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"]) {
+  process.once(sig, () => {
+    reapAll();
+    process.exit(sig === "SIGINT" ? 130 : 143);
+  });
+}
+
 export async function openPage(html, { exe = findBrowser(), url, width, height } = {}) {
   if (!exe) throw new Error("no browser");
   /**
@@ -162,6 +211,38 @@ export async function openPage(html, { exe = findBrowser(), url, width, height }
     ],
     { stdio: ["ignore", "pipe", "pipe"] }
   );
+
+  /**
+   * Kill the browser.
+   *
+   * ⛔ THE PARENT, AND NOT `detached` + A GROUP KILL — MEASURED, HAVING FIRST WRITTEN THE OTHER ONE.
+   *
+   * Chrome forks a renderer, a GPU process, a network service and a zygote, so killing the parent
+   * and orphaning the rest is a plausible story for where 378 processes came from. It is not what
+   * happens: with the group kill removed and only `proc.kill` left, every test in
+   * `v2-a-browser-is-never-left-running` still passes, because Chrome's children exit when the
+   * browser process does. An unfalsifiable mechanism is what this project refuses by name
+   * elsewhere, so it is gone.
+   *
+   * ⛔ AND `detached` WOULD HAVE MADE THINGS WORSE. Undetached, the browser sits in the runner's own
+   * process group and dies with a group signal — a free safety net. Detaching removes that and
+   * makes survival depend entirely on the hook above.
+   */
+  const killTree = () => {
+    try {
+      proc.kill("SIGKILL");
+    } catch {
+      /* already gone */
+    }
+  };
+  alive.add(killTree);
+
+  /**
+   * ⛔ EVERYTHING PAST THE SPAWN RUNS INSIDE THIS, because each step can throw while the caller
+   * still has no handle. "browser did not report a debugging endpoint" used to leave a whole Chrome
+   * running with nobody holding a reference to it.
+   */
+  try {
 
   /** Chrome prints the endpoint on stderr and only once it is listening. */
   let buf = "";
@@ -244,7 +325,8 @@ export async function openPage(html, { exe = findBrowser(), url, width, height }
       } catch {
         /* already gone */
       }
-      proc.kill("SIGKILL");
+      alive.delete(killTree);
+      killTree();
       await new Promise((resolve) => {
         if (proc.exitCode !== null || proc.signalCode) return resolve();
         proc.once("exit", resolve);
@@ -262,4 +344,14 @@ export async function openPage(html, { exe = findBrowser(), url, width, height }
       }
     },
   };
+  } catch (e) {
+    /**
+     * ⛔ REAPED BEFORE THE THROW, so a failure to START a browser does not leave one running. This
+     * is the path that produced most of the 378: the caller gets an exception and never a handle,
+     * so without this nobody on earth can close what was spawned.
+     */
+    alive.delete(killTree);
+    killTree();
+    throw e;
+  }
 }
