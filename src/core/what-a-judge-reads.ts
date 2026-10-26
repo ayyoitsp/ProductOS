@@ -35,10 +35,16 @@ import { LEVEL_WORD, type LevelName } from "../v2/level.js";
 
 /**
  * ⛔ THE ORDER A READER MEETS THEM IN, strongest first — and the KEYS come from `LEVEL_WORD`, so a
- * level added to `level.ts` without being listed here is a type error rather than a paragraph that
- * quietly describes three of four.
+ * rung added to `level.ts` without being listed here is a type error rather than a paragraph that
+ * quietly describes four of five.
+ *
+ * ⛔ IT WAS FOUR INVENTED NAMES AND IS NOW A SCALE, which is strictly better for a judge. Peter:
+ * *"I think we probably just need a confidence scale for derived, and get rid of suggested/open"*.
+ * What a reviewer needs is not a taxonomy but the LINE — `BUILDABLE` is the top three rungs, and
+ * everything below it is a claim a builder may not act on. That line is the whole reason this
+ * section exists, and the old names did not have one.
  */
-const ORDER: readonly LevelName[] = ["accepted", "derived", "suggested", "open"];
+const ORDER: readonly LevelName[] = ["accepted", "strongly-supported", "corroborated", "one-source", "none"];
 
 export const LEVEL_OPEN = "<!-- productos:what-you-are-reading -->";
 export const LEVEL_CLOSE = "<!-- /productos:what-you-are-reading -->";
@@ -54,14 +60,19 @@ export function whatAJudgeReads(): string {
 
 > Generated — do not edit between the markers. \`productos v2 agents --presets\` rewrites it, and a test fails if it drifts.
 
-**Not every sentence in a corpus is equally established, and you are the one who has to notice.** Every claim carries a level: ${names}. The packet prints it beside each slot; \`productos_exchange_questions\` returns it on every question; \`productos_exchange_can_be_agreed_to\` says what is blocking a behaviour and why — ⛔ and that last one **records nothing**, whatever its name suggests: it reports the gate, it does not open it, and agreeing to anything is a person's act that no tool of yours can perform.
+**Not every sentence in a corpus is equally established, and you are the one who has to notice.** Every claim carries a level, strongest first: ${names}. The packet prints it beside each slot; \`productos_exchange_questions\` returns it on every question; \`productos_exchange_can_be_agreed_to\` says what is blocking a behaviour and why — ⛔ and that last one **records nothing**, whatever its name suggests: it reports the gate, it does not open it, and agreeing to anything is a person's act that no tool of yours can perform.
 
-- **\`${LEVEL_WORD.accepted}\`** — a person read this and agreed to it. This is the only thing in a corpus anybody has stood behind.
-- **\`${LEVEL_WORD.derived}\`** — software worked it out from something agreed, and it is current with it.
-- **\`${LEVEL_WORD.suggested}\`** — somebody or something wrote it and **nobody has confirmed it**. Most of a fresh corpus is this.
-- **\`${LEVEL_WORD.open}\`** — a question somebody owes an answer to. It is not a claim at all.
+⛔ **The line is \`${LEVEL_WORD.corroborated}\`.** The top three rungs are what a builder may act on; the bottom two are not, whatever else is true about them.
 
-⛔ **Weigh what you read by what stands behind it, and say so in your finding.** A problem with an \`${LEVEL_WORD.accepted}\` sentence is a problem with the product: somebody agreed to it and it is wrong. The same problem in a \`${LEVEL_WORD.suggested}\` one may be nothing — a draft that has not been looked at yet, where the author already expects to be corrected.
+- **\`${LEVEL_WORD.accepted}\`** — a person read these words and agreed to them. The only thing in a corpus anybody has stood behind.
+- **\`${LEVEL_WORD["strongly-supported"]}\`** — several independent sources say it.
+- **\`${LEVEL_WORD.corroborated}\`** — worked out from agreed words, following an acceptance, or the product was SEEN doing it.
+- **\`${LEVEL_WORD["one-source"]}\`** — from a draft, a stale agreement, or an inference. ⛔ **Below the line.**
+- **\`${LEVEL_WORD.none}\`** — nothing supports it. ⛔ Below the line.
+
+⛔ **And a question somebody owes reports the bottom rung whatever supports it**, with what has been observed named beside it. An unanswered question is not a weak claim; it is not a claim.
+
+⛔ **Weigh what you read by what stands behind it, and say so in your finding.** A problem with an \`${LEVEL_WORD.accepted}\` sentence is a problem with the product: somebody agreed to it and it is wrong. The same problem in a \`${LEVEL_WORD.none}\` one may be nothing — a draft nobody has looked at, where the author already expects to be corrected.
 
 ⛔ **And never report a draft's unfinishedness as a defect.** "This cannot be built because nothing says where the stage order comes from" is a finding. "This cannot be built because the thing it rests on is only a suggestion" is not — that is the draft being a draft. Reporting it as a defect is how a reviewer sends somebody rewriting product truth to satisfy a reviewer rather than the person whose product it is, which is the one failure this whole arrangement is built to prevent.
 

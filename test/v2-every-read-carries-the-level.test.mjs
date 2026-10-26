@@ -12,6 +12,8 @@
  * the second, and the levels must be `levelOf`'s, not a second derivation that agrees today.
  */
 import assert from "node:assert/strict";
+/** ⛔ The gate itself, so "below it" is held against the real set rather than a literal. */
+const { BUILDABLE } = await import("../dist/v2/readiness.js");
 import { test } from "node:test";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
@@ -56,7 +58,7 @@ const corpusDir = (() => {
     /** ⛔ The premise, from the one module that answers it — not from the reads under test. */
     const c = loadCorpus(dir);
     assert.equal(levelOf(c, AGREED).level, "accepted");
-    assert.equal(levelOf(c, DRAFT).level, "suggested");
+    assert.ok(!BUILDABLE.includes(levelOf(c, DRAFT).level), "a draft passed the gate a builder applies");
     return (made = dir);
   };
 })();
@@ -75,11 +77,11 @@ test("the record carries each decision's ref level now, beside the person's own 
   assert.equal(d.route, "accepted-here");
 });
 
-test("a question carries its level, and an owed one reads open", async () => {
+test("a question carries its level, and an owed one is flagged as owed", async () => {
   const r = await call("productos_exchange_questions", { scope: "tasks" });
   const q = r.questions.find((x) => x.ref === "tasks#complete-a-task#at_once");
   assert.ok(q, `no question at tasks#complete-a-task#at_once: ${r.questions.map((x) => x.ref).join(", ")}`);
-  assert.equal(q.level, "open");
+  assert.equal(q.level, "none");
   assert.equal(q.route, "unruled");
   /** ⛔ Every question whose ref has a level carries it — a level on one and not its neighbour is a guess. */
   const c = loadCorpus(corpusDir());
@@ -101,11 +103,25 @@ test("the grid leads each cell with its level, so an agreed slot and a draft rea
     return row.slice(col).trim().split(/\s+/)[0];
   };
   assert.match(cellOf("see-a-balance"), /^a/, `the agreed slot does not read agreed:\n${grid}`);
-  assert.match(cellOf("record-earning"), /^s/, `the suggested slot does not read suggested:\n${grid}`);
-  assert.match(grid, /a agreed\s+d derived\s+s suggested\s+o open/, "the letters are not explained in plain words");
+  /**
+   * ⛔ `u` FOR UNSUPPORTED, AND THE GLYPH MOVED BECAUSE THE WORDS DID. The mark is the first letter
+   * of the display word, derived — so the five rungs read `a c o s u` and the old `s` for suggested
+   * is now `s` for strongly supported. That is a real reading hazard for anybody holding an old
+   * grid, which is why the legend is generated from `LEVEL_WORD` and asserted below rather than
+   * written out anywhere.
+   */
+  assert.match(cellOf("record-earning"), /^u/, `the unsupported slot does not read unsupported:\n${grid}`);
+  assert.match(
+    grid,
+    /a agreed\s+s strongly supported\s+c corroborated\s+o one source\s+u unsupported/,
+    "the letters are not explained in plain words"
+  );
+  /** ⛔ And every letter is distinct, or a reader cannot tell two rungs apart at all. */
+  const marks = [...grid.matchAll(/(\w) (agreed|strongly supported|corroborated|one source|unsupported)/g)].map((m) => m[1]);
+  assert.equal(new Set(marks).size, marks.length, `two rungs share a letter: ${marks.join("")}`);
 });
 
-test("the packet's slot lines say agreed or suggested in plain words", async () => {
+test("the packet's slot lines say how established each one is, in plain words", async () => {
   const { packet } = await call("productos_exchange_packet", { scope: "money" });
   const section = (title) => {
     const at = packet.indexOf(`## ${title}`);
@@ -117,7 +133,7 @@ test("the packet's slot lines say agreed or suggested in plain words", async () 
   const titleOf = (ref) =>
     c.scopes.find((s) => s.scope.id === "money").scope.exchanges.find((e) => e.id === ref.split("#")[1]).title;
   assert.match(section(titleOf(AGREED)), /^- \*\*with\*\* \*\(agreed\)\*/m);
-  assert.match(section(titleOf(DRAFT)), /^- \*\*with\*\* \*\(suggested\)\*/m);
+  assert.match(section(titleOf(DRAFT)), /^- \*\*with\*\* \*\(unsupported\)\*/m);
   /** ⛔ Plain words, never a route name. */
   assert.doesNotMatch(packet, /accepted-here|landed-by-software|accepted-through-a-rule/);
 });
@@ -137,7 +153,7 @@ test("the page puts the level on each behaviour row, so an HTML read can tell th
   const c = loadCorpus(corpusDir());
   const drafted = c.scopes.find((s) => s.scope.id === "money").scope.exchanges.find((e) => e.id === "record-earning").slots.with.says;
   const added = drafted[drafted.length - 1];
-  assert.equal(levelOfRow(`${DRAFT}#${added.id}`), "suggested");
+  assert.ok(!BUILDABLE.includes(levelOfRow(`${DRAFT}#${added.id}`)), "a drafted row passed the gate");
 });
 
 test("every read that now carries a level says so in its description", () => {

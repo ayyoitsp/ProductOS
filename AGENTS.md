@@ -111,7 +111,7 @@ flowchart TD
   index_a_corpus --> index_a_corpus_decomposer["decomposer"]
   index_a_corpus --> index_a_corpus_demonstrator["demonstrator ×N"]
   index_a_corpus --> index_a_corpus_designer["designer ×N"]
-  index_a_corpus -.->|keeps| index_a_corpus_self(["the session — 6 things it may not hand off"])
+  index_a_corpus -.->|keeps| index_a_corpus_self(["the session — 7 things it may not hand off"])
   hand_it_to_the_builders(["hand it to the builders<br/><i>The engineering and QA read, once product and design have signed off</i>"])
   hand_it_to_the_builders --> hand_it_to_the_builders_architecture["architecture"]
   hand_it_to_the_builders --> hand_it_to_the_builders_buildability["buildability"]
@@ -221,6 +221,7 @@ Run one analysis across everything, over only what is outstanding.
 **⛔ Keeps, because it may not be delegated:**
 - ⛔ running `productos v2 analyse <name>` FIRST and working only the refs it returns — a sweep that runs over everything redoes finished work and stops being something anybody runs twice
 - ⛔ reading what the analysis says about fanning before spawning anything: one that must be settled across the product first says so, and its refs are one run's worklist rather than a list of roles to spawn
+- ⛔ saying how many capabilities there are only from `productos_capability_tree` or the first line `analyse capabilities` prints — a product area called Capabilities is an older tree carried into product truth, its scopes are not subsystems, and counting either half alone is how sessions on a migrated corpus reported none and then dozens
 - ⛔ putting the subsystem tree in front of a person before any part of it is worked — the names, the areas and what nests in what. Three cold runs over three features produced three disjoint trees and nothing shared, and nobody reading them could see they were the same machinery
 - deciding which analysis to run: this route does one at a time, because thirty roles of three kinds at once is a diff nobody reviews
 - ⛔ reading the stale ones before the missing ones — a unit that was done and now answers an older wording looks finished to everybody reading it
@@ -247,7 +248,7 @@ The engineering and QA read, once product and design have signed off.
 Answer whether a piece of work can be built, and raise what is open as questions.
 
 **Spawns, in order:**
-- `demonstrator` *(quality · writes)* — the tests for every claim `readiness` lists as untested, one `demonstrate` call each — worked out from the claim as it reads, suggested until somebody agrees to it
+- `demonstrator` *(quality · writes)* — the tests for every claim `readiness` lists as untested, one `demonstrate` call each — worked out from the claim as it reads, and below the line a builder applies until somebody agrees to it
 
 **⛔ Keeps, because it may not be delegated:**
 - the whole reading — `productos_readiness` for the verdict, the queue for each open question, and the packet for what to build from
@@ -515,7 +516,7 @@ Held three ways rather than one: no author declares `ask-the-human`, so no host 
 - write or reword a claim. ⛔ A requirement that needs the sentence to be different is a note addressed to whoever owns the sentence — changing it would be the test deciding the product
 - assert anything the claim does not say: an engineer implements the `then`, so a word invented here becomes product truth nobody agreed to
 - demonstrate a claim about refusing with a case that succeeds — the whole content of the claim is in the part a happy path never reaches
-- stop because a claim is not agreed yet — a test worked out from a draft reads as suggested until somebody agrees to the claim, and climbs to derived with nothing re-derived
+- stop because a claim is not agreed yet — a test worked out from a draft sits below the line a builder applies until somebody agrees to the claim, and climbs above it with nothing re-derived
 - supply the hash itself — `demonstrate` hashes the claim it attaches to, so a test cannot be marked current with words it was not written against
 - stamp anything walked, validated or accepted
 
@@ -978,7 +979,7 @@ So the question you own is not asked once over a feature. It is asked once per c
 
 What `--help` cannot tell you, and why this exists: **who** types it. *Never hand a human a flag* is a rule the skills state and nothing enforced — a command marked `claude` appearing in instructions addressed to a person is now a visible contradiction.
 
-### 47 commands
+### 48 commands
 
 | command | does | layer | typed by |
 |---|---|---|---|
@@ -1004,6 +1005,7 @@ What `--help` cannot tell you, and why this exists: **who** types it. *Never han
 | `productos v2 acts` | How many acts of human judgement this corpus carries | derive | the model |
 | `productos v2 packet` | Compile the execution packet for one scope | generate | the model |
 | `productos v2 claim` | The hash of what a claim says, for a requirement worked out against it | derive | the model |
+| `productos v2 subsystems` | The capability tree, and what converting an older one into it would do | derive | the model |
 | `productos v2 analyse` | What work an analysis has left across a corpus, and which of it is stale | derive | the model |
 | `productos v2 next` | What to ask somebody next about one feature | derive | the model |
 | `productos v2 interview` | What is still worth asking somebody about one feature, folded so each thing is asked once | derive | the model |
@@ -1037,8 +1039,8 @@ Territory, not ownership. Nobody is assigned an area — an agent reads this to 
 | area | layers | files |
 |---|---|---|
 | **model** | model | `src/v2/schema.ts` `src/v2/load.ts` `src/v2/ref.ts` `src/core/jobs.ts` `src/core/change.ts` `src/core/config.ts` `src/v2/store/schema.ts` |
-| **derive** | derive | `src/v2/grid.ts` `src/v2/stamp.ts` `src/v2/demonstrate.ts` `src/v2/analyse.ts` `src/v2/confidence.ts` `src/v2/level.ts` `src/v2/readiness.ts` `src/v2/find.ts` `src/v2/settle.ts` `src/v2/interview.ts` `src/v2/applies.ts` `src/v2/acts.ts` `src/v2/record.ts` `src/v2/connects.ts` `src/v2/derive-states.ts` `src/v2/walk.ts` `src/v2/held.ts` `src/v2/selection.ts` `src/v2/dimensions.ts` `src/v2/steers.ts` `src/v2/store/access.ts` `src/v2/store/identity.ts` `src/core/learn.ts` `src/core/framework-gaps.ts` `src/adapters/claude.ts` |
-| **generate** | generate | `src/v2/draw.ts` `src/v2/draw-write.ts` `src/cli/commands/v2.ts` `src/v2/routes.ts` `src/v2/propose.ts` `src/v2/propose-slots.ts` `src/v2/reslot.ts` `src/v2/walked.ts` `src/v2/appcss.ts` `src/v2/icons.ts` `src/v2/shell.ts` `src/core/agents-doc.ts` `src/v2/design.ts` `src/v2/compiler.ts` `src/v2/store/watchdog.ts` `src/v2/store/because.ts` `src/v2/store/corpus.ts` `src/v2/store/doc-migrations.ts` `src/v2/store/migrate.ts` `src/v2/store/boot.ts` |
+| **derive** | derive | `src/v2/grid.ts` `src/v2/stamp.ts` `src/v2/demonstrate.ts` `src/v2/analyse.ts` `src/v2/subsystems.ts` `src/v2/confidence.ts` `src/v2/level.ts` `src/v2/readiness.ts` `src/v2/find.ts` `src/v2/settle.ts` `src/v2/interview.ts` `src/v2/applies.ts` `src/v2/acts.ts` `src/v2/record.ts` `src/v2/connects.ts` `src/v2/derive-states.ts` `src/v2/walk.ts` `src/v2/held.ts` `src/v2/selection.ts` `src/v2/dimensions.ts` `src/v2/steers.ts` `src/v2/store/access.ts` `src/v2/store/identity.ts` `src/core/learn.ts` `src/core/framework-gaps.ts` `src/adapters/claude.ts` |
+| **generate** | generate | `src/v2/draw.ts` `src/v2/draw-write.ts` `src/cli/commands/v2.ts` `src/v2/routes.ts` `src/v2/convert-capabilities.ts` `src/v2/propose.ts` `src/v2/propose-slots.ts` `src/v2/reslot.ts` `src/v2/walked.ts` `src/v2/appcss.ts` `src/v2/icons.ts` `src/v2/shell.ts` `src/core/agents-doc.ts` `src/v2/design.ts` `src/v2/compiler.ts` `src/v2/store/watchdog.ts` `src/v2/store/because.ts` `src/v2/store/corpus.ts` `src/v2/store/doc-migrations.ts` `src/v2/store/migrate.ts` `src/v2/store/boot.ts` |
 | **operate** | operate | `Makefile` `Dockerfile` `docker-compose.yml` `docker-compose.remote.yml` `scripts/` |
 | **surface** | surface | `src/v2/page.ts` `src/v2/prototype.ts` `src/v2/serve.ts` `src/v2/intents.ts` `src/v2/suggest.ts` `src/v2/store/server.ts` `src/v2/store/instance.ts` `src/v2/store/pushes.ts` `src/v2/store/mcp.ts` `src/v2/store/connect.ts` `src/v2/store/choose.ts` `src/cli/commands/hosted.ts` `src/v2/packet.ts` `src/v2/notes.ts` `src/v2/watch.ts` `src/v2/log.ts` `src/v2/inbox.ts` `src/v2/presence.ts` `src/v2/identity.ts` `src/v2/client.ts` `src/v2/write.ts` `src/v2/wire.ts` `src/v2/states.ts` `src/v2/moved.ts` `src/cli/commands/v2.ts` `src/cli/commands/todo.ts` `src/v2/store/trace.ts` `src/mcp/v2-tools.ts` |
 | **instruct** | instruct | `skills` `agents` |

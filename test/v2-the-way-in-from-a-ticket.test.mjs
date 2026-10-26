@@ -16,6 +16,8 @@
  * answers the same thing, which is `v2-confidence`'s lesson paid for once already.
  */
 import assert from "node:assert/strict";
+/** ⛔ The gate itself, so "below it" is held against the real set rather than a literal. */
+const { BUILDABLE } = await import("../dist/v2/readiness.js");
 import fs from "node:fs";
 import { test } from "node:test";
 import { temp } from "./support/temp.mjs";
@@ -59,7 +61,7 @@ test("the hit says what is undecided about it, not merely that it matched", () =
    * two drafted answers nobody has chosen between. `suggested` is the gate, and `because` is what
    * it pastes into the ticket.
    */
-  assert.equal(top.level.level, "suggested");
+  assert.ok(!BUILDABLE.includes(top.level.level), `it reads ${top.level.level}`);
   assert.equal(top.level.route, "drafted");
   assert.match(top.level.because, /larger than what the kid has/);
 

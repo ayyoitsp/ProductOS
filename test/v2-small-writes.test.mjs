@@ -18,7 +18,7 @@ import { temp } from "./support/temp.mjs";
 import { intentNamed, refuseIntent, incomplete } from "../dist/v2/intents.js";
 import { loadCorpus } from "../dist/v2/load.js";
 import { levelOf } from "../dist/v2/level.js";
-import { readinessOf } from "../dist/v2/readiness.js";
+import { readinessOf, BUILDABLE } from "../dist/v2/readiness.js";
 import { questionsFor } from "../dist/v2/settle.js";
 import { stampFor } from "../dist/v2/stamp.js";
 
@@ -61,7 +61,7 @@ test("a suggested sentence lands in the slot and reads as suggested, by an agent
 
   /** ⛔ The reader a consumer uses, not the YAML. */
   const lvl = levelOf(corpus, `money#see-a-balance#answer#${added.id}`);
-  assert.equal(lvl.level, "suggested", `a suggestion reads as ${lvl.level}`);
+  assert.ok(!BUILDABLE.includes(lvl.level), `a sentence an agent landed reads ${lvl.level}`);
 });
 
 test("a suggestion is unagreed: it holds readiness back until a person agrees to it", () => {
@@ -76,7 +76,7 @@ test("a suggestion is unagreed: it holds readiness back until a person agrees to
   assert.equal(ready.ready, false);
   const mine = ready.unagreed.find((u) => u.ref.startsWith("money#record-earning#with#a-note"));
   assert.ok(mine, `readiness does not list the suggested sentence among what is unagreed: ${ready.unagreed.map((u) => u.ref).join(", ")}`);
-  assert.equal(mine.level, "suggested");
+  assert.ok(!BUILDABLE.includes(mine.level), `it reads ${mine.level}`);
   assert.notEqual(mine.wrote.is, "unrecorded", "readiness lost who wrote it, so a grooming agent cannot tell it needs a question");
 });
 

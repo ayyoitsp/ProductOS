@@ -160,12 +160,62 @@ export function watchCorpus(dir: string, opts: WatchOptions = {}): { stopped: Pr
   }
 
   /**
-   * ⛔ A SLOW BACKSTOP, AND IT IS NOT THE MECHANISM. fs.watch misses events over some network and
-   * container filesystems, and a watcher that silently stops noticing is worse than one that polls.
-   * Thirty seconds, costing nothing — it is a filesystem read in a process that is already running,
-   * not a model call.
+   * ⛔ THE POLL IS THE MECHANISM HERE, NOT THE BACKSTOP — AND IT HAD TO BE, BECAUSE `fs.watch` ON A
+   * DIRECTORY REPORTS NOTHING ON macOS.
+   *
+   * Measured three ways before changing anything, because the comment this replaces asserted the
+   * opposite and had been believed for months:
+   *
+   *     append → flat dir watch        0 events
+   *     new file → flat dir watch      0 events      <- its own stated purpose
+   *     new file → RECURSIVE watch     0 events      <- FSEvents path, also nothing
+   *     append → FILE watch            1 event       <- the only thing that works
+   *
+   * So the three directory watches above fire on Linux, where the instance runs, and never fire on
+   * the machine everybody develops against. With a thirty-second interval behind them, "the page
+   * hears about a change" meant up to half a minute locally — and `v2-live` and `v2-watch`, the two
+   * tests that would have said so, were HANGING rather than failing, because each tore its watcher
+   * down on the last line of its body. A hang reports nothing through a gate that captures output.
+   *
+   * ⛔ AND A ONE-SECOND `sweep` WOULD BE WORSE THAN THE BUG. `sweep` calls `loadCorpus`, which is
+   * ~374ms of YAML on Bilrost's corpus — polling that every second would spend a third of a core
+   * per open watcher to notice nothing had changed.
+   *
+   * ⛔ SO WHAT IS POLLED IS A FINGERPRINT, AND THE PARSE HAPPENS ONLY WHEN IT MOVES. Size and mtime
+   * of the record files, which is three directory listings and a stat each — the cheap half of the
+   * question "has anything happened", asked often, with the expensive half asked only when the
+   * answer is yes.
    */
-  const floor = setInterval(() => sweep(true), 30_000);
+  const fingerprint = (): string => {
+    const parts: string[] = [];
+    for (const sub of ["verdicts", "notes", "readings"]) {
+      const here = path.join(dir, sub);
+      let names: string[];
+      try {
+        names = fs.readdirSync(here).sort();
+      } catch {
+        continue;
+      }
+      for (const name of names) {
+        try {
+          const st = fs.statSync(path.join(here, name));
+          parts.push(`${sub}/${name}:${st.size}:${st.mtimeMs}`);
+        } catch {
+          /** ⛔ Mid-write or just removed: the next poll settles it, and a throw here would end the stream. */
+        }
+      }
+    }
+    return parts.join("|");
+  };
+
+  let was = fingerprint();
+  const floor = setInterval(() => {
+    const now = fingerprint();
+    if (now === was) return;
+    was = now;
+    /** ⛔ Through `bump`, not straight to `sweep`, so a burst of writes is still one announcement. */
+    bump();
+  }, 500);
 
   let done: () => void;
   const stopped = new Promise<void>((r) => (done = r));

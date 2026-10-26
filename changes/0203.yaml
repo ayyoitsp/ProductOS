@@ -1,21 +1,14 @@
 id: "0203"
-said: |-
-  what is 'interview', this should be a first class representation in the UX - and claude should ideally be able to access this via mcp
-
-  — and, sharper: we should not be creating command line 'instructions' at this point? it should just be another functionality that could be reachable.  maybe i'm just taking issue with you saying 'producos v2 interview' command line, like no one will ever use the command line
-at: 2026-10-20
+said: "did you create CapabilityOffering? is that supposed to be the new capability tree? i'm confused / yes, but also fix the tooling.  every claude session connecting to staging is confused by the # of capabilities, if they even exist / while you're there, seems like our renderer is rendering our capabilities as a feature, which is wrong - should have its own view, specific to the contracts it provides / to be clear, i expect there to ONLY be a v2 subsystem/capability tree after this and no confusion, with the existing capabilities migrated to v2"
+at: 2026-10-23
 kind: concept
 reaches:
-  model: POLICY_SLOTS
-  derive: interviewFor
-  surface: renderUnasked
-  check: slot-blank
-  instruct: productos_exchange_interview
-  pin: nothing in it is pressable, and it does not look like the queue
-waived:
-  generate: >
-    Nothing new is generated. The derivation writes nothing at all, and the one answer that is not a
-    sentence — a screen with no picture — already routes to the existing drawing generators rather
-    than adding one. The correction in this record was about REACHABILITY, not about producing
-    anything: the same derivation now answers on the page and over MCP instead of only from a
-    checkout.
+  model: export const Subsystem
+  derive: export function capabilityTree
+  generate: 0002-carried-capabilities-become-subsystems
+  surface: productos_capability_tree
+  check: a-capability-that-serves-nothing
+  instruct: Parts converted from an older tree are where you start
+  pin: after conversion there is one tree, and no Capabilities area
+waived: {}
+closed: 2026-10-23

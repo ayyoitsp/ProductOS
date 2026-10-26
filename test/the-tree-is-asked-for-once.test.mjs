@@ -24,6 +24,7 @@ import { temp } from "./support/temp.mjs";
 
 const { loadCorpus } = await import(path.resolve("dist/v2/load.js"));
 const { interviewFor } = await import(path.resolve("dist/v2/interview.js"));
+const { capabilityTree } = await import(path.resolve("dist/v2/subsystems.js"));
 const CLI = path.resolve("dist/cli/index.js");
 
 /** The seed, which is a root with areas, behaviours that change things, and no capabilities. */
@@ -45,7 +46,15 @@ const kinds = (dir, scope) => {
 test("⛔ with no capabilities, the tree is asked for once — at the product, not per feature", () => {
   const dir = seed();
   const c = loadCorpus(dir);
-  assert.equal(c.capabilities.length, 0, "the seed has capabilities, so this test is measuring nothing");
+  /**
+   * ⛔ THROUGH `capabilityTree`, NOT A RAW FIELD — and the field this used to read no longer exists.
+   *
+   * Reading one is the mistake that produced the worst claim of the session: I counted
+   * `corpus.capabilities`, got zero on a corpus holding 47, and told Peter his product had none.
+   * He was looking at the page. A test that counts its own way can pin an interview to arithmetic
+   * no surface agrees with, so this asks the same function the page, `check` and MCP ask.
+   */
+  assert.equal(capabilityTree(c).counts.capabilities, 0, "the seed has a tree, so this test is measuring nothing");
 
   const at = root(dir);
   assert.equal(kinds(dir, at).parts, 1, "nothing asks what parts the product consists of");
@@ -111,7 +120,7 @@ offers:
 
   const after = loadCorpus(dir);
   assert.equal(after.broken.length, 0, `the fixture does not load: ${after.broken.map((b) => b.why).join("; ")}`);
-  assert.equal(after.capabilities.length, 1);
+  assert.equal(capabilityTree(after).counts.capabilities, 1, "the part written above is not in the tree");
 
   const now = kinds(dir, at);
   assert.ok(!now.parts, "the product is still asked what its parts are after a part exists");

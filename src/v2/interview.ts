@@ -46,6 +46,7 @@ import type { Corpus } from "./load.js";
 import type { Finding } from "./check.js";
 import { actsFor, gridFor } from "./grid.js";
 import { ANALYSES } from "./analyse.js";
+import { capabilityTree } from "./subsystems.js";
 import { descendants, questionsFor, rulingAct, type Question } from "./settle.js";
 import { vocabularyReach } from "./load.js";
 import { POLICY_SLOTS, SLOT_ASKED, SLOT_ASKS_SHORT, SLOTS, statements, type SlotName } from "./schema.js";
@@ -852,8 +853,22 @@ function unanchored(findings: Finding[], scopeIds: string[]): Owed[] {
  * them serves this feature rather than what the parts are.
  */
 function unserved(corpus: Corpus, scopeIds: string[]): Owed[] {
+  /**
+   * ⛔ `capabilityTree`, NOT THE RAW FIELD — AND READING THE FIELD IS EXACTLY WHAT I GOT WRONG.
+   *
+   * I keyed this on `corpus.capabilities.length`, found zero on Peter's corpus, and reported that
+   * his product had no capabilities. It has 47. They were a v1 tree filed as product scopes under a
+   * `capabilities` area, and the field I read is a different representation nothing had written. He
+   * said it plainly: *"on staging, i see hundreds of capabilities. are you high?"* — and he was
+   * looking at the page while I was looking at a field.
+   *
+   * `subsystems.ts` is now the one home for this and its own commit message says why: *"every
+   * surface counts the same"*, read by analyse, MCP, check and the page. A fifth reader with its own
+   * arithmetic is how that guarantee ends.
+   */
+  const tree = capabilityTree(corpus);
   /** ⛔ The gate. With no tree this is the `parts` question, asked once, not once per feature. */
-  if (!corpus.capabilities.length) return [];
+  if (!tree.counts.capabilities) return [];
   const sweep = ANALYSES.find((a) => a.name === "capabilities");
   if (!sweep) return [];
 
@@ -865,7 +880,7 @@ function unserved(corpus: Corpus, scopeIds: string[]): Owed[] {
   );
 
   /** Every part that exists, by the words it uses about itself. */
-  const parts = corpus.capabilities.map(({ capability }) => plain(capability.title || capability.id));
+  const parts = tree.subsystems.map((x) => plain(x.title || x.id));
 
   return scopeIds
     .filter((id) => missing.has(id))
@@ -916,7 +931,18 @@ function parts(corpus: Corpus, scopeId: string): Owed[] {
   if (!isRoot) return [];
   const sweep = ANALYSES.find((a) => a.name === "capabilities");
   if (!sweep?.settleFirst) return [];
-  if (corpus.capabilities.length) return [];
+  /**
+   * ⛔ THE SAME ONE HOME. This read the raw field too, so on a corpus with a v1 tree it asked what
+   * the product's parts are while 47 of them sat in the corpus — a question with a false premise,
+   * which is worse than no question.
+   *
+   * ⛔ AND `carried` IS WHY THE COUNT ALONE IS NOT ENOUGH. A corpus mid-conversion has an older tree
+   * filed as product scopes and no subsystems yet; asking it to invent a tree would be asking it to
+   * duplicate one. So a carried area counts as a tree here, and what it needs is conversion rather
+   * than an interview.
+   */
+  const tree = capabilityTree(corpus);
+  if (tree.counts.capabilities || tree.carried.length) return [];
 
   const features = corpus.scopes.filter((x) => x.scope.exchanges.length).length;
 

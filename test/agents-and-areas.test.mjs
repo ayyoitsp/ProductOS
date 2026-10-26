@@ -667,15 +667,35 @@ test("every role's installed definition is committed, and matches its source", (
    * silent — the guarantee that the installed file matches its source is blind to the half of the
    * file that cannot be universally correct.
    *
-   * ⛔ WHAT STOPPED A BAD COMMIT WAS A PERSON REMEMBERING. The deploy session's first plan was to
-   * commit whatever the installer wrote — "if it can be generated, generate it" — and what stopped
-   * it was `CLAUDE.md`'s record of an install once reverting `productos-scoper.md` to a `criteria`
-   * section Peter had killed. Prose saved it that time. This is the failing build.
+   * ⛔ WHAT STOPPED A BAD COMMIT WAS A SPECIFIC, FALSIFIABLE RECORD — NOT SOMEBODY BEING CAREFUL.
+   *
+   * The deploy session's first plan was to commit whatever the installer wrote, on the correct
+   * instinct that "if it can be generated, generate it". What stopped it was `CLAUDE.md` naming a
+   * PARTICULAR past failure: an install once reverted THIS FILE — `productos-scoper.md` — and
+   * restored a `criteria` section Peter had killed, with his words attached. That is why they went
+   * and diffed: a named failure told them WHICH diff to look at.
+   *
+   * ⛔ THE DISTINCTION IS THE WHOLE POINT, and it is theirs rather than mine — I first wrote this up
+   * as "a person remembering", which makes it sound like attentiveness and makes the lesson
+   * unactionable. "Be careful with installs" would not have stopped it. A record that says which
+   * file, which section and whose words did. Prose is not weak here BECAUSE it is prose; it is
+   * strong when it is specific enough to aim a check, and it still cannot run on its own. Hence
+   * this assertion.
    *
    * ⛔ IT DOES NOT ASSERT THE ABSENCE OF ALL MCP TOOLS, which would be a `0` with no failing state
    * and would also forbid the canonical registration a fresh clone legitimately has. It asserts
    * that no committed name is for a server OTHER than `productos` — so the main checkout's install
    * stays committable and a worktree's does not.
+   */
+  /**
+   * ⛔ AND THERE IS NO SECOND DEFECT HERE — RESOLVED, SO NOBODY GOES LOOKING.
+   *
+   * The report that came with this one said `init claude --update` left a stale author's body
+   * untouched, which would have been a separate hole in the remedy above. It does not: driven at
+   * the sha where scoper IS stale, the installer rewrote six lines and this test went green. The
+   * original observation was made on a branch cut from a main that had ALREADY fixed scoper, so
+   * there was nothing to change — the failure being reasoned about was two commits behind the tree
+   * it was measured in, and "which sha" was the unstated condition that was the entire finding.
    */
   /**
    * ⛔ AND A FILE WITH NO FRONTMATTER AT ALL WAS SKIPPED BY THE LOOP BELOW — `if (!head) continue`.

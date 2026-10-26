@@ -2980,7 +2980,7 @@ export const Scope = z.object({
 export type Scope = z.infer<typeof Scope>;
 
 // ---------------------------------------------------------------------------
-// Capability — the subsystems beneath the product, and roughly what each does.
+// Subsystem and Capability — the parts beneath the product, and roughly what each does.
 
 /**
  * ⛔ RESTORED. A CLAUDE SESSION DELETED THIS AND NOBODY ASKED IT TO.
@@ -3020,7 +3020,13 @@ export type Scope = z.infer<typeof Scope>;
  * product truth; this layer says what parts there are and what each is for. Anything that
  * makes an engineer write a given/when/then here has misunderstood the layer.
  */
-export const CapabilityOffering = z
+/**
+ * ⛔ NAMED SO THE WORD MEANS ONE THING. This was `CapabilityOffering`, beside a `Capability` that was
+ * really a subsystem — so the thing a person calls a capability had the longer, odder name, and
+ * Peter asked *"did you create CapabilityOffering? is that supposed to be the new capability tree?
+ * i'm confused"*. A `Subsystem` offers `Capability`s; there is one tree and these are its leaves.
+ */
+export const Capability = z
   .object({
     id: z.string().regex(new RegExp(`^${SEGMENT}$`), "a capability id is one segment, kebab-case"),
     /** Roughly what it does. One or two sentences — see the constraint above. */
@@ -3045,7 +3051,15 @@ export const CapabilityOffering = z
      * money. What `check` enforces is that following `serves` eventually reaches product
      * truth: machinery that only ever serves machinery is machinery nobody asked for.
      */
-    serves: z.array(z.string().regex(REF_PATTERN, REF_MESSAGE)).min(1),
+    /*
+     * ⛔ AND NOW REQUIRED AT `check`, NOT HERE — because the premise above stopped being true. The
+     * older tree carried into product truth is converted into this one (`convert-capabilities.ts`),
+     * and a carried capability nothing declared a dependency on has no honest `serves` to write.
+     * Refused at the schema, it would not load and would vanish from every page; refused at `check`
+     * as `a-capability-that-serves-nothing`, it is shown, named, and blocks handover until a person
+     * says what it is for.
+     */
+    serves: z.array(z.string().regex(REF_PATTERN, REF_MESSAGE)).default([]),
     /**
      * What this was worked out from, and when — the same shape `Criterion.derived` carries, and
      * for the same reason.
@@ -3081,9 +3095,9 @@ export const CapabilityOffering = z
       .optional(),
   })
   .strict();
-export type CapabilityOffering = z.infer<typeof CapabilityOffering>;
+export type Capability = z.infer<typeof Capability>;
 
-export const Capability = z
+export const Subsystem = z
   .object({
     id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/, "subsystem ids are kebab-case slugs, not paths"),
     title: z.string().min(2),
@@ -3112,7 +3126,7 @@ export const Capability = z
      * a cycle between two subsystems indistinguishable from a layering.
      */
     uses: z.array(z.string()).default([]),
-    offers: z.array(CapabilityOffering).default([]),
+    offers: z.array(Capability).default([]),
   })
   .strict()
   .superRefine((c, ctx) => {
@@ -3133,7 +3147,7 @@ export const Capability = z
       seen.add(o.id);
     }
   });
-export type Capability = z.infer<typeof Capability>;
+export type Subsystem = z.infer<typeof Subsystem>;
 
 // ---------------------------------------------------------------------------
 // Reading — an observation. ⛔ Never truth.
