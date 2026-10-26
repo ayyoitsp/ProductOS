@@ -87,6 +87,45 @@ export function inCarriedArea(corpus: Corpus): Set<string> {
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
+/**
+ * The path through the menu to each subsystem — the same `in:` chain the tree is indented by.
+ *
+ * ⛔ A SEPARATE TREE NEEDS A SEPARATE TRAIL, AND IT IS NOT `trailsOf`. That one walks `Scope.in`
+ * across product truth; a subsystem nests inside another SUBSYSTEM, and the two trees deliberately
+ * do not mix — Peter: *"product scope sits under product, and they reference capabilities"*. Asking
+ * `trailsOf` for a subsystem would silently return a one-element trail, which renders as a
+ * top-level row for something that is three deep.
+ *
+ * ⛔ AND IT IS COMPUTED HERE, ONCE, because the nav rows, the addresses and the breadcrumb all
+ * answer "where is this filed" and this project has paid repeatedly for two derivations of one
+ * fact. `renderNav`'s own comment says a second tree per area "would be two derivations of one
+ * fact, which is what this project keeps being bitten by".
+ *
+ * The `subsystems` segment heads every trail, because that is the view the tree lives on and the
+ * address has to land somewhere a route already knows.
+ */
+export function subsystemTrailsOf(corpus: Corpus): Record<string, Array<{ id: string; label: string }>> {
+  const subs = corpus.subsystems.map((x) => x.subsystem);
+  const byId = new Map(subs.map((s) => [s.id, s]));
+  const out: Record<string, Array<{ id: string; label: string }>> = {};
+  for (const s of subs) {
+    const trail: Array<{ id: string; label: string }> = [];
+    /** ⛔ A guard, because `in:` is author-supplied and a cycle would hang the render. `check`
+     *  refuses a subsystem filed inside itself; this still must not spin before it gets there. */
+    const seen = new Set<string>();
+    let at: string | undefined = s.id;
+    while (at && !seen.has(at)) {
+      seen.add(at);
+      const here = byId.get(at);
+      if (!here) break;
+      trail.unshift({ id: here.id, label: here.title || here.id });
+      at = here.in;
+    }
+    out[s.id] = trail;
+  }
+  return out;
+}
+
 export function capabilityTree(corpus: Corpus): CapabilityTree {
   const parts = derivedCapabilities(corpus);
   const subsystems = corpus.subsystems.map(({ subsystem: s }) => ({

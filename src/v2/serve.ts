@@ -14,6 +14,7 @@ import type http from "node:http";
 import { loadCorpus, corpusFiles, notesIn, type Corpus } from "./load.js";
 import { renderScopePage, standalone, trailsOf } from "./page.js";
 import { SLOTS } from "./schema.js";
+import { subsystemTrailsOf } from "./subsystems.js";
 import { perform, preview, payloadFrom, VIA, ACTS, type Act, type Via } from "./acts.js";
 /**
  * ⛔ NOTHING FROM `notes.js` AND NO AUTHORITY CHECK IS IMPORTED HERE ANY MORE, which is the shape
@@ -705,6 +706,38 @@ export async function v2Route(req: http.IncomingMessage, res: http.ServerRespons
     for (const seg of segments) if (corpus.scopes.some((x) => x.scope.id === seg)) scope = seg;
 
     /**
+     * Which subsystem a machinery path names — `/v2/subsystems/<its own in: chain>`.
+     *
+     * ⛔ THE CAPABILITY TREE HAD NO ADDRESS AT ALL, which is what Peter was looking at: *"I see a
+     * bunch of capabilities flattend in the menu. is the tree completely gone?"*. It was not gone —
+     * it had a model and a renderer and nowhere to navigate to, so all 27 subsystems rendered on one
+     * view with their nesting shown as indentation.
+     *
+     * ⛔ ONLY UNDER THE `subsystems` SEGMENT, NEVER BARE. Four ids in the real corpus name both a
+     * product scope and a subsystem, so a bare `/v2/<id>` has to keep meaning the scope — otherwise
+     * merging the trees in the URL would quietly change which page four existing addresses serve.
+     */
+    let subsystem: string | undefined;
+    if (segments[0] === "subsystems") {
+      for (const seg of segments.slice(1))
+        if (corpus.subsystems.some((x) => x.subsystem.id === seg)) subsystem = seg;
+      /**
+       * ⛔ AND THE CHAIN IS CHECKED, for the reason the scope redirect below exists: three invented
+       * ancestries served one byte-identical page, which undercuts the only claim an address makes.
+       */
+      if (subsystem) {
+        const canonical = (subsystemTrailsOf(corpus)[subsystem] ?? []).map((c) => c.id);
+        const want = ["subsystems", ...canonical];
+        const wrong = segments.length !== want.length || want.some((c, i) => segments[i] !== c);
+        if (wrong) {
+          res.writeHead(301, { location: `${opts.mount ?? ""}/v2/${want.map(encodeURIComponent).join("/")}` });
+          res.end();
+          return true;
+        }
+      }
+    }
+
+    /**
      * ⛔ THE WHOLE CHAIN HAS TO BE THE MENU PATH, OR A WRONG ADDRESS IS INDISTINGUISHABLE FROM A
      * RIGHT ONE.
      *
@@ -749,6 +782,8 @@ export async function v2Route(req: http.IncomingMessage, res: http.ServerRespons
      */
     if (segments.length) {
       const known = new Set(["overview", "prototype", "settings", "subsystems", "walk"]);
+      /** ⛔ A subsystem id is a real address now, so it is not an unrecognised tail. */
+      if (segments[0] === "subsystems") for (const x of corpus.subsystems) known.add(x.subsystem.id);
       const sc = scope ? corpus.scopes.find((x) => x.scope.id === scope)?.scope : undefined;
       const inScope = new Set<string>([
         ...(sc?.exchanges ?? []).map((e) => e.id),
@@ -825,7 +860,10 @@ export async function v2Route(req: http.IncomingMessage, res: http.ServerRespons
        * ⛔ AND THE STANDALONE RENDER DOES NOT PASS THIS. `v2 page --out` has no server to ask, so a
        * deferred section in a file is a section that never arrives.
        */
-      only: [target, "overview"],
+      /** ⛔ The machinery view has to arrive with the page when the address named a subsystem,
+       *     or the row navigates to a stub that fills in later and the landing reads as empty. */
+      only: subsystem ? [target, "overview", "subsystems"] : [target, "overview"],
+      subsystem,
     });
     if (!page) {
       const known = corpus.scopes.map((s) => s.scope.id);
