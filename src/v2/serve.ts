@@ -441,7 +441,9 @@ export async function v2Route(req: http.IncomingMessage, res: http.ServerRespons
   if (req.method === "POST" && p === "/api/v2/preview") {
     const body = await readJson(req);
     const act = String(body.act ?? "") as Act;
-    if (!ACTS.includes(act)) return json(res, { ok: false, why: `"${body.act}" is not one of the five acts` }, 400), true;
+    if (!ACTS.includes(act)) /** ⛔ It lists what it takes. `ACTS` holds six operations and `Verdict.kind` holds five acts, so
+       *     "one of the five" was false about this list — the same confusion `intents.ts` records. */
+      return json(res, { ok: false, why: `"${body.act}" is not one of: ${ACTS.join(" | ")}` }, 400), true;
     return json(res, preview(dir, act, payloadFrom(act, String(body.ref ?? ""), body))), true;
   }
 

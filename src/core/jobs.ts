@@ -1705,6 +1705,7 @@ export const COMMANDS: Verb[] = [
   { name: "v2 read", does: "Record that somebody read a scope end to end", owns: "derive", who: "claude" },
   { name: "v2 waive", does: "Declare that something is deliberately not answered", owns: "derive", who: "claude" },
   { name: "v2 defer", does: "Park a question somebody has read and is not answering yet", owns: "derive", who: "claude" },
+  { name: "v2 withdraw", does: "Take something out — a feature, one behaviour, one slot, or one statement", owns: "derive", who: "claude" },
   { name: "v2 decide", does: "Work one scope's open questions, with what guessing wrong would cost", owns: "surface", who: "claude" },
 
   // generating. ⛔ If it can be generated, generate it — these are why hand-authoring is a defect.
