@@ -42,7 +42,7 @@ import { decisionsOn, decisionsUnder, howItWasDecided, type Decision } from "./r
 import { holdsOn, whyHeld } from "./held.js";
 import { selectionOf, gapsIn, type Selection, type Option } from "./selection.js";
 import { dimensionsOf, sayCombination, variesBy } from "./dimensions.js";
-import { capabilityTree } from "./subsystems.js";
+import { capabilityTree, subsystemTrailsOf } from "./subsystems.js";
 
 const esc = (s: unknown): string =>
   String(s ?? "")
@@ -179,6 +179,28 @@ const addressIn =
     return `${base}/${[...menu, ...rest].map(encodeURIComponent).join("/")}`;
   };
 
+/**
+ * The address of a subsystem: `/v2/subsystems/<its own in: chain>`.
+ *
+ * ⛔ A SEPARATE TREE GETS A SEPARATE ADDRESS SPACE, AND THIS IS WHY IT MUST BE. Four ids in the real
+ * corpus name BOTH a product scope and a subsystem — `resolve-a-documents-name` is one — so a flat
+ * `/v2/<id>` would be two different pages competing for one address. Heading every subsystem path
+ * with the `subsystems` segment keeps the trees apart in the URL the way they are kept apart in the
+ * model: Peter, on what the model says, *"product scope sits under product, and they reference
+ * capabilities"*.
+ *
+ * ⛔ AND IT SHARES `addressIn`'S FALLBACK. With no base there is no address to speak of — a
+ * published artifact is one page — so it is a fragment, for the same reason and in the same shape.
+ */
+const subsystemAddressIn =
+  (base: string | undefined, trails: Record<string, Array<{ id: string; label: string }>>) =>
+  (id: string): string => {
+    if (!base) return `#${anchorOf(id ? `subsystems#${id}` : "subsystems")}`;
+    /** ⛔ The empty id is the tree itself — the one address above every subsystem. */
+    const menu = id ? (trails[id]?.map((c) => c.id) ?? [id]) : [];
+    return `${base}/${["subsystems", ...menu].map(encodeURIComponent).join("/")}`;
+  };
+
 /** What each slot asks. ⛔ Imported meaning, not a third copy — see `SLOT_ASKS` in the schema. */
 const SLOT_LABEL: Record<SlotName, string> = {
   may: "may",
@@ -192,6 +214,14 @@ const SLOT_LABEL: Record<SlotName, string> = {
 };
 
 export interface PageOptions {
+  /**
+   * The subsystem this page is standing on, where the address named one.
+   *
+   * ⛔ SEPARATE FROM `scopeId`, because the two trees do not mix and four ids in the real corpus
+   * name one of each. A page is either standing in product truth or in the machinery; conflating
+   * them into one "here" is how the current row would get marked in the wrong tree.
+   */
+  subsystem?: string;
   /**
    * Which views arrive with their content, when the rest should arrive as they are asked for.
    *
@@ -3469,7 +3499,11 @@ function renderNav(
   /** How many screens the subtree draws, so the tab says whether it is worth opening. */
   screens: number,
   /** ⛔ The Connect Claude Code control — only on a live page served under a project. */
-  connect: string = ""
+  connect: string = "",
+  /** Where each subsystem is addressed — the capability tree's own address space. */
+  subAddress: (id: string) => string = (id) => `#${anchorOf(`subsystems#${id}`)}`,
+  /** The subsystem whose page this is, where the address named one. */
+  hereSub?: string
 ): string {
   const kids = (parent?: string) => corpus.scopes.filter((s) => s.scope.in === parent);
   // ⛔ Once for the whole nav. It was called per row, which walks the entire corpus per row.
@@ -3740,7 +3774,72 @@ function renderNav(
    */
   /** From no parent at all: the root is stepped through rather than listed, as above. */
   const whole = subtree(undefined, 0);
-  const tree = counted < 2 ? "" : `<nav class="scopes">${whole}</nav>`;
+  /**
+   * ⛔ THE CAPABILITY TREE IS NAVIGABLE, AND IT SHIPPED WITHOUT BEING SO.
+   *
+   * Peter, looking at the converted corpus: *"wtf happened to capabilities tab? I see a bunch of
+   * capabilities flattend in the menu. is the tree completely gone?"* — and then *"capabilities is a
+   * separate tree, when did that change???"*. It had not changed. The tree was correct in the data
+   * (27 subsystems, 12 at the top, 15 nested, nothing dangling) and correct in its own render, and
+   * had NO WAY IN: `renderNav` walks `corpus.scopes`, a subsystem is not a scope, and the whole
+   * tree rendered on one view with its nesting shown only as indentation inside a 145 KB page. No
+   * rows, no addresses, nothing to click into.
+   *
+   * ⛔ IN THE SAME TREE, NOT A SECOND ONE. The comment forty lines down says a second tree per area
+   * "would be two derivations of one fact, which is what this project keeps being bitten by", and
+   * it was right the last time somebody ignored it. These rows are built by the same `subtree`
+   * recursion shape and filtered by the same `scopeTree` pass; what distinguishes them is the
+   * attribute they carry.
+   *
+   * ⛔ `data-subsystem`, NOT `data-scope`, AND THAT IS LOAD-BEARING. Four ids in the real corpus
+   * name both a product scope and a subsystem, so one attribute for both would make the filter and
+   * the current-row marking answer about whichever tree happened to be asked first.
+   */
+  const subs = corpus.subsystems.map((x) => x.subsystem);
+  /**
+   * ⛔ THE BRANCH YOU ARE STANDING IN IS OPEN, and the scope tree already paid for learning this:
+   * *"collapsed-by-default plus one-open-at-a-time is a menu that cannot show you where you are"*.
+   * Marking only the exact subsystem left its ancestors shut, so the row for the page on screen sat
+   * inside a closed `<ul>` and the menu answered "which part is this" with nothing. Measured in a
+   * browser — the row had height 0 while its own parent reported 33.
+   */
+  const standingInSub = new Set<string>(
+    hereSub ? (subsystemTrailsOf(corpus)[hereSub] ?? []).map((c) => c.id) : []
+  );
+  const subRow = (parent: string | undefined, depth: number): string => {
+    const rows: string[] = [];
+    for (const sub of subs.filter((x) => (x.in ?? undefined) === parent)) {
+      const kids = subRow(sub.id, depth + 1);
+      const standing = standingInSub.has(sub.id);
+      const current = hereSub === sub.id;
+      const label = line(sub.title || sub.id);
+      const hover = esc(plain(sub.title || sub.id));
+      /** How many contracts it offers — the same question a feature row's chip answers. */
+      const offers = sub.offers.length;
+      counted++;
+      rows.push(
+        `<li style="--d:${depth}" data-subsystem="${esc(sub.id)}"${kids ? ` class="holds${standing ? " open" : ""}"` : ""}>` +
+          `<span class="scoperow">` +
+          `<a href="${esc(subAddress(sub.id))}" data-goto-subsystem="${esc(sub.id)}"${
+            standing ? ' aria-current="page"' : ""
+          } title="${hover}">${current ? `<strong>${label}</strong>` : label}</a>` +
+          /**
+           * ⛔ AND NOTHING WHERE IT OFFERS NOTHING. A container subsystem groups what is filed inside
+           * it and offers nothing itself — the rows beneath it already say so, and a `0` chip reads
+           * as a thing to go and look at.
+           */
+          (offers
+            ? ` <span class="n" title="${esc(`${offers} ${offers === 1 ? "contract" : "contracts"}`)}" aria-label="${esc(
+                `${offers} ${offers === 1 ? "contract" : "contracts"}`
+              )}">${offers}<span class="mark" aria-hidden="true">⊂</span></span>`
+            : "") +
+          `</span>${kids}</li>`
+      );
+    }
+    return rows.length ? `<ul>${rows.join("")}</ul>` : "";
+  };
+  const machinery = subRow(undefined, 0);
+  const tree = counted < 2 ? "" : `<nav class="scopes">${whole}${machinery}</nav>`;
   const trails = trailsOf(corpus);
   /**
    * ⛔ THE TOP LEVEL IS A ROW OF TABS, NOT A ROW INSIDE A DROPDOWN.
@@ -3939,7 +4038,8 @@ function renderNav(
          * comment refuses two lines down. An empty list rendered as an empty `<nav>` as well, so the
          * group looked like a container to every stylesheet rule and to anything counting them.
          */
-        const holds = t.id === "overview" || areaIds.has(t.id);
+        /** ⛔ And the machinery group holds the capability tree, so it collapses like an area. */
+        const holds = t.id === "overview" || areaIds.has(t.id) || (t.id === "subsystems" && corpus.subsystems.length > 0);
         return (
           `<div class="tabgroup" data-group="${esc(t.id)}">` +
           `<div class="tabhead">` +
@@ -4271,6 +4371,8 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
    * it about where the thing sits.
    */
   const address = addressIn(opts.linkBase, trailsOf(corpus));
+  /** ⛔ The capability tree's own address space — see `subsystemAddressIn` for why it is separate. */
+  const subAddress = subsystemAddressIn(opts.linkBase, subsystemTrailsOf(corpus));
   /** ⛔ `corpus` too: showing a title where a ref used to be needs the thing the ref names. */
   const ctx: Ctx = { corpus, base: opts.linkBase, url: address, here: ids, anchors, served };
   const body = `
@@ -4289,7 +4391,9 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
         (n, id) => n + (corpus.scopes.find((s) => s.scope.id === id)?.scope.views.filter((v) => v.exists !== "withdrawn").length ?? 0),
         0
       ),
-      opts.interactive && servedUnderProject(opts.linkBase) ? CONNECT_BUTTON : ""
+      opts.interactive && servedUnderProject(opts.linkBase) ? CONNECT_BUTTON : "",
+      subAddress,
+      opts.subsystem
     )}
     <main>
       ${
@@ -4340,7 +4444,7 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
          */
         marked("prototype", renderPrototype(protoScreens, protoPromises, theWalk, (corpus.prototypes ?? []), selectionOf(corpus), served)) +
         (full("settings") ? marked("settings", renderSettings(corpus)) : stub("settings", "view-settings", "What steers this", false)) +
-        (full("subsystems") ? marked("subsystems", renderSubsystems(corpus, address)) : stub("subsystems", "view-subsystems", "How it works", false)) +
+        (full("subsystems") ? marked("subsystems", renderSubsystems(corpus, address, opts.subsystem, subAddress)) : stub("subsystems", "view-subsystems", "How it works", false)) +
         `<section class="view" id="view-overview" data-view="overview" data-ref="${esc(scopeId)}" data-label="Overview">
            <div class="sub-view" data-tabs="product" data-sub-view="queue" data-ref="queue" data-label="Queue">
              ${
@@ -8305,7 +8409,9 @@ const VIEW_SWITCH = `<script>
      * chosen and nothing to narrow to, and the tree stays whole. A real half still narrows, because
      * its rows do belong to it.
      */
-    const narrowing = rows.some((r) => r.dataset.scope && sectionOf[r.dataset.scope] === section);
+    const narrowing =
+      rows.some((r) => r.dataset.scope && sectionOf[r.dataset.scope] === section) ||
+      (section === "subsystems" && rows.some((r) => r.dataset.subsystem));
     for (const li of rows) {
       /**
        * ⛔ THE ROW SAYS WHICH SCOPE IT IS, rather than the filter inferring it from a link.
@@ -8339,7 +8445,16 @@ const VIEW_SWITCH = `<script>
        * So the filter answers only the question it exists for — which half of the product this row
        * belongs to — and the landing keeps the tree it is standing in.
        */
-      li.hidden = !id || (narrowing && sectionOf[id] !== section);
+      /**
+       * ⛔ A SUBSYSTEM ROW'S SECTION IS WHAT IT IS, NOT WHAT sectionOf SAYS. That map is keyed by
+       * id and four ids name both a scope and a subsystem, so a lookup would put a machinery row
+       * under whichever product area happened to share its name.
+       * ⛔ No backticks in here: template literal.
+       */
+      const sub = li.dataset.subsystem;
+      li.hidden = sub
+        ? narrowing && section !== "subsystems"
+        : !id || (narrowing && sectionOf[id] !== section);
       /**
        * ⛔ AND THE AREA ITSELF IS NOT A ROW OF ITS OWN MENU. Peter: *"'Product' itself doesn't need
        * to be a menu item under the 'Product' main tab"*.
@@ -8478,6 +8593,24 @@ const VIEW_SWITCH = `<script>
   const viewAt = (pathname) => {
     if (!BASE || pathname.indexOf(BASE) !== 0) return null;
     const segs = pathname.slice(BASE.length).split("/").filter(Boolean).map(decodeURIComponent);
+    /*
+     * ⛔ A FOCUSED MACHINERY PAGE IS ANOTHER PAGE'S ADDRESS, exactly as a scope this page does not
+     * hold is — see the comment on sectionOf below, which is the same bug in the other tree.
+     *
+     * /v2/subsystems/<id> renders ONE subsystem, and which one is decided by the server. Walking up
+     * from the id would match the subsystems section this document already carries, switch to the
+     * page it is already on, and leave the URL and the focus untouched: the reader presses a row
+     * for the clock and stays on the ledger. Peter has reported this shape twice in the other tree,
+     * the second time as "why does the URL NO LONGER CHANGE AFTER I GO THROUGH THE MENU".
+     *
+     * ⛔ The bare /v2/subsystems is still a switch, because that one IS this document's section.
+     * ⛔ No backticks in here: template literal.
+     */
+    if (segs.length > 1 && segs[0] === "subsystems") {
+      const sec = sectionNamed("subsystems");
+      const on = sec && sec.getAttribute("data-focused");
+      return on && segs[segs.length - 1] === on ? "subsystems" : null;
+    }
     for (let i = segs.length - 1; i >= 0; i--) {
       /**
        * ⛔ A REAL SECTION FIRST, AND THE ROOT RULE ONLY WHERE THERE IS NONE — THE ORDER IS THE BUG.
@@ -10801,7 +10934,14 @@ function renderSettings(corpus: Corpus): string {
  * the furniture of product truth is the exact mistake `packet.ts` made when it printed "accepted
  * separately" on rules nobody had stamped.
  */
-function renderSubsystems(corpus: Corpus, address: (ref: string) => string): string {
+function renderSubsystems(
+  corpus: Corpus,
+  address: (ref: string) => string,
+  /** The one this page is standing on, where the address named it. ⛔ Absent means the whole tree. */
+  at?: string,
+  /** Where each subsystem is addressed, so the trail above a focused one can be walked back up. */
+  subAddress: (id: string) => string = () => "#"
+): string {
   const tree = capabilityTree(corpus);
   if (!corpus.subsystems.length && !tree.carried.length) return "";
   const subs = corpus.subsystems.map((x) => x.subsystem);
@@ -10908,14 +11048,51 @@ function renderSubsystems(corpus: Corpus, address: (ref: string) => string): str
   /** ⛔ Orphans render too. A subsystem filed inside nothing is a `check` refusal, not a reason to
    *  hide it — a page that silently drops it is a page that disagrees with the check. */
   const parented = new Set(subs.filter((s) => s.in && subs.some((x) => x.id === s.in)).map((s) => s.id));
-  const roots = subs.filter((s) => !parented.has(s.id));
+  /**
+   * ⛔ ONE ADDRESS RENDERS ONE PAGE, AND THAT HAS TO HOLD FOR THIS TREE TOO.
+   *
+   * Without this the whole 27-subsystem tree rendered whatever the address said, so every row in
+   * the new menu led to the same 145 KB page and the reader had to find their way back to the part
+   * they had just chosen. That is the defect the scope side of this file already fixed — Peter:
+   * *"we need to stop the 'server re-rendering' of anything"* — and the machinery had no reason to
+   * be the exception.
+   */
+  const focus = at ? subs.find((x) => x.id === at) : undefined;
+  const roots = focus ? [focus] : subs.filter((s) => !parented.has(s.id));
+  /**
+   * ⛔ THE WAY BACK UP IS ON THE PAGE, because a focused page is reached from a menu that may be
+   * collapsed behind a chevron. Every ancestor is somewhere you can stand, so each is a link — the
+   * same argument the scope breadcrumb's own comment makes.
+   */
+  const up = focus
+    ? (() => {
+        const trail = subsystemTrailsOf(corpus)[focus.id] ?? [];
+        const above = trail.slice(0, -1);
+        return `<p class="subsys-up"><a href="${esc(subAddress(""))}">The machinery</a>${above
+          .map((c) => ` › <a href="${esc(subAddress(c.id))}">${line(c.label)}</a>`)
+          .join("")}</p>`;
+      })()
+    : "";
 
-  return `<section class="view" id="view-subsystems" data-view="subsystems" data-ref="subsystems" data-label="How it works">
-    <p class="lede">The parts of the system beneath the product, and roughly what each does.
+  /**
+   * ⛔ THE SECTION SAYS WHICH SUBSYSTEM IT IS SHOWING, because the client has to tell this page's own
+   * address apart from another page's. Without it, handing every focused machinery link to the
+   * browser also handed it THIS page's address on a cold arrival, so the landing fell through to
+   * Overview and rewrote the URL — measured: served /v2/subsystems/records/ledger, ended up at
+   * /v2/overview with the tree intact and the focus gone.
+   */
+  return `<section class="view" id="view-subsystems" data-view="subsystems" data-ref="subsystems"${
+    focus ? ` data-focused="${esc(focus.id)}"` : ""
+  } data-label="How it works">
+    ${
+      focus
+        ? `${up}`
+        : `<p class="lede">The parts of the system beneath the product, and roughly what each does.
     ⛔ <strong>Not product truth, and nobody has agreed to any of it.</strong> This is engineering's
     answer to what the product promised — each part says what it exists to serve, and you can follow
     that back to the behaviour that required it. What the product commits to is on the features.</p>
-    <p class="subsys-count" data-subsystems="${tree.counts.subsystems}" data-capabilities="${tree.counts.capabilities}" data-carried="${tree.carried.length}">${line(tree.says)}</p>
+    <p class="subsys-count" data-subsystems="${tree.counts.subsystems}" data-capabilities="${tree.counts.capabilities}" data-carried="${tree.carried.length}">${line(tree.says)}</p>`
+    }
     ${roots.map((s) => one(s)).join("")}
   </section>`;
 }
