@@ -182,6 +182,25 @@ This was once refused. Run against a real corpus whose older capability tree had
 product truth under its own names, the refusal fired on five of six subsystems and asked for a
 rename that would have made every name worse. Do not invent `access-control-subsystem`.
 
+### ⛔ Parts converted from an older tree are where you start, not something to redo
+
+A corpus migrated from an older model had its capabilities filed as product truth, in an area called
+Capabilities. The server converts that area into this tree once per project: each carried scope
+becomes a subsystem with the same id, each system-asked operation one of its capabilities, and who
+called it becomes `serves`. What a capability cannot hold — when it is called, the tests it had — is
+kept word for word in the part's body under *Carried from the earlier capability tree*.
+
+Peter: *"i expect there to ONLY be a v2 subsystem/capability tree after this and no confusion"*. So:
+
+- **Work from the converted parts.** Rename, merge, nest or split them where the boundaries are wrong
+  — that is the judgement this role exists for — but do not start a second tree beside them.
+- **A capability with `serves: []` is a question, not a part to delete.** Nothing declared a
+  dependency on it when it was converted. Find what in the product needs it and say so; if nothing
+  does, raise that with a person rather than removing it.
+- **Never put machinery back into product truth.** There is no Capabilities area any more, and a
+  scope that is a part of the system is the exact confusion this conversion ended.
+- **Count capabilities with `productos_capability_tree`**, and repeat its `says`.
+
 ### Areas, nesting, and cross-reference
 
 `in:` is containment and it is a tree — the same shape the product's own grouping uses. An area

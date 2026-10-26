@@ -7,8 +7,10 @@ import { checkCorpus, summarise } from "../../v2/check.js";
 import { stampFor, claimHash } from "../../v2/stamp.js";
 import { servesHash } from "../../v2/demonstrate.js";
 import { ANALYSES, sweep, sweeps, outstanding } from "../../v2/analyse.js";
+import { capabilityTree } from "../../v2/subsystems.js";
+import { convertCarriedCapabilities } from "../../v2/convert-capabilities.js";
 import { resolveRef } from "../../v2/ref.js";
-import { loadCorpus, memoryStore } from "../../v2/load.js";
+import { loadCorpus, memoryStore, corpusFiles } from "../../v2/load.js";
 import { SLOTS, SLOT_ASKS_SHORT, Steer, type Note as NoteT, type SlotName, type View, statements } from "../../v2/schema.js";
 import YAML from "yaml";
 import { gridFor, renderGridText, actsFor, gateFor } from "../../v2/grid.js";
@@ -563,6 +565,7 @@ export function v2Command(): Command {
             }${s.stale ? pc.red(`  ${s.stale} stale`) : ""}  ${pc.dim(`${s.done} done · per ${s.analysis.grain} · ${s.analysis.role}`)}`
           );
           console.log(pc.dim(`               ${s.analysis.does}`));
+          if (s.analysis.context) console.log(pc.cyan(`               ${s.analysis.context(corpus)}`));
           /**
            * ⛔ ON THE LISTING, NOT ONLY ON THE DETAIL. This line is where somebody decides how to
            * run the work, and "per feature · decomposer" reads as permission to fan twenty.
@@ -593,6 +596,7 @@ export function v2Command(): Command {
          * be fanned has to say so at the moment somebody does it, not only on a listing they may
          * never have read. stderr reaches the person and not the pipe.
          */
+        if (s.analysis.context) console.error(pc.cyan(s.analysis.context(corpus)));
         if (s.analysis.settleFirst) {
           console.error(pc.yellow("⛔"), `${s.analysis.name} cannot be fanned one-per-${s.analysis.grain}.`);
           console.error(pc.dim(`   settle first: ${s.analysis.settleFirst.what}`));
@@ -605,6 +609,7 @@ export function v2Command(): Command {
         `${pc.bold(s.analysis.name)} — ${s.analysis.does}`,
         pc.dim(`\n  one per ${s.analysis.grain}, worked out by ${s.analysis.role}`)
       );
+      if (s.analysis.context) console.log(pc.cyan(`  ${s.analysis.context(corpus)}`));
       if (s.analysis.settleFirst) {
         console.log(pc.yellow("  ⛔ counted per " + s.analysis.grain + ", but NOT worked that way."));
         console.log(pc.dim(`     settle first: ${s.analysis.settleFirst.what}`));
@@ -627,6 +632,47 @@ export function v2Command(): Command {
         )
       );
       console.log(pc.dim(`  Spawn one ${s.analysis.role} per ref above. Nothing here writes anything.`));
+    });
+
+  /**
+   * ⛔ THE CAPABILITY TREE, AND WHAT CONVERTING THE OLDER ONE WOULD DO — READ BEFORE IT RUNS.
+   *
+   * Peter: *"every claude session connecting to staging is confused by the # of capabilities, if they
+   * even exist"*. The conversion itself is the server's (`0002-carried-capabilities-become-subsystems`
+   * runs once per project at boot); this shows the same plan from the same function, so what it will
+   * do can be read before a deploy rather than discovered after one. It writes nothing.
+   */
+  cmd
+    .command("subsystems")
+    .description("The capability tree — and, with --convert, what converting an older one into it would do")
+    .option("--at <dir|url>", "corpus directory, or an instance URL", "v2")
+    .option("--token <t>", "bearer token for an instance (or $PRODUCTOS_TOKEN)")
+    .option("--convert", "print the conversion plan for an older capability tree carried into product truth")
+    .action(async (o: { at?: string; token?: string; convert?: boolean }) => {
+      const dir = await openAt(o);
+      const corpus = loadCorpus(dir);
+      const tree = capabilityTree(corpus);
+      console.log(tree.says);
+      for (const s of tree.subsystems) {
+        console.log(`  ${pc.bold(s.title)} ${pc.dim(`${s.id}#offers${s.in ? ` · in ${s.in}` : ""}`)}`);
+        for (const c of s.capabilities) console.log(`    ${c.id} ${pc.dim(`→ ${c.serves.join(", ") || pc.red("serves nothing")}`)}`);
+      }
+      if (!o.convert) return;
+      const plan = convertCarriedCapabilities(corpusFiles(dir));
+      console.log("");
+      if (!plan) return console.log(pc.green("✓"), "nothing to convert — no older capability tree in product truth");
+      const r = plan.report;
+      console.log(pc.bold(`converting "${r.area}" — ${r.subsystems.length} subsystems, ${r.capabilities.length} capabilities`));
+      console.log(pc.dim(`  writes ${Object.keys(plan.put).length} documents, deprecates ${plan.deprecate.length} (nothing is deleted)`));
+      const list = (title: string, xs: string[], col: (x: string) => string = (x) => x) => {
+        if (!xs.length) return;
+        console.log(col(`  ${title} (${xs.length})`));
+        for (const x of xs) console.log(pc.dim(`    ${x}`));
+      };
+      list("stays product truth — a person asks it", r.keptAsProduct, pc.yellow);
+      list("serves nothing — check will refuse until somebody says what it is for", r.servesNothing, pc.red);
+      list("feature edges re-spelled to the part", r.respelled);
+      list("still named by its old address — look at these", r.stillNamed, pc.yellow);
     });
 
   cmd

@@ -25,6 +25,7 @@ import { sql } from "drizzle-orm";
 import type { Db, ProjectStore } from "./access.js";
 import { documentMigrations as ledger, documents, projects } from "./schema.js";
 import { rowsOf } from "./server.js";
+import { convertCarriedCapabilities } from "../convert-capabilities.js";
 
 export interface DocMigration {
   /** Stable, ordered, never reused. ⛔ The ledger stores this, so renaming one re-runs it. */
@@ -40,6 +41,16 @@ export interface DocMigration {
    * recently".
    */
   apply: (path: string, source: string) => string | null;
+  /**
+   * ⛔ A REWRITE THAT SPANS DOCUMENTS, run after `apply` has seen each one alone.
+   *
+   * Converting the older capability tree is not a per-document change: a scope becomes a subsystem
+   * in another directory, and the features that named it have to name it the new way. Returns what
+   * to write and what to deprecate — never delete, because nothing in this store is deleted.
+   */
+  corpus?: (
+    sources: Record<string, string>
+  ) => { put: Record<string, string>; deprecate: string[]; report?: Record<string, unknown> } | null;
 }
 
 /**
@@ -69,6 +80,16 @@ export const DOC_MIGRATIONS: DocMigration[] = [
         .join("\n");
       return out === source ? null : out;
     },
+  },
+  {
+    id: "0002-carried-capabilities-become-subsystems",
+    why:
+      "The v1 migrator filed every v1 capability as a product scope under a `capabilities` area, while " +
+      "the capability tree is the subsystem layer — so two things answered to the word and every session " +
+      "counted a different one. Peter: \"i expect there to ONLY be a v2 subsystem/capability tree after " +
+      "this and no confusion, with the existing capabilities migrated to v2\".",
+    apply: () => null,
+    corpus: (sources) => convertCarriedCapabilities(sources),
   },
 ];
 
@@ -110,6 +131,17 @@ export async function migrateDocuments(
       await store.put(path, next);
       touched.push(path);
     }
+    const whole = rule.corpus?.(touched.length ? await store.documents() : sources);
+    if (whole) {
+      for (const [path, source] of Object.entries(whole.put)) {
+        await store.put(path, source);
+        if (!touched.includes(path)) touched.push(path);
+      }
+      for (const path of whole.deprecate) {
+        await store.deprecate(path);
+        if (!touched.includes(path)) touched.push(path);
+      }
+    }
 
     /**
      * ⛔ RECORDED EVEN WHEN IT CHANGED NOTHING. A rule that found nothing to do has still been
@@ -129,6 +161,8 @@ export async function migrateDocuments(
         ref: rule.id,
         says: `brought ${touched.length} document(s) up to date — ${rule.id}`,
         detail: touched,
+        /** ⛔ What a cross-document rewrite could not decide, where a reader of the log will see it. */
+        ...(whole?.report ? { report: whole.report } : {}),
       });
     }
     applied.push({ migration: rule.id, documents: touched });

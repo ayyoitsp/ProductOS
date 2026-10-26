@@ -33,6 +33,7 @@ import { compilePacket } from "../v2/packet.js";
 import { readinessOf } from "../v2/readiness.js";
 import { levelFields } from "../v2/level.js";
 import { find } from "../v2/find.js";
+import { capabilityTree } from "../v2/subsystems.js";
 import { questionsFor, descendants } from "../v2/settle.js";
 import { decisionsUnder, howItWasDecided } from "../v2/record.js";
 import { renderScopePage, standalone } from "../v2/page.js";
@@ -146,6 +147,8 @@ const scopesTool = tool(
     return {
       dir,
       broken: corpus.broken.map((b) => ({ file: b.file, why: b.why.split("\n")[0] })),
+      /** ⛔ So the first read a session makes already says what the capability tree is and is not. */
+      capability_tree: capabilityTree(corpus).says,
       scopes: corpus.scopes.map(({ scope }) => {
         const ids = descendants(corpus, scope.id);
         const qs = questionsFor(corpus, scope.id);
@@ -160,6 +163,22 @@ const scopesTool = tool(
         };
       }),
     };
+  }
+);
+
+/**
+ * ⛔ THE ONE ANSWER TO "HOW MANY CAPABILITIES, AND DO THEY EXIST". Peter: *"every claude session
+ * connecting to staging is confused by the # of capabilities, if they even exist"*. The tree had no
+ * read of its own, so a session counted whatever it found first — the empty subsystem layer, or the
+ * product area the v1 migrator filed the old tree under — and reported one, then the other.
+ */
+const capabilityTreeTool = tool(
+  "productos_capability_tree",
+  "The capability tree — subsystems, nested, each offering capabilities that serve product truth — with counts and one sentence naming everything that answers to the word. Call this whenever anyone asks how many capabilities there are, whether they exist, or how the system is built. ⛔ Repeat its `says` rather than counting scopes: a product area called Capabilities is an older tree carried into product truth, and its scopes are not subsystems.",
+  AtDir,
+  (a, paths) => {
+    const dir = dirOf(a, paths);
+    return { dir, ...capabilityTree(loadCorpus(dir)) };
   }
 );
 
@@ -716,6 +735,7 @@ export const RETIRED_LOOP_TOOLS: McpTool[] = [sayOnNoteTool, closeNoteTool];
 
 export const EXCHANGE_READ_TOOLS: McpTool[] = [
   scopesTool,
+  capabilityTreeTool,
   findTool,
   questionsTool,
   gridTool,

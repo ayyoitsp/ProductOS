@@ -81,7 +81,8 @@ test("`walked` is dropped, and the rest of the document is untouched byte for by
   assert.equal(before.broken.length, 1, "the fixture does not actually break — this proves nothing");
   assert.match(before.broken[0].why, /walked/);
 
-  const applied = await migrateDocuments(db, store);
+  /** ⛔ Every rule runs; only the ones that moved something are this test's business. */
+  const applied = (await migrateDocuments(db, store)).filter((a) => a.documents.length);
   assert.deepEqual(applied.map((a) => a.migration), ["0001-drop-walked"]);
   assert.deepEqual(applied[0].documents, ["truth/money.md"]);
 

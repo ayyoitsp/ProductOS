@@ -263,6 +263,8 @@ export const AREAS: Area[] = [
        * analysis would belong to `generate`; this one names the units and stops.
        */
       "src/v2/analyse.ts",
+      /** ⛔ `derive`: the one answer to how many capabilities there are, read by every surface that counts them. */
+      "src/v2/subsystems.ts",
       /**
        * ⛔ A DERIVATION, NOT A MODEL CONCEPT, AND THE DISTINCTION IS LOAD-BEARING. How
        * well-supported a statement is comes from counting readings and asking `stampFor`; a stored
@@ -413,6 +415,8 @@ export const AREAS: Area[] = [
        */
       "src/cli/commands/v2.ts",
       "src/v2/routes.ts",
+      /** ⛔ `generate`: it writes subsystems from the older tree carried into product truth. */
+      "src/v2/convert-capabilities.ts",
       "src/v2/propose.ts",
       /**
        * ⛔ `generate` BESIDE `propose.ts`, AND NOT `derive`. It reads the application's own
@@ -1689,6 +1693,7 @@ export const COMMANDS: Verb[] = [
    * command that produced the analysis itself would be the hand-authoring trap with a bigger
    * engine.
    */
+  { name: "v2 subsystems", does: "The capability tree, and what converting an older one into it would do", owns: "derive", who: "claude" },
   { name: "v2 analyse", does: "What work an analysis has left across a corpus, and which of it is stale", owns: "derive", who: "claude" },
   { name: "v2 next", does: "What to ask somebody next about one feature", owns: "derive", who: "claude" },
   { name: "v2 page", does: "Render one scope as a page a person can review", owns: "surface", who: "claude" },
@@ -2086,6 +2091,7 @@ export const SHIMS: Shim[] = [
     keeps: [
       "⛔ running `productos v2 analyse <name>` FIRST and working only the refs it returns — a sweep that runs over everything redoes finished work and stops being something anybody runs twice",
       "⛔ reading what the analysis says about fanning before spawning anything: one that must be settled across the product first says so, and its refs are one run's worklist rather than a list of roles to spawn",
+      "⛔ saying how many capabilities there are only from `productos_capability_tree` or the first line `analyse capabilities` prints — a product area called Capabilities is an older tree carried into product truth, its scopes are not subsystems, and counting either half alone is how sessions on a migrated corpus reported none and then dozens",
       "⛔ putting the subsystem tree in front of a person before any part of it is worked — the names, the areas and what nests in what. Three cold runs over three features produced three disjoint trees and nothing shared, and nobody reading them could see they were the same machinery",
       "deciding which analysis to run: this route does one at a time, because thirty roles of three kinds at once is a diff nobody reviews",
       "⛔ reading the stale ones before the missing ones — a unit that was done and now answers an older wording looks finished to everybody reading it",
