@@ -1029,10 +1029,46 @@ export function withdraw(
     };
 
   const aim = r.ref;
+  /**
+   * ⛔ A WHOLE FEATURE, AND THERE WAS NO WAY TO TAKE ONE OUT.
+   *
+   * Peter: *"just delete the fucking orphans"* — twelve scopes the carried-tree conversion left at
+   * the product root. The only route was editing twelve files by hand, which is the one move this
+   * project forbids outright: the next conversion regenerates them and nothing records which shape
+   * was right. He then said what the answer had to be: *"create a 'delete' interface if you need
+   * to, so you odn't touch the files directly"*.
+   *
+   * ⛔ ALWAYS `withdrawn`, NEVER DELETED — unlike a statement or a slot. `existsOf` already cascades
+   * `withdrawn` down the lineage, so marking the feature takes its behaviours with it and the id
+   * stays resolvable: a `depends_on` pointing at it still resolves, where a deleted file would make
+   * every reference to it a dangling ref and `check` would refuse for the removal rather than
+   * because anything was wrong. A feature is also the grain other documents point AT, which a slot
+   * is not.
+   */
+  if (aim.kind === "scope") {
+    const home = corpus.scopes.find((x) => x.scope.id === aim.scope);
+    if (!home) return { ok: false, why: `no feature "${aim.scope}"` };
+    if (home.scope.exists === "withdrawn")
+      return { ok: false, why: `${aim.scope} is already withdrawn` };
+    const raw0 = parseFrontmatter(fs.readFileSync(home.file, "utf-8"));
+    const d0 = raw0.data as Record<string, unknown>;
+    d0.exists = "withdrawn";
+    const ok0 = Scope.safeParse(d0);
+    if (!ok0.success)
+      return { ok: false, why: ok0.error.issues.map((i) => `${i.path.join(".")} — ${i.message}`).join("; ") };
+    fs.writeFileSync(
+      home.file,
+      `---\n${YAML.stringify(d0, { lineWidth: 96, blockQuote: "literal" })}---\n\n${raw0.content.trim()}\n`,
+      "utf-8"
+    );
+    void by;
+    void at;
+    return { ok: true, file: home.file, mode: "withdrawn", was: String(home.scope.title ?? aim.scope) };
+  }
   if (aim.kind !== "statement" && aim.kind !== "slot" && aim.kind !== "exchange")
     return {
       ok: false,
-      why: `${ref} is a ${aim.kind} — this takes out one statement, one slot, or one whole exchange`,
+      why: `${ref} is a ${aim.kind} — this takes out a feature, one statement, one slot, or one whole exchange`,
     };
   const kind = aim.kind;
 

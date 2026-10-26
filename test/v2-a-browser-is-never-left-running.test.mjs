@@ -50,6 +50,27 @@ const running = (where) => {
 
 const settle = (ms) => new Promise((r) => setTimeout(r, ms));
 
+/**
+ * Wait until nothing is left under `where`, and report how many were if the wait runs out.
+ *
+ * ⛔ A FIXED SETTLE WAS A TIMING CLAIM ABOUT THE MACHINE, and it failed as one: 3000ms was ample
+ * alone and left 2 processes still dying inside a full parallel suite. Reaping is asynchronous —
+ * the hook sends SIGKILL and the kernel takes as long as it takes — so the thing to assert is that
+ * it EVENTUALLY reaches zero, not that it has at some instant somebody picked.
+ *
+ * ⛔ And it still discriminates: with the hook removed nothing ever reaps, so this spends the whole
+ * deadline and then fails with the count — which is the red-check it has to keep passing.
+ */
+const gone = async (where, ms = 45000) => {
+  const until = Date.now() + ms;
+  let n = running(where);
+  while (n > 0 && Date.now() < until) {
+    await settle(500);
+    n = running(where);
+  }
+  return n;
+};
+
 /** A child node process with its own TMPDIR, so every browser it starts is attributable to it. */
 function child(script, tmp) {
   return spawn(process.execPath, ["--input-type=module", "-e", script], {
@@ -89,7 +110,7 @@ test("a browser is reaped when its page is closed, children and all", async () =
      console.log("CLOSED");`,
     tmp
   );
-  await waitForLine(kid, "OPEN:", 60000);
+  await waitForLine(kid, "OPEN:", 180000);
   /**
    * ⛔ A NON-ZERO FIRST, OR THE ZERO BELOW IS NOT A CHECK. Chrome forks several processes per
    * browser; a 1 would leave the cascade untested and a 0 would mean this is reading the wrong
@@ -100,8 +121,7 @@ test("a browser is reaped when its page is closed, children and all", async () =
 
   await waitForLine(kid, "CLOSED", 30000).catch(() => {});
   await new Promise((r) => kid.once("exit", r));
-  await settle(2500);
-  assert.equal(running(tmp), 0, `${running(tmp)} processes outlived close()`);
+  assert.equal(await gone(tmp), 0, "processes outlived close()");
 });
 
 test("⛔ a browser that fails to start is reaped too — the path that leaked most", async () => {
@@ -132,7 +152,7 @@ test("⛔ a browser that fails to start is reaped too — the path that leaked m
      }`,
     tmp
   );
-  const out = await waitForLine(kid, "THREW", 90000);
+  const out = await waitForLine(kid, "THREW", 180000);
   assert.match(out, /THREW/, "the launch was expected to fail");
   /**
    * ⛔ THE CHILD IS KILLED RATHER THAN WAITED FOR, and waiting is what made the red-check HANG
@@ -146,9 +166,8 @@ test("⛔ a browser that fails to start is reaped too — the path that leaked m
    * thing that can have reaped the process is openPage's catch, which is what this test is about.
    */
   kid.kill("SIGKILL");
-  await settle(2500);
   /** ⛔ Counted by the profile path, which the fake receives in its argv exactly as Chrome would. */
-  assert.equal(running(tmp), 0, "a failed launch left its process behind — the leak that reached 378");
+  assert.equal(await gone(tmp), 0, "a failed launch left its process behind — the leak that reached 378");
 });
 
 test("⛔ an interrupted run reaps on its way out, because that is the run that leaks hardest", async () => {
@@ -170,11 +189,16 @@ test("⛔ an interrupted run reaps on its way out, because that is the run that 
      await new Promise(() => {});`,
     tmp
   );
-  await waitForLine(kid, "READY", 60000);
+  /**
+   * ⛔ A GENEROUS BUDGET, BECAUSE THIS WAITS ON A BROWSER STARTING INSIDE A FULL SUITE. At 60s it
+   * passed alone and timed out in the pack, which is precisely what the harness's own `waitFor`
+   * comment warns about: *"15s is a claim about the MACHINE and not about the page"*. A reap test
+   * that flakes under load is worse than none — it reads as the leak coming back.
+   */
+  await waitForLine(kid, "READY", 180000);
   assert.ok(running(tmp) >= 2, "the child did not actually start a browser");
 
   kid.kill("SIGTERM");
   await new Promise((r) => kid.once("exit", r));
-  await settle(3000);
-  assert.equal(running(tmp), 0, `${running(tmp)} processes survived an interrupted run — the hook did not reap`);
+  assert.equal(await gone(tmp), 0, "processes survived an interrupted run — the hook did not reap");
 });

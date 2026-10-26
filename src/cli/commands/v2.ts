@@ -1167,6 +1167,29 @@ export function v2Command(): Command {
     });
 
   cmd
+    .command("withdraw")
+    .description("Take something out — a feature, one behaviour, one slot, or one statement")
+    /**
+     * ⛔ THE SIXTH ACT HAD NO SURFACE AT ALL. `withdraw` is in `Act`, in `ACTS`, in `perform`, in
+     * `settle`, and the HTTP door already accepted it — and nothing could invoke it: no CLI verb, no
+     * entry in the intents registry, no MCP tool. An act nobody could perform.
+     *
+     * Peter had asked for it twice at the behaviour grain — *"we should probalby have a 'delete'
+     * button to just remove behaviors"*, then *"'trash' icon to delete"* — and then at the feature
+     * grain: *"just delete the fucking orphans"*, followed by *"create a 'delete' interface if you
+     * need to, so you odn't touch the files directly"*. That is this.
+     */
+    .argument("<ref>", "a feature, scope#exchange, scope#exchange#slot, or scope#exchange#slot#statement")
+    .requiredOption("--because <why>", "why it is being taken out")
+    .requiredOption("--by <who>", "who took it out")
+    .option("--via <how>", "how consent was obtained: page | question | chat | cli", "cli")
+    .option("--at <dir|url>", "corpus directory, or an instance URL", "v2")
+    .option("--token <t>", "bearer token for an instance (or $PRODUCTOS_TOKEN)")
+    .action(async (ref, o) => {
+      await recordAt(o, "withdraw", ref, { because: o.because });
+    });
+
+  cmd
     /**
      * ⛔ THE REVIEWER'S SURFACE, WHICH IS NOT THIS COMMAND.
      *
