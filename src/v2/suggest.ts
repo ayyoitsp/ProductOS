@@ -256,6 +256,20 @@ export function raiseQuestion(
     about?: string;
     /** Say this question better, keeping its options and what it used to say. See the merge branch. */
     rephrase?: boolean;
+    /**
+     * Take options off the table, by the number a person sees, with why each is not a real answer.
+     *
+     * ⛔ BY NUMBER AND NOT BY TEXT, because the number is what a person and the worklist both read —
+     * *"option 1"* is how the refusal that started this names them, and matching on prose would
+     * make a withdrawal depend on reproducing a sentence exactly.
+     */
+    /**
+     * ⛔ `withdraw_options`, NOT `withdraw` — there is already an INTENT called `withdraw`, which
+     * takes a whole FEATURE out. A field and an intent sharing one name in one door is ambiguous to
+     * every caller, and the self-description test caught it by attributing this intent's fields to
+     * that one. Named for what it withdraws.
+     */
+    withdraw_options?: Array<{ option: number; because: string }>;
     /** For a named refusal: which part of the case is in question. See `grainOf`. */
     asks?: "whether" | "when" | "told";
     candidates?: unknown[];
@@ -486,6 +500,52 @@ export function raiseQuestion(
      * recorded in a field and not a similarity score. See the worklist's fold for what it does with
      * the field once it is honest.
      */
+    /**
+     * ⛔ OPTIONS COME OFF THE TABLE, AND WHAT CAME OFF IS KEPT. See `Standing.withdrawn`.
+     *
+     * Peter: *"definitely needs to remove options."* Three questions on his corpus carried options
+     * nothing could apply, and append-only meant the only way to make his answers recordable was to
+     * add working options beside the broken ones — six options, four unpickable, permanent until
+     * the question was answered.
+     *
+     * ⛔ EVERY GUARD HERE IS ABOUT NOT LOSING THE DECISION. Numbers are validated against what is
+     * actually on the table, the removed text is kept with a per-option reason, and the last option
+     * cannot be withdrawn: a question with nothing to pick between is not a question, and taking
+     * the whole thing off the table is a different act with a different name.
+     */
+    const taking = o.withdraw_options ?? [];
+    let withdrew = 0;
+    if (taking.length) {
+      const have = Array.isArray(was.candidates) ? (was.candidates as Array<Record<string, unknown>>) : [];
+      const wanted = [...new Set(taking.map((w) => w.option))];
+      const outOfRange = wanted.filter((n) => !Number.isInteger(n) || n < 1 || n > have.length);
+      if (outOfRange.length)
+        return {
+          ok: false,
+          why: `there ${outOfRange.length === 1 ? "is no option" : "are no options"} ${outOfRange.join(", ")} here — ${have.length} ${have.length === 1 ? "is" : "are"} on the table`,
+          detail: have.map((c, i) => `  ${i + 1}) ${String(c.says ?? "").slice(0, 90)}`),
+        };
+      if (wanted.length >= have.length)
+        return {
+          ok: false,
+          why: "that would leave the question with nothing to pick between",
+          detail: [
+            "⛔ a question with no options is not a question — if none of these is a real answer, the question itself is what is wrong",
+            "say so as a note with `disputes: true`, which takes it off the worklist and tells an author what to fix",
+          ],
+        };
+      /** ⛔ Highest first, so earlier removals cannot shift the index of a later one. */
+      const kept = [...have];
+      const log = Array.isArray(was.withdrawn) ? (was.withdrawn as unknown[]) : [];
+      for (const n of [...wanted].sort((a, b) => b - a)) {
+        const why = taking.find((w) => w.option === n)!.because;
+        const gone = kept.splice(n - 1, 1)[0]!;
+        log.push({ says: String(gone.says ?? ""), because: why.trim(), at: new Date().toISOString().slice(0, 10), by: o.by });
+        withdrew++;
+      }
+      was.candidates = kept;
+      was.withdrawn = log;
+    }
     const alsoBlocks = (o.blocks ?? []).filter((b) => b !== o.ref);
     /**
      * ⛔ A REWORDING, WHICH IS THE THIRD THING THAT CAN BE ADDED TO A QUESTION ALREADY ASKED.
@@ -508,12 +568,12 @@ export function raiseQuestion(
       was.question = o.question.trim();
       /** ⛔ The options are untouched. A rewording that changes the choice is not a rewording. */
     }
-    if (!adding.length && !alsoBlocks.length && !rewording)
+    if (!adding.length && !alsoBlocks.length && !rewording && !withdrew)
       return {
         ok: false,
         why: `${o.ref} is already ${was.kind}${was.question ? `: "${String(was.question).trim()}"` : ""}`,
         detail: [
-          "it is already asked, so there are three things you can do: add another answer (`candidates`), name the other questions this one answer settles (`blocks`), or say it better (`rephrase: true` with the new `question`)",
+          "it is already asked, so there are four things you can do: add another answer (`candidates`), name the other questions this one answer settles (`blocks`), say it better (`rephrase: true` with the new `question`), or take an option off the table (`withdraw`)",
           "⛔ a rewording keeps what it used to say in `was_asked` and leaves the options alone — somebody weighing it can see exactly what changed",
         ],
       };
@@ -526,15 +586,21 @@ export function raiseQuestion(
     const savedMerge = save(f);
     if (!savedMerge.ok) return savedMerge;
     const said = [
-      rewording ? "a better wording, with what it used to say kept" : "",
-      adding.length ? `${adding.length} answer${adding.length === 1 ? "" : "s"}` : "",
-      alsoBlocks.length ? `${alsoBlocks.length} question${alsoBlocks.length === 1 ? "" : "s"} this one settles` : "",
+      rewording ? "said it better, keeping what it used to ask" : "",
+      withdrew ? `took ${withdrew} option${withdrew === 1 ? "" : "s"} off the table, keeping what each said and why` : "",
+      adding.length ? `added ${adding.length} answer${adding.length === 1 ? "" : "s"}` : "",
+      alsoBlocks.length ? `named ${alsoBlocks.length} question${alsoBlocks.length === 1 ? "" : "s"} this one answer settles` : "",
     ].filter(Boolean);
     return {
       ok: true,
       file: f.file,
       ref: o.ref,
-      said: `added ${said.join(" and ")} to the question at ${o.ref}`,
+      /**
+       * ⛔ "added 2 options off the table" IS WHAT THIS SAID, because every change here used to be
+       * an addition and the verb was baked into the sentence. A withdrawal is not an addition, and
+       * a report that describes the opposite of what happened is how a wrong act goes unnoticed.
+       */
+      said: `${said.join(", and ")} — at ${o.ref}`,
     };
   }
   g.holder.standing = {

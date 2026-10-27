@@ -30,7 +30,7 @@ productos_in { intent: "document", fields: { key: "truth/<scope>.md", says: "<th
 - `productos_in { intent: "inside" }` — Say which screen a screen appears inside — or take that back. Takes `view`, `of`?.
 - `productos_in { intent: "holds-for" }` — Say which combination of the product's dimensions a screen is for — or take it back. Takes `view`, `is`?.
 - `productos_in { intent: "suggest" }` — Add one sentence to a slot, recorded as suggested — it reads as unagreed until a person agrees to it. Takes `ref`, `says`, `from`, `id`?.
-- `productos_in { intent: "ask" }` — Raise one question on a slot, with drafted answers — it gates the behaviour until the person asked answers it. Takes `ref`, `question`, `asked_of`, `blocks`, `candidates`?, `cost`?, `about`?, `rephrase`?, `asks`?.
+- `productos_in { intent: "ask" }` — Raise one question on a slot, with drafted answers — it gates the behaviour until the person asked answers it. Takes `ref`, `question`, `asked_of`, `blocks`, `candidates`?, `cost`?, `about`?, `withdraw_options`?, `rephrase`?, `asks`?.
 - `productos_in { intent: "demonstrate" }` — Add one testing requirement to a claim — it reads as suggested until a person agrees to the claim it demonstrates. Takes `ref`, `then`?, `given`?, `when`?, `steps`?, `level`?, `id`?.
 - `productos_in { intent: "say" }` — Answer on a filed request without deciding it is finished. Takes `note`, `says`, `by`?.
 - `productos_in { intent: "close" }` — Answer a filed request and take it off the queue. Takes `note`, `outcome`.
@@ -282,6 +282,32 @@ infers it — a note saying *"this makes no sense"* and a note saying *"Anybody 
 objection and an ANSWER, and reading the sentence to tell them apart is a guess wearing a decision's
 clothes. Marking an answer as a dispute hides a decision somebody made; missing a dispute puts the
 question back in front of the person who rejected it, which is what happened here.
+
+### ⛔ An option nobody can pick comes off the table — `withdraw`
+
+```
+intent: ask
+ref: <the same ref>
+withdraw: [{ "option": 3, "because": "why it is not a real answer" }]
+```
+
+⛔ **By the number a person sees**, and `because` is per option — two options usually go for
+different reasons, and one note on the pair loses both. What each said is kept in `withdrawn`, so
+nothing disappears: that is why this is allowed at all, and the rule it replaces was right about the
+harm — an option somebody is weighing must never vanish **silently**.
+
+⛔ **Not for an option you disagree with.** A reading you think is wrong is still an answer somebody
+may choose, and taking it away makes the question a formality. Withdraw an option because it cannot
+be **picked** — it names no statement to replace, it is the same answer as another in different
+words, or a person has said its premise is false.
+
+⛔ **The last one cannot go.** A question with nothing to pick between is not a question; if none of
+the options is real, the question is what is wrong. Say that as a note with `disputes: true`.
+
+⛔ **This exists because append-only was expensive.** Three questions on a real corpus carried
+options nothing could apply, and the only way to make answers recordable was to add working options
+beside the broken ones — six options, four unpickable, until somebody answered. Peter: *"definitely
+needs to remove options."*
 
 ### ⛔ A question already asked can be said better — `rephrase`
 

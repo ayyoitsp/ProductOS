@@ -976,6 +976,19 @@ export const INTENTS: Intent[] = [
       { name: "about", says: "Which part of what the slot already says is in question. Required when the slot already says something", required: false },
       {
         /**
+         * ⛔ THE ONLY ROUTE TO AN OPTION NOBODY CAN PICK. `ask` appends, so without this an option
+         * that cannot be applied is permanent until the question is answered — which is the state
+         * three questions on a real corpus were in, each carrying four unpickable options.
+         */
+        name: "withdraw_options",
+        says:
+          'Options to take off the table: [{"option": 1, "because": "…"}], by the number a person sees. ' +
+          "Keeps what each said and why it went, and refuses to leave the question with nothing to pick between. " +
+          "⛔ Not for an option you merely disagree with — that is an answer somebody may still choose",
+        required: false,
+      },
+      {
+        /**
          * ⛔ THE ONLY ROUTE TO THE 1,315 QUESTIONS ALREADY WORDED BADLY. Without it, improving how
          * this role asks things reaches nothing anybody is currently looking at.
          */
@@ -1006,6 +1019,12 @@ export const INTENTS: Intent[] = [
         about: str(body.about) || undefined,
         asks: (str(body.asks) || undefined) as "whether" | "when" | "told" | undefined,
         rephrase: body.rephrase === true,
+        withdraw_options: Array.isArray(body.withdraw_options)
+          ? (body.withdraw_options as Array<Record<string, unknown>>).map((w) => ({
+              option: Number(w?.option),
+              because: str(w?.because),
+            }))
+          : undefined,
         candidates: Array.isArray(body.candidates) ? body.candidates : undefined,
         by: a.who.actor,
       });

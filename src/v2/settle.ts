@@ -825,7 +825,24 @@ export function settle(
    * judge prose — it asks whether the sentences that were agreed still appear, which is a
    * question about what was removed, not about what is right.
    */
-  if (wasSaying && (beforeSlot.standing as { about?: string } | undefined)?.about) {
+  /**
+   * ⛔ NOT WHEN THE RULING IS AN ADDITION — AND THIS GUARD RAN FIRST, SO `adds a statement` WAS
+   * UNREACHABLE ON ANY SLOT WHOSE SENTENCE IS A SINGLE STRING.
+   *
+   * This test asks whether the clauses that were agreed still appear in the new sentence. An
+   * addition does not claim to contain them: it is a NEW sentence placed beside what is there,
+   * and `about.adds` below appends it without touching a word of the original. So running this
+   * first tested an addition as though it were a replacement and refused it for dropping clauses
+   * it never claimed to touch.
+   *
+   * ⛔ IT MADE THE FIX FOR fg-0001 UNREACHABLE WHERE IT WAS MOST NEEDED. `adds a statement` exists
+   * precisely so an answer about something a slot does not yet mention can be recorded without
+   * rewriting the sentences beside it — and on a single-string slot, which is the common shape,
+   * every such option was refused. Measured on Peter's corpus: of three questions he had answered,
+   * only the one whose `says` is a LIST could use the clean route, and that worked only because
+   * `wasSaying` is undefined for a list and this guard was skipped by accident.
+   */
+  if (wasSaying && !about.adds && (beforeSlot.standing as { about?: string } | undefined)?.about) {
     const dropped = droppedClauses(wasSaying, says);
     if (dropped.length)
       return {

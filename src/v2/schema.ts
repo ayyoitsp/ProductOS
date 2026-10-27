@@ -623,6 +623,37 @@ export const Standing = z
      */
     was_asked: z.array(z.string()).optional(),
     /**
+     * Options that were offered and are not real answers, with why each was taken off the table.
+     *
+     * ⛔ THE SAME ARGUMENT AS `was_asked`, AND THE SAME MISTAKE IT CORRECTS. `ask` appended and never
+     * removed, for a good reason stated in its own comment — *"a drafter adding a third reading must
+     * not be able to delete the two a person has been weighing."* That is right about the harm and
+     * wrong about the cure: the harm is deleting them SILENTLY, so the cure is keeping them.
+     *
+     * ⛔ WHAT APPEND-ONLY ACTUALLY COST. Three questions on `pl-start-a-deal` carried options that
+     * could not be applied at all, and nothing could take them off the table — so the only way to
+     * make Peter's answers recordable was to add pickable options BESIDE the broken ones, leaving
+     * questions with six options of which four cannot be picked. His reply: *"definitely needs to
+     * remove options."* An option nobody can choose is not a choice; it is noise in front of a
+     * decision, and it was permanent until the question was answered.
+     *
+     * ⛔ AND `because` IS PER OPTION, because "these two were wrong" is not a reason anybody can
+     * argue with. Two options are usually withdrawn for different reasons — one unapplicable, one
+     * built on a false premise — and a single note on the pair loses both.
+     */
+    withdrawn: z
+      .array(
+        z
+          .object({
+            says: z.string().min(1),
+            because: z.string().min(10, "why an option is not a real answer is the part somebody could disagree with"),
+            at: dateish.optional(),
+            by: z.string().optional(),
+          })
+          .strict()
+      )
+      .optional(),
+    /**
      * ⛔ REQUIRED WHEN THIS STANDING SITS BESIDE CONTENT, because otherwise the whole slot
      * reads unsettled and every surface throws the settled part away.
      *
