@@ -206,6 +206,8 @@ export function raiseQuestion(
     blocks: string[];
     cost?: string;
     about?: string;
+    /** Say this question better, keeping its options and what it used to say. See the merge branch. */
+    rephrase?: boolean;
     /** For a named refusal: which part of the case is in question. See `grainOf`. */
     asks?: "whether" | "when" | "told";
     candidates?: unknown[];
@@ -323,13 +325,34 @@ export function raiseQuestion(
      * the field once it is honest.
      */
     const alsoBlocks = (o.blocks ?? []).filter((b) => b !== o.ref);
-    if (!adding.length && !alsoBlocks.length)
+    /**
+     * ⛔ A REWORDING, WHICH IS THE THIRD THING THAT CAN BE ADDED TO A QUESTION ALREADY ASKED.
+     *
+     * The refusal below used to be the end of the road, and its own reason — *"a question somebody
+     * has been weighing is not rewritten under them"* — is about being rewritten SILENTLY. So the
+     * previous wording is kept rather than the question being frozen, and `was_asked` is what makes
+     * that true instead of a promise.
+     *
+     * ⛔ EXPLICIT, NEVER INFERRED FROM A DIFFERENT STRING ARRIVING. A caller re-sending a question
+     * it thinks is new must not quietly rewrite one somebody is weighing — that is the exact harm.
+     * So rewording is a thing the caller ASKS for, and a `question` that differs without it is
+     * still refused by the branch below.
+     */
+    const rewording = o.rephrase && o.question.trim() && o.question.trim() !== String(was.question ?? "").trim();
+    if (rewording) {
+      const before = String(was.question ?? "").trim();
+      const history = Array.isArray(was.was_asked) ? (was.was_asked as string[]) : [];
+      if (before) was.was_asked = [...history, before];
+      was.question = o.question.trim();
+      /** ⛔ The options are untouched. A rewording that changes the choice is not a rewording. */
+    }
+    if (!adding.length && !alsoBlocks.length && !rewording)
       return {
         ok: false,
         why: `${o.ref} is already ${was.kind}${was.question ? `: "${String(was.question).trim()}"` : ""}`,
         detail: [
-          "it is already asked, so there are two things to add here: another answer (`candidates`), or the other questions this one answer settles (`blocks`)",
-          "⛔ the question itself is not reworded from here: a question somebody has been weighing is not rewritten under them",
+          "it is already asked, so there are three things you can do: add another answer (`candidates`), name the other questions this one answer settles (`blocks`), or say it better (`rephrase: true` with the new `question`)",
+          "⛔ a rewording keeps what it used to say in `was_asked` and leaves the options alone — somebody weighing it can see exactly what changed",
         ],
       };
     if (adding.length) was.candidates = [...have, ...adding];
@@ -341,6 +364,7 @@ export function raiseQuestion(
     const savedMerge = save(f);
     if (!savedMerge.ok) return savedMerge;
     const said = [
+      rewording ? "a better wording, with what it used to say kept" : "",
       adding.length ? `${adding.length} answer${adding.length === 1 ? "" : "s"}` : "",
       alsoBlocks.length ? `${alsoBlocks.length} question${alsoBlocks.length === 1 ? "" : "s"} this one settles` : "",
     ].filter(Boolean);

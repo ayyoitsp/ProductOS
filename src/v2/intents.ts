@@ -963,6 +963,15 @@ export const INTENTS: Intent[] = [
       { name: "about", says: "Which part of what the slot already says is in question. Required when the slot already says something", required: false },
       {
         /**
+         * ⛔ THE ONLY ROUTE TO THE 1,315 QUESTIONS ALREADY WORDED BADLY. Without it, improving how
+         * this role asks things reaches nothing anybody is currently looking at.
+         */
+        name: "rephrase",
+        says: "Say an already-asked question better. Keeps its options and records what it used to say, so nobody weighing it loses the thread. ⛔ Not for changing the subject — a different decision is a different question",
+        required: false,
+      },
+      {
+        /**
          * ⛔ WITHOUT THIS THE WHOLE fg-0002 FIX IS UNREACHABLE FROM WHERE ANYBODY IS. The writer can
          * now put a question on a named refusal, and this is the only door — *"no one will ever use
          * the command line"*. A capability reachable only from a function call is not shipped.
@@ -983,6 +992,7 @@ export const INTENTS: Intent[] = [
         cost: str(body.cost) || undefined,
         about: str(body.about) || undefined,
         asks: (str(body.asks) || undefined) as "whether" | "when" | "told" | undefined,
+        rephrase: body.rephrase === true,
         candidates: Array.isArray(body.candidates) ? body.candidates : undefined,
         by: a.who.actor,
       });

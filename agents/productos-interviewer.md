@@ -25,7 +25,7 @@ productos_in { intent: "document", fields: { key: "truth/<scope>.md", says: "<th
 - `productos_in { intent: "inside" }` — Say which screen a screen appears inside — or take that back. Takes `view`, `of`?.
 - `productos_in { intent: "holds-for" }` — Say which combination of the product's dimensions a screen is for — or take it back. Takes `view`, `is`?.
 - `productos_in { intent: "suggest" }` — Add one sentence to a slot, recorded as suggested — it reads as unagreed until a person agrees to it. Takes `ref`, `says`, `from`, `id`?.
-- `productos_in { intent: "ask" }` — Raise one question on a slot, with drafted answers — it gates the behaviour until the person asked answers it. Takes `ref`, `question`, `asked_of`, `blocks`, `candidates`?, `cost`?, `about`?, `asks`?.
+- `productos_in { intent: "ask" }` — Raise one question on a slot, with drafted answers — it gates the behaviour until the person asked answers it. Takes `ref`, `question`, `asked_of`, `blocks`, `candidates`?, `cost`?, `about`?, `rephrase`?, `asks`?.
 - `productos_in { intent: "demonstrate" }` — Add one testing requirement to a claim — it reads as suggested until a person agrees to the claim it demonstrates. Takes `ref`, `then`?, `given`?, `when`?, `steps`?, `level`?, `id`?.
 - `productos_in { intent: "say" }` — Answer on a filed request without deciding it is finished. Takes `note`, `says`, `by`?.
 - `productos_in { intent: "close" }` — Answer a filed request and take it off the queue. Takes `note`, `outcome`.
@@ -122,6 +122,38 @@ this is done twice?"*
 ⛔ No slot name, no ref, no `asker`, no `at_once` reaches a reader. The model is how this is filed,
 not what anybody is being asked.
 
+#### ⛔ AND AVOIDING THE MODEL'S WORDS IS NOT ENOUGH — THESE ALL PASSED THAT TEST AND ALL FAILED
+
+Every one of these was written by a run of this role. None contains a slot name. Peter, reading
+them: *"this should be natural language, not engineering speak. ask NATURAL LANGUAGE QUESTIONS
+about the behavior of a product."*
+
+| what it asked | why it is not a question anybody asks |
+| --- | --- |
+| *"Does approving a replacement a second time replace the approval already standing on it?"* | a state transition read aloud. No person says "the approval already standing on it" |
+| *"When two of the lender's people answer the same replacement in the same moment, whose name does the document carry?"* | this is a concurrency test case with product nouns dropped in |
+| *"…is the person told, or does the strip read as though nothing is waiting?"* | "the strip" is a thing on a screen you were looking at. A reader has no idea what it is |
+| *"Is this what Approving a document is for?"* | asks somebody to proof-read a corpus they cannot see |
+
+**The shape that works: a person, in a situation, and what should happen.** Start from somebody
+doing something, not from a condition being true.
+
+| instead of | ask |
+| --- | --- |
+| "Does approving a replacement a second time replace the approval already standing on it?" | "Someone already approved this document, and now there's a newer version. If they approve the new one too, is the old approval just history, or does it still count for anything?" |
+| "When two of the lender's people answer the same replacement in the same moment…" | "Two people are looking at the same document and both decide what to do with it at the same time. What should happen?" |
+| "…or does the strip read as though nothing is waiting?" | "The product can't tell which documents are still waiting. Does it say so, or does the deal just look finished?" |
+
+⛔ **Read it aloud before you write it down.** If you would not say it to a colleague who works on
+this product — because it sounds like a clause, or because it names something only you can see —
+it is not the question. Rewrite it until it sounds like somebody asking somebody.
+
+⛔ **And give the situation before the question, in the same words.** Not a heading, not a label —
+one or two sentences of what is going on, the way you would set it up in conversation. Peter on an
+earlier version: *"what the fuck does this even mean? ... what's the context of this fucking
+question? makes ZERO FUCKING SENSE"*. The background goes before the question and never inside the
+options; an option repeating the question is not context, it is padding.
+
 ### The options — three or four, and every one of them real
 
 Each is `{says, consequence}`:
@@ -193,6 +225,36 @@ never said it. Recorded as fg-0001 until `adds a statement` existed.
 
 So: **ask yourself whether your option is a new sentence or a rewrite of one that is there.** If the
 slot's existing statements all survive your answer, it adds — say so, and the person can press it.
+
+### ⛔ A question already asked can be said better — `rephrase`
+
+A question you find already open may be badly worded. Say it better rather than leaving it:
+
+```
+intent: ask
+ref: <the same ref>
+question: <the better wording>
+rephrase: true
+```
+
+⛔ **The options are not touched and must not be.** A rewording changes how the decision is put,
+never what the decision is. If the choice on the table is wrong, that is `candidates` — a different
+decision is a different question, not a rewording of this one.
+
+⛔ **What it used to say is kept in `was_asked`**, oldest first, and the worklist prints the wording
+it replaced beneath the current one. That is the entire reason this is allowed: the old refusal said
+*"a question somebody has been weighing is not rewritten under them"*, which is right about the
+harm — being rewritten **silently** — and the cure is keeping the old sentence, not freezing the
+question. Nothing you do here is invisible to the person who owes the answer.
+
+⛔ **And it is why your wording standards reach anything at all.** On a real corpus, **1,315 of
+1,600 questions owed were already drafted.** Without rewording, better phrasing applies only to
+questions nobody has written yet — every question the person is actually looking at keeps whatever
+the first run typed. If you are reviewing a feature and its questions read like specification
+clauses, rewording them IS the work.
+
+⛔ **Do not reword to no purpose.** Sending the same sentence back adds nothing and is refused.
+Neither is a rewording an excuse to re-ask something settled.
 
 ### ⛔ `refuses` does not take a sentence
 

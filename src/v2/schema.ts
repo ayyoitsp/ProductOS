@@ -606,6 +606,23 @@ export const Standing = z
 
     raised_by: z.string().optional(),
     /**
+     * Every wording this question has had before its current one, oldest first.
+     *
+     * ⛔ THIS EXISTS SO A BADLY ASKED QUESTION IS NOT PERMANENT. `ask` refused to reword an open
+     * question — *"a question somebody has been weighing is not rewritten under them"* — which is
+     * right about the harm and wrong about the cure. The harm is being rewritten SILENTLY; the cure
+     * is keeping what it used to say, not freezing it.
+     *
+     * ⛔ AND IT WAS NOT A SMALL FREEZE. Measured on Peter's corpus: 1,315 of 1,600 questions owed
+     * were already drafted, so improving how this role words a question reached NONE of them —
+     * including every one he had objected to by name. *"this should be natural language, not
+     * engineering speak"* fixed the next question and not one question he was actually looking at.
+     *
+     * ⛔ THE OPTIONS ARE NOT TOUCHED BY A REWORDING, which is what makes it safe: the decision on
+     * the table is the same decision, and anybody weighing it can read what it used to say.
+     */
+    was_asked: z.array(z.string()).optional(),
+    /**
      * ⛔ REQUIRED WHEN THIS STANDING SITS BESIDE CONTENT, because otherwise the whole slot
      * reads unsettled and every surface throws the settled part away.
      *

@@ -49,6 +49,15 @@ export interface Question {
   kind: string;
   /** The question, in whatever form the standing carries it. */
   asks: string;
+  /**
+   * Every wording this question has had before its current one, oldest first.
+   *
+   * ⛔ THE WHOLE SAFETY ARGUMENT FOR REWORDING RESTS ON THIS BEING SHOWN. `ask` may now say an
+   * open question better, and the reason that is not "rewritten under somebody" is that what it
+   * used to say survives — which is worth nothing if no surface renders it. The suite caught
+   * exactly that: `was_asked` was written by an author and read by nothing.
+   */
+  wasAsked?: string[];
   /** What it costs to guess wrong, where the standing says. */
   cost?: string;
   owed?: string;
@@ -393,6 +402,7 @@ function questionsIn(corpus: Corpus, scopeId: string): Question[] {
           owed: s.asked_of,
           candidates: s.candidates ?? [],
           revises: undefined,
+          wasAsked: s.was_asked,
           about: s.about,
           asksPolarity: s.asks === "whether",
           observed: [],
@@ -436,6 +446,7 @@ function questionsIn(corpus: Corpus, scopeId: string): Question[] {
          * longer be confused. A `proposal` is one such answer.
          */
         candidates: s.candidates ?? [],
+        wasAsked: s.was_asked,
         revises: s.about ? saysText(fill.says) : undefined,
         /**
          * ⛔ AND IT MARKS WHICH ONE, because `standing.of` already names it and `settle` already

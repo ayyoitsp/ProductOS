@@ -1111,9 +1111,31 @@ export function interviewFor(corpus: Corpus, scopeId: string, findings: Finding[
         {
           ref: `${ungrounded.scope}#happy-path`,
           owes: "purpose",
+          /**
+           * ⛔ THE SUBSTANCE IS IN THE QUESTION, NOT IN A FIELD BESIDE IT.
+           *
+           * This asked *"Is this what Approving a document is for?"* and put the five sentences
+           * being agreed into `about.already` — a structured field a surface may or may not render.
+           * So the question as a person met it was a request to proof-read a corpus they cannot see.
+           *
+           * Peter: *"shape of this question is all wrong, i'm not tryign to read the corpus. ask the
+           * QUESTION that is relevant. the HUMAN READABLE question, with HUMAN READABLE background"*
+           * and then *"this should be natural language, not engineering speak."*
+           *
+           * ⛔ AND THE BOUNDARY LEADS THE DETAIL, because that is where disagreement actually lives.
+           * `not` is the sentence somebody argues with — "a document everybody has approved can
+           * still leave a closing requirement outstanding" is a real product decision, and it was
+           * the fifth row of a table nobody was shown.
+           */
           asks: hp
-            ? `Is this what ${plain(sc?.title || ungrounded.scope)} is for?`
-            : `What is ${plain(sc?.title || ungrounded.scope)} for?`,
+            ? [
+                plain(hp.accomplishes),
+                hp.not ? `It deliberately does not cover ${plain(hp.not)}.` : "",
+                `Is that what ${plain(sc?.title || ungrounded.scope)} is for?`,
+              ]
+                .filter(Boolean)
+                .join(" ")
+            : `Nobody has said what ${plain(sc?.title || ungrounded.scope)} is for. What is somebody trying to get done here?`,
           why: ungrounded.why,
           shape:
             "what somebody gets done here, what they arrive with, what they leave with, and the screens they meet in order — ⛔ at the altitude that survives a new form field, never the fields themselves",
@@ -1179,6 +1201,14 @@ export function interviewFor(corpus: Corpus, scopeId: string, findings: Finding[
    */
   const vocabulary = vocabularyOf(corpus, scopeId);
 
+  /**
+   * ⛔ WHAT A QUESTION USED TO ASK, SHOWN TO WHOEVER IS BEING ASKED IT NOW.
+   *
+   * A rewording is safe because nothing is lost; that is only true if the person weighing the
+   * question can see what changed. Printed after the question rather than before it — the current
+   * wording is what they are answering, and the old one is there to resolve "wasn't this different
+   * yesterday?" rather than to be read first.
+   */
   const drafted: Owed[] = questionsFor(corpus, scopeId)
     .filter((q) => !q.parked)
     .map((q) => ({
@@ -1194,7 +1224,19 @@ export function interviewFor(corpus: Corpus, scopeId: string, findings: Finding[
        * The newlines are the structure of the question. `decide` prints them line by line and this
        * destroyed them before anything could.
        */
-      asks: q.asks.replace(/[ \t]+/g, " ").trim(),
+      asks: [
+        q.asks.replace(/[ \t]+/g, " ").trim(),
+        /**
+         * ⛔ ONLY THE WORDING IMMEDIATELY BEFORE THIS ONE, not the whole trail. A person resolving
+         * "wasn't this different yesterday?" needs the one it replaced; four generations of it is
+         * an archive, and an archive in front of a question is noise where context should be.
+         */
+        (q.wasAsked ?? []).length
+          ? `(It used to ask: ${String((q.wasAsked ?? []).at(-1)).replace(/[ \t]+/g, " ").trim()})`
+          : "",
+      ]
+        .filter(Boolean)
+        .join("\n"),
       why: q.candidates.length
         ? `${q.candidates.length} answer${q.candidates.length === 1 ? " is" : "s are"} on the table and nobody has picked`
         : "it is asked and nothing is drafted against it",
