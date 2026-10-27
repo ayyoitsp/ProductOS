@@ -793,11 +793,30 @@ export function refineStanding(
       message:
         "`about` names something nobody has ruled, so it cannot sit on a settled standing — if one thing about this sentence is genuinely in question, keep the sentence and make the standing `open` with this `about`, which is the only form that reaches a person",
     });
-  if (!settled && context.hasContent && !s.about)
+  /**
+   * ⛔ ON A CASE, `asks` IS THIS REQUIREMENT ANSWERED BETTER — AND DEMANDING BOTH MADE THE ONE SLOT
+   * A CORPUS MOST OFTEN LEAVES OPEN THE ONE SLOT NOTHING COULD DRAFT FOR. Recorded as fg-0002.
+   *
+   * Both fields answer "which part of this is in question". `about` answers it in prose about a
+   * sentence; `asks` answers it with the FIELD — `whether` it refuses at all, `when`, or what the
+   * asker is `told`. For a named refusal the enum is strictly the better answer, because a case is
+   * not a sentence: it is three fields, and which one is in question is the whole question.
+   *
+   * ⛔ THE COST OF ASKING FOR BOTH WAS NOT PEDANTRY, IT WAS A DEAD END. `about` keys the demand
+   * that every candidate declare `replaces` — "the whole replacement sentence, or only the part in
+   * question". A case has no single sentence to replace, so there is no honest answer, and the only
+   * way to write a question onto a refusal was to claim an option replaced part of a sentence that
+   * does not exist. Measured by running it: a drafter was walked through `about`, then `replaces`,
+   * and what it finally wrote was a question tagged `of: already-paid` sitting beside the refusal
+   * rather than on it, which the reader then reported as settled.
+   */
+  if (!settled && context.hasContent && !s.about && !(context.isCase && s.asks))
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       path: [...at, "about"],
-      message: `this ${context.what} says something AND carries an unsettled standing — say which part of it is in question, or the whole sentence reads unruled and every surface discards it`,
+      message: context.isCase
+        ? `this ${context.what} says something AND carries an unsettled standing — say which part of it is in question with \`asks\`: \`whether\` it refuses at all, \`when\` it refuses, or what the asker is \`told\``
+        : `this ${context.what} says something AND carries an unsettled standing — say which part of it is in question, or the whole sentence reads unruled and every surface discards it`,
     });
   if (s.kind !== "open" && (s.candidates ?? []).length)
     ctx.addIssue({

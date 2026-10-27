@@ -1,0 +1,15 @@
+id: "0211"
+said: Let's get the fix for fg0002 done
+at: 2026-10-27
+kind: concept
+reaches:
+  model: context.isCase && s.asks
+  derive: WHAT_IS_IN_QUESTION
+  generate: ""
+  surface: grainOf
+  check: WHAT_IS_IN_QUESTION
+  instruct: ask at the case, with `asks`
+  pin: the question goes INSIDE the refusal
+waived:
+  generate: "Nothing generates a question on a named refusal. `propose-slots` lifts refusal CASES out of components but writes no standing on one, and the CLI has no `ask` verb at all — `ask` is an author's act reached through the door, which is the surface layer and is where this landed. ⛔ The arguable part: if a future generator proposes a case it cannot fully determine, it will need `asks` on the write, and this waiver is the record that nothing does so today."
+closed: 2026-10-27
