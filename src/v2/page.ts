@@ -3505,7 +3505,20 @@ function renderNav(
   /** The subsystem whose page this is, where the address named one. */
   hereSub?: string
 ): string {
-  const kids = (parent?: string) => corpus.scopes.filter((s) => s.scope.in === parent);
+  /**
+   * ⛔ A WITHDRAWN FEATURE IS NOT IN THE MENU, and it used to be.
+   *
+   * `exists: withdrawn` was honoured for a VIEW and for an EXCHANGE and nowhere for a scope, so a
+   * feature somebody had taken out still had a row, a tab and an address — a menu entry leading to
+   * a page about something that is gone, which is the dead row this file's opening comment is
+   * about. `existsOf` has always cascaded `withdrawn` down the lineage; the tree simply never asked.
+   *
+   * ⛔ THE WHOLE BRANCH GOES, because the cascade means everything beneath a withdrawn container is
+   * withdrawn too. Dropping only the container would leave its children as roots — which is exactly
+   * the orphaning that produced this work in the first place.
+   */
+  const kids = (parent?: string) =>
+    corpus.scopes.filter((s) => s.scope.in === parent && s.scope.exists !== "withdrawn");
   // ⛔ Once for the whole nav. It was called per row, which walks the entire corpus per row.
   const acts = actsFor(corpus);
   const homes = ruleHomes(corpus);
@@ -3864,7 +3877,9 @@ function renderNav(
   const derivedGoes = new Map<string, string>();
   for (const c of inferConnections(corpus).made) derivedGoes.set(c.from, c.to);
   /** Which tabs are areas of the product, and so hold scopes of their own. */
-  const areaIds = new Set(corpus.scopes.filter((x) => x.scope.in === rootId).map((x) => x.scope.id));
+  const areaIds = new Set(
+    corpus.scopes.filter((x) => x.scope.in === rootId && x.scope.exists !== "withdrawn").map((x) => x.scope.id)
+  );
   /**
    * ⛔ EVERY COUNT CARRIES THE NOUN IT IS COUNTING. These five tabs each showed a bare digit and
    * each was counting something different — screens, habits, capabilities, sentences — so "Money
@@ -3927,7 +3942,8 @@ function renderNav(
      * whatever the corpus is called rather than a list of names to keep updated.
      */
     ...corpus.scopes
-      .filter((x) => x.scope.in === rootId)
+      /** ⛔ And no tab for a withdrawn feature — see `kids` above. */
+      .filter((x) => x.scope.in === rootId && x.scope.exists !== "withdrawn")
       .map((x) => {
         const under = descendants(corpus, x.scope.id);
         const screens = under.reduce(

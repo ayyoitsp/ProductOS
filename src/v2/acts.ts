@@ -672,12 +672,21 @@ function doWithdraw(dir: string, o: AcceptPayload & { because?: string }, consen
     consent
   );
 
+  /**
+   * ⛔ AND IT SAYS WHY *THIS* ONE WAS MARKED RATHER THAN REMOVED. There are two different reasons and
+   * the message used to give only one: "somebody had agreed to it" is true of an agreed exchange and
+   * FALSE of a feature, which is always marked because its id is what other documents point at. A
+   * withdrawal reporting a consent that never happened is a record nobody can trust.
+   */
+  const feature = !o.target.includes("#");
   return {
     ok: true,
     said:
       done.mode === "deleted"
         ? `took ${o.target} out — a draft nobody had agreed to, and the sentence it said is in the log`
-        : `withdrew ${o.target} — somebody had agreed to it, so its id is kept and marked withdrawn rather than freed for reuse`,
+        : feature
+          ? `withdrew ${o.target} — a feature is what other documents point at, so its id stays resolvable and everything beneath it is withdrawn with it`
+          : `withdrew ${o.target} — somebody had agreed to it, so its id is kept and marked withdrawn rather than freed for reuse`,
     detail: [`it said: ${done.was.replace(/\s+/g, " ").slice(0, 160)}`],
   };
 }

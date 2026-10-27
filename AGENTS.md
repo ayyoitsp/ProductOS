@@ -1016,6 +1016,7 @@ What `--help` cannot tell you, and why this exists: **who** types it. *Never han
 | `productos v2 read` | Record that somebody read a scope end to end | derive | the model |
 | `productos v2 waive` | Declare that something is deliberately not answered | derive | the model |
 | `productos v2 defer` | Park a question somebody has read and is not answering yet | derive | the model |
+| `productos v2 withdraw` | Take something out — a feature, one behaviour, one slot, or one statement | derive | the model |
 | `productos v2 decide` | Work one scope's open questions, with what guessing wrong would cost | surface | the model |
 | `productos v2 generate` | Regenerate everything generable: screens, their states, and the graph | generate | the model |
 | `productos v2 style` | Copy the application's design libraries into the corpus, and say when they have moved since | generate | the model |
