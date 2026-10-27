@@ -105,8 +105,16 @@ test("⛔ the rows nest, so a container has something that can be folded", () =>
   assert.match(row[1], /<ul>/, "a container's row holds no list of its own");
   assert.match(row[1], /data-scope="weekly-top-up"/, "the sub-feature is not inside its parent's row");
 
-  /** ⛔ And ONE tree, not two: the second one is what broke the top menu. */
-  assert.equal((menu.match(/<nav class="scopes/g) || []).length, 1, "the page renders more than one tree");
+  /**
+   * ⛔ ONE LIST PER GROUP NOW — and what "one tree" was guarding is asserted as itself.
+   *
+   * The second tree that broke the top menu was a COPY: the same scopes rendered twice, two
+   * derivations of one fact. Groups holding their own items are not that, so the check is that no
+   * scope is in two lists, which is the defect, rather than the element count, which was a proxy.
+   */
+  const rows = [...menu.matchAll(/data-scope="([^"]+)"/g)].map((m) => m[1]);
+  const twice = rows.filter((r, i) => rows.indexOf(r) !== i);
+  assert.deepEqual(twice, [], `these scopes are listed more than once: ${twice.join(", ")}`);
 });
 
 test("⛔ no row carries a control of its own", () => {
@@ -175,15 +183,18 @@ test("⛔ in a real browser: the top menu can still reach every feature", { skip
   const { corpus, rootId } = deepCorpus();
   const page = await openPage(live(corpus, rootId), { exe, width: 1200, height: 900 });
   try {
-    await page.waitFor("!!document.querySelector('.chev')", "the chevron that opens the tree");
+    /**
+     * ⛔ NO CHEVRON ANY MORE. It expanded one shared tree; each group carries its own items and
+     * pressing the tab shows them, so a chevron would expand nothing. Peter: *"JUST A PLAIN FUCKING
+     * MENU WITH ITEMS INSIDE IT"*. What is driven here is what a person does: press the tab.
+     */
+    await page.waitFor("!!document.querySelector('.topframe .tab')", "the tab row");
 
     const seen = await page.evaluate(`(() => {
       document.documentElement.setAttribute('data-nav', 'top');
       /* The chevron is hidden on Overview, which has no features of its own — choose an area first. */
       document.querySelector('.tabgroup[data-group="money"] .tab').click();
-      const chev = document.querySelector('.chev');
-      if (chev.getAttribute('aria-expanded') !== 'true') chev.click();
-      const tree = document.querySelector('nav.scopes');
+      const tree = document.querySelector('.tabgroup[data-group="money"] nav.scopes');
       const reachable = [...tree.querySelectorAll('li')]
         .filter((r) => r.getBoundingClientRect().height > 0)
         .map((r) => r.dataset.scope);
@@ -197,7 +208,7 @@ test("⛔ in a real browser: the top menu can still reach every feature", { skip
       };
     })()`);
 
-    assert.notEqual(seen.treeShown, "none", "the chevron does not open the tree");
+    assert.notEqual(seen.treeShown, "none", "pressing the tab does not show that group's items");
     /** ⛔ The scope three levels down — the one a folded tree hides. */
     assert.equal(
       seen.deepest,
@@ -253,28 +264,46 @@ test("⛔ in a real browser: an area does not list itself, and keeps its items",
   /**
    * Peter: *"'Product' itself doesn't need to be a menu item under the 'Product' main tab"*.
    *
-   * ⛔ ITS ROW, NOT ITS ITEMS. The rows nest, so an area's own `li` CONTAINS its features — hiding the
-   * whole row would take every one of them with it, which is an area that looks right and holds
-   * nothing. Both halves are asserted, because the first alone is satisfied by an empty menu.
+   * ⛔ STILL TRUE, BY A DIFFERENT MECHANISM, and the test had to follow it. It used to assert the
+   * area's own row measured zero height — the row existed and was hidden. A root child is now a TAB
+   * and its group lists its CHILDREN, so there is no row for it to hide: the thing it names is the
+   * tab you pressed to get here.
+   *
+   * ⛔ BOTH HALVES, because the first alone is satisfied by an empty menu — which is exactly what
+   * shipped when a childless area's group rendered nothing at all.
    */
   const { corpus, rootId } = deepCorpus();
+  /**
+   * ⛔ NO BASE HERE, AND THAT IS DELIBERATE. With a base an area's tab is an ANCHOR, so clicking it
+   * in a file-rendered page navigates away — the page claims `/v2` as its base while living at a
+   * `file://` path, so the in-page handler declines it and the browser obeys the href. Driving a
+   * navigation is not what this test is about.
+   *
+   * With no base the tab is a button, which is also the correct shape: `address()` returns a
+   * fragment and a standalone file renders one scope, so an anchor would point at something the
+   * page does not contain. That the tab carries an address where there IS one is asserted in
+   * `v2-one-address-one-page`, on a page that is actually served.
+   */
   const page = await openPage(live(corpus, rootId), { exe, width: 1200, height: 900 });
   try {
-    await page.waitFor("!!document.querySelector('li[data-scope=\"money\"]')", "the area's row");
+    await page.waitFor("!!document.querySelector('.tabgroup[data-group=\"money\"] .tab')", "the area's tab");
 
     const seen = await page.evaluate(`(() => {
       document.documentElement.setAttribute('data-nav', 'left');
       document.querySelector('.tabgroup[data-group="money"] .tab').click();
-      const own = document.querySelector('li[data-scope="money"] > .scoperow');
-      const child = document.querySelector('li[data-scope="pocket-money"] > .scoperow');
+      const vis = (e) => !!e && e.getBoundingClientRect().height > 0;
+      const group = document.querySelector('.tabgroup[data-group="money"]');
       return {
-        areaLine: Math.round(own.getBoundingClientRect().height),
-        childLine: Math.round(child.getBoundingClientRect().height),
+        listsItself: !!group.querySelector('li[data-scope="money"]'),
+        child: vis(document.querySelector('li[data-scope="pocket-money"] > .scoperow')),
+        /** ⛔ And the tab is still the thing that names it — see the note above on the address. */
+        hasTab: !!group.querySelector('.tab[data-tab="money"]'),
       };
     })()`);
 
-    assert.equal(seen.areaLine, 0, "the area still names itself inside its own menu");
-    assert.ok(seen.childLine > 0, "hiding the area's line took its features with it");
+    assert.equal(seen.listsItself, false, "the area still names itself inside its own menu");
+    assert.equal(seen.child, true, "the area's group lists none of its features");
+    assert.equal(seen.hasTab, true, "the area has neither a row nor a tab, so nothing names it");
   } finally {
     await page.close();
   }

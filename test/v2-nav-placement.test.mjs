@@ -57,7 +57,20 @@ test("the placement is decided before the frame it governs is emitted", () => {
 
 test("one frame serves both placements — there is no second menu to drift", () => {
   assert.equal(count(/<div class="tabs">/g), 1, "more than one tab row");
-  assert.equal(count(/<nav class="scopes">/g), 1, "more than one scope tree");
+  /**
+   * ⛔ ONE LIST PER GROUP NOW, NOT ONE FOR THE PAGE — and the property this was protecting still
+   * holds, stated as what it actually means.
+   *
+   * The worry was a second MENU that could drift from the first. Each tab group carrying its own
+   * items is not that: the lists hold different scopes and are built by one function. So what gets
+   * asserted is that no scope appears in two of them, which is the drift, rather than counting
+   * elements, which never was.
+   */
+  const lists = html.match(/<nav class="scopes">[\s\S]*?<\/nav>/g) ?? [];
+  assert.ok(lists.length >= 1, "no menu list at all");
+  const rows = lists.flatMap((l) => [...l.matchAll(/data-scope="([^"]+)"/g)].map((m) => m[1]));
+  const twice = rows.filter((r, i) => rows.indexOf(r) !== i);
+  assert.deepEqual(twice, [], `these scopes are in more than one list: ${twice.join(", ")}`);
   assert.equal(count(/<div class="crumbs">/g), 1, "more than one breadcrumb row");
   // The placement is never a rendering branch: it exists in the stylesheet and the script only.
   const frameMarkup = html.slice(html.indexOf('<div class="topframe"'), html.indexOf("<main>"));
@@ -76,7 +89,8 @@ test("the stylesheet answers for the side placement, and the top one is the defa
   // ⛔ NOT SCOPED TO THE FRAME ANY MORE. The chevron sits on the breadcrumb line, and that line left
   // the frame when Peter said *"breadcrumb on page in both top/side menu modes"* — so a selector
   // naming `.topframe .chev` describes a nesting that no longer exists.
-  assert.match(html, /:root\[data-nav="left"\] \.chev \{ display: none/);
+  /** ⛔ The chevron is gone entirely — a group holds its own items, so there is nothing to expand. */
+  assert.doesNotMatch(html, /class="chev"/, "the chevron is back, and it now expands nothing");
   // Below the breakpoint the menu is at the top whatever was remembered, so the offer goes away.
   assert.match(html, /@media \(max-width: [\d.]+rem\) \{ \.navplace \{ display: none/);
 });
