@@ -25,6 +25,20 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 
+/**
+ * Every menu list on the page, joined.
+ *
+ * ⛔ THERE IS NO LONGER ONE TREE, AND THESE ALL READ THE FIRST ONE. Each tab group renders its own
+ * items now — Peter: *"JUST A PLAIN FUCKING MENU WITH ITEMS INSIDE IT, NO COMPLICATED FUCKING
+ * FILTERS"* — so `exec(html)[0]` returned one area's list and every assertion about "the menu" was
+ * made about a fraction of it. On the seed that is literally half: `money` in the first nav,
+ * `tasks` in the second, and a test asking whether both are reachable answering about one.
+ *
+ * The assertions themselves are unchanged in intent; only "the menu" had to stop meaning "the
+ * first nav element".
+ */
+const allNavs = (html) => (html.match(/<nav class="scopes">[\s\S]*?<\/nav>/g) ?? []).join("\n");
+
 const corpus = loadCorpus("v2-seed");
 const SCOPES = corpus.scopes.map((s) => s.scope.id);
 
@@ -173,7 +187,7 @@ test("a slot answered at a rule is named, not linked", () => {
 test("a served page links by address; a page with no address says so", () => {
   const root = corpus.scopes.find((s) => !s.scope.in).scope.id;
   const leaf = corpus.scopes.find((s) => s.scope.exchanges.length && s.scope.in).scope.id;
-  const navOf = (html) => html.match(/nav class="scopes"[\s\S]*?<\/nav>/)[0];
+  const navOf = allNavs;
 
   /** 1. Served: the nav addresses each scope by URL, and under the base it is actually served at. */
   const served = renderScopePage(corpus, root, { linkBase: "/p/prj-x/v2" });
@@ -289,7 +303,7 @@ test("each feature is its own view, reachable from the menu", () => {
   const views = [...html.matchAll(/data-view="([^"]+)"/g)].map((m) => m[1]);
   // ⛔ Scoped to the nav. `data-goto` is no longer nav-only — a container's contents list uses it
   // too — and counting both made every feature look like it had two menu rows.
-  const navHtml = /<nav class="scopes">[\s\S]*?<\/nav>/.exec(html)[0];
+  const navHtml = allNavs(html);
   const menu = [...navHtml.matchAll(/data-goto="([^"]+)"/g)].map((m) => m[1]);
 
   /**
@@ -344,10 +358,18 @@ test("the top frame carries a trail for every view it can reach", () => {
 
   assert.match(html, /class="topframe"/, "no top frame");
   /**
-   * ⛔ THE CHEVRON EXPANDS; THE TRAIL NAVIGATES. One control doing both meant every attempt to go up
-   * a level dropped the whole tree on you — the opposite of what a breadcrumb is for.
+   * ⛔ THERE IS NO CHEVRON ANY MORE, AND ITS ABSENCE IS THE POINT.
+   *
+   * It existed to expand one shared tree that hid behind it. Each tab group now carries its own
+   * items and pressing the tab shows them, so a chevron would expand nothing — which is the dead
+   * control this project refuses by name. Peter: *"JUST A PLAIN FUCKING MENU WITH ITEMS INSIDE IT"*.
+   *
+   * What replaced it is asserted instead: a group holds its own list, so the menu is reachable
+   * without a second control.
    */
-  assert.match(html, /class="chev" aria-expanded="false"/, "nothing expands the tree");
+  assert.doesNotMatch(html, /class="chev"/, "the chevron is back, and it now expands nothing");
+  assert.match(html, /<div class="tabgroup" data-group="[^"]+">[\s\S]*?<nav class="scopes">/,
+    "no group carries its own items, so pressing a tab reveals nothing");
   assert.doesNotMatch(html, /class="crumbs"[^>]*aria-expanded/, "the trail is still the expander");
 
   const raw = /data-trails="([^"]+)"/.exec(html);
@@ -362,7 +384,7 @@ test("the top frame carries a trail for every view it can reach", () => {
 
   // ⛔ Every view the menu offers has a trail, or selecting it leaves the frame lying about where
   // you are — which is worse than no trail at all.
-  const nav = /<nav class="scopes">[\s\S]*?<\/nav>/.exec(html)[0];
+  const nav = allNavs(html);
   for (const view of [...nav.matchAll(/data-goto="([^"]+)"/g)].map((m) => m[1])) {
     assert.ok(trails[view]?.length, `${view} is reachable and has no trail`);
     // ⛔ Every crumb carries the id it navigates to. With labels alone the ancestors were decoration.
@@ -649,7 +671,7 @@ test("every section says how much it is holding", () => {
   const root = corpus.scopes.find((s) => !s.scope.in).scope.id;
   const html = renderScopePage(corpus, root, { linkBase: "/v2" });
   const acts = actsFor(corpus);
-  const nav = /<nav class="scopes">[\s\S]*?<\/nav>/.exec(html)[0];
+  const nav = allNavs(html);
 
   /**
    * ⛔ ITS OWN FIGURE, AND WHAT IS BELOW SAID SEPARATELY.
@@ -700,7 +722,7 @@ test("every section says how much it is holding", () => {
       assert.match(
         html,
         /** ⛔ Attributes between the class and the number: the pill says what it is counting now. */
-        new RegExp(`data-tab="${half.scope.id}">[^<]*<span class="pill quiet"[^>]*>${n}</span>`),
+        new RegExp(`data-tab="${half.scope.id}"[^>]*>[^<]*<span class="pill quiet"[^>]*>${n}</span>`),
         `the ${half.scope.id} tab does not carry its count`
       );
     /**
@@ -711,7 +733,7 @@ test("every section says how much it is holding", () => {
     if (n)
       assert.match(
         html,
-        new RegExp(`data-tab="${half.scope.id}">[^<]*<span class="pill quiet"[^>]*aria-label="${n} sentences nobody has read"`),
+        new RegExp(`data-tab="${half.scope.id}"[^>]*>[^<]*<span class="pill quiet"[^>]*aria-label="${n} sentences nobody has read"`),
         `the ${half.scope.id} tab's count does not say what it counts`
       );
   }
