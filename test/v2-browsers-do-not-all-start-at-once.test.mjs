@@ -126,3 +126,36 @@ test("⛔ waiting too long proceeds rather than failing the suite", async () => 
   release();
   for (const r of mine) r();
 });
+
+test("⛔ the wait for a permit leaves the file time to do its work", () => {
+  /**
+   * ⛔ THIS CAP BLOCKED MAIN FROM DEPLOYING, which is the opposite of what a flake cap is for.
+   *
+   * `npm test` runs with `--test-timeout`, which exists so a hang becomes a verdict rather than a
+   * green suite. The permit wait defaulted to 240s inside a 300s file budget, so under load a file
+   * was killed BY THE FILE TIMEOUT WHILE STILL QUEUING, with 60s left for everything it actually
+   * came to do:
+   *
+   *     not ok test/v2-a-deep-address-lands-where-it-points.test.mjs — timed out after 300000ms
+   *       at takeABrowserSlot (browser-slots.mjs:107)
+   *
+   * It traded nine flakes for a gate that could not pass. So the two numbers are not independent,
+   * and nothing was holding them in any relation — each looked reasonable alone.
+   *
+   * ⛔ HALF, NOT "LESS THAN". Waiting 299s of a 300s budget satisfies "less than" and leaves a file
+   * one second to render a page in a real browser. The point is that a starved file still has room
+   * to finish, not merely that it is not killed mid-wait.
+   */
+  const pkg = JSON.parse(fs.readFileSync("package.json", "utf-8"));
+  const fileBudget = Number(/--test-timeout=(\d+)/.exec(pkg.scripts.test)[1]);
+  const slots = fs.readFileSync("test/support/browser-slots.mjs", "utf-8");
+  const wait = Number(/waitMs = (\d+)/.exec(slots)[1]);
+
+  assert.ok(fileBudget > 0 && wait > 0, `could not read the two budgets: wait ${wait}, file ${fileBudget}`);
+  assert.ok(
+    wait * 2 <= fileBudget,
+    `a file may wait ${wait / 1000}s for a permit inside a ${fileBudget / 1000}s budget — it can be killed while queuing`
+  );
+  /** ⛔ And the wait has to be long enough to actually smooth a batch, or the cap bounds nothing. */
+  assert.ok(wait >= 30000, `a ${wait / 1000}s wait gives up before a slow browser has finished starting`);
+});
