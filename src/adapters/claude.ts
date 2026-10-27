@@ -136,6 +136,17 @@ const TOOL_FOR: Record<Capability, string[]> = {
     "productos_exchange_grid",
     "productos_exchange_packet",
     "productos_exchange_questions",
+    /**
+     * ⛔ BESIDE `questions`, AND IT WAS MISSING FROM HERE FOR AS LONG AS IT EXISTED — so the tool
+     * shipped reachable by the main session and by no role at all. Caught by the guard that a
+     * prompt may not name a tool its role does not hold: the `interviewer`'s brief opens by calling
+     * this, and the brief was unrunnable.
+     *
+     * The pair is the point. `questions` answers what somebody HAS been asked; this answers what
+     * nobody has been asked yet. A role holding only the first sees an empty queue on a corpus with
+     * ninety holes in it.
+     */
+    "productos_exchange_interview",
     "productos_exchange_what_it_covers",
     "productos_exchange_can_be_agreed_to",
     "productos_exchange_check",

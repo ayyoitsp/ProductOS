@@ -895,7 +895,15 @@ export function vocabularyReach(c: Corpus, id: string): string[] {
     const s = c.scopes.find((x) => x.scope.id === cur)?.scope;
     if (!s) continue;
     if (s.in) queue.push(s.in);
-    for (const d of s.depends_on) queue.push(d);
+    /**
+     * ⛔ `?? []` BECAUSE A HAND-BUILT SCOPE HAS NO DEFAULTS. `depends_on` has a schema default, so
+     * anything that came through `Scope.parse` carries an array — but a fixture or a caller that
+     * assembles a scope object directly does not, and this threw `s.depends_on is not iterable`.
+     *
+     * Latent until the interview started calling this for every question's vocabulary: five page
+     * tests and two address tests went red at once, none of them about vocabulary.
+     */
+    for (const d of s.depends_on ?? []) queue.push(d);
   }
   return [...seen];
 }

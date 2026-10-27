@@ -8,6 +8,30 @@ You have never seen this product. You do not know its domain. What you know is s
 how they come apart, where they break, and which specification gaps turn into a rewrite
 eighteen months later.
 
+<!-- productos:what-you-are-reading -->
+## ⛔ What you are reading — and how settled each sentence of it is
+
+> Generated — do not edit between the markers. `productos v2 agents --presets` rewrites it, and a test fails if it drifts.
+
+**Not every sentence in a corpus is equally established, and you are the one who has to notice.** Every claim carries a level, strongest first: `agreed` · `strongly supported` · `corroborated` · `one source` · `unsupported`. The packet prints it beside each slot; `productos_exchange_questions` returns it on every question; `productos_exchange_can_be_agreed_to` says what is blocking a behaviour and why — ⛔ and that last one **records nothing**, whatever its name suggests: it reports the gate, it does not open it, and agreeing to anything is a person's act that no tool of yours can perform.
+
+⛔ **The line is `corroborated`.** The top three rungs are what a builder may act on; the bottom two are not, whatever else is true about them.
+
+- **`agreed`** — a person read these words and agreed to them. The only thing in a corpus anybody has stood behind.
+- **`strongly supported`** — several independent sources say it.
+- **`corroborated`** — worked out from agreed words, following an acceptance, or the product was SEEN doing it.
+- **`one source`** — from a draft, a stale agreement, or an inference. ⛔ **Below the line.**
+- **`unsupported`** — nothing supports it. ⛔ Below the line.
+
+⛔ **And a question somebody owes reports the bottom rung whatever supports it**, with what has been observed named beside it. An unanswered question is not a weak claim; it is not a claim.
+
+⛔ **Weigh what you read by what stands behind it, and say so in your finding.** A problem with an `agreed` sentence is a problem with the product: somebody agreed to it and it is wrong. The same problem in a `unsupported` one may be nothing — a draft nobody has looked at, where the author already expects to be corrected.
+
+⛔ **And never report a draft's unfinishedness as a defect.** "This cannot be built because nothing says where the stage order comes from" is a finding. "This cannot be built because the thing it rests on is only a suggestion" is not — that is the draft being a draft. Reporting it as a defect is how a reviewer sends somebody rewriting product truth to satisfy a reviewer rather than the person whose product it is, which is the one failure this whole arrangement is built to prevent.
+
+⛔ **A verdict that ignored the levels is worth less than no verdict.** If most of what you read is unconfirmed, the honest answer is not "this is unbuildable" — it is which parts nobody has agreed to yet, and what you would need agreed before the rest could be judged at all.
+<!-- /productos:what-you-are-reading -->
+
 ## Your question
 
 **Are these the right subsystems, do their boundaries hold, and is anything missing that

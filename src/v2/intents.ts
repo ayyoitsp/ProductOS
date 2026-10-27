@@ -24,10 +24,10 @@
  * a classifier that mis-reads a sentence as `accept` mints consent nobody gave. A caller says which
  * intent it means, and an unknown one is refused with the list.
  */
-import { perform, payloadFrom, VIA, ACTS, OWED, ALSO, type Act, type Via } from "./acts.js";
+import { perform, payloadFrom, VIA, ACTS, OWED, ALSO, type Act, type Via, isHuman } from "./acts.js";
 import { closeNote, fileNote, replyToNote } from "./notes.js";
 import { suggestClaim, raiseQuestion, proposeRequirement } from "./suggest.js";
-import { mayRecord, mayRelay, mayClaimHand, type Principal } from "./identity.js";
+import { mayRecord, mayRelay, mayClaimHand, watchedAPerson, type Principal } from "./identity.js";
 import { parseFrontmatter } from "../core/frontmatter.js";
 import YAML from "yaml";
 import { authIsOff } from "./store/identity.js";
@@ -37,7 +37,7 @@ import { CORPUS_DIRS, loadCorpus } from "./load.js";
 import { append } from "./log.js";
 import { writePrototypes, writeWithin, diskPages, writeHoldsFor } from "./draw-write.js";
 import { walkOf } from "./walk.js";
-import { axesOf, answersOf, HANDS, type Hand } from "./schema.js";
+import { axesOf, answersOf, HANDS, NOTE_VIA, type Hand, type NoteVia } from "./schema.js";
 import { dimensionsOf, sayCombination, variesBy } from "./dimensions.js";
 import { doorOpensOn, theOnlyScreenIn, screensIn } from "./selection.js";
 
@@ -281,17 +281,97 @@ export const INTENTS: Intent[] = [
           "write through the whole path, which is the point of it",
         required: false,
       },
+      /**
+       * ⛔ `via` AND `assumed` WERE MISSING, AND THAT MADE A WHOLE FEATURE UNREACHABLE.
+       *
+       * This hardcoded `via: "page"` and exposed neither field, so **no caller of the door could
+       * file a `review` finding** — the judge → note → interviewer path had exactly one working
+       * route, `fileNote` called in-process, which a session against a hosted project does not
+       * have. Found by running the interviewer against a live instance: *"no MCP caller can create
+       * one, and an interviewer that notices a hole the worklist cannot see has nowhere to record
+       * it."*
+       *
+       * ⛔ AND THE HARDCODE WAS A FORGERY IN ITSELF. Every note through the door claimed a person
+       * pressed it on a page. That is the *"and what are those 6 requests, i did not send any
+       * requests"* confusion with the door's volume behind it — so `via` now goes through
+       * `mayRecord`, the same gate that stops a token claiming somebody agreed.
+       */
+      {
+        name: "via",
+        says: `How it arrived: ${NOTE_VIA.join(" | ")}. Defaults to \`agent\` for a session and \`page\` for a press. ⛔ \`review\` is a judge's finding a session wrote down, and it owes \`assumed\``,
+        required: false,
+      },
+      {
+        name: "assumed",
+        says:
+          "⛔ Required on `review`, forbidden elsewhere. What somebody would do if nobody answered " +
+          "this, as a `that…` clause — the risk, which is what makes a finding worth a person's " +
+          "time rather than a worry. It becomes one of the options when this is drafted into a question",
+        required: false,
+      },
     ],
-    run: (a, body) =>
-      fileNote(a.dir, {
+    run: (a, body) => {
+      /**
+       * ⛔ THE DEFAULT IS WHAT THE CALLER IS, never what reads best. A browser press is a person on
+       * a page; anything else is software, and `agent` is the honest word for it.
+       */
+      /** ⛔ `NOTE_VIA`, not `VIA` — a request is not consent, and two of its answers are not ways
+       *  anybody could have agreed. See `NOTE_VIA` for what the door refused when this read `VIA`. */
+      const via = (str(body.via) || (a.who.kind === "browser" ? "page" : "agent")) as NoteVia;
+      if (!NOTE_VIA.includes(via))
+        return { ok: false, why: `"${via}" is not a way a request could have arrived`, detail: [NOTE_VIA.join(" · ")] };
+      /**
+       * ⛔ `mayRelay`, NOT `mayRecord` — AND MY FIRST VERSION OF THIS GOT IT WRONG IN A WAY THAT
+       * BLOCKED THE CASE IT WAS WRITTEN FOR.
+       *
+       * The two gates answer different questions:
+       *
+       *   `mayRecord`  may this principal claim a person AGREED? — consent, and no token ever may
+       *   `mayRelay`   may this principal carry what somebody else said? — relay, which is a scope
+       *
+       * A note is a REQUEST. `via: chat` on one says *where the request arrived from*, not that
+       * anybody agreed to anything — and carrying what a person said in a conversation is precisely
+       * what a session is for. Gated on `mayRecord`, every such note came back **"a token cannot
+       * record \"chat\" — that claims a person agreed"**, which is true of a verdict and false of
+       * a request. Found immediately: three of Peter's own answers, relayed from this session,
+       * refused on the grounds that he had not agreed to having said them.
+       *
+       * ⛔ AND A HUMAN `via` STILL COSTS SOMETHING. It needs `relay`, so a read-or-author token
+       * cannot put words in a person's mouth; what it can do is file under `agent`, as itself.
+       */
+      /**
+       * ⛔ A HUMAN `via` IS EITHER A PRESS THIS INSTANCE WATCHED, OR A RELAY — and my first two
+       * attempts each got one of those halves wrong.
+       *
+       *   first:  `mayRecord` for everything — refused a session carrying what Peter said in chat,
+       *           on the grounds that he had not agreed to having said it. A note is a REQUEST;
+       *           `via: chat` says where it arrived from, not that anybody agreed to anything.
+       *   second: `mayRelay` for every human `via` — which made a PERSON pressing on the page prove
+       *           they held a relay scope. A browser principal holds none, so the ordinary case —
+       *           somebody filing a request on their own product — came back *"this token may not
+       *           carry somebody else's press"*. Caught by the store suite, four tests over.
+       *
+       * ⛔ SO BOTH DOORS, AND NEITHER ALONE. `watchedAPerson` is the one that makes a browser press
+       * free: the instance saw it happen, so there is nothing to relay. Anything else asserting a
+       * human `via` is speaking for somebody who is not here, and that is exactly what `relay` is.
+       */
+      const forged = isHuman(via)
+        ? watchedAPerson(a.who.kind)
+          ? null
+          : mayRelay(a.who)
+        : mayRecord(a.who, via);
+      if (forged) return forged;
+      return fileNote(a.dir, {
         about: str(body.about),
         says: str(body.says),
         by: str(body.by) || a.pressing,
-        via: "page",
+        via,
         at: new Date().toISOString().slice(0, 10),
         /** ⛔ Only ever true where somebody said so. An inferred probe is a request discarded. */
         ...(body.probe === true ? { probe: true as const } : {}),
-      }),
+        ...(str(body.assumed) ? { assumed: str(body.assumed) } : {}),
+      });
+    },
   },
   /**
    * ⛔ AN INTENT, NOT AN ENDPOINT — and I said we needed an endpoint before the door existed.

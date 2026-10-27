@@ -33,6 +33,7 @@ import { confidenceOf, whyConfident, discrepancyFor } from "./confidence.js";
 import { levelOf } from "./level.js";
 import { wireParts } from "./wire.js";
 import { questionsFor, descendants, type Question } from "./settle.js";
+import { interviewFor, contextFor as interviewContext } from "./interview.js";
 import { resolveRef } from "./ref.js";
 import { demonstrationOf } from "./demonstrate.js";
 /** ⛔ The packet's own readiness verdict, not a second one — see `readinessOf`. */
@@ -587,6 +588,36 @@ function renderQuestion(q: Question, i: number, past: Decision[], ctx: Ctx): str
                 : "every behaviour this rule reaches"
             }${q.slot ? ` · ${esc(SLOT_LABEL[q.slot] ?? q.slot)}` : ""}</p>`
           : ""
+      }
+      ${
+        /**
+         * ⛔ WHAT THE FEATURE IS FOR, AND WHAT THIS BEHAVIOUR GIVES BACK — THE QUESTION ARRIVED
+         * WITH NEITHER.
+         *
+         * Peter: *"I need context for the questions being asked, not a question out of the blue
+         * about a behavior of a feature. always give context in the question"*, and *"explain the
+         * question"*.
+         *
+         * The card had the question, the address of the behaviour, and the slot's label. That is
+         * where it is, not what it is about: a reader met *"Does pinning a worked-out figure by
+         * hand make it settled?"* with no statement of what the feature is for and no sentence
+         * saying what the behaviour does, both of which are in the corpus three lines away.
+         *
+         * ⛔ TWO SLOTS, NOT EIGHT — see `GROUNDING` in interview.ts for what printing all of them
+         * did. `revises` already renders the statements being ruled on, directly below this, so
+         * this is deliberately only the grounding a reader needs to judge those.
+         */
+        (() => {
+          const a = interviewContext(ctx.corpus, q.scope, q.ref.includes("#") ? q.exchange : undefined, q.slot);
+          const rows = [
+            ...(a.purpose ? [{ k: "what this feature is for", v: a.purpose }] : []),
+            ...a.already.map((x) => ({ k: x.asks, v: x.says })),
+          ];
+          if (!rows.length) return "";
+          return `<div class="q-ctx">${rows
+            .map((r) => `<p><span class="k">${esc(r.k)}</span> ${line(r.v)}</p>`)
+            .join("")}</div>`;
+        })()
       }
       ${acts.join("")}
       ${q.cost ? `<div class="cost"><p class="k">what guessing wrong costs</p><p>${line(q.cost)}</p></div>` : ""}
@@ -1821,6 +1852,85 @@ function partFacts(corpus: Corpus, ids: string[]): string {
  * a reviewer facing 539 blanks is asking "where do I start", and the answer is the feature with the
  * fewest holes — it is the cheapest to finish and the first that becomes agreeable.
  */
+/**
+ * What nobody has been ASKED yet — ⛔ THE HALF OF "WHAT IS UNDECIDED HERE" THE QUEUE CANNOT CARRY.
+ *
+ * Peter: *"what is 'interview', this should be a first class representation in the UX - and claude
+ * should ideally be able to access this via mcp"*.
+ *
+ * The queue above holds questions somebody has drafted answers for, which a reviewer can press. It
+ * is therefore a measure of how much drafting has happened, and was reading as a measure of how much
+ * is undecided — the two are the same number only on a corpus where every hole has been worked. A
+ * short queue over ninety blank slots told a reviewer the corpus was nearly done.
+ *
+ * ⛔ AND IT IS NOT `renderWorklist`, WHICH SITS DIRECTLY BELOW THIS. That one counts blank slots per
+ * feature and names the slots — it answers *"where do I start authoring"*, in the grid's vocabulary,
+ * and it is the right thing to show somebody who has nothing to press. This answers *"what is the
+ * question"*, folded so one answer covers every behaviour blank on the same policy. Same source,
+ * different question, and the fold is the part no other surface does.
+ *
+ * ⛔ NOTHING HERE IS PRESSABLE, DELIBERATELY. A hole with no drafted options cannot be answered by
+ * choosing, and a text box on a page of product truth is how a decision gets made by whoever is
+ * tired — which is the sentence `decide` already uses about composing truth at a prompt. What a
+ * reviewer gets is the question and an honest account of why they cannot answer it yet.
+ */
+function renderUnasked(corpus: Corpus, scopeId: string, ctx: Ctx): string {
+  const it = interviewFor(corpus, scopeId);
+  if (!it) return "";
+  /**
+   * ⛔ IT USED TO RETURN NOTHING ON ANY FEATURE WITH NO AGREED PURPOSE — the same defect as the
+   * derivation's, in the surface, and on a corpus with 102 such features that is the whole page.
+   *
+   * The comment here said "the purpose gate is the queue's own business; this is about the detail
+   * behind it", which sounds right and had it exactly backwards: a feature nobody has agreed a
+   * purpose for is the one where knowing what is still unsaid matters MOST, because that is what
+   * somebody weighs before agreeing to anything. Withholding it meant the page's honest answer to
+   * "what is undecided here" was blank precisely where it was largest.
+   */
+  const unasked = it.owed.filter((o) => o.owes === "blank" || o.owes === "screen");
+  if (!unasked.length) return "";
+
+  const folded = unasked.filter((o) => o.fills.length > 1);
+  return `
+    <div class="unasked">
+      <h3>Nobody has been asked these yet</h3>
+      ${
+        /**
+         * ⛔ THE TWO NUMBERS, BECAUSE THE GAP BETWEEN THEM IS THE ONLY EVIDENCE THE FOLD HAPPENED.
+         * How many questions, against how many places they would fill. Equal only when nothing
+         * folded, and a reader who cannot see the difference has no reason to believe it.
+         */
+        `<p class="lede">${unasked.length} question${unasked.length === 1 ? "" : "s"}, covering
+         <strong>${unasked.reduce((n, o) => n + o.fills.length, 0)}</strong> places where this
+         product does not yet say what it does${
+           folded.length
+             ? ` — ${folded.length} of them ${folded.length === 1 ? "is one answer that settles several" : "are each one answer that settles several"}`
+             : ""
+         }.</p>`
+      }
+      <p class="note">Each needs options drafted against it before anybody can choose. Until then it
+      is not a decision anybody has declined to make — it is one nobody has been offered.</p>
+      <ul class="unasked-list">
+        ${unasked
+          .map(
+            (o) => `
+          <li>
+            <p class="u-asks">${line(o.asks)}</p>
+            <p class="u-why">${line(o.why)}</p>
+            ${
+              o.fills.length > 1
+                ? `<p class="u-fills">one answer settles ${o.fills.length}: ${o.fills
+                    .map((f) => refLink(f, ctx))
+                    .join("; ")}</p>`
+                : ""
+            }
+          </li>`
+          )
+          .join("")}
+      </ul>
+    </div>`;
+}
+
 function renderWorklist(
   corpus: Corpus,
   grids: Grid[],
@@ -4407,7 +4517,15 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
                           }</p>`
                         : ""
                     }
-                    ${live.map((q, i) => renderQuestion(q, i, decisionsOn(corpus, q.ref), ctx)).join("")}`
+                    ${live.map((q, i) => renderQuestion(q, i, decisionsOn(corpus, q.ref), ctx)).join("")}
+                    ${
+                      /**
+                       * ⛔ AFTER THE PRESSABLE ONES AND ON THE SAME TAB, because "what is undecided
+                       * here" has one honest answer and it is both halves. Below the queue, so the
+                       * things a reviewer can act on come first.
+                       */
+                      renderUnasked(corpus, scopeId, ctx)
+                    }`
                  : /**
                     * ⛔ "NOTHING IS UNDECIDED" IS TRUE AND MISLEADING WHEN NOTHING IS WRITTEN.
                     *
@@ -4430,6 +4548,15 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
                        * "where do I start" and the answer is the one with the fewest holes.
                        */
                       blanks ? renderWorklist(corpus, grids, a, written, blanks, gated.length, ctx) : ""
+                    }
+                    ${
+                      /**
+                       * ⛔ AND HERE ESPECIALLY. This is the branch whose own ⛔ says an empty queue
+                       * over 539 blank slots tells a reviewer the corpus is ready. `renderWorklist`
+                       * answers it in slots and features; this answers it in the questions somebody
+                       * would actually be asked, which is the form a reviewer can judge.
+                       */
+                      renderUnasked(corpus, scopeId, ctx)
                     }`
              }
            </div>
@@ -10514,6 +10641,35 @@ export const STYLE = `<style>
 
   .gate-note { background: var(--warn-bg); border-left: 3px solid var(--warn); border-radius: 0 6px 6px 0;
     padding: .7rem .9rem; margin: .9rem 0 1.4rem; font-size: .92rem; }
+  /**
+   * ⛔ THE UNASKED HALF READS AS UNASKED, AND NOT AS A QUEUE.
+   *
+   * A question card is a card with a border and a background because it is a thing to act on.
+   * These are not —
+   * nothing here is pressable, by design, because a hole with no drafted options cannot be answered
+   * by choosing. Styling them like questions would offer a reviewer eight cards and no buttons,
+   * which is the state the queue's own ⛔ describes as "reads as finished".
+   *
+   * So: a list, offset by a rule down the left, in the dimmer register the page already uses for
+   * things that are context rather than acts.
+   */
+  /**
+   * ⛔ CONTEXT READS AS CONTEXT. It sits above the options and below the question, dimmer than
+   * both, with each line labelled by what it answers — so a reader can skip it once they know the
+   * feature and cannot mistake it for something being decided.
+   */
+  .q-ctx { margin: .6rem 0 1rem; font-size: .9rem; color: var(--dim); }
+  .q-ctx p { margin: .2rem 0; }
+  .q-ctx .k { color: var(--ink); opacity: .75; }
+  .unasked { margin-top: 2rem; padding-left: .9rem; border-left: 2px solid var(--line); }
+  .unasked h3 { margin: 0 0 .4rem; font-size: 1rem; }
+  .unasked .note { color: var(--dim); font-size: .9rem; margin: .5rem 0 0; }
+  .unasked-list { list-style: none; margin: 1rem 0 0; padding: 0; }
+  .unasked-list li { padding: .7rem 0; border-top: 1px solid var(--line); }
+  /** ⛔ The question is the thing to read, so it carries the page's own ink weight. */
+  .u-asks { margin: 0; font-size: 1rem; line-height: 1.5; color: var(--ink); }
+  .u-why { margin: .25rem 0 0; font-size: .88rem; color: var(--dim); }
+  .u-fills { margin: .25rem 0 0; font-size: .85rem; color: var(--dim); }
   .steer-list { list-style: none; margin: 1rem 0 0; padding: 0; }
   .steer-block { margin-top: 1.6rem; }
   .steer-list li { padding: .6rem 0; border-bottom: 1px solid var(--line); font-size: 1rem; line-height: 1.5; }

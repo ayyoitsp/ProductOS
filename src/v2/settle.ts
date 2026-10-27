@@ -99,6 +99,53 @@ export interface Question {
 }
 
 /**
+ * The command that answers one question — ⛔ `null` WHERE NO COMMAND CAN, AND THAT IS THE WHOLE
+ * REASON THIS IS A FUNCTION RATHER THAN A TEMPLATE AT EACH CALL SITE.
+ *
+ * `v2 decide` worked this out inline and the reasoning is long, because four different facts about a
+ * question change the verb it takes: a dispute wants `--stands`, an org-wide rule owes `--then` in
+ * the same act, a case asking `whether` needs `--refuses yes|no`, and a residual on a multi-statement
+ * slot decides whether `--pick` is safe or whether the whole sentence has to be written out.
+ *
+ * ⛔ AND A CONTESTED WORD HAS NO COMMAND AT ALL. `Term.contested` is `{question, with}`, strictly,
+ * so there is nowhere for a candidate to go and no ref a verb accepts — the ref is `<scope>#<word>`
+ * and a multi-word term is not one kebab-case segment. v2.ts records this biting twice: #148 minted
+ * the ref shape, #153 printed `v2 rule` against it, and it fails with `no exchange "where a value
+ * was read from"`. Answering it means choosing a sense and renaming the losing uses across files,
+ * which is authoring and not an act.
+ *
+ * ⛔ SO IT IS EXTRACTED, BECAUSE A SECOND SURFACE REPRODUCED THE DEFECT IMMEDIATELY. `v2 interview`
+ * printed `v2 rule <ref> --pick N` for every drafted question — which is wrong for a rule (no
+ * `--then`), wrong for a dispute (no `--stands`), wrong for a `whether` case (no `--refuses`), and a
+ * command that cannot work for a contested word. Four classes of broken advice, from one surface
+ * re-deriving what another already knew, on the queue a reviewer meets first.
+ */
+export function rulingAct(q: Question, who = "<your name>"): string | null {
+  /** ⛔ First, because everything below it assumes a ref a verb accepts. */
+  if (q.kind === "contested word") return null;
+
+  const stands = q.conflictsWith.length ? ` --stands this` : "";
+  const then = q.needsThen ? ` --then "…what would show it holding…"` : "";
+  const pol = q.asksPolarity ? ` --refuses yes|no` : "";
+  const tail = `${stands}${then}${pol} --because "…" --by ${who}`;
+
+  /**
+   * ⛔ A RESIDUAL — one thing unruled ABOUT a sentence somebody agreed to. `--pick` is safe only
+   * where an option is a whole replacement sentence, or where `of:` names the one statement it
+   * replaces; otherwise picking deletes the siblings, which is the clause loss `--pick` exists to
+   * prevent. See `write.ts` and `Standing.candidates`.
+   */
+  if (q.revises) {
+    if (q.candidatesAreWhole) return `productos v2 rule ${q.ref} --pick N${tail}`;
+    if ((q.saysEach ?? []).some((x) => x.inQuestion)) return `productos v2 rule ${q.ref} --pick N${tail}`;
+    return `productos v2 rule ${q.ref} --says "…the whole sentence…"${tail}`;
+  }
+  if (q.candidates.length) return `productos v2 rule ${q.ref} --pick N${tail}`;
+  /** Nothing drafted: it is answered by writing the sentence. Drafting is authoring, not an act. */
+  return `productos v2 rule ${q.ref} --says "…"${tail}`;
+}
+
+/**
  * This scope and everything filed beneath it.
  *
  * ⛔ THE `in:` TREE WAS DECLARED AND UNIMPLEMENTED, AND IT REPORTED SUCCESS.
@@ -374,8 +421,33 @@ function questionsIn(corpus: Corpus, scopeId: string): Question[] {
         saysEach: s.about
           ? statements(fill.says).map((x) => ({ says: x.says, inQuestion: Boolean(s.of) && x.id === s.of }))
           : undefined,
+        /**
+         * ⛔ `of` WINS OVER WHAT A CANDIDATE CLAIMS, AND IT DID NOT — SO THE PAGE TOLD A READER THE
+         * OPPOSITE OF WHAT THE BUTTON DOES.
+         *
+         * This read only the candidates' own `replaces`. But `settle` scopes the replacement by
+         * `standing.of` when it is set: it rewrites that statement's `says` and leaves its siblings
+         * byte-identical (fg-0008, forty lines down). So a standing with `of` AND candidates
+         * declaring `the whole sentence` set this true, and the page then printed *"Each option is
+         * the whole sentence, so picking one replaces it cleanly"* above two statements, one of them
+         * marked `this one is unruled`.
+         *
+         * Read live off `deal-pricing#deal-pricing-grid#at_once` on a running instance. The
+         * honest branch — *"Each option replaces the marked statement only. The others stand exactly
+         * as they are."* — sits one `else if` below and was unreachable, because `candidatesAreWhole`
+         * is tested first.
+         *
+         * ⛔ IT OVER-WARNS RATHER THAN DESTROYING ANYTHING, which is why nothing caught it: the
+         * press is safe and the sentence describing it is wrong. A reviewer who cares about the
+         * other statements declines to press — which is the failure the ⛔ above `saysEach` records
+         * fixing, arriving through the flag instead of through the markup.
+         *
+         * Found by running the `interviewer` against a live instance for the first time.
+         */
         candidatesAreWhole:
-          (s.candidates ?? []).length > 0 && (s.candidates ?? []).every((c) => c.replaces === "the whole sentence"),
+          !s.of &&
+          (s.candidates ?? []).length > 0 &&
+          (s.candidates ?? []).every((c) => c.replaces === "the whole sentence"),
         about: s.about,
         /**
          * ⛔ The corpus held the evidence for the question and withheld it at the moment of
@@ -419,6 +491,14 @@ export function settle(
     /** ⛔ For a `refuses` question: the named cases, which a sentence cannot express. */
     outcomes?: unknown[];
     none?: boolean;
+    /**
+     * ⛔ THE CHOSEN OPTION SAID IT ADDS A SENTENCE RATHER THAN REPLACING ONE — fg-0001.
+     *
+     * Passed in rather than read here, for the reason everything else in this bag is: the candidate
+     * is resolved by `perform`, which is the only place that knows which option was picked. A second
+     * resolution here would be a second answer to "what did they choose".
+     */
+    adds?: boolean;
   } = {},
   /**
    * Which hand supplied the words this is about to write.
@@ -766,6 +846,41 @@ export function settle(
   else if (about.none) {
     slot.none = true;
     if (wrote) slot.wrote = wrote;
+  }
+  /**
+   * ⛔ A NEW STATEMENT BESIDE THE OTHERS — fg-0001, and the branch that lets an answer about an
+   * ABSENCE land at all.
+   *
+   * Where the chosen option declares `adds a statement`, the ruling is not a replacement of
+   * anything: it is a sentence the slot did not say, appended with its own id, every sibling left
+   * byte-identical. Same guarantee as the `of` branch below, for the opposite situation — that one
+   * rewrites one of several, this one makes it one more.
+   *
+   * ⛔ ITS ID IS MADE FROM THE SENTENCE, never asked for. Nobody composing an answer at a prompt
+   * should be asked to invent an identifier for words they have just chosen — `suggest` already
+   * holds that line for the same reason.
+   */
+  else if (about.adds) {
+    const list = Array.isArray(slot.says)
+      ? (slot.says as Array<{ id: string; says: string }>)
+      : typeof slot.says === "string" && slot.says.trim()
+        ? [{ id: "it", says: slot.says as string }]
+        : [];
+    const id =
+      says
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-|-$/g, "")
+        .split("-")
+        .slice(0, 6)
+        .join("-") || "also";
+    if (list.some((x) => x.id === id))
+      return {
+        ok: false,
+        why: `${ref} already says something filed as "${id}" — give this sentence different words, or rule the statement that is there`,
+      };
+    list.push({ id, says });
+    slot.says = list;
   }
   else if (asked?.of && Array.isArray(slot.says)) {
     /**
