@@ -170,6 +170,28 @@ export function descendants(corpus: Corpus, scopeId: string): string[] {
 const norm = (s?: string) => (s ?? "").replace(/\s+/g, " ").trim();
 
 /** Every unsettled slot in one scope and everything beneath it, in reading order. */
+/**
+ * What `asks` means to the person reading the question — in product words, never the enum.
+ *
+ * ⛔ THE QUESTION USED TO DROP THIS ENTIRELY, and it is the part that makes the options legible.
+ * A case question read *"The case \"already-paid\" — when the task has been paid once already — is
+ * not ruled."* and then the drafter's sentence. Nothing said which of the case's three fields was
+ * in question, so two options reading "it can be paid again" and "it still refuses" arrived with no
+ * statement of what picking one DOES — and on `whether`, picking one retires the case outright.
+ *
+ * ⛔ IT MATTERS MOST HERE BECAUSE `about` NO LONGER CARRIES IT. A case states which part is unruled
+ * with `asks`, not with prose about a sentence — see `refineStanding` and fg-0002. So the surface
+ * that reads `about` and not `asks` shows a strictly thinner question than it did before.
+ *
+ * Peter, on a question with no context: *"what the fuck does this even mean? ... what's the context
+ * of this fucking question? makes ZERO FUCKING SENSE"*. This is that complaint, one grain down.
+ */
+export const WHAT_IS_IN_QUESTION: Record<string, string> = {
+  whether: "In question: whether it refuses here at all — so answering that it does not retires this case, and the words below stop being shown to anybody.",
+  when: "In question: the condition. It does refuse; what is unruled is whether this is the right moment for it.",
+  told: "In question: the words the asker reads. It refuses, and at the right moment — this is about how it is said.",
+};
+
 export function questionsFor(corpus: Corpus, scopeId: string): Question[] {
   const under = descendants(corpus, scopeId);
   const fromSlots = under.length > 1 ? under.flatMap((id) => questionsIn(corpus, id)) : questionsIn(corpus, scopeId);
@@ -357,7 +379,10 @@ function questionsIn(corpus: Corpus, scopeId: string): Question[] {
           kind: `${ok} case`,
           asks: [
             `The case "${o.name}" — when ${o.when} — is not ruled.`,
+            /** ⛔ The enum first: it says what picking an option DOES. See `WHAT_IS_IN_QUESTION`. */
+            s.asks ? WHAT_IS_IN_QUESTION[s.asks] ?? "" : "",
             s.about ? `In question: ${s.about}` : "",
+            s.asks === "told" ? `It says now: ${o.told}` : "",
             (s.candidates ?? []).length === 1 ? `Proposed: ${s.candidates![0]!.says}` : "",
             s.because ? `Because: ${s.because}` : "",
             s.question ?? "",

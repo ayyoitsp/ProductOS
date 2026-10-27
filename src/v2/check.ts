@@ -33,7 +33,7 @@ import {
 import { confidenceOf, containerOf } from "./confidence.js";
 import { stampFor, staleReason, coveredBy, whatChangedSince } from "./stamp.js";
 import { resolveRef } from "./ref.js";
-import { descendants } from "./settle.js";
+import { descendants, WHAT_IS_IN_QUESTION } from "./settle.js";
 import { ruleHomes, reachOf } from "./grid.js";
 import { appStyleFor, styleDrift } from "./appcss.js";
 import { readLog } from "./log.js";
@@ -1273,6 +1273,18 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
             where: `${ref}#${slot}#${o.name}`,
             what: [
               `the case "${o.name}" (${o.when}) is not ruled`,
+              /**
+               * ⛔ `asks` IS WHAT SAYS WHICH OF THE CASE'S THREE FIELDS IS UNRULED, and this
+               * finding rendered `about` only — so after fg-0002 made `asks` the grain for a case,
+               * the finding went quieter than it had been. Same defect as the worklist had, in the
+               * second surface that shows a case question.
+               *
+               * ⛔ IMPORTED, NOT RESTATED. Two wordings of "what `whether` means to a reader" is
+               * two facts with one source and no forcing function to keep them equal.
+               */
+              o.standing?.asks ? WHAT_IS_IN_QUESTION[o.standing.asks] ?? "" : "",
+              /** ⛔ Asking about the wording without showing the wording is asking blind. */
+              o.standing?.asks === "told" ? `it says now: ${norm(o.told)}` : "",
               o.standing?.about ? `in question: ${norm(o.standing.about)}` : "",
               (o.standing?.candidates ?? []).length === 1 ? `proposed: ${norm(o.standing!.candidates![0]!.says)}` : "",
               o.standing?.because ? `because: ${norm(o.standing.because)}` : "",

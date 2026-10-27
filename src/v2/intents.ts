@@ -942,7 +942,11 @@ export const INTENTS: Intent[] = [
     gate: "author",
     does: "Raise one question on a slot, with drafted answers — it gates the behaviour until the person asked answers it",
     takes: [
-      { name: "ref", says: "The slot, as <scope>#<exchange>#<slot>, or <scope>#<exchange>#<slot>#<statement> when one sentence of several is in question", required: true },
+      {
+        name: "ref",
+        says: "The slot, as <scope>#<exchange>#<slot>. A fourth segment addresses one part of it: a named refusal on `refuses`, or one statement when the slot says several things",
+        required: true,
+      },
       { name: "question", says: "The question, as the person who owes it would read it", required: true, floor: 10 },
       { name: "asked_of", says: "Who owes the answer — a person's handle", required: true },
       {
@@ -957,6 +961,16 @@ export const INTENTS: Intent[] = [
       },
       { name: "cost", says: "What it costs to guess wrong. Required with two or more drafted answers", required: false },
       { name: "about", says: "Which part of what the slot already says is in question. Required when the slot already says something", required: false },
+      {
+        /**
+         * ⛔ WITHOUT THIS THE WHOLE fg-0002 FIX IS UNREACHABLE FROM WHERE ANYBODY IS. The writer can
+         * now put a question on a named refusal, and this is the only door — *"no one will ever use
+         * the command line"*. A capability reachable only from a function call is not shipped.
+         */
+        name: "asks",
+        says: "For a named refusal: which part of the case is unruled — `whether` it refuses at all, `when` it refuses, or what the asker is `told`. Required when the ref names a refusal, and meaningless otherwise",
+        required: false,
+      },
     ],
     run: (a, body) => {
       const blocks = Array.isArray(body.blocks) ? body.blocks.map(String) : null;
@@ -968,6 +982,7 @@ export const INTENTS: Intent[] = [
         blocks,
         cost: str(body.cost) || undefined,
         about: str(body.about) || undefined,
+        asks: (str(body.asks) || undefined) as "whether" | "when" | "told" | undefined,
         candidates: Array.isArray(body.candidates) ? body.candidates : undefined,
         by: a.who.actor,
       });

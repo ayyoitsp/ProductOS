@@ -25,7 +25,7 @@ productos_in { intent: "document", fields: { key: "truth/<scope>.md", says: "<th
 - `productos_in { intent: "inside" }` — Say which screen a screen appears inside — or take that back. Takes `view`, `of`?.
 - `productos_in { intent: "holds-for" }` — Say which combination of the product's dimensions a screen is for — or take it back. Takes `view`, `is`?.
 - `productos_in { intent: "suggest" }` — Add one sentence to a slot, recorded as suggested — it reads as unagreed until a person agrees to it. Takes `ref`, `says`, `from`, `id`?.
-- `productos_in { intent: "ask" }` — Raise one question on a slot, with drafted answers — it gates the behaviour until the person asked answers it. Takes `ref`, `question`, `asked_of`, `blocks`, `candidates`?, `cost`?, `about`?.
+- `productos_in { intent: "ask" }` — Raise one question on a slot, with drafted answers — it gates the behaviour until the person asked answers it. Takes `ref`, `question`, `asked_of`, `blocks`, `candidates`?, `cost`?, `about`?, `asks`?.
 - `productos_in { intent: "demonstrate" }` — Add one testing requirement to a claim — it reads as suggested until a person agrees to the claim it demonstrates. Takes `ref`, `then`?, `given`?, `when`?, `steps`?, `level`?, `id`?.
 - `productos_in { intent: "say" }` — Answer on a filed request without deciding it is finished. Takes `note`, `says`, `by`?.
 - `productos_in { intent: "close" }` — Answer a filed request and take it off the queue. Takes `note`, `outcome`.
@@ -206,6 +206,33 @@ candidates: [ { outcomes: [{ name: "not-your-kid", when: "…", told: "…" }], 
 This is not a detail. `refuses` was unsettleable by any command for a while precisely because a
 candidate's only content field was `says`, and an option written as a sentence there is refused by
 the schema.
+
+### ⛔ One named refusal that is already there — ask at the case, with `asks`
+
+The section above is for a `refuses` slot with **no cases yet**. When the cases exist and one of
+them is what nobody has ruled, the question goes on **that case** — not on the slot above it:
+
+```
+ref:  <scope>#<exchange>#refuses#<case name>
+asks: whether | when | told
+```
+
+⛔ **`asks` is required there and it is the whole question**, because a case is three fields and a
+ruling is written into the one it names:
+
+| `asks` | what is unruled | what your options are |
+| --- | --- | --- |
+| `whether` | does it refuse in this case at all? | sentences describing each outcome — answering "it does not" **retires the case**, so the `told` wording stops being shown to anybody |
+| `when` | it refuses; is this the right condition? | replacement conditions, as sentences |
+| `told` | it refuses, at the right moment; are these the words? | replacement wordings, as the person reads them |
+
+⛔ **Not `about`, and never `of`.** `of` names one statement of a slot's sentence, and a named
+refusal is not a statement of its slot — a question filed that way lands *beside* the case, where
+the surface reading that same ref reports it **settled**. That was fg-0002, and it is why the one
+slot a corpus most often leaves open was the one slot nothing could draft options for.
+
+⛔ **And a case name that matches nothing is refused, naming the cases there are.** If you get that
+refusal you have the wrong name, not a missing case — read `shape` again rather than inventing one.
 
 ### ⛔ A screen is never answered as a sentence
 

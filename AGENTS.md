@@ -979,7 +979,7 @@ So the question you own is not asked once over a feature. It is asked once per c
 
 What `--help` cannot tell you, and why this exists: **who** types it. *Never hand a human a flag* is a rule the skills state and nothing enforced — a command marked `claude` appearing in instructions addressed to a person is now a visible contradiction.
 
-### 48 commands
+### 49 commands
 
 | command | does | layer | typed by |
 |---|---|---|---|
