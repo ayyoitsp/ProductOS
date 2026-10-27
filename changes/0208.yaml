@@ -1,0 +1,8 @@
+id: "0208"
+said: "uhm, what? why? buildability should take validation into account.  if a verdict has low confidence/no agreement, why the fuck would it trust it?"
+at: 2026-10-21
+kind: instruction
+reaches:
+  instruct: what-you-are-reading
+  pin: every judge that reads a corpus is told how settled what it reads is
+waived: {}

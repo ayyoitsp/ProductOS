@@ -1,4 +1,4 @@
-id: "0158"
+id: "0163"
 said: "[found while reviewing the MCP interface] a refusal from productos_in reached an MCP caller as a SUCCESS — guardArgs marked its own refusals and a write conflict was marked, but a refusal the tool returned fell through with no isError, so a model proceeds as though its act was recorded"
 at: 2026-10-15
 kind: surface

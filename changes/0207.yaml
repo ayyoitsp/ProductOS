@@ -1,0 +1,8 @@
+id: "0207"
+said: "[shown three options for when buildability may run — split it, exempt it, or leave it gated — with the pros and cons of each] Exempt it — just run it early: buildability runs in the authoring route as it is today, verdict and all. Add it to the six roles already exempted from the gate."
+at: 2026-10-21
+kind: instruction
+reaches:
+  instruct: buildability
+  pin: buildability was exempted from the gate and then not run early anyway
+waived: {}

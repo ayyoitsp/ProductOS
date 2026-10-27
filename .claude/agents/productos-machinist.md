@@ -30,7 +30,7 @@ productos_in { intent: "document", fields: { key: "truth/<scope>.md", says: "<th
 - `productos_in { intent: "inside" }` — Say which screen a screen appears inside — or take that back. Takes `view`, `of`?.
 - `productos_in { intent: "holds-for" }` — Say which combination of the product's dimensions a screen is for — or take it back. Takes `view`, `is`?.
 - `productos_in { intent: "suggest" }` — Add one sentence to a slot, recorded as suggested — it reads as unagreed until a person agrees to it. Takes `ref`, `says`, `from`, `id`?.
-- `productos_in { intent: "ask" }` — Raise one question on a slot, with drafted answers — it gates the behaviour until the person asked answers it. Takes `ref`, `question`, `asked_of`, `blocks`, `candidates`?, `cost`?, `about`?.
+- `productos_in { intent: "ask" }` — Raise one question on a slot, with drafted answers — it gates the behaviour until the person asked answers it. Takes `ref`, `question`, `asked_of`, `blocks`, `candidates`?, `cost`?, `about`?, `asks`?.
 - `productos_in { intent: "demonstrate" }` — Add one testing requirement to a claim — it reads as suggested until a person agrees to the claim it demonstrates. Takes `ref`, `then`?, `given`?, `when`?, `steps`?, `level`?, `id`?.
 - `productos_in { intent: "say" }` — Answer on a filed request without deciding it is finished. Takes `note`, `says`, `by`?.
 - `productos_in { intent: "close" }` — Answer a filed request and take it off the queue. Takes `note`, `outcome`.

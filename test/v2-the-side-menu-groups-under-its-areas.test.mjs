@@ -176,28 +176,43 @@ test("⛔ collapsing does not navigate, and choosing an area opens it", async (t
   assert.equal(seen.openedByChoosing, true, "choosing a collapsed area left it collapsed and showed nothing");
 });
 
-test("⛔ there is exactly one feature tree, and it sits under the area it is listing", async (t) => {
+test("⛔ no row is in two lists, and each list sits under the area it belongs to", async (t) => {
   if (skip) return t.skip(skip);
+  /**
+   * ⛔ THIS USED TO DEMAND EXACTLY ONE TREE, moved under whichever area was selected. That design is
+   * gone: each group renders its own items, so there are as many lists as there are groups with
+   * something in them. Peter: *"JUST A PLAIN FUCKING MENU WITH ITEMS INSIDE IT, NO COMPLICATED
+   * FUCKING FILTERS"*.
+   *
+   * ⛔ BUT THE PROPERTY IT WAS PROTECTING IS REAL AND IS NOW ASSERTED DIRECTLY — and more strictly.
+   * "One tree" was a proxy for "nothing is duplicated": the worry was a per-area copy, two
+   * derivations of one fact that drift. Counting elements never actually tested that. Counting
+   * whether any scope appears in more than one list does.
+   */
   const out = await inTheMenu(
     "left",
     `
     const tabs = [...document.querySelectorAll('.topframe .tab')];
-    const pick = tabs.find((t) => t.dataset.tab !== 'overview' && t.dataset.tab !== 'prototype');
-    const seen = { trees: document.querySelectorAll('nav.scopes').length, picked: pick ? pick.dataset.tab : null };
+    const pick = tabs.find((t) => t.dataset.tab !== 'overview' && t.dataset.tab !== 'prototype' && t.dataset.tab !== 'subsystems');
+    const ids = () => [...document.querySelectorAll('nav.scopes li[data-scope]')].map((li) => li.dataset.scope);
+    const seen = { picked: pick ? pick.dataset.tab : null, before: ids() };
     if (pick) {
       pick.click();
-      await new Promise((r) => setTimeout(r, 80));
-      const tree = document.querySelector('nav.scopes');
+      await new Promise((r) => setTimeout(r, 120));
+      seen.after = ids();
       const group = document.querySelector('.tabgroup[data-group="' + pick.dataset.tab + '"]');
-      seen.under = !!tree && !!group && group.contains(tree);
-      seen.treesAfter = document.querySelectorAll('nav.scopes').length;
+      const list = group && group.querySelector('nav.scopes');
+      seen.under = !!list;
+      seen.insideAreTheAreas = list ? [...list.querySelectorAll('li[data-scope]')].map((li) => li.dataset.scope) : [];
     }
     return JSON.stringify(seen);
   `
   );
   const seen = JSON.parse(out);
-  if (!seen.picked) return; // a one-area corpus has no tree to place
-  assert.equal(seen.trees, 1, `${seen.trees} feature trees — it is being copied per area`);
-  assert.equal(seen.treesAfter, 1, "choosing an area produced a second tree");
-  assert.equal(seen.under, true, "the feature tree is not under the area whose features it lists");
+  if (!seen.picked) return; // a one-area corpus has no list to place
+  const dupes = (xs) => xs.filter((x, i) => xs.indexOf(x) !== i);
+  assert.deepEqual(dupes(seen.before), [], `a scope is listed twice before choosing: ${dupes(seen.before).join(", ")}`);
+  assert.deepEqual(dupes(seen.after), [], `choosing an area duplicated rows: ${dupes(seen.after).join(", ")}`);
+  assert.equal(seen.under, true, "the area's group carries no list of its own");
+  assert.ok(seen.insideAreTheAreas.length > 0, "the area's own group lists nothing");
 });

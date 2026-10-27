@@ -1,0 +1,20 @@
+id: "0205"
+said: "we have almost ZERO human validated truths.  there are a TON of features with behaviors.  the goal is to GET HUMAN VALIDATIONS.  how can there be ZERO to operate on? do you not undersatnd the feature you are building?"
+at: 2026-10-21
+kind: derivation
+reaches:
+  derive: purpose
+  surface: renderUnasked
+  check: slot-blank
+  pin: the purpose leads and does not suppress
+waived:
+  check: >
+    ⛔ WAIVED WITH A WORSE ADMISSION THAN A GAP. The absence this record is about was not
+    undetectable — it was ASSERTED. `v2-the-interview-asks-once` carried a test demanding
+    `owed.length === 1` on a feature with no agreed purpose, whose own failure message was "the
+    detail questions were offered beside the purpose they depend on". It was built to go red if the
+    fix were made, and it passed for the whole session. So no check could have caught this while
+    its pin forbade it, and the repair is in `pin` rather than here: that test now asserts the
+    opposite, with the 1,560-against-4 measurement in its reasoning. `check` itself is unchanged
+    and correct — it reports every blank slot and always did; the interview was discarding what
+    `questionsFor` handed it, which is nothing `check` can see.

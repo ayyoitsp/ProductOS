@@ -178,42 +178,59 @@ test("a page of product truth is never cacheable", async () => {
 });
 
 /**
- * ⛔ THE TABS ARE NOT ALL HALVES OF THE PRODUCT, AND THE MENU MUST SURVIVE THE ONES THAT ARE NOT.
+ * ⛔ A TAB SHOWS ITS OWN ITEMS AND NOBODY ELSE'S — WHICH REVERSES WHAT THIS FILE USED TO ASSERT.
  *
- * Overview, the prototype board and What steers this are SECTIONS — no scope belongs to any of
- * them. The tree filter compared every row against the current section, so on all four it hid the
- * entire menu. Peter, standing on one of them: *"the menu is broken"*, and
- * *"i'm on another machine, looking at .../v2/prototype"*.
+ * It used to demand that Overview, Prototype, What steers this and Capabilities each show the WHOLE
+ * tree, because one shared tree was filtered per section and the filter hid everything on a tab no
+ * scope belonged to. Peter, standing on one: *"the menu is broken"*. Showing all of it was the fix
+ * available at the time.
  *
- * ⛔ A PREVIOUS ROUND SPECIAL-CASED "overview" BY NAME AND LEFT ITS THREE SIBLINGS BROKEN, which is
- * why this drives all four rather than the one that was reported.
+ * It is not what he wants, and he said so four separate ways after seeing it:
+ *
+ *     "when i goto overview, I see a menu below it, then under all the high level items, there's
+ *      the product entry and capabilities flattened"
+ *     "Overview -> queue/screens, etc under it. no separate menu of product displayed"
+ *     "Prototype -> no submenu, nothing"
+ *     "JUST A PLAIN FUCKING MENU WITH ITEMS INSIDE IT, NO COMPLICATED FUCKING FILTERS"
+ *
+ * So each group holds its own items and a tab that owns none shows none. The old assertion and the
+ * new one cannot both be true; this is the spec he gave, and the four bugs the filter produced are
+ * recorded at the group emission in `page.ts`.
  */
-for (const tab of ["prototype", "settings", "subsystems", "overview"]) {
-  test(`/${tab}: a tab no scope belongs to still has a usable menu`, { skip }, async () => {
+for (const [tab, expects] of [
+  ["prototype", "nothing"],
+  ["settings", "nothing"],
+  ["subsystems", "the capability tree"],
+  ["overview", "its own strip"],
+]) {
+  test(`/${tab}: shows ${expects}, and no other tab's items`, { skip }, async () => {
     const { base, close } = await serve(dir);
     const page = await openPage(null, { exe, url: `${base}/v2/${tab}`, width: 1440, height: 1000 });
     after(() => page.close());
     try {
-      await page.waitFor(
-        `document.readyState === "complete" && document.querySelectorAll("nav.scopes [data-goto]").length > 0`,
-        `the ${tab} page to arrive`,
-        ARRIVAL
-      );
+      await page.waitFor(`document.readyState === "complete" && !!document.querySelector(".topframe")`, `the ${tab} page`, ARRIVAL);
       await sideMenu(page);
       const seen = await page.evaluate(`(() => {
-        const rows = [...document.querySelectorAll("nav.scopes li")].filter((li) => li.dataset.scope);
-        const tree = document.querySelector("nav.scopes");
+        const vis = (e) => e.getBoundingClientRect().height > 0;
+        const lists = [...document.querySelectorAll("nav.scopes")].filter(vis);
+        const items = lists.flatMap((l) => [...l.querySelectorAll("li")]).filter(vis);
         return {
-          rows: rows.length,
-          hidden: rows.filter((li) => li.hidden).length,
-          laidOut: rows.filter((li) => li.getClientRects().length > 0).length,
-          treeHidden: tree ? tree.hidden : "no tree",
+          productItems: items.filter((i) => i.dataset.scope).length,
+          capabilityItems: items.filter((i) => i.dataset.subsystem).length,
+          strip: [...document.querySelectorAll(".subtabs")].filter(vis).length,
         };
       })()`);
-      assert.ok(seen.rows > 0, `the ${tab} page renders no menu rows at all`);
-      assert.equal(seen.hidden, 0, `${seen.hidden} of ${seen.rows} rows are hidden on /${tab} — no scope belongs to it, so there is no half to narrow to`);
-      assert.equal(seen.treeHidden, false, `the tree is hidden on /${tab}, which down the side leaves a column with no way back to it`);
-      assert.ok(seen.laidOut > 0, `every row on /${tab} is laid out nowhere`);
+      /** ⛔ No tab but Product shows a feature row — that is the flattening he kept reporting. */
+      assert.equal(seen.productItems, 0, `/${tab} shows ${seen.productItems} feature rows, which belong to Product`);
+      /**
+       * ⛔ THIS FIXTURE HAS NO CAPABILITY TREE, so the Capabilities tab correctly shows none and
+       * asserting otherwise here would be a claim about the fixture rather than the menu. That the
+       * tab DOES show its tree where one exists is pinned in
+       * `v2-the-capability-tree-can-be-navigated`, on a corpus that has one.
+       */
+      if (tab !== "subsystems")
+        assert.equal(seen.capabilityItems, 0, `/${tab} shows ${seen.capabilityItems} capability rows`);
+      if (tab === "overview") assert.ok(seen.strip > 0, "Overview lost its own strip");
     } finally {
       close();
     }
@@ -221,28 +238,29 @@ for (const tab of ["prototype", "settings", "subsystems", "overview"]) {
 }
 
 /**
- * ⛔ AND A REAL HALF STILL NARROWS, or the fix above is the filter switched off. Needs two halves in
- * the fixture to have a failing state at all.
+ * ⛔ AND THE PRODUCT TAB SHOWS THE FEATURES — the other half of the same claim. Without this, every
+ * assertion above is satisfied by a menu that shows nothing anywhere.
  */
-test("the tree still narrows to the half you are in", { skip }, async () => {
+test("the Product tab shows the feature tree, and no capabilities", { skip }, async () => {
   const { base, close } = await serve(dir);
   const page = await openPage(null, { exe, url: `${base}/v2/${pathTo("area")}`, width: 1440, height: 1000 });
   after(() => page.close());
   try {
-    await page.waitFor(
-      `document.readyState === "complete" && document.querySelectorAll("nav.scopes [data-goto]").length > 0`,
-      "the area page to arrive",
-      ARRIVAL
-    );
+    await page.waitFor(`document.readyState === "complete" && !!document.querySelector(".topframe")`, "the area page", ARRIVAL);
     await sideMenu(page);
     const seen = await page.evaluate(`(() => {
-      const rows = [...document.querySelectorAll("nav.scopes li")].filter((li) => li.dataset.scope);
-      return { total: rows.length, hidden: rows.filter((li) => li.hidden).map((li) => li.dataset.scope) };
+      const vis = (e) => e.getBoundingClientRect().height > 0;
+      const lists = [...document.querySelectorAll("nav.scopes")].filter(vis);
+      const items = lists.flatMap((l) => [...l.querySelectorAll("li")]).filter(vis);
+      return {
+        shown: items.filter((i) => i.dataset.scope).map((i) => i.dataset.scope),
+        capabilities: items.filter((i) => i.dataset.subsystem).length,
+      };
     })()`);
-    assert.ok(seen.hidden.length > 0, `standing in one half hid none of ${seen.total} rows — the filter does nothing`);
-    /** The other half's rows are the ones that go, and this half's stay. */
-    assert.ok(seen.hidden.includes("far"), `the other half's rows are still shown: hidden = ${JSON.stringify(seen.hidden)}`);
-    assert.ok(!seen.hidden.includes("leaf"), `this half's own rows were hidden: ${JSON.stringify(seen.hidden)}`);
+    assert.ok(seen.shown.length > 0, "the area's own tab shows no features at all");
+    /** ⛔ And not the other half's: a group lists what is filed inside it, nothing else. */
+    assert.ok(!seen.shown.includes("far"), `another area's rows are showing: ${JSON.stringify(seen.shown)}`);
+    assert.equal(seen.capabilities, 0, "the Product tab is showing capability rows");
   } finally {
     close();
   }

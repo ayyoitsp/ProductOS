@@ -16,7 +16,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { parseFrontmatter } from "../core/frontmatter.js";
 import YAML from "yaml";
-import { Scope, Rule, Capability, Reading, Verdict, Charter, type SlotName , saysText, type Says, Note, Steer, Access, Style, Prototype, PrototypeFile } from "./schema.js";
+import { Scope, Rule, Subsystem, Reading, Verdict, Charter, type SlotName , saysText, type Says, Note, Steer, Access, Style, Prototype, PrototypeFile } from "./schema.js";
 
 export interface V2Paths {
   root: string;
@@ -123,7 +123,7 @@ export interface Corpus {
    * agree on in the future"* — so each one is addressable and hashed from the day it lands, and
    * nothing yet agrees to any of them.
    */
-  capabilities: Array<{ capability: Capability; body: string; file: string }>;
+  subsystems: Array<{ subsystem: Subsystem; body: string; file: string }>;
   readings: Reading[];
   verdicts: Verdict[];
   /** Files that would not parse, with why. ⛔ Reported, never thrown — one malformed file
@@ -467,7 +467,7 @@ export function loadCorpus(root: string, store: Store = diskStore): Corpus {
   const broken: Corpus["broken"] = [];
   const scopes: Corpus["scopes"] = [];
   const rules: Corpus["rules"] = [];
-  const capabilities: Corpus["capabilities"] = [];
+  const subsystems: Corpus["subsystems"] = [];
   const charter: Corpus["charter"] = [];
 
   /**
@@ -539,7 +539,7 @@ export function loadCorpus(root: string, store: Store = diskStore): Corpus {
     if (path.basename(file).toLowerCase() === "readme.md") continue;
     try {
       const p = parseFrontmatter(readFile(file));
-      capabilities.push({ capability: Capability.parse(p.data), body: p.content.trim(), file });
+      subsystems.push({ subsystem: Subsystem.parse(p.data), body: p.content.trim(), file });
     } catch (e) {
       broken.push({ file, why: why(e) });
     }
@@ -672,7 +672,7 @@ export function loadCorpus(root: string, store: Store = diskStore): Corpus {
       broken.push({ file, why: why(e) });
     }
   }
-  return { paths, scopes, rules, capabilities, charter, notes, readings, verdicts, steers, access, style, prototypes, splitsOn, broken };
+  return { paths, scopes, rules, subsystems, charter, notes, readings, verdicts, steers, access, style, prototypes, splitsOn, broken };
 }
 
 // ---------------------------------------------------------------------------
@@ -895,7 +895,15 @@ export function vocabularyReach(c: Corpus, id: string): string[] {
     const s = c.scopes.find((x) => x.scope.id === cur)?.scope;
     if (!s) continue;
     if (s.in) queue.push(s.in);
-    for (const d of s.depends_on) queue.push(d);
+    /**
+     * ⛔ `?? []` BECAUSE A HAND-BUILT SCOPE HAS NO DEFAULTS. `depends_on` has a schema default, so
+     * anything that came through `Scope.parse` carries an array — but a fixture or a caller that
+     * assembles a scope object directly does not, and this threw `s.depends_on is not iterable`.
+     *
+     * Latent until the interview started calling this for every question's vocabulary: five page
+     * tests and two address tests went red at once, none of them about vocabulary.
+     */
+    for (const d of s.depends_on ?? []) queue.push(d);
   }
   return [...seen];
 }

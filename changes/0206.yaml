@@ -1,0 +1,19 @@
+id: "0206"
+said: "let's go B.  and the buildability question shoudl be run again before the interviewer"
+at: 2026-10-21
+kind: concept
+reaches:
+  model: assumed
+  derive: found
+  surface: renderUnasked
+  check: slot-blank
+  instruct: buildability
+  pin: a judge's finding reaches the queue, carrying what a builder would assume
+waived:
+  generate: >
+    Nothing is generated. A judge writes nothing by design — "a reviewer that can write is a
+    reviewer that repairs what it finds, which hides how often it fires" — so its findings are
+    recorded by the session as `review` notes and drafted into questions by the interviewer through
+    `ask`. Both of those are authoring acts on existing surfaces; no generator produces anything
+    here, and one that drafted the options would be software writing product truth nobody can tell
+    from agreed truth.

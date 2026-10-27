@@ -64,8 +64,7 @@ exchanges:
             says: The fourth thing it says, equally settled.
         standing:
           kind: open
-          of: ${of}
-          about: whether the third thing holds when the deal has not funded
+${of ? `          of: ${of}\n` : ""}          about: whether the third thing holds when the deal has not funded
           question: Does the third thing hold before funding, or only after?
           asked_of: peter
           cost: a deal read before funding shows the wrong answer for this condition
@@ -131,10 +130,43 @@ test("where each option IS the whole sentence, it still says so", () => {
   /**
    * ⛔ WITHOUT THIS THE FIX IS JUST THE OPPOSITE BIAS. A whole-sentence ruling really does
    * replace everything, and a page that never says that is wrong in the other direction.
+   *
+   * ⛔ AND IT NEEDS `of` ABSENT, WHICH THE FIXTURE USED TO SET ANYWAY. This passed
+   * `{ replaces: "the whole sentence" }` and inherited `of: the-third` from the default — so it
+   * asserted the page should say "picking one replaces it cleanly" in exactly the state where
+   * `settle` replaces ONE statement and leaves its siblings byte-identical. The intent above was
+   * right and the fixture contradicted it, so the test was pinning the wrong half: `of` decides the
+   * scope, never what a candidate claims about itself.
+   *
+   * Found when `candidatesAreWhole` was made to defer to `of` — after an `interviewer` run read
+   * the false sentence off a live page.
+   */
+  const { dir, scope } = corpusWithFour({ of: "", replaces: "the whole sentence" });
+  const html = renderScopePage(loadCorpus(dir), scope, { linkBase: "/v2" });
+  assert.match(html, /Each option is the whole sentence, so picking one replaces it cleanly/);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test("⛔ and where `of` names one statement, a whole-sentence claim does not get to say that", () => {
+  /**
+   * ⛔ THE CASE THE FIXTURE WAS SILENTLY TESTING AND THE ASSERTION HAD BACKWARDS. A standing with
+   * `of` set AND every candidate declaring `the whole sentence`: `settle` scopes the replacement to
+   * the named statement regardless, so the page must say the marked-statement sentence. Read off a
+   * live instance before this was fixed — two statements, one marked `this one is unruled`, and
+   * underneath them "Each option is the whole sentence, so picking one replaces it cleanly."
+   *
+   * It over-warns rather than destroying anything, which is why nothing caught it: the press is
+   * safe and the sentence describing it is wrong, so a reviewer who cares about the other
+   * statements declines to press.
    */
   const { dir, scope } = corpusWithFour({ replaces: "the whole sentence" });
   const html = renderScopePage(loadCorpus(dir), scope, { linkBase: "/v2" });
-  assert.match(html, /Each option is the whole sentence, so picking one replaces it cleanly/);
+  assert.match(html, /replaces the marked statement only. The others stand/);
+  assert.doesNotMatch(
+    html,
+    /Each option is the whole sentence, so picking one replaces it cleanly/,
+    "the page tells a reviewer the press overwrites every statement, when `settle` replaces only the one `of` names"
+  );
   fs.rmSync(dir, { recursive: true, force: true });
 });
 

@@ -33,7 +33,7 @@ import {
 import { confidenceOf, containerOf } from "./confidence.js";
 import { stampFor, staleReason, coveredBy, whatChangedSince } from "./stamp.js";
 import { resolveRef } from "./ref.js";
-import { descendants, unbuildableReads } from "./settle.js";
+import { descendants, unbuildableReads, WHAT_IS_IN_QUESTION } from "./settle.js";
 import { ruleHomes, reachOf } from "./grid.js";
 import { appStyleFor, styleDrift } from "./appcss.js";
 import { readLog } from "./log.js";
@@ -47,6 +47,7 @@ import path from "node:path";
 import { projectRootOf } from "../core/paths.js";
 import { wouldReach } from "./steers.js";
 import { demonstrations, derivedCapabilities } from "./demonstrate.js";
+import { carriedAreas } from "./subsystems.js";
 
 export type Severity = "refuse" | "note" | "shape";
 
@@ -1195,7 +1196,13 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
       });
     }
     for (const d of scope.depends_on) {
-      if (!scopeById.has(d))
+      /**
+       * ⛔ OR A PART OF THE SYSTEM — `<subsystem>#offers`, or one capability of it. What a feature
+       * rests on is very often machinery, and once the older tree was converted into subsystems the
+       * edges every feature had to it were spelled that way rather than dropped.
+       */
+      const part = /#offers(#|$)/.test(d) && !("error" in resolveRef(corpus, d));
+      if (!scopeById.has(d) && !part)
         add({
           severity: "refuse",
           kind: "depends-on-nothing",
@@ -1266,6 +1273,18 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
             where: `${ref}#${slot}#${o.name}`,
             what: [
               `the case "${o.name}" (${o.when}) is not ruled`,
+              /**
+               * ⛔ `asks` IS WHAT SAYS WHICH OF THE CASE'S THREE FIELDS IS UNRULED, and this
+               * finding rendered `about` only — so after fg-0002 made `asks` the grain for a case,
+               * the finding went quieter than it had been. Same defect as the worklist had, in the
+               * second surface that shows a case question.
+               *
+               * ⛔ IMPORTED, NOT RESTATED. Two wordings of "what `whether` means to a reader" is
+               * two facts with one source and no forcing function to keep them equal.
+               */
+              o.standing?.asks ? WHAT_IS_IN_QUESTION[o.standing.asks] ?? "" : "",
+              /** ⛔ Asking about the wording without showing the wording is asking blind. */
+              o.standing?.asks === "told" ? `it says now: ${norm(o.told)}` : "",
               o.standing?.about ? `in question: ${norm(o.standing.about)}` : "",
               (o.standing?.candidates ?? []).length === 1 ? `proposed: ${norm(o.standing!.candidates![0]!.says)}` : "",
               o.standing?.because ? `because: ${norm(o.standing.because)}` : "",
@@ -3969,13 +3988,13 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
    * the product promised unanswered by any part.
    */
   {
-    const subs = new Map(corpus.capabilities.map((c) => [c.capability.id, c.capability]));
+    const subs = new Map(corpus.subsystems.map((c) => [c.subsystem.id, c.subsystem]));
     /** Every capability ref, so `serves` can be followed to see if it ever reaches truth. */
     const servesOf = new Map<string, string[]>();
-    for (const { capability } of corpus.capabilities)
-      for (const o of capability.offers) servesOf.set(`${capability.id}#offers#${o.id}`, o.serves);
+    for (const { subsystem } of corpus.subsystems)
+      for (const o of subsystem.offers) servesOf.set(`${subsystem.id}#offers#${o.id}`, o.serves);
 
-    for (const { capability: cap, file } of corpus.capabilities) {
+    for (const { subsystem: cap, file } of corpus.subsystems) {
       /**
        * ⛔ THERE IS NO ID-COLLISION FINDING HERE, AND DELETING IT WAS THE FIX RATHER THAN A
        * CONCESSION.
@@ -4023,7 +4042,7 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
         }
         seen.add(at);
       }
-      if (!cap.offers.length && !corpus.capabilities.some((x) => x.capability.in === cap.id))
+      if (!cap.offers.length && !corpus.subsystems.some((x) => x.subsystem.in === cap.id))
         add({
           severity: "note",
           kind: "a-subsystem-that-does-nothing-and-holds-nothing",
@@ -4034,6 +4053,14 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
 
       for (const o of cap.offers) {
         const ref = `${cap.id}#offers#${o.id}`;
+        if (!o.serves.length)
+          add({
+            severity: "refuse",
+            kind: "a-capability-that-serves-nothing",
+            where: ref,
+            what: "names nothing it exists for",
+            fix: "name the product statement it serves, or another capability that does. ⛔ A capability converted from the older tree lands here when nothing in the product declared a dependency on it — ask whether anything does before deleting it",
+          });
         for (const s of o.serves) {
           const r = resolveRef(corpus, s);
           if ("error" in r)
@@ -4115,9 +4142,9 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
      * layer has only just been started would otherwise refuse on every behaviour at once — and a
      * refusal that fires everywhere teaches people to run with it switched off.
      */
-    if (corpus.capabilities.length) {
+    if (corpus.subsystems.length) {
       const served = [
-        ...new Set(corpus.capabilities.flatMap((c) => c.capability.offers.flatMap((o) => o.serves))),
+        ...new Set(corpus.subsystems.flatMap((c) => c.subsystem.offers.flatMap((o) => o.serves))),
       ];
       const every = corpus.scopes.flatMap(({ scope }) => scope.exchanges.map((ex) => `${scope.id}#${ex.id}`));
       const unanswered = every.filter((ref) => !served.some((s) => s === ref || s.startsWith(`${ref}#`)));
@@ -4139,6 +4166,23 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
         });
     }
   }
+
+  /**
+   * ---- an older capability tree, carried into product truth ----
+   *
+   * ⛔ A NOTE, AND IT NAMES THE COLLISION RATHER THAN THE CORPUS'S FAULT. The v1 migrator filed every
+   * v1 capability as a scope under one container; nothing converts it now. Until somebody does, two
+   * things answer to "capability" and sessions counted whichever they met first — Peter: *"every
+   * claude session connecting to staging is confused by the # of capabilities, if they even exist"*.
+   */
+  for (const a of carriedAreas(corpus))
+    add({
+      severity: "note",
+      kind: "an-older-capability-tree-in-product-truth",
+      where: a.id,
+      what: `"${a.title}" holds ${a.features} features and ${a.behaviours} behaviours carried from an older capability tree; the capability tree itself has ${corpus.subsystems.length} subsystems`,
+      fix: "these scopes are product truth about machinery, not subsystems — count capabilities with `productos_capability_tree`, and have `decomposer` work the tree from the product it serves",
+    });
 
   // ---- readings ----
   for (const r of corpus.readings) {

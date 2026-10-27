@@ -69,10 +69,29 @@ export type Via = "page" | "question" | "chat" | "cli" | "agent";
 export const VIA: readonly Via[] = ["page", "question", "chat", "cli", "agent"] as const;
 
 /**
+ * Every way a PERSON did something, named — ⛔ POSITIVELY, BECAUSE THE NEGATIVE BROKE THE MOMENT
+ * THERE WAS A SECOND NON-HUMAN VALUE.
+ *
+ * This was `via !== "agent"`, which is correct for the five values consent has and silently wrong
+ * for anything added beside them. `Note.via` now carries `review` — a judge found it and a session
+ * wrote it down, so nobody asked for it at all — and under the negative reading `review` counted as
+ * HUMAN. `mayRecord` would then have refused a token filing a finding, on the grounds that it was
+ * claiming a person did something.
+ *
+ * ⛔ SO THE SET IS THE LIST, and a value added to either vocabulary without being added here is a
+ * type error rather than a guess. A reviewer's finding and software's default are the two things
+ * nobody pressed; everything else is somebody at a page, a question, a chat or a terminal.
+ */
+const BY_A_PERSON = ["page", "question", "chat", "cli"] as const;
+
+/**
  * ⛔ WHAT A PERSON DID, as opposed to what something decided on their behalf. Every gate asks this
  * rather than asking whether a record exists.
+ *
+ * ⛔ TAKES EITHER VOCABULARY. Consent and a filed request ask the same question of a principal —
+ * did a person do this — over two value sets that overlap but are not equal. See `NOTE_VIA`.
  */
-export const isHuman = (via: Via): boolean => via !== "agent";
+export const isHuman = (via: Via | "review"): boolean => (BY_A_PERSON as readonly string[]).includes(via);
 
 export type Act = "accept" | "rule" | "read" | "waive" | "defer" | "withdraw";
 
@@ -686,12 +705,21 @@ function doWithdraw(dir: string, o: AcceptPayload & { because?: string }, consen
     consent
   );
 
+  /**
+   * ⛔ AND IT SAYS WHY *THIS* ONE WAS MARKED RATHER THAN REMOVED. There are two different reasons and
+   * the message used to give only one: "somebody had agreed to it" is true of an agreed exchange and
+   * FALSE of a feature, which is always marked because its id is what other documents point at. A
+   * withdrawal reporting a consent that never happened is a record nobody can trust.
+   */
+  const feature = !o.target.includes("#");
   return {
     ok: true,
     said:
       done.mode === "deleted"
         ? `took ${o.target} out — a draft nobody had agreed to, and the sentence it said is in the log`
-        : `withdrew ${o.target} — somebody had agreed to it, so its id is kept and marked withdrawn rather than freed for reuse`,
+        : feature
+          ? `withdrew ${o.target} — a feature is what other documents point at, so its id stays resolvable and everything beneath it is withdrawn with it`
+          : `withdrew ${o.target} — somebody had agreed to it, so its id is kept and marked withdrawn rather than freed for reuse`,
     detail: [`it said: ${done.was.replace(/\s+/g, " ").slice(0, 160)}`],
   };
 }
@@ -1053,12 +1081,38 @@ function doRule(dir: string, o: RulePayload, consent: Consent): Outcome {
       : undefined;
   if (residual?.says) {
     const chosen = o.pick ? target.standing?.candidates?.[o.pick - 1] : undefined;
-    if (o.pick && chosen?.replaces === "the whole sentence") {
-      // ⛔ A candidate written as the WHOLE replacement sentence is pickable in one act — which
-      // is the point. Only a fragment still needs the merged sentence written.
+    if (o.pick && (chosen?.replaces === "the whole sentence" || chosen?.replaces === "adds a statement")) {
+      /**
+       * ⛔ TWO KINDS OF OPTION ARE PICKABLE IN ONE ACT, and only a fragment is not.
+       *
+       * `the whole sentence` replaces everything, which is safe because it says so. `adds a
+       * statement` appends beside the others and touches none of them, which is safer still —
+       * fg-0001, the case that had no write at all and refused Peter's own first answer.
+       *
+       * What still needs the merged sentence written out is `only the part in question`: a fragment
+       * whose ruling would become the whole slot. That is the clause loss `--pick` exists to stop.
+       */
     } else if (o.pick && !o.says) {
+      /**
+       * ⛔ `statements()`, NOT `flat()` — THIS PRINTED `[object Object],[object Object],[object
+       * Object]` AT THE EXACT MOMENT A PERSON NEEDED TO READ IT.
+       *
+       * `residual.says` is a `Says`, which is a LIST of statement objects wherever a slot says more
+       * than one thing. `flat()` is `String(…)`, so an array of three became three
+       * `[object Object]`s — on the one refusal whose whole argument is *"picking would delete the
+       * rest"*. It told a person their press would destroy something and then would not say what.
+       *
+       * Found by carrying a real answer in from a chat session: Peter chose an option, this refused
+       * the pick correctly, and the refusal was unreadable.
+       *
+       * ⛔ ONE PER LINE, because that is what a reader has to count. A slot saying four things, glued
+       * into a paragraph, gives nobody a way to see which three survive — the same reason `saysEach`
+       * exists on the page and in `decide`.
+       */
+      const said = statements(residual.says).map((x) => flat(x.says)).filter(Boolean);
       return no(`${o.slot} already says something, and only one thing about it is unruled`, [
-        `it says:  ${flat(residual.says)}`,
+        `it says ${said.length} thing${said.length === 1 ? "" : "s"}:`,
+        ...said.map((x) => `  · ${x}`),
         `unruled:  ${flat(target.standing!.about!)}`,
         "a ruling here becomes the whole sentence, so picking an option that answers only the unruled part would delete the rest",
         ...(target.standing!.candidates ?? []).map((c, i) => `${i + 1}. ${optionText(c)}`),
@@ -1071,6 +1125,7 @@ function doRule(dir: string, o: RulePayload, consent: Consent): Outcome {
   let says = o.says;
   let pickedOutcomes: Array<{ name: string; when: string; told: string }> | undefined;
   let pickedNone: boolean | undefined;
+  let pickedAdds = false;
   let chose: string | undefined;
   let optionSaid: string | undefined;
   let alsoConsidered = o.alsoConsidered;
@@ -1095,6 +1150,8 @@ function doRule(dir: string, o: RulePayload, consent: Consent): Outcome {
     says = c.says ?? optionText(c);
     pickedOutcomes = c.outcomes;
     pickedNone = c.none;
+    /** ⛔ fg-0001 — an option that is a sentence the slot does not yet make. See `settle`'s `adds`. */
+    pickedAdds = c.replaces === "adds a statement";
     /**
      * ⛔ THE OPTION'S ARGUMENT GOES IN ITS OWN FIELD, NOT INTO THE RULER'S `because`.
      *
@@ -1177,6 +1234,13 @@ function doRule(dir: string, o: RulePayload, consent: Consent): Outcome {
       refuses: o.refuses,
       outcomes: pickedOutcomes,
       none: pickedNone,
+      /**
+       * ⛔ fg-0001. An option declaring `adds a statement` is answering a question about something
+       * the slot does not yet SAY, so the ruling appends a sentence and leaves every sibling
+       * byte-identical. Read off the candidate the person picked, never from a flag a caller sent —
+       * the same rule as `pickedOutcomes` beside it.
+       */
+      adds: pickedAdds,
     },
     /**
      * ⛔ A PICKED OPTION'S WORDS WERE DRAFTED BY SOMETHING ELSE, AND THE RECORD SAYS SO.

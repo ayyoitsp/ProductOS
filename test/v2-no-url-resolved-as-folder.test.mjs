@@ -63,6 +63,9 @@ const SPEAKS_TO_INSTANCES = new Map([
   ["v2 read", "one of the five acts"],
   ["v2 waive", "one of the five acts"],
   ["v2 defer", "one of the five acts"],
+  /** ⛔ The sixth operation. `ACTS` holds six and `Verdict.kind` holds five, so "the five acts" is
+   *  true of the verdicts and false of this list — see the note in `intents.ts`. */
+  ["v2 withdraw", "takes truth out, against the instance it was read from"],
 ]);
 
 /** Every leaf command that declares `--at`, read off the command tree the CLI actually registers. */

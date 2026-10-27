@@ -26,6 +26,7 @@
 import type { Corpus } from "./load.js";
 import { demonstrationOf, derivedCapabilities } from "./demonstrate.js";
 import { pictureOf } from "./states.js";
+import { capabilityTree, inCarriedArea } from "./subsystems.js";
 
 /**
  * ⛔ THREE STATES, AND `stale` IS THE ONE THAT MAKES A SWEEP WORTH RE-RUNNING.
@@ -79,6 +80,14 @@ export interface Analysis {
    * independent — a requirement belongs to one claim and a drawing to one screen, and neither needs
    * to know what another unit decided.
    */
+  /**
+   * ⛔ ONE SENTENCE A SESSION READS BEFORE THE COUNT, where the count alone misleads.
+   *
+   * `capabilities` counted the tree and said nothing about the product area the v1 migrator filed the
+   * old tree under — so a session on staging reported "no capabilities" over a corpus visibly full
+   * of them, then reversed itself. The sentence names both halves so nobody has to reconstruct it.
+   */
+  context?: (corpus: Corpus) => string;
   settleFirst?: {
     /** What has to be agreed across the corpus before any unit is handed out. */
     what: string;
@@ -108,6 +117,7 @@ export const ANALYSES: Analysis[] = [
     role: "decomposer",
     does: "Which parts of the system each feature needs, and where they belong",
     grain: "feature",
+    context: (corpus) => capabilityTree(corpus).says,
     settleFirst: {
       what: "one subsystem tree for the whole product — the names, the areas, and what nests in what",
       because:
@@ -119,7 +129,13 @@ export const ANALYSES: Analysis[] = [
     units: (corpus) => {
       /** Every part, grouped by the feature whose promises it serves. */
       const parts = derivedCapabilities(corpus);
-      return featuresOf(corpus).map(({ id, title }) => {
+      /**
+       * ⛔ NOT THE CARRIED AREA'S SCOPES. Each one IS an old capability, filed as product truth by
+       * the v1 migrator; counting it as a feature that needs decomposing asks for the machinery
+       * behind the machinery, and inflated the count every session on staging reported.
+       */
+      const carried = inCarriedArea(corpus);
+      return featuresOf(corpus).filter(({ id }) => !carried.has(id)).map(({ id, title }) => {
         const mine = parts.filter((p) =>
           p.offering.serves.some((s) => s === id || s.startsWith(`${id}#`))
         );

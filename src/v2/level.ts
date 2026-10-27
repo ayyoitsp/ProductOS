@@ -6,7 +6,7 @@
  * four values — accepted, derived, suggested, open — and every ingredient of it already existed,
  * spread over five mechanisms and never presented as one answer: `stampFor` knows what a human
  * agreed to and how it breaks, `Standing` knows whether anybody owes a decision, `Criterion.derived`
- * and `CapabilityOffering.derived` know what was worked out from what, and `confidence.ts` knows
+ * and `Capability.derived` know what was worked out from what, and `confidence.ts` knows
  * what has been observed. A consumer with a ticket had to parse markdown to learn any of it.
  *
  * ⛔ DERIVED, NEVER STORED, for the reason `confidence.ts`, `stageOf` and `reachOf` are: a stored
@@ -119,7 +119,7 @@ export type Route =
  *
  * It is right, and the distinction cannot be computed today. What a corpus holds is:
  *
- *  - `Criterion.derived {by, at, from}` and `CapabilityOffering.derived` — a named ROLE worked it
+ *  - `Criterion.derived {by, at, from}` and `Capability.derived` — a named ROLE worked it
  *    out. ⛔ Recorded, and the only place authorship is.
  *  - an `accept` verdict with `via: agent` — software landed content so a reviewer has something to
  *    disagree with. Recorded, and only where a caller chose to record one.
@@ -283,9 +283,9 @@ export function wroteOf(corpus: Corpus, ref: string): Wrote {
       if (d) return { is: "a role", by: d.by, at: d.at };
     }
     if (got.kind === "capability") {
-      const d = corpus.capabilities
-        .find((c) => c.capability.id === got.subsystem)
-        ?.capability.offers.find((o) => o.id === got.capability)?.derived;
+      const d = corpus.subsystems
+        .find((c) => c.subsystem.id === got.subsystem)
+        ?.subsystem.offers.find((o) => o.id === got.capability)?.derived;
       if (d) return { is: "a role", by: d.by, at: d.at };
     }
     /**
@@ -996,8 +996,8 @@ export function levelsIn(corpus: Corpus): Level[] {
       for (const c of ex.criteria) refs.push(`${exRef}#shows#${c.id}`);
     }
   }
-  for (const { capability } of corpus.capabilities)
-    for (const o of capability.offers) refs.push(`${capability.id}#offers#${o.id}`);
+  for (const { subsystem } of corpus.subsystems)
+    for (const o of subsystem.offers) refs.push(`${subsystem.id}#offers#${o.id}`);
 
   const out: Level[] = [];
   for (const ref of refs) {

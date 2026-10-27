@@ -263,6 +263,8 @@ export const AREAS: Area[] = [
        * analysis would belong to `generate`; this one names the units and stops.
        */
       "src/v2/analyse.ts",
+      /** ⛔ `derive`: the one answer to how many capabilities there are, read by every surface that counts them. */
+      "src/v2/subsystems.ts",
       /**
        * ⛔ A DERIVATION, NOT A MODEL CONCEPT, AND THE DISTINCTION IS LOAD-BEARING. How
        * well-supported a statement is comes from counting readings and asking `stampFor`; a stored
@@ -294,6 +296,18 @@ export const AREAS: Area[] = [
        */
       "src/v2/find.ts",
       "src/v2/settle.ts",
+      /**
+       * ⛔ `derive`, AND A PROJECTION LIKE `readiness.ts` — IT MUST NEVER BECOME A SECOND ANSWER TO
+       * "WHAT IS A HOLE". The blanks are `check.ts`'s, the purpose gate is `actsFor`'s, the
+       * questions are `questionsFor`'s. What it decides is the one thing nothing else decides: how
+       * FEW times a person has to answer, by folding every site blank on one slot into one question
+       * and dropping every slot an existing question already speaks for.
+       *
+       * ⛔ It writes nothing, which is why it is here and not under `generate`. The options a person
+       * picks between are written by the `interviewer`, through the `ask` intent — because a
+       * sentence software made up is indistinguishable from one somebody agreed to.
+       */
+      "src/v2/interview.ts",
       /**
        * ⛔ WHICH CLAIMS ONE STATED SENTENCE SETTLES, AND WHICH IT ONLY ASKS ABOUT. Filed under
        * `derive` rather than beside `acts.ts` because it decides nothing and writes nothing: it
@@ -413,6 +427,8 @@ export const AREAS: Area[] = [
        */
       "src/cli/commands/v2.ts",
       "src/v2/routes.ts",
+      /** ⛔ `generate`: it writes subsystems from the older tree carried into product truth. */
+      "src/v2/convert-capabilities.ts",
       "src/v2/propose.ts",
       /**
        * ⛔ `generate` BESIDE `propose.ts`, AND NOT `derive`. It reads the application's own
@@ -1078,6 +1094,26 @@ export const AGENTS: Agent[] = [
       "a failure that would certainly happen and is not described — ⛔ offline, concurrent edit, half-finished work",
       "a criterion that cannot be demonstrated without inventing a fact the corpus does not supply",
       "an ordering or permission assumption that is load-bearing and unwritten",
+      /**
+       * ⛔ TWO QUESTIONS THAT ARE ONE DECISION — AND A BUILDER IS THE ONE WHO SEES IT.
+       *
+       * Peter, on where the combining intelligence has to come from: *"the whole point of the
+       * feature is to reduce the operator load. it could even be more than one question. that's the
+       * intelligence we need from the interviewer"*, then *"and probably from the builder as well"*.
+       *
+       * He is right that it is a builder's finding and not only an author's. The interviewer reads
+       * one feature in order to draft; a builder reads the PACKET, which puts every open question on
+       * one page in the order somebody would hit them — so a pair that is one decision in two slots
+       * is visible from here and from almost nowhere else.
+       *
+       * Measured on his own corpus: `resume-a-deal-already-started#answer` asks whether an
+       * unfinished deal is offered org-wide or only to its starter, and
+       * `make-a-place-for-the-deal#at_once` offers *"only ever offered back to the person who
+       * started it"* against *"belongs to the lender rather than to a person"*. Both carried
+       * `blocks: []`. Two of the four pressable combinations were flat contradictions, and a builder
+       * handed that packet would have had to pick one and guess.
+       */
+      "two open questions that are one decision — a builder reading the packet sees them side by side, and a person answering them separately can answer them into a contradiction",
     ],
     never: [
       "write anything",
@@ -1299,6 +1335,96 @@ export const AUTHORS: Author[] = [
    * Before this, engineering existed in the registry only as judges — `truthfulness`,
    * `architecture`, `buildability` — three roles reviewing work that no engineering role wrote.
    */
+  /**
+   * ⛔ THE ROLE THAT MAKES A HOLE ANSWERABLE, AND THERE WAS NO SUCH ROLE.
+   *
+   * Peter: *"Examine product truth for a feature, determine what needs to be answered, have them ask
+   * the user for the answers, but combined in a way that lessens the burden on the user. pointed,
+   * directed questions, 3-4 possible answers (just like claude code). user can select them, or
+   * freeform the answer."*
+   *
+   * ⛔ EVERY OTHER AUTHOR WRITES SENTENCES, AND A SENTENCE IS THE WRONG SHAPE FOR THE THING NOBODY
+   * HAS DECIDED. Each of them is told to write `question:` where it cannot resolve something — and
+   * that produces a bare question with nothing to pick between, which `Standing.candidates` names as
+   * the state the model used to leave a decider in: *"a page asking 'Can both kids complete the same
+   * task, or is it claimed by whoever presses first?' and no way to tell what either answer would
+   * cost, what else hangs on it, or how to record having chosen. A question a person cannot act on
+   * is not a queue item, it is a decoration."*
+   *
+   * So this role's whole output is the pick-one-of-three — and it is a separate pass for the reason
+   * the surveyor is: drafting answers while writing the feature means doing it in whatever words the
+   * last slot used, for one site at a time, with no view of the three other behaviours blank on the
+   * same question.
+   */
+  {
+    name: "interviewer",
+    discipline: "product",
+    asks: "What has nobody decided here, and what are the three or four answers somebody could pick between?",
+    because:
+      "The answering half of this loop shipped complete and the asking half was hand-typed. Every " +
+      "question in every corpus was invented by whoever had the patience to invent it, so the queue " +
+      "a person works through was never a measure of what was undecided — it was a measure of " +
+      "somebody's stamina. `productos_exchange_interview` now says where the questions are; this " +
+      "writes the answers a person chooses between.",
+    reads: [
+      /**
+       * ⛔ FIRST, AND IT IS THE WHOLE POINT OF THE ROLE EXISTING SEPARATELY. The worklist has
+       * already folded the blanks, so a question covering four behaviours is read as one question.
+       * An author finding holes by eye asks four times.
+       */
+      /**
+       * ⛔ THE MCP TOOL, NOT A SHELL LINE. Peter: *"we should not be creating command line
+       * 'instructions' at this point? it should just be another functionality that could be
+       * reachable... like no one will ever use the command line"* — and this role's own preamble
+       * opens *"There is no local corpus"*, so a CLI instruction here was unfollowable as well as
+       * wrong.
+       */
+      "`productos_exchange_interview { scope }` — the holes, already folded, each saying what shape an answer takes",
+      "its own scope, and the code that implements it where code exists",
+      "what the product already calls these things, so an option is in the words the corpus uses",
+    ],
+    writes: [
+      /**
+       * ⛔ THROUGH `ask`, AND NOT BY EDITING A SCOPE. The intent lands the question `open` with its
+       * candidates, which is the one shape `decide` renders as pressable options and `rule --pick`
+       * settles in one act. A hand-written standing is how a corpus comes to hold two shapes of
+       * question with nothing recording which is right.
+       */
+      "one `open` standing per question, through the `ask` intent — never by editing a scope",
+      "three or four candidate answers on each, every one of them something a reasonable person would choose",
+      "`consequence` on every option — what follows if this is the answer, what it rules out",
+      "`cost` — what it costs to guess wrong, which is what makes the question worth a person's time",
+      "`blocks` — every other slot this one answer settles, which is what `interview` already worked out",
+    ],
+    never: [
+      /**
+       * ⛔ THE ONE THAT MATTERS. A drafted option is indistinguishable from an agreed sentence once
+       * it is in a file, and `propose-slots.ts` holds the same line: *"a sentence this file made up
+       * would be indistinguishable from one somebody agreed to"*.
+       */
+      "settle anything, pick between its own options, or write a sentence anywhere but inside a candidate — the options are offered, and a person chooses",
+      "pad to three or four. Two honest answers are two options; a third invented to fill the list is a decision disguised as a choice, and it is the one a tired reviewer picks",
+      "draft options that differ only in wording — two options with no stated difference in `consequence` is not a choice",
+      "ask about something already asked: `interview` excludes every slot an existing question speaks for, so a second question on one is the same question twice",
+      "stamp anything walked, validated or accepted",
+    ],
+    /**
+     * ⛔ THE ONE AUTHOR THAT DECLARES `ask-the-corpus`, AND IT IS NOT A CONVENIENCE.
+     *
+     * Every other author's input is files — its own scope and the code that implements it. This
+     * one's input is a DERIVATION: the folded worklist, which exists nowhere on disk and is
+     * answered by `productos_exchange_interview`. Without the capability its own brief is
+     * unrunnable, which is exactly what the prompt-names-an-unheld-tool guard reported.
+     *
+     * ⛔ Still an author and still unable to settle anything: `ask-the-corpus` is the read half of
+     * ProductOS's own surface and holds no act. The door it writes through comes from
+     * `write-corpus`, and what it lands there is `open` by construction.
+     */
+    needs: ["read-files", "search-files", "run-commands", "write-corpus", "ask-the-corpus"],
+    each: "feature",
+    authors: true,
+    prompt: "agents/productos-interviewer.md",
+  },
   {
     name: "machinist",
     discipline: "engineering",
@@ -1689,8 +1815,18 @@ export const COMMANDS: Verb[] = [
    * command that produced the analysis itself would be the hand-authoring trap with a bigger
    * engine.
    */
+  { name: "v2 subsystems", does: "The capability tree, and what converting an older one into it would do", owns: "derive", who: "claude" },
   { name: "v2 analyse", does: "What work an analysis has left across a corpus, and which of it is stale", owns: "derive", who: "claude" },
   { name: "v2 next", does: "What to ask somebody next about one feature", owns: "derive", who: "claude" },
+  /**
+   * ⛔ `derive`, BESIDE `next`, AND NOT `surface` — WHICH IS WHERE A COMMAND THAT PRINTS QUESTIONS
+   * LOOKS LIKE IT BELONGS. It decides nothing and writes nothing: it takes `check`'s blanks,
+   * `actsFor`'s purpose gate and `questionsFor`'s open questions, and folds them. The thing a
+   * reviewer has to check about it is whether the count it reports can be recomputed from what it
+   * returned — an arithmetic question about a derivation. `decide`, which shows a person each
+   * question and the act that answers it, is the `surface` next to it.
+   */
+  { name: "v2 interview", does: "What is still worth asking somebody about one feature, folded so each thing is asked once", owns: "derive", who: "claude" },
   { name: "v2 page", does: "Render one scope as a page a person can review", owns: "surface", who: "claude" },
   { name: "v2 publishable", does: "Emit the interactive page for publishing, if the corpus allows it", owns: "surface", who: "claude" },
 
@@ -1700,6 +1836,7 @@ export const COMMANDS: Verb[] = [
   { name: "v2 read", does: "Record that somebody read a scope end to end", owns: "derive", who: "claude" },
   { name: "v2 waive", does: "Declare that something is deliberately not answered", owns: "derive", who: "claude" },
   { name: "v2 defer", does: "Park a question somebody has read and is not answering yet", owns: "derive", who: "claude" },
+  { name: "v2 withdraw", does: "Take something out — a feature, one behaviour, one slot, or one statement", owns: "derive", who: "claude" },
   { name: "v2 decide", does: "Work one scope's open questions, with what guessing wrong would cost", owns: "surface", who: "claude" },
 
   // generating. ⛔ If it can be generated, generate it — these are why hand-authoring is a defect.
@@ -1975,12 +2112,78 @@ export const SHIMS: Shim[] = [
        * the right screens. Both are questions about the truth itself, which is the thing being
        * validated.
        */
+      /**
+       * ⛔ AFTER EVERY AUTHOR AND BEFORE EVERY JUDGE, BECAUSE IT WORKS ON WHAT THEY LEFT.
+       *
+       * Each author above is told to write `question:` where it cannot resolve something, which is
+       * right — a guess reads exactly like a decision. What that produces is a bare question, and
+       * `Standing.candidates` names that state as the one the model used to leave a decider in:
+       * nothing to pick between, no stated cost, no way to record having chosen.
+       *
+       * ⛔ It cannot run earlier: `productos v2 interview` folds the blanks across a feature's
+       * behaviours, so it has to see all of them. Run per-author, it would ask about each site as it
+       * appeared — which is the burden this whole route exists to reduce.
+       */
+      /**
+       * ⛔ BUILDABILITY RUNS HERE, BEFORE ANYBODY HAS AGREED TO THIS DRAFT — AND THE ⛔ FORTY LINES
+       * ABOVE ARGUES AGAINST IT. Both are Peter's, and the later one wins; this comment exists so
+       * the next session reverts neither by accident.
+       *
+       * ⛔ WHAT THE OLDER RULE SAYS, AND IT IS NOT WRONG. Engineering and QA wait for
+       * `ready for review` because an engineer's read of a draft comes back phrased as fact, and a
+       * session then builds toward a shape nobody validated. His words: *"we need to a rough scope,
+       * nail down human truth before we need to involve engineers/qa"*. Two tests hold it, and the
+       * first names *"is this buildable"* as the canonical thing that must wait.
+       *
+       * ⛔ WHAT CHANGED IS A NUMBER, NOT AN ARGUMENT. Measured on his own corpus: **1 of 131
+       * features is past that gate.** So the one role that can find what is MISSING — as against
+       * what is blank — could run on one feature, and only ever on features already validated,
+       * which is backwards: a finding is what should inform the validation. Against that, 422
+       * `nothing-demonstrates-this` and 64 of 350 behaviours with no criterion at all, none of
+       * which any other role can see.
+       *
+       * Offered the three ways out — split the role so only the findings run early, exempt it
+       * outright, or leave it gated — he chose: *"Exempt it — just run it early: buildability runs
+       * in the authoring route as it is today, verdict and all."*
+       *
+       * ⛔ AND THE PROTECTION MOVED RATHER THAN BEING GIVEN UP, which is the part the first version
+       * of this comment got wrong — it said the risk was "live and named" and left it there.
+       *
+       * Peter: *"uhm, what? why? buildability should take validation into account. if a verdict has
+       * low confidence/no agreement, why the fuck would it trust it?"*
+       *
+       * The gate was a crude proxy for "do not trust unagreed truth", applied to a whole feature
+       * from outside. The corpus answers it per SENTENCE and always has — `levelOf` returns
+       * `accepted | derived | suggested | open`, and the packet prints that word on every slot line.
+       * No judge had ever been told. `what-a-judge-reads.ts` now tells all of them, in one generated
+       * section, including that a draft's unfinishedness is not a defect — so a verdict here arrives
+       * carrying what stands behind each sentence it was reached from.
+       *
+       * ⛔ THAT IS WHAT MAKES RUNNING EARLY SAFE, and it is pinned: if the sentence about not
+       * reporting unfinishedness leaves that block, `a-judge-knows-how-settled-what-it-reads-is`
+       * fails, and this exemption is unguarded again.
+       */
+      { role: "buildability", why: "what somebody starting Monday would hit, and what they would assume unasked — the half no other role can see" },
+      { role: "interviewer", why: "the three or four answers a person could pick between — drains the findings above first, then the slots the authors left undecided" },
       { role: "completeness", why: "whether somebody can get from the start of this feature to the end of it" },
       { role: "design-critique", fan: true, why: "whether these are the right screens for the job, not just complete ones" },
     ],
     keeps: [
       "the conversation about what this feature is for — a purpose inferred from code is a purpose nobody chose",
-      "putting every open question to the person, in their own interface",
+      /**
+       * ⛔ STILL THE SESSION'S, AND THE INTERVIEWER DOES NOT TAKE IT. The role drafts the options;
+       * putting them to the person is the one job that may never be delegated, because a subagent
+       * is not talking to anybody. Peter: *"pointed, directed questions, 3-4 possible answers (just
+       * like claude code). user can select them, or freeform the answer."* — that is this line,
+       * and the drafted candidates are what make it answerable in one act instead of an essay.
+       */
+      "putting every open question to the person, in their own interface — `productos v2 decide <feature>` is the list, the options are pressable, and `--says` is always there for an answer nobody drafted",
+      /**
+       * ⛔ THE SESSION WRITES THE FINDINGS DOWN, BECAUSE THE JUDGE MAY NOT AND NOBODY ELSE WAS
+       * THERE. This is the one step of option B that cannot be delegated: a judge returns text, and
+       * if nothing records it the whole pass is lost the moment the context is.
+       */
+      "⛔ writing down what the judges found, as `review` notes carrying what a builder would assume unasked — a judge may never write, so a finding nobody records is a finding that did not happen",
       "every act of judgement, and never answering one on their behalf",
       "⛔ settling the subsystem tree with a person before the decomposer runs, and never spawning one per feature — a part that serves several features cannot be named by a role that can see only one of them",
       "⛔ stopping here. The engineering and QA reads are a different route and it cannot run until somebody has agreed to this — an engineer costing a draft produces a decision nobody made",
@@ -2003,6 +2206,12 @@ export const SHIMS: Shim[] = [
       { role: "evidencer", why: "what the repository already demonstrates, found by somebody who did not write the claims" },
       { role: "completeness", fan: true, why: "every feature walked end to end, because a first corpus is where paths fail to join" },
       { role: "coherence", why: "⛔ the whole corpus at once — thirty scopers writing in isolation is exactly how one word comes to mean two things" },
+      /**
+       * ⛔ FANNED HERE AND NOT THERE, because a first corpus is thirty features' worth of holes and
+       * one context cannot hold them. The fold is per-feature either way — `interview` works at a
+       * feature and its descendants — so fanning costs nothing and collapses nothing.
+       */
+      { role: "interviewer", fan: true, why: "every feature's undecided parts turned into answers a person can pick between" },
       { role: "hand-authored", why: "whether anything was typed that a generator should have produced — on a run this large, nobody would notice" },
     ],
     keeps: [
@@ -2086,6 +2295,7 @@ export const SHIMS: Shim[] = [
     keeps: [
       "⛔ running `productos v2 analyse <name>` FIRST and working only the refs it returns — a sweep that runs over everything redoes finished work and stops being something anybody runs twice",
       "⛔ reading what the analysis says about fanning before spawning anything: one that must be settled across the product first says so, and its refs are one run's worklist rather than a list of roles to spawn",
+      "⛔ saying how many capabilities there are only from `productos_capability_tree` or the first line `analyse capabilities` prints — a product area called Capabilities is an older tree carried into product truth, its scopes are not subsystems, and counting either half alone is how sessions on a migrated corpus reported none and then dozens",
       "⛔ putting the subsystem tree in front of a person before any part of it is worked — the names, the areas and what nests in what. Three cold runs over three features produced three disjoint trees and nothing shared, and nobody reading them could see they were the same machinery",
       "deciding which analysis to run: this route does one at a time, because thirty roles of three kinds at once is a diff nobody reviews",
       "⛔ reading the stale ones before the missing ones — a unit that was done and now answers an older wording looks finished to everybody reading it",

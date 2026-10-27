@@ -33,6 +33,7 @@ import { confidenceOf, whyConfident, discrepancyFor } from "./confidence.js";
 import { levelOf } from "./level.js";
 import { wireParts } from "./wire.js";
 import { questionsFor, descendants, type Question } from "./settle.js";
+import { interviewFor, contextFor as interviewContext } from "./interview.js";
 import { resolveRef } from "./ref.js";
 import { demonstrationOf } from "./demonstrate.js";
 /** ⛔ The packet's own readiness verdict, not a second one — see `readinessOf`. */
@@ -41,6 +42,7 @@ import { decisionsOn, decisionsUnder, howItWasDecided, type Decision } from "./r
 import { holdsOn, whyHeld } from "./held.js";
 import { selectionOf, gapsIn, type Selection, type Option } from "./selection.js";
 import { dimensionsOf, sayCombination, variesBy } from "./dimensions.js";
+import { capabilityTree, subsystemTrailsOf } from "./subsystems.js";
 
 const esc = (s: unknown): string =>
   String(s ?? "")
@@ -177,6 +179,28 @@ const addressIn =
     return `${base}/${[...menu, ...rest].map(encodeURIComponent).join("/")}`;
   };
 
+/**
+ * The address of a subsystem: `/v2/subsystems/<its own in: chain>`.
+ *
+ * ⛔ A SEPARATE TREE GETS A SEPARATE ADDRESS SPACE, AND THIS IS WHY IT MUST BE. Four ids in the real
+ * corpus name BOTH a product scope and a subsystem — `resolve-a-documents-name` is one — so a flat
+ * `/v2/<id>` would be two different pages competing for one address. Heading every subsystem path
+ * with the `subsystems` segment keeps the trees apart in the URL the way they are kept apart in the
+ * model: Peter, on what the model says, *"product scope sits under product, and they reference
+ * capabilities"*.
+ *
+ * ⛔ AND IT SHARES `addressIn`'S FALLBACK. With no base there is no address to speak of — a
+ * published artifact is one page — so it is a fragment, for the same reason and in the same shape.
+ */
+const subsystemAddressIn =
+  (base: string | undefined, trails: Record<string, Array<{ id: string; label: string }>>) =>
+  (id: string): string => {
+    if (!base) return `#${anchorOf(id ? `subsystems#${id}` : "subsystems")}`;
+    /** ⛔ The empty id is the tree itself — the one address above every subsystem. */
+    const menu = id ? (trails[id]?.map((c) => c.id) ?? [id]) : [];
+    return `${base}/${["subsystems", ...menu].map(encodeURIComponent).join("/")}`;
+  };
+
 /** What each slot asks. ⛔ Imported meaning, not a third copy — see `SLOT_ASKS` in the schema. */
 const SLOT_LABEL: Record<SlotName, string> = {
   may: "may",
@@ -190,6 +214,14 @@ const SLOT_LABEL: Record<SlotName, string> = {
 };
 
 export interface PageOptions {
+  /**
+   * The subsystem this page is standing on, where the address named one.
+   *
+   * ⛔ SEPARATE FROM `scopeId`, because the two trees do not mix and four ids in the real corpus
+   * name one of each. A page is either standing in product truth or in the machinery; conflating
+   * them into one "here" is how the current row would get marked in the wrong tree.
+   */
+  subsystem?: string;
   /**
    * Which views arrive with their content, when the rest should arrive as they are asked for.
    *
@@ -556,6 +588,36 @@ function renderQuestion(q: Question, i: number, past: Decision[], ctx: Ctx): str
                 : "every behaviour this rule reaches"
             }${q.slot ? ` · ${esc(SLOT_LABEL[q.slot] ?? q.slot)}` : ""}</p>`
           : ""
+      }
+      ${
+        /**
+         * ⛔ WHAT THE FEATURE IS FOR, AND WHAT THIS BEHAVIOUR GIVES BACK — THE QUESTION ARRIVED
+         * WITH NEITHER.
+         *
+         * Peter: *"I need context for the questions being asked, not a question out of the blue
+         * about a behavior of a feature. always give context in the question"*, and *"explain the
+         * question"*.
+         *
+         * The card had the question, the address of the behaviour, and the slot's label. That is
+         * where it is, not what it is about: a reader met *"Does pinning a worked-out figure by
+         * hand make it settled?"* with no statement of what the feature is for and no sentence
+         * saying what the behaviour does, both of which are in the corpus three lines away.
+         *
+         * ⛔ TWO SLOTS, NOT EIGHT — see `GROUNDING` in interview.ts for what printing all of them
+         * did. `revises` already renders the statements being ruled on, directly below this, so
+         * this is deliberately only the grounding a reader needs to judge those.
+         */
+        (() => {
+          const a = interviewContext(ctx.corpus, q.scope, q.ref.includes("#") ? q.exchange : undefined, q.slot);
+          const rows = [
+            ...(a.purpose ? [{ k: "what this feature is for", v: a.purpose }] : []),
+            ...a.already.map((x) => ({ k: x.asks, v: x.says })),
+          ];
+          if (!rows.length) return "";
+          return `<div class="q-ctx">${rows
+            .map((r) => `<p><span class="k">${esc(r.k)}</span> ${line(r.v)}</p>`)
+            .join("")}</div>`;
+        })()
       }
       ${acts.join("")}
       ${q.cost ? `<div class="cost"><p class="k">what guessing wrong costs</p><p>${line(q.cost)}</p></div>` : ""}
@@ -1775,12 +1837,22 @@ function partFacts(corpus: Corpus, ids: string[]): string {
           goes: pt.leads_to ?? null,
           at: own,
           ofScreen: pt.role === "commits" && !own.length ? statedAt(scope, v.id, undefined) : [],
-          slots: SLOT_ASKS_SHORT,
         };
       }
     }
   }
-  return `<script type="application/json" id="part-facts">${JSON.stringify(facts).replace(/</g, "\\u003c")}</script>`;
+  /**
+   * ⛔ THE SLOT NAMES ARE THE PAGE'S, NOT EACH PART'S — AND THIS WAS A THIRD OF THE BLOB.
+   *
+   * `slots: SLOT_ASKS_SHORT` sat on every entry, so one 226-byte map shipped 1,126 times on the
+   * product page: 254 KB of the 764 KB, all of it the same bytes. It reads as per-part data and
+   * never was — every part has the identical map, because it is what the SLOTS are called.
+   *
+   * ⛔ `parts` AND `slots` AS SEPARATE KEYS, NOT A RESERVED PART NAME. Hanging the map off something
+   * like `__slots` inside the same object means a view called `__slots` silently eats it, and view
+   * ids are author-supplied.
+   */
+  return `<script type="application/json" id="part-facts">${JSON.stringify({ parts: facts, slots: SLOT_ASKS_SHORT }).replace(/</g, "\\u003c")}</script>`;
 }
 
 /**
@@ -1790,6 +1862,85 @@ function partFacts(corpus: Corpus, ids: string[]): string {
  * a reviewer facing 539 blanks is asking "where do I start", and the answer is the feature with the
  * fewest holes — it is the cheapest to finish and the first that becomes agreeable.
  */
+/**
+ * What nobody has been ASKED yet — ⛔ THE HALF OF "WHAT IS UNDECIDED HERE" THE QUEUE CANNOT CARRY.
+ *
+ * Peter: *"what is 'interview', this should be a first class representation in the UX - and claude
+ * should ideally be able to access this via mcp"*.
+ *
+ * The queue above holds questions somebody has drafted answers for, which a reviewer can press. It
+ * is therefore a measure of how much drafting has happened, and was reading as a measure of how much
+ * is undecided — the two are the same number only on a corpus where every hole has been worked. A
+ * short queue over ninety blank slots told a reviewer the corpus was nearly done.
+ *
+ * ⛔ AND IT IS NOT `renderWorklist`, WHICH SITS DIRECTLY BELOW THIS. That one counts blank slots per
+ * feature and names the slots — it answers *"where do I start authoring"*, in the grid's vocabulary,
+ * and it is the right thing to show somebody who has nothing to press. This answers *"what is the
+ * question"*, folded so one answer covers every behaviour blank on the same policy. Same source,
+ * different question, and the fold is the part no other surface does.
+ *
+ * ⛔ NOTHING HERE IS PRESSABLE, DELIBERATELY. A hole with no drafted options cannot be answered by
+ * choosing, and a text box on a page of product truth is how a decision gets made by whoever is
+ * tired — which is the sentence `decide` already uses about composing truth at a prompt. What a
+ * reviewer gets is the question and an honest account of why they cannot answer it yet.
+ */
+function renderUnasked(corpus: Corpus, scopeId: string, ctx: Ctx): string {
+  const it = interviewFor(corpus, scopeId);
+  if (!it) return "";
+  /**
+   * ⛔ IT USED TO RETURN NOTHING ON ANY FEATURE WITH NO AGREED PURPOSE — the same defect as the
+   * derivation's, in the surface, and on a corpus with 102 such features that is the whole page.
+   *
+   * The comment here said "the purpose gate is the queue's own business; this is about the detail
+   * behind it", which sounds right and had it exactly backwards: a feature nobody has agreed a
+   * purpose for is the one where knowing what is still unsaid matters MOST, because that is what
+   * somebody weighs before agreeing to anything. Withholding it meant the page's honest answer to
+   * "what is undecided here" was blank precisely where it was largest.
+   */
+  const unasked = it.owed.filter((o) => o.owes === "blank" || o.owes === "screen");
+  if (!unasked.length) return "";
+
+  const folded = unasked.filter((o) => o.fills.length > 1);
+  return `
+    <div class="unasked">
+      <h3>Nobody has been asked these yet</h3>
+      ${
+        /**
+         * ⛔ THE TWO NUMBERS, BECAUSE THE GAP BETWEEN THEM IS THE ONLY EVIDENCE THE FOLD HAPPENED.
+         * How many questions, against how many places they would fill. Equal only when nothing
+         * folded, and a reader who cannot see the difference has no reason to believe it.
+         */
+        `<p class="lede">${unasked.length} question${unasked.length === 1 ? "" : "s"}, covering
+         <strong>${unasked.reduce((n, o) => n + o.fills.length, 0)}</strong> places where this
+         product does not yet say what it does${
+           folded.length
+             ? ` — ${folded.length} of them ${folded.length === 1 ? "is one answer that settles several" : "are each one answer that settles several"}`
+             : ""
+         }.</p>`
+      }
+      <p class="note">Each needs options drafted against it before anybody can choose. Until then it
+      is not a decision anybody has declined to make — it is one nobody has been offered.</p>
+      <ul class="unasked-list">
+        ${unasked
+          .map(
+            (o) => `
+          <li>
+            <p class="u-asks">${line(o.asks)}</p>
+            <p class="u-why">${line(o.why)}</p>
+            ${
+              o.fills.length > 1
+                ? `<p class="u-fills">one answer settles ${o.fills.length}: ${o.fills
+                    .map((f) => refLink(f, ctx))
+                    .join("; ")}</p>`
+                : ""
+            }
+          </li>`
+          )
+          .join("")}
+      </ul>
+    </div>`;
+}
+
 function renderWorklist(
   corpus: Corpus,
   grids: Grid[],
@@ -3358,9 +3509,26 @@ function renderNav(
   /** How many screens the subtree draws, so the tab says whether it is worth opening. */
   screens: number,
   /** ⛔ The Connect Claude Code control — only on a live page served under a project. */
-  connect: string = ""
+  connect: string = "",
+  /** Where each subsystem is addressed — the capability tree's own address space. */
+  subAddress: (id: string) => string = (id) => `#${anchorOf(`subsystems#${id}`)}`,
+  /** The subsystem whose page this is, where the address named one. */
+  hereSub?: string
 ): string {
-  const kids = (parent?: string) => corpus.scopes.filter((s) => s.scope.in === parent);
+  /**
+   * ⛔ A WITHDRAWN FEATURE IS NOT IN THE MENU, and it used to be.
+   *
+   * `exists: withdrawn` was honoured for a VIEW and for an EXCHANGE and nowhere for a scope, so a
+   * feature somebody had taken out still had a row, a tab and an address — a menu entry leading to
+   * a page about something that is gone, which is the dead row this file's opening comment is
+   * about. `existsOf` has always cascaded `withdrawn` down the lineage; the tree simply never asked.
+   *
+   * ⛔ THE WHOLE BRANCH GOES, because the cascade means everything beneath a withdrawn container is
+   * withdrawn too. Dropping only the container would leave its children as roots — which is exactly
+   * the orphaning that produced this work in the first place.
+   */
+  const kids = (parent?: string) =>
+    corpus.scopes.filter((s) => s.scope.in === parent && s.scope.exists !== "withdrawn");
   // ⛔ Once for the whole nav. It was called per row, which walks the entire corpus per row.
   const acts = actsFor(corpus);
   const homes = ruleHomes(corpus);
@@ -3398,9 +3566,21 @@ function renderNav(
   }
   /** How many rows the whole corpus yields, so a corpus with nothing to navigate grows no tree. */
   let counted = 0;
-  const subtree = (parent: string | undefined, depth: number): string => {
+  /**
+   * ⛔ `only` EXISTS FOR AN AREA THAT IS ITSELF A FEATURE, and leaving it out emptied the menu.
+   *
+   * A group lists its area's CHILDREN, because Peter: *"'Product' itself doesn't need to be a menu
+   * item under the 'Product' main tab"*. That is right wherever an area holds things. Where a root
+   * child is a LEAF — the seed's `money` and `tasks`, and any small corpus — it holds nothing, so
+   * the group came out empty and the only durable link to that feature disappeared with it. The
+   * nav emitted zero links and `money has behaviours and no way to reach it from the menu`.
+   *
+   * So a childless area lists ITSELF: the rule against self-listing was about areas with items,
+   * and a group with nothing in it is the dead menu entry this file opens on.
+   */
+  const subtree = (parent: string | undefined, depth: number, only?: string[]): string => {
     const rows: string[] = [];
-    for (const { scope } of kids(parent)) {
+    for (const { scope } of kids(parent).filter((k) => !only || only.includes(k.scope.id))) {
       /**
        * ⛔ THE ROOT IS NOT A ROW, AND NEITHER IS AN AREA INSIDE ITS OWN GROUP. The root is the
        * Overview tab; listing it again at the head of the tree gave every half a first entry that
@@ -3629,7 +3809,78 @@ function renderNav(
    */
   /** From no parent at all: the root is stepped through rather than listed, as above. */
   const whole = subtree(undefined, 0);
-  const tree = counted < 2 ? "" : `<nav class="scopes">${whole}</nav>`;
+  /**
+   * ⛔ THE CAPABILITY TREE IS NAVIGABLE, AND IT SHIPPED WITHOUT BEING SO.
+   *
+   * Peter, looking at the converted corpus: *"wtf happened to capabilities tab? I see a bunch of
+   * capabilities flattend in the menu. is the tree completely gone?"* — and then *"capabilities is a
+   * separate tree, when did that change???"*. It had not changed. The tree was correct in the data
+   * (27 subsystems, 12 at the top, 15 nested, nothing dangling) and correct in its own render, and
+   * had NO WAY IN: `renderNav` walks `corpus.scopes`, a subsystem is not a scope, and the whole
+   * tree rendered on one view with its nesting shown only as indentation inside a 145 KB page. No
+   * rows, no addresses, nothing to click into.
+   *
+   * ⛔ IN THE SAME TREE, NOT A SECOND ONE. The comment forty lines down says a second tree per area
+   * "would be two derivations of one fact, which is what this project keeps being bitten by", and
+   * it was right the last time somebody ignored it. These rows are built by the same `subtree`
+   * recursion shape and filtered by the same `scopeTree` pass; what distinguishes them is the
+   * attribute they carry.
+   *
+   * ⛔ `data-subsystem`, NOT `data-scope`, AND THAT IS LOAD-BEARING. Four ids in the real corpus
+   * name both a product scope and a subsystem, so one attribute for both would make the filter and
+   * the current-row marking answer about whichever tree happened to be asked first.
+   */
+  const subs = corpus.subsystems.map((x) => x.subsystem);
+  /**
+   * ⛔ THE BRANCH YOU ARE STANDING IN IS OPEN, and the scope tree already paid for learning this:
+   * *"collapsed-by-default plus one-open-at-a-time is a menu that cannot show you where you are"*.
+   * Marking only the exact subsystem left its ancestors shut, so the row for the page on screen sat
+   * inside a closed `<ul>` and the menu answered "which part is this" with nothing. Measured in a
+   * browser — the row had height 0 while its own parent reported 33.
+   */
+  const standingInSub = new Set<string>(
+    hereSub ? (subsystemTrailsOf(corpus)[hereSub] ?? []).map((c) => c.id) : []
+  );
+  const subRow = (parent: string | undefined, depth: number): string => {
+    const rows: string[] = [];
+    for (const sub of subs.filter((x) => (x.in ?? undefined) === parent)) {
+      const kids = subRow(sub.id, depth + 1);
+      const standing = standingInSub.has(sub.id);
+      const current = hereSub === sub.id;
+      const label = line(sub.title || sub.id);
+      const hover = esc(plain(sub.title || sub.id));
+      /** How many contracts it offers — the same question a feature row's chip answers. */
+      const offers = sub.offers.length;
+      counted++;
+      rows.push(
+        `<li style="--d:${depth}" data-subsystem="${esc(sub.id)}"${kids ? ` class="holds${standing ? " open" : ""}"` : ""}>` +
+          `<span class="scoperow">` +
+          `<a href="${esc(subAddress(sub.id))}" data-goto-subsystem="${esc(sub.id)}"${
+            standing ? ' aria-current="page"' : ""
+          } title="${hover}">${current ? `<strong>${label}</strong>` : label}</a>` +
+          /**
+           * ⛔ AND NOTHING WHERE IT OFFERS NOTHING. A container subsystem groups what is filed inside
+           * it and offers nothing itself — the rows beneath it already say so, and a `0` chip reads
+           * as a thing to go and look at.
+           */
+          (offers
+            ? ` <span class="n" title="${esc(`${offers} ${offers === 1 ? "contract" : "contracts"}`)}" aria-label="${esc(
+                `${offers} ${offers === 1 ? "contract" : "contracts"}`
+              )}">${offers}<span class="mark" aria-hidden="true">⊂</span></span>`
+            : "") +
+          `</span>${kids}</li>`
+      );
+    }
+    return rows.length ? `<ul>${rows.join("")}</ul>` : "";
+  };
+  const machinery = subRow(undefined, 0);
+  /**
+   * ⛔ THE ONE CORPUS-WIDE TREE IS GONE. Each tab group renders its own items — see the comment at
+   * the group emission below. `whole` is kept only so the row count still decides whether there is
+   * anything to navigate at all.
+   */
+  void whole;
+  const tree = "";
   const trails = trailsOf(corpus);
   /**
    * ⛔ THE TOP LEVEL IS A ROW OF TABS, NOT A ROW INSIDE A DROPDOWN.
@@ -3654,7 +3905,9 @@ function renderNav(
   const derivedGoes = new Map<string, string>();
   for (const c of inferConnections(corpus).made) derivedGoes.set(c.from, c.to);
   /** Which tabs are areas of the product, and so hold scopes of their own. */
-  const areaIds = new Set(corpus.scopes.filter((x) => x.scope.in === rootId).map((x) => x.scope.id));
+  const areaIds = new Set(
+    corpus.scopes.filter((x) => x.scope.in === rootId && x.scope.exists !== "withdrawn").map((x) => x.scope.id)
+  );
   /**
    * ⛔ EVERY COUNT CARRIES THE NOUN IT IS COUNTING. These five tabs each showed a bare digit and
    * each was counting something different — screens, habits, capabilities, sentences — so "Money
@@ -3695,12 +3948,26 @@ function renderNav(
      * next" is answered by how much is said inside, and a container holding four parts that each
      * offer nothing should not read as four things to go and look at.
      */
-    ...(corpus.capabilities.length
+    /**
+     * ⛔ AND PRESENT WHEN AN OLDER TREE WAS CARRIED INTO PRODUCT TRUTH, even with nothing in this
+     * one. That is the corpus where a reader most needs to be told which "capabilities" is which —
+     * Peter: *"every claude session connecting to staging is confused by the # of capabilities"*.
+     */
+    ...(corpus.subsystems.length || capabilityTree(corpus).carried.length
       ? [
           {
             id: "subsystems",
-            label: "How it works",
-            toRead: corpus.capabilities.reduce((n, c) => n + c.capability.offers.length, 0),
+            /**
+             * ⛔ CALLED WHAT HE CALLS IT. Peter: *"call it fucking Capabilities. what the FUCK ELSE
+             * WOULD WE CALL IT"* — after *"there is no capabilities menu"*, which was literally
+             * true: the tree was built under a label containing no such word, so somebody looking
+             * for capabilities found four tabs, none of them it.
+             *
+             * ⛔ The VIEW id stays `subsystems`, because that is what every address, route and test
+             * already says. A label is what a reader looks for; an id is what the machine resolves.
+             */
+            label: "Capabilities",
+            toRead: corpus.subsystems.reduce((n, c) => n + c.subsystem.offers.length, 0),
             says: "things the machinery offers",
           },
         ]
@@ -3712,7 +3979,8 @@ function renderNav(
      * whatever the corpus is called rather than a list of names to keep updated.
      */
     ...corpus.scopes
-      .filter((x) => x.scope.in === rootId)
+      /** ⛔ And no tab for a withdrawn feature — see `kids` above. */
+      .filter((x) => x.scope.in === rootId && x.scope.exists !== "withdrawn")
       .map((x) => {
         const under = descendants(corpus, x.scope.id);
         const screens = under.reduce(
@@ -3743,7 +4011,21 @@ function renderNav(
    * so the frame said one thing and the page showed another, with Overview's sub-menu still under
    * it. A fixed tab needs an entry exactly like a scope does.
    */
-  const sectionOf: Record<string, string> = { overview: "overview", prototype: "prototype", settings: "settings" };
+  /**
+   * ⛔ AND `subsystems` WAS MISSING, WHICH IS THE WHOLE "there is no capabilities menu" BUG.
+   *
+   * The comment above says a fixed tab needs an entry exactly like a scope does, and the tab I gave
+   * a tree to did not have one. So `sectionOf["subsystems"]` was undefined, the Capabilities tab
+   * resolved to `overview`, and every decision keyed on the section answered about the wrong tab:
+   * the capability rows were hidden on their own tab and shown on the others. Peter: *"how it works
+   * -> nothing in it, product + flttened capabilities outside"*.
+   */
+  const sectionOf: Record<string, string> = {
+    overview: "overview",
+    prototype: "prototype",
+    settings: "settings",
+    subsystems: "subsystems",
+  };
   for (const { scope } of corpus.scopes) {
     const t = trails[scope.id]!;
     // ⛔ Index 0 now, because the root is no longer a crumb — see the trail comment above. Reading
@@ -3823,11 +4105,32 @@ function renderNav(
          * comment refuses two lines down. An empty list rendered as an empty `<nav>` as well, so the
          * group looked like a container to every stylesheet rule and to anything counting them.
          */
-        const holds = t.id === "overview" || areaIds.has(t.id);
+        /** ⛔ And the machinery group holds the capability tree, so it collapses like an area. */
+        const holds = t.id === "overview" || areaIds.has(t.id) || (t.id === "subsystems" && corpus.subsystems.length > 0);
         return (
           `<div class="tabgroup" data-group="${esc(t.id)}">` +
           `<div class="tabhead">` +
-          `<button type="button" class="tab" data-tab="${esc(t.id)}">${t.label}${
+          /**
+           * ⛔ A TAB NAMING A SCOPE IS A LINK, NOT A BUTTON, and making it one is what kept every
+           * area reachable once a group stopped listing itself.
+           *
+           * Peter: *"'Product' itself doesn't need to be a menu item under the 'Product' main tab"*
+           * — right, and with the group listing only its CHILDREN the area had no row anywhere, so
+           * the only way to it was a button with no address. `whole's page cannot reach area`, and
+           * the served nav emitted zero durable links on a corpus whose root children are leaves.
+           *
+           * So the tab carries the address. It keeps `data-tab`, so the frame script is unchanged,
+           * and gains `data-goto` and an href, so it is shareable and the delegated handler treats
+           * it exactly like any other row. A fixed tab — Overview, Prototype, Capabilities — names
+           * no scope and stays a button.
+           *
+           * ⛔ AND ONLY WHERE THERE IS A BASE. With none, `address()` returns a FRAGMENT, and a
+           * standalone file or a published artifact renders one scope — so the tab would point at
+           * an anchor the page does not contain. `v2-page` refuses exactly that by name, and it is
+           * right to: a link that goes nowhere is worse than a control that says it is one.
+           */
+          (areaIds.has(t.id) && base
+            ? `<a class="tab" data-tab="${esc(t.id)}" data-goto="${esc(t.id)}" href="${esc(address(t.id))}">${t.label}${
             /**
              * ⛔ THE COUNT ON THE TAB TOO. Overview carried one and the halves carried none, so the
              * top row could not answer "which side has the work" without opening both.
@@ -3839,7 +4142,16 @@ function renderNav(
               : t.toRead
                 ? pill(t.toRead, t.says ?? "here")
                 : ""
-          }</button>` +
+              }</a>`
+            : `<button type="button" class="tab" data-tab="${esc(t.id)}">${t.label}${
+                t.id === "overview"
+                  ? open
+                    ? pill(open, open === 1 ? "question nobody has answered" : "questions nobody has answered", false)
+                    : ""
+                  : t.toRead
+                    ? pill(t.toRead, t.says ?? "here")
+                    : ""
+              }</button>`) +
           /**
            * ⛔ THE TWISTY IS A SEPARATE CONTROL FROM THE AREA, for the reason the chevron beside the
            * trail is: one control that both navigates and expands means every attempt to collapse a
@@ -3854,6 +4166,39 @@ function renderNav(
           `</div>` +
           /** Overview's own items move inside their area — see the strip below. */
           (t.id === "overview" ? OVERVIEW_STRIP : "") +
+          /**
+           * ⛔ EACH TAB HOLDS ITS OWN ITEMS. NO FILTER.
+           *
+           * Peter, after four attempts at this: *"JUST A PLAIN FUCKING MENU WITH ITEMS INSIDE IT, NO
+           * COMPLICATED FUCKING FILTERS"*, and *"JUST A FUCKING TABLE OF ITEMS FOR OVERVIEW, ITEMS
+           * FOR PROTOTYPE, WHAT THE FUCK DO WE NEED A FILTER FOR"*. He is right, and the history
+           * here is the argument for him.
+           *
+           * There used to be ONE tree for the whole corpus, moved between groups by script, with
+           * every row's visibility decided by a derived `narrowing` flag plus a `sectionOf` lookup.
+           * The comment that justified it said a per-group tree "would be two derivations of one
+           * fact" — but it is not: `subtree()` is one function and this calls it per group, which is
+           * one derivation EMITTED IN PLACE. What was actually duplicated was the answer to "which
+           * rows belong here", computed once at render and again, differently, in the browser.
+           *
+           * That second answer was wrong four separate ways: capability rows shown on every tab but
+           * their own, 81 product rows beside them, the whole tree hidden on the tab whose only
+           * content it was, and a free variable resolving to `window.name`. Each fix revealed the
+           * next. A menu is a list of what is in a section; asking a question to work that out is
+           * where all of it came from.
+           */
+          (t.id === "subsystems"
+            ? machinery
+              ? `<nav class="scopes">${machinery}</nav>`
+              : ""
+            : areaIds.has(t.id)
+              ? (() => {
+                  const inside = subtree(t.id, 0);
+                  /** ⛔ A leaf area lists itself — see `only` on `subtree`, or its tab leads nowhere. */
+                  const body = inside || subtree(rootId, 0, [t.id]);
+                  return body ? `<nav class="scopes">${body}</nav>` : "";
+                })()
+              : "") +
           /**
            * ⛔ AND NO SECOND TREE PER AREA. THERE IS ALREADY ONE, AND THE SCRIPT MOVES IT HERE.
            *
@@ -4155,6 +4500,8 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
    * it about where the thing sits.
    */
   const address = addressIn(opts.linkBase, trailsOf(corpus));
+  /** ⛔ The capability tree's own address space — see `subsystemAddressIn` for why it is separate. */
+  const subAddress = subsystemAddressIn(opts.linkBase, subsystemTrailsOf(corpus));
   /** ⛔ `corpus` too: showing a title where a ref used to be needs the thing the ref names. */
   const ctx: Ctx = { corpus, base: opts.linkBase, url: address, here: ids, anchors, served };
   const body = `
@@ -4173,7 +4520,9 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
         (n, id) => n + (corpus.scopes.find((s) => s.scope.id === id)?.scope.views.filter((v) => v.exists !== "withdrawn").length ?? 0),
         0
       ),
-      opts.interactive && servedUnderProject(opts.linkBase) ? CONNECT_BUTTON : ""
+      opts.interactive && servedUnderProject(opts.linkBase) ? CONNECT_BUTTON : "",
+      subAddress,
+      opts.subsystem
     )}
     <main>
       ${
@@ -4224,7 +4573,7 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
          */
         marked("prototype", renderPrototype(protoScreens, protoPromises, theWalk, (corpus.prototypes ?? []), selectionOf(corpus), served)) +
         (full("settings") ? marked("settings", renderSettings(corpus)) : stub("settings", "view-settings", "What steers this", false)) +
-        (full("subsystems") ? marked("subsystems", renderSubsystems(corpus, address)) : stub("subsystems", "view-subsystems", "How it works", false)) +
+        (full("subsystems") ? marked("subsystems", renderSubsystems(corpus, address, opts.subsystem, subAddress)) : stub("subsystems", "view-subsystems", "Capabilities", false)) +
         `<section class="view" id="view-overview" data-view="overview" data-ref="${esc(scopeId)}" data-label="Overview">
            <div class="sub-view" data-tabs="product" data-sub-view="queue" data-ref="queue" data-label="Queue">
              ${
@@ -4281,7 +4630,15 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
                           }</p>`
                         : ""
                     }
-                    ${live.map((q, i) => renderQuestion(q, i, decisionsOn(corpus, q.ref), ctx)).join("")}`
+                    ${live.map((q, i) => renderQuestion(q, i, decisionsOn(corpus, q.ref), ctx)).join("")}
+                    ${
+                      /**
+                       * ⛔ AFTER THE PRESSABLE ONES AND ON THE SAME TAB, because "what is undecided
+                       * here" has one honest answer and it is both halves. Below the queue, so the
+                       * things a reviewer can act on come first.
+                       */
+                      renderUnasked(corpus, scopeId, ctx)
+                    }`
                  : /**
                     * ⛔ "NOTHING IS UNDECIDED" IS TRUE AND MISLEADING WHEN NOTHING IS WRITTEN.
                     *
@@ -4304,6 +4661,15 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
                        * "where do I start" and the answer is the one with the fewest holes.
                        */
                       blanks ? renderWorklist(corpus, grids, a, written, blanks, gated.length, ctx) : ""
+                    }
+                    ${
+                      /**
+                       * ⛔ AND HERE ESPECIALLY. This is the branch whose own ⛔ says an empty queue
+                       * over 539 blank slots tells a reviewer the corpus is ready. `renderWorklist`
+                       * answers it in slots and features; this answers it in the questions somebody
+                       * would actually be asked, which is the form a reviewer can judge.
+                       */
+                      renderUnasked(corpus, scopeId, ctx)
                     }`
              }
            </div>
@@ -6649,7 +7015,20 @@ const PROTOTYPE = `<script>
   const blob = document.getElementById("part-facts");
   if (!blob) return;
   let FACTS = {};
-  try { FACTS = JSON.parse(blob.textContent || "{}"); } catch (e) { return; }
+  let SLOTS = {};
+  try {
+    const d = JSON.parse(blob.textContent || "{}");
+    /**
+     * ⛔ EITHER SHAPE, BECAUSE A PUBLISHED PAGE IS A FILE SOMEBODY ALREADY HAS. An artifact rendered
+     * before the slot map was hoisted carries the parts at the top level and the map on each entry;
+     * it is static HTML on claude.ai and no deploy reaches it. Reading only the new shape would
+     * leave every control on those pages answering "nothing describes this".
+     */
+    FACTS = d.parts || d;
+    SLOTS = d.slots || {};
+  } catch (e) { return; }
+  /** The map is the page's; an older blob kept a copy per part, so fall back to the entry's own. */
+  const slotName = (f, slot) => (SLOTS && SLOTS[slot]) || (f && f.slots && f.slots[slot]) || slot;
 
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
@@ -6770,7 +7149,7 @@ const PROTOTYPE = `<script>
             esc(x.title) +
             "</p>" +
             x.said
-              .map((sd) => '<p class="pt-said"><span class="slot">' + esc(f.slots[sd.slot] || sd.slot) + "</span> " + esc(sd.text) + "</p>")
+              .map((sd) => '<p class="pt-said"><span class="slot">' + esc(slotName(f, sd.slot)) + "</span> " + esc(sd.text) + "</p>")
               .join("")
         )
         .join("");
@@ -6786,8 +7165,8 @@ const PROTOTYPE = `<script>
     }
     return head + f.at.map((a) => {
       const said = (a.said || []).map((s) =>
-        '<li><span class="g">' + esc((f.slots && f.slots[s.slot]) || s.slot) + '</span> ' + esc(s.text) + '</li>').join("");
-      const blank = (a.blank || []).map((b) => esc((f.slots && f.slots[b]) || b)).join(" · ");
+        '<li><span class="g">' + esc(slotName(f, s.slot)) + '</span> ' + esc(s.text) + '</li>').join("");
+      const blank = (a.blank || []).map((b) => esc(slotName(f, b))).join(" · ");
       return '<div class="pt-ex"><p class="pt-ex-t">' + esc(a.title) + ' <code>' + esc(a.ref) + '</code></p>' +
         (said ? '<ul class="pt-said">' + said + "</ul>" : "") +
         (blank ? '<p class="none">says nothing about: ' + blank + "</p>" : "") + "</div>";
@@ -7902,7 +8281,12 @@ const VIEW_SWITCH = `<script>
      */
     const sideways = frame && getComputedStyle(frame).position === "fixed";
     if (sideways || (c && !c.hidden && getComputedStyle(c).display === "none")) open = true;
-    tree.hidden = !open;
+    /*
+     * ⛔ A CLASS ON THE FRAME, NOT hidden ON ONE ELEMENT. Each tab group now carries its own list,
+     * so there is no single element to hide — and hiding the first one it happened to find is how a
+     * chevron ended up closing one area's items and leaving every other group's showing.
+     * No backticks in here: template literal.
+     */
     if (c) c.setAttribute("aria-expanded", String(open));
     frame.classList.toggle("open", open);
   };
@@ -8000,7 +8384,16 @@ const VIEW_SWITCH = `<script>
     }
     const section = sectionOf[name] || "overview";
     for (const t of tabs) t.classList.toggle("on", t.dataset.tab === section);
-    scopeTree(section);
+    /*
+     * ⛔ THE GROUP IS MARKED, AND THAT IS THE WHOLE OF IT. Its own items are already inside it, so
+     * selecting a tab is one class and the stylesheet shows that group's list. What used to be here
+     * was scopeTree(section): a pass over every row in one shared tree, deciding visibility from a
+     * derived flag and a lookup keyed on product truth. It was wrong on every tab for the capability
+     * tree, and each fix uncovered another.
+     * No backticks in here: template literal.
+     */
+    for (const g of document.querySelectorAll(".tabgroup"))
+      g.classList.toggle("on", g.getAttribute("data-group") === section);
     // ⛔ Overview has no tree to open, so the chevron goes away rather than opening an empty one.
     if (chev) chev.hidden = section === "overview";
     const sm = document.querySelector(".topframe .subtabs");
@@ -8020,13 +8413,23 @@ const VIEW_SWITCH = `<script>
      * ⛔ AND IT GOES BACK WHERE IT WAS FOR OVERVIEW, which has no features of its own: left inside
      * the last area it was moved to, it would read as that area's list while showing nothing.
      */
-    if (tree) {
-      const group = section === "overview" ? null : document.querySelector('.tabgroup[data-group="' + CSS.escape(section) + '"]');
-      const home = document.querySelector(".topframe");
-      if (group && tree.parentNode !== group) group.appendChild(tree);
-      else if (!group && home && tree.parentNode !== home) home.appendChild(tree);
-    }
-    if (collapse || section === "overview") setOpen(false);
+    /*
+     * ⛔ NOTHING IS MOVED ANY MORE. A group's items are rendered inside it, so there is no element to
+     * relocate and no parentNode to compare. Moving one shared tree between groups by script is
+     * what made "which items belong to this tab" a runtime question with a wrong answer.
+     * No backticks in here: template literal.
+     */
+    /*
+     * ⛔ THE CAPABILITY TAB OPENS THE TREE INSTEAD OF CLOSING IT, because the tree IS its content.
+     *
+     * Every other tab has a section of its own to show, so collapsing the drill-down on arrival is
+     * right. This one has a page listing the subsystems AND a menu of them, and in top mode the menu
+     * is the thing that answers "which part next". Closing it on arrival is what Peter saw:
+     * "how it works -> nothing in it".
+     * No backticks in here: template literal.
+     */
+    if (section === "subsystems") setOpen(true);
+    else if (collapse || section === "overview") setOpen(false);
     /**
      * ⛔ EACH VIEW IS A PLACE THE BACK BUTTON CAN RETURN TO.
      *
@@ -8085,12 +8488,20 @@ const VIEW_SWITCH = `<script>
   };
 
   const chev = document.querySelector(".chev");
-  if (chev) chev.addEventListener("click", () => setOpen(tree.hidden));
+  /*
+   * ⛔ THE CHEVRON ASKS THE FRAME, NOT ONE LIST. It read tree.hidden, and nothing sets that any
+   * more: each group carries its own list and the frame's open class decides. Left reading a flag
+   * nobody writes, it computed setOpen(false) every press — so on the Product tab 80 items were
+   * rendered, in the document, and unreachable.
+   * No backticks in here: template literal.
+   */
+  const isOpen = () => !!frame && frame.classList.contains("open");
+  if (chev) chev.addEventListener("click", () => setOpen(!isOpen()));
   /**
    * ⛔ Re-asked, not re-decided. Moving the menu — or dragging the window across the breakpoint —
    * changes whether the chevron exists, and setOpen is the one place that knows what that means.
    */
-  const reask = () => setOpen(!tree || !tree.hidden);
+  const reask = () => setOpen(isOpen());
   /*
    * ⛔ THE SWITCHER, EXPOSED, BECAUSE THE ALTERNATIVE WAS SIMULATING A PRESS.
    *
@@ -8154,80 +8565,15 @@ const VIEW_SWITCH = `<script>
    * ⛔ The tree shows only the half you are in. Every scope in both halves at once is the wall the
    * tabs exist to remove, and a reader who has chosen a side has said which one they mean.
    */
-  const scopeTree = (section) => {
-    const rows = tree ? [...tree.querySelectorAll("li")] : [];
-    /**
-     * ⛔ FILTER ONLY WHERE THERE IS SOMETHING TO FILTER TO, AND ASK THE ROWS RATHER THAN A LIST.
-     *
-     * The tabs are not all halves of the product. Overview, the prototype board and What steers
-     * this are SECTIONS, and no scope belongs to any of them — so comparing every row against the
-     * current section hid the entire tree on all four. Peter, standing on one of them:
-     * *"the menu is broken"*, and *"i'm on another machine, looking at .../v2/prototype"*.
-     *
-     * The previous round of this special-cased "overview" by name and left its three siblings
-     * broken, which is the shape of the bug rather than a fix for it — a list of exceptions is a
-     * list somebody has to remember to extend, and the next tab added breaks it again.
-     *
-     * So it is derived: if no row in the tree belongs to the current section, there is no half being
-     * chosen and nothing to narrow to, and the tree stays whole. A real half still narrows, because
-     * its rows do belong to it.
-     */
-    const narrowing = rows.some((r) => r.dataset.scope && sectionOf[r.dataset.scope] === section);
-    for (const li of rows) {
-      /**
-       * ⛔ THE ROW SAYS WHICH SCOPE IT IS, rather than the filter inferring it from a link.
-       *
-       * It read the id off a[data-goto], and the row for the scope you are currently ON has no
-       * link — it is its own name in bold, because a link to where you already are is not a link. So
-       * that row was unidentifiable, fell to the branch below, and the area whose page you were
-       * reading was the one row the filter could not reason about.
-       *
-       * ⛔ A ROW THE FILTER CANNOT IDENTIFY IS STILL HIDDEN. Defaulting to visible meant every row
-       * without a usable link survived every filter — so choosing the product half still showed the
-       * machinery, while the machinery half looked correct and hid the bug.
-       */
-      const id = li.dataset.scope;
-      /**
-       * ⛔ THE LANDING IS NOT A REASON TO HIDE THE MENU. This read
-       * section === "overview" || !id || sectionOf[id] !== section, so whenever the visible
-       * section was the landing, EVERY row in the tree was hidden.
-       *
-       * On the root page that was invisible: /v2 lands on the product overview, where the tabs
-       * are the navigation and the tree is a drill-down nobody has opened yet. But a page served at
-       * ANY deeper address also shows its landing — so on every cold arrival at a real URL this hid
-       * the entire menu. Peter, three times, and the third time with the row already marked current
-       * and its ancestors already open: *"menus not operable, in a shit state again"*, *"the menu
-       * doesn't expand"*.
-       *
-       * ⛔ Measured, not reasoned: with aria-current landing correctly and every ancestor open,
-       * the row was STILL rowVisible: false — which is what sent me here rather than to another
-       * patch of the address resolution.
-       *
-       * So the filter answers only the question it exists for — which half of the product this row
-       * belongs to — and the landing keeps the tree it is standing in.
-       */
-      li.hidden = !id || (narrowing && sectionOf[id] !== section);
-      /**
-       * ⛔ AND THE AREA ITSELF IS NOT A ROW OF ITS OWN MENU. Peter: *"'Product' itself doesn't need
-       * to be a menu item under the 'Product' main tab"*.
-       *
-       * The tree hangs under the group it is listing and the group's head already names it, so the
-       * row whose id IS the section is the group repeating itself one line below its own tab. It
-       * belongs in this filter rather than in the render: one tree is emitted for the whole corpus,
-       * and which scope is redundant depends on where that tree currently hangs.
-       *
-       * ⛔ ITS ROW, NOT ITS ITEMS. The rows nest now, so an area's row CONTAINS its features —
-       * hiding the whole row would take every one of them with it, which is the area looking right and
-       * holding nothing. Only the row's own line is hidden.
-       *
-       * ⛔ AND IT IS FORCED OPEN, because the control that would open it is the line just hidden.
-       */
-      const own = li.querySelector(":scope > .scoperow");
-      const redundant = !!id && id === section;
-      if (own) own.hidden = redundant;
-      if (redundant) li.classList.add("open");
-    }
-  };
+  /*
+   * ⛔ scopeTree IS GONE. It took one shared tree and decided every row's visibility from a derived
+   * flag plus a lookup keyed on product truth. Each tab group now renders its own items, so there
+   * is nothing to filter: selecting a tab marks its group and the stylesheet shows that list.
+   *
+   * Peter, after four attempts: "JUST A PLAIN FUCKING MENU WITH ITEMS INSIDE IT, NO COMPLICATED
+   * FUCKING FILTERS". The four bugs that filter produced are recorded at the group emission.
+   * No backticks in here: template literal.
+   */
   // ⛔ No per-row binding: the delegated handler above covers the menu, the crumbs and a
   // container's contents alike. Two handlers on one click is how a toggle fires twice.
   // ⛔ Escape closes it, because a tree covering the page with no visible way out is a trap.
@@ -8345,6 +8691,24 @@ const VIEW_SWITCH = `<script>
   const viewAt = (pathname) => {
     if (!BASE || pathname.indexOf(BASE) !== 0) return null;
     const segs = pathname.slice(BASE.length).split("/").filter(Boolean).map(decodeURIComponent);
+    /*
+     * ⛔ A FOCUSED MACHINERY PAGE IS ANOTHER PAGE'S ADDRESS, exactly as a scope this page does not
+     * hold is — see the comment on sectionOf below, which is the same bug in the other tree.
+     *
+     * /v2/subsystems/<id> renders ONE subsystem, and which one is decided by the server. Walking up
+     * from the id would match the subsystems section this document already carries, switch to the
+     * page it is already on, and leave the URL and the focus untouched: the reader presses a row
+     * for the clock and stays on the ledger. Peter has reported this shape twice in the other tree,
+     * the second time as "why does the URL NO LONGER CHANGE AFTER I GO THROUGH THE MENU".
+     *
+     * ⛔ The bare /v2/subsystems is still a switch, because that one IS this document's section.
+     * ⛔ No backticks in here: template literal.
+     */
+    if (segs.length > 1 && segs[0] === "subsystems") {
+      const sec = sectionNamed("subsystems");
+      const on = sec && sec.getAttribute("data-focused");
+      return on && segs[segs.length - 1] === on ? "subsystems" : null;
+    }
     for (let i = segs.length - 1; i >= 0; i--) {
       /**
        * ⛔ A REAL SECTION FIRST, AND THE ROOT RULE ONLY WHERE THERE IS NONE — THE ORDER IS THE BUG.
@@ -9609,6 +9973,53 @@ export const STYLE = `<style>
    * menu does not change at all. Nesting is the side menu's business.
    */
   .topframe .tabgroup { display: contents; }
+  /*
+   * ⛔ ONLY THE SELECTED GROUP SHOWS ITS ITEMS, and this is the whole of what replaced the filter.
+   *
+   * Each group carries its own list, so "which items belong to this tab" is answered by where they
+   * are in the document. Showing them is then one rule about the group that is marked, rather than a
+   * pass over every row in a shared tree — which is where four separate wrong answers came from.
+   *
+   * Across the top the lists are a drill-down behind the chevron, so they need the frame open AND
+   * their group selected. Down the side each group holds its own and collapses with .shut, which is
+   * already handled below.
+   */
+  .topframe .tabgroup > nav.scopes { display: none; }
+  /*
+   * ⛔ PRESSING THE TAB IS WHAT SHOWS ITS ITEMS. No second control, no open state.
+   *
+   * The first cut required the frame to be .open as well, which is how the drill-down used to work
+   * when one shared tree hid behind a chevron. With each group holding its own list there is nothing
+   * to drill into: the list IS the tab's contents. And the chevron no longer renders at all, because
+   * it was gated on the corpus-wide tree that is now gone — so the extra condition meant the Product
+   * tab had 80 items in the document, correctly marked, and display:none with no way to change it.
+   *
+   * A control that expands nothing is the thing this project refuses by name, so it stays gone.
+   */
+  /*
+   * ⛔ OVERVIEW'S STRIP TAKES ITS OWN LINE TOO, for the same reason the lists do. Inline it sat
+   * between the Overview tab and the rest, pushing Product onto a second row — four tabs that are
+   * meant to read as one row, broken across two by the contents of one of them.
+   */
+  .topframe .tabgroup > .subtabs { flex-basis: 100%; width: 100%; order: 99; }
+  .topframe .tabgroup.on > nav.scopes {
+    display: block;
+    /*
+     * ⛔ A LINE OF ITS OWN, BELOW THE TABS — and without this the menu rendered INSIDE the tab row.
+     *
+     * The group is display:contents in top mode, deliberately: it puts the head back in the tabs
+     * flex row so grouping stays a fact about the DOM. But that makes the list a flex sibling of the
+     * tabs too, so it sat between "Capabilities" and "Product", shoving the later tabs to the right
+     * edge with a column of dead space beside them. Correct items, unusable menu.
+     *
+     * The row is already flex-wrap: wrap, so a full basis puts the list on the next line, and an
+     * order past every tab keeps it after all of them rather than mid-row.
+     */
+    flex-basis: 100%;
+    width: 100%;
+    order: 99;
+    margin: .4rem 0 0;
+  }
   .topframe .tabhead { display: contents; }
   /* ⛔ Nothing to collapse in a row — the twisty is the side menu's control. */
   .topframe .twisty { display: none; }
@@ -9707,6 +10118,17 @@ export const STYLE = `<style>
      * it, not under a new section. And each container should be collapsible"*.
      */
     :root[data-nav="left"] .topframe .tabgroup { display: block; }
+    /*
+     * ⛔ ONE RULE FOR BOTH PLACEMENTS: the selected group shows its items, and no other group does.
+     *
+     * The first cut gave the side menu its own pair of rules, one of which showed EVERY group's
+     * list — so docked left, the product items and all 27 capabilities appeared together under
+     * every tab. That is the "capabilities flattened" Peter has reported four times, reintroduced
+     * by the fix for it, in the one placement he actually reads in.
+     *
+     * The shared rule above is the whole of it. A group's items being inside the group is what
+     * makes one rule enough; that was the point of moving them there.
+     */
     :root[data-nav="left"] .topframe .tabhead { display: flex; align-items: center; gap: .15rem; }
     :root[data-nav="left"] .topframe .tabhead .tab { flex: 1; }
     /*
@@ -10359,6 +10781,35 @@ export const STYLE = `<style>
 
   .gate-note { background: var(--warn-bg); border-left: 3px solid var(--warn); border-radius: 0 6px 6px 0;
     padding: .7rem .9rem; margin: .9rem 0 1.4rem; font-size: .92rem; }
+  /**
+   * ⛔ THE UNASKED HALF READS AS UNASKED, AND NOT AS A QUEUE.
+   *
+   * A question card is a card with a border and a background because it is a thing to act on.
+   * These are not —
+   * nothing here is pressable, by design, because a hole with no drafted options cannot be answered
+   * by choosing. Styling them like questions would offer a reviewer eight cards and no buttons,
+   * which is the state the queue's own ⛔ describes as "reads as finished".
+   *
+   * So: a list, offset by a rule down the left, in the dimmer register the page already uses for
+   * things that are context rather than acts.
+   */
+  /**
+   * ⛔ CONTEXT READS AS CONTEXT. It sits above the options and below the question, dimmer than
+   * both, with each line labelled by what it answers — so a reader can skip it once they know the
+   * feature and cannot mistake it for something being decided.
+   */
+  .q-ctx { margin: .6rem 0 1rem; font-size: .9rem; color: var(--dim); }
+  .q-ctx p { margin: .2rem 0; }
+  .q-ctx .k { color: var(--ink); opacity: .75; }
+  .unasked { margin-top: 2rem; padding-left: .9rem; border-left: 2px solid var(--line); }
+  .unasked h3 { margin: 0 0 .4rem; font-size: 1rem; }
+  .unasked .note { color: var(--dim); font-size: .9rem; margin: .5rem 0 0; }
+  .unasked-list { list-style: none; margin: 1rem 0 0; padding: 0; }
+  .unasked-list li { padding: .7rem 0; border-top: 1px solid var(--line); }
+  /** ⛔ The question is the thing to read, so it carries the page's own ink weight. */
+  .u-asks { margin: 0; font-size: 1rem; line-height: 1.5; color: var(--ink); }
+  .u-why { margin: .25rem 0 0; font-size: .88rem; color: var(--dim); }
+  .u-fills { margin: .25rem 0 0; font-size: .85rem; color: var(--dim); }
   .steer-list { list-style: none; margin: 1rem 0 0; padding: 0; }
   .steer-block { margin-top: 1.6rem; }
   .steer-list li { padding: .6rem 0; border-bottom: 1px solid var(--line); font-size: 1rem; line-height: 1.5; }
@@ -10473,6 +10924,8 @@ export const STYLE = `<style>
   .cap-list li { margin: .4rem 0; }
   .cap-does { display: block; }
   .cap-serves { display: block; font-size: .85rem; color: var(--dim); }
+  .subsys-relied { margin: .35rem 0; font-size: .85rem; color: var(--dim); }
+  .cap-terms { margin: .3rem 0 0; padding-left: 1rem; font-size: .82rem; color: var(--dim); }
   .cap-up { font-style: italic; }
   .cap-dead { color: var(--warn, #b4541f); }
   .g { font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; color: var(--dim); margin: 0 .25rem; }
@@ -10637,9 +11090,17 @@ function renderSettings(corpus: Corpus): string {
  * the furniture of product truth is the exact mistake `packet.ts` made when it printed "accepted
  * separately" on rules nobody had stamped.
  */
-function renderSubsystems(corpus: Corpus, address: (ref: string) => string): string {
-  if (!corpus.capabilities.length) return "";
-  const subs = corpus.capabilities.map((x) => x.capability);
+function renderSubsystems(
+  corpus: Corpus,
+  address: (ref: string) => string,
+  /** The one this page is standing on, where the address named it. ⛔ Absent means the whole tree. */
+  at?: string,
+  /** Where each subsystem is addressed, so the trail above a focused one can be walked back up. */
+  subAddress: (id: string) => string = () => "#"
+): string {
+  const tree = capabilityTree(corpus);
+  if (!corpus.subsystems.length && !tree.carried.length) return "";
+  const subs = corpus.subsystems.map((x) => x.subsystem);
   const titleOf = (id: string) => subs.find((s) => s.id === id)?.title ?? id;
 
   /** What a `serves` ref actually says, so a reader is not left holding an address. */
@@ -10668,7 +11129,36 @@ function renderSubsystems(corpus: Corpus, address: (ref: string) => string): str
    * so it was passing on containment while claiming to measure the indent. The mechanism was
    * redundant and the test was measuring the wrong thing — one defect, visible from two sides.
    */
-  const one = (s: (typeof subs)[number]): string => `
+  /**
+   * ⛔ A CAPABILITY IS SHOWN AS A CONTRACT — WHAT IT GIVES, TO WHOM, AND HOW YOU WOULD KNOW — NOT AS A
+   * FEATURE. Peter: *"seems like our renderer is rendering our capabilities as a feature, which is
+   * wrong - should have its own view, specific to the contracts it provides"*. What converting the
+   * older tree carried word for word (when it is called, the tests it had) lives in the part's body
+   * under one heading per capability, and is read back here beside the capability it belongs to.
+   */
+  const carriedFor = (sid: string): Map<string, string[]> => {
+    const body = corpus.subsystems.find((x) => x.subsystem.id === sid)?.body ?? "";
+    const out = new Map<string, string[]>();
+    const at = body.indexOf("## Carried from the earlier capability tree");
+    if (at < 0) return out;
+    for (const block of body.slice(at).split(/\n### /).slice(1)) {
+      const [head, ...rest] = block.split("\n");
+      out.set(head!.trim(), rest.map((l) => l.replace(/^-\s*/, "").trim()).filter(Boolean));
+    }
+    return out;
+  };
+  /** Who leans on a part: the features that say they rest on it, and the parts that use it. */
+  const reliedOnBy = (sid: string): string[] => [
+    ...corpus.scopes
+      .filter(({ scope }) => scope.depends_on.some((d) => d === `${sid}#offers` || d.startsWith(`${sid}#offers#`)))
+      .map(({ scope }) => `<a href="${esc(address(scope.id))}">${line(scope.title)}</a>`),
+    ...subs.filter((x) => x.uses.includes(sid)).map((x) => `<strong>${line(x.title)}</strong>`),
+  ];
+
+  const one = (s: (typeof subs)[number]): string => {
+    const carried = carriedFor(s.id);
+    const relied = reliedOnBy(s.id);
+    return `
     <article class="subsys" data-ref="${esc(s.id)}">
       <header>
         <h3>${line(s.title)}</h3>
@@ -10680,15 +11170,25 @@ function renderSubsystems(corpus: Corpus, address: (ref: string) => string): str
           ? `<p class="subsys-uses">leans on ${s.uses.map((u) => `<strong>${line(titleOf(u))}</strong>`).join(", ")}</p>`
           : ""
       }
+      ${relied.length ? `<p class="subsys-relied">relied on by ${relied.join(", ")}</p>` : ""}
       ${
         s.offers.length
           ? `<ul class="cap-list">${s.offers
               .map(
                 (o) => `
-            <li>
+            <li class="contract" data-ref="${esc(`${s.id}#offers#${o.id}`)}">
               <code class="creq">${esc(`${s.id}#offers#${o.id}`)}</code>
               <span class="cap-does">${line(o.does)}</span>
-              <span class="cap-serves">for ${o.serves.map(servedText).join(", ")}</span>
+              ${
+                o.serves.length
+                  ? `<span class="cap-serves">for ${o.serves.map(servedText).join(", ")}</span>`
+                  : `<span class="cap-serves cap-dead">serves nothing yet — nobody has said what this is for</span>`
+              }
+              ${
+                (carried.get(o.id) ?? []).length
+                  ? `<ul class="cap-terms">${(carried.get(o.id) ?? []).map((t) => `<li>${line(t)}</li>`).join("")}</ul>`
+                  : ""
+              }
             </li>`
               )
               .join("")}</ul>`
@@ -10699,17 +11199,56 @@ function renderSubsystems(corpus: Corpus, address: (ref: string) => string): str
         .map((x) => one(x))
         .join("")}
     </article>`;
+  };
 
   /** ⛔ Orphans render too. A subsystem filed inside nothing is a `check` refusal, not a reason to
    *  hide it — a page that silently drops it is a page that disagrees with the check. */
   const parented = new Set(subs.filter((s) => s.in && subs.some((x) => x.id === s.in)).map((s) => s.id));
-  const roots = subs.filter((s) => !parented.has(s.id));
+  /**
+   * ⛔ ONE ADDRESS RENDERS ONE PAGE, AND THAT HAS TO HOLD FOR THIS TREE TOO.
+   *
+   * Without this the whole 27-subsystem tree rendered whatever the address said, so every row in
+   * the new menu led to the same 145 KB page and the reader had to find their way back to the part
+   * they had just chosen. That is the defect the scope side of this file already fixed — Peter:
+   * *"we need to stop the 'server re-rendering' of anything"* — and the machinery had no reason to
+   * be the exception.
+   */
+  const focus = at ? subs.find((x) => x.id === at) : undefined;
+  const roots = focus ? [focus] : subs.filter((s) => !parented.has(s.id));
+  /**
+   * ⛔ THE WAY BACK UP IS ON THE PAGE, because a focused page is reached from a menu that may be
+   * collapsed behind a chevron. Every ancestor is somewhere you can stand, so each is a link — the
+   * same argument the scope breadcrumb's own comment makes.
+   */
+  const up = focus
+    ? (() => {
+        const trail = subsystemTrailsOf(corpus)[focus.id] ?? [];
+        const above = trail.slice(0, -1);
+        return `<p class="subsys-up"><a href="${esc(subAddress(""))}">The machinery</a>${above
+          .map((c) => ` › <a href="${esc(subAddress(c.id))}">${line(c.label)}</a>`)
+          .join("")}</p>`;
+      })()
+    : "";
 
-  return `<section class="view" id="view-subsystems" data-view="subsystems" data-ref="subsystems" data-label="How it works">
-    <p class="lede">The parts of the system beneath the product, and roughly what each does.
+  /**
+   * ⛔ THE SECTION SAYS WHICH SUBSYSTEM IT IS SHOWING, because the client has to tell this page's own
+   * address apart from another page's. Without it, handing every focused machinery link to the
+   * browser also handed it THIS page's address on a cold arrival, so the landing fell through to
+   * Overview and rewrote the URL — measured: served /v2/subsystems/records/ledger, ended up at
+   * /v2/overview with the tree intact and the focus gone.
+   */
+  return `<section class="view" id="view-subsystems" data-view="subsystems" data-ref="subsystems"${
+    focus ? ` data-focused="${esc(focus.id)}"` : ""
+  } data-label="Capabilities">
+    ${
+      focus
+        ? `${up}`
+        : `<p class="lede">The parts of the system beneath the product, and roughly what each does.
     ⛔ <strong>Not product truth, and nobody has agreed to any of it.</strong> This is engineering's
     answer to what the product promised — each part says what it exists to serve, and you can follow
     that back to the behaviour that required it. What the product commits to is on the features.</p>
+    <p class="subsys-count" data-subsystems="${tree.counts.subsystems}" data-capabilities="${tree.counts.capabilities}" data-carried="${tree.carried.length}">${line(tree.says)}</p>`
+    }
     ${roots.map((s) => one(s)).join("")}
   </section>`;
 }

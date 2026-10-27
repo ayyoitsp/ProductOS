@@ -355,6 +355,37 @@ export const SLOT_ASKS_SHORT: Record<SlotName, string> = {
   at_once: "two at once",
 };
 
+/**
+ * The same asks, as a question somebody is actually put in front of.
+ *
+ * ⛔ A THIRD FORM, AND IT BELONGS HERE FOR THE REASON THE COMMENT ABOVE GIVES. `SLOT_ASKS` and
+ * `SLOT_ASKS_SHORT` sit together so *"a change to either is visible against the other"*; this is
+ * the same fact in the third shape a surface needs, so it sits in the same place. A table of
+ * question wordings anywhere else is the drift that comment is about.
+ *
+ * ⛔ AND IT IS NOT DERIVABLE FROM EITHER OF THE OTHER TWO, which is why composing one was wrong.
+ * `SLOT_ASKS` completes *"this slot says ___"*, and its entries are a mix of noun phrases (*"who is
+ * permitted to ask"*) and clauses (*"what happens when it is asked twice"*). The first attempt at
+ * the interview built questions as `what is ${SLOT_ASKS[slot]}?` and produced **"what is what
+ * happens when it is asked twice?"** on two of the eight — a template that reads fine on the slot
+ * you tested and is broken on the others, which is this project's most-repeated defect wearing a
+ * grammar.
+ *
+ * ⛔ POINTED AND IN THE SECOND PERSON. Peter: *"pointed, directed questions"*. These are what a
+ * person reads on a page or in a terminal, so they ask about the product and never about the model
+ * — no slot name, no `asker`, no ref.
+ */
+export const SLOT_ASKED: Record<SlotName, string> = {
+  may: "Who is allowed to do this?",
+  with: "What does somebody have to know before they can do it?",
+  answer: "What do they get back?",
+  after: "What is different afterwards, whether or not they see it?",
+  refuses: "What can this refuse, when does it refuse, and what is the person told?",
+  fails: "What is somebody left with when this cannot be done?",
+  again: "What happens when this is done twice?",
+  at_once: "What happens when two people do this at the same time?",
+};
+
 // ---------------------------------------------------------------------------
 // Standing — the disposition of a slot. One enum; each value demands its companions.
 
@@ -487,7 +518,29 @@ export const Standing = z
              * action; `only the part in question` is honest about being a fragment, and
              * `decide` then asks for the merged sentence and shows what is being replaced.
              */
-            replaces: z.enum(["the whole sentence", "only the part in question"]).optional(),
+            /**
+             * ⛔ A THIRD VALUE, BECAUSE THE MODEL COULD SAY "THIS SENTENCE IS WRONG" AND NOT "A
+             * SENTENCE IS MISSING" — AND THE SECOND IS THE SHAPE OF EVERY JUDGE FINDING.
+             *
+             * Recorded as fg-0001 after it bit on Peter's own first answer. The question sat on
+             * `pl-start-a-deal#resume-a-deal-already-started#answer`, a slot saying three separately
+             * identified things. Its `about` was *"whether a processor is offered deals that somebody
+             * else started"* — which is not any of the three. So `of` could not be set (there is no
+             * statement to name), and the only write `settle` offered was the no-`of` branch, which
+             * replaces the whole slot with one string.
+             *
+             * He chose an option. It was refused: *"a ruling here becomes the whole sentence, so
+             * picking an option that answers only the unruled part would delete the rest"*. His
+             * decision stood and the slot did not say it.
+             *
+             * ⛔ `adds a statement` IS THE HONEST THIRD CASE. The option is neither a replacement for
+             * the slot nor a rewrite of one sentence in it — it is a new sentence to sit beside the
+             * others. `settle` appends it with its own id and leaves every sibling byte-identical,
+             * which is exactly what the `of` branch already proves is possible.
+             */
+            replaces: z
+              .enum(["the whole sentence", "only the part in question", "adds a statement"])
+              .optional(),
             /**
              * ⛔ FOR A `refuses` QUESTION, because `refuses` was unsettleable by any command.
              *
@@ -740,11 +793,30 @@ export function refineStanding(
       message:
         "`about` names something nobody has ruled, so it cannot sit on a settled standing — if one thing about this sentence is genuinely in question, keep the sentence and make the standing `open` with this `about`, which is the only form that reaches a person",
     });
-  if (!settled && context.hasContent && !s.about)
+  /**
+   * ⛔ ON A CASE, `asks` IS THIS REQUIREMENT ANSWERED BETTER — AND DEMANDING BOTH MADE THE ONE SLOT
+   * A CORPUS MOST OFTEN LEAVES OPEN THE ONE SLOT NOTHING COULD DRAFT FOR. Recorded as fg-0002.
+   *
+   * Both fields answer "which part of this is in question". `about` answers it in prose about a
+   * sentence; `asks` answers it with the FIELD — `whether` it refuses at all, `when`, or what the
+   * asker is `told`. For a named refusal the enum is strictly the better answer, because a case is
+   * not a sentence: it is three fields, and which one is in question is the whole question.
+   *
+   * ⛔ THE COST OF ASKING FOR BOTH WAS NOT PEDANTRY, IT WAS A DEAD END. `about` keys the demand
+   * that every candidate declare `replaces` — "the whole replacement sentence, or only the part in
+   * question". A case has no single sentence to replace, so there is no honest answer, and the only
+   * way to write a question onto a refusal was to claim an option replaced part of a sentence that
+   * does not exist. Measured by running it: a drafter was walked through `about`, then `replaces`,
+   * and what it finally wrote was a question tagged `of: already-paid` sitting beside the refusal
+   * rather than on it, which the reader then reported as settled.
+   */
+  if (!settled && context.hasContent && !s.about && !(context.isCase && s.asks))
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       path: [...at, "about"],
-      message: `this ${context.what} says something AND carries an unsettled standing — say which part of it is in question, or the whole sentence reads unruled and every surface discards it`,
+      message: context.isCase
+        ? `this ${context.what} says something AND carries an unsettled standing — say which part of it is in question with \`asks\`: \`whether\` it refuses at all, \`when\` it refuses, or what the asker is \`told\``
+        : `this ${context.what} says something AND carries an unsettled standing — say which part of it is in question, or the whole sentence reads unruled and every surface discards it`,
     });
   if (s.kind !== "open" && (s.candidates ?? []).length)
     ctx.addIssue({
@@ -1129,6 +1201,37 @@ export const DEMONSTRABLE_SLOTS: readonly SlotName[] = [
   "again",
   "at_once",
 ];
+
+/**
+ * The five slots whose answer is a POLICY, and the three whose answer is a fact about one ask.
+ *
+ * ⛔ THIS IS WHAT MAKES FOLDING HONEST, AND WITHOUT IT THE FOLD WAS A LIE ON THREE SLOTS.
+ *
+ * `interview.ts` offers several behaviours blank on one slot as ONE question, on the grounds that
+ * the slot IS the question — `SLOT_ASKS.at_once` is one sentence and it is the same sentence at
+ * every site. That holds for what a product does about permission, refusal, failure, repetition and
+ * concurrency: each is a decision taken once and applied, which is exactly why `Rule` exists and
+ * why it can SUPPLY these outright.
+ *
+ * It does not hold for the other three. *"What must be known to ask"*, *"what the asker gets"* and
+ * *"what is true afterwards"* are facts about one ask — three behaviours blank on `after` are blank
+ * on three different questions, and folding them offers one answer for all three. A reviewer who
+ * picked it would have settled two behaviours they were never shown.
+ *
+ * ⛔ READ OFF THE RULES A REAL CORPUS HAS, not reasoned from the names. Every rule in `v2-seed`
+ * SUPPLIES one of these five (`only-a-parent-moves-money` → `may`, `a-repeat-does-nothing-twice` →
+ * `again`, `nothing-half-happens` → `fails`, `amounts-refuse-the-same-way` → `refuses`,
+ * `one-hand-at-a-time` → `at_once`). **No rule anywhere fills `with` or `after`.** `answer` is the
+ * one to look at twice: three rules declare `fills: [answer]` and the grid shows it `✓+R4+R9` at
+ * every site — stated locally and CONSTRAINED by a rule, never supplied by one. A cross-cutting
+ * claim about how a figure reads is not an answer to what the asker gets.
+ *
+ * ⛔ NOT `DEMONSTRABLE_SLOTS` WITH A TWEAK, THOUGH IT IS ONE SLOT AWAY. That set answers "does this
+ * owe a given/when/then"; this one answers "is one answer here an answer everywhere". `answer` owes
+ * a demonstration and does not fold, which is the whole difference — collapsing them would make the
+ * next change to either silently change the other.
+ */
+export const POLICY_SLOTS: readonly SlotName[] = ["may", "refuses", "fails", "again", "at_once"];
 
 /**
  * Whether this slot, as filled, owes a given/when/then of its own.
@@ -2896,7 +2999,7 @@ export const Scope = z.object({
 export type Scope = z.infer<typeof Scope>;
 
 // ---------------------------------------------------------------------------
-// Capability — the subsystems beneath the product, and roughly what each does.
+// Subsystem and Capability — the parts beneath the product, and roughly what each does.
 
 /**
  * ⛔ RESTORED. A CLAUDE SESSION DELETED THIS AND NOBODY ASKED IT TO.
@@ -2936,7 +3039,13 @@ export type Scope = z.infer<typeof Scope>;
  * product truth; this layer says what parts there are and what each is for. Anything that
  * makes an engineer write a given/when/then here has misunderstood the layer.
  */
-export const CapabilityOffering = z
+/**
+ * ⛔ NAMED SO THE WORD MEANS ONE THING. This was `CapabilityOffering`, beside a `Capability` that was
+ * really a subsystem — so the thing a person calls a capability had the longer, odder name, and
+ * Peter asked *"did you create CapabilityOffering? is that supposed to be the new capability tree?
+ * i'm confused"*. A `Subsystem` offers `Capability`s; there is one tree and these are its leaves.
+ */
+export const Capability = z
   .object({
     id: z.string().regex(new RegExp(`^${SEGMENT}$`), "a capability id is one segment, kebab-case"),
     /** Roughly what it does. One or two sentences — see the constraint above. */
@@ -2961,7 +3070,15 @@ export const CapabilityOffering = z
      * money. What `check` enforces is that following `serves` eventually reaches product
      * truth: machinery that only ever serves machinery is machinery nobody asked for.
      */
-    serves: z.array(z.string().regex(REF_PATTERN, REF_MESSAGE)).min(1),
+    /*
+     * ⛔ AND NOW REQUIRED AT `check`, NOT HERE — because the premise above stopped being true. The
+     * older tree carried into product truth is converted into this one (`convert-capabilities.ts`),
+     * and a carried capability nothing declared a dependency on has no honest `serves` to write.
+     * Refused at the schema, it would not load and would vanish from every page; refused at `check`
+     * as `a-capability-that-serves-nothing`, it is shown, named, and blocks handover until a person
+     * says what it is for.
+     */
+    serves: z.array(z.string().regex(REF_PATTERN, REF_MESSAGE)).default([]),
     /**
      * What this was worked out from, and when — the same shape `Criterion.derived` carries, and
      * for the same reason.
@@ -2997,9 +3114,9 @@ export const CapabilityOffering = z
       .optional(),
   })
   .strict();
-export type CapabilityOffering = z.infer<typeof CapabilityOffering>;
+export type Capability = z.infer<typeof Capability>;
 
-export const Capability = z
+export const Subsystem = z
   .object({
     id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/, "subsystem ids are kebab-case slugs, not paths"),
     title: z.string().min(2),
@@ -3028,7 +3145,7 @@ export const Capability = z
      * a cycle between two subsystems indistinguishable from a layering.
      */
     uses: z.array(z.string()).default([]),
-    offers: z.array(CapabilityOffering).default([]),
+    offers: z.array(Capability).default([]),
   })
   .strict()
   .superRefine((c, ctx) => {
@@ -3049,7 +3166,7 @@ export const Capability = z
       seen.add(o.id);
     }
   });
-export type Capability = z.infer<typeof Capability>;
+export type Subsystem = z.infer<typeof Subsystem>;
 
 // ---------------------------------------------------------------------------
 // Reading — an observation. ⛔ Never truth.
@@ -3592,6 +3709,26 @@ export const NOT_A_DOCUMENT: Record<string, string> = {
  * almost nothing an hour later. The ref they were looking at is captured with the words, because
  * reconstructing it is the part nobody can do afterwards.
  */
+/**
+ * How a REQUEST arrived — ⛔ A DIFFERENT QUESTION FROM HOW CONSENT WAS OBTAINED, which is why this
+ * is not `VIA`.
+ *
+ * `Verdict.via` asks *how was this person's agreement obtained*, and every value has to be a way a
+ * human could have agreed. A note is not consent: it asks *how did this request reach us*, and two
+ * of its answers have no meaning on a verdict at all —
+ *
+ *   `agent`   software asked for this change on its own behalf. A probe, or a session relaying.
+ *   `review`  ⛔ NOBODY ASKED. A judge found it while reading and a session wrote it down. It owes
+ *             `assumed`, and it is the one value the interviewer drafts questions from.
+ *
+ * ⛔ AND IT WAS THREE HAND-WRITTEN LISTS BEFORE THIS. `VIA` in acts.ts, one inline enum on the
+ * reading, one on the note — and adding `review` to only the note's left the door validating
+ * against `VIA`, so the value the schema accepted was refused one layer out: *"review is not a way
+ * a request could have arrived"*, listing the five that are not it. Found by driving the door.
+ */
+export const NOTE_VIA = ["page", "question", "chat", "cli", "agent", "review"] as const;
+export type NoteVia = (typeof NOTE_VIA)[number];
+
 export const Note = z
   .object({
     id: z.string().min(1),
@@ -3600,8 +3737,35 @@ export const Note = z
     says: z.string().min(1, "an empty note is a click nobody can act on"),
     by: z.string().min(1),
     at: z.string(),
-    /** ⛔ Which surface it came from, for the same reason a verdict records it. */
-    via: z.enum(["page", "question", "chat", "cli"]),
+    /**
+     * ⛔ Which surface it came from, for the same reason a verdict records it.
+     *
+     * ⛔ `review` IS NOT A SURFACE AND THAT IS THE POINT. The other four are places a PERSON was
+     * standing. `review` says no person asked for this at all: a judge found it while reading, and
+     * a session wrote it down. Peter's own worry about the queue was *"and what are those 6
+     * requests, i did not send any requests"* — five probes rendered as five people asking him for
+     * changes. A judge's finding filed as `chat` would be the same confusion with a hundred times
+     * the volume, and the one thing a reader must be able to tell is whether somebody asked.
+     */
+    via: z.enum(NOTE_VIA),
+    /**
+     * What somebody would do if nobody answered this — ⛔ THE RISK, AND IT IS NOT THE FINDING.
+     *
+     * `productos-buildability` has said this from the day it was written: its output is *"the
+     * questions somebody would hit in their first day, each with what they would probably assume if
+     * nobody answered — because the assumption is the actual risk, not the question."* That second
+     * half had nowhere to live, so every finding it ever produced arrived as prose and the part
+     * carrying the risk was the part most easily dropped in the retelling.
+     *
+     * ⛔ AND IT IS WHAT MAKES A FINDING ANSWERABLE. An assumption is a candidate answer that nobody
+     * chose — which is exactly the shape `Standing.candidates` wants, and the reason a stored
+     * finding can become a question somebody picks between rather than an essay somebody rewrites.
+     *
+     * ⛔ REQUIRED ON A `review` NOTE. A reviewer that names a gap without saying what would happen
+     * if it stayed open has filed a worry, not a finding — and a queue of worries is the thing
+     * `decide` calls a decoration.
+     */
+    assumed: z.string().min(10).optional(),
     /**
      * ⛔ CLOSING A NOTE SAYS WHAT WAS DONE, or the queue becomes a list nobody trusts.
      *
@@ -3686,6 +3850,32 @@ export const Note = z
   })
   .strict()
   .superRefine((n, ctx) => {
+    /**
+     * ⛔ A REVIEW FINDING OWES ITS ASSUMPTION, and a note that owes nothing is a worry.
+     *
+     * The one thing that makes a judge's finding worth a person's attention is what happens if it
+     * stays open — `buildability`'s own brief: *"the assumption is the actual risk, not the
+     * question"*. Without it a reader has a gap named at them and no way to weigh it, and the
+     * interviewer has nothing to draft an option from.
+     *
+     * ⛔ REFUSED RATHER THAN NOTED, because the alternative is a queue that fills with reviewer
+     * observations nobody can act on — which is how 1,560 real questions came to be invisible
+     * behind noise once already.
+     */
+    if (n.via === "review" && !n.assumed)
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["assumed"],
+        message:
+          "a review finding has to say what somebody would assume if nobody answered it — that is the risk, and without it this is a worry rather than a finding",
+      });
+    /** ⛔ And the converse: nobody but a reviewer is in a position to say what a builder would assume. */
+    if (n.assumed && n.via !== "review")
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["assumed"],
+        message: `"assumed" is what a reviewer found somebody would do unasked — on a note from ${n.via} it would be putting words in the mouth of whoever filed it`,
+      });
     if (n.state === "done" && !n.outcome)
       ctx.addIssue({
         code: z.ZodIssueCode.custom,

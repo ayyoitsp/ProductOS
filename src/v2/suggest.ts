@@ -32,15 +32,67 @@ export type Wrote = { ok: true; file: string; ref: string; said: string } | { ok
 
 const SEGMENT = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
-/** `<scope>#<exchange>#<slot>[#<statement>]`, read apart. */
-function slotRef(ref: string): { scope: string; exchange: string; slot: SlotName; statement?: string } | { error: string } {
+/**
+ * `<scope>#<exchange>#<slot>[#<case or statement>]`, read apart.
+ *
+ * ⛔ THE FOURTH SEGMENT IS NOT RESOLVED HERE, because what it means depends on the slot it lands
+ * on and this function has only the string. `REF_MESSAGE` has always said it is "a named refusal
+ * or one statement"; this file read it as a statement always. See `grainOf`.
+ */
+function slotRef(ref: string): { scope: string; exchange: string; slot: SlotName; part?: string } | { error: string } {
   const parts = ref.split("#");
   if (parts.length < 3 || parts.length > 4 || parts.some((p) => !p))
     return { error: `"${ref}" is not a slot — expected <scope>#<exchange>#<slot>, e.g. money#record-spending#after` };
-  const [scope, exchange, slot, statement] = parts;
+  const [scope, exchange, slot, part] = parts;
   if (!(SLOT_NAMES as readonly string[]).includes(slot))
     return { error: `"${slot}" is not a slot — one of ${SLOT_NAMES.join(", ")}` };
-  return { scope, exchange, slot: slot as SlotName, statement };
+  return { scope, exchange, slot: slot as SlotName, part };
+}
+
+/**
+ * Which thing in a slot a four-segment ref addresses, and therefore WHERE a standing goes.
+ *
+ * ⛔ THIS IS fg-0002, AND THE BUG WAS A GUESS DRESSED AS A PARSE. `REF_MESSAGE` says the fourth
+ * segment is "a named refusal or one statement"; `ref.ts` resolves it as either; this file assumed
+ * statement and wrote `of:` on the SLOT. So two readers disagreed about one address:
+ *
+ * | | read `#already-paid` as | so it |
+ * | --- | --- | --- |
+ * | this file, writing | one statement of the slot | wrote the slot's standing, tagged `of:` |
+ * | `ref.ts`, reading | a named refusal | read the REFUSAL's standing — which was empty |
+ *
+ * The question therefore went somewhere nothing asking that address would look: asked at
+ * `payouts#pay-for-a-task#refuses#already-paid`, read back at the same ref, the answer was *"already
+ * settled — it says what it is"*, with a live question carrying two candidates and a cost sitting
+ * one level above it. `RefusalOutcome.standing` has existed the whole time, with its own validated
+ * contract — the home was built and nothing could reach it.
+ *
+ * ⛔ AND A NAME THAT MATCHES NO CASE IS NOW AN ERROR NAMING THE CASES THERE ARE. Previously it
+ * became `of: <whatever-was-typed>` with no complaint, so a typo produced a question filed against
+ * a statement that does not exist — indistinguishable, on the page, from one correctly filed.
+ */
+function grainOf(
+  fill: Record<string, unknown>,
+  slot: SlotName,
+  part: string | undefined
+): { holder: Record<string, unknown>; isCase: boolean; statement?: string } | { error: string } {
+  if (!part) return { holder: fill, isCase: false };
+  if (slot === "refuses") {
+    const outcomes = (Array.isArray(fill.outcomes) ? fill.outcomes : []) as Array<Record<string, unknown>>;
+    const hit = outcomes.find((x) => x && x.name === part);
+    if (hit) return { holder: hit, isCase: true };
+    /**
+     * ⛔ A refusal is named, never described — so `refuses` holds cases and not statements, and a
+     * fourth segment here can only be meant as a case. Falling through to `of:` would file the
+     * question against a statement the slot cannot have.
+     */
+    if (outcomes.length)
+      return {
+        error: `"${part}" is not one of the refusals here — ${outcomes.map((x) => `"${String(x.name)}"`).join(", ")}`,
+      };
+    return { error: `this refusal slot names no cases yet, so "${part}" addresses nothing — ask at the slot instead` };
+  }
+  return { holder: fill, isCase: false, statement: part };
 }
 
 /** Kebab-case from a sentence, so nobody is asked to invent an id for words they just wrote. */
@@ -98,7 +150,7 @@ export function suggestClaim(
 ): Wrote {
   const r = slotRef(o.ref);
   if ("error" in r) return { ok: false, why: r.error };
-  if (r.statement) return { ok: false, why: "a suggestion is added to a slot, not to one of its statements — drop the last part of the ref" };
+  if (r.part) return { ok: false, why: "a suggestion is added to a slot, not to one of its statements — drop the last part of the ref" };
   if (r.slot === "refuses")
     return { ok: false, why: "`refuses` holds named refusals, not sentences", detail: ["raise it as a question with drafted outcomes instead (intent: ask)"] };
   const says = o.says.trim();
@@ -154,6 +206,8 @@ export function raiseQuestion(
     blocks: string[];
     cost?: string;
     about?: string;
+    /** For a named refusal: which part of the case is in question. See `grainOf`. */
+    asks?: "whether" | "when" | "told";
     candidates?: unknown[];
     by: string;
   }
@@ -163,18 +217,147 @@ export function raiseQuestion(
   const f = open(root, r.scope, r.exchange);
   if ("error" in f) return { ok: false, why: f.error };
   const fill = (f.slots[r.slot] ??= {});
-  const was = fill.standing as Record<string, unknown> | undefined;
-  if (was && was.kind && was.kind !== "stated")
+  /**
+   * ⛔ WHERE THE STANDING GOES IS RESOLVED AGAINST THE LOADED SLOT, NOT THE REF STRING — fg-0002.
+   * A named refusal carries its own question; it is not a statement of the slot above it.
+   */
+  const g = grainOf(fill, r.slot, r.part);
+  if ("error" in g) return { ok: false, why: g.error };
+  /**
+   * ⛔ A CASE NEEDS `asks` AND THE REFUSAL FOR IT IS WORTH MORE THAN A SCHEMA DUMP. The model
+   * demands it because three different questions were being answered into one field — *"is this
+   * refused at all?"* answered into `told` produced a user-facing message saying it is not refused.
+   */
+  if (g.isCase && !o.asks)
     return {
       ok: false,
-      why: `${o.ref} is already ${was.kind}${was.question ? `: "${String(was.question).trim()}"` : ""}`,
-      detail: ["one question per slot — answer or reword the one that is there"],
+      why: `a question on the refusal "${String(g.holder.name)}" has to say which part of it is in question`,
+      detail: [
+        "`asks: whether` — does it refuse in this case at all?",
+        "`asks: when` — it refuses, but is this the right condition?",
+        "`asks: told` — it refuses and the condition is right, but are these the words?",
+        "⛔ without it a ruling is written into `told`, so answering \"is this refused at all?\" produces a refusal message saying it is not refused",
+      ],
     };
-  fill.standing = {
+  if (!g.isCase && o.asks)
+    return {
+      ok: false,
+      why: "`asks` names which part of a NAMED REFUSAL is in question, and this ref does not address one",
+      detail: ["on a slot or one of its statements, `about` is the field that says which part is unruled"],
+    };
+  const was = g.holder.standing as Record<string, unknown> | undefined;
+  /**
+   * ⛔ "ONE QUESTION PER SLOT" WAS NEVER A PRODUCT RULE — it was `SlotFill.standing` being one
+   * object, and the refusal it produced said so as though it were a decision.
+   *
+   * Peter, on the two things it cost: *"per my original prompt - questions should seek to answer
+   * MULTIPLE questions in an EFFICIENT manner. no idea why this limitation would exist"* and
+   * *"again, one question per slot is not a requirement"*.
+   *
+   * Two separate failures came out of that one refusal, and they need different answers:
+   *
+   *  1. **A missing option could never be added.** A question drafted with two candidates was frozen
+   *     at whatever its first drafter wrote. `ask` was the only route, it refused an open slot, and
+   *     the refusal's own advice — *"reword the one that is there"* — is not an act anything
+   *     implements. So a judge's finding became a question, and if one of its options was wrong
+   *     nobody could fix it.
+   *  2. **A second question about a DIFFERENT statement had nowhere to go.** An eleven-statement
+   *     slot can hold eleven genuinely separate questions and could hold one, serialised for no
+   *     product reason.
+   *
+   * ⛔ THIS FIXES (1) HERE AND REPORTS (2) HONESTLY. Adding to the question that is there is a
+   * merge, which needs no new grain. Two questions at once needs a standing per STATEMENT — the
+   * fourth grain, which `refineStanding` was built to make cheap — and that is a model change, not
+   * a merge. Pretending otherwise by overwriting the first question would lose it silently, which
+   * is worse than the limit.
+   */
+  if (was && was.kind && was.kind !== "stated") {
+    /**
+     * ⛔ A CASE IS ITS OWN GRAIN, so there is nothing to disambiguate: the standing found here
+     * belongs to this refusal and no other. `of` keys sameness only among statements of one slot.
+     */
+    const sameThing = g.isCase || !g.statement || was.of === g.statement;
+    /**
+     * ⛔ A DIFFERENT STATEMENT IS A DIFFERENT QUESTION, and merging into the one that is there
+     * would answer the wrong thing. Named as the gap it is rather than refused as a rule.
+     */
+    if (!sameThing)
+      return {
+        ok: false,
+        why: `${o.ref} already carries a question about "${String(was.of)}", and this one is about "${g.statement}"`,
+        detail: [
+          "a slot holds one standing, so two questions about two statements cannot both sit here yet",
+          "⛔ this is a limit of the model and not a rule about questions — recorded as a framework gap",
+          "meanwhile: settle the one that is there, or ask this at the slot as a whole",
+        ],
+      };
+    /**
+     * ⛔ THE SAME QUESTION, WITH MORE ON THE TABLE. Candidates are appended, not replaced — a
+     * drafter adding a third reading must not be able to delete the two a person has been weighing.
+     * Everything else about the standing is left exactly as it was asked, including who owes it.
+     */
+    const have = Array.isArray(was.candidates) ? (was.candidates as unknown[]) : [];
+    const adding = o.candidates ?? [];
+    /**
+     * ⛔ `blocks` ON AN EXISTING QUESTION — THE ACT THAT SAYS "THESE ARE ONE DECISION", AND THE ONE
+     * THING THE INTERVIEWER COULD NOT DO.
+     *
+     * Peter, on being handed four questions where two were the same decision: *"the whole point of
+     * the feature is to reduce the operator load. it could even be more than one question. that's
+     * the intelligence we need from the interviewer."*
+     *
+     * `blocks` is the model's own way to say *"answering this settles that"*, and the worklist folds
+     * questions that name each other into one item. But it could only be set when a question was
+     * CREATED — so a role noticing afterwards that two existing questions are one had nowhere to
+     * record it, and both kept their `blocks: []`, which positively asserts each settles nothing but
+     * itself. Recorded as fg-0004 until now.
+     *
+     * ⛔ UNIONED, NEVER REPLACED, for the reason candidates are. A later reader adding a third ref
+     * must not be able to drop the two already named, and `[]` is a real answer meaning "the rest
+     * can ship without this" — so an empty list sent here adds nothing rather than erasing what is
+     * there.
+     *
+     * ⛔ AND IT IS THE ONLY JUDGEMENT IN THIS FILE. Which questions are one decision cannot be
+     * computed — it is a reading of what two sentences mean, which is why it is an author's act
+     * recorded in a field and not a similarity score. See the worklist's fold for what it does with
+     * the field once it is honest.
+     */
+    const alsoBlocks = (o.blocks ?? []).filter((b) => b !== o.ref);
+    if (!adding.length && !alsoBlocks.length)
+      return {
+        ok: false,
+        why: `${o.ref} is already ${was.kind}${was.question ? `: "${String(was.question).trim()}"` : ""}`,
+        detail: [
+          "it is already asked, so there are two things to add here: another answer (`candidates`), or the other questions this one answer settles (`blocks`)",
+          "⛔ the question itself is not reworded from here: a question somebody has been weighing is not rewritten under them",
+        ],
+      };
+    if (adding.length) was.candidates = [...have, ...adding];
+    if (alsoBlocks.length) {
+      const held = Array.isArray(was.blocks) ? (was.blocks as string[]) : [];
+      was.blocks = [...new Set([...held, ...alsoBlocks])];
+    }
+    if (o.cost && !was.cost) was.cost = o.cost.trim();
+    const savedMerge = save(f);
+    if (!savedMerge.ok) return savedMerge;
+    const said = [
+      adding.length ? `${adding.length} answer${adding.length === 1 ? "" : "s"}` : "",
+      alsoBlocks.length ? `${alsoBlocks.length} question${alsoBlocks.length === 1 ? "" : "s"} this one settles` : "",
+    ].filter(Boolean);
+    return {
+      ok: true,
+      file: f.file,
+      ref: o.ref,
+      said: `added ${said.join(" and ")} to the question at ${o.ref}`,
+    };
+  }
+  g.holder.standing = {
     kind: "open",
     question: o.question.trim(),
     ...(o.about ? { about: o.about.trim() } : {}),
-    ...(r.statement ? { of: r.statement } : {}),
+    /** ⛔ `asks` on a case, `of` on a statement — never both, and never `of` on a case. */
+    ...(g.isCase ? { asks: o.asks } : {}),
+    ...(g.statement ? { of: g.statement } : {}),
     ...(o.candidates?.length ? { candidates: o.candidates } : {}),
     ...(o.cost ? { cost: o.cost.trim() } : {}),
     asked_of: o.asked_of,
@@ -234,7 +417,13 @@ export function proposeRequirement(
   criteria.push({
     id,
     slot: r.slot,
-    ...(r.statement ? { of: r.statement } : {}),
+    /**
+     * ⛔ STILL THE RAW SEGMENT HERE, AND DELIBERATELY UNCHANGED BY THE fg-0002 FIX. `Criterion.of`
+     * is its own field with its own meaning, and whether a criterion may pin one named refusal is
+     * a question about testing requirements, not about where a question goes. Changing it in the
+     * same pass would be a guess — see the note left on fg-0002's closure.
+     */
+    ...(r.part ? { of: r.part } : {}),
     ...(o.given?.trim() ? { given: o.given.trim() } : {}),
     ...(o.when?.trim() ? { when: o.when.trim() } : {}),
     ...(then ? { then } : {}),

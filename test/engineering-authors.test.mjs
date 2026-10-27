@@ -121,9 +121,26 @@ test("⛔ engineering authors run where truth is written; engineering judges sti
   assert.ok(names.includes("machinist"), "the machinery half is written after somebody signed off, or never");
   assert.ok(names.includes("instrumenter"));
 
-  const judgeNames = new Set(AGENTS.filter((a) => a.discipline === "engineering").map((a) => a.name));
+  /**
+   * ⛔ `buildability` IS EXEMPT BY DECISION, AND IT IS THE ONLY ONE.
+   *
+   * The rule above is right about what a judge's read does to a draft. What changed is a number:
+   * on Peter's corpus 1 of 131 features is past `ready for review`, so the one role that can find
+   * what is MISSING rather than what is blank could run on one feature — and only on features
+   * already validated, which is backwards. Offered split / exempt / leave-gated, he chose
+   * *"Exempt it — just run it early ... verdict and all."* `agents-and-areas` carries the longer
+   * note and what to do if it bites.
+   *
+   * ⛔ THE TEST STILL BITES FOR EVERY OTHER ENGINEERING JUDGE — `truthfulness` and `architecture`
+   * — so this is one named exemption rather than the split being abandoned.
+   */
+  const judgeNames = new Set(
+    AGENTS.filter((a) => a.discipline === "engineering" && a.name !== "buildability").map((a) => a.name)
+  );
   for (const n of names)
     assert.ok(!judgeNames.has(n), `${n} judges, and judging a draft nobody agreed to is what the split exists to prevent`);
+  /** ⛔ And the exemption is real rather than vacuous: the role it names is actually on the route. */
+  assert.ok(names.includes("buildability"), "buildability was exempted from the gate and then not run early anyway");
 });
 
 test("every engineering author is reachable from a route, and fans where a codebase demands it", () => {

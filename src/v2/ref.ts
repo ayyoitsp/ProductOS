@@ -139,16 +139,16 @@ export function resolveRef(corpus: Corpus, raw: string): Resolved | { error: str
    * was talking about, which is exactly the symptom the happy-path branch below was added for.
    */
   if ((parts.length === 2 || parts.length === 3) && parts[1] === "offers") {
-    const sub = corpus.capabilities.find((x) => x.capability.id === parts[0]);
+    const sub = corpus.subsystems.find((x) => x.subsystem.id === parts[0]);
     if (sub) {
       /** `<id>#offers` is the subsystem itself — see why it is not addressable bare, below. */
       if (parts.length === 2)
         return { ref: { kind: "subsystem", id: raw, subsystem: parts[0]! }, unsettled: false };
-      const one = sub.capability.offers.find((o) => o.id === parts[2]);
+      const one = sub.subsystem.offers.find((o) => o.id === parts[2]);
       if (!one)
         return {
-          error: sub.capability.offers.length
-            ? `${parts[0]} offers no "${parts[2]}" — it offers ${sub.capability.offers.map((o) => o.id).join(", ")}`
+          error: sub.subsystem.offers.length
+            ? `${parts[0]} offers no "${parts[2]}" — it offers ${sub.subsystem.offers.map((o) => o.id).join(", ")}`
             : `${parts[0]} offers nothing — it is a container, and groups the subsystems filed inside it`,
         };
       /** ⛔ No standing. A capability is engineering's sketch, not a claim with a decision behind it. */

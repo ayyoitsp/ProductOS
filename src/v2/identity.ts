@@ -171,7 +171,12 @@ const doorOf = (p: Principal): (typeof NOT_A_PERSON)[keyof typeof NOT_A_PERSON] 
  * whatever `--via` it was handed, so `accept --by peter --via chat` from an agent's Bash tool
  * produced a verdict byte-identical to one Peter pressed.
  */
-export function mayRecord(p: Principal, via: Via): Refusal | null {
+/**
+ * ⛔ `Via | "review"`, because a filed request asks this principal the same question a verdict does
+ * — did a person do this — and `review` is the one way of arriving that means nobody asked at all.
+ * `isHuman` now names the human set positively, so adding a value cannot quietly make it human.
+ */
+export function mayRecord(p: Principal, via: Via | "review"): Refusal | null {
   if (!isHuman(via)) {
     // `via: agent` is a default, not agreement. It satisfies no gate, so authoring is enough.
     return p.scopes.includes("author")

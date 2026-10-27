@@ -99,6 +99,53 @@ export interface Question {
 }
 
 /**
+ * The command that answers one question — ⛔ `null` WHERE NO COMMAND CAN, AND THAT IS THE WHOLE
+ * REASON THIS IS A FUNCTION RATHER THAN A TEMPLATE AT EACH CALL SITE.
+ *
+ * `v2 decide` worked this out inline and the reasoning is long, because four different facts about a
+ * question change the verb it takes: a dispute wants `--stands`, an org-wide rule owes `--then` in
+ * the same act, a case asking `whether` needs `--refuses yes|no`, and a residual on a multi-statement
+ * slot decides whether `--pick` is safe or whether the whole sentence has to be written out.
+ *
+ * ⛔ AND A CONTESTED WORD HAS NO COMMAND AT ALL. `Term.contested` is `{question, with}`, strictly,
+ * so there is nowhere for a candidate to go and no ref a verb accepts — the ref is `<scope>#<word>`
+ * and a multi-word term is not one kebab-case segment. v2.ts records this biting twice: #148 minted
+ * the ref shape, #153 printed `v2 rule` against it, and it fails with `no exchange "where a value
+ * was read from"`. Answering it means choosing a sense and renaming the losing uses across files,
+ * which is authoring and not an act.
+ *
+ * ⛔ SO IT IS EXTRACTED, BECAUSE A SECOND SURFACE REPRODUCED THE DEFECT IMMEDIATELY. `v2 interview`
+ * printed `v2 rule <ref> --pick N` for every drafted question — which is wrong for a rule (no
+ * `--then`), wrong for a dispute (no `--stands`), wrong for a `whether` case (no `--refuses`), and a
+ * command that cannot work for a contested word. Four classes of broken advice, from one surface
+ * re-deriving what another already knew, on the queue a reviewer meets first.
+ */
+export function rulingAct(q: Question, who = "<your name>"): string | null {
+  /** ⛔ First, because everything below it assumes a ref a verb accepts. */
+  if (q.kind === "contested word") return null;
+
+  const stands = q.conflictsWith.length ? ` --stands this` : "";
+  const then = q.needsThen ? ` --then "…what would show it holding…"` : "";
+  const pol = q.asksPolarity ? ` --refuses yes|no` : "";
+  const tail = `${stands}${then}${pol} --because "…" --by ${who}`;
+
+  /**
+   * ⛔ A RESIDUAL — one thing unruled ABOUT a sentence somebody agreed to. `--pick` is safe only
+   * where an option is a whole replacement sentence, or where `of:` names the one statement it
+   * replaces; otherwise picking deletes the siblings, which is the clause loss `--pick` exists to
+   * prevent. See `write.ts` and `Standing.candidates`.
+   */
+  if (q.revises) {
+    if (q.candidatesAreWhole) return `productos v2 rule ${q.ref} --pick N${tail}`;
+    if ((q.saysEach ?? []).some((x) => x.inQuestion)) return `productos v2 rule ${q.ref} --pick N${tail}`;
+    return `productos v2 rule ${q.ref} --says "…the whole sentence…"${tail}`;
+  }
+  if (q.candidates.length) return `productos v2 rule ${q.ref} --pick N${tail}`;
+  /** Nothing drafted: it is answered by writing the sentence. Drafting is authoring, not an act. */
+  return `productos v2 rule ${q.ref} --says "…"${tail}`;
+}
+
+/**
  * This scope and everything filed beneath it.
  *
  * ⛔ THE `in:` TREE WAS DECLARED AND UNIMPLEMENTED, AND IT REPORTED SUCCESS.
@@ -123,6 +170,28 @@ export function descendants(corpus: Corpus, scopeId: string): string[] {
 const norm = (s?: string) => (s ?? "").replace(/\s+/g, " ").trim();
 
 /** Every unsettled slot in one scope and everything beneath it, in reading order. */
+/**
+ * What `asks` means to the person reading the question — in product words, never the enum.
+ *
+ * ⛔ THE QUESTION USED TO DROP THIS ENTIRELY, and it is the part that makes the options legible.
+ * A case question read *"The case \"already-paid\" — when the task has been paid once already — is
+ * not ruled."* and then the drafter's sentence. Nothing said which of the case's three fields was
+ * in question, so two options reading "it can be paid again" and "it still refuses" arrived with no
+ * statement of what picking one DOES — and on `whether`, picking one retires the case outright.
+ *
+ * ⛔ IT MATTERS MOST HERE BECAUSE `about` NO LONGER CARRIES IT. A case states which part is unruled
+ * with `asks`, not with prose about a sentence — see `refineStanding` and fg-0002. So the surface
+ * that reads `about` and not `asks` shows a strictly thinner question than it did before.
+ *
+ * Peter, on a question with no context: *"what the fuck does this even mean? ... what's the context
+ * of this fucking question? makes ZERO FUCKING SENSE"*. This is that complaint, one grain down.
+ */
+export const WHAT_IS_IN_QUESTION: Record<string, string> = {
+  whether: "In question: whether it refuses here at all — so answering that it does not retires this case, and the words below stop being shown to anybody.",
+  when: "In question: the condition. It does refuse; what is unruled is whether this is the right moment for it.",
+  told: "In question: the words the asker reads. It refuses, and at the right moment — this is about how it is said.",
+};
+
 export function questionsFor(corpus: Corpus, scopeId: string): Question[] {
   const under = descendants(corpus, scopeId);
   const fromSlots = under.length > 1 ? under.flatMap((id) => questionsIn(corpus, id)) : questionsIn(corpus, scopeId);
@@ -310,7 +379,10 @@ function questionsIn(corpus: Corpus, scopeId: string): Question[] {
           kind: `${ok} case`,
           asks: [
             `The case "${o.name}" — when ${o.when} — is not ruled.`,
+            /** ⛔ The enum first: it says what picking an option DOES. See `WHAT_IS_IN_QUESTION`. */
+            s.asks ? WHAT_IS_IN_QUESTION[s.asks] ?? "" : "",
             s.about ? `In question: ${s.about}` : "",
+            s.asks === "told" ? `It says now: ${o.told}` : "",
             (s.candidates ?? []).length === 1 ? `Proposed: ${s.candidates![0]!.says}` : "",
             s.because ? `Because: ${s.because}` : "",
             s.question ?? "",
@@ -374,8 +446,33 @@ function questionsIn(corpus: Corpus, scopeId: string): Question[] {
         saysEach: s.about
           ? statements(fill.says).map((x) => ({ says: x.says, inQuestion: Boolean(s.of) && x.id === s.of }))
           : undefined,
+        /**
+         * ⛔ `of` WINS OVER WHAT A CANDIDATE CLAIMS, AND IT DID NOT — SO THE PAGE TOLD A READER THE
+         * OPPOSITE OF WHAT THE BUTTON DOES.
+         *
+         * This read only the candidates' own `replaces`. But `settle` scopes the replacement by
+         * `standing.of` when it is set: it rewrites that statement's `says` and leaves its siblings
+         * byte-identical (fg-0008, forty lines down). So a standing with `of` AND candidates
+         * declaring `the whole sentence` set this true, and the page then printed *"Each option is
+         * the whole sentence, so picking one replaces it cleanly"* above two statements, one of them
+         * marked `this one is unruled`.
+         *
+         * Read live off `deal-pricing#deal-pricing-grid#at_once` on a running instance. The
+         * honest branch — *"Each option replaces the marked statement only. The others stand exactly
+         * as they are."* — sits one `else if` below and was unreachable, because `candidatesAreWhole`
+         * is tested first.
+         *
+         * ⛔ IT OVER-WARNS RATHER THAN DESTROYING ANYTHING, which is why nothing caught it: the
+         * press is safe and the sentence describing it is wrong. A reviewer who cares about the
+         * other statements declines to press — which is the failure the ⛔ above `saysEach` records
+         * fixing, arriving through the flag instead of through the markup.
+         *
+         * Found by running the `interviewer` against a live instance for the first time.
+         */
         candidatesAreWhole:
-          (s.candidates ?? []).length > 0 && (s.candidates ?? []).every((c) => c.replaces === "the whole sentence"),
+          !s.of &&
+          (s.candidates ?? []).length > 0 &&
+          (s.candidates ?? []).every((c) => c.replaces === "the whole sentence"),
         about: s.about,
         /**
          * ⛔ The corpus held the evidence for the question and withheld it at the moment of
@@ -419,6 +516,14 @@ export function settle(
     /** ⛔ For a `refuses` question: the named cases, which a sentence cannot express. */
     outcomes?: unknown[];
     none?: boolean;
+    /**
+     * ⛔ THE CHOSEN OPTION SAID IT ADDS A SENTENCE RATHER THAN REPLACING ONE — fg-0001.
+     *
+     * Passed in rather than read here, for the reason everything else in this bag is: the candidate
+     * is resolved by `perform`, which is the only place that knows which option was picked. A second
+     * resolution here would be a second answer to "what did they choose".
+     */
+    adds?: boolean;
   } = {},
   /**
    * Which hand supplied the words this is about to write.
@@ -767,6 +872,41 @@ export function settle(
     slot.none = true;
     if (wrote) slot.wrote = wrote;
   }
+  /**
+   * ⛔ A NEW STATEMENT BESIDE THE OTHERS — fg-0001, and the branch that lets an answer about an
+   * ABSENCE land at all.
+   *
+   * Where the chosen option declares `adds a statement`, the ruling is not a replacement of
+   * anything: it is a sentence the slot did not say, appended with its own id, every sibling left
+   * byte-identical. Same guarantee as the `of` branch below, for the opposite situation — that one
+   * rewrites one of several, this one makes it one more.
+   *
+   * ⛔ ITS ID IS MADE FROM THE SENTENCE, never asked for. Nobody composing an answer at a prompt
+   * should be asked to invent an identifier for words they have just chosen — `suggest` already
+   * holds that line for the same reason.
+   */
+  else if (about.adds) {
+    const list = Array.isArray(slot.says)
+      ? (slot.says as Array<{ id: string; says: string }>)
+      : typeof slot.says === "string" && slot.says.trim()
+        ? [{ id: "it", says: slot.says as string }]
+        : [];
+    const id =
+      says
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-|-$/g, "")
+        .split("-")
+        .slice(0, 6)
+        .join("-") || "also";
+    if (list.some((x) => x.id === id))
+      return {
+        ok: false,
+        why: `${ref} already says something filed as "${id}" — give this sentence different words, or rule the statement that is there`,
+      };
+    list.push({ id, says });
+    slot.says = list;
+  }
   else if (asked?.of && Array.isArray(slot.says)) {
     /**
      * ⛔ ONE STATEMENT, NOT THE WHOLE SLOT (fg-0008).
@@ -1029,10 +1169,46 @@ export function withdraw(
     };
 
   const aim = r.ref;
+  /**
+   * ⛔ A WHOLE FEATURE, AND THERE WAS NO WAY TO TAKE ONE OUT.
+   *
+   * Peter: *"just delete the fucking orphans"* — twelve scopes the carried-tree conversion left at
+   * the product root. The only route was editing twelve files by hand, which is the one move this
+   * project forbids outright: the next conversion regenerates them and nothing records which shape
+   * was right. He then said what the answer had to be: *"create a 'delete' interface if you need
+   * to, so you odn't touch the files directly"*.
+   *
+   * ⛔ ALWAYS `withdrawn`, NEVER DELETED — unlike a statement or a slot. `existsOf` already cascades
+   * `withdrawn` down the lineage, so marking the feature takes its behaviours with it and the id
+   * stays resolvable: a `depends_on` pointing at it still resolves, where a deleted file would make
+   * every reference to it a dangling ref and `check` would refuse for the removal rather than
+   * because anything was wrong. A feature is also the grain other documents point AT, which a slot
+   * is not.
+   */
+  if (aim.kind === "scope") {
+    const home = corpus.scopes.find((x) => x.scope.id === aim.scope);
+    if (!home) return { ok: false, why: `no feature "${aim.scope}"` };
+    if (home.scope.exists === "withdrawn")
+      return { ok: false, why: `${aim.scope} is already withdrawn` };
+    const raw0 = parseFrontmatter(fs.readFileSync(home.file, "utf-8"));
+    const d0 = raw0.data as Record<string, unknown>;
+    d0.exists = "withdrawn";
+    const ok0 = Scope.safeParse(d0);
+    if (!ok0.success)
+      return { ok: false, why: ok0.error.issues.map((i) => `${i.path.join(".")} — ${i.message}`).join("; ") };
+    fs.writeFileSync(
+      home.file,
+      `---\n${YAML.stringify(d0, { lineWidth: 96, blockQuote: "literal" })}---\n\n${raw0.content.trim()}\n`,
+      "utf-8"
+    );
+    void by;
+    void at;
+    return { ok: true, file: home.file, mode: "withdrawn", was: String(home.scope.title ?? aim.scope) };
+  }
   if (aim.kind !== "statement" && aim.kind !== "slot" && aim.kind !== "exchange")
     return {
       ok: false,
-      why: `${ref} is a ${aim.kind} — this takes out one statement, one slot, or one whole exchange`,
+      why: `${ref} is a ${aim.kind} — this takes out a feature, one statement, one slot, or one whole exchange`,
     };
   const kind = aim.kind;
 
