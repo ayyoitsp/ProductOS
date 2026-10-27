@@ -81,7 +81,26 @@ const nap = (ms) => new Promise((r) => setTimeout(r, ms));
  * ⛔ NEVER THROWS ON CONTENTION. A test that cannot get a slot must wait, not fail — a semaphore that
  * fails under load would reproduce the exact flakiness it exists to remove.
  */
-export async function takeABrowserSlot({ waitMs = 240000, now = () => Date.now() } = {}) {
+/**
+ * ⛔ THE WAIT MUST NOT EAT THE FILE'S WHOLE BUDGET, AND AT 240000 IT DID.
+ *
+ * `npm test` runs with `--test-timeout=300000`, which exists so a hang becomes a verdict instead of
+ * a green suite — the Makefile records why. A file that waited the old 240s for a permit then had
+ * 60s to do its actual work, so under load it was killed by the file timeout WHILE QUEUING:
+ *
+ *     not ok test/v2-a-deep-address-lands-where-it-points.test.mjs — timed out after 300000ms
+ *       at takeABrowserSlot (browser-slots.mjs:107)
+ *       at async openPage (chrome.mjs:196)
+ *
+ * That blocked main from deploying, which is the opposite of what a flake cap is for: it traded
+ * nine flakes for a gate that could not pass at all.
+ *
+ * ⛔ 90s, AND IT PROCEEDS RATHER THAN FAILING — the cap is advisory under starvation by design. A
+ * file that has waited 90s has already lost whatever race the cap was smoothing; spending the rest
+ * of its budget waiting serves nobody. Three browsers at once is the common case this bounds, and
+ * the pathological case must degrade to "slower", never to "the suite cannot run".
+ */
+export async function takeABrowserSlot({ waitMs = 90000, now = () => Date.now() } = {}) {
   fs.mkdirSync(home, { recursive: true });
   const stop = now() + waitMs;
   for (;;) {
