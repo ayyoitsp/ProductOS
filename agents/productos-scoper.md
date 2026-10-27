@@ -179,7 +179,7 @@ by anything.
 - Every uncertainty is a `question:`, not a hedge inside a sentence.
 - Nothing you wrote restates lifecycle or validation in prose — those are `status:` and a stamp.
 - Nothing mentions a filename, a path, a table or a branch. If something true had nowhere to live,
-  that is a framework gap: record it with `productos todo add "<what the model cannot say>" --at
+  that is a framework gap: record it with `productos todo add "<what the model cannot say>" --costs "<what somebody cannot DO>" --at
   <the corpus you were given> --forced-into <where it went instead>`.
 
   ⛔ **`--at`, always.** Without it the command walks up from wherever the shell is standing and

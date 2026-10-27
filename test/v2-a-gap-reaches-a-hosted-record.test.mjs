@@ -68,12 +68,13 @@ async function fakeInstance(files) {
 const WHAT =
   "a refusal outcome has no at/view_in/part of its own, so a refusal delivered on another feature's screen cannot say where it is read";
 const FORCED = "publish-a-statement#statement-publish-modal#refuses: two cases with no part";
+const COSTS = "you file the gap into a report nobody reads back, so it is rediscovered next session";
 
 const inst = await fakeInstance({ "framework-gaps.yaml": EXISTING });
 const work = temp("v2gapcwd-");
 let out;
 try {
-  const r = await run("node", [CLI, "todo", "add", WHAT, "--forced-into", FORCED, "--at", inst.url], {
+  const r = await run("node", [CLI, "todo", "add", WHAT, "--costs", COSTS, "--forced-into", FORCED, "--at", inst.url], {
     encoding: "utf-8",
     cwd: work,
   });

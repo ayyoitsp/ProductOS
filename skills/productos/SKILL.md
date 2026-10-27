@@ -234,9 +234,21 @@ somebody's request silently discarded. The flag is set by whoever wrote the note
 ## ⛔ A gap is filed against the corpus it was found in
 
 ```bash
-productos todo add "<what the model cannot express>" --at <corpus> --forced-into <where it went>
+productos todo add "<what the model cannot express>" --at <corpus> \
+  --costs "<what somebody CANNOT DO, and what they do instead>" \
+  --forced-into <where it went>
 productos todo --at <corpus>          # what this corpus could not say
 ```
+
+⛔ **`--costs` is required, and it is written for somebody who did not hit the gap.** Name the act
+they cannot perform and what they do instead — *"you get asked about one sentence at a time, so a
+slot saying eleven things takes eleven round trips"* — not what is wrong inside the model.
+
+**Because it has to be checkable by trying it.** The description written in the vocabulary of the
+layer you were standing in is accurate and unreadable, and unreadable means nobody re-reads the
+backlog to ask whether an entry is still true. Two of four gaps were fixed and still read `open`,
+both closed earlier in the same session that recorded them. Peter: *"tell me the actual IMPACT, not
+a wordy thing about holding slots.. none of that makes sense"*.
 
 **`--at`, always.** Without it the command walks up from wherever the shell is standing and files
 the finding against whatever product lives *there*. That is not a lost gap, which would be
