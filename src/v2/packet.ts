@@ -13,7 +13,7 @@
  */
 import { SLOTS, DEMONSTRABLE_SLOTS, owesDemonstration, type SlotName , statements, saysText, nothingHere} from "./schema.js";
 import { resolveRules, disputeIndex, vocabularyReach, resolveView, DOWNSTREAM_OF_ANSWER, answerIsUnknown, type Corpus } from "./load.js";
-import { descendants } from "./settle.js";
+import { descendants, unbuildableReads } from "./settle.js";
 import { existsOf } from "./load.js";
 import { stampFor, staleReason, requirementHash } from "./stamp.js";
 import { demonstrationOf } from "./demonstrate.js";
@@ -95,8 +95,19 @@ export function readinessOf(corpus: Corpus, scopeId: string): Readiness | null {
   const under = descendants(corpus, scopeId);
   const each = under.map((id) => compileOne(corpus, id)).filter(Boolean) as Array<{ md: string; holes: string[] }>;
   if (!each.length) return null;
-  const holes = each.flatMap((x) => x.holes);
-  return { ready: holes.length === 0, holes };
+  /**
+   * ⛔ THE BANNER THIS PASS PRINTS IS PART OF THE VERDICT IT RETURNS. `compileOne` has pushed
+   * *"X read this end to end and could not build from it — nothing below outranks that"* to the
+   * top of the markdown since the act shipped, and this function then answered `ready: true` over
+   * the same scope, because its holes come from the traversal and a person's reading is not one.
+   *
+   * The page renders THIS verdict (`page.ts` imports it rather than `readiness.ts`, deliberately,
+   * so the page and the packet cannot disagree) — so the one surface Peter reviews on showed a
+   * green readiness above a packet whose first line was a human refusing it.
+   */
+  const stopped = unbuildableReads(corpus, scopeId);
+  const holes = [...each.flatMap((x) => x.holes), ...stopped.flatMap((r) => r.blockedBy)];
+  return { ready: holes.length === 0 && stopped.length === 0, holes };
 }
 
 function compileOne(corpus: Corpus, scopeId: string): { md: string; holes: string[] } | null {
@@ -159,12 +170,11 @@ function compileOne(corpus: Corpus, scopeId: string): { md: string; holes: strin
    * derive, and it outranks every finding below it. The packet used to compile clean over
    * a scope somebody had declared unbuildable.
    */
-  for (const v of corpus.verdicts) {
-    if (v.kind !== "read" || v.scope !== scopeId || v.buildable !== false) continue;
+  for (const r of unbuildableReads(corpus, scopeId)) {
     out.push(
-      `> ⛔ **${v.by} read this end to end on ${v.at} and could not build from it.**` +
-        (v.note ? ` "${v.note}"` : "") +
-        (v.blocked_by.length ? ` Stopped by: ${v.blocked_by.join(", ")}.` : "")
+      `> ⛔ **${r.by} read ${r.scope} end to end on ${r.at} and could not build from it.**` +
+        (r.note ? ` "${r.note}"` : "") +
+        (r.blockedBy.length ? ` Stopped by: ${r.blockedBy.join(", ")}.` : "")
     );
     out.push("> Nothing below outranks that. Find out what they hit before you start.");
     out.push("");

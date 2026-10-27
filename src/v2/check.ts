@@ -33,7 +33,7 @@ import {
 import { confidenceOf, containerOf } from "./confidence.js";
 import { stampFor, staleReason, coveredBy, whatChangedSince } from "./stamp.js";
 import { resolveRef } from "./ref.js";
-import { descendants, WHAT_IS_IN_QUESTION } from "./settle.js";
+import { descendants, unbuildableReads, WHAT_IS_IN_QUESTION } from "./settle.js";
 import { ruleHomes, reachOf } from "./grid.js";
 import { appStyleFor, styleDrift } from "./appcss.js";
 import { readLog } from "./log.js";
@@ -2128,11 +2128,11 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
    * declared unbuildable.
    */
   for (const v of corpus.verdicts) {
-    if (v.kind !== "read" || v.buildable !== false) continue;
+    if (v.kind !== "read" || v.buildable !== false || !v.scope) continue;
     add({
       severity: "refuse",
       kind: "a-person-could-not-build-from-this",
-      where: v.scope ?? "(no scope)",
+      where: v.scope,
       what: `${v.by} read this end to end on ${v.at} and could not build from it${v.note ? `: ${v.note}` : ""}`,
       fix: v.blocked_by.length
         ? `they were stopped by ${v.blocked_by.join(", ")} — no computed finding outranks this`

@@ -131,8 +131,23 @@ test("⛔ the whole loop: not ready, a person agrees, the demonstrator fills the
   }, agent(dir));
   assert.equal(r.ok, true, JSON.stringify(r));
 
+  /**
+   * ⛔ AGREED AND DEMONSTRATED AND STILL NOT READY — THE STEP THIS LOOP WAS MISSING.
+   *
+   * Peter: *"buildability should be a part of readiness."* Everything a traversal can check now
+   * holds, and nobody has read the thing from a builder's seat. That was the end of this loop until
+   * this landed, and it is the second tenet the four counts cannot reach.
+   */
+  const unread = readinessOf(loadCorpus(dir), EX);
+  assert.equal(unread.ready, false, "agreed and demonstrated, with nobody having read it, read as ready");
+  assert.equal(unread.read.unread, true);
+  assert.match(unread.because, /nobody has read this end to end/);
+
+  assert.equal(say("read", { ref: EX, buildable: true, via: "page" }, person(dir)).ok, true);
+
   const after = readinessOf(loadCorpus(dir), EX);
   assert.equal(after.ready, true, after.because);
+  assert.equal(after.read.latest.by, "peter");
   assert.deepEqual(after.untested, []);
   const added = after.requirements.find((q) => q.ref === r.ref);
   assert.ok(BUILDABLE.includes(added.level), `a requirement from an agreed claim reads ${added.level}`);

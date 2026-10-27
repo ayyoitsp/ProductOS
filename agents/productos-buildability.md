@@ -152,3 +152,30 @@ Then say plainly whether you could start. "Yes, with these three guesses" is a u
 ⛔ **And you still write nothing.** Not the note, not the question, not a corrected sentence. A
 reviewer that can write is a reviewer that repairs what it finds, which hides how often it fires —
 and how often this fires is a fact about the product, not about you.
+
+## ⛔ That last sentence is now the gate, so write it as one
+
+Peter: *"buildability should be a part of readiness, should not introduce a new 'groomed' concept.
+don't know what we would use 'ready' for outside of buildability."*
+
+`productos_readiness` used to answer `ready: true` on the strength of four emptiness checks — no
+open question, no unagreed claim, no requirement below the line, no claim without a test. All four
+hold over a corpus where two screens claim the same piece of state and nothing says where the data
+comes from, because each of those is a *filled slot*. That is your question, and nothing was asking
+it before the gate.
+
+It asks now: **`ready` requires a recorded read-through saying somebody could build from this, and
+refuses while one says they could not.** Your answer is the content of that record — which is why
+the shape above matters, and why a vague answer now stops a build rather than merely being
+unhelpful:
+
+- **could you start, yes or no** — one word, not a hedge. A reviewer who will not answer leaves the
+  scope reading `ready: false / nobody has read this`, which is honest and useless.
+- **what stopped you, as slot refs** — `<scope>#<exchange>#<slot>` for each. These become the
+  `blockedBy` list, and a blocker named as a ref lands in the hole list a consumer already reads; a
+  blocker named only in prose lands nowhere.
+
+⛔ **And recording it is not yours either**, for the reason directly above. A read-through is a
+person's act; one stamped by the reviewer would be software stamping its own homework on the single
+signal in the corpus that nothing else can reconstruct. The session carries your answer to whoever
+is driving.

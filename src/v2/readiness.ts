@@ -34,7 +34,15 @@ import { resolveRules, type Corpus } from "./load.js";
 import { SLOTS, type SlotName } from "./schema.js";
 import { countLevels, levelOf, levelsIn, type Level, type LevelName, type Route, type Wrote, OWED } from "./level.js";
 import { gridFor } from "./grid.js";
-import { descendants, questionsFor, type Question } from "./settle.js";
+import {
+  descendants,
+  questionsFor,
+  unbuildableReads,
+  buildableReads,
+  whereQuestionStands,
+  type Question,
+  type ReadThrough,
+} from "./settle.js";
 import { demonstrationOf, type RequirementState } from "./demonstrate.js";
 import { requirementHash } from "./stamp.js";
 import { resolveRef } from "./ref.js";
@@ -159,6 +167,45 @@ export interface Readiness {
   /** The test list, in the packet's order. */
   requirements: TestRequirement[];
   /**
+   * Whether a person read this end to end and could build from it — ⛔ GATING, AND THE ONLY PART
+   * OF THIS VERDICT NOTHING CAN COMPUTE.
+   *
+   * Peter: *"buildability should be a part of readiness, should not introduce a new 'groomed'
+   * concept. don't know what we would use 'ready' for outside of buildability."*
+   *
+   * Before this, `ready` was four emptiness checks over the SHAPE of the record: every slot
+   * filled, every claim agreed, every requirement established, every claim demonstrated. All four
+   * can hold over a corpus where two screens claim the same piece of state, nothing says where the
+   * data comes from, and nothing describes what happens to half-finished work — each of those is a
+   * filled slot, and the arithmetic counts it as settled. That is the second tenet, and no
+   * traversal tests it.
+   *
+   * `buildability` the reviewer asks exactly that question and returns prose to a session; the
+   * `read` act is where a person records the answer. Both existed. Nothing joined them to the
+   * field a consumer asks before it starts work.
+   */
+  read: {
+    /** The newest read-through standing over this work, from a person. */
+    latest: ReadThrough | null;
+    /**
+     * Readings that say a builder could not start — ⛔ INCLUDING ONES RECORDED ON AN ANCESTOR.
+     * A person reads a subtree end to end; a child that ignored its parent's reading would report
+     * itself buildable on the strength of nobody having read it specifically.
+     */
+    stopped: ReadThrough[];
+    /**
+     * ⛔ NOBODY HAS READ THIS, WHICH IS NOT THE SAME AS IT PASSING — and the distinction is the
+     * whole reason this is a field rather than a filter.
+     *
+     * "No reading says this is unbuildable" is also what a corpus nobody ever opened produces.
+     * Same shape as the zero that this project has now mis-read six times: for a signal whose
+     * absence is indistinguishable from its success, absence is not weak evidence, it is none. So
+     * an unread scope is `ready: false` with a reason naming the act that would settle it, rather
+     * than a pass nobody earned.
+     */
+    unread: boolean;
+  };
+  /**
    * Claims that owe a demonstration and have no testing requirement at all.
    *
    * ⛔ GATING, BECAUSE A BUILDER WITH NO TEST LIST IS NOT READY — THEY ARE UNCHECKED. Peter: *"make
@@ -235,46 +282,6 @@ function blankSlots(corpus: Corpus, scope: string, exchange?: string): string[] 
   return out;
 }
 
-/**
- * Where one of the queue's questions stands relative to this work.
- *
- *   `on it`        it is about a fact of this work — a hole, and nothing here is buildable
- *   `around it`    it reaches this work and lands on none of its facts — raise it, do not gate on it
- *   `nowhere near` it is about some other behaviour, and this verdict is not the place for it
- *
- * ⛔ THE THIRD ONE MATTERS AS MUCH AS THE OTHER TWO. `questionsFor` is asked of a SCOPE, so asking
- * about one behaviour returns its siblings' questions too. Reporting those as reaching the work would
- * tell a grooming agent that `record-earning` is held up by a question about `record-spending` — a
- * sentence it does not use, a slot it does not have, and an invitation to go and ask a person about
- * neither.
- *
- * ⛔ AND FOR A RULE, `awaiting` DECIDES RATHER THAN THE SELECTOR. `openRuleQuestions` returns a rule
- * for every scope it selects — right for a queue, because ruling it is work somebody owes — but an
- * open rule supplies no sentence, so where the exchange already states the slot the local sentence is
- * the answer and the rule is holding nothing open. `resolveRules` records `awaiting` only where the
- * exchange says nothing itself, which is exactly the distinction, already drawn once.
- */
-type Where = "on it" | "around it" | "nowhere near";
-
-function whereQuestionStands(corpus: Corpus, q: Question, scopes: string[], exchange?: string): Where {
-  const seg = q.ref.split("#");
-  /** A slot, one of its statements, or a named refusal case — a fact somebody can point at. */
-  if (seg.length >= 3) {
-    if (!scopes.includes(seg[0]!)) return "nowhere near";
-    return !exchange || seg[1] === exchange ? "on it" : "nowhere near";
-  }
-  /** A contested word, `<scope>#<word>` — scope-wide, and it blanks no slot. */
-  if (seg.length === 2) return scopes.includes(seg[0]!) ? "around it" : "nowhere near";
-  const { awaiting } = resolveRules(corpus);
-  for (const [ref, rules] of awaiting) {
-    if (!rules.some((r) => r.id === q.ref)) continue;
-    const at = ref.split("#");
-    if (!scopes.includes(at[0]!)) continue;
-    if (!exchange || at[1] === exchange) return "on it";
-  }
-  return "around it";
-}
-
 /** Whether a ref is one of a feature's framing cards. */
 const isFraming = (ref: string): boolean => {
   const seg = ref.split("#");
@@ -316,7 +323,22 @@ export function readinessOf(corpus: Corpus, ref: string): Readiness | { error: s
   /** ⛔ And the blanks `levelsIn` deliberately leaves out, from the grid that already classified them. */
   const blanks = scopes.flatMap((s) => blankSlots(corpus, s, exchange));
 
-  const holeRefs = new Set<string>([...owed.map((q) => q.ref), ...blanks]);
+  /**
+   * ⛔ WHAT A PERSON SAID STOPPED THEM IS A HOLE, THROUGH THE SAME PATH AN OPEN QUESTION TAKES.
+   *
+   * Peter: *"buildability should be a part of readiness."* A reader who got to the end and named
+   * two slots that stopped them has said something no traversal can reach — and routing it into
+   * `holeRefs` rather than into a list of its own means every count, every verdict sentence and
+   * every consumer already handles it. A blocker that is ALSO an open question is one hole, not
+   * two, because this is a set.
+   */
+  /** ⛔ The ref at the grain asked about, so a behaviour's own read-through is found. */
+  const at = exchange ? `${scope}#${exchange}` : scope;
+  const reads = buildableReads(corpus, at);
+  const stopped = unbuildableReads(corpus, at);
+  const blockers = stopped.flatMap((r) => r.blockedBy);
+
+  const holeRefs = new Set<string>([...owed.map((q) => q.ref), ...blanks, ...blockers]);
 
   const holes: Level[] = [];
   const unagreed: Level[] = [];
@@ -408,14 +430,37 @@ export function readinessOf(corpus: Corpus, ref: string): Readiness | { error: s
 
   const unbuildable = requirements.filter((r) => !BUILDABLE.includes(r.level));
   const counts = countLevels([...holes, ...unagreed, ...latitude, ...settled, ...requirements]);
-  const ready = holes.length === 0 && unagreed.length === 0 && unbuildable.length === 0 && untested.length === 0;
+  /**
+   * ⛔ `stopped` AND `unread` ARE TWO REASONS AND NEITHER IS THE OTHER. One is a person saying no;
+   * the other is nobody having been asked. They route to different acts — find out what they hit,
+   * versus get somebody to read it — so `verdict` names whichever it is.
+   */
+  const read = {
+    latest: reads[0] ?? null,
+    stopped,
+    /**
+     * ⛔ NEITHER ANSWER WAS GIVEN — not "there is no yes". A reading that said no makes `stopped`
+     * non-empty and leaves `reads` empty, so a field meaning "no recorded yes" would be true
+     * alongside it and `verdict` would print both *"X could not build from it"* and *"nobody has
+     * read this"* about the same scope. Two sentences, contradicting, from one verdict.
+     */
+    unread: reads.length === 0 && stopped.length === 0,
+  };
+  const ready =
+    holes.length === 0 &&
+    unagreed.length === 0 &&
+    unbuildable.length === 0 &&
+    untested.length === 0 &&
+    /** ⛔ A RECORDED YES IS REQUIRED, not merely the absence of a no — see `buildableReads`. */
+    reads.length > 0 &&
+    stopped.length === 0;
 
   return {
     ref,
     grain,
     title,
     ready,
-    because: verdict({ title, ready, holes, unagreed, latitude, settled, requirements, unbuildable, untested, openElsewhere }),
+    because: verdict({ title, ready, holes, unagreed, latitude, settled, requirements, unbuildable, untested, openElsewhere, read }),
     counts,
     holes,
     unagreed,
@@ -423,6 +468,7 @@ export function readinessOf(corpus: Corpus, ref: string): Readiness | { error: s
     settled,
     framing,
     requirements,
+    read,
     untested,
     openElsewhere,
   };
@@ -456,6 +502,7 @@ function verdict(x: {
   unbuildable: TestRequirement[];
   untested: string[];
   openElsewhere: Nearby[];
+  read: { latest: ReadThrough | null; stopped: ReadThrough[]; unread: boolean };
 }): string {
   const tests = `${n(x.requirements.length, "testing requirement")} to implement`;
   const extra = x.openElsewhere.length
@@ -465,7 +512,8 @@ function verdict(x: {
     : "";
   if (x.ready)
     return (
-      `Ready to build: every one of ${n(x.settled.length + x.requirements.length, "fact")} this touches is accepted or derived, and ${tests}.` +
+      `Ready to build: ${x.read.latest!.by} read this end to end on ${x.read.latest!.at} and could build from it; ` +
+      `every one of ${n(x.settled.length + x.requirements.length, "fact")} this touches is accepted or derived, and ${tests}.` +
       (x.latitude.length
         ? ` ${n(x.latitude.length, "slot")} ${was(x.latitude.length, "is", "are")} declared the builder's latitude.`
         : "") +
@@ -473,6 +521,32 @@ function verdict(x: {
     );
 
   const why: string[] = [];
+  /**
+   * ⛔ FIRST, BECAUSE NOTHING BELOW OUTRANKS IT — the order `compilePacket` already prints these in,
+   * for the same reason: a person who got to the end and could not build from it has said something
+   * no count can contradict, and burying it under four tallies invites a reader to weigh it against
+   * them.
+   */
+  for (const r of x.read.stopped)
+    why.push(
+      `${r.by} read ${r.scope} end to end on ${r.at} and could NOT build from it` +
+        (r.note ? ` ("${r.note}")` : "") +
+        (r.blockedBy.length
+          ? ` — stopped by ${r.blockedBy.join(", ")}, counted among the questions below`
+          : " — ⛔ and did not say what stopped them, so ask before anybody starts") +
+        ". Nothing computed outranks that"
+    );
+  /**
+   * ⛔ AND THE OTHER DIRECTION, WHICH IS THE ONE THAT USED TO READ AS A PASS. An unread scope has
+   * no failing state in the four counts — they are all empty on a corpus nobody has opened.
+   */
+  if (x.read.unread)
+    why.push(
+      "nobody has read this end to end from a builder's seat — ⛔ not a finding against it, and not " +
+        "a pass either: the second tenet is that this is sufficient to build from WITHOUT " +
+        "interpretation, and no traversal tests that. Run `buildability`, then record what they " +
+        "found with a read-through"
+    );
   if (x.holes.length)
     why.push(
       `${n(x.holes.length, "question")} nobody has answered (${x.holes.map((h) => h.ref).join(", ")}) — ⛔ a builder who fills one has invented product truth`

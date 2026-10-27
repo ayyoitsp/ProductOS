@@ -116,7 +116,7 @@ flowchart TD
   hand_it_to_the_builders --> hand_it_to_the_builders_architecture["architecture"]
   hand_it_to_the_builders --> hand_it_to_the_builders_buildability["buildability"]
   hand_it_to_the_builders --> hand_it_to_the_builders_test-design["test-design"]
-  hand_it_to_the_builders -.->|keeps| hand_it_to_the_builders_self(["the session — 3 things it may not hand off"])
+  hand_it_to_the_builders -.->|keeps| hand_it_to_the_builders_self(["the session — 4 things it may not hand off"])
   groom_a_ticket(["groom a ticket<br/><i>Answer whether a piece of work can be built, and raise what is open as questions</i>"])
   groom_a_ticket --> groom_a_ticket_demonstrator["demonstrator"]
   groom_a_ticket -.->|keeps| groom_a_ticket_self(["the session — 6 things it may not hand off"])
@@ -242,6 +242,7 @@ The engineering and QA read, once product and design have signed off.
 - ⛔ checking somebody actually agreed before spawning either of these — the precondition is the whole point of the split
 - deciding what to do with what comes back: a question the corpus must settle goes to the person, never to the builder
 - every act of judgement — an engineer saying it is buildable is not somebody agreeing it is right
+- ⛔ landing what `buildability` found: each gap it names becomes a question on the slot it belongs to, then a read-through recording whether somebody could build from it — `buildable: false` with those refs as `blockedBy`, or `true` once they are answered. ⛔ The reviewer writes nothing and `ready` now requires this, so a finding that stops here stops the gate too
 
 ### groom a ticket
 
