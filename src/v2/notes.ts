@@ -59,6 +59,14 @@ const asYaml = (n: NoteT): string =>
      * the whole file with it. A louder failure than a silent one, and the same omission.
      */
     ...(n.assumed ? [`    assumed: ${JSON.stringify(n.assumed)}`] : []),
+    /**
+     * ⛔ WRITTEN HERE TOO, WHICH IS THE WARNING DIRECTLY ABOVE THIS LINE BEING HEEDED. `assumed`
+     * reached the schema, the refinement, `Filing` and the assembly and not this function, so it
+     * was silently dropped on the way to disk. `disputes` has the same four-plus-one shape and the
+     * same failure available to it — and it is worse here, because a dropped `disputes` means a
+     * question somebody rejected comes back as answerable with nothing recording that they did.
+     */
+    ...(n.disputes ? [`    disputes: true`] : []),
     ...(n.outcome ? [`    outcome: ${JSON.stringify(n.outcome)}`] : []),
     /** ⛔ Every reply kept, in order. A thread with the middle removed is a thread that lies. */
     ...(n.replies?.length
@@ -109,6 +117,8 @@ export interface Filing {
    * still not one to ship.
    */
   assumed?: string;
+  /** ⛔ This note withdraws what it is about rather than answering it. See `Note.disputes`. */
+  disputes?: boolean;
 }
 
 /**
@@ -149,6 +159,20 @@ export function fileNote(dir: string, f: Filing): Filed | NotFiled {
     /** ⛔ Only where the caller said so. Absent on every ordinary note rather than `false`. */
     ...(f.probe === true ? { probe: true as const } : {}),
     ...(f.assumed?.trim() ? { assumed: f.assumed.trim() } : {}),
+    /**
+     * ⛔ THE FIFTH PLACE, AND I MISSED IT WHILE WRITING A COMMENT ABOUT NOT MISSING IT.
+     *
+     * `disputes` went into the schema, into `Filing`, into the door's fields, into `asYaml` — and
+     * not into this object, which is the one that decides what a note IS. So two notes were accepted
+     * through the live door, reported as recorded, and reached disk without the field: the
+     * interview offered both disputed questions back as answerable, and the only evidence anything
+     * was wrong was a count of `disputed` reading 0.
+     *
+     * ⛔ A ZERO THAT PROVED NOTHING, EXACTLY AS THE RULE SAYS. "No disputed questions" is also what
+     * a corpus with no disputes produces, and what a dropped field produces. It was found by reading
+     * one note on disk, which is the other half of that rule.
+     */
+    ...(f.disputes === true ? { disputes: true as const } : {}),
   };
   const parsed = Note.safeParse(candidate);
   if (!parsed.success)

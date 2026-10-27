@@ -511,6 +511,36 @@ function questionsIn(corpus: Corpus, scopeId: string): Question[] {
  * is re-parsed and validated before anything is written, so a ruling can never leave a
  * file that will not load.
  */
+/**
+ * Which clauses of an agreed sentence a proposed replacement would drop.
+ *
+ * ⛔ EXTRACTED SO THE DRAFTER AND THE RULER ASK THE SAME QUESTION. It lived inside `settle` and
+ * fired only when somebody tried to answer — so a question could be drafted whose every option was
+ * unapplicable, worded beautifully, put in front of a person, answered, and refused.
+ *
+ * That happened. Peter answered three questions on `pl-start-a-deal` and **not one could be
+ * recorded**: two had options declaring they replace "only the part in question" with nothing naming
+ * the part, and the third offered a whole sentence that silently dropped two statements already
+ * agreed — *"nothing they entered is lost"* and *"nothing is said about why"*. His reply on being
+ * shown the result: *"so show me what truths changed based on my 3 answers"*. Nothing had.
+ *
+ * ⛔ IT IS A HEURISTIC AND THAT IS WHY IT ASKS ABOUT REMOVAL, NOT CORRECTNESS. It does not judge
+ * whether a sentence is right — it asks whether the clauses that were agreed still appear. Anybody
+ * may overrule it by writing the whole sentence they want.
+ */
+export function droppedClauses(wasSaying: string, says: string): string[] {
+  const clauses = wasSaying
+    .split(/[,;—]| and (?=the |it |they )/)
+    .map((c) => c.trim().replace(/^(and|then|so) /i, ""))
+    .filter((c) => c.split(/\s+/).length >= 4);
+  const kept = says.replace(/\s+/g, " ").toLowerCase();
+  return clauses.filter((c) => {
+    const words = c.toLowerCase().split(/\s+/).filter((w) => w.length > 3);
+    const hits = words.filter((w) => kept.includes(w)).length;
+    return words.length >= 3 && hits / words.length < 0.5;
+  });
+}
+
 export function settle(
   root: string,
   ref: string,
@@ -796,16 +826,7 @@ export function settle(
    * question about what was removed, not about what is right.
    */
   if (wasSaying && (beforeSlot.standing as { about?: string } | undefined)?.about) {
-    const clauses = wasSaying
-      .split(/[,;—]| and (?=the |it |they )/)
-      .map((c) => c.trim().replace(/^(and|then|so) /i, ""))
-      .filter((c) => c.split(/\s+/).length >= 4);
-    const kept = says.replace(/\s+/g, " ").toLowerCase();
-    const dropped = clauses.filter((c) => {
-      const words = c.toLowerCase().split(/\s+/).filter((w) => w.length > 3);
-      const hits = words.filter((w) => kept.includes(w)).length;
-      return words.length >= 3 && hits / words.length < 0.5;
-    });
+    const dropped = droppedClauses(wasSaying, says);
     if (dropped.length)
       return {
         ok: false,

@@ -149,6 +149,35 @@ doing something, not from a condition being true.
 | "When two of the lender's people answer the same replacement in the same moment…" | "Two people are looking at the same document and both decide what to do with it at the same time. What should happen?" |
 | "…or does the strip read as though nothing is waiting?" | "The product can't tell which documents are still waiting. Does it say so, or does the deal just look finished?" |
 
+#### ⛔ SHORT, AND PLAIN, AND THAT IS A HARD RULE — LONG IS THE FAILURE THAT SURVIVED THE LAST FIX
+
+The guidance above said "a person, in a situation" and its examples ran long, so a run of this role
+produced this, and Peter's whole reply to it was **"is this even english?"**:
+
+> *"A processor opens the screen to start a deal, and the draft deal the product quietly sets up
+> behind it — the thing everything they type gets saved into — cannot be made. What happens?"*
+
+Thirty-five words, a nested em-dash gloss explaining a term, "cannot be made" with nobody doing it,
+and an implementation detail the person being asked does not act on. It is not a question. It is a
+paragraph with a question mark.
+
+**The shape:** one short sentence of situation. One short question. Nothing else.
+
+> *"Someone clicks New Deal and the product can't set the deal up to save their work into. Do they
+> start typing anyway, or do you tell them first?"*
+
+| ⛔ never | because |
+| --- | --- |
+| **over ~25 words per sentence** | if you need a comma to keep it upright, split it or cut it |
+| **an em-dash or bracket explaining a term** | if a word needs a gloss, it is the wrong word. Use the plain one |
+| **"cannot be made", "is told", "is offered"** | somebody does things. Say who. Passive voice is how a clause sneaks back in |
+| **machinery the person does not decide about** | "the draft deal the product quietly sets up behind it" is how it works, not what is being asked |
+| **"given that…", "in the case where…", "rather than simply…"** | nobody talks like this. These are the seams of a specification |
+
+⛔ **Two sentences is the budget for the situation, and usually one is enough.** If you cannot set the
+scene in that, you have not worked out what is actually being decided — go back to the feature, not
+to a longer sentence.
+
 ⛔ **Read it aloud before you write it down.** If you would not say it to a colleague who works on
 this product — because it sounds like a clause, or because it names something only you can see —
 it is not the question. Rewrite it until it sounds like somebody asking somebody.
@@ -230,6 +259,29 @@ never said it. Recorded as fg-0001 until `adds a statement` existed.
 
 So: **ask yourself whether your option is a new sentence or a rewrite of one that is there.** If the
 slot's existing statements all survive your answer, it adds — say so, and the person can press it.
+
+### ⛔ A question somebody has REJECTED is not reworded — it is withdrawn
+
+Before you touch a question that is already open, read the notes against its ref. If a person has
+said it makes no sense, that note carries `disputes: true` and the worklist shows it as **disputed**
+rather than as something to answer.
+
+⛔ **Do not reword a disputed question.** Wording is not what is wrong with it. One question on
+`pl-start-a-deal` was rejected by Peter on 2026-10-22, reworded twice by this role across two runs,
+and put back in front of him both times — *"This still doesn't make any sense"*, then *"what does
+'the product can't set up anywhere to save their work' even mean??????"*. The behaviour under it is
+`asked_by: system`: plumbing no person performs, so there is no situation a person is ever in for
+any wording to describe.
+
+⛔ **What is owed instead** is a corpus fix: withdraw the options and ask something that matches what
+happens, or establish that the thing the question is about is real. Reply to the note rather than
+re-asking.
+
+⛔ **And when you record somebody rejecting a question, set `disputes: true` on the note.** Nothing
+infers it — a note saying *"this makes no sense"* and a note saying *"Anybody in the org"* are an
+objection and an ANSWER, and reading the sentence to tell them apart is a guess wearing a decision's
+clothes. Marking an answer as a dispute hides a decision somebody made; missing a dispute puts the
+question back in front of the person who rejected it, which is what happened here.
 
 ### ⛔ A question already asked can be said better — `rephrase`
 

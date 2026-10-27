@@ -15,15 +15,6 @@ reaches:
   instruct: AND AVOIDING THE MODEL'S WORDS IS NOT ENOUGH
   pin: it can be said better, and what it used to say is kept
 waived:
-  generate: >-
-    No generator writes a question's wording. The template-built purpose question lives in
-    `interview.ts`, which is the derive layer and is where that half landed; every other question in
-    a corpus is written by the interviewer role, which is the instruct layer. Nothing under
-    `generate` composes question text.
-  check: >-
-    ⛔ THE ARGUABLE ONE, AND I AM RECORDING THE ARGUMENT RATHER THAN THE CONCLUSION. A check COULD
-    refuse a question that reads like a specification clause — the four examples now in the brief
-    share real markers ("is the asker told", "pending", a screen part no reader can see). But every
-    rule I could write would be a guess about prose dressed as a refusal, and a judge told what good
-    wording looks like stops being able to notice the project is wrong about it. The honest check is
-    a person reading one, which is what happened here.
+  generate: No generator writes a question's wording. The template-built purpose question lives in `interview.ts`, which is the derive layer and is where that half landed; every other question in a corpus is written by the interviewer role, which is the instruct layer. Nothing under `generate` composes question text.
+  check: ⛔ THE ARGUABLE ONE, AND I AM RECORDING THE ARGUMENT RATHER THAN THE CONCLUSION. A check COULD refuse a question that reads like a specification clause — the four examples now in the brief share real markers ("is the asker told", "pending", a screen part no reader can see). But every rule I could write would be a guess about prose dressed as a refusal, and a judge told what good wording looks like stops being able to notice the project is wrong about it. The honest check is a person reading one, which is what happened here.
+closed: 2026-10-27

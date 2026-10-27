@@ -49,7 +49,8 @@ import { ANALYSES } from "./analyse.js";
 import { capabilityTree } from "./subsystems.js";
 import { descendants, questionsFor, rulingAct, type Question } from "./settle.js";
 import { vocabularyReach } from "./load.js";
-import { POLICY_SLOTS, SLOT_ASKED, SLOT_ASKS_SHORT, SLOTS, statements, type SlotName } from "./schema.js";
+import { POLICY_SLOTS, SLOT_ASKED, SLOT_ASKS_SHORT, SLOTS, statements, type NoteVia, type SlotName } from "./schema.js";
+import { isHuman } from "./acts.js";
 
 const plain = (x: unknown): string => String(x ?? "").replace(/\s+/g, " ").trim();
 
@@ -60,6 +61,26 @@ const plain = (x: unknown): string => String(x ?? "").replace(/\s+/g, " ").trim(
 export type Owes =
   /** Nobody has agreed what this feature is for. ⛔ A gate: see `contextAgreed` in grid.ts. */
   | "purpose"
+  /**
+   * ⛔ A QUESTION A PERSON HAS SAID MAKES NO SENSE. IT IS WORK TO DO, NOT A QUESTION TO ASK AGAIN.
+   *
+   * Peter, on one question, three times across five days: *"this question makes no sense to me, no
+   * idea what you're talkinga bout"* (recorded 2026-10-22 as note `n-a3v33u`), then *"This still
+   * doesn't make any sense - what is this?"*, then *"what does 'the product can't set up anywhere to
+   * save their work' even mean??????"*.
+   *
+   * ⛔ IT WAS REWORDED TWICE IN BETWEEN AND HIS NOTE WAS NEVER READ. The interviewer loaded that
+   * note, reported it, and still treated the problem as phrasing. It is not phrasing: the behaviour
+   * under it is `asked_by: system` — plumbing nobody performs — and he had already said the thing it
+   * describes does not happen. A question whose premise a person has rejected does not become
+   * answerable by being said better, and offering it again spends the one thing this feature exists
+   * to save.
+   *
+   * ⛔ SO IT LEAVES THE ANSWERABLE PILE ENTIRELY. What is owed here is a corpus fix an author makes
+   * — withdraw the options, or establish that the thing is real — and the person's own words are
+   * carried so nobody has to guess what was wrong with it.
+   */
+  | "disputed"
   /** A slot says nothing and nothing fills it — `check`'s `slot-blank`. */
   | "blank"
   /** A question already drafted and waiting on the person it is asked of — `questionsFor`. */
@@ -1209,8 +1230,69 @@ export function interviewFor(corpus: Corpus, scopeId: string, findings: Finding[
    * wording is what they are answering, and the old one is there to resolve "wasn't this different
    * yesterday?" rather than to be read first.
    */
+  /**
+   * ⛔ THE REFS A PERSON HAS SAID MAKE NO SENSE, AND THE WORDS THEY SAID IT IN.
+   *
+   * ⛔ `isHuman(via)`, NOT `by`. `by` is a name and a name proves nothing about which hand typed —
+   * a role writing a note on somebody's behalf records their name too. The `via` is the channel, and
+   * `BY_A_PERSON` is the one place that decides what counts. A judge's `review` note must never
+   * suppress a question: a reviewer saying a question is unclear is a finding to act on, and a
+   * person saying it is nonsense is the question being withdrawn.
+   *
+   * ⛔ AND ONLY `open` ONES. A note somebody closed has been dealt with — treating a settled
+   * objection as live would hide questions forever on the strength of a complaint already answered.
+   */
+  const objected = new Map<string, { note: string; said: string; by: string }>();
+  for (const n of corpus.notes) {
+    if (n.state !== "open" || !n.about) continue;
+    /**
+     * ⛔ `disputes` IS THE FIELD, AND MY FIRST VERSION OF THIS GATE DID NOT HAVE IT — it treated
+     * every open note from a person as an objection, which swallowed `n-z1r4wt`: Peter's ANSWER to
+     * a question, recorded as a note because the model could not write it at the time. A gate meant
+     * to stop a rejected question being re-asked would instead have hidden a decision he had made.
+     */
+    if (n.disputes !== true) continue;
+    if (!isHuman((n.via ?? "page") as NoteVia)) continue;
+    if (!objected.has(n.about)) objected.set(n.about, { note: n.id, said: n.says, by: n.by });
+  }
+
+  /**
+   * ⛔ WORK AN AUTHOR DOES, NEVER A QUESTION OFFERED BACK. See the `disputed` kind for the five days
+   * this cost. `fills` is the ref so the fix has an address; `candidates` is empty because the
+   * options are precisely what a rejected premise cannot be trusted to carry.
+   */
+  const disputed: Owed[] = [];
+
   const drafted: Owed[] = questionsFor(corpus, scopeId)
     .filter((q) => !q.parked)
+    .filter((q) => {
+      const no = objected.get(q.ref);
+      if (!no) return true;
+      disputed.push({
+        ref: q.ref,
+        owes: "disputed",
+        asks: `${no.by} has said this question makes no sense, and it has not been fixed: "${plain(no.said)}"`,
+        why: `it was asked anyway, and rewording it is not the fix — ${no.by} is disputing what it is about`,
+        shape:
+          "either withdraw the options and ask something that matches what actually happens, or establish that the thing the question is about is real — ⛔ an author's work, and not a question for the person who already rejected it",
+        fills: [q.ref],
+        candidates: [],
+        /**
+         * ⛔ THE QUESTION AS IT STANDS IS THE CONTEXT. An author's first job here is to see what was
+         * asked beside what the person said about it — the two together are the whole finding, and
+         * either alone reads as somebody being difficult.
+         */
+        about: {
+          feature: plain(title),
+          behaviour: q.exchangeTitle ? plain(q.exchangeTitle) : undefined,
+          already: [{ asks: "it currently asks", says: plain(q.asks) }],
+          words: [],
+          undefined_words: [],
+        },
+        act: `read the note in full (${no.note}) before writing anything, and reply to it rather than re-asking`,
+      });
+      return false;
+    })
     .map((q) => ({
       ref: q.ref,
       owes: "drafted" as const,
@@ -1379,7 +1461,18 @@ export function interviewFor(corpus: Corpus, scopeId: string, findings: Finding[
    * feature and it fills exactly one slot, so any ordering by reach would bury it — which is the
    * opposite of the gate's point. It leads; the rest competes on what one answer closes.
    */
-  const owed = [...purpose, ...[...folded, ...rest].sort((a, b) => b.fills.length - a.fills.length)];
+  /**
+   * ⛔ AND A DISPUTED QUESTION COMES BEFORE EVERYTHING, EVEN THE PURPOSE.
+   *
+   * Not because it is more important than what a feature is for, but because it is the one item on
+   * this list a person has ALREADY SPENT TIME ON and been handed back. Burying it under questions
+   * is how a question Peter rejected on 2026-10-22 got reworded twice and put in front of him
+   * again — *"This still doesn't make any sense"*, then *"what does ... even mean??????"*.
+   *
+   * ⛔ It is also not sorted by reach, because `fills.length` is 1 by construction and reach is a
+   * measure of how much one ANSWER closes. Nobody is answering this one; somebody is fixing it.
+   */
+  const owed = [...disputed, ...purpose, ...[...folded, ...rest].sort((a, b) => b.fills.length - a.fills.length)];
   return {
     scope: scopeId,
     title,

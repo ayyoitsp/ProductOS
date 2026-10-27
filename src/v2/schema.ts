@@ -3812,6 +3812,27 @@ export const Note = z
      */
     probe: z.boolean().optional(),
     /**
+     * This note says the thing it is about should not be asked as it stands — not an answer to it.
+     *
+     * ⛔ SET, NEVER INFERRED, AND THAT IS THE WHOLE REASON IT IS A FIELD. Two notes on one feature
+     * read almost identically to software and mean opposite things:
+     *
+     *   n-a3v33u  "this question makes no sense to me, no idea what you're talkinga bout"
+     *   n-z1r4wt  "Anybody in the org" — an ANSWER, recorded as a note only because the model
+     *             could not write it at the time (fg-0001, since closed)
+     *
+     * A classifier reading those sentences would be a guess wearing a decision's clothes, and
+     * guessing wrong is expensive in both directions: treat an answer as a dispute and a decision
+     * somebody already made disappears; treat a dispute as an answer and the question goes back in
+     * front of the person who rejected it.
+     *
+     * ⛔ WHICH IS WHAT HAPPENED. `n-a3v33u` was recorded on 2026-10-22 and the question it rejects
+     * was reworded twice and put to Peter twice more — *"This still doesn't make any sense"*, then
+     * *"what does 'the product can't set up anywhere to save their work' even mean??????"*. Nothing
+     * could tell that note from the one beside it, so nothing acted on either.
+     */
+    disputes: z.boolean().optional(),
+    /**
      * ⛔ WHAT KIND OF THING IS BEING ASKED FOR — the corpus, or the framework that produced it.
      *
      * Peter: *"if i tag pos: {blah blah} in the message, that indicates a framework issue and to

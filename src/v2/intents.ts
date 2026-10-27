@@ -302,6 +302,18 @@ export const INTENTS: Intent[] = [
         required: false,
       },
       {
+        /**
+         * ⛔ Without this the distinction exists in the schema and no caller can set it, which is
+         * the same as not having it. See `Note.disputes`.
+         */
+        name: "disputes",
+        says:
+          "true when this note says the thing it is about should not be asked AS IT STANDS — nonsense, " +
+          "or built on a false premise. ⛔ Not for an answer, however strongly put: an answer settles the " +
+          "question, a dispute withdraws it. Nothing infers this from the sentence",
+        required: false,
+      },
+      {
         name: "assumed",
         says:
           "⛔ Required on `review`, forbidden elsewhere. What somebody would do if nobody answered " +
@@ -370,6 +382,7 @@ export const INTENTS: Intent[] = [
         /** ⛔ Only ever true where somebody said so. An inferred probe is a request discarded. */
         ...(body.probe === true ? { probe: true as const } : {}),
         ...(str(body.assumed) ? { assumed: str(body.assumed) } : {}),
+        ...(body.disputes === true ? { disputes: true } : {}),
       });
     },
   },
