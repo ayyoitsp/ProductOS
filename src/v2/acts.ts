@@ -23,7 +23,16 @@ import { loadCorpus, type Corpus } from "./load.js";
 import { Verdict, statements, authorshipOf, type SlotName, type Authorship } from "./schema.js";
 import { gateFor, sentencesIn } from "./grid.js";
 import { coveredBy, stampFor, staleReason } from "./stamp.js";
-import { questionsFor, settle, waive as applyWaiver, govern, withdraw as takeOut } from "./settle.js";
+import {
+  questionsFor,
+  whereQuestionStands,
+  descendants,
+  type Question,
+  settle,
+  waive as applyWaiver,
+  govern,
+  withdraw as takeOut,
+} from "./settle.js";
 import { resolveRef, nothingToDecide } from "./ref.js";
 import { append } from "./log.js";
 
@@ -181,6 +190,31 @@ export interface RulePayload {
   refuses?: boolean;
 }
 export interface ReadPayload { scope: string; buildable: boolean; blockedBy?: string[]; note?: string }
+
+/**
+ * The questions standing in the way of a read-through - the same ones readinessOf counts.
+ *
+ * `scope` on a read may name a feature or ONE behaviour, `<scope>#<exchange>`. Scope-only was the
+ * original shape and it made the act unusable at the grain readiness answers at: `money` holds
+ * `see-a-balance`, fully agreed and demonstrated, beside `record-spending` with two open questions.
+ * Readiness reports those as `around it` - not this exchange's facts - and the act refused anyway,
+ * so the one exchange a builder could have started on could never be recorded as buildable.
+ *
+ * Which, once buildability is part of the gate, means permanently unready. So the filter is
+ * `whereQuestionStands`, which is the function that already drew this line, now in one place.
+ */
+export function inTheWayOf(
+  corpus: Corpus,
+  ref: string
+): { scope: string; exchange?: string; open: Question[]; parked: Question[] } | null {
+  const [scope, exchange] = ref.split("#");
+  if (!scope || !corpus.scopes.some((s) => s.scope.id === scope)) return null;
+  if (exchange && !corpus.scopes.find((s) => s.scope.id === scope)?.scope.exchanges.some((e) => e.id === exchange))
+    return null;
+  const scopes = exchange ? [scope] : descendants(corpus, scope);
+  const qs = questionsFor(corpus, scope).filter((q) => whereQuestionStands(corpus, q, scopes, exchange) === "on it");
+  return { scope, exchange, open: qs.filter((q) => !q.parked), parked: qs.filter((q) => q.parked) };
+}
 export interface WaivePayload { slot: string; because: string }
 export interface DeferPayload { slot: string; because: string; until: string }
 export type Payload = AcceptPayload | RulePayload | ReadPayload | WaivePayload | DeferPayload;
@@ -306,10 +340,9 @@ export function preview(dir: string, act: Act, payload: Payload): { ok: true; re
 
   if (act === "read") {
     const { scope } = payload as ReadPayload;
-    if (!corpus.scopes.some((s) => s.scope.id === scope)) return no(`no scope "${scope}"`);
-    const qs = questionsFor(corpus, scope);
-    const open = qs.filter((q) => !q.parked);
-    const parked = qs.filter((q) => q.parked);
+    const way = inTheWayOf(corpus, scope);
+    if (!way) return no(`no scope or behaviour "${scope}"`);
+    const { open, parked } = way;
     return {
       ok: true,
       reads: [
@@ -1206,7 +1239,8 @@ function doRead(dir: string, o: ReadPayload, consent: Consent): Outcome {
   const corpus = loadCorpus(dir);
   const bad = gatesOf(consent, corpus, "a read-through");
   if (bad) return bad;
-  if (!corpus.scopes.some((s) => s.scope.id === o.scope)) return no(`no scope "${o.scope}"`);
+  const way = inTheWayOf(corpus, o.scope);
+  if (!way) return no(`no scope or behaviour "${o.scope}"`);
 
   /**
    * ⛔ A person cannot record "I could build from this" over questions nobody has answered —
@@ -1228,8 +1262,7 @@ function doRead(dir: string, o: ReadPayload, consent: Consent): Outcome {
      * The act that says *a builder may decide this themselves* is `waive`, which is why that
      * one is charged an owner, a date and forty characters.
      */
-    const qs = questionsFor(corpus, o.scope);
-    const parked = qs.filter((q) => q.parked);
+    const parked = way.parked;
     if (parked.length)
       return no(
         `${o.scope} has ${parked.length} parked question${parked.length === 1 ? "" : "s"} — "I could build from this" and "we have not decided this" cannot both be true`,
@@ -1245,7 +1278,7 @@ function doRead(dir: string, o: ReadPayload, consent: Consent): Outcome {
           { act: "read", ref: o.scope, why: "say you could NOT build from it, and what stopped you" },
         ]
       );
-    const open = qs.filter((q) => !q.parked);
+    const open = way.open;
     if (open.length)
       return no(
         `${o.scope} has ${open.length} question${open.length === 1 ? "" : "s"} nobody has answered`,

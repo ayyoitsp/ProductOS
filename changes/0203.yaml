@@ -1,0 +1,11 @@
+id: "0203"
+said: buildability should be a part of readiness, should not introduce a new 'groomed' concept.  don't know what we would use 'ready' for outside of buildability.
+at: 2026-10-27
+kind: derivation
+reaches:
+  derive: buildableReads
+  surface: unbuildableReads
+  check: a-person-could-not-build-from-this
+  pin: unread, a recorded no, and a recorded yes are three different answers from the same corpus
+waived: {}
+closed: 2026-10-27

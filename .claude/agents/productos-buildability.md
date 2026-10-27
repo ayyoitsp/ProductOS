@@ -79,3 +79,32 @@ probably assume if nobody answered — because the assumption is the actual risk
 
 Then say plainly whether you could start. "Yes, with these three guesses" is a useful answer. So is
 "no, and here is the one thing that blocks it."
+
+## ⛔ That last sentence is now the gate, so write it as one
+
+Peter: *"buildability should be a part of readiness, should not introduce a new 'groomed' concept.
+don't know what we would use 'ready' for outside of buildability."*
+
+`productos_readiness` used to answer `ready: true` on the strength of four emptiness checks — no
+open question, no unagreed claim, no requirement below the line, no claim without a test. All four
+hold over a corpus where two screens claim the same piece of state and nothing says where the data
+comes from, because each of those is a *filled slot*. That is your question, and nothing was asking
+it before the gate.
+
+It asks now: **`ready` requires a recorded read-through saying somebody could build from this, and
+refuses while one says they could not.** Your answer is the content of that record.
+
+So return it in the shape it has to be recorded in, and name the refs:
+
+- **could you start, yes or no** — one word, not a hedge. A reviewer who will not answer leaves the
+  scope reading `ready: false / nobody has read this`, which is honest and useless.
+- **what stopped you, as slot refs** — `<scope>#<exchange>#<slot>` for each. These become the
+  `blockedBy` list, and a blocker named as a ref lands in the hole list a consumer already reads; a
+  blocker named only in prose lands nowhere.
+- **what you would have assumed** for each, which is what makes it answerable by whoever owns it.
+
+⛔ **You still write nothing, and this does not change that.** You cannot record a read-through —
+that is a person's act, and one recorded by a reviewer would be software stamping its own homework
+on the one signal in the corpus nothing else can reconstruct. The session carries your answer to
+whoever is driving. What this does change is that a vague answer now stops a build rather than
+merely being unhelpful.

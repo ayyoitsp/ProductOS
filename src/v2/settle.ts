@@ -1112,3 +1112,167 @@ export function withdraw(
   void at;
   return { ok: true, file: entry.file, mode: agreed ? "withdrawn" : "deleted", was };
 }
+
+/**
+ * What a person said when they read a scope end to end — ⛔ THE ONE SIGNAL NOTHING CAN COMPUTE,
+ * AND NOW THERE IS ONE PLACE THAT ANSWERS FOR IT.
+ *
+ * Peter: *"buildability should be a part of readiness, should not introduce a new 'groomed'
+ * concept. don't know what we would use 'ready' for outside of buildability."*
+ *
+ * `Verdict kind: read` has carried `buildable` and `blocked_by` since the act shipped, and three
+ * surfaces read it by hand: `compilePacket` prints a banner (its own `readinessOf` did not),
+ * `check` raises a refusal, and the page renders it. `readinessOf` — the field a consumer asks
+ * before it starts work — consulted it nowhere, so a scope a human had read and declared
+ * unbuildable answered `ready: true`.
+ *
+ * ⛔ A FOURTH HAND-WRITTEN COPY OF THE PREDICATE IS HOW THREE AGREEING READERS BECOME FOUR
+ * DISAGREEING ONES — the warning `readiness.ts` opens with, about holes, reached by the same route
+ * one field along. So the predicate lives here, beside `questionsFor`, because the two answer
+ * halves of one question: what nobody has decided, and what somebody could not build from.
+ */
+export interface ReadThrough {
+  /** The scope they read. ⛔ May be an ancestor of the one being asked about. */
+  scope: string;
+  by: string;
+  at: string;
+  /**
+   * Could they build from it, as it stood — ⛔ THREE STATES, AND `undefined` IS NOT A NO.
+   *
+   * The field is optional on `Verdict`, so a reading relayed without it, or written before it
+   * existed, states nothing about buildability. Collapsing that to `false` would make `check`
+   * refuse every such corpus — *"a refusal firing on all of them is one people switch off"* —
+   * and collapsing it to `true` would let the gate pass on exactly the records it cannot read.
+   * It counts as neither: a reading that did not answer the question has not answered it.
+   */
+  buildable?: boolean;
+  /** Slot refs that stopped them, where they said. */
+  blockedBy: string[];
+  note?: string;
+}
+
+/** The scope ids from one scope up to the root, itself included. */
+function ancestryOf(corpus: Corpus, scopeId: string): Set<string> {
+  const out = new Set<string>([scopeId]);
+  for (let id: string | undefined = scopeId; id; ) {
+    const parent: string | undefined = corpus.scopes.find((s) => s.scope.id === id)?.scope.in;
+    if (!parent || out.has(parent)) break;
+    out.add(parent);
+    id = parent;
+  }
+  return out;
+}
+
+const readsIn = (corpus: Corpus): ReadThrough[] =>
+  corpus.verdicts
+    .filter((v) => v.kind === "read" && v.scope)
+    .map((v) => ({
+      scope: v.scope!,
+      by: v.by,
+      at: v.at,
+      buildable: v.buildable,
+      blockedBy: v.blocked_by ?? [],
+      note: v.note,
+    }))
+    .sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
+
+/**
+ * The read-throughs that say a builder could not start — ⛔ A RECORDED NO, AND ONLY THAT.
+ *
+ * What `check` refuses on and what the packet banners. Both are claims ABOUT a person's statement,
+ * so both need the statement to exist: `=== false`, never `!== true`.
+ *
+ * ⛔ IT REACHES IN BOTH DIRECTIONS, WHICH `buildableReads` DELIBERATELY DOES NOT. A person who
+ * could not build a parent could not build its children — they read the subtree. And a person who
+ * could not build ONE behaviour has found something wrong with the feature containing it, so the
+ * feature is not startable either. A no is contagious in both directions; see the other one.
+ */
+export function unbuildableReads(corpus: Corpus, ref: string): ReadThrough[] {
+  const [scopeId, exchange] = ref.split("#");
+  const ancestry = ancestryOf(corpus, scopeId!);
+  const under = new Set(descendants(corpus, scopeId!));
+  return readsIn(corpus).filter((r) => {
+    if (r.buildable !== false) return false;
+    const [at, atExchange] = r.scope.split("#");
+    /** A no on a sibling behaviour is not a no on this one. */
+    if (exchange && atExchange && !(at === scopeId && atExchange === exchange)) return false;
+    return ancestry.has(at!) || under.has(at!);
+  });
+}
+
+/**
+ * The read-throughs that say a builder could start.
+ *
+ * ⛔ DOWNWARD ONLY, AND NEVER UP. A person who read a whole feature and could build it has said
+ * something about every behaviour in it; a person who read ONE behaviour has said nothing about its
+ * siblings, so their yes must not make the feature ready. Asked of a feature, a child's yes is not
+ * an answer — asked of the child, the parent's yes is.
+ *
+ * ⛔ AND IT IS A RECORDED YES, NOT THE ABSENCE OF A NO, which is the other half of the asymmetry:
+ * `readinessOf` withholds a pass until somebody says so, `check` stays quiet until somebody says
+ * otherwise. A reading that stated neither satisfies neither.
+ */
+export function buildableReads(corpus: Corpus, ref: string): ReadThrough[] {
+  const [scopeId, exchange] = ref.split("#");
+  const ancestry = ancestryOf(corpus, scopeId!);
+  return readsIn(corpus).filter((r) => {
+    if (r.buildable !== true) return false;
+    const [at, atExchange] = r.scope.split("#");
+    if (atExchange) return Boolean(exchange) && at === scopeId && atExchange === exchange;
+    return ancestry.has(at!);
+  });
+}
+
+/**
+ * ⛔ MOVED HERE FROM `readiness.ts`, BECAUSE TWO SURFACES WERE ANSWERING IT AND ONLY ONE HAD IT.
+ *
+ * `doRead` refuses *"I could build from this"* over `questionsFor(scope)` with no filter at all —
+ * every question anywhere under the scope. `readinessOf` asks this function and reports a sibling
+ * exchange's question as `around it`, deliberately: *"a sentence it does not use, a slot it does not
+ * have, and an invitation to go and ask a person about neither."*
+ *
+ * Both are claims about what blocks one piece of work, and they disagreed. The cost was exact:
+ * `money#see-a-balance` has every slot agreed and every claim demonstrated, its sibling
+ * `record-spending` has two open questions — so readiness called it clear, and the act a person
+ * would use to record that they could build it was refused. With buildability inside the gate,
+ * that combination makes the exchange permanently unready. One function, both callers.
+ */
+/**
+ * Where one of the queue's questions stands relative to this work.
+ *
+ *   `on it`        it is about a fact of this work — a hole, and nothing here is buildable
+ *   `around it`    it reaches this work and lands on none of its facts — raise it, do not gate on it
+ *   `nowhere near` it is about some other behaviour, and this verdict is not the place for it
+ *
+ * ⛔ THE THIRD ONE MATTERS AS MUCH AS THE OTHER TWO. `questionsFor` is asked of a SCOPE, so asking
+ * about one behaviour returns its siblings' questions too. Reporting those as reaching the work would
+ * tell a grooming agent that `record-earning` is held up by a question about `record-spending` — a
+ * sentence it does not use, a slot it does not have, and an invitation to go and ask a person about
+ * neither.
+ *
+ * ⛔ AND FOR A RULE, `awaiting` DECIDES RATHER THAN THE SELECTOR. `openRuleQuestions` returns a rule
+ * for every scope it selects — right for a queue, because ruling it is work somebody owes — but an
+ * open rule supplies no sentence, so where the exchange already states the slot the local sentence is
+ * the answer and the rule is holding nothing open. `resolveRules` records `awaiting` only where the
+ * exchange says nothing itself, which is exactly the distinction, already drawn once.
+ */
+export type Where = "on it" | "around it" | "nowhere near";
+
+export function whereQuestionStands(corpus: Corpus, q: Question, scopes: string[], exchange?: string): Where {
+  const seg = q.ref.split("#");
+  /** A slot, one of its statements, or a named refusal case — a fact somebody can point at. */
+  if (seg.length >= 3) {
+    if (!scopes.includes(seg[0]!)) return "nowhere near";
+    return !exchange || seg[1] === exchange ? "on it" : "nowhere near";
+  }
+  /** A contested word, `<scope>#<word>` — scope-wide, and it blanks no slot. */
+  if (seg.length === 2) return scopes.includes(seg[0]!) ? "around it" : "nowhere near";
+  const { awaiting } = resolveRules(corpus);
+  for (const [ref, rules] of awaiting) {
+    if (!rules.some((r) => r.id === q.ref)) continue;
+    const at = ref.split("#");
+    if (!scopes.includes(at[0]!)) continue;
+    if (!exchange || at[1] === exchange) return "on it";
+  }
+  return "around it";
+}

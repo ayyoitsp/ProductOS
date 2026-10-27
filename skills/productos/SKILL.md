@@ -114,6 +114,7 @@ You are the **orchestrator**, and you are the session — not a subagent. That i
 - ⛔ checking somebody actually agreed before spawning either of these — the precondition is the whole point of the split
 - deciding what to do with what comes back: a question the corpus must settle goes to the person, never to the builder
 - every act of judgement — an engineer saying it is buildable is not somebody agreeing it is right
+- ⛔ landing what `buildability` found: each gap it names becomes a question on the slot it belongs to, then a read-through recording whether somebody could build from it — `buildable: false` with those refs as `blockedBy`, or `true` once they are answered. ⛔ The reviewer writes nothing and `ready` now requires this, so a finding that stops here stops the gate too
 
 ### Answer whether a piece of work can be built, and raise what is open as questions
 
