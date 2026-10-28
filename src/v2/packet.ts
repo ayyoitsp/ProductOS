@@ -652,6 +652,34 @@ function compileOne(corpus: Corpus, scopeId: string): { md: string; holes: strin
      * at exactly the address its test was written against.
      */
     const cs = ex.criteria;
+    /**
+     * ⛔ WHAT WAS CONCLUDED TO NEED NOTHING BUILT, AND WHY — fg-0020, on the artefact a builder holds.
+     *
+     * This is the field's surface, and the packet is the right one: it is the only route past the
+     * machinery gate, so a builder handed a ready packet has to be able to see which promises were
+     * cleared that way and disagree. Rendered nowhere, it would be an exemption visible only to
+     * whoever wrote it — and `v2-no-dead-fields` refuses a field no surface reads for exactly that.
+     *
+     * ⛔ The reason is printed, never summarised. It is priced at thirty characters precisely so
+     * somebody can argue with it, and a packet that said only "nothing needed here" would throw
+     * away the one part that makes it arguable.
+     */
+    const nothing = ex.needs_nothing ?? [];
+    if (nothing.length) {
+      out.push("");
+      out.push(
+        `Nothing has to be built for ${
+          nothing.length === 1 ? "one of these" : `${nothing.length} of these`
+        }:`
+      );
+      for (const nn of nothing) {
+        const whose = nn.derived
+          ? `worked out by ${nn.derived.by} on ${nn.derived.at}`
+          : "⚠ typed by hand, so nothing says what it was concluded against — it counts for nothing at the gate";
+        out.push(`- *${nn.slot}${nn.of ? ` · ${nn.of}` : ""}* — ${nn.because.replace(/\s+/g, " ").trim()} *(${whose})*`);
+      }
+    }
+
     if (cs.length) {
       out.push("");
       out.push(`What must be demonstrated — ${cs.length} requirement${cs.length === 1 ? "" : "s"}:`);

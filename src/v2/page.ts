@@ -2087,13 +2087,13 @@ function featureHead(corpus: Corpus, scopeId: string, title: string, ctx: Ctx): 
          <ul class="verdict-holes">${verdict.holes.map((h) => `<li>${esc(named(h))}</li>`).join("")}</ul>`
     : "";
   /**
-   * Promises no part of the system answers yet.
+   * Promises no part of the system answers, and nobody has concluded need none.
    *
-   * ⛔ OUTSIDE THE VERDICT, NOT INSIDE IT. Peter: *"does buildability also ensure capabilities are
-   * mapped from a feature?"* — it does now, and it reports rather than blocks: a promise may
-   * genuinely need no new machinery and the model has nowhere to say so (fg-0020). Printed inside
-   * the blocked branch it would read as one of the things stopping a builder; printed only there it
-   * would vanish on every ready feature, which is exactly where somebody is about to start.
+   * ⛔ STILL ITS OWN LINE NOW THAT IT BLOCKS, which is a change of reason rather than of place.
+   * It shipped outside the verdict because it did not gate; fg-0020 closed that, so it does. It
+   * stays separate because what it routes to is different from everything in the hole list: a hole
+   * is a decision a PERSON owes, and this is work a decomposer owes — and a reader shown them
+   * together goes looking for a question nobody has asked them.
    *
    * ⛔ AND IT NAMES BEHAVIOURS, NEVER REFS. `money#see-a-balance#answer` is an address; a reader
    * meets the behaviour's own title, through the same `named` this file already uses for a hole.
@@ -2104,7 +2104,7 @@ function featureHead(corpus: Corpus, scopeId: string, title: string, ctx: Ctx): 
         unserved.length === 1 ? "has" : "have"
       } no part of the system against ${
         unserved.length === 1 ? "it" : "them"
-      } yet. Not a decision anybody owes — somebody has to work the parts out:</p>
+      } yet. Not a decision anybody owes — a decomposer has to work the parts out, or conclude that nothing needs building and say why:</p>
        <ul class="verdict-parts-list">${[
          ...new Set(unserved.map((r) => named(r.split("#").slice(1, 3).join("#")))),
        ]

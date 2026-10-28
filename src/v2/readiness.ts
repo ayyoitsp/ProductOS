@@ -221,26 +221,27 @@ export interface Readiness {
    */
   untested: string[];
   /**
-   * Statements no machinery says it serves — ⛔ REPORTED, AND IT CANNOT GATE YET.
+   * Statements no machinery answers and nobody has concluded need none — ⛔ GATING, SINCE fg-0020.
    *
-   * Peter: *"does buildability also ensure capabilities are mapped from a feature?"* It did not, and
-   * nor did anything else: driven on the shipped seed, zero subsystems, none of five behaviours
-   * served, zero findings, `ready: true`.
+   * Peter: *"does buildability also ensure capabilities are mapped from a feature?"*, then
+   * *"that doesnt change the fact that the feature isn't bcked by a capability"*, then
+   * *"let's implement fg0020"*.
    *
-   * This is `untested`'s twin and it is deliberately NOT in the gate, which is the one asymmetry in
-   * this file that is a gap rather than a decision:
+   * This is `untested`'s twin and it shipped as a report, with the reason written down as a gap: a
+   * behaviour can legitimately need NO new machinery, and the model had nowhere to say so — so a
+   * refusal could only be cleared by inventing a part, which is verbatim the failure `none: true`
+   * exists to prevent.
    *
-   *   `untested`   every claim owes a demonstration. There is no claim that needs none, so an
-   *                empty list is reachable and blocking on it is honest.
-   *   `unserved`   a behaviour can legitimately need NO new machinery, and **the model has no way
-   *                to say so.** Blocking would fire on every corpus with no subsystems at all, and
-   *                the only way to clear it would be to invent a part — which is verbatim the
-   *                failure `none: true` exists to prevent: *"a model that refused to let anyone say
-   *                so would push an author into inventing a state change just to fill the slot."*
+   * `needs_nothing` is that somewhere. An empty list is now reachable without inventing anything, so
+   * the asymmetry is gone and this blocks exactly as `untested` does:
    *
-   * ⛔ So the absence here is a framework gap, not an author's mistake, and it is recorded as one
-   * (fg). What is reported is what a grooming agent actually needs — these are the promises nobody
-   * has worked the parts out for — without a refusal nobody can satisfy.
+   *   a part serves it            answered
+   *   a decomposer concluded      nothing has to be built, with a reason, against this wording
+   *   neither                     ⛔ a builder has no idea what makes this happen
+   *
+   * ⛔ AND A CONCLUSION ONLY COUNTS WHILE ITS HASH MATCHES. Conclude nothing is needed, then reword
+   * the promise, and it is unserved again — otherwise this gate has a permanent bypass with a
+   * one-line cost.
    */
   unserved: string[];
   /**
@@ -450,6 +451,12 @@ export function readinessOf(corpus: Corpus, ref: string): Readiness | { error: s
     unagreed.length === 0 &&
     unbuildable.length === 0 &&
     untested.length === 0 &&
+    /**
+     * ⛔ fg-0020 CLOSED THIS. It reported rather than blocked only because an empty list was
+     * unreachable without inventing a part; `needs_nothing` makes it reachable, so the twin of
+     * `untested` now behaves like `untested`.
+     */
+    unserved.length === 0 &&
     /** ⛔ A RECORDED YES IS REQUIRED, not merely the absence of a no — see `buildableReads`. */
     reads.length > 0 &&
     stopped.length === 0;
@@ -506,16 +513,6 @@ function verdict(x: {
   unserved: string[];
 }): string {
   const tests = `${n(x.requirements.length, "testing requirement")} to implement`;
-  /**
-   * ⛔ SAID ON BOTH SIDES OF THE VERDICT, because it is not a reason for either. A ready scope with
-   * unmapped promises is still ready — nothing in the gate turns on this — and a reader who only
-   * ever saw it beside "not ready" would read it as one of the things blocking them.
-   */
-  const parts = x.unserved.length
-    ? ` ⛔ ${n(x.unserved.length, "promise")} ${was(x.unserved.length, "has", "have")} no machinery against ${
-        x.unserved.length === 1 ? "it" : "them"
-      } (${x.unserved.join(", ")}) — a decomposer owes the parts. Reported, not blocking: a promise may genuinely need nothing new, and nothing in the model can say so yet.`
-    : "";
   const extra = x.openElsewhere.length
     ? ` ${n(x.openElsewhere.length, "open question")} ${was(x.openElsewhere.length, "reaches", "reach")} this work without landing on any of its facts (${x.openElsewhere
         .map((q) => q.ref)
@@ -528,7 +525,6 @@ function verdict(x: {
       (x.latitude.length
         ? ` ${n(x.latitude.length, "slot")} ${was(x.latitude.length, "is", "are")} declared the builder's latitude.`
         : "") +
-      parts +
       extra
     );
 
@@ -583,13 +579,25 @@ function verdict(x: {
           : "")
     );
   }
+  /**
+   * ⛔ BESIDE `untested`, BECAUSE IT IS THE SAME SENTENCE ON THE OTHER AXIS — one says nothing would
+   * show this holding, the other says nothing makes it happen. Both are owed by a role rather than
+   * by a person, and a verdict that routed either to the human it is shown to would send them to
+   * rewrite truth that is not wrong.
+   */
+  if (x.unserved.length)
+    why.push(
+      `${n(x.unserved.length, "promise")} with no part of the system behind ${
+        x.unserved.length === 1 ? "it" : "them"
+      } (${x.unserved.join(", ")}) — a decomposer owes the parts, or has to conclude that nothing needs building and say why`
+    );
   if (x.untested.length)
     why.push(
       `${n(x.untested.length, "claim")} with nothing that would show ${was(x.untested.length, "it", "them")} holding (${x.untested.join(", ")}) — a demonstrator owes the tests, not a person`
     );
   return (
     `Not ready to build: ${why.join("; and ")}. ` +
-    `${n(x.settled.length, "fact")} ${was(x.settled.length, "is", "are")} agreed, and ${tests}.${parts}${extra}`
+    `${n(x.settled.length, "fact")} ${was(x.settled.length, "is", "are")} agreed, and ${tests}.${extra}`
   );
 }
 

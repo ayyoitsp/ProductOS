@@ -184,61 +184,36 @@ test("a slot saying three things is reported sentence by sentence, and one part 
 });
 
 /**
- * ⛔ IT IS IN THE VERDICT AND IT DOES NOT BLOCK — `fg-0020`. This is the assertion that keeps the
- * gap honest: the day somebody adds a way to say "this needs nothing new", this test is what says
- * the gate was deliberately left open until then.
+ * ⛔ IT BLOCKS NOW, AND IT DID NOT WHEN THIS FILE WAS WRITTEN.
+ *
+ * This case used to assert the opposite, with the reason recorded as `fg-0020`: a behaviour can
+ * legitimately need no new machinery and the model had nowhere to say so, so a refusal could only
+ * be cleared by inventing a part. `needs_nothing` is that somewhere — an empty list is reachable
+ * without inventing anything — so the gap closed and the twin of `untested` behaves like `untested`.
+ *
+ * The assertion that kept the gap honest has done its job: it is this one, inverted.
  */
-test("readiness reports unserved promises on both sides of the verdict, and gates on neither", () => {
+test("readiness blocks on a promise with no part behind it, and says whose job that is", () => {
   const dir = seed("v2parts-verdict-");
   const r = ok(readinessOf(loadCorpus(dir), EX));
 
-  assert.ok(r.unserved.length, "the seed has no subsystems, so its promises cannot be served");
-  assert.match(r.because, /no machinery against/);
-  assert.match(r.because, /Reported, not blocking/);
+  assert.ok(r.unserved.length, "the seed has no subsystems, so its promises cannot be answered");
+  assert.equal(r.ready, false);
+  assert.match(r.because, /no part of the system behind/);
+  /** ⛔ Routed to a role, never to the person reading it — the same as `untested` beside it. */
+  assert.match(r.because, /a decomposer owes the parts, or has to conclude that nothing needs building/);
 
   /**
-   * ⛔ NOTHING IT CONTRIBUTES IS A HOLE — `holes` is the gating list, so a list that quietly joined
-   * it would pass every assertion above while blocking every corpus in existence.
-   *
-   * ⛔ And NOT disjoint from `untested`, which the first version of this test asserted and was wrong
-   * about: a claim with no test and no machinery is two independent facts about one sentence, owed
-   * by two different roles. Overlap is the normal case on a corpus nobody has derived either layer
-   * for, and demanding they not overlap would have forced one of the two to go quiet.
+   * ⛔ AND STILL NOT A HOLE. `holes` is what a PERSON owes an answer to; this is work a role owes,
+   * and collapsing the two sends a reviewer looking for a question nobody asked them.
    */
   for (const ref of r.unserved) assert.ok(!r.holes.some((h) => h.ref === ref), `${ref} became a hole`);
+
+  /** ⛔ Independent of `untested`, not disjoint from it: two facts about one sentence, two owners. */
   assert.ok(
     r.unserved.some((ref) => r.untested.includes(ref)),
-    "the fixture no longer exercises a sentence that is both untested and unserved"
+    "the fixture no longer exercises a sentence that is both untested and unanswered"
   );
-
-  /**
-   * ⛔ THE PROOF IT DOES NOT GATE: the same corpus reaching `ready: true` with the list non-empty.
-   * Asserting only "ready is false here" would be satisfied by a build that did gate on it.
-   */
-  const { inherited } = resolveRules(loadCorpus(dir));
-  for (const id of new Set(SLOTS.map((s) => inherited.get(`${EX}#${s}`)?.id).filter(Boolean)))
-    perform(dir, "accept", { target: id }, { by: "peter", via: "page", because: "yes" });
-  for (const slot of SLOTS)
-    perform(dir, "accept", { target: `${EX}#${slot}` }, { by: "peter", via: "page", because: "yes" });
-  perform(dir, "read", { scope: EX, buildable: true }, { by: "peter", via: "page" });
-
-  const c = loadCorpus(dir);
-  c.scopes
-    .find((s) => s.scope.id === "money")
-    .scope.exchanges.find((e) => e.id === "see-a-balance")
-    .criteria.push({
-      id: "6",
-      slot: "at_once",
-      kind: "instance",
-      then: "both people looking see the same figure",
-      derived: { by: "demonstrator", at: "2026-10-17", from: claimHash(c, `${EX}#at_once`) },
-    });
-
-  const ready = ok(readinessOf(c, EX));
-  assert.equal(ready.ready, true, ready.because);
-  assert.ok(ready.unserved.length, "the fixture stopped exercising the case");
-  assert.match(ready.because, /^Ready to build/);
-  assert.match(ready.because, /no machinery against/, "a ready verdict dropped the report instead of carrying it");
 });
 
 /**
