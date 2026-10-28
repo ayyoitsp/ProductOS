@@ -27,7 +27,8 @@
 import fs from "node:fs";
 import { parseFrontmatter } from "../core/frontmatter.js";
 import YAML from "yaml";
-import { Scope, Rule, type SlotName , saysText, statements, type Authorship} from "./schema.js";
+import { Scope, Rule, type SlotName , saysText, statements, type Authorship, type NoteVia } from "./schema.js";
+import { isHuman } from "./acts.js";
 import { loadCorpus, resolveRules, selectsFor, lineageOf, type Corpus } from "./load.js";
 import { resolveRef } from "./ref.js";
 import { removals, refuseBecause } from "./write.js";
@@ -58,6 +59,16 @@ export interface Question {
    * exactly that: `was_asked` was written by an author and read by nothing.
    */
   wasAsked?: string[];
+  /**
+   * A person has said this question should not be asked as it stands — `Note.disputes`.
+   *
+   * ⛔ IT LIVES HERE BECAUSE `questionsFor` IS THE ONE HOME FOR "THIS IS A QUESTION", AND PUTTING IT
+   * ANYWHERE ELSE MEANT ONE SURFACE KNEW AND THE REST DID NOT. I gated it in `interviewFor` first
+   * and the PAGE went on offering both disputed questions under *"5 questions nobody has answered"*
+   * — the page derives its own list from here, so the fix did not exist on the surface Peter
+   * actually works on. He had rejected one of them three times.
+   */
+  disputed?: { note: string; said: string; by: string };
   /** What it costs to guess wrong, where the standing says. */
   cost?: string;
   owed?: string;
@@ -216,7 +227,29 @@ export function questionsFor(corpus: Corpus, scopeId: string): Question[] {
    */
   const fromRules = openRuleQuestions(corpus, under);
   const fromTerms = openTermQuestions(corpus, under);
-  return orderByAttention(corpus, [...fromRules, ...fromTerms, ...fromSlots]);
+  /**
+   * ⛔ ONLY `disputes: true`, AND ONLY FROM A PERSON. A judge's `review` note saying a question is
+   * unclear is a finding to act on; a person saying it is nonsense withdraws the question. See
+   * `Note.disputes` for why nothing reads the sentence to tell them apart.
+   */
+  const objected = new Map<string, { note: string; said: string; by: string }>();
+  for (const n of corpus.notes) {
+    if (n.state !== "open" || !n.about || n.disputes !== true) continue;
+    if (!isHuman((n.via ?? "page") as NoteVia)) continue;
+    if (!objected.has(n.about)) objected.set(n.about, { note: n.id, said: n.says, by: n.by });
+  }
+
+  /**
+   * ⛔ STAMPED ON EVERY GRAIN AT ONCE — slot, case, rule and term alike. Doing it at each push site
+   * is four chances to forget one, and the one forgotten is a disputed question that keeps being
+   * offered on whichever surface reads that grain.
+   */
+  const all = orderByAttention(corpus, [...fromRules, ...fromTerms, ...fromSlots]);
+  for (const q of all) {
+    const no = objected.get(q.ref);
+    if (no) q.disputed = no;
+  }
+  return all;
 }
 
 /**

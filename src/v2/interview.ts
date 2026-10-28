@@ -49,8 +49,7 @@ import { ANALYSES } from "./analyse.js";
 import { capabilityTree } from "./subsystems.js";
 import { descendants, questionsFor, rulingAct, type Question } from "./settle.js";
 import { vocabularyReach } from "./load.js";
-import { POLICY_SLOTS, SLOT_ASKED, SLOT_ASKS_SHORT, SLOTS, statements, type NoteVia, type SlotName } from "./schema.js";
-import { isHuman } from "./acts.js";
+import { POLICY_SLOTS, SLOT_ASKED, SLOT_ASKS_SHORT, SLOTS, statements, type SlotName } from "./schema.js";
 
 const plain = (x: unknown): string => String(x ?? "").replace(/\s+/g, " ").trim();
 
@@ -1242,20 +1241,6 @@ export function interviewFor(corpus: Corpus, scopeId: string, findings: Finding[
    * ⛔ AND ONLY `open` ONES. A note somebody closed has been dealt with — treating a settled
    * objection as live would hide questions forever on the strength of a complaint already answered.
    */
-  const objected = new Map<string, { note: string; said: string; by: string }>();
-  for (const n of corpus.notes) {
-    if (n.state !== "open" || !n.about) continue;
-    /**
-     * ⛔ `disputes` IS THE FIELD, AND MY FIRST VERSION OF THIS GATE DID NOT HAVE IT — it treated
-     * every open note from a person as an objection, which swallowed `n-z1r4wt`: Peter's ANSWER to
-     * a question, recorded as a note because the model could not write it at the time. A gate meant
-     * to stop a rejected question being re-asked would instead have hidden a decision he had made.
-     */
-    if (n.disputes !== true) continue;
-    if (!isHuman((n.via ?? "page") as NoteVia)) continue;
-    if (!objected.has(n.about)) objected.set(n.about, { note: n.id, said: n.says, by: n.by });
-  }
-
   /**
    * ⛔ WORK AN AUTHOR DOES, NEVER A QUESTION OFFERED BACK. See the `disputed` kind for the five days
    * this cost. `fills` is the ref so the fix has an address; `candidates` is empty because the
@@ -1266,7 +1251,13 @@ export function interviewFor(corpus: Corpus, scopeId: string, findings: Finding[
   const drafted: Owed[] = questionsFor(corpus, scopeId)
     .filter((q) => !q.parked)
     .filter((q) => {
-      const no = objected.get(q.ref);
+      /**
+       * ⛔ `q.disputed` FROM `questionsFor`, NOT A SECOND READ OF THE NOTES. This file computed its
+       * own map first, and the PAGE — which builds its list straight from `questionsFor` — went on
+       * offering both disputed questions under "5 questions nobody has answered". One surface knew
+       * and the others did not, which is the whole reason that function is the one home.
+       */
+      const no = q.disputed;
       if (!no) return true;
       disputed.push({
         ref: q.ref,
