@@ -94,6 +94,24 @@ export type Owes =
    * is what a person is asked to READ at a time.
    */
   | "handover"
+  /**
+   * A word this feature uses whose definition does not reach it — so nothing is holding its sense.
+   *
+   * ⛔ THIS IS THE PRECONDITION FOR AMBIGUITY, NOT A CLAIM OF IT. "Is this word ambiguous" is a
+   * reading and would be a guess wearing a decision's clothes. "This word is used here and its
+   * definition is somewhere that cannot be seen from here" is a count, and the count is the only
+   * part a check or a question can stand on.
+   *
+   * ⛔ IT IS EXACTLY HOW THE ONE WE FOUND DRIFTED. "kind of deal" was used in 11 scopes and its
+   * definition reached 2, so the phrase quietly came to carry two unrelated concepts — the lender's
+   * product (bridge, rehab, DSCR) and the kind of system the deal lives in. Nothing noticed for as
+   * long as the corpus has existed; Peter found it by reading one sentence of one boundary.
+   *
+   * ⛔ A QUESTION, NEVER A REFUSAL — his call when asked: *"A question for the interviewer."* A word
+   * nobody has defined where it is used is not a defect on its own; plenty of words need no
+   * definition. What is owed is somebody saying whether it is one thing.
+   */
+  | "undefined-word"
   /** A slot says nothing and nothing fills it — `check`'s `slot-blank`. */
   | "blank"
   /** A question already drafted and waiting on the person it is asked of — `questionsFor`. */
@@ -492,6 +510,101 @@ function wordsIn(
    * prose is a reading, and a reading dressed as a finding is the thing this file refuses to be.
    */
   return { words, missing: [] };
+}
+
+/**
+ * Words this feature uses that are DEFINED somewhere the feature cannot see.
+ *
+ * ⛔ ARITHMETIC, NOT A READING, AND THAT IS THE WHOLE DESIGN. `wordsIn` refuses to extract concepts
+ * from prose for a good reason recorded directly above it — guessing produced *"processor told
+ * that"* and *"check failed"* as vocabulary gaps. This asks a strictly countable question instead:
+ * somebody has DEFINED this word, it appears here, and `vocabularyReach` says the definition does
+ * not travel this far. No judgement about whether the senses differ, because that is the part a
+ * person owes.
+ *
+ * ⛔ IT IS HOW THE ONE WE FOUND DRIFTED. "kind of deal" was used in 11 scopes and its definition
+ * reached 2. Nothing in the framework could see that; Peter found it by reading one boundary
+ * sentence and noticing the phrase was carrying two unrelated concepts.
+ *
+ * ⛔ AND ONLY WORDS SOMEBODY ALREADY DEFINED. A word nobody has defined anywhere is a different
+ * thing — plenty of words need no definition, and demanding one for each would be the padding this
+ * file exists to refuse.
+ */
+/**
+ * Every scope's text, flattened once — and `definedOutOfReach`'s index, built once per corpus.
+ *
+ * ⛔ MEMOISED BECAUSE THE FIRST VERSION WAS QUADRATIC AND I SHIPPED IT TO A TIMEOUT. It flattened
+ * every scope to a string INSIDE the per-word loop, so one feature cost 188 words × 64 scopes ×
+ * a JSON round-trip, and a corpus-wide sweep never finished. The index below is the same arithmetic
+ * computed once: each scope's haystack, and each word's users and reach.
+ *
+ * ⛔ Keyed on the corpus object, so a reloaded corpus gets a fresh index rather than a stale one —
+ * every write in this project reloads, which is the only reason a cache is safe here at all.
+ */
+const WORD_INDEX = new WeakMap<Corpus, { haystack: Map<string, string>; defined: Map<string, string[]>; spread: Map<string, { users: string[]; reaches: number }> }>();
+
+function wordIndex(corpus: Corpus) {
+  const had = WORD_INDEX.get(corpus);
+  if (had) return had;
+
+  const flat = (o: unknown) => ` ${JSON.stringify(o).toLowerCase().replace(/[^a-z0-9]+/g, " ")} `;
+  const haystack = new Map<string, string>();
+  for (const { scope } of corpus.scopes) haystack.set(scope.id, flat(scope));
+
+  const defined = new Map<string, string[]>();
+  for (const { scope } of corpus.scopes)
+    for (const w of Object.keys(scope.terms ?? {})) {
+      const k = w.toLowerCase();
+      if (!defined.has(k)) defined.set(k, []);
+      defined.get(k)!.push(scope.id);
+    }
+
+  /** ⛔ `vocabularyReach` once per scope, not once per word per scope. */
+  const reach = new Map<string, Set<string>>();
+  for (const { scope } of corpus.scopes) reach.set(scope.id, new Set(vocabularyReach(corpus, scope.id)));
+
+  const spread = new Map<string, { users: string[]; reaches: number }>();
+  for (const [word, where] of defined) {
+    const needle = ` ${word.replace(/[^a-z0-9]+/g, " ")} `;
+    const users = [...haystack].filter(([, t]) => t.includes(needle)).map(([id]) => id);
+    const reaches = users.filter((id) => where.some((d) => reach.get(id)?.has(d))).length;
+    spread.set(word, { users, reaches });
+  }
+
+  const index = { haystack, defined, spread };
+  WORD_INDEX.set(corpus, index);
+  return index;
+}
+
+/**
+ * Words this feature uses that are DEFINED somewhere the feature cannot see.
+ *
+ * ⛔ ARITHMETIC, NOT A READING, AND THAT IS THE WHOLE DESIGN. `wordsIn` refuses to extract concepts
+ * from prose for a good reason recorded directly above it — guessing produced *"processor told
+ * that"* and *"check failed"* as vocabulary gaps. This asks a strictly countable question instead:
+ * somebody has DEFINED this word, it appears here, and `vocabularyReach` says the definition does
+ * not travel this far. No judgement about whether the senses differ, because that is the part a
+ * person owes.
+ *
+ * ⛔ IT IS HOW THE ONE WE FOUND DRIFTED. "kind of deal" was used in 11 scopes and its definition
+ * reached 2. Nothing in the framework could see that; Peter found it by reading one boundary
+ * sentence and noticing the phrase was carrying two unrelated concepts.
+ *
+ * ⛔ AND ONLY WHERE IT HAS ACTUALLY DRIFTED. Asking about every out-of-reach word gave **17
+ * questions on one feature** — the load problem this whole role exists to avoid, rediscovered one
+ * layer along. A word is only worth asking about when MOST of its uses cannot see a definition:
+ * that is still a count, and it is the shape of the one Peter found (11 uses, 2 reached).
+ */
+function definedOutOfReach(corpus: Corpus): Array<{ word: string; where: string[]; users: number; reaches: number }> {
+  const { defined, spread } = wordIndex(corpus);
+  const out: Array<{ word: string; where: string[]; users: number; reaches: number }> = [];
+  for (const [word, where] of defined) {
+    const { users, reaches } = spread.get(word) ?? { users: [], reaches: 0 };
+    /** ⛔ Drifted: used in several places and reaching fewer than half of them. */
+    if (users.length < 3 || reaches * 2 >= users.length) continue;
+    out.push({ word, where, users: users.length, reaches });
+  }
+  return out.sort((a, b) => b.users - a.users);
 }
 
 export function contextFor(
@@ -1522,7 +1635,53 @@ export function interviewFor(corpus: Corpus, scopeId: string, findings: Finding[
    * ⛔ It is also not sorted by reach, because `fills.length` is 1 by construction and reach is a
    * measure of how much one ANSWER closes. Nobody is answering this one; somebody is fixing it.
    */
-  const owed = [...disputed, ...purpose, ...[...folded, ...rest].sort((a, b) => b.fills.length - a.fills.length)];
+  /**
+   * ⛔ A WORD WHOSE DEFINITION DOES NOT REACH HERE — asked, never refused. Peter's call: *"A question
+   * for the interviewer."* See the `undefined-word` kind for why the test is a count and not a
+   * reading, and `definedOutOfReach` for what it counts.
+   */
+  /**
+   * ⛔ ONCE AT THE PRODUCT, NEVER PER FEATURE — AND THE NUMBER THAT SETTLED IT IS 950.
+   *
+   * Asked per feature this produced **950 questions across the corpus**, whose commonest subjects
+   * were `reading`, `deal`, `kind`, `role`, `document`. Those are not 950 ambiguities: they are the
+   * product's CORE NOUNS, each defined in one feature and used in fifty, and the fix for every one
+   * of them is the same single act — put the word in the glossary. Asking each feature separately
+   * is the load problem this role exists to remove, rediscovered one layer along.
+   *
+   * ⛔ SAME SHAPE AS THE CAPABILITY TREE, and that precedent is explicit: *"a subsystem serves many
+   * features, so which parts exist is not a per-feature question."* A word means one thing across a
+   * product or it does not; whose feature noticed is an accident of where somebody was reading.
+   */
+  const atProduct = !corpus.scopes.find((x) => x.scope.id === scopeId)?.scope.in;
+  const loose: Owed[] = (atProduct ? definedOutOfReach(corpus) : []).map((x) => ({
+    ref: `${scopeId}#word:${x.word.replace(/[^a-z0-9]+/g, "-")}`,
+    owes: "undefined-word" as const,
+    asks: [
+      /**
+       * ⛔ "USED HERE" WAS WRONG AT THE ONE PLACE THIS IS ASKED. Folded to the product root, "here"
+       * is the whole product, so the sentence said nothing. The arithmetic IS the context: where it
+       * is defined, how far it travels, and how much of its use that covers.
+       */
+      `"${x.word}" is defined in ${x.where.join(" and ")}, and used in ${x.users} places across the product.`,
+      `The definition reaches ${x.reaches === 0 ? "none of them" : x.reaches === 1 ? "one of them" : `${x.reaches} of them`}.`,
+      "Is it one thing?",
+    ].join(" "),
+    why: `it is defined in ${x.where.join(", ")}, which this feature does not reach — so nothing is holding what it means here`,
+    shape:
+      "either the same thing, and the definition belongs somewhere both can see — the product's glossary — or a different thing, which needs its own name",
+    fills: [`${scopeId}#word:${x.word.replace(/[^a-z0-9]+/g, "-")}`],
+    candidates: [],
+    about: {
+      feature: plain(title),
+      already: [{ asks: `where "${x.word}" is defined`, says: x.where.join(", ") }],
+      words: [],
+      undefined_words: [],
+    },
+    act: "a person says whether it is one thing — ⛔ nothing here guesses, because whether two uses mean the same is a reading and not a count",
+  }));
+
+  const owed = [...disputed, ...purpose, ...loose, ...[...folded, ...rest].sort((a, b) => b.fills.length - a.fills.length)];
   return {
     scope: scopeId,
     title,
