@@ -1,0 +1,22 @@
+id: "0223"
+said: |-
+  we should probably have a glossary section that is 'top level'
+  [asked what happens when a feature redefines a glossary word] Refuse it
+  [asked whether a word used where no definition reaches is a check failure or a question]
+  A question for the interviewer
+at: 2026-10-28
+kind: concept
+reaches:
+  model: ""
+  derive: definedOutOfReach
+  generate: ""
+  surface: ""
+  check: redefines-a-glossary-word
+  instruct: ""
+  pin: a drifted word is asked about ONCE, at the product
+waived:
+  model: '⛔ THE MECHANISM ALREADY EXISTED AND NOBODY HAD USED IT. `terms` live on a scope and `vocabularyReach` walks up `in:`, so a term on the PRODUCT ROOT already reaches everything beneath it — that IS a top-level glossary. Measured on his corpus: 0 terms at the top, 188 below, "deal" defined four separate times. What was missing was never a field; it was a check that makes the top-level home mean something and a question that notices when a word drifts.'
+  generate: Nothing generates a term. An author writes one, and which sense keeps a name is a person's decision — the framework's job is to notice the collision and ask, which is where this landed.
+  surface: "The worklist renders whatever `interviewFor` returns and `check` prints its own findings, so both halves reach a reader without a surface change. ⛔ The arguable part: nothing yet renders the glossary AS a glossary — a product page section listing the words that reach everything. That is a real piece of work and it is not this change."
+  instruct: ⛔ ARGUABLE AND RECORDED RATHER THAN CLAIMED. No role is told to put a word in the glossary, because the question this change adds is asked OF A PERSON — *"A question for the interviewer"* was his call, and the interviewer's brief already says to raise what a corpus leaves undecided. What a brief would need to say is what to do once somebody answers, and that act is a term write, which has no intent yet.
+closed: 2026-10-28

@@ -59,6 +59,42 @@ export const FrameworkGap = z.object({
   detector: GapDetector,
   /** What the framework cannot express, in one or two sentences. */
   what: z.string().min(10),
+  /**
+   * ⛔ WHAT SOMEBODY CANNOT DO, IN PRODUCT TERMS — AND IT IS REQUIRED BECAUSE THE LIST WENT STALE.
+   *
+   * Peter, reading his own backlog: *"i really don't understand what fg-0001 is, wtf are these
+   * descriptions?"* and *"tell me the actual IMPACT, not a wordy thing about holding slots.. none of
+   * that makes sense"*.
+   *
+   * ⛔ THE WORDING WAS NOT THE REAL COST. `what` is written by the author who hit the gap, in the
+   * vocabulary of the layer they were standing in — "a slot holds one standing", "`of:` names one
+   * existing statement". That is accurate and it is unreadable, and unreadable has a consequence:
+   * re-reading four records to ask "is this still true?" costs enough that nobody does it. So on the
+   * day this field was added, **two of four gaps were already fixed and still read `open`** — fg-0001
+   * closed by the `adds a statement` work and fg-0004 by `blocks` on an existing question, both
+   * earlier in the same session that recorded them.
+   *
+   * A backlog where half the entries are false is worse than no backlog: it agrees with whatever
+   * was believed when it was written, which is the same failure as a count that measures the wrong
+   * thing and confirms the hypothesis.
+   *
+   * ⛔ SO THIS FIELD IS WRITTEN FOR SOMEBODY WHO DID NOT HIT THE GAP. It names the act a person
+   * cannot perform and what they do instead — "you get asked about one sentence at a time, so a slot
+   * saying eleven things takes eleven round trips". That sentence can be CHECKED by trying it, which
+   * is what makes a stale record findable. `what` cannot: verifying it means reading the source.
+   */
+  /**
+   * ⛔ OPTIONAL HERE AND REQUIRED BY `todo add`, WHICH IS THE PROJECT'S OWN RULE FOR THIS LAYER:
+   * the `model` area may never *"make a field required on the day it lands — a schema change nobody
+   * can adopt gets reverted"*.
+   *
+   * ⛔ AND THE REASON IS NOT POLITENESS TO OUR OWN FOUR RECORDS. Every CONSUMER repo has its own
+   * `productos/framework-gaps.yaml`. Required, this field stops those files PARSING — measured by
+   * making it required and watching `todo` die on the one record I could see:
+   * `framework-gaps.yaml failed to parse: expected string, received undefined`. The four I can
+   * backfill are not the population; the ones I cannot reach are.
+   */
+  costs: z.string().min(10).optional(),
   /** The decision we owe: what should the model do here? */
   question: z.string().optional(),
   /** Container or behavior ids that demonstrate the gap. */

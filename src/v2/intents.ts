@@ -302,6 +302,18 @@ export const INTENTS: Intent[] = [
         required: false,
       },
       {
+        /**
+         * ⛔ Without this the distinction exists in the schema and no caller can set it, which is
+         * the same as not having it. See `Note.disputes`.
+         */
+        name: "disputes",
+        says:
+          "true when this note says the thing it is about should not be asked AS IT STANDS — nonsense, " +
+          "or built on a false premise. ⛔ Not for an answer, however strongly put: an answer settles the " +
+          "question, a dispute withdraws it. Nothing infers this from the sentence",
+        required: false,
+      },
+      {
         name: "assumed",
         says:
           "⛔ Required on `review`, forbidden elsewhere. What somebody would do if nobody answered " +
@@ -370,6 +382,7 @@ export const INTENTS: Intent[] = [
         /** ⛔ Only ever true where somebody said so. An inferred probe is a request discarded. */
         ...(body.probe === true ? { probe: true as const } : {}),
         ...(str(body.assumed) ? { assumed: str(body.assumed) } : {}),
+        ...(body.disputes === true ? { disputes: true } : {}),
       });
     },
   },
@@ -963,6 +976,28 @@ export const INTENTS: Intent[] = [
       { name: "about", says: "Which part of what the slot already says is in question. Required when the slot already says something", required: false },
       {
         /**
+         * ⛔ THE ONLY ROUTE TO AN OPTION NOBODY CAN PICK. `ask` appends, so without this an option
+         * that cannot be applied is permanent until the question is answered — which is the state
+         * three questions on a real corpus were in, each carrying four unpickable options.
+         */
+        name: "withdraw_options",
+        says:
+          'Options to take off the table: [{"option": 1, "because": "…"}], by the number a person sees. ' +
+          "Keeps what each said and why it went, and refuses to leave the question with nothing to pick between. " +
+          "⛔ Not for an option you merely disagree with — that is an answer somebody may still choose",
+        required: false,
+      },
+      {
+        /**
+         * ⛔ THE ONLY ROUTE TO THE 1,315 QUESTIONS ALREADY WORDED BADLY. Without it, improving how
+         * this role asks things reaches nothing anybody is currently looking at.
+         */
+        name: "rephrase",
+        says: "Say an already-asked question better. Keeps its options and records what it used to say, so nobody weighing it loses the thread. ⛔ Not for changing the subject — a different decision is a different question",
+        required: false,
+      },
+      {
+        /**
          * ⛔ WITHOUT THIS THE WHOLE fg-0002 FIX IS UNREACHABLE FROM WHERE ANYBODY IS. The writer can
          * now put a question on a named refusal, and this is the only door — *"no one will ever use
          * the command line"*. A capability reachable only from a function call is not shipped.
@@ -983,6 +1018,13 @@ export const INTENTS: Intent[] = [
         cost: str(body.cost) || undefined,
         about: str(body.about) || undefined,
         asks: (str(body.asks) || undefined) as "whether" | "when" | "told" | undefined,
+        rephrase: body.rephrase === true,
+        withdraw_options: Array.isArray(body.withdraw_options)
+          ? (body.withdraw_options as Array<Record<string, unknown>>).map((w) => ({
+              option: Number(w?.option),
+              because: str(w?.because),
+            }))
+          : undefined,
         candidates: Array.isArray(body.candidates) ? body.candidates : undefined,
         by: a.who.actor,
       });

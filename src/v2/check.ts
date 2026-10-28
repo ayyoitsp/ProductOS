@@ -315,6 +315,48 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
       what: b.why,
     });
   }
+
+
+  /**
+   * ⛔ A WORD IN THE GLOSSARY MEANS ONE THING, AND A FEATURE MAY NOT QUIETLY MEAN ANOTHER.
+   *
+   * Terms live on a scope and `vocabularyReach` walks up `in:`, so a term on the PRODUCT ROOT
+   * already reaches everything beneath it — that is the glossary, and nothing had ever put a word
+   * in it. Measured on a real corpus when this was written: **0 terms at the top, 188 defined
+   * below, and "deal" — the product's central noun — defined four separate times.**
+   *
+   * ⛔ WHAT THAT COSTS, AND IT IS THE REASON THIS IS A REFUSAL RATHER THAN A NOTE. "kind of deal"
+   * was used in 11 scopes and its definition reached 2 of them, so the phrase drifted into carrying
+   * two unrelated concepts — the lender's product (bridge, rehab, DSCR) and the kind of SYSTEM the
+   * deal lives in. Nothing noticed. Peter found it by reading one sentence, and his answer when
+   * asked what should happen was exactly this: *"Refuse it"*.
+   *
+   * ⛔ IT REFUSES ONLY WHERE THE GLOSSARY ALREADY REACHES. Two scopes that cannot see each other may
+   * legitimately use one word for different things — that is what a local vocabulary is for. A scope
+   * redefining a word that is already in scope is a collision somebody has to have meant.
+   */
+  const glossary = corpus.scopes.find((x) => !x.scope.in)?.scope;
+  if (glossary) {
+    for (const { scope } of corpus.scopes) {
+      if (scope.id === glossary.id) continue;
+      for (const word of Object.keys(scope.terms ?? {})) {
+        const above = Object.keys(glossary.terms ?? {}).find((w) => w.toLowerCase() === word.toLowerCase());
+        if (!above) continue;
+        add({
+          severity: "refuse",
+          kind: "redefines-a-glossary-word",
+          where: `${scope.id} :: ${word}`,
+          what:
+            `"${word}" is in the product's glossary and this defines it again, so one word means two things ` +
+            `and nothing says which is meant where.`,
+          fix:
+            `If it is the same thing, drop the local definition and let the glossary carry it. If it is a different ` +
+            `thing, give it its own name — a word that means two things cannot be built from, because the builder ` +
+            `has to guess which one each sentence meant.`,
+        });
+      }
+    }
+  }
   /**
    * ⛔ NOTHING DERIVED IS REPORTED WHILE A FILE WILL NOT PARSE, because the gate turns into a
    * vandal.

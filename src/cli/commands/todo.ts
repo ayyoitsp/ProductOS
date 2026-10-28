@@ -166,7 +166,17 @@ function showGaps(paths: ReturnType<typeof pathsAtCorpus>, all: boolean, where: 
       for (const g of gaps) {
         const tone = g.status === "open" ? pc.yellow : pc.cyan;
         console.log(`\n${tone("●")} ${pc.bold(g.id)} ${pc.dim(`[${g.detector}] ${g.status}`)}`);
-        console.log(`  ${g.what}`);
+        /**
+         * ⛔ `costs` LEADS AND `what` FOLLOWS, which is the opposite of how they were written.
+         *
+         * Peter, reading this exact output: *"tell me the actual IMPACT, not a wordy thing about
+         * holding slots.. none of that makes sense"*. `what` is the author's note to the layer they
+         * were standing in; `costs` is the act somebody cannot perform, which is the only part a
+         * reader can check by trying it — and checking is what keeps this list from going stale.
+         */
+        /** ⛔ A record written before the field existed still prints — it just leads with `what`. */
+        if (g.costs) console.log(`  ${pc.bold("costs:")} ${g.costs}`);
+        console.log(`  ${g.costs ? pc.dim(g.what) : g.what}`);
         if (g.question) console.log(`  ${pc.dim("decide:")} ${g.question}`);
         if (g.forced_into) console.log(`  ${pc.dim("forced into:")} ${g.forced_into}`);
         for (const e of g.evidence) console.log(`  ${pc.dim("·")} ${pc.cyan(e)}`);
@@ -204,12 +214,16 @@ export function todoCommand(): Command {
     .command("add")
     .description("Record a gap you hit by hand — something the model can't express")
     .argument("<what>", "What the framework cannot express")
+    .requiredOption(
+      "--costs <impact>",
+      "⛔ What somebody CANNOT DO, in product terms, and what they do instead — written for a reader who did not hit this. Checkable by trying it: that is what makes a fixed gap findable"
+    )
     .option("--question <q>", "The decision we owe")
     .option("--evidence <ids...>", "Container or behavior ids that show it")
     .option("--forced-into <id>", "Where the content had to go meanwhile")
     .option("--at <corpus>", "The corpus this gap was found in — a directory, or an instance url (defaults to the repo you are standing in)")
     .option("--token <t>", "bearer token for an instance (or $PRODUCTOS_TOKEN)")
-    .action(async (what: string, opts: { question?: string; evidence?: string[]; forcedInto?: string; at?: string; token?: string }) => {
+    .action(async (what: string, opts: { costs: string; question?: string; evidence?: string[]; forcedInto?: string; at?: string; token?: string }) => {
       /** ⛔ A hosted corpus is reached through the door; a directory is written in place. */
       if (looksLikeInstance(opts.at)) {
         const g = await throughTheDoor(opts.at!, opts.token, (paths) =>
@@ -217,6 +231,7 @@ export function todoCommand(): Command {
             detected_at: new Date().toISOString().slice(0, 10),
             detector: "authored",
             what,
+            costs: opts.costs,
             question: opts.question,
             evidence: opts.evidence ?? [],
             forced_into: opts.forcedInto,
@@ -234,6 +249,7 @@ export function todoCommand(): Command {
         detected_at: new Date().toISOString().slice(0, 10),
         detector: "authored",
         what,
+        costs: opts.costs,
         question: opts.question,
         evidence: opts.evidence ?? [],
         forced_into: opts.forcedInto,

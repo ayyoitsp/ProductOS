@@ -27,9 +27,10 @@
 import fs from "node:fs";
 import { parseFrontmatter } from "../core/frontmatter.js";
 import YAML from "yaml";
-import { Scope, Rule, SLOTS, type SlotName , saysText, statements, type Authorship} from "./schema.js";
+import { Scope, Rule, SLOTS, type SlotName , saysText, statements, type Authorship, type NoteVia } from "./schema.js";
+import { isHuman } from "./acts.js";
 import { loadCorpus, resolveRules, selectsFor, lineageOf, type Corpus } from "./load.js";
-import { resolveRef } from "./ref.js";
+import { resolveRef, HAPPY_PARTS } from "./ref.js";
 /** ⛔ `grid.ts` imports nothing from here, so this is not a cycle — checked before moving `blankSlots`. */
 import { gridFor } from "./grid.js";
 import { removals, refuseBecause } from "./write.js";
@@ -53,6 +54,25 @@ export interface Question {
   kind: string;
   /** The question, in whatever form the standing carries it. */
   asks: string;
+  /**
+   * Every wording this question has had before its current one, oldest first.
+   *
+   * ⛔ THE WHOLE SAFETY ARGUMENT FOR REWORDING RESTS ON THIS BEING SHOWN. `ask` may now say an
+   * open question better, and the reason that is not "rewritten under somebody" is that what it
+   * used to say survives — which is worth nothing if no surface renders it. The suite caught
+   * exactly that: `was_asked` was written by an author and read by nothing.
+   */
+  wasAsked?: string[];
+  /**
+   * A person has said this question should not be asked as it stands — `Note.disputes`.
+   *
+   * ⛔ IT LIVES HERE BECAUSE `questionsFor` IS THE ONE HOME FOR "THIS IS A QUESTION", AND PUTTING IT
+   * ANYWHERE ELSE MEANT ONE SURFACE KNEW AND THE REST DID NOT. I gated it in `interviewFor` first
+   * and the PAGE went on offering both disputed questions under *"5 questions nobody has answered"*
+   * — the page derives its own list from here, so the fix did not exist on the surface Peter
+   * actually works on. He had rejected one of them three times.
+   */
+  disputed?: { note: string; said: string; by: string };
   /** What it costs to guess wrong, where the standing says. */
   cost?: string;
   owed?: string;
@@ -211,7 +231,29 @@ export function questionsFor(corpus: Corpus, scopeId: string): Question[] {
    */
   const fromRules = openRuleQuestions(corpus, under);
   const fromTerms = openTermQuestions(corpus, under);
-  return orderByAttention(corpus, [...fromRules, ...fromTerms, ...fromSlots]);
+  /**
+   * ⛔ ONLY `disputes: true`, AND ONLY FROM A PERSON. A judge's `review` note saying a question is
+   * unclear is a finding to act on; a person saying it is nonsense withdraws the question. See
+   * `Note.disputes` for why nothing reads the sentence to tell them apart.
+   */
+  const objected = new Map<string, { note: string; said: string; by: string }>();
+  for (const n of corpus.notes) {
+    if (n.state !== "open" || !n.about || n.disputes !== true) continue;
+    if (!isHuman((n.via ?? "page") as NoteVia)) continue;
+    if (!objected.has(n.about)) objected.set(n.about, { note: n.id, said: n.says, by: n.by });
+  }
+
+  /**
+   * ⛔ STAMPED ON EVERY GRAIN AT ONCE — slot, case, rule and term alike. Doing it at each push site
+   * is four chances to forget one, and the one forgotten is a disputed question that keeps being
+   * offered on whichever surface reads that grain.
+   */
+  const all = orderByAttention(corpus, [...fromRules, ...fromTerms, ...fromSlots]);
+  for (const q of all) {
+    const no = objected.get(q.ref);
+    if (no) q.disputed = no;
+  }
+  return all;
 }
 
 /**
@@ -397,6 +439,7 @@ function questionsIn(corpus: Corpus, scopeId: string): Question[] {
           owed: s.asked_of,
           candidates: s.candidates ?? [],
           revises: undefined,
+          wasAsked: s.was_asked,
           about: s.about,
           asksPolarity: s.asks === "whether",
           observed: [],
@@ -440,6 +483,7 @@ function questionsIn(corpus: Corpus, scopeId: string): Question[] {
          * longer be confused. A `proposal` is one such answer.
          */
         candidates: s.candidates ?? [],
+        wasAsked: s.was_asked,
         revises: s.about ? saysText(fill.says) : undefined,
         /**
          * ⛔ AND IT MARKS WHICH ONE, because `standing.of` already names it and `settle` already
@@ -504,6 +548,36 @@ function questionsIn(corpus: Corpus, scopeId: string): Question[] {
  * is re-parsed and validated before anything is written, so a ruling can never leave a
  * file that will not load.
  */
+/**
+ * Which clauses of an agreed sentence a proposed replacement would drop.
+ *
+ * ⛔ EXTRACTED SO THE DRAFTER AND THE RULER ASK THE SAME QUESTION. It lived inside `settle` and
+ * fired only when somebody tried to answer — so a question could be drafted whose every option was
+ * unapplicable, worded beautifully, put in front of a person, answered, and refused.
+ *
+ * That happened. Peter answered three questions on `pl-start-a-deal` and **not one could be
+ * recorded**: two had options declaring they replace "only the part in question" with nothing naming
+ * the part, and the third offered a whole sentence that silently dropped two statements already
+ * agreed — *"nothing they entered is lost"* and *"nothing is said about why"*. His reply on being
+ * shown the result: *"so show me what truths changed based on my 3 answers"*. Nothing had.
+ *
+ * ⛔ IT IS A HEURISTIC AND THAT IS WHY IT ASKS ABOUT REMOVAL, NOT CORRECTNESS. It does not judge
+ * whether a sentence is right — it asks whether the clauses that were agreed still appear. Anybody
+ * may overrule it by writing the whole sentence they want.
+ */
+export function droppedClauses(wasSaying: string, says: string): string[] {
+  const clauses = wasSaying
+    .split(/[,;—]| and (?=the |it |they )/)
+    .map((c) => c.trim().replace(/^(and|then|so) /i, ""))
+    .filter((c) => c.split(/\s+/).length >= 4);
+  const kept = says.replace(/\s+/g, " ").toLowerCase();
+  return clauses.filter((c) => {
+    const words = c.toLowerCase().split(/\s+/).filter((w) => w.length > 3);
+    const hits = words.filter((w) => kept.includes(w)).length;
+    return words.length >= 3 && hits / words.length < 0.5;
+  });
+}
+
 export function settle(
   root: string,
   ref: string,
@@ -547,6 +621,53 @@ export function settle(
   // three of them got the outcome grain wrong.
   const r = resolveRef(corpus, ref);
   if ("error" in r) return { ok: false, why: r.error };
+  /**
+   * ⛔ ONE PART OF A HAPPY PATH — THE ACT THAT DID NOT EXIST.
+   *
+   * `#happy-path` could be accepted and never revised. The interview asks *"is that what this is
+   * for?"*; Peter answered *"The boundary is wrong"*, and there was nowhere for the correction to
+   * go. Every other route records a decision about a SLOT, and a happy path is not one — so the
+   * only way to change a word of it was `document`, a whole-file rewrite, which is exactly the
+   * hand-authoring this project refuses.
+   *
+   * ⛔ IT TAKES A SENTENCE AND NOTHING ELSE. There is no standing on a happy path's parts, so none
+   * of the slot machinery applies: no `about`, no `of`, no displacement, no clause-loss guard. What
+   * makes it safe is the same thing that makes `accept` safe — agreement is recorded separately,
+   * and changing the words puts the whole happy path back to unagreed, which `coveredBy` already
+   * derives from the claim hash.
+   */
+  if (r.ref.kind === "happy-path") {
+    const part = (r.ref as { part?: string }).part;
+    if (!part)
+      return {
+        ok: false,
+        why: `${ref} is the whole happy path — rule on one part of it: ${HAPPY_PARTS.join(", ")}`,
+        detail: [
+          "⛔ what a feature is for is agreed as one thing and corrected a sentence at a time, so a reader who disagrees with one part has something to press",
+        ],
+      } as { ok: false; why: string };
+    const scopeId = (r.ref as { scope: string }).scope;
+    const entry = corpus.scopes.find((x) => x.scope.id === scopeId);
+    if (!entry) return { ok: false, why: `no scope "${scopeId}"` };
+    const raw = parseFrontmatter(fs.readFileSync(entry.file, "utf-8"));
+    const data = raw.data as { happy_path?: Record<string, unknown> };
+    if (!data.happy_path) return { ok: false, why: `nothing says what "${scopeId}" is for yet` };
+    const was = String(data.happy_path[part] ?? "").trim();
+    const now = says.trim();
+    if (!now) return { ok: false, why: `a happy path's ${part} cannot be emptied by ruling on it` };
+    if (was === now) return { ok: false, why: `${ref} already says that` };
+    data.happy_path[part] = now;
+    const check = Scope.safeParse(data);
+    if (!check.success)
+      return { ok: false, why: check.error.issues.map((i) => `${i.path.join(".")} — ${i.message}`).join("; ") };
+    /** ⛔ The same idiom as every other write here — and the verdict is `perform`'s to record. */
+    fs.writeFileSync(
+      entry.file,
+      `---\n${YAML.stringify(data, { lineWidth: 96, blockQuote: "literal" })}---\n\n${raw.content.trim()}\n`,
+      "utf-8"
+    );
+    return { ok: true, file: entry.file, displaced: [], replaced: was || undefined };
+  }
   /**
    * ⛔ Answering an ORG-WIDE question. One ruling here settles every exchange the selector
    * reaches, including ones nobody has written yet, which is the whole argument for the rule
@@ -788,17 +909,25 @@ export function settle(
    * judge prose — it asks whether the sentences that were agreed still appear, which is a
    * question about what was removed, not about what is right.
    */
-  if (wasSaying && (beforeSlot.standing as { about?: string } | undefined)?.about) {
-    const clauses = wasSaying
-      .split(/[,;—]| and (?=the |it |they )/)
-      .map((c) => c.trim().replace(/^(and|then|so) /i, ""))
-      .filter((c) => c.split(/\s+/).length >= 4);
-    const kept = says.replace(/\s+/g, " ").toLowerCase();
-    const dropped = clauses.filter((c) => {
-      const words = c.toLowerCase().split(/\s+/).filter((w) => w.length > 3);
-      const hits = words.filter((w) => kept.includes(w)).length;
-      return words.length >= 3 && hits / words.length < 0.5;
-    });
+  /**
+   * ⛔ NOT WHEN THE RULING IS AN ADDITION — AND THIS GUARD RAN FIRST, SO `adds a statement` WAS
+   * UNREACHABLE ON ANY SLOT WHOSE SENTENCE IS A SINGLE STRING.
+   *
+   * This test asks whether the clauses that were agreed still appear in the new sentence. An
+   * addition does not claim to contain them: it is a NEW sentence placed beside what is there,
+   * and `about.adds` below appends it without touching a word of the original. So running this
+   * first tested an addition as though it were a replacement and refused it for dropping clauses
+   * it never claimed to touch.
+   *
+   * ⛔ IT MADE THE FIX FOR fg-0001 UNREACHABLE WHERE IT WAS MOST NEEDED. `adds a statement` exists
+   * precisely so an answer about something a slot does not yet mention can be recorded without
+   * rewriting the sentences beside it — and on a single-string slot, which is the common shape,
+   * every such option was refused. Measured on Peter's corpus: of three questions he had answered,
+   * only the one whose `says` is a LIST could use the clean route, and that worked only because
+   * `wasSaying` is undefined for a list and this guard was skipped by accident.
+   */
+  if (wasSaying && !about.adds && (beforeSlot.standing as { about?: string } | undefined)?.about) {
+    const dropped = droppedClauses(wasSaying, says);
     if (dropped.length)
       return {
         ok: false,

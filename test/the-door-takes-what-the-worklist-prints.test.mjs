@@ -265,7 +265,21 @@ test("⛔ and a merge with nothing to add is refused rather than rewording the q
    */
   assert.match(r.detail.join(" "), /`candidates`/, "it does not say another answer can be added");
   assert.match(r.detail.join(" "), /`blocks`/, "it does not say the questions this one settles can be named");
-  assert.match(r.detail.join(" "), /not reworded from here/, "nothing says the question is not rewritten under somebody");
+  /**
+   * ⛔ AND THE THIRD THING IS NOW A REWORDING, WHICH IS WHY THIS ASSERTION MOVED. The refusal used
+   * to say the question *"is not reworded from here"*, full stop — right about the harm (being
+   * rewritten silently) and wrong about the cure, because it froze 1,315 badly-worded questions on
+   * a real corpus. So the deliberate act exists and the refusal names it.
+   */
+  assert.match(r.detail.join(" "), /rephrase/, "the refusal does not say how to say the question better on purpose");
+
+  /**
+   * ⛔ THE PROPERTY, WHICH THIS FILE ONLY EVER ASSERTED AS A SENTENCE. It checked that the refusal
+   * CLAIMED nothing was rewritten and never checked that nothing was — so the message and the
+   * behaviour could have diverged with the test still green.
+   */
+  const after = loadCorpus(dir).scopes.flatMap(({ scope }) => questionsFor(loadCorpus(dir), scope.id)).find((x) => x.ref === q.ref);
+  assert.notEqual(after.question, "a different question entirely", "the question was rewritten under somebody with no `rephrase`");
 });
 
 test("⛔ a control that does something and has no behaviour reaches the worklist", () => {

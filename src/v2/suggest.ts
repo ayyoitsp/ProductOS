@@ -24,7 +24,8 @@
 import fs from "node:fs";
 import YAML from "yaml";
 import { parseFrontmatter } from "../core/frontmatter.js";
-import { Scope, SLOTS as SLOT_NAMES, type SlotName } from "./schema.js";
+import { Scope, SLOTS as SLOT_NAMES, statements, type SlotName } from "./schema.js";
+import { droppedClauses } from "./settle.js";
 import { loadCorpus } from "./load.js";
 import { claimHash, stampFor } from "./stamp.js";
 
@@ -197,6 +198,53 @@ export function suggestClaim(
  * it is asked of picks an answer or writes their own. Whatever the slot already says stays; `about`
  * says which part of it is in question.
  */
+/**
+ * The longest sentence in a question, in words — and the refusal when it is a paragraph.
+ *
+ * ⛔ A STYLE JUDGEMENT WOULD BE A GUESS. THIS IS ARITHMETIC, WHICH IS WHY IT CAN BE A REFUSAL.
+ *
+ * I waived the `check` layer on the wording change arguing that any rule about prose quality is "a
+ * guess about prose dressed as a refusal". That was right about judging whether a sentence sounds
+ * human and wrong about concluding nothing is measurable. Length is countable, and length was the
+ * actual failure: Peter's entire response to one question was **"is this even english?"** —
+ *
+ *   "A processor opens the screen to start a deal, and the draft deal the product quietly sets up
+ *    behind it — the thing everything they type gets saved into — cannot be made. What happens?"
+ *
+ * Thirty-five words in one sentence with a nested gloss. Not a question; a paragraph with a question
+ * mark on it.
+ *
+ * ⛔ AND IT IS A REFUSAL BECAUSE PROSE DID NOT WORK. The brief already said to use the words a
+ * person uses, then said it harder with a table of real failures, and the next run produced this.
+ * Same reason `framework-not-just-output` exists: a ⛔ in a document did not stop the thing it
+ * forbade, and a failing write does.
+ *
+ * ⛔ AND THE NUMBER WAS MEASURED AGAINST THE REAL SENTENCE, WHICH IS THE ONLY REASON IT IS RIGHT.
+ *
+ * I set this to 32 first, on the reasoning that a generous floor nobody argues with beats a strict
+ * one. Then I ran it against the sentence Peter had just rejected: **31 words, accepted.** A guard
+ * built to catch one known failure, which did not catch it — the same shape as every meaningless
+ * zero this project has a rule about, and it survived only because the failing input was to hand.
+ *
+ * 28 refuses his sentence at 31 and accepts the 17-word replacement. The brief asks for about 25,
+ * so there is still room between the target a reader is persuaded of and the floor that is enforced.
+ */
+const LONGEST_SENTENCE = 28;
+
+function tooLongToAsk(question: string): { words: number; sentence: string } | null {
+  /** ⛔ `?` and `!` end sentences too, and a question ends in one by construction. */
+  const sentences = question
+    .split(/(?<=[.?!])\s+/)
+    .map((x) => x.trim())
+    .filter(Boolean);
+  let worst: { words: number; sentence: string } | null = null;
+  for (const sentence of sentences) {
+    const words = sentence.split(/\s+/).filter((w) => /[a-z0-9]/i.test(w)).length;
+    if (words > LONGEST_SENTENCE && (!worst || words > worst.words)) worst = { words, sentence };
+  }
+  return worst;
+}
+
 export function raiseQuestion(
   root: string,
   o: {
@@ -206,6 +254,22 @@ export function raiseQuestion(
     blocks: string[];
     cost?: string;
     about?: string;
+    /** Say this question better, keeping its options and what it used to say. See the merge branch. */
+    rephrase?: boolean;
+    /**
+     * Take options off the table, by the number a person sees, with why each is not a real answer.
+     *
+     * ⛔ BY NUMBER AND NOT BY TEXT, because the number is what a person and the worklist both read —
+     * *"option 1"* is how the refusal that started this names them, and matching on prose would
+     * make a withdrawal depend on reproducing a sentence exactly.
+     */
+    /**
+     * ⛔ `withdraw_options`, NOT `withdraw` — there is already an INTENT called `withdraw`, which
+     * takes a whole FEATURE out. A field and an intent sharing one name in one door is ambiguous to
+     * every caller, and the self-description test caught it by attributing this intent's fields to
+     * that one. Named for what it withdraws.
+     */
+    withdraw_options?: Array<{ option: number; because: string }>;
     /** For a named refusal: which part of the case is in question. See `grainOf`. */
     asks?: "whether" | "when" | "told";
     candidates?: unknown[];
@@ -223,6 +287,120 @@ export function raiseQuestion(
    */
   const g = grainOf(fill, r.slot, r.part);
   if ("error" in g) return { ok: false, why: g.error };
+  /**
+   * ⛔ CHECKED BEFORE ANYTHING IS WRITTEN, and on a rewording as well as a new question — a
+   * rewording exists to make a question readable, so it is the last place this should be waived.
+   */
+  /**
+   * ⛔ A DASH IN A QUESTION IS A GLOSS, AND A GLOSS MEANS THE WRONG WORD WAS USED.
+   *
+   * His sentence had two, wrapped around *"the thing everything they type gets saved into"* —
+   * an explanation of a term the question should not have needed. The brief says never; this is
+   * the same sentence as a refusal, and it is a character search rather than a judgement.
+   */
+  const gloss = /[—–]|\s-\s/.test(o.question ?? "");
+  /** ⛔ ON A REWORDING TOO. I exempted those first, which contradicts the length rule below by one
+   *  line: a rewording exists to make a question readable, so it is the last place to waive this. */
+  if (gloss)
+    return {
+      ok: false,
+      why: "this question explains a term with a dash, which means it is the wrong term",
+      detail: [
+        "use the plain word instead, and the gloss disappears with it",
+        "⛔ if there is genuinely no plainer word, the term belongs in the feature's own vocabulary first — not in a bracket inside a question",
+      ],
+    };
+  /**
+   * ⛔ EVERY OPTION HAS TO BE APPLICABLE, CHECKED HERE RATHER THAN WHEN SOMEBODY ANSWERS.
+   *
+   * Peter answered three questions on `pl-start-a-deal` and **not one could be recorded.** The
+   * questions were well worded — three rounds of work went into that — and every option was
+   * unpickable, which nothing noticed until he asked *"so show me what truths changed based on my 3
+   * answers"*. Two had options declaring they replace "only the part in question" with nothing
+   * naming the part; the third offered a whole sentence that dropped two statements already agreed.
+   *
+   * ⛔ ASKING SOMEBODY A QUESTION THAT CANNOT BE ANSWERED IS WORSE THAN NOT ASKING. It spends the
+   * one thing this whole feature exists to save, and it spends it twice — once reading, once being
+   * refused — while reporting a full worklist either way.
+   *
+   * ⛔ AND IT IS THE SAME TWO CHECKS THE RULER RUNS, not a second opinion about them: `of` is the
+   * field that names which statement is in question, and `droppedClauses` is imported from the
+   * module that applies the ruling. A draft-time guard with its own idea of applicability would
+   * just move the surprise.
+   */
+  /** ⛔ `statements()` is the one home for reading a slot's sentence, list-shaped or not. */
+  const fillSays = statements((fill as { says?: Parameters<typeof statements>[0] }).says)
+    .map((x) => x.says)
+    .join(" ")
+    .trim();
+  const willReplace = (c: unknown): string | undefined =>
+    (c as { replaces?: string } | null)?.replaces;
+  const optionText = (c: unknown): string => String((c as { says?: unknown } | null)?.says ?? "");
+  /**
+   * ⛔ ONLY WHEN ONE THING ABOUT THE SENTENCE IS UNRULED — WHICH IS THE CONDITION `settle` RUNS AND
+   * MY FIRST VERSION OF THIS DID NOT.
+   *
+   * Without `about`, the whole slot is in question, and replacing the sentence wholesale is the
+   * correct act rather than a deletion. Checking regardless broke two existing tests that were
+   * right: a slot saying "Two people looking at once see the same thing, and a change one of them
+   * makes appears for the other without a reload" being re-answered entirely is not a question with
+   * a residual, and "it drops both clauses" is true and irrelevant there.
+   *
+   * ⛔ A GUARD THAT REFUSES CORRECT WORK IS NOT A SAFER GUARD. It is the same defect one layer over:
+   * the drafter now cannot say the thing the model allows, and the refusal reads like a rule.
+   */
+  if (fillSays && (o.about ?? "").trim()) {
+    for (const [i, c] of (o.candidates ?? []).entries()) {
+      const how = willReplace(c);
+      /**
+       * ⛔ "Only the part in question" NEEDS A PART. Without `of` on the standing — which comes from
+       * the fourth segment of the ref — there is no statement to swap, so the pick has no target.
+       */
+      if (how === "only the part in question" && !g.statement)
+        return {
+          ok: false,
+          why: `option ${i + 1} says it replaces only the part in question, and nothing says which part`,
+          detail: [
+            `this slot already says: ${fillSays}`,
+            "⛔ name the statement in the ref — <scope>#<exchange>#<slot>#<statement id> — so a pick swaps that one and leaves its siblings byte-identical",
+            "or set `replaces: \"adds a statement\"` if the answer is a NEW sentence beside what is there",
+            "or `replaces: \"the whole sentence\"` with the full text you want, including the parts already agreed",
+          ],
+        };
+      /**
+       * ⛔ AND THERE IS DELIBERATELY NO DROP CHECK HERE, THOUGH I WROTE ONE AND IT WAS WRONG.
+       *
+       * A whole-sentence option that silently deletes an agreed statement is a real defect — it is
+       * one of the three reasons Peter's answers could not be recorded. But the only test available
+       * for it is `droppedClauses`, which compares WORD OVERLAP, and it refused two existing tests
+       * that were correct: an option reading *"Each parent sees the other's record appear as soon as
+       * it saves"* restates *"a change one of them makes appears for the other"* in different words,
+       * and overlap cannot tell a paraphrase from a deletion.
+       *
+       * Good wording paraphrases. So at draft time that check refuses the well-worded options and
+       * passes the lazy ones — precisely backwards, and a guard that refuses correct work is the
+       * same defect one layer up: the drafter can no longer say what the model allows, and the
+       * refusal reads like a rule.
+       *
+       * ⛔ IT STILL RUNS WHERE IT BELONGS. `settle` applies it to ONE act by ONE person, who reads
+       * the message, sees which clauses it thinks are missing, and overrules it by writing the
+       * sentence they want. That is a heuristic used as a prompt to a human, which is what it can
+       * support — not as a gate on a generator, which is what it cannot.
+       */
+    }
+  }
+  const long = tooLongToAsk(o.question ?? "");
+  if (long)
+    return {
+      ok: false,
+      why: `one sentence of this question is ${long.words} words, and nobody asks a question that long`,
+      detail: [
+        `"${long.sentence}"`,
+        "⛔ one short sentence of situation, one short question, nothing else — about 25 words each",
+        "if you need a dash or a bracket to gloss a term, it is the wrong term: use the plain one",
+        "and say who does things — \"cannot be made\" and \"is told\" are how a specification clause sneaks back in",
+      ],
+    };
   /**
    * ⛔ A CASE NEEDS `asks` AND THE REFUSAL FOR IT IS WORTH MORE THAN A SCHEMA DUMP. The model
    * demands it because three different questions were being answered into one field — *"is this
@@ -322,14 +500,81 @@ export function raiseQuestion(
      * recorded in a field and not a similarity score. See the worklist's fold for what it does with
      * the field once it is honest.
      */
+    /**
+     * ⛔ OPTIONS COME OFF THE TABLE, AND WHAT CAME OFF IS KEPT. See `Standing.withdrawn`.
+     *
+     * Peter: *"definitely needs to remove options."* Three questions on his corpus carried options
+     * nothing could apply, and append-only meant the only way to make his answers recordable was to
+     * add working options beside the broken ones — six options, four unpickable, permanent until
+     * the question was answered.
+     *
+     * ⛔ EVERY GUARD HERE IS ABOUT NOT LOSING THE DECISION. Numbers are validated against what is
+     * actually on the table, the removed text is kept with a per-option reason, and the last option
+     * cannot be withdrawn: a question with nothing to pick between is not a question, and taking
+     * the whole thing off the table is a different act with a different name.
+     */
+    const taking = o.withdraw_options ?? [];
+    let withdrew = 0;
+    if (taking.length) {
+      const have = Array.isArray(was.candidates) ? (was.candidates as Array<Record<string, unknown>>) : [];
+      const wanted = [...new Set(taking.map((w) => w.option))];
+      const outOfRange = wanted.filter((n) => !Number.isInteger(n) || n < 1 || n > have.length);
+      if (outOfRange.length)
+        return {
+          ok: false,
+          why: `there ${outOfRange.length === 1 ? "is no option" : "are no options"} ${outOfRange.join(", ")} here — ${have.length} ${have.length === 1 ? "is" : "are"} on the table`,
+          detail: have.map((c, i) => `  ${i + 1}) ${String(c.says ?? "").slice(0, 90)}`),
+        };
+      if (wanted.length >= have.length)
+        return {
+          ok: false,
+          why: "that would leave the question with nothing to pick between",
+          detail: [
+            "⛔ a question with no options is not a question — if none of these is a real answer, the question itself is what is wrong",
+            "say so as a note with `disputes: true`, which takes it off the worklist and tells an author what to fix",
+          ],
+        };
+      /** ⛔ Highest first, so earlier removals cannot shift the index of a later one. */
+      const kept = [...have];
+      const log = Array.isArray(was.withdrawn) ? (was.withdrawn as unknown[]) : [];
+      for (const n of [...wanted].sort((a, b) => b - a)) {
+        const why = taking.find((w) => w.option === n)!.because;
+        const gone = kept.splice(n - 1, 1)[0]!;
+        log.push({ says: String(gone.says ?? ""), because: why.trim(), at: new Date().toISOString().slice(0, 10), by: o.by });
+        withdrew++;
+      }
+      was.candidates = kept;
+      was.withdrawn = log;
+    }
     const alsoBlocks = (o.blocks ?? []).filter((b) => b !== o.ref);
-    if (!adding.length && !alsoBlocks.length)
+    /**
+     * ⛔ A REWORDING, WHICH IS THE THIRD THING THAT CAN BE ADDED TO A QUESTION ALREADY ASKED.
+     *
+     * The refusal below used to be the end of the road, and its own reason — *"a question somebody
+     * has been weighing is not rewritten under them"* — is about being rewritten SILENTLY. So the
+     * previous wording is kept rather than the question being frozen, and `was_asked` is what makes
+     * that true instead of a promise.
+     *
+     * ⛔ EXPLICIT, NEVER INFERRED FROM A DIFFERENT STRING ARRIVING. A caller re-sending a question
+     * it thinks is new must not quietly rewrite one somebody is weighing — that is the exact harm.
+     * So rewording is a thing the caller ASKS for, and a `question` that differs without it is
+     * still refused by the branch below.
+     */
+    const rewording = o.rephrase && o.question.trim() && o.question.trim() !== String(was.question ?? "").trim();
+    if (rewording) {
+      const before = String(was.question ?? "").trim();
+      const history = Array.isArray(was.was_asked) ? (was.was_asked as string[]) : [];
+      if (before) was.was_asked = [...history, before];
+      was.question = o.question.trim();
+      /** ⛔ The options are untouched. A rewording that changes the choice is not a rewording. */
+    }
+    if (!adding.length && !alsoBlocks.length && !rewording && !withdrew)
       return {
         ok: false,
         why: `${o.ref} is already ${was.kind}${was.question ? `: "${String(was.question).trim()}"` : ""}`,
         detail: [
-          "it is already asked, so there are two things to add here: another answer (`candidates`), or the other questions this one answer settles (`blocks`)",
-          "⛔ the question itself is not reworded from here: a question somebody has been weighing is not rewritten under them",
+          "it is already asked, so there are four things you can do: add another answer (`candidates`), name the other questions this one answer settles (`blocks`), say it better (`rephrase: true` with the new `question`), or take an option off the table (`withdraw`)",
+          "⛔ a rewording keeps what it used to say in `was_asked` and leaves the options alone — somebody weighing it can see exactly what changed",
         ],
       };
     if (adding.length) was.candidates = [...have, ...adding];
@@ -341,14 +586,21 @@ export function raiseQuestion(
     const savedMerge = save(f);
     if (!savedMerge.ok) return savedMerge;
     const said = [
-      adding.length ? `${adding.length} answer${adding.length === 1 ? "" : "s"}` : "",
-      alsoBlocks.length ? `${alsoBlocks.length} question${alsoBlocks.length === 1 ? "" : "s"} this one settles` : "",
+      rewording ? "said it better, keeping what it used to ask" : "",
+      withdrew ? `took ${withdrew} option${withdrew === 1 ? "" : "s"} off the table, keeping what each said and why` : "",
+      adding.length ? `added ${adding.length} answer${adding.length === 1 ? "" : "s"}` : "",
+      alsoBlocks.length ? `named ${alsoBlocks.length} question${alsoBlocks.length === 1 ? "" : "s"} this one answer settles` : "",
     ].filter(Boolean);
     return {
       ok: true,
       file: f.file,
       ref: o.ref,
-      said: `added ${said.join(" and ")} to the question at ${o.ref}`,
+      /**
+       * ⛔ "added 2 options off the table" IS WHAT THIS SAID, because every change here used to be
+       * an addition and the verb was baked into the sentence. A withdrawal is not an addition, and
+       * a report that describes the opposite of what happened is how a wrong act goes unnoticed.
+       */
+      said: `${said.join(", and ")} — at ${o.ref}`,
     };
   }
   g.holder.standing = {

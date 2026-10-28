@@ -1,0 +1,32 @@
+id: "0219"
+said: |-
+  i really don't understand what fg-0001 is, wtf are these descriptions? / tell me the actual
+  IMPACT, not a wordy thing about holding slots.. none of that makes sense
+at: 2026-10-27
+kind: concept
+reaches:
+  model: costs
+  derive: ""
+  generate: ""
+  surface: costs
+  check: ""
+  instruct: what somebody CANNOT DO, and what they do instead
+  pin: a gap cannot be filed without saying what it costs
+waived:
+  generate: >-
+    ⛔ THIS WAS A FALSE TICK AND IS A WAIVER NOW. I named `requiredOption`, `change check` said ✓,
+    and the match was in `src/cli/commands/v2.ts` — code this change never touched. `todo.ts` is a
+    SURFACE file, not a generate one, so the layer was never reached and the matcher agreed with me
+    because a substring is not a location. Nothing generates a framework gap: `todo add` is a door
+    an author types at, which is the surface layer and is where this landed.
+  derive: >-
+    Nothing is computed from a gap. The record is read and printed; there is no derivation over it
+    and this change adds no number. ⛔ The arguable part: the staleness this change is really about
+    IS derivable — `gapsWhoseFieldShipped` already guesses at it by grepping the schema for field
+    names a gap mentions, and a stronger version would re-run each gap's `costs` sentence as a
+    check. That is a real feature and it is not this change; recorded here rather than claimed.
+  check: >-
+    `v2 check` reads a corpus, and a framework gap is deliberately not corpus content — it is a
+    TODO addressed to us, and `GLOSSARY.md` leaves it out for that reason. A corpus check refusing
+    on the shape of our own backlog would put the two on one gauge, which is the distinction the
+    audit-finding-versus-framework-gap table exists to keep.

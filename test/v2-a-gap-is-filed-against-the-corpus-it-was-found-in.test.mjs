@@ -33,7 +33,11 @@ test("a gap found while authoring a corpus is filed against that corpus, not the
   // Standing in one product's repo, authoring another product's corpus — the exact shape
   // that put 33 gaps in the wrong record.
   const out = run(
-    ["todo", "add", "a slot cannot carry its own standing", "--at", corpus, "--forced-into", "a-scope#a-view"],
+    [
+      "todo", "add", "a slot cannot carry its own standing",
+      "--costs", "you settle the whole slot or none of it, so one open detail blocks the rest",
+      "--at", corpus, "--forced-into", "a-scope#a-view",
+    ],
     repo
   );
 
@@ -47,14 +51,14 @@ test("a gap found while authoring a corpus is filed against that corpus, not the
 
 test("without --at it still files against the repo, so v1 corpora are untouched", () => {
   const { repo } = twoPlaces();
-  run(["todo", "add", "something the model cannot express here"], repo);
+  run(["todo", "add", "something the model cannot express here", "--costs", "you write it as prose, where no check can see it"], repo);
   assert.match(gapsIn(path.join(repo, "productos")), /something the model cannot express here/);
 });
 
 test("--at reads back only that corpus's gaps", () => {
   const { repo, corpus } = twoPlaces();
-  run(["todo", "add", "a gap belonging to the corpus", "--at", corpus], repo);
-  run(["todo", "add", "a gap belonging to the repo itself"], repo);
+  run(["todo", "add", "a gap belonging to the corpus", "--costs", "you cannot say it about this product at all", "--at", corpus], repo);
+  run(["todo", "add", "a gap belonging to the repo itself", "--costs", "you cannot say it about ProductOS itself either"], repo);
 
   const atCorpus = run(["todo", "--at", corpus], repo);
   assert.match(atCorpus, /a gap belonging to the corpus/);
@@ -65,14 +69,14 @@ test("--at reads back only that corpus's gaps", () => {
 test("--at on a directory that is not there says so, rather than inventing a record", () => {
   const { repo, tmp } = twoPlaces();
   assert.throws(
-    () => run(["todo", "add", "a gap with nowhere to go", "--at", path.join(tmp, "absent")], repo),
+    () => run(["todo", "add", "a gap with nowhere to go", "--costs", "you have no record to file it in, so it is only in a chat log", "--at", path.join(tmp, "absent")], repo),
     /No corpus at/
   );
 });
 
 test("a gap can be settled in the corpus it lives in", () => {
   const { repo, corpus } = twoPlaces();
-  run(["todo", "add", "a gap that gets closed later", "--at", corpus], repo);
+  run(["todo", "add", "a gap that gets closed later", "--costs", "you work around it by hand every time it comes up", "--at", corpus], repo);
   const out = run(["todo", "close", "fg-0001", "--resolution", "the field shipped", "--at", corpus], repo);
   assert.match(out, /closed/);
   assert.match(gapsIn(corpus), /status: closed/,

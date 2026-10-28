@@ -218,8 +218,33 @@ an author mistake as a framework gap buries a real fix in our backlog.
 
 ```bash
 productos todo          # read the open gaps
-productos todo add "<what the model can't express>" --forced-into <where it went>
+productos todo add "<what the model can't express>" \
+  --costs "<what somebody CANNOT DO, and what they do instead>" \
+  --forced-into <where it went>
+productos todo close <id> --resolution "<what changed>"   # ⛔ never by hand — see below
 ```
+
+⛔ **`--costs` is required, and it is the field a reader can check.** Peter, reading his own
+backlog: *"i really don't understand what fg-0001 is, wtf are these descriptions?"* then *"tell me
+the actual IMPACT, not a wordy thing about holding slots.. none of that makes sense"*.
+
+`what` is written by whoever hit the gap, in the vocabulary of the layer they were standing in — "a
+slot holds one standing", "`of:` names one existing statement". Accurate, and unreadable. And
+unreadable has a consequence: re-reading the records to ask *"is this still true?"* costs enough
+that nobody does, so **two of four gaps were fixed and still read `open` — both closed earlier in
+the same session that recorded them.** A backlog where half the entries are false agrees with
+whatever was believed when it was written.
+
+So `--costs` names the act somebody cannot perform and what they do instead, written for a reader
+who did not hit it: *"you get asked about one sentence at a time, so a slot saying eleven things
+takes eleven round trips."* That can be **checked by trying it**. `what` cannot — verifying it
+means reading the source, which is the cost that let two records rot.
+
+⛔ **And closing one is a command, never a hand-edit.** `settleFrameworkGap` rewrites the file from
+the parsed records, so invented keys are silently dropped — a closure written by hand as `how:` and
+`closed_by:` survived until the next `todo close` rewrote the file, and then vanished with no trace
+that anything had been said. Same rule as everywhere else here: if a command produces it, the edit
+is the bug.
 
 **`forced_into` is the load-bearing field.** It names the compromise, so the corpus can
 be corrected in one pass once the gap closes — instead of the compromise quietly

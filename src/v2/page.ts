@@ -2076,7 +2076,12 @@ function renderWorklist(
  */
 function featureHead(corpus: Corpus, scopeId: string, title: string, ctx: Ctx): string {
   const verdict = readinessOf(corpus, scopeId);
-  const open = questionsFor(corpus, scopeId).filter((q) => !q.parked);
+  /**
+   * ⛔ AND NOT THE ONES A PERSON HAS REJECTED. "Questions nobody has answered" has to mean questions
+   * somebody COULD answer: a question whose premise a person has disputed is work for an author, and
+   * listing it here is how one Peter had rejected three times kept being offered back to him.
+   */
+  const open = questionsFor(corpus, scopeId).filter((q) => !q.parked && !q.disputed);
   /**
    * `<exchange>#<slot>` → the behaviour's own title and what the slot asks.
    *
@@ -4454,8 +4459,18 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
   // Where each rule belongs in the tree, so a group's own sentences render on the group.
   const homesOf = ruleHomes(corpus);
   const qs = questionsFor(corpus, scopeId);
-  const live = qs.filter((q) => !q.parked);
+  /**
+   * ⛔ AND NOT THE ONES A PERSON HAS REJECTED — THE LIST A READER ACTUALLY PRESSES.
+   *
+   * I filtered `q.disputed` out of the tab's COUNT first and left this list alone, so the page went
+   * on rendering a pressable card for a question Peter had rejected three times while the pill
+   * above it said a different number. Two counts of one thing disagreeing, and the wrong one is the
+   * one with the buttons under it.
+   */
+  const live = qs.filter((q) => !q.parked && !q.disputed);
   const parked = qs.filter((q) => q.parked);
+  /** Work for an author: a person has said these should not be asked as they stand. */
+  const disputed = qs.filter((q) => q.disputed);
   const a = actsFor(corpus);
   /** ⛔ Scoped to this page's subtree, so the figure describes what the reader is looking at. */
   const under = (r: string) => ids.some((i) => r.startsWith(`${i}#`));
@@ -5191,6 +5206,33 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
             </section>`);
           })
           .join("")
+      }
+      ${
+        /**
+         * ⛔ SHOWN, NOT HIDDEN — AND NOT AS A QUESTION. Filtering a disputed question out of the
+         * answerable list is half the job: dropped silently, nobody can see what needs fixing, and
+         * the feature reads as though it has fewer holes than it has.
+         *
+         * ⛔ NO PRESSABLE OPTIONS, which is the whole point. These are addressed to an author —
+         * withdraw the options and ask something that matches what happens, or establish that the
+         * thing the question is about is real. The person's own words are carried so nobody has to
+         * guess what was wrong with it, and so nobody re-words it a third time.
+         */
+        disputed.length
+          ? `<section class="questions disputed-set">
+               <h2>${disputed.length === 1 ? "A question somebody has rejected" : "Questions somebody has rejected"}</h2>
+               <p class="lede">Not offered for answering. Somebody has said ${disputed.length === 1 ? "this makes" : "these make"} no sense as asked, so the fix is to the question — not another wording of it.</p>
+               ${disputed
+                 .map(
+                   (q) => `<article class="question disputed">
+                     <header><span class="kind">disputed</span>${copyRef(q.ref)}</header>
+                     <h3>${line(String(q.asks).split("\n")[0] ?? "")}</h3>
+                     <p class="said"><strong>${esc(q.disputed!.by)} said:</strong> ${line(q.disputed!.said)}</p>
+                   </article>`
+                 )
+                 .join("")}
+             </section>`
+          : ""
       }
       ${
         parked.length

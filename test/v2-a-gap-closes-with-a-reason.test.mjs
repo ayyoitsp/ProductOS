@@ -111,10 +111,17 @@ function corpusWithGaps() {
   fs.mkdirSync(dir, { recursive: true });
   execFileSync(
     "node",
-    [CLI, "todo", "add", "A slot cannot cite a charter section, so a feature restates it", "--forced-into", "somewhere#a-slot"],
+    [
+      CLI, "todo", "add", "A slot cannot cite a charter section, so a feature restates it",
+      "--costs", "you copy the charter sentence into the feature, and nothing updates it when the charter changes",
+      "--forced-into", "somewhere#a-slot",
+    ],
     { cwd: root, stdio: "pipe" }
   );
-  execFileSync("node", [CLI, "todo", "add", "A second thing the model cannot express at all"], {
+  execFileSync("node", [
+    CLI, "todo", "add", "A second thing the model cannot express at all",
+    "--costs", "you leave the thing out of the corpus entirely, so a builder never learns it",
+  ], {
     cwd: root,
     stdio: "pipe",
   });

@@ -60,6 +60,58 @@ const plain = (x: unknown): string => String(x ?? "").replace(/\s+/g, " ").trim(
 export type Owes =
   /** Nobody has agreed what this feature is for. ⛔ A gate: see `contextAgreed` in grid.ts. */
   | "purpose"
+  /**
+   * ⛔ A QUESTION A PERSON HAS SAID MAKES NO SENSE. IT IS WORK TO DO, NOT A QUESTION TO ASK AGAIN.
+   *
+   * Peter, on one question, three times across five days: *"this question makes no sense to me, no
+   * idea what you're talkinga bout"* (recorded 2026-10-22 as note `n-a3v33u`), then *"This still
+   * doesn't make any sense - what is this?"*, then *"what does 'the product can't set up anywhere to
+   * save their work' even mean??????"*.
+   *
+   * ⛔ IT WAS REWORDED TWICE IN BETWEEN AND HIS NOTE WAS NEVER READ. The interviewer loaded that
+   * note, reported it, and still treated the problem as phrasing. It is not phrasing: the behaviour
+   * under it is `asked_by: system` — plumbing nobody performs — and he had already said the thing it
+   * describes does not happen. A question whose premise a person has rejected does not become
+   * answerable by being said better, and offering it again spends the one thing this feature exists
+   * to save.
+   *
+   * ⛔ SO IT LEAVES THE ANSWERABLE PILE ENTIRELY. What is owed here is a corpus fix an author makes
+   * — withdraw the options, or establish that the thing is real — and the person's own words are
+   * carried so nobody has to guess what was wrong with it.
+   */
+  | "disputed"
+  /**
+   * What somebody arrives with and leaves with — asked apart from what the feature is FOR.
+   *
+   * ⛔ ONE ACCEPTANCE, TWO READS, AND THAT IS THE WHOLE CHANGE. Peter, handed the purpose as a
+   * single five-part wall: *"this is too much for a single question - again, reading the inner
+   * workings. what's it for could be a separate question, arrives with, leaves with can be another
+   * question of its own."*
+   *
+   * Bundling them meant agreeing to five things with one press, which is the shape of a form rather
+   * than a decision — and a reader who disagrees with one of the five has nothing to press at all.
+   * Both still fill `#happy-path`, because the model agrees a happy path as one thing; what splits
+   * is what a person is asked to READ at a time.
+   */
+  | "handover"
+  /**
+   * A word this feature uses whose definition does not reach it — so nothing is holding its sense.
+   *
+   * ⛔ THIS IS THE PRECONDITION FOR AMBIGUITY, NOT A CLAIM OF IT. "Is this word ambiguous" is a
+   * reading and would be a guess wearing a decision's clothes. "This word is used here and its
+   * definition is somewhere that cannot be seen from here" is a count, and the count is the only
+   * part a check or a question can stand on.
+   *
+   * ⛔ IT IS EXACTLY HOW THE ONE WE FOUND DRIFTED. "kind of deal" was used in 11 scopes and its
+   * definition reached 2, so the phrase quietly came to carry two unrelated concepts — the lender's
+   * product (bridge, rehab, DSCR) and the kind of system the deal lives in. Nothing noticed for as
+   * long as the corpus has existed; Peter found it by reading one sentence of one boundary.
+   *
+   * ⛔ A QUESTION, NEVER A REFUSAL — his call when asked: *"A question for the interviewer."* A word
+   * nobody has defined where it is used is not a defect on its own; plenty of words need no
+   * definition. What is owed is somebody saying whether it is one thing.
+   */
+  | "undefined-word"
   /** A slot says nothing and nothing fills it — `check`'s `slot-blank`. */
   | "blank"
   /** A question already drafted and waiting on the person it is asked of — `questionsFor`. */
@@ -458,6 +510,101 @@ function wordsIn(
    * prose is a reading, and a reading dressed as a finding is the thing this file refuses to be.
    */
   return { words, missing: [] };
+}
+
+/**
+ * Words this feature uses that are DEFINED somewhere the feature cannot see.
+ *
+ * ⛔ ARITHMETIC, NOT A READING, AND THAT IS THE WHOLE DESIGN. `wordsIn` refuses to extract concepts
+ * from prose for a good reason recorded directly above it — guessing produced *"processor told
+ * that"* and *"check failed"* as vocabulary gaps. This asks a strictly countable question instead:
+ * somebody has DEFINED this word, it appears here, and `vocabularyReach` says the definition does
+ * not travel this far. No judgement about whether the senses differ, because that is the part a
+ * person owes.
+ *
+ * ⛔ IT IS HOW THE ONE WE FOUND DRIFTED. "kind of deal" was used in 11 scopes and its definition
+ * reached 2. Nothing in the framework could see that; Peter found it by reading one boundary
+ * sentence and noticing the phrase was carrying two unrelated concepts.
+ *
+ * ⛔ AND ONLY WORDS SOMEBODY ALREADY DEFINED. A word nobody has defined anywhere is a different
+ * thing — plenty of words need no definition, and demanding one for each would be the padding this
+ * file exists to refuse.
+ */
+/**
+ * Every scope's text, flattened once — and `definedOutOfReach`'s index, built once per corpus.
+ *
+ * ⛔ MEMOISED BECAUSE THE FIRST VERSION WAS QUADRATIC AND I SHIPPED IT TO A TIMEOUT. It flattened
+ * every scope to a string INSIDE the per-word loop, so one feature cost 188 words × 64 scopes ×
+ * a JSON round-trip, and a corpus-wide sweep never finished. The index below is the same arithmetic
+ * computed once: each scope's haystack, and each word's users and reach.
+ *
+ * ⛔ Keyed on the corpus object, so a reloaded corpus gets a fresh index rather than a stale one —
+ * every write in this project reloads, which is the only reason a cache is safe here at all.
+ */
+const WORD_INDEX = new WeakMap<Corpus, { haystack: Map<string, string>; defined: Map<string, string[]>; spread: Map<string, { users: string[]; reaches: number }> }>();
+
+function wordIndex(corpus: Corpus) {
+  const had = WORD_INDEX.get(corpus);
+  if (had) return had;
+
+  const flat = (o: unknown) => ` ${JSON.stringify(o).toLowerCase().replace(/[^a-z0-9]+/g, " ")} `;
+  const haystack = new Map<string, string>();
+  for (const { scope } of corpus.scopes) haystack.set(scope.id, flat(scope));
+
+  const defined = new Map<string, string[]>();
+  for (const { scope } of corpus.scopes)
+    for (const w of Object.keys(scope.terms ?? {})) {
+      const k = w.toLowerCase();
+      if (!defined.has(k)) defined.set(k, []);
+      defined.get(k)!.push(scope.id);
+    }
+
+  /** ⛔ `vocabularyReach` once per scope, not once per word per scope. */
+  const reach = new Map<string, Set<string>>();
+  for (const { scope } of corpus.scopes) reach.set(scope.id, new Set(vocabularyReach(corpus, scope.id)));
+
+  const spread = new Map<string, { users: string[]; reaches: number }>();
+  for (const [word, where] of defined) {
+    const needle = ` ${word.replace(/[^a-z0-9]+/g, " ")} `;
+    const users = [...haystack].filter(([, t]) => t.includes(needle)).map(([id]) => id);
+    const reaches = users.filter((id) => where.some((d) => reach.get(id)?.has(d))).length;
+    spread.set(word, { users, reaches });
+  }
+
+  const index = { haystack, defined, spread };
+  WORD_INDEX.set(corpus, index);
+  return index;
+}
+
+/**
+ * Words this feature uses that are DEFINED somewhere the feature cannot see.
+ *
+ * ⛔ ARITHMETIC, NOT A READING, AND THAT IS THE WHOLE DESIGN. `wordsIn` refuses to extract concepts
+ * from prose for a good reason recorded directly above it — guessing produced *"processor told
+ * that"* and *"check failed"* as vocabulary gaps. This asks a strictly countable question instead:
+ * somebody has DEFINED this word, it appears here, and `vocabularyReach` says the definition does
+ * not travel this far. No judgement about whether the senses differ, because that is the part a
+ * person owes.
+ *
+ * ⛔ IT IS HOW THE ONE WE FOUND DRIFTED. "kind of deal" was used in 11 scopes and its definition
+ * reached 2. Nothing in the framework could see that; Peter found it by reading one boundary
+ * sentence and noticing the phrase was carrying two unrelated concepts.
+ *
+ * ⛔ AND ONLY WHERE IT HAS ACTUALLY DRIFTED. Asking about every out-of-reach word gave **17
+ * questions on one feature** — the load problem this whole role exists to avoid, rediscovered one
+ * layer along. A word is only worth asking about when MOST of its uses cannot see a definition:
+ * that is still a count, and it is the shape of the one Peter found (11 uses, 2 reached).
+ */
+function definedOutOfReach(corpus: Corpus): Array<{ word: string; where: string[]; users: number; reaches: number }> {
+  const { defined, spread } = wordIndex(corpus);
+  const out: Array<{ word: string; where: string[]; users: number; reaches: number }> = [];
+  for (const [word, where] of defined) {
+    const { users, reaches } = spread.get(word) ?? { users: [], reaches: 0 };
+    /** ⛔ Drifted: used in several places and reaching fewer than half of them. */
+    if (users.length < 3 || reaches * 2 >= users.length) continue;
+    out.push({ word, where, users: users.length, reaches });
+  }
+  return out.sort((a, b) => b.users - a.users);
 }
 
 export function contextFor(
@@ -1109,11 +1256,40 @@ export function interviewFor(corpus: Corpus, scopeId: string, findings: Finding[
     const hp = sc?.happy_path;
     purpose.push(
         {
-          ref: `${ungrounded.scope}#happy-path`,
+          /**
+           * ⛔ THE PART IT IS ABOUT, NOT THE WHOLE PATH — because the whole path is now TWO
+           * questions and a worklist refuses one ref asked twice. That invariant is right: two
+           * entries on one address read as the same thing asked again. `fills` still names
+           * `#happy-path`, because agreeing is one act over the whole of it; the ref is where the
+           * sentence being discussed actually lives, which `rule` now takes.
+           */
+          ref: `${ungrounded.scope}#happy-path#accomplishes`,
           owes: "purpose",
+          /**
+           * ⛔ THE SUBSTANCE IS IN THE QUESTION, NOT IN A FIELD BESIDE IT.
+           *
+           * This asked *"Is this what Approving a document is for?"* and put the five sentences
+           * being agreed into `about.already` — a structured field a surface may or may not render.
+           * So the question as a person met it was a request to proof-read a corpus they cannot see.
+           *
+           * Peter: *"shape of this question is all wrong, i'm not tryign to read the corpus. ask the
+           * QUESTION that is relevant. the HUMAN READABLE question, with HUMAN READABLE background"*
+           * and then *"this should be natural language, not engineering speak."*
+           *
+           * ⛔ AND THE BOUNDARY LEADS THE DETAIL, because that is where disagreement actually lives.
+           * `not` is the sentence somebody argues with — "a document everybody has approved can
+           * still leave a closing requirement outstanding" is a real product decision, and it was
+           * the fifth row of a table nobody was shown.
+           */
           asks: hp
-            ? `Is this what ${plain(sc?.title || ungrounded.scope)} is for?`
-            : `What is ${plain(sc?.title || ungrounded.scope)} for?`,
+            ? [
+                plain(hp.accomplishes),
+                hp.not ? `It deliberately does not cover ${plain(hp.not)}.` : "",
+                `Is that what ${plain(sc?.title || ungrounded.scope)} is for?`,
+              ]
+                .filter(Boolean)
+                .join(" ")
+            : `Nobody has said what ${plain(sc?.title || ungrounded.scope)} is for. What is somebody trying to get done here?`,
           why: ungrounded.why,
           shape:
             "what somebody gets done here, what they arrive with, what they leave with, and the screens they meet in order — ⛔ at the altitude that survives a new form field, never the fields themselves",
@@ -1133,21 +1309,19 @@ export function interviewFor(corpus: Corpus, scopeId: string, findings: Finding[
             purpose: hp ? plain(hp.accomplishes) : undefined,
             words: [],
             undefined_words: [],
+            /**
+             * ⛔ WHAT IT IS FOR, AND WHAT IT IS NOT FOR. Nothing else.
+             *
+             * ⛔ THE SCREENS ARE GONE FROM HERE AND THAT IS A JUDGEMENT ABOUT THE MODEL, NOT A
+             * TIDY-UP. Peter: *"screens really doesn't belong in the 'purpose'."* He is right —
+             * which screens somebody passes through is how the feature is arranged, and a purpose
+             * that names them cannot survive the arrangement changing. It is the altitude this
+             * field's own `shape` warns about, one level up: *"at the altitude that survives a new
+             * form field"*. A route of four screens is four form fields' worth of the same mistake.
+             */
             already: hp
               ? [
                   { asks: "what it gets done", says: plain(hp.accomplishes) },
-                  { asks: "what they arrive with", says: plain(hp.brings) },
-                  { asks: "what they leave with", says: plain(hp.ends_with) },
-                  ...(hp.through.length
-                    ? [
-                        {
-                          asks: "the screens, in order",
-                          says: hp.through
-                            .map((v) => plain(sc?.views.find((x) => x.id === v)?.title || v))
-                            .join(" → "),
-                        },
-                      ]
-                    : []),
                   ...(hp.not ? [{ asks: "deliberately not part of it", says: plain(hp.not) }] : []),
                 ]
               : [],
@@ -1162,7 +1336,47 @@ export function interviewFor(corpus: Corpus, scopeId: string, findings: Finding[
             ? `a person agrees to this on the page — ⛔ nobody else can, and its behaviours are not offered for acceptance until they have`
             : `nothing says what this feature is for — an author writes the happy path before anybody can agree to it`,
         }
-    );
+      );
+    /**
+     * ⛔ ASKED APART FROM THE PURPOSE, AND ONLY WHERE THERE IS SOMETHING TO READ. See the `handover`
+     * kind: one acceptance, two reads. A feature with no happy path at all has nothing to show here
+     * — the purpose question above already says an author has to write one first.
+     */
+    if (hp)
+      purpose.push({
+        ref: `${ungrounded.scope}#happy-path#brings`,
+        owes: "handover",
+        asks: [
+          /**
+           * ⛔ "Afterwards," NOT "They leave with" — `ends_with` IS A CLAUSE, NOT A NOUN PHRASE.
+           *
+           * Slotted after "They leave with", a real corpus produced *"They leave with the deal is in
+           * the lender's list"*. The field describes a STATE that holds once the work is done, and
+           * every surface that reads it has to join it as one. Machine-assembled prose that is not
+           * English is the same defect as a question nobody can picture, one layer down.
+           */
+          `Somebody arrives at ${plain(sc?.title || ungrounded.scope)} with ${plain(hp.brings)}.`,
+          `Afterwards, ${plain(hp.ends_with)}.`,
+          "Is that right?",
+        ].join(" "),
+        why: "agreeing what a feature is for means agreeing what somebody brings to it and takes away, and those are two different things to be wrong about",
+        shape:
+          "what somebody has in hand before they start, and what is different for them afterwards — ⛔ at the altitude that survives a new form field, never the fields themselves",
+        fills: [`${ungrounded.scope}#happy-path`],
+        candidates: [],
+        about: {
+          feature: plain(sc?.title || ungrounded.scope),
+          purpose: plain(hp.accomplishes),
+          already: [
+            { asks: "what they arrive with", says: plain(hp.brings) },
+            { asks: "what they leave with", says: plain(hp.ends_with) },
+          ],
+          words: [],
+          undefined_words: [],
+        },
+        act: "a person agrees to this on the page, in the same act that agrees what the feature is for — ⛔ the happy path is agreed as one thing, and this is the half of it nobody was reading",
+      });
+
   }
 
   /**
@@ -1179,8 +1393,69 @@ export function interviewFor(corpus: Corpus, scopeId: string, findings: Finding[
    */
   const vocabulary = vocabularyOf(corpus, scopeId);
 
+  /**
+   * ⛔ WHAT A QUESTION USED TO ASK, SHOWN TO WHOEVER IS BEING ASKED IT NOW.
+   *
+   * A rewording is safe because nothing is lost; that is only true if the person weighing the
+   * question can see what changed. Printed after the question rather than before it — the current
+   * wording is what they are answering, and the old one is there to resolve "wasn't this different
+   * yesterday?" rather than to be read first.
+   */
+  /**
+   * ⛔ THE REFS A PERSON HAS SAID MAKE NO SENSE, AND THE WORDS THEY SAID IT IN.
+   *
+   * ⛔ `isHuman(via)`, NOT `by`. `by` is a name and a name proves nothing about which hand typed —
+   * a role writing a note on somebody's behalf records their name too. The `via` is the channel, and
+   * `BY_A_PERSON` is the one place that decides what counts. A judge's `review` note must never
+   * suppress a question: a reviewer saying a question is unclear is a finding to act on, and a
+   * person saying it is nonsense is the question being withdrawn.
+   *
+   * ⛔ AND ONLY `open` ONES. A note somebody closed has been dealt with — treating a settled
+   * objection as live would hide questions forever on the strength of a complaint already answered.
+   */
+  /**
+   * ⛔ WORK AN AUTHOR DOES, NEVER A QUESTION OFFERED BACK. See the `disputed` kind for the five days
+   * this cost. `fills` is the ref so the fix has an address; `candidates` is empty because the
+   * options are precisely what a rejected premise cannot be trusted to carry.
+   */
+  const disputed: Owed[] = [];
+
   const drafted: Owed[] = questionsFor(corpus, scopeId)
     .filter((q) => !q.parked)
+    .filter((q) => {
+      /**
+       * ⛔ `q.disputed` FROM `questionsFor`, NOT A SECOND READ OF THE NOTES. This file computed its
+       * own map first, and the PAGE — which builds its list straight from `questionsFor` — went on
+       * offering both disputed questions under "5 questions nobody has answered". One surface knew
+       * and the others did not, which is the whole reason that function is the one home.
+       */
+      const no = q.disputed;
+      if (!no) return true;
+      disputed.push({
+        ref: q.ref,
+        owes: "disputed",
+        asks: `${no.by} has said this question makes no sense, and it has not been fixed: "${plain(no.said)}"`,
+        why: `it was asked anyway, and rewording it is not the fix — ${no.by} is disputing what it is about`,
+        shape:
+          "either withdraw the options and ask something that matches what actually happens, or establish that the thing the question is about is real — ⛔ an author's work, and not a question for the person who already rejected it",
+        fills: [q.ref],
+        candidates: [],
+        /**
+         * ⛔ THE QUESTION AS IT STANDS IS THE CONTEXT. An author's first job here is to see what was
+         * asked beside what the person said about it — the two together are the whole finding, and
+         * either alone reads as somebody being difficult.
+         */
+        about: {
+          feature: plain(title),
+          behaviour: q.exchangeTitle ? plain(q.exchangeTitle) : undefined,
+          already: [{ asks: "it currently asks", says: plain(q.asks) }],
+          words: [],
+          undefined_words: [],
+        },
+        act: `read the note in full (${no.note}) before writing anything, and reply to it rather than re-asking`,
+      });
+      return false;
+    })
     .map((q) => ({
       ref: q.ref,
       owes: "drafted" as const,
@@ -1194,7 +1469,19 @@ export function interviewFor(corpus: Corpus, scopeId: string, findings: Finding[
        * The newlines are the structure of the question. `decide` prints them line by line and this
        * destroyed them before anything could.
        */
-      asks: q.asks.replace(/[ \t]+/g, " ").trim(),
+      asks: [
+        q.asks.replace(/[ \t]+/g, " ").trim(),
+        /**
+         * ⛔ ONLY THE WORDING IMMEDIATELY BEFORE THIS ONE, not the whole trail. A person resolving
+         * "wasn't this different yesterday?" needs the one it replaced; four generations of it is
+         * an archive, and an archive in front of a question is noise where context should be.
+         */
+        (q.wasAsked ?? []).length
+          ? `(It used to ask: ${String((q.wasAsked ?? []).at(-1)).replace(/[ \t]+/g, " ").trim()})`
+          : "",
+      ]
+        .filter(Boolean)
+        .join("\n"),
       why: q.candidates.length
         ? `${q.candidates.length} answer${q.candidates.length === 1 ? " is" : "s are"} on the table and nobody has picked`
         : "it is asked and nothing is drafted against it",
@@ -1337,7 +1624,64 @@ export function interviewFor(corpus: Corpus, scopeId: string, findings: Finding[
    * feature and it fills exactly one slot, so any ordering by reach would bury it — which is the
    * opposite of the gate's point. It leads; the rest competes on what one answer closes.
    */
-  const owed = [...purpose, ...[...folded, ...rest].sort((a, b) => b.fills.length - a.fills.length)];
+  /**
+   * ⛔ AND A DISPUTED QUESTION COMES BEFORE EVERYTHING, EVEN THE PURPOSE.
+   *
+   * Not because it is more important than what a feature is for, but because it is the one item on
+   * this list a person has ALREADY SPENT TIME ON and been handed back. Burying it under questions
+   * is how a question Peter rejected on 2026-10-22 got reworded twice and put in front of him
+   * again — *"This still doesn't make any sense"*, then *"what does ... even mean??????"*.
+   *
+   * ⛔ It is also not sorted by reach, because `fills.length` is 1 by construction and reach is a
+   * measure of how much one ANSWER closes. Nobody is answering this one; somebody is fixing it.
+   */
+  /**
+   * ⛔ A WORD WHOSE DEFINITION DOES NOT REACH HERE — asked, never refused. Peter's call: *"A question
+   * for the interviewer."* See the `undefined-word` kind for why the test is a count and not a
+   * reading, and `definedOutOfReach` for what it counts.
+   */
+  /**
+   * ⛔ ONCE AT THE PRODUCT, NEVER PER FEATURE — AND THE NUMBER THAT SETTLED IT IS 950.
+   *
+   * Asked per feature this produced **950 questions across the corpus**, whose commonest subjects
+   * were `reading`, `deal`, `kind`, `role`, `document`. Those are not 950 ambiguities: they are the
+   * product's CORE NOUNS, each defined in one feature and used in fifty, and the fix for every one
+   * of them is the same single act — put the word in the glossary. Asking each feature separately
+   * is the load problem this role exists to remove, rediscovered one layer along.
+   *
+   * ⛔ SAME SHAPE AS THE CAPABILITY TREE, and that precedent is explicit: *"a subsystem serves many
+   * features, so which parts exist is not a per-feature question."* A word means one thing across a
+   * product or it does not; whose feature noticed is an accident of where somebody was reading.
+   */
+  const atProduct = !corpus.scopes.find((x) => x.scope.id === scopeId)?.scope.in;
+  const loose: Owed[] = (atProduct ? definedOutOfReach(corpus) : []).map((x) => ({
+    ref: `${scopeId}#word:${x.word.replace(/[^a-z0-9]+/g, "-")}`,
+    owes: "undefined-word" as const,
+    asks: [
+      /**
+       * ⛔ "USED HERE" WAS WRONG AT THE ONE PLACE THIS IS ASKED. Folded to the product root, "here"
+       * is the whole product, so the sentence said nothing. The arithmetic IS the context: where it
+       * is defined, how far it travels, and how much of its use that covers.
+       */
+      `"${x.word}" is defined in ${x.where.join(" and ")}, and used in ${x.users} places across the product.`,
+      `The definition reaches ${x.reaches === 0 ? "none of them" : x.reaches === 1 ? "one of them" : `${x.reaches} of them`}.`,
+      "Is it one thing?",
+    ].join(" "),
+    why: `it is defined in ${x.where.join(", ")}, which this feature does not reach — so nothing is holding what it means here`,
+    shape:
+      "either the same thing, and the definition belongs somewhere both can see — the product's glossary — or a different thing, which needs its own name",
+    fills: [`${scopeId}#word:${x.word.replace(/[^a-z0-9]+/g, "-")}`],
+    candidates: [],
+    about: {
+      feature: plain(title),
+      already: [{ asks: `where "${x.word}" is defined`, says: x.where.join(", ") }],
+      words: [],
+      undefined_words: [],
+    },
+    act: "a person says whether it is one thing — ⛔ nothing here guesses, because whether two uses mean the same is a reading and not a count",
+  }));
+
+  const owed = [...disputed, ...purpose, ...loose, ...[...folded, ...rest].sort((a, b) => b.fills.length - a.fills.length)];
   return {
     scope: scopeId,
     title,

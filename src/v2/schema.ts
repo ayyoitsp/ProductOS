@@ -606,6 +606,54 @@ export const Standing = z
 
     raised_by: z.string().optional(),
     /**
+     * Every wording this question has had before its current one, oldest first.
+     *
+     * ⛔ THIS EXISTS SO A BADLY ASKED QUESTION IS NOT PERMANENT. `ask` refused to reword an open
+     * question — *"a question somebody has been weighing is not rewritten under them"* — which is
+     * right about the harm and wrong about the cure. The harm is being rewritten SILENTLY; the cure
+     * is keeping what it used to say, not freezing it.
+     *
+     * ⛔ AND IT WAS NOT A SMALL FREEZE. Measured on Peter's corpus: 1,315 of 1,600 questions owed
+     * were already drafted, so improving how this role words a question reached NONE of them —
+     * including every one he had objected to by name. *"this should be natural language, not
+     * engineering speak"* fixed the next question and not one question he was actually looking at.
+     *
+     * ⛔ THE OPTIONS ARE NOT TOUCHED BY A REWORDING, which is what makes it safe: the decision on
+     * the table is the same decision, and anybody weighing it can read what it used to say.
+     */
+    was_asked: z.array(z.string()).optional(),
+    /**
+     * Options that were offered and are not real answers, with why each was taken off the table.
+     *
+     * ⛔ THE SAME ARGUMENT AS `was_asked`, AND THE SAME MISTAKE IT CORRECTS. `ask` appended and never
+     * removed, for a good reason stated in its own comment — *"a drafter adding a third reading must
+     * not be able to delete the two a person has been weighing."* That is right about the harm and
+     * wrong about the cure: the harm is deleting them SILENTLY, so the cure is keeping them.
+     *
+     * ⛔ WHAT APPEND-ONLY ACTUALLY COST. Three questions on `pl-start-a-deal` carried options that
+     * could not be applied at all, and nothing could take them off the table — so the only way to
+     * make Peter's answers recordable was to add pickable options BESIDE the broken ones, leaving
+     * questions with six options of which four cannot be picked. His reply: *"definitely needs to
+     * remove options."* An option nobody can choose is not a choice; it is noise in front of a
+     * decision, and it was permanent until the question was answered.
+     *
+     * ⛔ AND `because` IS PER OPTION, because "these two were wrong" is not a reason anybody can
+     * argue with. Two options are usually withdrawn for different reasons — one unapplicable, one
+     * built on a false premise — and a single note on the pair loses both.
+     */
+    withdrawn: z
+      .array(
+        z
+          .object({
+            says: z.string().min(1),
+            because: z.string().min(10, "why an option is not a real answer is the part somebody could disagree with"),
+            at: dateish.optional(),
+            by: z.string().optional(),
+          })
+          .strict()
+      )
+      .optional(),
+    /**
      * ⛔ REQUIRED WHEN THIS STANDING SITS BESIDE CONTENT, because otherwise the whole slot
      * reads unsettled and every surface throws the settled part away.
      *
@@ -3870,6 +3918,27 @@ export const Note = z
      * value that means "disregard", which is how a vocabulary starts lying.
      */
     probe: z.boolean().optional(),
+    /**
+     * This note says the thing it is about should not be asked as it stands — not an answer to it.
+     *
+     * ⛔ SET, NEVER INFERRED, AND THAT IS THE WHOLE REASON IT IS A FIELD. Two notes on one feature
+     * read almost identically to software and mean opposite things:
+     *
+     *   n-a3v33u  "this question makes no sense to me, no idea what you're talkinga bout"
+     *   n-z1r4wt  "Anybody in the org" — an ANSWER, recorded as a note only because the model
+     *             could not write it at the time (fg-0001, since closed)
+     *
+     * A classifier reading those sentences would be a guess wearing a decision's clothes, and
+     * guessing wrong is expensive in both directions: treat an answer as a dispute and a decision
+     * somebody already made disappears; treat a dispute as an answer and the question goes back in
+     * front of the person who rejected it.
+     *
+     * ⛔ WHICH IS WHAT HAPPENED. `n-a3v33u` was recorded on 2026-10-22 and the question it rejects
+     * was reworded twice and put to Peter twice more — *"This still doesn't make any sense"*, then
+     * *"what does 'the product can't set up anywhere to save their work' even mean??????"*. Nothing
+     * could tell that note from the one beside it, so nothing acted on either.
+     */
+    disputes: z.boolean().optional(),
     /**
      * ⛔ WHAT KIND OF THING IS BEING ASKED FOR — the corpus, or the framework that produced it.
      *
