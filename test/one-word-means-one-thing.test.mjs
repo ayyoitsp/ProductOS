@@ -65,16 +65,37 @@ terms:
   return dir;
 };
 
-test("⛔ a feature redefining a glossary word is refused, and the refusal names both ways out", () => {
+test("⛔ a feature redefining a glossary word is a question, NEVER a refusal", () => {
+  /**
+   * ⛔ THIS ASSERTED THE OPPOSITE FOR ABOUT AN HOUR, ON HIS FIRST ANSWER. Asked what should happen,
+   * Peter said *"Refuse it"*; shown the result he reversed it with a principle larger than this
+   * check: *"anyone should be able to redefine a gloassary word - why wouldn't thye? nothing should
+   * be refused of a human requesting to make changes. product os should be reindexing based off the
+   * feedback."*
+   *
+   * He is right about what `refuse` DOES — it stops a corpus being handed over — so a person who
+   * changed a word of their own product truth was told their product had become unreviewable.
+   * Punished for authoring. A refusal is right where the corpus cannot be READ; a word meaning two
+   * things is a decision somebody made, and a decision gets a question.
+   */
   const dir = corpus({ glossary: true, shadow: true });
   const found = checkCorpus(dir).findings.filter((f) => f.kind === "redefines-a-glossary-word");
-  assert.equal(found.length, 1, `expected one refusal, got ${found.length}`);
-  assert.equal(found[0].severity, "refuse", "it is a note rather than a refusal");
+  assert.equal(found.length, 1, `expected one finding, got ${found.length}`);
+  assert.notEqual(found[0].severity, "refuse", "a person's own change makes their corpus unreviewable");
   assert.match(found[0].where, /payouts :: payout/);
-  /** ⛔ Both exits named, or an author has a refusal and no move. */
   const fix = String(found[0].fix ?? "");
   assert.match(fix, /drop the local definition/);
   assert.match(fix, /give it its own name/);
+
+  /** ⛔ AND IT REACHES THE PERSON AS A QUESTION, carrying BOTH senses — "defined twice" without
+   *  showing the two readings is a feeling, and sends somebody off to look it up. */
+  const c = loadCorpus(dir);
+  const asked = interviewFor(c, "payouts")?.owed.filter((o) => o.owes === "undefined-word") ?? [];
+  assert.equal(asked.length, 1, "the collision never reached anybody as a question");
+  assert.match(asked[0].asks, /Money leaving a kid's pocket money/, "the glossary's sense is not shown");
+  assert.match(asked[0].asks, /a transfer between two families/, "the local sense is not shown");
+  assert.match(asked[0].asks, /needs its own name/);
+  assert.equal(asked[0].candidates.length, 0, "it drafted an answer to a question only a person can settle");
 });
 
 test("⛔ and the same word defined only locally is fine — the glossary is what makes it a collision", () => {
