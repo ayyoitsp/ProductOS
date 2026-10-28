@@ -242,52 +242,54 @@ test("readiness reports unserved promises on both sides of the verdict, and gate
 });
 
 /**
- * ⛔ THE CHECK'S SILENCE AT ZERO IS A DECISION, AND IT WAS NEARLY OVERTURNED.
+ * ⛔ THE CHECK WAS GUARDED ON `corpus.subsystems.length`, AND THE GUARD IS GONE.
  *
- * `behaviours-no-subsystem-answers` has asked this question all along, under
- * `if (corpus.subsystems.length)` — which is why the probe behind this file found nothing on the
- * seed, and why the first repair attempted was deleting that guard. `v2-capabilities` pins it with
- * its reason: *"A corpus that has not started this must not be told it is incomplete at something
- * it has not begun."*
+ * `behaviours-no-subsystem-answers` has asked this question all along, under that guard — which is
+ * why the probe behind this file found nothing on the seed. A test pinned the guard with its reason:
+ * *"A corpus that has not started this must not be told it is incomplete at something it has not
+ * begun."* On the strength of that pinning I put the guard back.
  *
- * That is right about `check`, which audits a whole corpus unasked and has a queue-length ratchet
- * to stop it nagging — the ratchet caught the attempt, taking the seed from 14 decisions owed to 19
- * against 14 reviewable things. It is wrong about `readinessOf`, which is ASKED by somebody about to
- * build one thing, and where "no part serves this" and "nobody has decomposed anything" read
- * identically. So the two surfaces split: this one stays quiet, `unserved` above does not.
+ * Peter: *"uh, why do we have a corpus.subsystems.length check? who fucking cares? that doesnt
+ * change the fact that the feature isn't bcked by a capability"*.
  *
- * ⛔ WHAT DID CHANGE HERE IS THE GRAIN, and the denominator comes from the same walk — "11 of 5" is
- * what comparing a statement count against a behaviour count produces.
+ * ⛔ A PINNED DECISION IS WORTH READING BEFORE OVERTURNING AND IS NOT AUTHORITY OVER THE PERSON
+ * WHOSE REASONING IT CLAIMED TO ENCODE. The comment recorded what somebody believed. What is true is
+ * that a product with no capability layer has every promise unbacked, and the guard made that read
+ * identically to every promise being backed — at exactly the count where it matters most.
+ *
+ * What keeps it proportionate is the COUNT, which was always there and is what the guard was
+ * redundant with: one line saying "40 of 40", never 40 notes.
  */
-test("check stays silent with no capability layer, and counts statements once there is one", () => {
+test("the finding fires with no capability layer at all, as one line, at statement grain", () => {
   const bare = seed("v2parts-check-");
-  assert.deepEqual(
-    checkCorpus(bare).findings.filter((f) => f.kind === "behaviours-no-subsystem-answers"),
-    [],
-    "a corpus that has not begun decomposing was told it is incomplete at it"
-  );
+  const found = checkCorpus(bare).findings.filter((f) => f.kind === "behaviours-no-subsystem-answers");
 
-  /** One part, so the layer exists — and now the rest must be reported. */
-  const some = seed("v2parts-check-some-");
-  machineryFor(some, [`${EX}#answer`]);
-  const found = checkCorpus(some).findings.filter((f) => f.kind === "behaviours-no-subsystem-answers");
-  assert.equal(found.length, 1, "reported per statement instead of once");
+  assert.equal(found.length, 1, "⛔ a corpus with no subsystems said nothing about its promises being unbacked");
   assert.equal(found[0].severity, "note", "a refusal here can only be cleared by inventing a part — fg-0020");
   assert.match(found[0].fix, /nowhere yet to say so — fg-0020/);
 
-  /** ⛔ Both halves of the fraction from one walk, at statement grain. */
-  const c = loadCorpus(some);
-  const [n, , m] = found[0].where.split(" ");
+  /** ⛔ With nothing decomposed, every promise is unbacked — so the fraction says all of them. */
+  const c = loadCorpus(bare);
   const ids = c.scopes.map((x) => x.scope.id);
+  const [n, , m] = found[0].where.split(" ");
+  assert.equal(n, m, "with no capability layer the numerator and denominator must agree");
   assert.equal(Number(n), unservedIn(c, ids).length);
   assert.equal(Number(m), unservedIn(c, ids, undefined, true).length);
   assert.ok(
     Number(m) > c.scopes.reduce((t, x) => t + x.scope.exchanges.length, 0),
     `${m} is not finer than the behaviour count, so the grain is not being exercised`
   );
-  assert.ok(Number(n) < Number(m), "the one served promise is not reflected in the numerator");
 
-  /** And it goes quiet once every part exists, which is the half that makes it a check. */
+  /** One part written: the numerator drops, the denominator does not. */
+  const some = seed("v2parts-check-some-");
+  machineryFor(some, [`${EX}#answer`]);
+  const after = checkCorpus(some).findings.filter((f) => f.kind === "behaviours-no-subsystem-answers");
+  assert.equal(after.length, 1);
+  const [n2, , m2] = after[0].where.split(" ");
+  assert.equal(m2, m, "the denominator moved when a part was written — it counts promises, not gaps");
+  assert.ok(Number(n2) < Number(n), "writing a part did not reduce the number of unbacked promises");
+
+  /** And it goes quiet once every promise is backed, which is the half that makes it a check. */
   const mapped = seed("v2parts-check-clean-");
   const mc = loadCorpus(mapped);
   machineryFor(

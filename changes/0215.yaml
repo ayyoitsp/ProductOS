@@ -1,0 +1,11 @@
+id: "0215"
+said: uh, why do we have a corpus.subsystems.length check? who fucking cares? that doesnt change the fact that the feature isn't bcked by a capability
+at: 2026-10-28
+kind: derivation
+reaches:
+  derive: unservedIn
+  surface: verdict-parts
+  check: behaviours-no-subsystem-answers
+  pin: the finding fires with no capability layer at all, as one line, at statement grain
+waived: {}
+closed: 2026-10-28
