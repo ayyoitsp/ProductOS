@@ -566,12 +566,26 @@ function questionsIn(corpus: Corpus, scopeId: string): Question[] {
  * may overrule it by writing the whole sentence they want.
  */
 export function droppedClauses(wasSaying: string, says: string): string[] {
-  const clauses = wasSaying
-    .split(/[,;—]| and (?=the |it |they )/)
-    .map((c) => c.trim().replace(/^(and|then|so) /i, ""))
-    .filter((c) => c.split(/\s+/).length >= 4);
+  return droppedFrom(
+    wasSaying
+      .split(/[,;—]| and (?=the |it |they )/)
+      .map((c) => c.trim().replace(/^(and|then|so) /i, ""))
+      .filter((c) => c.split(/\s+/).length >= 4),
+    says
+  );
+}
+
+/**
+ * Which of several agreed units a replacement would drop — the same overlap test, any units.
+ *
+ * ⛔ SPLIT OUT BECAUSE THE UNITS ARE SOMETIMES ALREADY SPLIT, AND THAT CASE HAD NO GUARD AT ALL.
+ * `droppedClauses` cuts a sentence on punctuation, which is a heuristic standing in for "the
+ * things this slot promises". A slot whose `says` is a LIST does not need the heuristic: each
+ * statement IS a unit, with its own id.
+ */
+export function droppedFrom(units: string[], says: string): string[] {
   const kept = says.replace(/\s+/g, " ").toLowerCase();
-  return clauses.filter((c) => {
+  return units.filter((c) => {
     const words = c.toLowerCase().split(/\s+/).filter((w) => w.length > 3);
     const hits = words.filter((w) => kept.includes(w)).length;
     return words.length >= 3 && hits / words.length < 0.5;
@@ -962,8 +976,30 @@ export function settle(
    * only the one whose `says` is a LIST could use the clean route, and that worked only because
    * `wasSaying` is undefined for a list and this guard was skipped by accident.
    */
-  if (wasSaying && !about.adds && (beforeSlot.standing as { about?: string } | undefined)?.about) {
-    const dropped = droppedClauses(wasSaying, says);
+  /**
+   * ⛔ A LIST-SHAPED SLOT HAD NO PROTECTION AT ALL, WHICH IS EXACTLY INVERTED.
+   *
+   * `wasSaying` is set only when `says` is a STRING, so this guard ran where there was one sentence
+   * to lose and was skipped where there were several — and several is the shape that holds several
+   * agreed statements. Measured on Peter's real corpus: `resume-a-deal-already-started#answer`
+   * carries THREE agreed statements, a `pick` is correctly refused, and writing the sentence
+   * directly was **accepted, leaving one. Two statements a person had agreed to, gone, silently.**
+   *
+   * ⛔ I TOUCHED THIS LINE TODAY AND MISSED IT. Fixing `adds a statement` I added `!about.adds`
+   * here and wrote in the comment that the add path "worked only because `wasSaying` is undefined
+   * for a list and this guard was skipped by accident". I noticed the skip and did not see that the
+   * skip is also the hole — the interviewer running against staging is what found it.
+   *
+   * ⛔ AND A LIST NEEDS NO HEURISTIC. Splitting prose on punctuation is a stand-in for "the things
+   * this slot promises"; a list has already been split, each unit with its own id. So the same
+   * overlap test runs over better units.
+   */
+  const agreedUnits = Array.isArray(slot.says)
+    ? statements(slot.says as Parameters<typeof statements>[0]).map((x) => x.says.replace(/\s+/g, " ").trim())
+    : null;
+  const guardable = wasSaying || (agreedUnits?.length ?? 0) > 1;
+  if (guardable && !about.adds && (beforeSlot.standing as { about?: string } | undefined)?.about) {
+    const dropped = agreedUnits ? droppedFrom(agreedUnits, says) : droppedClauses(wasSaying!, says);
     if (dropped.length)
       return {
         ok: false,
@@ -971,7 +1007,7 @@ export function settle(
           `This ruling drops ${dropped.length === 1 ? "a part" : "parts"} of what was already agreed here, ` +
           `and only one thing about it was in question:\n` +
           dropped.map((c) => `      ${c}`).join("\n") +
-          `\n\n  It said: ${wasSaying}\n  In question: ${(beforeSlot.standing as { about: string }).about.replace(/\s+/g, " ").trim()}\n` +
+          `\n\n  It said: ${wasSaying ?? agreedUnits!.join(" ")}\n  In question: ${(beforeSlot.standing as { about: string }).about.replace(/\s+/g, " ").trim()}\n` +
           `\n  Write the whole sentence you want, keeping the rest — or if those parts really are ` +
           `wrong too,\n  say so as its own act first.`,
       };
