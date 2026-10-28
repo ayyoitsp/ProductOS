@@ -635,13 +635,41 @@ function glossaryCollisions(
   return out;
 }
 
-function definedOutOfReach(corpus: Corpus): Array<{ word: string; where: string[]; users: number; reaches: number }> {
-  const { defined, spread } = wordIndex(corpus);
+function definedOutOfReach(
+  corpus: Corpus,
+  scopeId?: string
+): Array<{ word: string; where: string[]; users: number; reaches: number }> {
+  const { defined, spread, haystack } = wordIndex(corpus);
+  /**
+   * ⛔ SCOPED TO ONE FEATURE WHERE ASKED THAT WAY — and folding this to the product was my mistake.
+   *
+   * Asked per feature it summed to 950 across the corpus, so I folded it to the root. Peter:
+   * *"we should be able to start the interviewer on a feature, and have it fan out to the
+   * gloassary/capabilities that are needed to support the feature."*
+   *
+   * He is right and the 950 was a number nobody experiences. Nobody interviews 64 features at once;
+   * they interview ONE, and what that one needs is the words IT uses — seventeen on the feature we
+   * measured, which is the work of making that feature buildable rather than a corpus-wide audit
+   * nobody asked for. The sum across features was me optimising a total no person ever sees.
+   *
+   * ⛔ AND THE PRODUCT VIEW STAYS, because the sweep is a real thing somebody does deliberately.
+   * Same derivation, two grains: everything that has drifted, or everything this feature leans on.
+   */
+  const inReach = scopeId ? new Set(vocabularyOf(corpus, scopeId).map((x) => x.word.toLowerCase())) : null;
+  const here = scopeId ? haystack.get(scopeId) ?? "" : null;
+
   const out: Array<{ word: string; where: string[]; users: number; reaches: number }> = [];
   for (const [word, where] of defined) {
     const { users, reaches } = spread.get(word) ?? { users: [], reaches: 0 };
-    /** ⛔ Drifted: used in several places and reaching fewer than half of them. */
-    if (users.length < 3 || reaches * 2 >= users.length) continue;
+    if (scopeId) {
+      /** ⛔ Words THIS feature uses and cannot see a definition for. Its own words are fine. */
+      if (where.includes(scopeId)) continue;
+      if (inReach!.has(word)) continue;
+      if (!here!.includes(` ${word.replace(/[^a-z0-9]+/g, "-").replace(/-/g, " ")} `)) continue;
+    } else {
+      /** ⛔ Drifted: used in several places and reaching fewer than half of them. */
+      if (users.length < 3 || reaches * 2 >= users.length) continue;
+    }
     out.push({ word, where, users: users.length, reaches });
   }
   return out.sort((a, b) => b.users - a.users);
@@ -1694,7 +1722,7 @@ export function interviewFor(corpus: Corpus, scopeId: string, findings: Finding[
    * product or it does not; whose feature noticed is an accident of where somebody was reading.
    */
   const atProduct = !corpus.scopes.find((x) => x.scope.id === scopeId)?.scope.in;
-  const loose: Owed[] = (atProduct ? definedOutOfReach(corpus) : []).map((x) => ({
+  const loose: Owed[] = definedOutOfReach(corpus, atProduct ? undefined : scopeId).map((x) => ({
     ref: `${scopeId}#word:${x.word.replace(/[^a-z0-9]+/g, "-")}`,
     owes: "undefined-word" as const,
     asks: [
@@ -1703,9 +1731,23 @@ export function interviewFor(corpus: Corpus, scopeId: string, findings: Finding[
        * is the whole product, so the sentence said nothing. The arithmetic IS the context: where it
        * is defined, how far it travels, and how much of its use that covers.
        */
-      `"${x.word}" is defined in ${x.where.join(" and ")}, and used in ${x.users} places across the product.`,
-      `The definition reaches ${x.reaches === 0 ? "none of them" : x.reaches === 1 ? "one of them" : `${x.reaches} of them`}.`,
-      "Is it one thing everywhere, or does some use of it mean something else?",
+      /**
+       * ⛔ TWO GRAINS, TWO VOICES. Started on a feature this is *"you use this word and cannot see
+       * what it means"*; started on the product it is *"this word has drifted across the corpus"*.
+       * The feature version read in the corpus voice first — *"used in 62 places across the
+       * product"* — which is true and is not what somebody interviewing one feature is asking.
+       */
+      ...(atProduct
+        ? [
+            `"${x.word}" is defined in ${x.where.join(" and ")}, and used in ${x.users} places across the product.`,
+            `The definition reaches ${x.reaches === 0 ? "none of them" : x.reaches === 1 ? "one of them" : `${x.reaches} of them`}.`,
+            "Is it one thing everywhere, or does some use of it mean something else?",
+          ]
+        : [
+            `This feature uses "${x.word}" and cannot see where it is defined.`,
+            `It is defined in ${x.where.join(" and ")}, and used in ${x.users} places across the product.`,
+            "Is that the same thing meant here?",
+          ]),
     ].join(" "),
     why: `it is defined in ${x.where.join(", ")}, which this feature does not reach — so nothing is holding what it means here`,
     shape:

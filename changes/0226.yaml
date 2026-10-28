@@ -1,0 +1,13 @@
+id: "0226"
+said: |-
+  it should go under the overview as a submenu item there
+  make it part of the interviewer to get this indexed. we should be able to start the interviewer
+  on a feature, and have it fan out to the gloassary/capabilities that are needed to support the
+  feature
+at: 2026-10-28
+kind: surface
+reaches:
+  surface: renderGlossary
+  pin: a feature is asked about a word it uses and cannot see the meaning of
+waived: {}
+closed: 2026-10-28
