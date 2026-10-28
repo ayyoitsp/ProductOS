@@ -33,7 +33,13 @@ import {
 import { confidenceOf, containerOf } from "./confidence.js";
 import { stampFor, staleReason, coveredBy, whatChangedSince } from "./stamp.js";
 import { resolveRef } from "./ref.js";
-import { descendants, WHAT_IS_IN_QUESTION } from "./settle.js";
+import {
+  descendants,
+  unbuildableReads,
+  readThroughsFor,
+  blankSlots,
+  WHAT_IS_IN_QUESTION,
+} from "./settle.js";
 import { ruleHomes, reachOf } from "./grid.js";
 import { appStyleFor, styleDrift } from "./appcss.js";
 import { readLog } from "./log.js";
@@ -46,7 +52,14 @@ import { readConfig } from "../core/config.js";
 import path from "node:path";
 import { projectRootOf } from "../core/paths.js";
 import { wouldReach } from "./steers.js";
-import { demonstrations, derivedCapabilities } from "./demonstrate.js";
+import {
+  demonstrations,
+  derivedCapabilities,
+  unservedIn,
+  staleConclusions,
+  typedConclusions,
+  answeringParts,
+} from "./demonstrate.js";
 import { carriedAreas } from "./subsystems.js";
 
 export type Severity = "refuse" | "note" | "shape";
@@ -2179,6 +2192,95 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
   }
 
   /**
+   * ---- a person could build from it, and a slot in it says nobody has thought about one ----
+   *
+   * ⛔ THE STATE THE ACT NO LONGER PERMITS AND A CORPUS CAN ALREADY BE IN.
+   *
+   * `doRead` refuses `buildable: true` over a blank slot now. It did not before — `questionsIn`
+   * skips a slot with no fill, so a blank produced no question and the refusal read only questions.
+   * Every stamp written in that window is still in the log, and nothing looked for it: the grid says
+   * `·`, `readinessOf` counts a hole, and a person's word says they could build it.
+   *
+   * ⛔ A NOTE, NOT A REFUSAL, AND THE DIRECTION IS WHY. The gate already blocks on the blank, so no
+   * builder is handed this; what is wrong is a record of consent that its own corpus contradicts.
+   * Refusing would fire on every corpus carrying an older stamp at once — *"a refusal firing on all
+   * of them is one people switch off"*, learned twice in one day here — and the fix is somebody
+   * re-reading, which is an act, not an edit.
+   */
+  /**
+   * ⛔ OVER THE READINGS, NOT OVER THE SCOPES, because a yes does not travel up. Walking scopes and
+   * asking `buildableReads` for each missed every exchange-grained stamp: asked of `money`, a
+   * reading of `money#see-a-balance` is correctly not an answer, which is the asymmetry that exists
+   * so a behaviour's yes cannot make its feature ready. Here the question runs the other way — what
+   * did this reading cover, and is any of it undecided — so the reading is what to iterate.
+   */
+  for (const r of corpus.verdicts) {
+    if (r.kind !== "read" || r.buildable !== true || !r.scope) continue;
+    {
+      const [at, exchange] = r.scope.split("#");
+      if (!corpus.scopes.some((x) => x.scope.id === at)) continue;
+      const blank = (exchange ? [at!] : descendants(corpus, at!)).flatMap((id) =>
+        blankSlots(corpus, id, exchange)
+      );
+      if (!blank.length) continue;
+      add({
+        severity: "note",
+        kind: "built-from-a-slot-nobody-decided",
+        where: r.scope,
+        what:
+          `${r.by} read this on ${r.at} and could build from it, and ` +
+          `${blank.length === 1 ? "one slot says" : `${blank.length} slots say`} nobody has thought about ` +
+          `${blank.length === 1 ? "it" : "them"}: ${blank.join(", ")}`,
+        fix:
+          "decide them, or declare each the builder's on purpose — then read it through again. " +
+          "⛔ The stamp is not editable: it records what somebody said when the corpus looked different",
+      });
+    }
+  }
+
+  /**
+   * ---- somebody could build from it, and then the words moved ----
+   *
+   * ⛔ THE LAST THING IN THE GATE THAT COULD BE TRUE FOREVER. A read-through is the one signal
+   * nothing can compute, and until `covers_read` it recorded no provenance — so a person read a
+   * feature, said they could build it, and that stood after every sentence in it was rewritten.
+   * `buildableReads` declines it now, so the gate is safe; what this adds is saying WHICH, because
+   * a scope that quietly went back to unready looks exactly like one nobody ever read.
+   *
+   * ⛔ A NOTE, AND THE TWO CASES ROUTE DIFFERENTLY. Neither is a corpus being wrong: one is an
+   * acceptance whose words moved, which is ordinary and expected, and the other is a record written
+   * before this field existed. A refusal on the second would fire on every corpus carrying an older
+   * reading at once, which this project has twice learned the end of.
+   */
+  /**
+   * ⛔ OVER THE READINGS, NOT OVER THE SCOPES. A reading is recorded at either grain, so walking
+   * scopes and matching `r.scope === scope.id` skips every exchange-grained one — the same mistake
+   * made once already on `buildable: true` and caught by a test rather than by review.
+   */
+  for (const v of corpus.verdicts) {
+    if (v.kind !== "read" || v.buildable !== true || !v.scope) continue;
+    for (const r of readThroughsFor(corpus, v.scope)) {
+      if (r.buildable !== true || r.scope !== v.scope || r.at !== v.at || r.by !== v.by) continue;
+      if (r.stale)
+        add({
+          severity: "note",
+          kind: "read-through-older-than-what-it-read",
+          where: r.scope,
+          what: `${r.by} read this end to end on ${r.at} and could build from it, and the words have moved since`,
+          fix: "show them what changed and have them read it again — ⛔ not from scratch: the point of recording what they read is that re-confirming is one glance at a diff. Until then this does not count towards readiness",
+        });
+      else if (!r.of)
+        add({
+          severity: "note",
+          kind: "read-through-against-nothing-recorded",
+          where: r.scope,
+          what: `${r.by} read this end to end on ${r.at} and could build from it, and nothing records which words they read`,
+          fix: "have somebody read it again, which stamps what they read — ⛔ a yes nothing can tie to particular words is not evidence about these ones, so it does not count towards readiness",
+        });
+    }
+  }
+
+  /**
    * ---- a person read it end to end and could not build from it ----
    *
    * ⛔ The one signal nothing can compute, and it was invisible on every surface. A
@@ -2187,11 +2289,11 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
    * declared unbuildable.
    */
   for (const v of corpus.verdicts) {
-    if (v.kind !== "read" || v.buildable !== false) continue;
+    if (v.kind !== "read" || v.buildable !== false || !v.scope) continue;
     add({
       severity: "refuse",
       kind: "a-person-could-not-build-from-this",
-      where: v.scope ?? "(no scope)",
+      where: v.scope,
       what: `${v.by} read this end to end on ${v.at} and could not build from it${v.note ? `: ${v.note}` : ""}`,
       fix: v.blocked_by.length
         ? `they were stopped by ${v.blocked_by.join(", ")} — no computed finding outranks this`
@@ -4201,29 +4303,136 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
      * layer has only just been started would otherwise refuse on every behaviour at once — and a
      * refusal that fires everywhere teaches people to run with it switched off.
      */
-    if (corpus.subsystems.length) {
-      const served = [
-        ...new Set(corpus.subsystems.flatMap((c) => c.subsystem.offers.flatMap((o) => o.serves))),
-      ];
-      const every = corpus.scopes.flatMap(({ scope }) => scope.exchanges.map((ex) => `${scope.id}#${ex.id}`));
-      const unanswered = every.filter((ref) => !served.some((s) => s === ref || s.startsWith(`${ref}#`)));
-      /**
-       * ⛔ ONE FINDING WITH A COUNT, not one per behaviour — the same shape
-       * `behaviours-with-nothing-behind-them` uses, and for the same reason. A corpus that has just
-       * started its capability layer has every behaviour unanswered, and 38 identical notes is a
-       * report nobody reads followed by a check nobody runs.
-       */
-      if (unanswered.length)
+    /**
+     * ⛔ THERE IS NO `corpus.subsystems.length` GUARD, AND THERE USED TO BE.
+     *
+     * Peter: *"uh, why do we have a corpus.subsystems.length check? who fucking cares? that doesnt
+     * change the fact that the feature isn't bcked by a capability"*.
+     *
+     * It was written as kindness — *"a corpus that has not started this must not be told it is
+     * incomplete at something it has not begun"* — and pinned by a test saying so. What it actually
+     * did was suppress a true statement at exactly the count where it matters most: a product with
+     * no capability layer has EVERY promise unbacked, and the guard made that read identically to
+     * every promise being backed. Whether anybody has begun is a fact about the author's progress;
+     * whether a promise has machinery behind it is a fact about the product, and this reports the
+     * second.
+     *
+     * ⛔ AND I KEPT THE GUARD ONCE ON THE STRENGTH OF THE TEST THAT PINNED IT. A pinned decision is
+     * worth reading before overturning and is not worth deferring to against the person whose
+     * reasoning it claimed to encode — the comment said what somebody believed, not what is true.
+     *
+     * ⛔ ONE FINDING WITH A COUNT, not one per statement — the same shape
+     * `behaviours-with-nothing-behind-them` uses, and the mitigation the guard was redundant with.
+     * A corpus that has not begun has every behaviour unanswered, and 38 identical notes is a report
+     * nobody reads followed by a check nobody runs. The count says "all of them" in one line.
+     *
+     * ⛔ STATEMENT-GRAINED, through `unservedIn` — the same predicate `readinessOf` reports, so the
+     * two cannot disagree. Exchange grain called a slot answered when one capability named it,
+     * however many things that slot says; a slot saying nine things with one part against it is an
+     * eighth mapped and read as done.
+     */
+    /**
+     * ---- a part a promise leans on that nobody has put their name to ----
+     *
+     * ⛔ TENET ONE, ONE LEVEL DOWN. Peter: *"the dependency is a capability dependency, and those
+     * should be validated"*, and *"we need to ensure the capability of 'ledger' and 'increment
+     * balance' has been validated by a human, but not more than that"*.
+     *
+     * A promise can be agreed at the top and answered by machinery nobody has read, which is
+     * validation in name only. Until this landed there was no route to the thing at all: `aimOf` did
+     * not list a capability among what an acceptance may cover, and `capabilityLevel` answered
+     * `unaccepted` on all three branches.
+     *
+     * ⛔ ONE SUMMARY LINE WITH A COUNT, the shape every finding on this axis uses and for the reason
+     * `behaviours-no-subsystem-answers` records: a corpus that has just written its tree has every
+     * part unvalidated, and N identical notes is a report nobody reads.
+     *
+     * ⛔ AND STALE IS ITS OWN LINE. Agreed-and-changed-since routes to the person whose agreement the
+     * part outgrew; never-agreed routes to whoever has not seen it. One finding for both would send
+     * the first to a review they already did.
+     */
+    {
+      const parts = answeringParts(
+        corpus,
+        corpus.scopes.map(({ scope }) => scope.id)
+      );
+      const once = new Map(parts.map((p) => [p.ref, p]));
+      const never = [...once.values()].filter((p) => !p.validated && !p.stale);
+      const stale = [...once.values()].filter((p) => p.stale);
+      if (never.length)
         add({
           severity: "note",
-          kind: "behaviours-no-subsystem-answers",
-          where: `${unanswered.length} of ${every.length}`,
+          kind: "a-part-nobody-has-validated",
+          where: `${never.length} of ${once.size}`,
           what:
-            unanswered.slice(0, 5).join(", ") +
-            (unanswered.length > 5 ? `, +${unanswered.length - 5} more` : ""),
-          fix: "name the part of the system that answers each — a capability whose `serves` points at it. ⛔ Where the gap is real this is the architect's finding made early: a promise with no machinery behind it, before anybody starts building",
+            never.slice(0, 5).map((p) => p.ref).join(", ") +
+            (never.length > 5 ? `, +${never.length - 5} more` : ""),
+          fix: "have somebody read each and agree to it — ⛔ a promise agreed at the top and answered by machinery nobody has read is validated in name only, and `readiness` holds a build until this is empty",
+        });
+      if (stale.length)
+        add({
+          severity: "note",
+          kind: "a-part-agreed-and-changed-since",
+          where: `${stale.length} of ${once.size}`,
+          what: stale.map((p) => `${p.ref} — ${p.by}`).join(", "),
+          fix: "show them what moved and have them agree again. ⛔ Not from scratch: the stamp records the words it was taken against, so re-confirming is one glance at a diff",
         });
     }
+
+    /**
+     * ---- somebody concluded nothing had to be built, for words that have since moved ----
+     *
+     * ⛔ THE ONE WAY fg-0020's FIELD CAN FAIL SILENTLY, AND IT IS THE REASON IT CARRIES A HASH.
+     *
+     * `needs_nothing` is the only route past the machinery gate. Conclude nothing is needed, then
+     * reword the promise, and without the hash nothing ever asks again — a permanent bypass with a
+     * one-line cost. `unserved` already treats a stale conclusion as absent, so the gate is safe;
+     * what this adds is saying WHICH, because a promise that silently went back to being unanswered
+     * looks exactly like one nobody ever concluded anything about.
+     *
+     * ⛔ A refusal, unlike the finding below it. This is not a corpus that has not started — it is a
+     * record asserting something about a sentence that no longer exists, which is the same thing a
+     * stale acceptance is, and this project refuses those.
+     */
+    for (const { scope } of corpus.scopes)
+      for (const ex of scope.exchanges) {
+        for (const st of staleConclusions(corpus, scope.id, ex.id))
+          add({
+            severity: "refuse",
+            kind: "nothing-needed-for-words-that-moved",
+            where: st.ref,
+            what: `${st.by} concluded on ${st.at} that nothing had to be built for this, and the promise has been reworded since`,
+            fix: "work it out again against what it says now — ⛔ until then the promise counts as having no machinery behind it, which is what the gate reads",
+          });
+        /**
+         * ⛔ AND ONE NOBODY DERIVED COUNTS FOR NOTHING, SAID OUT LOUD. A typed exemption from the
+         * only gate on this axis is indistinguishable in the file from a conclusion somebody
+         * reached — the same reason `check` names the role for a hand-written criterion rather than
+         * reading absence as a human's judgement.
+         */
+        for (const ref of typedConclusions(corpus, scope.id, ex.id))
+          add({
+            severity: "note",
+            kind: "nothing-needed-but-nobody-worked-it-out",
+            where: ref,
+            what: "says nothing has to be built for this, and records nobody working that out",
+            fix: "have `decomposer` reach it, so it carries the words it was concluded against. ⛔ As it stands it counts for nothing at the gate — a typed exemption from the one check on this axis is not a conclusion",
+          });
+      }
+
+    const ids = corpus.scopes.map(({ scope }) => scope.id);
+    const unanswered = unservedIn(corpus, ids);
+    const every = unservedIn(corpus, ids, undefined, true);
+    if (unanswered.length)
+      add({
+        severity: "note",
+        kind: "behaviours-no-subsystem-answers",
+        where: `${unanswered.length} of ${every.length}`,
+        what:
+          unanswered.slice(0, 5).join(", ") +
+          (unanswered.length > 5 ? `, +${unanswered.length - 5} more` : ""),
+        fix: "name the part of the system that answers each — a capability whose `serves` points at it. ⛔ Where the gap is real this is the architect's finding made early: a promise with no machinery behind it, before anybody starts building. ⛔ And where a promise genuinely needs nothing new, there is nowhere yet to say so — fg-0020, which is why this reports rather than refusing",
+      });
   }
 
   /**

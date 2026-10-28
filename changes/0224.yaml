@@ -1,0 +1,21 @@
+id: "0224"
+said: |-
+  anyone should be able to redefine a gloassary word - why wouldn't thye? nothing should be
+  refused of a human requesting to make changes. product os should be reindexing based off the
+  feedback.
+at: 2026-10-28
+kind: concept
+reaches:
+  model: ""
+  derive: glossaryCollisions
+  generate: ""
+  surface: ""
+  check: Not a refusal — somebody decided this
+  instruct: ""
+  pin: a feature redefining a glossary word is a question, NEVER a refusal
+waived:
+  model: "Nothing in the schema changed: a term could always be defined in two places. What changed is what the framework DOES about it, which was a severity and a question."
+  generate: Nothing generates a term, and which sense keeps a name is a person's decision.
+  surface: "`check` prints its own findings and the worklist renders what `interviewFor` returns, so both halves reach a reader unchanged. ⛔ Still true from 0216: nothing renders the glossary AS a glossary."
+  instruct: "⛔ ARGUABLE AND THE MOST LIKELY TO BE WRONG. No role is told \"do not refuse a person\", because no role refuses — `check` does, and it is not a role. But the PRINCIPLE is larger than this change and probably belongs in the briefs: 30 of check's 81 refusals gate a decision rather than a broken reference, and two of them fire BECAUSE somebody edited. That sweep is recorded as unexamined rather than claimed as done."
+closed: 2026-10-28

@@ -1,0 +1,14 @@
+id: "0218"
+said: yes, the dependency is a capability dependency, and those should be validated.  is that where you're going? / we don't need to check the balance moved, we need to ensure the capability of 'ledger' and 'increment balance' has been validated by a human, but not more than that / uh, capabilities have no validation????
+at: 2026-10-28
+kind: concept
+reaches:
+  derive: answeringParts
+  surface: renderState(corpus, `${s.id}#offers#${o.id}`)
+  check: a-part-nobody-has-validated
+  instruct: A person can now agree to one part
+  pin: "it gates: everything else settled, and an unvalidated part still holds it"
+waived:
+  model: "No field was added, and that is the finding rather than a gap in the work. A capability was already a schema concept and `Verdict.target` already accepts any ref matching `REF_PATTERN` — so `ledger#offers#increment-balance` was storable as an acceptance target all along. What stopped it was two pieces of CODE, in neither model file: `aimOf` in `acts.ts` listed what an acceptance may cover and a capability was not on the list, so the refusal fired before `coveredBy` was consulted; and `capabilityLevel` in `level.ts` returned `unaccepted` on all three of its branches. Verified by looking: `schema.ts` and `load.ts` are the model files, and neither changed. ⛔ A schema field recording that a part is validated would be exactly what `level.ts` refuses in its own first paragraph — a stored level is a word that was true when it was written and unfalsifiable afterwards. Reaching this layer would mean having broken it."
+  generate: "No generator writes or reads a validation, and one that did would be the defect. The whole point is that a named person reads a part and puts their name to it, so software producing that stamp is what `via: agent` exists to keep distinguishable from consent — and the decomposer's `never` was sharpened in this very change to say it may not accept a capability either. Verified by looking: `draw.ts`, `draw-write.ts`, `propose.ts`, `routes.ts`, `derive-states.ts` and `cli/commands/v2.ts` are the generate files and `answeringParts`, `a-part-nobody-has-validated` and `capabilityLevel` appear in none of them."
+closed: 2026-10-28

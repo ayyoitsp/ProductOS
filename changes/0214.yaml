@@ -1,16 +1,11 @@
 id: "0214"
-said: |-
-  this is too much for a single question - again, reading the inner workings. what's it for could
-  be a separate question, arrives with, leaves with can be another question of its own. screens
-  really doesn't belong in the 'purpose'.
+said: does buildability also ensure capabilities are mapped from a feature? / yup, let's build it
 at: 2026-10-28
 kind: derivation
 reaches:
-  derive: handover
-  surface: ""
-  check: ""
-  pin: the purpose is asked apart from what somebody arrives and leaves with
-waived:
-  surface: "The worklist renders whatever `interviewFor` returns, so a second question needs no surface change — and the page's own list is built from `questionsFor`, which a happy path does not reach. ⛔ The arguable part: nothing on the page shows the split yet, because the purpose is reached through acceptance rather than through the question list."
-  check: "`v2 check` refuses on structure, and both halves of a happy path were already required — this changes how they are ASKED, not whether they must be there. A check that counted questions would be measuring the interview's shape rather than the corpus's."
+  derive: unservedIn
+  surface: verdict-parts
+  check: behaviours-no-subsystem-answers
+  pin: check stays silent with no capability layer, and counts statements once there is one
+waived: {}
 closed: 2026-10-28

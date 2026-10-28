@@ -23,7 +23,18 @@ import { loadCorpus, type Corpus } from "./load.js";
 import { Verdict, statements, authorshipOf, type SlotName, type Authorship } from "./schema.js";
 import { gateFor, sentencesIn } from "./grid.js";
 import { coveredBy, stampFor, staleReason } from "./stamp.js";
-import { questionsFor, settle, waive as applyWaiver, govern, withdraw as takeOut } from "./settle.js";
+import {
+  questionsFor,
+  whereQuestionStands,
+  blankSlots,
+  descendants,
+  readHashFor,
+  type Question,
+  settle,
+  waive as applyWaiver,
+  govern,
+  withdraw as takeOut,
+} from "./settle.js";
 import { resolveRef, nothingToDecide } from "./ref.js";
 import { append } from "./log.js";
 
@@ -200,6 +211,43 @@ export interface RulePayload {
   refuses?: boolean;
 }
 export interface ReadPayload { scope: string; buildable: boolean; blockedBy?: string[]; note?: string }
+
+/**
+ * The questions standing in the way of a read-through - the same ones readinessOf counts.
+ *
+ * `scope` on a read may name a feature or ONE behaviour, `<scope>#<exchange>`. Scope-only was the
+ * original shape and it made the act unusable at the grain readiness answers at: `money` holds
+ * `see-a-balance`, fully agreed and demonstrated, beside `record-spending` with two open questions.
+ * Readiness reports those as `around it` - not this exchange's facts - and the act refused anyway,
+ * so the one exchange a builder could have started on could never be recorded as buildable.
+ *
+ * Which, once buildability is part of the gate, means permanently unready. So the filter is
+ * `whereQuestionStands`, which is the function that already drew this line, now in one place.
+ */
+export function inTheWayOf(
+  corpus: Corpus,
+  ref: string
+): { scope: string; exchange?: string; open: Question[]; parked: Question[]; blank: string[] } | null {
+  const [scope, exchange] = ref.split("#");
+  if (!scope || !corpus.scopes.some((s) => s.scope.id === scope)) return null;
+  if (exchange && !corpus.scopes.find((s) => s.scope.id === scope)?.scope.exchanges.some((e) => e.id === exchange))
+    return null;
+  const scopes = exchange ? [scope] : descendants(corpus, scope);
+  const qs = questionsFor(corpus, scope).filter((q) => whereQuestionStands(corpus, q, scopes, exchange) === "on it");
+  /**
+   * ⛔ THE THIRD CATEGORY, AND THE ONE THE ACT COULD NOT SEE AT ALL.
+   *
+   * `questionsIn` skips a slot with no fill, so a slot nobody has thought about produces no
+   * question — and this refusal read only questions. Driven: blank `again` on
+   * `money#see-a-balance` gives the grid a `·`, `readinessOf` a hole, `questionsFor` nothing, and
+   * the act recorded *"I could build from this"* over it.
+   *
+   * It is not an open question and it is not parked. Nobody has been asked. Which makes it the
+   * strongest case for this refusal's own sentence rather than an exception to it.
+   */
+  const blank = scopes.flatMap((s) => blankSlots(corpus, s, exchange));
+  return { scope, exchange, open: qs.filter((q) => !q.parked), parked: qs.filter((q) => q.parked), blank };
+}
 export interface WaivePayload { slot: string; because: string }
 export interface DeferPayload { slot: string; because: string; until: string }
 export type Payload = AcceptPayload | RulePayload | ReadPayload | WaivePayload | DeferPayload;
@@ -325,10 +373,9 @@ export function preview(dir: string, act: Act, payload: Payload): { ok: true; re
 
   if (act === "read") {
     const { scope } = payload as ReadPayload;
-    if (!corpus.scopes.some((s) => s.scope.id === scope)) return no(`no scope "${scope}"`);
-    const qs = questionsFor(corpus, scope);
-    const open = qs.filter((q) => !q.parked);
-    const parked = qs.filter((q) => q.parked);
+    const way = inTheWayOf(corpus, scope);
+    if (!way) return no(`no scope or behaviour "${scope}"`);
+    const { open, parked } = way;
     return {
       ok: true,
       reads: [
@@ -452,9 +499,22 @@ function aimOf(corpus: Corpus, target: string): Refused | { kind: string } {
     aim.ref.kind !== "statement" &&
     aim.ref.kind !== "section" &&
     /** ⛔ And a feature's framing — a reason, a risk, a measure, an instrument. */
-    aim.ref.kind !== "card"
+    aim.ref.kind !== "card" &&
+    /**
+     * ⛔ AND A CAPABILITY, WHICH IS WHAT THIS GATE WAS LAST MISSING.
+     *
+     * Peter: *"the dependency is a capability dependency, and those should be validated"*, and
+     * *"we need to ensure the capability of 'ledger' and 'increment balance' has been validated by
+     * a human, but not more than that"*.
+     *
+     * This list is the whole reason no amount of reading could validate a part: `coveredBy` is
+     * never consulted, so the refusal fires before anything looks at whether the thing is hashable.
+     * The decomposer's instructions have said *"nothing agrees to one today"* since the layer
+     * shipped — that was a description of this condition, not a principle.
+     */
+    aim.ref.kind !== "capability"
   )
-    return no(`${target} is a ${aim.ref.kind} — an acceptance covers one behaviour, one whole exchange, one rule, one section of a product-wide document, or one card of a feature's framing`, [
+    return no(`${target} is a ${aim.ref.kind} — an acceptance covers one behaviour, one whole exchange, one rule, one section of a product-wide document, one card of a feature's framing, or one capability`, [
       aim.ref.kind === "case"
         ? `you are probably after the slot: ${target.split("#").slice(0, 3).join("#")}`
         : "name a behaviour as <scope>#<exchange>#<slot>, an exchange as <scope>#<exchange>, a rule by its id, or a section as <document>#<section>",
@@ -1287,7 +1347,8 @@ function doRead(dir: string, o: ReadPayload, consent: Consent): Outcome {
   const corpus = loadCorpus(dir);
   const bad = gatesOf(consent, corpus, "a read-through");
   if (bad) return bad;
-  if (!corpus.scopes.some((s) => s.scope.id === o.scope)) return no(`no scope "${o.scope}"`);
+  const way = inTheWayOf(corpus, o.scope);
+  if (!way) return no(`no scope or behaviour "${o.scope}"`);
 
   /**
    * ⛔ A person cannot record "I could build from this" over questions nobody has answered —
@@ -1309,8 +1370,7 @@ function doRead(dir: string, o: ReadPayload, consent: Consent): Outcome {
      * The act that says *a builder may decide this themselves* is `waive`, which is why that
      * one is charged an owner, a date and forty characters.
      */
-    const qs = questionsFor(corpus, o.scope);
-    const parked = qs.filter((q) => q.parked);
+    const parked = way.parked;
     if (parked.length)
       return no(
         `${o.scope} has ${parked.length} parked question${parked.length === 1 ? "" : "s"} — "I could build from this" and "we have not decided this" cannot both be true`,
@@ -1326,7 +1386,7 @@ function doRead(dir: string, o: ReadPayload, consent: Consent): Outcome {
           { act: "read", ref: o.scope, why: "say you could NOT build from it, and what stopped you" },
         ]
       );
-    const open = qs.filter((q) => !q.parked);
+    const open = way.open;
     if (open.length)
       return no(
         `${o.scope} has ${open.length} question${open.length === 1 ? "" : "s"} nobody has answered`,
@@ -1337,9 +1397,41 @@ function doRead(dir: string, o: ReadPayload, consent: Consent): Outcome {
           { act: "read", ref: o.scope, why: "say you could NOT build from it, and what stopped you" },
         ]
       );
+    /**
+     * ⛔ AND A SLOT NOBODY HAS THOUGHT ABOUT, WHICH THIS REFUSAL COULD NOT SEE.
+     *
+     * Last, because the other two are questions somebody is holding and this one has not been
+     * asked — so it routes differently: there is nobody to chase and nothing to park. Somebody has
+     * to decide it, or declare it the builder's on purpose.
+     *
+     * ⛔ It belongs here rather than only in the gate. `readinessOf` already counted it as a hole,
+     * so the corpus could hold a person's *"I could build from this"* beside its own grid saying
+     * nobody had thought about one of the slots — and the act's stated reason is that those two
+     * sentences cannot both be true. Driven on `money#see-a-balance` with `again` removed: one
+     * blank, zero questions, one hole, stamp accepted.
+     */
+    if (way.blank.length)
+      return no(
+        `${o.scope} has ${way.blank.length} slot${way.blank.length === 1 ? "" : "s"} nobody has thought about`,
+        [
+          ...way.blank,
+          "⛔ not an open question — nobody has been asked, so there is nobody to chase and nothing to park",
+        ],
+        [
+          { act: "rule", ref: way.blank[0]!, why: "decide it" },
+          { act: "waive", ref: way.blank[0]!, why: "declare it the builder's on purpose, with why" },
+          { act: "read", ref: o.scope, why: "say you could NOT build from it, and name these as what stopped you" },
+        ]
+      );
   }
 
   const blocked = (o.blockedBy ?? []).map((s) => s.trim()).filter(Boolean);
+  /**
+   * ⛔ COMPUTED HERE, NEVER TAKEN FROM THE CALLER — the rule `demonstrate` already follows, for the
+   * same reason: a stamp that can be marked current with words it was not taken against is a stamp
+   * with no content. The payload has no field for this and must not grow one.
+   */
+  const covers = readHashFor(corpus, o.scope);
   writeVerdict(dir, "reads.yaml", [
     `  - kind: read`,
     `    scope: ${o.scope}`,
@@ -1347,13 +1439,23 @@ function doRead(dir: string, o: ReadPayload, consent: Consent): Outcome {
     `    at: ${today()}`,
     `    via: ${consent.via}`,
     `    buildable: ${o.buildable}`,
+    `    covers_read: ${covers}`,
     ...(blocked.length ? [`    blocked_by: [${blocked.join(", ")}]`] : []),
     ...(o.note ? [`    note: ${JSON.stringify(o.note)}`] : []),
   ], consent);
   return {
     ok: true,
     said: `${consent.by} read ${o.scope} and ${o.buildable ? "could" : "could NOT"} build from it`,
-    detail: o.buildable ? [] : ["this is the one signal nothing can compute — it now appears on every packet for this scope"],
+    detail: o.buildable
+      ? [
+          /**
+           * ⛔ SAID OUT LOUD, BECAUSE THE ALTERNATIVE IS SOMEBODY DISCOVERING IT AS A REGRESSION.
+           * A reader who thinks they have signed this off permanently will read the scope going
+           * unready after an edit as the tool losing their stamp.
+           */
+          "recorded against the words as they read now — ⛔ reword any of them and this scope needs reading again",
+        ]
+      : ["this is the one signal nothing can compute — it now appears on every packet for this scope"],
   };
 }
 

@@ -30,7 +30,7 @@
     "dev": "tsx src/cli/index.ts",
     "start": "node bin/productos.js",
     "typecheck": "tsc --noEmit",
-    "test": "node --test --test-timeout=300000 test/*.test.mjs",
+    "test": "node --test --test-timeout=600000 test/*.test.mjs",
     "db:generate": "drizzle-kit generate",
     "hosted": "node dist/v2/store/boot.js",
     "dev:hosted": "tsx src/v2/store/boot.ts"

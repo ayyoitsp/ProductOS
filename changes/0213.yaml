@@ -1,20 +1,11 @@
 id: "0213"
-said: |-
-  shape of this question is all wrong, i'm not tryign to read the corpus. ask the QUESTION that is
-  relevant. the HUMAN READABLE question, with HUMAN READABLE background / this should be natural
-  language, not engineering speak. ask NATURAL LANGAUGE QUESTIONS about the behavior of a product.
-  / you better be fixing the interviewer
-at: 2026-10-27
-kind: concept
+said: so is there anything left to close? i'm confused.  what do the act an the gate disagree on?
+at: 2026-10-28
+kind: derivation
 reaches:
-  model: was_asked
-  derive: It deliberately does not cover
-  generate: ""
-  surface: rewording
-  check: ""
-  instruct: AND AVOIDING THE MODEL'S WORDS IS NOT ENOUGH
-  pin: it can be said better, and what it used to say is kept
+  derive: blankSlots
+  check: built-from-a-slot-nobody-decided
+  pin: a slot nobody has thought about stops the act, not only the gate
 waived:
-  generate: No generator writes a question's wording. The template-built purpose question lives in `interview.ts`, which is the derive layer and is where that half landed; every other question in a corpus is written by the interviewer role, which is the instruct layer. Nothing under `generate` composes question text.
-  check: ⛔ THE ARGUABLE ONE, AND I AM RECORDING THE ARGUMENT RATHER THAN THE CONCLUSION. A check COULD refuse a question that reads like a specification clause — the four examples now in the brief share real markers ("is the asker told", "pending", a screen part no reader can see). But every rule I could write would be a guess about prose dressed as a refusal, and a judge told what good wording looks like stops being able to notice the project is wrong about it. The honest check is a person reading one, which is what happened here.
-closed: 2026-10-27
+  surface: "There is nothing new to show, and that is the point of the change rather than a gap in it. The blank slot was ALREADY on every surface: the grid draws it `·`, the packet counts it as a hole, and `readinessOf` returned `ready: false` over it. What was missing was the ACT's precondition, so the fix is a refusal, and a refusal travels out as the act's own `Outcome` — `why`, `detail`, `instead` — which every surface already renders for all five acts generically. Verified by looking rather than assumed: `page.ts` passes any non-ok body to `announce(out)` and sets \"Not recorded.\", with no per-act branch, and `src/cli/commands/v2.ts` prints `r.instead` for whatever comes back. A new region or field here would be a second place saying what the grid already says, which is the one rule this repo applies hardest."
+closed: 2026-10-28

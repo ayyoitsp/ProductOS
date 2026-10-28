@@ -225,14 +225,38 @@ test("a subsystem may share a name with the feature it answers", () => {
  * every behaviour at once. A corpus whose capability layer has just been started has nothing
  * answered, and 38 identical notes is a report nobody reads followed by a check nobody runs.
  */
-test("behaviours no subsystem answers are reported once, with a count", () => {
+/**
+ * ⛔ THIS TEST USED TO ASSERT THE OPPOSITE OF ITS LAST LINE, AND THE REASON IT GAVE WAS KINDNESS.
+ *
+ * It read: *"Silent on a corpus with no capability layer at all. A corpus that has not started this
+ * must not be told it is incomplete at something it has not begun"*, pinning a
+ * `if (corpus.subsystems.length)` guard in `check.ts`.
+ *
+ * Peter: *"uh, why do we have a corpus.subsystems.length check? who fucking cares? that doesnt
+ * change the fact that the feature isn't bcked by a capability"*.
+ *
+ * He is right, and the guard's cost is exactly the shape this project keeps paying for: a product
+ * with no capability layer has EVERY promise unbacked, and suppressing the finding there made that
+ * read identically to every promise being backed. Whether an author has begun is a fact about their
+ * progress; whether a promise has machinery behind it is a fact about the product.
+ *
+ * ⛔ The mitigation that makes this bearable was always the count, not the guard — one line saying
+ * "40 of 40", never 40 notes. That is asserted below and is what the guard was redundant with.
+ */
+test("behaviours no subsystem answers are reported once, with a count, however empty the tree is", () => {
   const found = checkCorpus(withCapabilities()).findings.filter((f) => f.kind === "behaviours-no-subsystem-answers");
   assert.equal(found.length, 1, "reported per behaviour instead of once");
   assert.match(found[0].where, /^\d+ of \d+$/);
 
-  // ⛔ Silent on a corpus with no capability layer at all. A corpus that has not started this
-  // must not be told it is incomplete at something it has not begun.
-  assert.ok(!kinds("v2-seed").includes("behaviours-no-subsystem-answers"));
+  /**
+   * ⛔ AND ON A CORPUS WITH NO CAPABILITY LAYER AT ALL, which is where it was silent. Still one
+   * finding — the count is what keeps this proportionate, not the silence.
+   */
+  const bare = checkCorpus("v2-seed").findings.filter((f) => f.kind === "behaviours-no-subsystem-answers");
+  assert.equal(bare.length, 1, "a corpus with no subsystems says nothing about its promises being unbacked");
+  assert.equal(bare[0].severity, "note");
+  const [n, , m] = bare[0].where.split(" ");
+  assert.equal(n, m, "with no capability layer every promise is unbacked, so the count must say all of them");
 });
 
 /** ⛔ The remote copy and the parser must agree about which directories a corpus has. */

@@ -135,6 +135,46 @@ export function claimHash(corpus: Corpus, ref: string): string | null {
   return coveredBy(corpus, ref)?.slots ?? null;
 }
 
+/**
+ * The hash of everything somebody read, when they read a scope end to end.
+ *
+ * ⛔ WITHOUT THIS, `buildable: true` WAS TRUE FOREVER. A read-through is the one signal nothing can
+ * compute, and the only one in the gate that recorded no provenance — so a person could read a
+ * feature, say they could build it, and have that stand after every sentence in it was rewritten.
+ * Both derived layers already carry `derived.from` for exactly this; the human act did not, which
+ * made it the last laundering route in the model and the easiest to miss because it looks settled.
+ *
+ * ⛔ EVERY STATEMENT, NOT THE SLOTS. What a person read end to end is the sentences, and a slot
+ * saying nine things is nine of them — hashing the slot would let eight be rewritten under a stamp.
+ * `claimHash` is asked per statement rather than recomputed, so this cannot disagree with what
+ * `demonstrate` and the capability layer hash.
+ *
+ * ⛔ AND IT IS ORDER-INDEPENDENT ONLY WHERE ORDER DOES NOT MEAN ANYTHING. The refs come in sorted,
+ * so re-filing an exchange inside its scope does not read as a change of what somebody read, while
+ * adding or removing one does.
+ */
+export function readHash(corpus: Corpus, exchangeRefs: readonly string[]): string {
+  const parts: string[] = [];
+  for (const ref of [...exchangeRefs].sort()) {
+    const [scopeId, exchangeId] = ref.split("#");
+    const ex = corpus.scopes
+      .find((x) => x.scope.id === scopeId)
+      ?.scope.exchanges.find((e) => e.id === exchangeId);
+    if (!ex) {
+      parts.push(`${ref}=gone`);
+      continue;
+    }
+    for (const slot of SLOTS as readonly SlotName[]) {
+      const fill = ex.slots[slot];
+      if (!fill) continue;
+      const said = statements(fill.says);
+      const at = said.length > 1 ? said.map((st) => `${ref}#${slot}#${st.id}`) : [`${ref}#${slot}`];
+      for (const one of at) parts.push(`${one}=${claimHash(corpus, one) ?? "none"}`);
+    }
+  }
+  return h(parts.join("\n"));
+}
+
 export interface Covered {
   slots: string;
   criteria: string;
@@ -176,6 +216,55 @@ export function coveredBy(corpus: Corpus, target: string): Covered | null {
         ...(hp.not ? [`  deliberately not: ${norm(hp.not)}`] : []),
       ],
     };
+  }
+
+  /**
+   * ⛔ A CAPABILITY IS AGREEABLE NOW, AND IT WAS NOT. The decomposer's instructions said so
+   * outright — *"Capabilities become agreeable by engineers later; nothing agrees to one today"* —
+   * and `capabilityLevel` returned `unaccepted` on all three of its branches, so no amount of
+   * reading could make one validated.
+   *
+   * Peter: *"the dependency is a capability dependency, and those should be validated"*, and
+   * *"we need to ensure the capability of 'ledger' and 'increment balance' has been validated by a
+   * human, but not more than that"*.
+   *
+   * ⛔ BEING COVERABLE IS WHAT MAKES IT ACCEPTABLE AT ALL, which is the rule this file applies to
+   * every other acceptable thing: a verdict against something nothing hashes could never go stale,
+   * and a permanent stamp is worse than no stamp.
+   *
+   * ⛔ TWO HASHES, AND THE SECOND IS THE SET IT SERVES RATHER THAN WHAT THOSE PROMISES SAY. The
+   * resolved-claims version of that question is already answered, by `derivedCapabilities.state`
+   * through `servesHash` — so hashing it again here would be a second answer to one question, and
+   * `demonstrate.ts` imports this file, so reaching for `servesHash` would also close a cycle. What
+   * acceptance breaks on is this part's own words changing, or the set of promises it answers
+   * changing. Both are things a person read.
+   */
+  {
+    const seg = target.split("#");
+    if (seg.length === 3 && seg[1] === "offers") {
+      const sub = corpus.subsystems.find((x) => x.subsystem.id === seg[0])?.subsystem;
+      const o = sub?.offers.find((x) => x.id === seg[2]);
+      if (sub && o)
+        return {
+          /**
+           * ⛔ `derived` excluded: a re-derivation by a role is not the part changing.
+           *
+           * ⛔ AND THE SUBSYSTEM'S IDENTITY IS IN IT, BECAUSE `reads` SHOWS IT. A person agreeing to
+           * this is shown *"The ledger — appends one movement…"*, so the name is part of what they
+           * read, and this file's whole argument is that somebody cannot have agreed to words they
+           * never saw. Its `does` is NOT in it and is not shown: rewording a subsystem's own
+           * description would otherwise drop the stamp on every capability under it.
+           */
+          slots: h(canon({ in: sub.id, named: sub.title, ...o, derived: undefined, serves: undefined })),
+          criteria: h(canon([...o.serves].sort())),
+          parts: ["does", "serves"],
+          criteriaCount: o.serves.length,
+          reads: [
+            `${norm(sub.title)} — ${norm(o.does)}`,
+            `  it exists for: ${o.serves.length ? o.serves.join(", ") : "⛔ nothing, which `check` refuses"}`,
+          ],
+        };
+    }
   }
 
   /**

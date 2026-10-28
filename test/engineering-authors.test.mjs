@@ -181,6 +181,17 @@ test("⛔ an engineering author is still an author — it settles nothing and as
   for (const a of AUTHORS.filter((x) => x.discipline === "engineering")) {
     assert.equal(a.authors, true);
     assert.ok(!a.needs.includes("ask-the-human"), `${a.name} could obtain consent with no record of how`);
-    assert.match(a.never.join(" | "), /stamp anything/, `${a.name} does not say it may not stamp`);
+    /**
+     * ⛔ THE CLAIM, NOT THE PHRASING. This matched `/stamp anything/` and broke when the
+     * decomposer's line became "stamp, validate or accept anything — ⛔ including a capability",
+     * which says strictly more of the same thing. A pattern coupled to one wording turns every
+     * sharpening of an instruction into a failure, and the next person makes the words fit the
+     * regex rather than the regex fit the words.
+     */
+    assert.match(
+      a.never.join(" | "),
+      /\bstamp\b[^|]*\banything\b/,
+      `${a.name} does not say it may not stamp anything`
+    );
   }
 });

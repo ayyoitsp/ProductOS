@@ -1401,6 +1401,59 @@ export const Criterion = z
   });
 export type Criterion = z.infer<typeof Criterion>;
 
+/**
+ * A decomposer's conclusion that one promise needs NOTHING built — fg-0020, closed.
+ *
+ * ⛔ WITHOUT THIS, "no part of the system answers this" could only ever be a note, and the gate had
+ * an asymmetry it could not fix. `untested` blocks because every claim owes a demonstration and an
+ * empty list is reachable. Every claim does NOT owe machinery: *"looking is never refused for having
+ * been done before"* is a promise about the absence of behaviour, and there is nothing to build for
+ * it. So a refusal could only be cleared by inventing a part — verbatim the failure `none: true`
+ * exists to prevent: *"a model that refused to let anyone say so would push an author into inventing
+ * a state change just to fill the slot."*
+ *
+ * ⛔ ON THE EXCHANGE, BESIDE `criteria`, AND NOT INSIDE THE SLOT. The slot's words are what a person
+ * agreed to and what `coveredBy` hashes; a conclusion about machinery written in there would move a
+ * stamp, so accepting a sentence would silently bless a decomposer's judgement about it. Same
+ * separation, same reason, as the criteria list.
+ *
+ * ⛔ AND IT IS NOT A WAIVER. A waiver is a person declaring something the builder's to decide,
+ * priced at an owner and a date. This is an author role reporting what it worked out, so it carries
+ * `derived` exactly as a criterion does — and a reworded claim leaves it pointing at a hash nothing
+ * matches, which un-concludes it. A conclusion that survived a reword would be the one way to get a
+ * promise past this gate forever: conclude nothing is needed, then change what the promise says.
+ */
+export const NeedsNothing = z
+  .object({
+    slot: z.enum(SLOTS),
+    /** The statement, where the slot says several things. Absent means the slot says one. */
+    of: z.string().optional(),
+    /**
+     * Why nothing has to exist for this.
+     *
+     * ⛔ PRICED, BECAUSE IT IS THE ONLY WAY PAST THE GATE AND AN UNPRICED ESCAPE IS THE CHEAPEST
+     * SENTENCE IN A SCHEMA — which this file has already learned once, from `example: true`
+     * switching off the best detector in the codebase for the cost of a boolean. A reason somebody
+     * could argue with is the whole difference between a conclusion and a bypass.
+     */
+    because: z.string().min(30, "why nothing has to be built for this — a reason somebody could argue with"),
+    /**
+     * Who worked it out, and against which words. ⛔ Never a person: concluding this is an author
+     * role's act, and `check` names the role when it is absent.
+     */
+    derived: z
+      .object({
+        by: z.string().min(1),
+        at: dateish,
+        /** The claim hash this was concluded against — see `claimHash`. */
+        from: z.string().min(8),
+      })
+      .strict()
+      .optional(),
+  })
+  .strict();
+export type NeedsNothing = z.infer<typeof NeedsNothing>;
+
 // ---------------------------------------------------------------------------
 // Exchange — one ask with exactly one answer, and the unit a human accepts.
 
@@ -1591,6 +1644,8 @@ export const Exchange = z
       .default([]),
     slots: z.record(z.enum(SLOTS), SlotFill).default({}),
     criteria: z.array(Criterion).default([]),
+    /** ⛔ The twin of `criteria` on the machinery axis — see `NeedsNothing`. fg-0020. */
+    needs_nothing: z.array(NeedsNothing).default([]),
   }).strict()
   .superRefine((e, ctx) => {
     /**
@@ -3444,6 +3499,27 @@ export const Verdict = z
      */
     covered_text: z.array(z.string()).optional(),
     covers_criteria: z.string().optional(),
+    /**
+     * What a read-through covered — the hash of every sentence in it, when it was read.
+     *
+     * ⛔ THE FIELD THAT STOPS `buildable: true` BEING TRUE FOREVER. A read-through is the one signal
+     * nothing can compute and it was the only thing in the gate recording no provenance: somebody
+     * read a feature, said they could build it, and that stood after every sentence in it was
+     * rewritten. Both derived layers already carry `derived.from` against exactly this; the human
+     * act did not, which made it the last laundering route in the model and the hardest to notice,
+     * because a stale stamp looks identical to a current one.
+     *
+     * ⛔ NOT `covers_slots`, WHICH IS ACCEPTANCE'S. That answers "has what this person agreed to
+     * moved", at one target. This answers "have the words somebody read end to end moved", over a
+     * whole subtree, and is computed by `readHashFor` rather than `coveredBy`. One field for two
+     * questions is how `covers_slots` and `covers_criteria` came to be two fields.
+     *
+     * Optional, because every read-through written before this exists without it, and a corpus must
+     * keep loading. ⛔ Absent does NOT satisfy the gate — a yes nothing can tie to particular words
+     * is not evidence about these ones — and `check` notes it rather than refusing, the same way an
+     * undated criterion is handled.
+     */
+    covers_read: z.string().optional(),
     // rule
     settles: z
       .string()

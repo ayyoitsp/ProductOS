@@ -1,21 +1,14 @@
 id: "0217"
-said: |-
-  anyone should be able to redefine a gloassary word - why wouldn't thye? nothing should be
-  refused of a human requesting to make changes. product os should be reindexing based off the
-  feedback.
+said: let's fix read:true indefinitely for sure
 at: 2026-10-28
 kind: concept
 reaches:
-  model: ""
-  derive: glossaryCollisions
-  generate: ""
-  surface: ""
-  check: Not a refusal — somebody decided this
-  instruct: ""
-  pin: a feature redefining a glossary word is a question, NEVER a refusal
+  model: covers_read
+  derive: readHashFor
+  surface: dspent
+  check: read-through-older-than-what-it-read
+  instruct: a read-through expires
+  pin: a yes stops counting the moment a sentence it covered is reworded
 waived:
-  model: "Nothing in the schema changed: a term could always be defined in two places. What changed is what the framework DOES about it, which was a severity and a question."
-  generate: Nothing generates a term, and which sense keeps a name is a person's decision.
-  surface: "`check` prints its own findings and the worklist renders what `interviewFor` returns, so both halves reach a reader unchanged. ⛔ Still true from 0216: nothing renders the glossary AS a glossary."
-  instruct: "⛔ ARGUABLE AND THE MOST LIKELY TO BE WRONG. No role is told \"do not refuse a person\", because no role refuses — `check` does, and it is not a role. But the PRINCIPLE is larger than this change and probably belongs in the briefs: 30 of check's 81 refusals gate a decision rather than a broken reference, and two of them fire BECAUSE somebody edited. That sweep is recorded as unexamined rather than claimed as done."
+  generate: 'No generator writes or reads a read-through, and one that did would be the defect rather than the layer being reached: this is the one act in the model that only a person can perform, which is the whole of "the one signal nothing can compute". Software stamping it would be exactly what `via: agent` exists to keep distinguishable from consent. Verified by looking rather than assumed: `draw.ts`, `draw-write.ts`, `propose.ts`, `routes.ts`, `derive-states.ts` and `cli/commands/v2.ts` are the generate files and neither `covers_read` nor `readHashFor` appears in any of them. What a generator does produce from a read-through is the packet banner, which `compilePacket` already carried and which is the surface layer.'
 closed: 2026-10-28

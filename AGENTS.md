@@ -116,7 +116,7 @@ flowchart TD
   hand_it_to_the_builders --> hand_it_to_the_builders_architecture["architecture"]
   hand_it_to_the_builders --> hand_it_to_the_builders_buildability["buildability"]
   hand_it_to_the_builders --> hand_it_to_the_builders_test-design["test-design"]
-  hand_it_to_the_builders -.->|keeps| hand_it_to_the_builders_self(["the session — 3 things it may not hand off"])
+  hand_it_to_the_builders -.->|keeps| hand_it_to_the_builders_self(["the session — 5 things it may not hand off"])
   groom_a_ticket(["groom a ticket<br/><i>Answer whether a piece of work can be built, and raise what is open as questions</i>"])
   groom_a_ticket --> groom_a_ticket_demonstrator["demonstrator"]
   groom_a_ticket -.->|keeps| groom_a_ticket_self(["the session — 6 things it may not hand off"])
@@ -242,6 +242,8 @@ The engineering and QA read, once product and design have signed off.
 - ⛔ checking somebody actually agreed before spawning either of these — the precondition is the whole point of the split
 - deciding what to do with what comes back: a question the corpus must settle goes to the person, never to the builder
 - every act of judgement — an engineer saying it is buildable is not somebody agreeing it is right
+- ⛔ landing what `buildability` found: each gap it names becomes a question on the slot it belongs to, then a read-through recording whether somebody could build from it — `buildable: false` with those refs as `blockedBy`, or `true` once they are answered. ⛔ The reviewer writes nothing and `ready` now requires this, so a finding that stops here stops the gate too
+- ⛔ knowing a read-through expires: it is stamped against the words it covered, so rewording any of them makes the scope unready again and `check` says so as `read-through-older-than-what-it-read`. ⛔ What is owed then is showing the reader WHAT MOVED, not another review — re-confirming is one glance at a diff, which is the whole reason the words read are recorded
 
 ### groom a ticket
 
@@ -347,7 +349,7 @@ Held three ways rather than one: no author declares `ask-the-human`, so no host 
 | **scoper** | What does this one feature promise, and where does somebody meet it? | feature | the happy path — what the feature is FOR, first; views and their parts; person-asked exchanges, and what each slot says; `why`, `risks` and `measures` — why this is worth building, what could go wrong, and how anybody would know it worked; `terms` — what each word means in this feature; `question:` on anything it cannot resolve, with no claim beside it |
 | **interviewer** | What has nobody decided here, and what are the three or four answers somebody could pick between? | feature | one `open` standing per question, through the `ask` intent — never by editing a scope; three or four candidate answers on each, every one of them something a reasonable person would choose; `consequence` on every option — what follows if this is the answer, what it rules out; `cost` — what it costs to guess wrong, which is what makes the question worth a person's time; `blocks` — every other slot this one answer settles, which is what `interview` already worked out |
 | **machinist** | What does this product do that nobody presses, and what sets it off? | feature | system- and integrator-asked exchanges, and what each slot says; `when.triggered_by` — what sets it off, in product language; `when.follows` — the ask this one comes after, where something in the product sets it off; `depends_on` — what this rests on and does not itself behaviour; `question:` on anything it cannot resolve, with no claim beside it |
-| **decomposer** | Which parts of the system does this feature need, and where do they belong? | feature | subsystems — roughly what each does, and which area it is filed inside; `offers` — the capabilities a subsystem provides, each in a sentence; `serves` — the product statement each capability exists for, or the capability that needs it; `uses` — what a subsystem leans on across the tree, where containment cannot say it |
+| **decomposer** | Which parts of the system does this feature need, and where do they belong? | feature | subsystems — roughly what each does, and which area it is filed inside; `offers` — the capabilities a subsystem provides, each in a sentence; `serves` — the product statement each capability exists for, or the capability that needs it; `uses` — what a subsystem leans on across the tree, where containment cannot say it; `needs_nothing` — where a promise requires nothing to be built, the conclusion that it does not, with why. ⛔ Hashed against the claim, so rewording the promise asks again |
 | **demonstrator** | What would have to be demonstrated for this claim to be believed? | feature | criteria — what must be demonstrated for each claim, as given/when/then; `derived` — the role, the date, and the hash of the claim it was worked out against. ⛔ Over a hosted corpus it is one `productos_in` call per requirement, intent `demonstrate`, and the server records all three; `of` — which statement, wherever the slot says more than one thing; `level` — where somebody would have to stand to observe it, where that is knowable from the claim |
 | **instrumenter** | What does this product record, and which question does each recording answer? | feature | instruments — what gets recorded, in the product's own terms; `feeds` — which measure each recording answers, which is what stops either end being decorative |
 | **designer** | What should this screen look like, where no code renders it? | screen no component renders | a drawing for a screen no component renders, stamped with what it was designed from |
@@ -482,13 +484,15 @@ Held three ways rather than one: no author declares `ask-the-human`, so no host 
 - `offers` — the capabilities a subsystem provides, each in a sentence
 - `serves` — the product statement each capability exists for, or the capability that needs it
 - `uses` — what a subsystem leans on across the tree, where containment cannot say it
+- `needs_nothing` — where a promise requires nothing to be built, the conclusion that it does not, with why. ⛔ Hashed against the claim, so rewording the promise asks again
 
 **⛔ Never:**
 - write or reword product truth — a capability answers a promise and never changes one. ⛔ A decomposition that needed the promise to be different is a note, not an edit
 - invent a capability nothing serves: if no statement requires it, say so rather than filing it, because a part nobody asked for is indistinguishable from layering one level up
 - name infrastructure — a queue, a table, a topic or a framework is how a part is built, not what it is
+- ⛔ conclude `needs_nothing` because the parts are unclear. It says nothing HAS to exist — a promise about the absence of behaviour, or one an existing capability already answers, which is `serves` and not this. Unclear is a note addressed to whoever can say
 - write a given/when/then here: precision about behaviour belongs to product truth, and this layer is a sketch of the parts
-- stamp anything walked, validated or accepted. ⛔ Capabilities become agreeable by engineers later; nothing agrees to one today
+- stamp, validate or accept anything — ⛔ including a capability. A person agrees to one part at a time now, and a role agreeing to its own output would be software clearing the gate built to make somebody look
 
 **Needs:** read-files · search-files · run-commands · write-corpus  ·  **Prompt:** `agents/productos-decomposer.md`
 

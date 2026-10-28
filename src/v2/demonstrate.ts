@@ -263,6 +263,226 @@ export function derivedCapabilities(corpus: Corpus): DerivedCapability[] {
   );
 }
 
+/**
+ * The capabilities answering one feature's promises, and whether a person has validated each.
+ *
+ * ⛔ WHAT PETER ASKED FOR, AND NOT WHAT I WAS BUILDING. I proposed deriving a cross-feature
+ * criterion — complete a task, then check the balance moved. He stopped it: *"the dependency is a
+ * capability dependency, and those should be validated"*, then *"we don't need to check the balance
+ * moved, we need to ensure the capability of 'ledger' and 'increment balance' has been validated by
+ * a human, but not more than that"*.
+ *
+ * The difference is the whole design. An integration test asserts two features agree at runtime,
+ * which is a thing to BUILD and belongs to whoever builds it. What the corpus owes is narrower and
+ * is the thing nothing else can supply: the part this promise leans on is one a person has read and
+ * put their name to. *"But not more than that"* is a boundary, so this reports exactly that and
+ * derives no test from an edge.
+ *
+ * ⛔ FOLLOWED THROUGH `serves`, which is how this model already reasons about a part's dependencies.
+ * The clock serves the ledger serves the money — so a promise leaning on the ledger leans on the
+ * clock, and `a-capability-serves-only-other-machinery` already walks exactly this chain. Stopping
+ * at the first hop would validate the part somebody looked at and nothing underneath it.
+ */
+export interface AnsweringPart {
+  /** `<subsystem>#offers#<id>` */
+  ref: string;
+  subsystem: string;
+  /** The promise it was reached from — ⛔ one of them: a part may answer several. */
+  answers: string;
+  /** Whether a person has agreed to this part as it now reads. */
+  validated: boolean;
+  /** Who, where somebody has. */
+  by?: string;
+  /** ⛔ Agreed once and changed since, which is not the same as never agreed. */
+  stale: boolean;
+}
+
+export function answeringParts(corpus: Corpus, scopeIds: readonly string[]): AnsweringPart[] {
+  /** Every part, by ref, so the chain can be walked without re-finding each hop. */
+  const parts = new Map<string, { subsystem: string; serves: readonly string[] }>();
+  for (const { subsystem } of corpus.subsystems)
+    for (const o of subsystem.offers)
+      parts.set(`${subsystem.id}#offers#${o.id}`, { subsystem: subsystem.id, serves: o.serves });
+
+  /** Which parts answer a given product ref, at any grain that ref might be named at. */
+  const answering = (at: string): string[] =>
+    [...parts].filter(([, p]) => p.serves.some((t) => at === t || at.startsWith(`${t}#`) || t.startsWith(`${at}#`)))
+      .map(([ref]) => ref);
+
+  const out: AnsweringPart[] = [];
+  for (const id of scopeIds) {
+    const scope = corpus.scopes.find((s) => s.scope.id === id)?.scope;
+    if (!scope) continue;
+    for (const ex of scope.exchanges) {
+      const ref = `${id}#${ex.id}`;
+      /**
+       * ⛔ PER BEHAVIOUR, NOT ACROSS THE WALK. One `seen` for the whole scope attributed a shared
+       * part to whichever behaviour reached it first, and `readinessOf` filters on `answers` — so
+       * asking about the second behaviour reported no parts at all. Driven: a ledger serving both
+       * `see-a-balance` and `record-earning`, with an unvalidated clock beneath it, came back clean
+       * for `record-earning` while blocking `see-a-balance`. A gate that answers differently
+       * depending on which sibling was walked first is worse than one that does not exist.
+       */
+      const seen = new Set<string>();
+      /** ⛔ Breadth-first down `serves`, so the clock under the ledger is reached. */
+      const queue = answering(ref).map((p) => ({ ref: p, answers: ref }));
+      for (let i = 0; i < queue.length; i++) {
+        const { ref: at, answers } = queue[i]!;
+        if (seen.has(at)) continue;
+        seen.add(at);
+        const part = parts.get(at);
+        if (!part) continue;
+        const stamp = stampFor(corpus, at);
+        out.push({
+          ref: at,
+          subsystem: part.subsystem,
+          answers,
+          validated: stamp.state === "accepted",
+          ...(stamp.state === "never" ? {} : { by: stamp.by }),
+          stale: stamp.state !== "accepted" && stamp.state !== "never",
+        });
+        /** Parts this one leans on, named in its own `serves`. */
+        for (const t of part.serves) if (parts.has(t)) queue.push({ ref: t, answers });
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * Which statements no machinery says it serves — ⛔ THE TWIN OF `undemonstrated`, AND THE ONE THAT
+ * WAS NEVER WRITTEN.
+ *
+ * Peter: *"does buildability also ensure capabilities are mapped from a feature?"* Driven on the
+ * shipped seed before answering: zero subsystems, none of its five behaviours served by anything,
+ * zero findings, and `readinessOf` answering `ready: true` with no idea capabilities exist.
+ *
+ * Every capability check in `check.ts` runs ONE direction — `a-capability-that-serves-nothing`,
+ * `a-capability-serves-nothing-here`, `a-capability-serves-only-other-machinery`. All three catch an
+ * engineer inventing scope. Nothing caught the reverse: a promise nobody has worked out the parts
+ * for. The two derived layers were made generable from current truth in the same decision —
+ * *"capabilities should be generated based on current truth, have the accepted state feed in. test
+ * cases should be generated too"* — and one of them got a gate.
+ *
+ * ⛔ STATEMENT-GRAINED, for the reason `undemonstrated` is. A slot saying nine things with one
+ * capability against it is an eighth mapped and reads as covered.
+ */
+export function unserved(corpus: Corpus, scopeId: string, exchangeId: string, all = false): string[] {
+  const scope = corpus.scopes.find((s) => s.scope.id === scopeId)?.scope;
+  const ex = scope?.exchanges.find((e) => e.id === exchangeId);
+  if (!scope || !ex) return [];
+  const ref = `${scopeId}#${exchangeId}`;
+
+  /**
+   * ⛔ EVERYTHING ANY PART CLAIMS TO SERVE, AT EVERY GRAIN IT MIGHT NAME IT. A capability serving
+   * `money#see-a-balance#answer` answers for the statements inside that slot too — the part exists,
+   * somebody worked it out, and demanding one per sentence would report a mapped slot as unmapped.
+   * So a prefix match, not an equality: the same direction `whereQuestionStands` resolves.
+   */
+  const served = new Set<string>();
+  for (const { subsystem } of corpus.subsystems)
+    for (const o of subsystem.offers) for (const t of o.serves) served.add(t);
+  const covered = (at: string) => [...served].some((t) => at === t || at.startsWith(`${t}#`) || t.startsWith(`${at}#`));
+
+  /**
+   * ⛔ A CONCLUSION THAT NOTHING HAS TO BE BUILT, AND ONLY WHILE IT IS CURRENT — fg-0020.
+   *
+   * `needs_nothing` is how a promise that genuinely requires no machinery leaves this list, which
+   * is what the gap was: without it the list could never empty and so could never gate.
+   *
+   * ⛔ THE HASH IS THE WHOLE SAFETY. A conclusion that survived a reword would be the one way past
+   * this gate forever — conclude nothing is needed, then change what the promise says, and nothing
+   * ever asks again. So a conclusion counts only while `derived.from` still matches the claim it was
+   * reached against; a stale one leaves the promise unserved and `check` says which. ⛔ And an entry
+   * with no `derived` at all counts for nothing: somebody typed it, and a typed exemption from the
+   * only gate on this axis is not a conclusion anybody reached.
+   */
+  const concluded = new Set<string>();
+  for (const nn of ex.needs_nothing ?? []) {
+    if (!nn.derived) continue;
+    const at = nn.of ? `${ref}#${nn.slot}#${nn.of}` : `${ref}#${nn.slot}`;
+    if (nn.derived.from === claimHash(corpus, at)) concluded.add(at);
+  }
+
+  const out: string[] = [];
+  /**
+   * ⛔ `all` BYPASSES BOTH, because it asks for the DENOMINATOR — every promise there is. Letting a
+   * conclusion shrink the bottom half of "n of m" would make concluding one promise look like
+   * backing it, which is the fraction-drift this already learned once from counting behaviours
+   * against statements.
+   */
+  const owed = (at: string) => all || (!covered(at) && !concluded.has(at));
+  for (const slot of DEMONSTRABLE_SLOTS) {
+    const fill = ex.slots[slot as SlotName];
+    if (!owesDemonstration(slot as SlotName, fill)) continue;
+    const said = statements(fill!.says);
+    if (said.length > 1) {
+      for (const st of said) if (owed(`${ref}#${slot}#${st.id}`)) out.push(`${ref}#${slot}#${st.id}`);
+      continue;
+    }
+    if (owed(`${ref}#${slot}`)) out.push(`${ref}#${slot}`);
+  }
+  return out;
+}
+
+/**
+ * Conclusions that nothing has to be built, which were reached against words that have since moved.
+ *
+ * ⛔ THE ONE STATE THIS FEATURE CAN FAIL IN SILENTLY, and it is the same failure a stale criterion
+ * is: the record looks settled and describes a sentence nobody is promising any more. Worse here,
+ * because the consequence is a promise that quietly stopped being asked about at all.
+ */
+export function staleConclusions(
+  corpus: Corpus,
+  scopeId: string,
+  exchangeId: string
+): Array<{ ref: string; by: string; at: string }> {
+  const scope = corpus.scopes.find((s) => s.scope.id === scopeId)?.scope;
+  const ex = scope?.exchanges.find((e) => e.id === exchangeId);
+  if (!scope || !ex) return [];
+  const ref = `${scopeId}#${exchangeId}`;
+  const out: Array<{ ref: string; by: string; at: string }> = [];
+  for (const nn of ex.needs_nothing ?? []) {
+    if (!nn.derived) continue;
+    const at = nn.of ? `${ref}#${nn.slot}#${nn.of}` : `${ref}#${nn.slot}`;
+    if (nn.derived.from !== claimHash(corpus, at)) out.push({ ref: at, by: nn.derived.by, at: nn.derived.at });
+  }
+  return out;
+}
+
+/** Conclusions nobody derived — typed by hand, and counting for nothing at the gate. */
+export function typedConclusions(corpus: Corpus, scopeId: string, exchangeId: string): string[] {
+  const scope = corpus.scopes.find((s) => s.scope.id === scopeId)?.scope;
+  const ex = scope?.exchanges.find((e) => e.id === exchangeId);
+  if (!scope || !ex) return [];
+  const ref = `${scopeId}#${exchangeId}`;
+  return (ex.needs_nothing ?? [])
+    .filter((nn) => !nn.derived)
+    .map((nn) => (nn.of ? `${ref}#${nn.slot}#${nn.of}` : `${ref}#${nn.slot}`));
+}
+
+/**
+ * Every statement in one scope and everything under it that no machinery serves.
+ *
+ * ⛔ `all` ASKS FOR THE DENOMINATOR FROM THE SAME WALK. `check` reports "n of m", and computing m
+ * by counting exchanges would compare a statement count against a behaviour count — two grains in
+ * one fraction, which is how "11 of 5" happens. Same traversal, same predicate, `served` ignored.
+ */
+export function unservedIn(
+  corpus: Corpus,
+  scopeIds: readonly string[],
+  exchangeId?: string,
+  all = false
+): string[] {
+  return scopeIds.flatMap((id) => {
+    const scope = corpus.scopes.find((s) => s.scope.id === id)?.scope;
+    if (!scope) return [];
+    return scope.exchanges
+      .filter((e) => !exchangeId || e.id === exchangeId)
+      .flatMap((e) => unserved(corpus, id, e.id, all));
+  });
+}
+
 export interface DemonstrationTally {
   total: number;
   current: number;

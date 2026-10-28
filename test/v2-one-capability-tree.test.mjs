@@ -111,11 +111,17 @@ test("check names the carried area, and only where there is one", () => {
   assert.equal(f.where, "capabilities");
 });
 
-test("the page shows How it works on a carried corpus with an empty tree, and says so", () => {
+test("the page shows Capabilities on a carried corpus with an empty tree, and says so", () => {
   const plain = renderScopePage(loadCorpus(corpus()), "family-wallet");
   assert.doesNotMatch(plain, /data-view="subsystems"/, "nothing to say, so no tab");
   const page = renderScopePage(loadCorpus(corpus({ carried: true })), "family-wallet");
-  assert.match(page, /data-tab="subsystems">How it works</, "the tab a reader clicks, not only the section");
+  /**
+   * ⛔ CALLED "Capabilities". Peter, looking for it and finding four tabs none of which said the
+   * word: *"there is no capabilities menu"*, then *"call it fucking Capabilities. what the FUCK
+   * ELSE WOULD WE CALL IT"*. The view id stays `subsystems` — that is what every address and route
+   * resolves — and only the label a person reads changed.
+   */
+  assert.match(page, /data-tab="subsystems">Capabilities</, "the tab a reader clicks, not only the section");
   assert.doesNotMatch(plain, /data-tab="subsystems"/);
   assert.match(page, /data-subsystems="0" data-capabilities="0" data-carried="1"/);
   assert.match(page, /older capability tree carried into product truth/);
