@@ -636,6 +636,42 @@ export function settle(
    * and changing the words puts the whole happy path back to unagreed, which `coveredBy` already
    * derives from the claim hash.
    */
+  /**
+   * ⛔ WRITING ONE WORD — THE ACT THAT COULD NOT EXIST, AND THE REASON IT COULD NOT.
+   *
+   * This file recorded the blocker itself: *"the ref is `<scope>#<word>` and a multi-word term is
+   * not one kebab-case segment"*. So no intent could write a term, and when the interview asked
+   * *"is it one thing?"* — the question the glossary work added — the answer had nowhere to go.
+   * Peter: *"why can't an intent write a term?"* Nothing about it was impossible; `term:` prefixes
+   * the slug, exactly as `#happy-path#<part>` had been given an address an hour before.
+   *
+   * ⛔ IT CREATES WHERE THE SCOPE DOES NOT DEFINE THE WORD, because that IS the act the glossary
+   * needs: a word defined in one feature, moved UP to the product where every feature can see it.
+   * The resolver only lets that through for a word somebody already defined somewhere — inventing
+   * vocabulary from a typo is authoring, and authoring has its own door.
+   */
+  if (r.ref.kind === "term") {
+    const { scope: scopeId, word } = r.ref as { scope: string; word: string };
+    const entry = corpus.scopes.find((x) => x.scope.id === scopeId);
+    if (!entry) return { ok: false, why: `no scope "${scopeId}"` };
+    const raw = parseFrontmatter(fs.readFileSync(entry.file, "utf-8"));
+    const data = raw.data as { terms?: Record<string, { means?: string }> };
+    const now = says.trim();
+    if (!now) return { ok: false, why: `a word cannot be defined as nothing — say what "${word}" means` };
+    data.terms ??= {};
+    const was = String(data.terms[word]?.means ?? "").trim();
+    if (was === now) return { ok: false, why: `"${word}" already says that in ${scopeId}` };
+    data.terms[word] = { ...(data.terms[word] ?? {}), means: now };
+    const check = Scope.safeParse(data);
+    if (!check.success)
+      return { ok: false, why: check.error.issues.map((i) => `${i.path.join(".")} — ${i.message}`).join("; ") };
+    fs.writeFileSync(
+      entry.file,
+      `---\n${YAML.stringify(data, { lineWidth: 96, blockQuote: "literal" })}---\n\n${raw.content.trim()}\n`,
+      "utf-8"
+    );
+    return { ok: true, file: entry.file, displaced: [], replaced: was || undefined };
+  }
   if (r.ref.kind === "happy-path") {
     const part = (r.ref as { part?: string }).part;
     if (!part)

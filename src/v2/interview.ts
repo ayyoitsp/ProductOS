@@ -1705,11 +1705,11 @@ export function interviewFor(corpus: Corpus, scopeId: string, findings: Finding[
        */
       `"${x.word}" is defined in ${x.where.join(" and ")}, and used in ${x.users} places across the product.`,
       `The definition reaches ${x.reaches === 0 ? "none of them" : x.reaches === 1 ? "one of them" : `${x.reaches} of them`}.`,
-      "Is it one thing?",
+      "Is it one thing everywhere, or does some use of it mean something else?",
     ].join(" "),
     why: `it is defined in ${x.where.join(", ")}, which this feature does not reach — so nothing is holding what it means here`,
     shape:
-      "either the same thing, and the definition belongs somewhere both can see — the product's glossary — or a different thing, which needs its own name",
+      "either one thing, and it moves to the product's glossary where every feature reads it — or more than one, and the other senses need names of their own",
     fills: [`${scopeId}#word:${x.word.replace(/[^a-z0-9]+/g, "-")}`],
     candidates: [],
     about: {
@@ -1718,7 +1718,12 @@ export function interviewFor(corpus: Corpus, scopeId: string, findings: Finding[
       words: [],
       undefined_words: [],
     },
-    act: "a person says whether it is one thing — ⛔ nothing here guesses, because whether two uses mean the same is a reading and not a count",
+    /**
+     * ⛔ THE ACT EXISTS NOW, AND NAMING IT IS THE POINT. Peter: *"why can't an intent write a
+     * term?"* — nothing about it was impossible; a word simply had no address. `<scope>#term#<slug>`
+     * is one, so a question about a word ends in a press rather than in somebody opening a file.
+     */
+    act: `a person says whether it is one thing, and \`rule\` at the product's \`#term#${x.word.replace(/[^a-z0-9]+/g, "-")}\` moves it to the glossary — ⛔ nothing here guesses, because whether two uses mean the same is a reading and not a count`,
   }));
 
   /**

@@ -2981,6 +2981,23 @@ export const Scope = z.object({
            * ⛔ `with` NAMES THE OTHER WORDS, because "this is contested" without saying against
            * what is a feeling. The question goes to a person; nothing here resolves it.
            */
+          /**
+           * ⛔ A TERM BELONGS TO THE PRODUCT'S GLOSSARY, NOT TO A FEATURE.
+           *
+           * Peter, asked whether a term should always be a glossary entry or whether a feature may
+           * keep its own vocabulary: **"One glossary, product-wide."**
+           *
+           * ⛔ IT IS STILL WRITABLE ANYWHERE, AND DELIBERATELY SO — he is equally clear that
+           * *"nothing should be refused of a human requesting to make changes"*. A word defined on a
+           * feature is not an error; it is a word that has not been moved up yet, and the act that
+           * moves it is `rule` at `<scope>#term#<slug>`.
+           *
+           * ⛔ WHAT THE SCATTERING COST, MEASURED: 188 terms across 62 scopes and **0 at the
+           * product**, so "deal" was defined four separate times and "kind of deal" drifted into
+           * carrying two unrelated concepts across 11 scopes while its definition reached 2.
+           * `vocabularyReach` made local vocabulary work, and working was the problem: nothing held
+           * a word together once it travelled.
+           */
           contested: z
             .object({
               question: z.string().min(10),

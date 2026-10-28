@@ -1,0 +1,21 @@
+id: "0225"
+said: |-
+  why can't an intent write a term?
+  [asked whether a term should always be a glossary entry, or a feature can keep its own local
+  vocabulary] One glossary, product-wide
+at: 2026-10-28
+kind: concept
+reaches:
+  model: A TERM BELONGS TO THE PRODUCT'S GLOSSARY
+  derive: r.ref.kind === "term"
+  generate: ""
+  surface: ""
+  check: ""
+  instruct: ""
+  pin: a word defined on a feature can be moved up to the product
+waived:
+  generate: Nothing generates a definition — what a word means is a person's sentence, and the act this adds is how theirs gets recorded.
+  surface: "`rule` already takes a `ref` and the resolver is shared, so the new address reaches every surface without one being edited. ⛔ Still owed from 0216 and not claimed here: nothing renders the glossary AS a glossary."
+  check: ⛔ DELIBERATELY NOT A CHECK, AND THE REASON IS HIS OTHER DECISION. "One glossary" could be enforced by refusing a term on a feature — and *"nothing should be refused of a human requesting to make changes"* (0224) says not to. A word defined on a feature is a word that has not been moved up yet; the interview asks about it and the act now exists to do it.
+  instruct: ⛔ ARGUABLE. No author role is told "put words in the glossary", because the decision about what a word means is the person's and the question reaches them through the interview. What a brief would need is guidance on writing a definition that survives being read everywhere, and that is worth writing once somebody has moved a few and seen what goes wrong.
+closed: 2026-10-28
