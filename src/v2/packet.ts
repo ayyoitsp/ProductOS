@@ -13,7 +13,7 @@
  */
 import { SLOTS, DEMONSTRABLE_SLOTS, owesDemonstration, type SlotName , statements, saysText, nothingHere} from "./schema.js";
 import { resolveRules, disputeIndex, vocabularyReach, resolveView, DOWNSTREAM_OF_ANSWER, answerIsUnknown, type Corpus } from "./load.js";
-import { descendants, unbuildableReads } from "./settle.js";
+import { descendants, unbuildableReads, buildableReads, readThroughsFor } from "./settle.js";
 import { existsOf } from "./load.js";
 import { stampFor, staleReason, requirementHash } from "./stamp.js";
 import { demonstrationOf } from "./demonstrate.js";
@@ -89,6 +89,14 @@ export interface Readiness {
   ready: boolean;
   /** `<exchange>#<slot>` for each, in the order the packet reports them. */
   holes: string[];
+  /**
+   * Whether anybody has recorded reading this end to end, at any verdict.
+   *
+   * ⛔ SO A RENDERER CAN TELL "NOBODY HAS READ IT" FROM "SOMEBODY DID AND IT NO LONGER COUNTS".
+   * Both are `ready: false` with an empty hole list, and they route to different people — get it
+   * read, versus show the reader what moved.
+   */
+  read: boolean;
 }
 
 export function readinessOf(corpus: Corpus, scopeId: string): Readiness | null {
@@ -106,8 +114,23 @@ export function readinessOf(corpus: Corpus, scopeId: string): Readiness | null {
    * green readiness above a packet whose first line was a human refusing it.
    */
   const stopped = unbuildableReads(corpus, scopeId);
+  /**
+   * ⛔ AND A CURRENT YES IS REQUIRED HERE TOO, WHICH IS THE SAME DISAGREEMENT ONE FIELD ALONG.
+   *
+   * This function and `readinessOf` in `readiness.ts` are two renderings of one verdict — the page
+   * imports this one so the page and the packet cannot differ. It learned to respect a recorded NO;
+   * it did not learn that a yes expires, so the page went on printing *"Ready to build: yes"* over a
+   * reading whose every sentence had been rewritten. That is the laundering `covers_read` closed,
+   * surviving on the one surface Peter reviews on.
+   *
+   * ⛔ Asked of the predicate rather than re-derived: `buildableReads` already declines a stale or
+   * unprovenanced yes, and a second opinion about what counts would be a third answer to a question
+   * this file's header says must have one.
+   */
+  const current = buildableReads(corpus, scopeId);
+  const read = readThroughsFor(corpus, scopeId).some((r) => r.buildable !== undefined);
   const holes = [...each.flatMap((x) => x.holes), ...stopped.flatMap((r) => r.blockedBy)];
-  return { ready: holes.length === 0 && stopped.length === 0, holes };
+  return { ready: holes.length === 0 && stopped.length === 0 && current.length > 0, holes, read };
 }
 
 function compileOne(corpus: Corpus, scopeId: string): { md: string; holes: string[] } | null {

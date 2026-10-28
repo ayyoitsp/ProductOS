@@ -180,6 +180,12 @@ unhelpful:
   `blockedBy` list, and a blocker named as a ref lands in the hole list a consumer already reads; a
   blocker named only in prose lands nowhere.
 
+⛔ **And a read-through expires.** It is stamped against the hash of every sentence it covered, so
+rewording any of them makes the scope unready again — the same way a criterion goes stale when its
+claim moves. What that means for you: a feature you cleared last week may be back. ⛔ It is not
+another review from scratch. The reader is one diff away from re-confirming, and what is owed is
+showing them what moved — which is the whole reason the words they read are recorded.
+
 ⛔ **And recording it is not yours either**, for the reason directly above. A read-through is a
 person's act; one stamped by the reviewer would be software stamping its own homework on the single
 signal in the corpus that nothing else can reconstruct. The session carries your answer to whoever

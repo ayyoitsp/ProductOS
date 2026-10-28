@@ -135,6 +135,46 @@ export function claimHash(corpus: Corpus, ref: string): string | null {
   return coveredBy(corpus, ref)?.slots ?? null;
 }
 
+/**
+ * The hash of everything somebody read, when they read a scope end to end.
+ *
+ * ⛔ WITHOUT THIS, `buildable: true` WAS TRUE FOREVER. A read-through is the one signal nothing can
+ * compute, and the only one in the gate that recorded no provenance — so a person could read a
+ * feature, say they could build it, and have that stand after every sentence in it was rewritten.
+ * Both derived layers already carry `derived.from` for exactly this; the human act did not, which
+ * made it the last laundering route in the model and the easiest to miss because it looks settled.
+ *
+ * ⛔ EVERY STATEMENT, NOT THE SLOTS. What a person read end to end is the sentences, and a slot
+ * saying nine things is nine of them — hashing the slot would let eight be rewritten under a stamp.
+ * `claimHash` is asked per statement rather than recomputed, so this cannot disagree with what
+ * `demonstrate` and the capability layer hash.
+ *
+ * ⛔ AND IT IS ORDER-INDEPENDENT ONLY WHERE ORDER DOES NOT MEAN ANYTHING. The refs come in sorted,
+ * so re-filing an exchange inside its scope does not read as a change of what somebody read, while
+ * adding or removing one does.
+ */
+export function readHash(corpus: Corpus, exchangeRefs: readonly string[]): string {
+  const parts: string[] = [];
+  for (const ref of [...exchangeRefs].sort()) {
+    const [scopeId, exchangeId] = ref.split("#");
+    const ex = corpus.scopes
+      .find((x) => x.scope.id === scopeId)
+      ?.scope.exchanges.find((e) => e.id === exchangeId);
+    if (!ex) {
+      parts.push(`${ref}=gone`);
+      continue;
+    }
+    for (const slot of SLOTS as readonly SlotName[]) {
+      const fill = ex.slots[slot];
+      if (!fill) continue;
+      const said = statements(fill.says);
+      const at = said.length > 1 ? said.map((st) => `${ref}#${slot}#${st.id}`) : [`${ref}#${slot}`];
+      for (const one of at) parts.push(`${one}=${claimHash(corpus, one) ?? "none"}`);
+    }
+  }
+  return h(parts.join("\n"));
+}
+
 export interface Covered {
   slots: string;
   criteria: string;

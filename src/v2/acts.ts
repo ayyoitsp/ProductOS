@@ -28,6 +28,7 @@ import {
   whereQuestionStands,
   blankSlots,
   descendants,
+  readHashFor,
   type Question,
   settle,
   waive as applyWaiver,
@@ -1395,6 +1396,12 @@ function doRead(dir: string, o: ReadPayload, consent: Consent): Outcome {
   }
 
   const blocked = (o.blockedBy ?? []).map((s) => s.trim()).filter(Boolean);
+  /**
+   * ⛔ COMPUTED HERE, NEVER TAKEN FROM THE CALLER — the rule `demonstrate` already follows, for the
+   * same reason: a stamp that can be marked current with words it was not taken against is a stamp
+   * with no content. The payload has no field for this and must not grow one.
+   */
+  const covers = readHashFor(corpus, o.scope);
   writeVerdict(dir, "reads.yaml", [
     `  - kind: read`,
     `    scope: ${o.scope}`,
@@ -1402,13 +1409,23 @@ function doRead(dir: string, o: ReadPayload, consent: Consent): Outcome {
     `    at: ${today()}`,
     `    via: ${consent.via}`,
     `    buildable: ${o.buildable}`,
+    `    covers_read: ${covers}`,
     ...(blocked.length ? [`    blocked_by: [${blocked.join(", ")}]`] : []),
     ...(o.note ? [`    note: ${JSON.stringify(o.note)}`] : []),
   ], consent);
   return {
     ok: true,
     said: `${consent.by} read ${o.scope} and ${o.buildable ? "could" : "could NOT"} build from it`,
-    detail: o.buildable ? [] : ["this is the one signal nothing can compute — it now appears on every packet for this scope"],
+    detail: o.buildable
+      ? [
+          /**
+           * ⛔ SAID OUT LOUD, BECAUSE THE ALTERNATIVE IS SOMEBODY DISCOVERING IT AS A REGRESSION.
+           * A reader who thinks they have signed this off permanently will read the scope going
+           * unready after an edit as the tool losing their stamp.
+           */
+          "recorded against the words as they read now — ⛔ reword any of them and this scope needs reading again",
+        ]
+      : ["this is the one signal nothing can compute — it now appears on every packet for this scope"],
   };
 }
 

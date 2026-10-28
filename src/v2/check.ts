@@ -33,7 +33,13 @@ import {
 import { confidenceOf, containerOf } from "./confidence.js";
 import { stampFor, staleReason, coveredBy, whatChangedSince } from "./stamp.js";
 import { resolveRef } from "./ref.js";
-import { descendants, unbuildableReads, blankSlots, WHAT_IS_IN_QUESTION } from "./settle.js";
+import {
+  descendants,
+  unbuildableReads,
+  readThroughsFor,
+  blankSlots,
+  WHAT_IS_IN_QUESTION,
+} from "./settle.js";
 import { ruleHomes, reachOf } from "./grid.js";
 import { appStyleFor, styleDrift } from "./appcss.js";
 import { readLog } from "./log.js";
@@ -2169,6 +2175,48 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
           "decide them, or declare each the builder's on purpose — then read it through again. " +
           "⛔ The stamp is not editable: it records what somebody said when the corpus looked different",
       });
+    }
+  }
+
+  /**
+   * ---- somebody could build from it, and then the words moved ----
+   *
+   * ⛔ THE LAST THING IN THE GATE THAT COULD BE TRUE FOREVER. A read-through is the one signal
+   * nothing can compute, and until `covers_read` it recorded no provenance — so a person read a
+   * feature, said they could build it, and that stood after every sentence in it was rewritten.
+   * `buildableReads` declines it now, so the gate is safe; what this adds is saying WHICH, because
+   * a scope that quietly went back to unready looks exactly like one nobody ever read.
+   *
+   * ⛔ A NOTE, AND THE TWO CASES ROUTE DIFFERENTLY. Neither is a corpus being wrong: one is an
+   * acceptance whose words moved, which is ordinary and expected, and the other is a record written
+   * before this field existed. A refusal on the second would fire on every corpus carrying an older
+   * reading at once, which this project has twice learned the end of.
+   */
+  /**
+   * ⛔ OVER THE READINGS, NOT OVER THE SCOPES. A reading is recorded at either grain, so walking
+   * scopes and matching `r.scope === scope.id` skips every exchange-grained one — the same mistake
+   * made once already on `buildable: true` and caught by a test rather than by review.
+   */
+  for (const v of corpus.verdicts) {
+    if (v.kind !== "read" || v.buildable !== true || !v.scope) continue;
+    for (const r of readThroughsFor(corpus, v.scope)) {
+      if (r.buildable !== true || r.scope !== v.scope || r.at !== v.at || r.by !== v.by) continue;
+      if (r.stale)
+        add({
+          severity: "note",
+          kind: "read-through-older-than-what-it-read",
+          where: r.scope,
+          what: `${r.by} read this end to end on ${r.at} and could build from it, and the words have moved since`,
+          fix: "show them what changed and have them read it again — ⛔ not from scratch: the point of recording what they read is that re-confirming is one glance at a diff. Until then this does not count towards readiness",
+        });
+      else if (!r.of)
+        add({
+          severity: "note",
+          kind: "read-through-against-nothing-recorded",
+          where: r.scope,
+          what: `${r.by} read this end to end on ${r.at} and could build from it, and nothing records which words they read`,
+          fix: "have somebody read it again, which stamps what they read — ⛔ a yes nothing can tie to particular words is not evidence about these ones, so it does not count towards readiness",
+        });
     }
   }
 
