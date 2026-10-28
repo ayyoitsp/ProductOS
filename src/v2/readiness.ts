@@ -40,6 +40,7 @@ import {
   unbuildableReads,
   buildableReads,
   whereQuestionStands,
+  blankSlots,
   type Question,
   type ReadThrough,
 } from "./settle.js";
@@ -252,34 +253,6 @@ function targetOf(
   return {
     error: `${ref} is a ${r.ref.kind}. Readiness is asked of a feature or of one behaviour — name a scope, or <scope>#<exchange>`,
   };
-}
-
-/**
- * Blank slots, taken from the grid rather than counted again.
- *
- * ⛔ THE GRID IS ASKED BECAUSE THE EXCLUSIONS ARE THE HARD PART, AND THERE ARE ALREADY THREE COPIES
- * OF THEM. A slot with no fill is not automatically a hole: a `refuses` answered by a rule's shared
- * named cases is answered, a slot downstream of an unruled `answer` is *"not a hole; not yours to
- * fill"*, and a slot waiting on an open org-wide rule is a hole whose home is the RULE — reporting
- * it per slot is what turned seven questions into 643 refusals. `check`, `compilePacket` and
- * `gridFor` each carry those three, each with a ⛔ saying they must agree; a fourth copy here is how
- * three agreeing implementations become four disagreeing ones.
- *
- * So the mark is read, and `·` is the one that means nobody has thought about it — *"a hole, not a
- * silence"*, in the grid's own words.
- */
-const NOTHING_SAYS_THIS = "·";
-
-function blankSlots(corpus: Corpus, scope: string, exchange?: string): string[] {
-  const g = gridFor(corpus, scope);
-  if (!g) return [];
-  const out: string[] = [];
-  for (const row of g.rows) {
-    if (exchange && row.exchange !== exchange) continue;
-    for (const slot of SLOTS as readonly SlotName[])
-      if (row.cells[slot]?.mark === NOTHING_SAYS_THIS) out.push(`${scope}#${row.exchange}#${slot}`);
-  }
-  return out;
 }
 
 /** Whether a ref is one of a feature's framing cards. */

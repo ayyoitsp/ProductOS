@@ -27,9 +27,11 @@
 import fs from "node:fs";
 import { parseFrontmatter } from "../core/frontmatter.js";
 import YAML from "yaml";
-import { Scope, Rule, type SlotName , saysText, statements, type Authorship} from "./schema.js";
+import { Scope, Rule, SLOTS, type SlotName , saysText, statements, type Authorship} from "./schema.js";
 import { loadCorpus, resolveRules, selectsFor, lineageOf, type Corpus } from "./load.js";
 import { resolveRef } from "./ref.js";
+/** ⛔ `grid.ts` imports nothing from here, so this is not a cycle — checked before moving `blankSlots`. */
+import { gridFor } from "./grid.js";
 import { removals, refuseBecause } from "./write.js";
 
 import { confidenceOf, type Strength } from "./confidence.js";
@@ -1451,4 +1453,52 @@ export function whereQuestionStands(corpus: Corpus, q: Question, scopes: string[
     if (!exchange || at[1] === exchange) return "on it";
   }
   return "around it";
+}
+
+/**
+ * ⛔ MOVED HERE FOR THE REASON `whereQuestionStands` MOVED HERE, AND IT IS THE OTHER HALF OF THE
+ * SAME DEFECT.
+ *
+ * `questionsIn` opens each slot with `if (!fill) continue` — so a slot nobody has filled is not a
+ * question, and never was. That is right: nobody has been ASKED anything about it. But it meant the
+ * act's refusal and the gate's hole list were disjoint on exactly the purest case:
+ *
+ *     grid                    `·` — nobody has thought about this
+ *     readinessOf             a hole, so `ready: false`
+ *     questionsFor            nothing, so the act saw nothing
+ *     read --buildable true   ✓ recorded
+ *
+ * Driven on `money#see-a-balance` with `again` removed: one blank slot, zero questions, one hole,
+ * and the act accepted *"I read this end to end and could build from it"* over it. The gate still
+ * blocked, so no builder was handed it — but the corpus then held a person's stamp contradicting
+ * its own grid, and the act's whole stated reason is that *"'I read it and could build it' and 'we
+ * have not decided that' cannot both be true."* A slot nobody has thought about is that sentence's
+ * strongest case.
+ */
+/**
+ * Blank slots, taken from the grid rather than counted again.
+ *
+ * ⛔ THE GRID IS ASKED BECAUSE THE EXCLUSIONS ARE THE HARD PART, AND THERE ARE ALREADY THREE COPIES
+ * OF THEM. A slot with no fill is not automatically a hole: a `refuses` answered by a rule's shared
+ * named cases is answered, a slot downstream of an unruled `answer` is *"not a hole; not yours to
+ * fill"*, and a slot waiting on an open org-wide rule is a hole whose home is the RULE — reporting
+ * it per slot is what turned seven questions into 643 refusals. `check`, `compilePacket` and
+ * `gridFor` each carry those three, each with a ⛔ saying they must agree; a fourth copy here is how
+ * three agreeing implementations become four disagreeing ones.
+ *
+ * So the mark is read, and `·` is the one that means nobody has thought about it — *"a hole, not a
+ * silence"*, in the grid's own words.
+ */
+export const NOTHING_SAYS_THIS = "·";
+
+export function blankSlots(corpus: Corpus, scope: string, exchange?: string): string[] {
+  const g = gridFor(corpus, scope);
+  if (!g) return [];
+  const out: string[] = [];
+  for (const row of g.rows) {
+    if (exchange && row.exchange !== exchange) continue;
+    for (const slot of SLOTS as readonly SlotName[])
+      if (row.cells[slot]?.mark === NOTHING_SAYS_THIS) out.push(`${scope}#${row.exchange}#${slot}`);
+  }
+  return out;
 }

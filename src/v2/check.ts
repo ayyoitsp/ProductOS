@@ -33,7 +33,7 @@ import {
 import { confidenceOf, containerOf } from "./confidence.js";
 import { stampFor, staleReason, coveredBy, whatChangedSince } from "./stamp.js";
 import { resolveRef } from "./ref.js";
-import { descendants, unbuildableReads, WHAT_IS_IN_QUESTION } from "./settle.js";
+import { descendants, unbuildableReads, blankSlots, WHAT_IS_IN_QUESTION } from "./settle.js";
 import { ruleHomes, reachOf } from "./grid.js";
 import { appStyleFor, styleDrift } from "./appcss.js";
 import { readLog } from "./log.js";
@@ -2117,6 +2117,53 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
         what: `${v.by} ruled this on ${v.at} — "${(v.says ?? "").replace(/\s+/g, " ").slice(0, 110)}" — and the slot still stands as ${st}`,
         fix: "write the ruling into the slot. Until you do, every surface re-asks a question that has been answered",
       });
+  }
+
+  /**
+   * ---- a person could build from it, and a slot in it says nobody has thought about one ----
+   *
+   * ⛔ THE STATE THE ACT NO LONGER PERMITS AND A CORPUS CAN ALREADY BE IN.
+   *
+   * `doRead` refuses `buildable: true` over a blank slot now. It did not before — `questionsIn`
+   * skips a slot with no fill, so a blank produced no question and the refusal read only questions.
+   * Every stamp written in that window is still in the log, and nothing looked for it: the grid says
+   * `·`, `readinessOf` counts a hole, and a person's word says they could build it.
+   *
+   * ⛔ A NOTE, NOT A REFUSAL, AND THE DIRECTION IS WHY. The gate already blocks on the blank, so no
+   * builder is handed this; what is wrong is a record of consent that its own corpus contradicts.
+   * Refusing would fire on every corpus carrying an older stamp at once — *"a refusal firing on all
+   * of them is one people switch off"*, learned twice in one day here — and the fix is somebody
+   * re-reading, which is an act, not an edit.
+   */
+  /**
+   * ⛔ OVER THE READINGS, NOT OVER THE SCOPES, because a yes does not travel up. Walking scopes and
+   * asking `buildableReads` for each missed every exchange-grained stamp: asked of `money`, a
+   * reading of `money#see-a-balance` is correctly not an answer, which is the asymmetry that exists
+   * so a behaviour's yes cannot make its feature ready. Here the question runs the other way — what
+   * did this reading cover, and is any of it undecided — so the reading is what to iterate.
+   */
+  for (const r of corpus.verdicts) {
+    if (r.kind !== "read" || r.buildable !== true || !r.scope) continue;
+    {
+      const [at, exchange] = r.scope.split("#");
+      if (!corpus.scopes.some((x) => x.scope.id === at)) continue;
+      const blank = (exchange ? [at!] : descendants(corpus, at!)).flatMap((id) =>
+        blankSlots(corpus, id, exchange)
+      );
+      if (!blank.length) continue;
+      add({
+        severity: "note",
+        kind: "built-from-a-slot-nobody-decided",
+        where: r.scope,
+        what:
+          `${r.by} read this on ${r.at} and could build from it, and ` +
+          `${blank.length === 1 ? "one slot says" : `${blank.length} slots say`} nobody has thought about ` +
+          `${blank.length === 1 ? "it" : "them"}: ${blank.join(", ")}`,
+        fix:
+          "decide them, or declare each the builder's on purpose — then read it through again. " +
+          "⛔ The stamp is not editable: it records what somebody said when the corpus looked different",
+      });
+    }
   }
 
   /**

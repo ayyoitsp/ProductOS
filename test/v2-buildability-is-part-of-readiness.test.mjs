@@ -37,9 +37,17 @@ const { readinessOf: packetReadiness, compilePacket } = await import("../dist/v2
 const { perform } = await import("../dist/v2/acts.js");
 const { checkCorpus } = await import("../dist/v2/check.js");
 const { SLOTS } = await import("../dist/v2/schema.js");
+const { questionsFor } = await import("../dist/v2/settle.js");
 const { claimHash } = await import("../dist/v2/stamp.js");
 
 const EX = "money#see-a-balance";
+
+/** The `again` sentence this file blanks, matched exactly so a reword fails loudly. */
+const SLOT_TEXT =
+  "      again:\n" +
+  "        says: >\n" +
+  "          Looking twice shows the same thing, plus anything recorded in between. Looking\n" +
+  "          changes nothing and is never refused for having been done before.\n";
 
 /**
  * A seed where everything a TRAVERSAL can check about `money#see-a-balance` holds: every slot
@@ -238,4 +246,95 @@ test("the packet's readiness agrees with the banner the same pass prints", () =>
   const r = packetReadiness(corpus, "money");
   assert.equal(r.ready, false, "the packet printed a human's refusal and returned ready: true");
   assert.ok(r.holes.includes("money#see-a-balance#after"), `what stopped them is not in ${JSON.stringify(r.holes)}`);
+});
+
+/**
+ * ⛔ THE ACT AND THE GATE HAVE TO AGREE ABOUT WHAT A HOLE IS, AND ON THIS CASE THEY DID NOT.
+ *
+ * `questionsIn` opens each slot with `if (!fill) continue`, so a slot nobody has thought about
+ * produces no question — correctly, because nobody has been asked. But the act's refusal read only
+ * questions while `readinessOf` counts a blank as a hole, so the two lists were disjoint on exactly
+ * the purest case:
+ *
+ *     grid `·` · one hole · zero questions · `read --buildable true` recorded
+ *
+ * The gate still blocked, so nothing reached a builder. What the corpus held was a person's stamp
+ * contradicting its own grid — and the act's stated reason is that *"'I read it and could build it'
+ * and 'we have not decided that' cannot both be true."*
+ */
+test("a slot nobody has thought about stops the act, not only the gate", () => {
+  const dir = settled("v2build-blank-");
+  const f = `${dir}/truth/money.md`;
+  const src = fs.readFileSync(f, "utf-8");
+  const cut = src.replace(SLOT_TEXT, "");
+  assert.notEqual(cut, src, "the slot this test blanks has been reworded — find the new wording");
+  fs.writeFileSync(f, cut);
+
+  /** ⛔ The gate's side, which already worked: a blank is a hole. */
+  const r = ok(readinessOf(loadCorpus(dir), EX));
+  assert.equal(r.ready, false);
+  assert.deepEqual(
+    r.holes.map((h) => h.ref),
+    [`${EX}#again`]
+  );
+
+  /** ⛔ And nobody has been ASKED about it — which is why the act could not see it. */
+  const asked = questionsFor(loadCorpus(dir), "money").filter((q) => q.ref.includes("see-a-balance"));
+  assert.deepEqual(asked, [], "a blank slot became a question, so this test no longer covers the gap");
+
+  const act = perform(dir, "read", { scope: EX, buildable: true }, { by: "peter", via: "page" });
+  assert.equal(act.ok, false, "a person recorded 'I could build from this' over a slot nobody had thought about");
+  assert.match(act.why, /1 slot nobody has thought about/);
+  assert.ok(act.detail.includes(`${EX}#again`), `the blank is not named in ${JSON.stringify(act.detail)}`);
+  /** ⛔ It routes to deciding or waiving — never to parking, because there is no question to park. */
+  assert.deepEqual(
+    act.instead.map((i) => i.act),
+    ["rule", "waive", "read"]
+  );
+
+  /** ⛔ And saying you could NOT build from it is still open to them. That is the whole escape. */
+  const said = perform(
+    dir,
+    "read",
+    { scope: EX, buildable: false, blockedBy: [`${EX}#again`] },
+    { by: "peter", via: "page" }
+  );
+  assert.equal(said.ok, true, said.why);
+});
+
+/**
+ * ⛔ AND THE CORPORA THE OLD ACT ALREADY LET THROUGH.
+ *
+ * Every `buildable: true` recorded before the refusal above existed is still in the log, written
+ * over a blank slot nobody looked for. The verdict log is append-only, so the fix is somebody
+ * re-reading rather than an edit — which is why this is a note and not a refusal, and why its `fix`
+ * names an act.
+ */
+test("a stamp written before the refusal existed is found, as a note and not a refusal", () => {
+  const dir = settled("v2build-legacy-");
+
+  /** The stamp first, while the slot still says something — which is what the old act allowed. */
+  assert.equal(perform(dir, "read", { scope: EX, buildable: true }, { by: "peter", via: "page" }).ok, true);
+
+  /** Then the slot goes blank, exactly as a later edit to the truth would do. */
+  const f = `${dir}/truth/money.md`;
+  const src = fs.readFileSync(f, "utf-8");
+  const cut = src.replace(SLOT_TEXT, "");
+  assert.notEqual(cut, src, "the slot this test blanks has been reworded — find the new wording");
+  fs.writeFileSync(f, cut);
+
+  const found = checkCorpus(dir).findings.filter((x) => x.kind === "built-from-a-slot-nobody-decided");
+  assert.equal(found.length, 1, `expected one, got ${JSON.stringify(found)}`);
+  assert.equal(found[0].severity, "note", "⛔ a refusal here would fire on every corpus carrying an older stamp");
+  assert.match(found[0].what, /peter read this on \d{4}-\d{2}-\d{2} and could build from it/);
+  assert.match(found[0].what, /one slot says nobody has thought about it: money#see-a-balance#again/);
+  assert.match(found[0].fix, /read it through again/);
+
+  /** ⛔ And it says nothing where the corpus is whole, which is the half that makes it a check. */
+  const clean = settled("v2build-legacy-clean-");
+  assert.equal(perform(clean, "read", { scope: EX, buildable: true }, { by: "peter", via: "page" }).ok, true);
+  assert.deepEqual(
+    checkCorpus(clean).findings.filter((x) => x.kind === "built-from-a-slot-nobody-decided"),
+    []
+  );
 });

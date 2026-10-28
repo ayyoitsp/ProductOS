@@ -1,0 +1,11 @@
+id: "0213"
+said: so is there anything left to close? i'm confused.  what do the act an the gate disagree on?
+at: 2026-10-28
+kind: derivation
+reaches:
+  derive: blankSlots
+  check: built-from-a-slot-nobody-decided
+  pin: a slot nobody has thought about stops the act, not only the gate
+waived:
+  surface: "There is nothing new to show, and that is the point of the change rather than a gap in it. The blank slot was ALREADY on every surface: the grid draws it `·`, the packet counts it as a hole, and `readinessOf` returned `ready: false` over it. What was missing was the ACT's precondition, so the fix is a refusal, and a refusal travels out as the act's own `Outcome` — `why`, `detail`, `instead` — which every surface already renders for all five acts generically. Verified by looking rather than assumed: `page.ts` passes any non-ok body to `announce(out)` and sets \"Not recorded.\", with no per-act branch, and `src/cli/commands/v2.ts` prints `r.instead` for whatever comes back. A new region or field here would be a second place saying what the grid already says, which is the one rule this repo applies hardest."
+closed: 2026-10-28
