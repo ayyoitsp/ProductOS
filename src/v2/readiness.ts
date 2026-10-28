@@ -44,7 +44,7 @@ import {
   type Question,
   type ReadThrough,
 } from "./settle.js";
-import { demonstrationOf, type RequirementState } from "./demonstrate.js";
+import { demonstrationOf, unservedIn, type RequirementState } from "./demonstrate.js";
 import { requirementHash } from "./stamp.js";
 import { resolveRef } from "./ref.js";
 
@@ -220,6 +220,29 @@ export interface Readiness {
    * Routed to the demonstrator, not to a person: nobody authors a criterion.
    */
   untested: string[];
+  /**
+   * Statements no machinery says it serves — ⛔ REPORTED, AND IT CANNOT GATE YET.
+   *
+   * Peter: *"does buildability also ensure capabilities are mapped from a feature?"* It did not, and
+   * nor did anything else: driven on the shipped seed, zero subsystems, none of five behaviours
+   * served, zero findings, `ready: true`.
+   *
+   * This is `untested`'s twin and it is deliberately NOT in the gate, which is the one asymmetry in
+   * this file that is a gap rather than a decision:
+   *
+   *   `untested`   every claim owes a demonstration. There is no claim that needs none, so an
+   *                empty list is reachable and blocking on it is honest.
+   *   `unserved`   a behaviour can legitimately need NO new machinery, and **the model has no way
+   *                to say so.** Blocking would fire on every corpus with no subsystems at all, and
+   *                the only way to clear it would be to invent a part — which is verbatim the
+   *                failure `none: true` exists to prevent: *"a model that refused to let anyone say
+   *                so would push an author into inventing a state change just to fill the slot."*
+   *
+   * ⛔ So the absence here is a framework gap, not an author's mistake, and it is recorded as one
+   * (fg). What is reported is what a grooming agent actually needs — these are the promises nobody
+   * has worked the parts out for — without a refusal nobody can satisfy.
+   */
+  unserved: string[];
   /**
    * Questions that reach this work without landing on any of its facts.
    *
@@ -401,6 +424,9 @@ export function readinessOf(corpus: Corpus, ref: string): Readiness | { error: s
     }
   }
 
+  /** ⛔ `unservedIn`'s answer, at the grain asked about — never recomputed from the tree here. */
+  const unserved = unservedIn(corpus, scopes, exchange);
+
   const unbuildable = requirements.filter((r) => !BUILDABLE.includes(r.level));
   const counts = countLevels([...holes, ...unagreed, ...latitude, ...settled, ...requirements]);
   /**
@@ -433,7 +459,7 @@ export function readinessOf(corpus: Corpus, ref: string): Readiness | { error: s
     grain,
     title,
     ready,
-    because: verdict({ title, ready, holes, unagreed, latitude, settled, requirements, unbuildable, untested, openElsewhere, read }),
+    because: verdict({ title, ready, holes, unagreed, latitude, settled, requirements, unbuildable, untested, openElsewhere, read, unserved }),
     counts,
     holes,
     unagreed,
@@ -443,6 +469,7 @@ export function readinessOf(corpus: Corpus, ref: string): Readiness | { error: s
     requirements,
     read,
     untested,
+    unserved,
     openElsewhere,
   };
 }
@@ -476,8 +503,19 @@ function verdict(x: {
   untested: string[];
   openElsewhere: Nearby[];
   read: { latest: ReadThrough | null; stopped: ReadThrough[]; unread: boolean };
+  unserved: string[];
 }): string {
   const tests = `${n(x.requirements.length, "testing requirement")} to implement`;
+  /**
+   * ⛔ SAID ON BOTH SIDES OF THE VERDICT, because it is not a reason for either. A ready scope with
+   * unmapped promises is still ready — nothing in the gate turns on this — and a reader who only
+   * ever saw it beside "not ready" would read it as one of the things blocking them.
+   */
+  const parts = x.unserved.length
+    ? ` ⛔ ${n(x.unserved.length, "promise")} ${was(x.unserved.length, "has", "have")} no machinery against ${
+        x.unserved.length === 1 ? "it" : "them"
+      } (${x.unserved.join(", ")}) — a decomposer owes the parts. Reported, not blocking: a promise may genuinely need nothing new, and nothing in the model can say so yet.`
+    : "";
   const extra = x.openElsewhere.length
     ? ` ${n(x.openElsewhere.length, "open question")} ${was(x.openElsewhere.length, "reaches", "reach")} this work without landing on any of its facts (${x.openElsewhere
         .map((q) => q.ref)
@@ -490,6 +528,7 @@ function verdict(x: {
       (x.latitude.length
         ? ` ${n(x.latitude.length, "slot")} ${was(x.latitude.length, "is", "are")} declared the builder's latitude.`
         : "") +
+      parts +
       extra
     );
 
@@ -550,7 +589,7 @@ function verdict(x: {
     );
   return (
     `Not ready to build: ${why.join("; and ")}. ` +
-    `${n(x.settled.length, "fact")} ${was(x.settled.length, "is", "are")} agreed, and ${tests}.${extra}`
+    `${n(x.settled.length, "fact")} ${was(x.settled.length, "is", "are")} agreed, and ${tests}.${parts}${extra}`
   );
 }
 

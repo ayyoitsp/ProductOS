@@ -263,6 +263,78 @@ export function derivedCapabilities(corpus: Corpus): DerivedCapability[] {
   );
 }
 
+/**
+ * Which statements no machinery says it serves — ⛔ THE TWIN OF `undemonstrated`, AND THE ONE THAT
+ * WAS NEVER WRITTEN.
+ *
+ * Peter: *"does buildability also ensure capabilities are mapped from a feature?"* Driven on the
+ * shipped seed before answering: zero subsystems, none of its five behaviours served by anything,
+ * zero findings, and `readinessOf` answering `ready: true` with no idea capabilities exist.
+ *
+ * Every capability check in `check.ts` runs ONE direction — `a-capability-that-serves-nothing`,
+ * `a-capability-serves-nothing-here`, `a-capability-serves-only-other-machinery`. All three catch an
+ * engineer inventing scope. Nothing caught the reverse: a promise nobody has worked out the parts
+ * for. The two derived layers were made generable from current truth in the same decision —
+ * *"capabilities should be generated based on current truth, have the accepted state feed in. test
+ * cases should be generated too"* — and one of them got a gate.
+ *
+ * ⛔ STATEMENT-GRAINED, for the reason `undemonstrated` is. A slot saying nine things with one
+ * capability against it is an eighth mapped and reads as covered.
+ */
+export function unserved(corpus: Corpus, scopeId: string, exchangeId: string, all = false): string[] {
+  const scope = corpus.scopes.find((s) => s.scope.id === scopeId)?.scope;
+  const ex = scope?.exchanges.find((e) => e.id === exchangeId);
+  if (!scope || !ex) return [];
+  const ref = `${scopeId}#${exchangeId}`;
+
+  /**
+   * ⛔ EVERYTHING ANY PART CLAIMS TO SERVE, AT EVERY GRAIN IT MIGHT NAME IT. A capability serving
+   * `money#see-a-balance#answer` answers for the statements inside that slot too — the part exists,
+   * somebody worked it out, and demanding one per sentence would report a mapped slot as unmapped.
+   * So a prefix match, not an equality: the same direction `whereQuestionStands` resolves.
+   */
+  const served = new Set<string>();
+  for (const { subsystem } of corpus.subsystems)
+    for (const o of subsystem.offers) for (const t of o.serves) served.add(t);
+  const covered = (at: string) =>
+    !all && [...served].some((t) => at === t || at.startsWith(`${t}#`) || t.startsWith(`${at}#`));
+
+  const out: string[] = [];
+  for (const slot of DEMONSTRABLE_SLOTS) {
+    const fill = ex.slots[slot as SlotName];
+    if (!owesDemonstration(slot as SlotName, fill)) continue;
+    const said = statements(fill!.says);
+    if (said.length > 1) {
+      for (const st of said) if (!covered(`${ref}#${slot}#${st.id}`)) out.push(`${ref}#${slot}#${st.id}`);
+      continue;
+    }
+    if (!covered(`${ref}#${slot}`)) out.push(`${ref}#${slot}`);
+  }
+  return out;
+}
+
+/**
+ * Every statement in one scope and everything under it that no machinery serves.
+ *
+ * ⛔ `all` ASKS FOR THE DENOMINATOR FROM THE SAME WALK. `check` reports "n of m", and computing m
+ * by counting exchanges would compare a statement count against a behaviour count — two grains in
+ * one fraction, which is how "11 of 5" happens. Same traversal, same predicate, `served` ignored.
+ */
+export function unservedIn(
+  corpus: Corpus,
+  scopeIds: readonly string[],
+  exchangeId?: string,
+  all = false
+): string[] {
+  return scopeIds.flatMap((id) => {
+    const scope = corpus.scopes.find((s) => s.scope.id === id)?.scope;
+    if (!scope) return [];
+    return scope.exchanges
+      .filter((e) => !exchangeId || e.id === exchangeId)
+      .flatMap((e) => unserved(corpus, id, e.id, all));
+  });
+}
+
 export interface DemonstrationTally {
   total: number;
   current: number;

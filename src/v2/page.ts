@@ -38,6 +38,11 @@ import { resolveRef } from "./ref.js";
 import { demonstrationOf } from "./demonstrate.js";
 /** ⛔ The packet's own readiness verdict, not a second one — see `readinessOf`. */
 import { readinessOf } from "./packet.js";
+/**
+ * ⛔ THE ONE HOME FOR "no part of the system answers this", asked rather than recomputed — the
+ * same function `readinessOf` reports and `check` counts, so the page cannot say a third thing.
+ */
+import { unservedIn } from "./demonstrate.js";
 import { decisionsOn, decisionsUnder, howItWasDecided, type Decision } from "./record.js";
 import { holdsOn, whyHeld } from "./held.js";
 import { selectionOf, gapsIn, type Selection, type Option } from "./selection.js";
@@ -2082,6 +2087,31 @@ function featureHead(corpus: Corpus, scopeId: string, title: string, ctx: Ctx): 
          <ul class="verdict-holes">${verdict.holes.map((h) => `<li>${esc(named(h))}</li>`).join("")}</ul>`
     : "";
   /**
+   * Promises no part of the system answers yet.
+   *
+   * ⛔ OUTSIDE THE VERDICT, NOT INSIDE IT. Peter: *"does buildability also ensure capabilities are
+   * mapped from a feature?"* — it does now, and it reports rather than blocks: a promise may
+   * genuinely need no new machinery and the model has nowhere to say so (fg-0020). Printed inside
+   * the blocked branch it would read as one of the things stopping a builder; printed only there it
+   * would vanish on every ready feature, which is exactly where somebody is about to start.
+   *
+   * ⛔ AND IT NAMES BEHAVIOURS, NEVER REFS. `money#see-a-balance#answer` is an address; a reader
+   * meets the behaviour's own title, through the same `named` this file already uses for a hole.
+   */
+  const unserved = unservedIn(corpus, under);
+  const parts = unserved.length
+    ? `<p class="verdict-parts">${unserved.length} promise${unserved.length === 1 ? "" : "s"} here ${
+        unserved.length === 1 ? "has" : "have"
+      } no part of the system against ${
+        unserved.length === 1 ? "it" : "them"
+      } yet. Not a decision anybody owes — somebody has to work the parts out:</p>
+       <ul class="verdict-parts-list">${[
+         ...new Set(unserved.map((r) => named(r.split("#").slice(1, 3).join("#")))),
+       ]
+         .map((t) => `<li>${esc(t)}</li>`)
+         .join("")}</ul>`
+    : "";
+  /**
    * ⛔ THE QUESTIONS, NOT A COUNT OF THEM. A number sends a reader looking for the queue; the
    * questions themselves are the work, and each links to the card that answers it — which is the
    * part of this product the review called the best thing in it, and is not reproduced here.
@@ -2095,6 +2125,7 @@ function featureHead(corpus: Corpus, scopeId: string, title: string, ctx: Ctx): 
   return `<header class="feature-head">
     <h3 class="feature-title">${title}</h3>
     ${says}
+    ${parts}
     ${asks}
   </header>`;
 }

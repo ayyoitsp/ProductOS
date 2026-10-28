@@ -1,0 +1,11 @@
+id: "0214"
+said: does buildability also ensure capabilities are mapped from a feature? / yup, let's build it
+at: 2026-10-28
+kind: derivation
+reaches:
+  derive: unservedIn
+  surface: verdict-parts
+  check: behaviours-no-subsystem-answers
+  pin: check stays silent with no capability layer, and counts statements once there is one
+waived: {}
+closed: 2026-10-28
