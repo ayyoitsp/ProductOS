@@ -979,7 +979,24 @@ function doRule(dir: string, o: RulePayload, consent: Consent): Outcome {
    * YAML the only exit.
    */
   const onlyGovernance = (o.defersTo || o.insteadOf) && !o.says && !o.pick;
-  if (!target.unsettled && !onlyGovernance)
+  /**
+   * ⛔ A HAPPY PATH'S PARTS HAVE NO STANDING, SO "UNSETTLED" IS THE WRONG QUESTION TO ASK OF THEM.
+   *
+   * A slot carries a standing and is corrected by asking and then answering, which is right: a
+   * reader who disagrees with agreed words should leave a question somebody else can see. A happy
+   * path has no such field — it is agreed as a whole by `accept` and has nowhere to hold a question
+   * — so gating on `unsettled` made every part of it permanently unrulable, and the only way to
+   * change a word was `document`, a whole-file rewrite.
+   *
+   * That is where Peter's *"The boundary is wrong"* dead-ended. He answered the question the
+   * interview asked and there was no act that took the answer.
+   *
+   * ⛔ WHAT STILL PROTECTS IT: `because` is required, the verdict records what it replaced, and
+   * agreement is separate — changing the words puts the whole happy path back to unagreed, so
+   * nobody's acceptance survives a correction they did not see.
+   */
+  const happyPart = target.ref.kind === "happy-path" && Boolean((target.ref as { part?: string }).part);
+  if (!target.unsettled && !onlyGovernance && !happyPart)
     return no(`nothing to rule on at ${o.slot} — ${nothingToDecide(target)}`);
 
   if (onlyGovernance) {

@@ -80,6 +80,20 @@ export type Owes =
    * carried so nobody has to guess what was wrong with it.
    */
   | "disputed"
+  /**
+   * What somebody arrives with and leaves with — asked apart from what the feature is FOR.
+   *
+   * ⛔ ONE ACCEPTANCE, TWO READS, AND THAT IS THE WHOLE CHANGE. Peter, handed the purpose as a
+   * single five-part wall: *"this is too much for a single question - again, reading the inner
+   * workings. what's it for could be a separate question, arrives with, leaves with can be another
+   * question of its own."*
+   *
+   * Bundling them meant agreeing to five things with one press, which is the shape of a form rather
+   * than a decision — and a reader who disagrees with one of the five has nothing to press at all.
+   * Both still fill `#happy-path`, because the model agrees a happy path as one thing; what splits
+   * is what a person is asked to READ at a time.
+   */
+  | "handover"
   /** A slot says nothing and nothing fills it — `check`'s `slot-blank`. */
   | "blank"
   /** A question already drafted and waiting on the person it is asked of — `questionsFor`. */
@@ -1129,7 +1143,14 @@ export function interviewFor(corpus: Corpus, scopeId: string, findings: Finding[
     const hp = sc?.happy_path;
     purpose.push(
         {
-          ref: `${ungrounded.scope}#happy-path`,
+          /**
+           * ⛔ THE PART IT IS ABOUT, NOT THE WHOLE PATH — because the whole path is now TWO
+           * questions and a worklist refuses one ref asked twice. That invariant is right: two
+           * entries on one address read as the same thing asked again. `fills` still names
+           * `#happy-path`, because agreeing is one act over the whole of it; the ref is where the
+           * sentence being discussed actually lives, which `rule` now takes.
+           */
+          ref: `${ungrounded.scope}#happy-path#accomplishes`,
           owes: "purpose",
           /**
            * ⛔ THE SUBSTANCE IS IN THE QUESTION, NOT IN A FIELD BESIDE IT.
@@ -1175,21 +1196,19 @@ export function interviewFor(corpus: Corpus, scopeId: string, findings: Finding[
             purpose: hp ? plain(hp.accomplishes) : undefined,
             words: [],
             undefined_words: [],
+            /**
+             * ⛔ WHAT IT IS FOR, AND WHAT IT IS NOT FOR. Nothing else.
+             *
+             * ⛔ THE SCREENS ARE GONE FROM HERE AND THAT IS A JUDGEMENT ABOUT THE MODEL, NOT A
+             * TIDY-UP. Peter: *"screens really doesn't belong in the 'purpose'."* He is right —
+             * which screens somebody passes through is how the feature is arranged, and a purpose
+             * that names them cannot survive the arrangement changing. It is the altitude this
+             * field's own `shape` warns about, one level up: *"at the altitude that survives a new
+             * form field"*. A route of four screens is four form fields' worth of the same mistake.
+             */
             already: hp
               ? [
                   { asks: "what it gets done", says: plain(hp.accomplishes) },
-                  { asks: "what they arrive with", says: plain(hp.brings) },
-                  { asks: "what they leave with", says: plain(hp.ends_with) },
-                  ...(hp.through.length
-                    ? [
-                        {
-                          asks: "the screens, in order",
-                          says: hp.through
-                            .map((v) => plain(sc?.views.find((x) => x.id === v)?.title || v))
-                            .join(" → "),
-                        },
-                      ]
-                    : []),
                   ...(hp.not ? [{ asks: "deliberately not part of it", says: plain(hp.not) }] : []),
                 ]
               : [],
@@ -1204,7 +1223,47 @@ export function interviewFor(corpus: Corpus, scopeId: string, findings: Finding[
             ? `a person agrees to this on the page — ⛔ nobody else can, and its behaviours are not offered for acceptance until they have`
             : `nothing says what this feature is for — an author writes the happy path before anybody can agree to it`,
         }
-    );
+      );
+    /**
+     * ⛔ ASKED APART FROM THE PURPOSE, AND ONLY WHERE THERE IS SOMETHING TO READ. See the `handover`
+     * kind: one acceptance, two reads. A feature with no happy path at all has nothing to show here
+     * — the purpose question above already says an author has to write one first.
+     */
+    if (hp)
+      purpose.push({
+        ref: `${ungrounded.scope}#happy-path#brings`,
+        owes: "handover",
+        asks: [
+          /**
+           * ⛔ "Afterwards," NOT "They leave with" — `ends_with` IS A CLAUSE, NOT A NOUN PHRASE.
+           *
+           * Slotted after "They leave with", a real corpus produced *"They leave with the deal is in
+           * the lender's list"*. The field describes a STATE that holds once the work is done, and
+           * every surface that reads it has to join it as one. Machine-assembled prose that is not
+           * English is the same defect as a question nobody can picture, one layer down.
+           */
+          `Somebody arrives at ${plain(sc?.title || ungrounded.scope)} with ${plain(hp.brings)}.`,
+          `Afterwards, ${plain(hp.ends_with)}.`,
+          "Is that right?",
+        ].join(" "),
+        why: "agreeing what a feature is for means agreeing what somebody brings to it and takes away, and those are two different things to be wrong about",
+        shape:
+          "what somebody has in hand before they start, and what is different for them afterwards — ⛔ at the altitude that survives a new form field, never the fields themselves",
+        fills: [`${ungrounded.scope}#happy-path`],
+        candidates: [],
+        about: {
+          feature: plain(sc?.title || ungrounded.scope),
+          purpose: plain(hp.accomplishes),
+          already: [
+            { asks: "what they arrive with", says: plain(hp.brings) },
+            { asks: "what they leave with", says: plain(hp.ends_with) },
+          ],
+          words: [],
+          undefined_words: [],
+        },
+        act: "a person agrees to this on the page, in the same act that agrees what the feature is for — ⛔ the happy path is agreed as one thing, and this is the half of it nobody was reading",
+      });
+
   }
 
   /**

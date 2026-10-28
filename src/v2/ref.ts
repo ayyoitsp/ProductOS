@@ -31,12 +31,22 @@
 import { SLOTS, type SlotName, type Standing , statements} from "./schema.js";
 import type { Corpus } from "./load.js";
 
+/**
+ * The parts of a happy path a person can rule on, one at a time.
+ *
+ * ⛔ FOUR SENTENCES, AND NOT `through`. A route of view ids is not prose, and asking somebody to
+ * agree the screens inside a question about PURPOSE is the bundling that produced Peter's *"this is
+ * too much for a single question ... screens really doesn't belong in the 'purpose'."*
+ */
+export const HAPPY_PARTS = ["accomplishes", "brings", "ends_with", "not"] as const;
+export type HappyPart = (typeof HAPPY_PARTS)[number];
+
 export type Ref =
   | { kind: "rule"; id: string; rule: string }
   | { kind: "rule-case"; id: string; rule: string; name: string }
   | { kind: "scope"; id: string; scope: string }
   /** What a feature is for — the one thing agreed before anything in it. `<scope>#happy-path`. */
-  | { kind: "happy-path"; id: string; scope: string }
+  | { kind: "happy-path"; id: string; scope: string; part?: HappyPart }
   | { kind: "exchange"; id: string; scope: string; exchange: string }
   | { kind: "slot"; id: string; scope: string; exchange: string; slot: SlotName }
   | { kind: "case"; id: string; scope: string; exchange: string; slot: SlotName; name: string }
@@ -286,9 +296,31 @@ export function resolveRef(corpus: Corpus, raw: string): Resolved | { error: str
    * unreachable. `money#happy-path` read as an exchange and came back "no exchange happy-path in
    * money" — an error about a thing nobody was talking about, on the act that ungates the feature.
    */
-  if (parts.length === 2 && exId === "happy-path") {
+  if (exId === "happy-path" && (parts.length === 2 || parts.length === 3)) {
     if (!scope.happy_path) return { error: `nothing says what "${scopeId}" is for yet` };
-    return { ref: { kind: "happy-path", id: raw, scope: scopeId! }, unsettled: false };
+    if (parts.length === 2) return { ref: { kind: "happy-path", id: raw, scope: scopeId! }, unsettled: false };
+    /**
+     * ⛔ ONE PART OF A HAPPY PATH, SO "THE BOUNDARY IS WRONG" HAS SOMEWHERE TO GO.
+     *
+     * `#happy-path` could be ACCEPTED and never REVISED. The interview asks *"is that what this is
+     * for?"*, and when Peter answered *"The boundary is wrong"* there was no address for the
+     * correction — every route through the door records a decision about a SLOT, and a happy path
+     * is not one. The only way to change a word of it was `document`, a whole-file rewrite, which
+     * is the hand-authoring this project exists to refuse.
+     *
+     * ⛔ `through` IS DELIBERATELY NOT ONE OF THESE. It is a route of view ids, not a sentence, and
+     * Peter on being shown it inside the purpose: *"screens really doesn't belong in the
+     * 'purpose'."* A ruling that replaced it with prose would turn a resolvable route into text.
+     */
+    const part = slotName as string;
+    if (!(HAPPY_PARTS as readonly string[]).includes(part))
+      return {
+        error:
+          part === "through"
+            ? `"through" is the screens somebody passes through, which is a route rather than a sentence — it is not ruled on here`
+            : `"${part}" is not part of a happy path — one of ${HAPPY_PARTS.join(", ")}`,
+      };
+    return { ref: { kind: "happy-path", id: raw, scope: scopeId!, part: part as HappyPart }, unsettled: false };
   }
   const ex = scope.exchanges.find((e) => e.id === exId);
   if (!ex) return { error: `no exchange "${exId}" in ${scopeId}` };

@@ -30,7 +30,7 @@ import YAML from "yaml";
 import { Scope, Rule, type SlotName , saysText, statements, type Authorship, type NoteVia } from "./schema.js";
 import { isHuman } from "./acts.js";
 import { loadCorpus, resolveRules, selectsFor, lineageOf, type Corpus } from "./load.js";
-import { resolveRef } from "./ref.js";
+import { resolveRef, HAPPY_PARTS } from "./ref.js";
 import { removals, refuseBecause } from "./write.js";
 
 import { confidenceOf, type Strength } from "./confidence.js";
@@ -617,6 +617,53 @@ export function settle(
   // three of them got the outcome grain wrong.
   const r = resolveRef(corpus, ref);
   if ("error" in r) return { ok: false, why: r.error };
+  /**
+   * ⛔ ONE PART OF A HAPPY PATH — THE ACT THAT DID NOT EXIST.
+   *
+   * `#happy-path` could be accepted and never revised. The interview asks *"is that what this is
+   * for?"*; Peter answered *"The boundary is wrong"*, and there was nowhere for the correction to
+   * go. Every other route records a decision about a SLOT, and a happy path is not one — so the
+   * only way to change a word of it was `document`, a whole-file rewrite, which is exactly the
+   * hand-authoring this project refuses.
+   *
+   * ⛔ IT TAKES A SENTENCE AND NOTHING ELSE. There is no standing on a happy path's parts, so none
+   * of the slot machinery applies: no `about`, no `of`, no displacement, no clause-loss guard. What
+   * makes it safe is the same thing that makes `accept` safe — agreement is recorded separately,
+   * and changing the words puts the whole happy path back to unagreed, which `coveredBy` already
+   * derives from the claim hash.
+   */
+  if (r.ref.kind === "happy-path") {
+    const part = (r.ref as { part?: string }).part;
+    if (!part)
+      return {
+        ok: false,
+        why: `${ref} is the whole happy path — rule on one part of it: ${HAPPY_PARTS.join(", ")}`,
+        detail: [
+          "⛔ what a feature is for is agreed as one thing and corrected a sentence at a time, so a reader who disagrees with one part has something to press",
+        ],
+      } as { ok: false; why: string };
+    const scopeId = (r.ref as { scope: string }).scope;
+    const entry = corpus.scopes.find((x) => x.scope.id === scopeId);
+    if (!entry) return { ok: false, why: `no scope "${scopeId}"` };
+    const raw = parseFrontmatter(fs.readFileSync(entry.file, "utf-8"));
+    const data = raw.data as { happy_path?: Record<string, unknown> };
+    if (!data.happy_path) return { ok: false, why: `nothing says what "${scopeId}" is for yet` };
+    const was = String(data.happy_path[part] ?? "").trim();
+    const now = says.trim();
+    if (!now) return { ok: false, why: `a happy path's ${part} cannot be emptied by ruling on it` };
+    if (was === now) return { ok: false, why: `${ref} already says that` };
+    data.happy_path[part] = now;
+    const check = Scope.safeParse(data);
+    if (!check.success)
+      return { ok: false, why: check.error.issues.map((i) => `${i.path.join(".")} — ${i.message}`).join("; ") };
+    /** ⛔ The same idiom as every other write here — and the verdict is `perform`'s to record. */
+    fs.writeFileSync(
+      entry.file,
+      `---\n${YAML.stringify(data, { lineWidth: 96, blockQuote: "literal" })}---\n\n${raw.content.trim()}\n`,
+      "utf-8"
+    );
+    return { ok: true, file: entry.file, displaced: [], replaced: was || undefined };
+  }
   /**
    * ⛔ Answering an ORG-WIDE question. One ruling here settles every exchange the selector
    * reaches, including ones nobody has written yet, which is the whole argument for the rule

@@ -1,0 +1,18 @@
+id: "0215"
+said: yes, we should be fixing the framework, that's the point
+at: 2026-10-28
+kind: concept
+reaches:
+  model: HAPPY_PARTS
+  derive: happyPart
+  generate: ""
+  surface: ""
+  check: ""
+  instruct: ""
+  pin: one part of a happy path can be corrected
+waived:
+  surface: "The door needed no change: `rule` already takes a `ref`, and the new grain is resolved by the resolver every intent shares. ⛔ That is the point rather than an accident — a new address reaching every surface without one of them being edited is what having one resolver buys, and a surface change here would have meant the grammar was not really shared."
+  generate: Nothing generates a happy path's wording — an author writes it and a person corrects it. This adds an address and an act, both of which live in the model and at the door.
+  check: "`v2 check` already refuses a scope whose happy path is missing or thin. What was missing was not a check but an ACT: the question could be asked and the answer had nowhere to go."
+  instruct: "⛔ ARGUABLE, AND RECORDED AS SUCH. No role is told to correct a happy path, because none should be: it is a person's words about what their product is for, and an author writing one is the scoper's existing job. The brief that would need this is the one for whoever RELAYS a person's correction — and that is this session, which has no file."
+closed: 2026-10-28
