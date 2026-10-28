@@ -26,6 +26,7 @@ import { coveredBy, stampFor, staleReason } from "./stamp.js";
 import {
   questionsFor,
   whereQuestionStands,
+  blankSlots,
   descendants,
   type Question,
   settle,
@@ -225,14 +226,26 @@ export interface ReadPayload { scope: string; buildable: boolean; blockedBy?: st
 export function inTheWayOf(
   corpus: Corpus,
   ref: string
-): { scope: string; exchange?: string; open: Question[]; parked: Question[] } | null {
+): { scope: string; exchange?: string; open: Question[]; parked: Question[]; blank: string[] } | null {
   const [scope, exchange] = ref.split("#");
   if (!scope || !corpus.scopes.some((s) => s.scope.id === scope)) return null;
   if (exchange && !corpus.scopes.find((s) => s.scope.id === scope)?.scope.exchanges.some((e) => e.id === exchange))
     return null;
   const scopes = exchange ? [scope] : descendants(corpus, scope);
   const qs = questionsFor(corpus, scope).filter((q) => whereQuestionStands(corpus, q, scopes, exchange) === "on it");
-  return { scope, exchange, open: qs.filter((q) => !q.parked), parked: qs.filter((q) => q.parked) };
+  /**
+   * ⛔ THE THIRD CATEGORY, AND THE ONE THE ACT COULD NOT SEE AT ALL.
+   *
+   * `questionsIn` skips a slot with no fill, so a slot nobody has thought about produces no
+   * question — and this refusal read only questions. Driven: blank `again` on
+   * `money#see-a-balance` gives the grid a `·`, `readinessOf` a hole, `questionsFor` nothing, and
+   * the act recorded *"I could build from this"* over it.
+   *
+   * It is not an open question and it is not parked. Nobody has been asked. Which makes it the
+   * strongest case for this refusal's own sentence rather than an exception to it.
+   */
+  const blank = scopes.flatMap((s) => blankSlots(corpus, s, exchange));
+  return { scope, exchange, open: qs.filter((q) => !q.parked), parked: qs.filter((q) => q.parked), blank };
 }
 export interface WaivePayload { slot: string; because: string }
 export interface DeferPayload { slot: string; because: string; until: string }
@@ -1351,6 +1364,32 @@ function doRead(dir: string, o: ReadPayload, consent: Consent): Outcome {
           { act: "decide", ref: o.scope, why: "work through them, with what you need to answer each" },
           ...open.map((q): Instead => ({ act: "defer", ref: q.ref, why: "park it, with what brings it back" })),
           { act: "read", ref: o.scope, why: "say you could NOT build from it, and what stopped you" },
+        ]
+      );
+    /**
+     * ⛔ AND A SLOT NOBODY HAS THOUGHT ABOUT, WHICH THIS REFUSAL COULD NOT SEE.
+     *
+     * Last, because the other two are questions somebody is holding and this one has not been
+     * asked — so it routes differently: there is nobody to chase and nothing to park. Somebody has
+     * to decide it, or declare it the builder's on purpose.
+     *
+     * ⛔ It belongs here rather than only in the gate. `readinessOf` already counted it as a hole,
+     * so the corpus could hold a person's *"I could build from this"* beside its own grid saying
+     * nobody had thought about one of the slots — and the act's stated reason is that those two
+     * sentences cannot both be true. Driven on `money#see-a-balance` with `again` removed: one
+     * blank, zero questions, one hole, stamp accepted.
+     */
+    if (way.blank.length)
+      return no(
+        `${o.scope} has ${way.blank.length} slot${way.blank.length === 1 ? "" : "s"} nobody has thought about`,
+        [
+          ...way.blank,
+          "⛔ not an open question — nobody has been asked, so there is nobody to chase and nothing to park",
+        ],
+        [
+          { act: "rule", ref: way.blank[0]!, why: "decide it" },
+          { act: "waive", ref: way.blank[0]!, why: "declare it the builder's on purpose, with why" },
+          { act: "read", ref: o.scope, why: "say you could NOT build from it, and name these as what stopped you" },
         ]
       );
   }
