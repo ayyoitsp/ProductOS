@@ -46,7 +46,7 @@ import { readConfig } from "../core/config.js";
 import path from "node:path";
 import { projectRootOf } from "../core/paths.js";
 import { wouldReach } from "./steers.js";
-import { demonstrations, derivedCapabilities } from "./demonstrate.js";
+import { demonstrations, derivedCapabilities, unservedIn } from "./demonstrate.js";
 import { carriedAreas } from "./subsystems.js";
 
 export type Severity = "refuse" | "note" | "shape";
@@ -4189,14 +4189,45 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
      * layer has only just been started would otherwise refuse on every behaviour at once — and a
      * refusal that fires everywhere teaches people to run with it switched off.
      */
+    /**
+     * ⛔ THE GUARD STAYS, AND IT WAS NEARLY REMOVED. `v2-capabilities` pins it with its reason —
+     * *"A corpus that has not started this must not be told it is incomplete at something it has
+     * not begun"* — and that is a decision, not an oversight.
+     *
+     * Peter: *"does buildability also ensure capabilities are mapped from a feature?"* Driven on the
+     * shipped seed, the answer looked like nothing checked it: zero subsystems, five behaviours,
+     * zero findings. It was this guard. Removing it reads as the obvious repair and is wrong about
+     * which surface owes the answer:
+     *
+     *   `check`         audits a WHOLE corpus, unasked, and its queue-length ratchet exists to stop
+     *                   it nagging. A product that has not begun decomposing does not need five
+     *                   notes about it.
+     *   `readinessOf`   is ASKED about one piece of work by somebody about to build it, and there
+     *                   silence at zero is the defect: "no part serves this" and "nobody has
+     *                   decomposed anything" read identically to a consumer, and the second is the
+     *                   one it most needs to know.
+     *
+     * So the unguarded report lives in `readinessOf.unserved`, and this one stays quiet until a
+     * corpus has a tree to be incomplete against.
+     *
+     * ⛔ WHAT DID CHANGE IS THE GRAIN, through `unservedIn` — the same predicate `readinessOf`
+     * reports, so the two cannot disagree. Exchange grain called a slot answered when one capability
+     * named it, however many things that slot says; a slot saying nine things with one part against
+     * it is an eighth mapped and read as done.
+     */
     if (corpus.subsystems.length) {
-      const served = [
-        ...new Set(corpus.subsystems.flatMap((c) => c.subsystem.offers.flatMap((o) => o.serves))),
-      ];
-      const every = corpus.scopes.flatMap(({ scope }) => scope.exchanges.map((ex) => `${scope.id}#${ex.id}`));
-      const unanswered = every.filter((ref) => !served.some((s) => s === ref || s.startsWith(`${ref}#`)));
+      const unanswered = unservedIn(
+        corpus,
+        corpus.scopes.map(({ scope }) => scope.id)
+      );
+      const every = unservedIn(
+        corpus,
+        corpus.scopes.map(({ scope }) => scope.id),
+        undefined,
+        true
+      );
       /**
-       * ⛔ ONE FINDING WITH A COUNT, not one per behaviour — the same shape
+       * ⛔ ONE FINDING WITH A COUNT, not one per statement — the same shape
        * `behaviours-with-nothing-behind-them` uses, and for the same reason. A corpus that has just
        * started its capability layer has every behaviour unanswered, and 38 identical notes is a
        * report nobody reads followed by a check nobody runs.
@@ -4209,7 +4240,7 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
           what:
             unanswered.slice(0, 5).join(", ") +
             (unanswered.length > 5 ? `, +${unanswered.length - 5} more` : ""),
-          fix: "name the part of the system that answers each — a capability whose `serves` points at it. ⛔ Where the gap is real this is the architect's finding made early: a promise with no machinery behind it, before anybody starts building",
+          fix: "name the part of the system that answers each — a capability whose `serves` points at it. ⛔ Where the gap is real this is the architect's finding made early: a promise with no machinery behind it, before anybody starts building. ⛔ And where a promise genuinely needs nothing new, there is nowhere yet to say so — fg-0020, which is why this reports rather than refusing",
         });
     }
   }
