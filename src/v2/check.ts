@@ -4190,59 +4190,46 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
      * refusal that fires everywhere teaches people to run with it switched off.
      */
     /**
-     * ⛔ THE GUARD STAYS, AND IT WAS NEARLY REMOVED. `v2-capabilities` pins it with its reason —
-     * *"A corpus that has not started this must not be told it is incomplete at something it has
-     * not begun"* — and that is a decision, not an oversight.
+     * ⛔ THERE IS NO `corpus.subsystems.length` GUARD, AND THERE USED TO BE.
      *
-     * Peter: *"does buildability also ensure capabilities are mapped from a feature?"* Driven on the
-     * shipped seed, the answer looked like nothing checked it: zero subsystems, five behaviours,
-     * zero findings. It was this guard. Removing it reads as the obvious repair and is wrong about
-     * which surface owes the answer:
+     * Peter: *"uh, why do we have a corpus.subsystems.length check? who fucking cares? that doesnt
+     * change the fact that the feature isn't bcked by a capability"*.
      *
-     *   `check`         audits a WHOLE corpus, unasked, and its queue-length ratchet exists to stop
-     *                   it nagging. A product that has not begun decomposing does not need five
-     *                   notes about it.
-     *   `readinessOf`   is ASKED about one piece of work by somebody about to build it, and there
-     *                   silence at zero is the defect: "no part serves this" and "nobody has
-     *                   decomposed anything" read identically to a consumer, and the second is the
-     *                   one it most needs to know.
+     * It was written as kindness — *"a corpus that has not started this must not be told it is
+     * incomplete at something it has not begun"* — and pinned by a test saying so. What it actually
+     * did was suppress a true statement at exactly the count where it matters most: a product with
+     * no capability layer has EVERY promise unbacked, and the guard made that read identically to
+     * every promise being backed. Whether anybody has begun is a fact about the author's progress;
+     * whether a promise has machinery behind it is a fact about the product, and this reports the
+     * second.
      *
-     * So the unguarded report lives in `readinessOf.unserved`, and this one stays quiet until a
-     * corpus has a tree to be incomplete against.
+     * ⛔ AND I KEPT THE GUARD ONCE ON THE STRENGTH OF THE TEST THAT PINNED IT. A pinned decision is
+     * worth reading before overturning and is not worth deferring to against the person whose
+     * reasoning it claimed to encode — the comment said what somebody believed, not what is true.
      *
-     * ⛔ WHAT DID CHANGE IS THE GRAIN, through `unservedIn` — the same predicate `readinessOf`
-     * reports, so the two cannot disagree. Exchange grain called a slot answered when one capability
-     * named it, however many things that slot says; a slot saying nine things with one part against
-     * it is an eighth mapped and read as done.
+     * ⛔ ONE FINDING WITH A COUNT, not one per statement — the same shape
+     * `behaviours-with-nothing-behind-them` uses, and the mitigation the guard was redundant with.
+     * A corpus that has not begun has every behaviour unanswered, and 38 identical notes is a report
+     * nobody reads followed by a check nobody runs. The count says "all of them" in one line.
+     *
+     * ⛔ STATEMENT-GRAINED, through `unservedIn` — the same predicate `readinessOf` reports, so the
+     * two cannot disagree. Exchange grain called a slot answered when one capability named it,
+     * however many things that slot says; a slot saying nine things with one part against it is an
+     * eighth mapped and read as done.
      */
-    if (corpus.subsystems.length) {
-      const unanswered = unservedIn(
-        corpus,
-        corpus.scopes.map(({ scope }) => scope.id)
-      );
-      const every = unservedIn(
-        corpus,
-        corpus.scopes.map(({ scope }) => scope.id),
-        undefined,
-        true
-      );
-      /**
-       * ⛔ ONE FINDING WITH A COUNT, not one per statement — the same shape
-       * `behaviours-with-nothing-behind-them` uses, and for the same reason. A corpus that has just
-       * started its capability layer has every behaviour unanswered, and 38 identical notes is a
-       * report nobody reads followed by a check nobody runs.
-       */
-      if (unanswered.length)
-        add({
-          severity: "note",
-          kind: "behaviours-no-subsystem-answers",
-          where: `${unanswered.length} of ${every.length}`,
-          what:
-            unanswered.slice(0, 5).join(", ") +
-            (unanswered.length > 5 ? `, +${unanswered.length - 5} more` : ""),
-          fix: "name the part of the system that answers each — a capability whose `serves` points at it. ⛔ Where the gap is real this is the architect's finding made early: a promise with no machinery behind it, before anybody starts building. ⛔ And where a promise genuinely needs nothing new, there is nowhere yet to say so — fg-0020, which is why this reports rather than refusing",
-        });
-    }
+    const ids = corpus.scopes.map(({ scope }) => scope.id);
+    const unanswered = unservedIn(corpus, ids);
+    const every = unservedIn(corpus, ids, undefined, true);
+    if (unanswered.length)
+      add({
+        severity: "note",
+        kind: "behaviours-no-subsystem-answers",
+        where: `${unanswered.length} of ${every.length}`,
+        what:
+          unanswered.slice(0, 5).join(", ") +
+          (unanswered.length > 5 ? `, +${unanswered.length - 5} more` : ""),
+        fix: "name the part of the system that answers each — a capability whose `serves` points at it. ⛔ Where the gap is real this is the architect's finding made early: a promise with no machinery behind it, before anybody starts building. ⛔ And where a promise genuinely needs nothing new, there is nowhere yet to say so — fg-0020, which is why this reports rather than refusing",
+      });
   }
 
   /**
