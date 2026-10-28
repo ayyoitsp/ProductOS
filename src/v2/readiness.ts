@@ -39,6 +39,7 @@ import {
   questionsFor,
   unbuildableReads,
   buildableReads,
+  readThroughsFor,
   whereQuestionStands,
   blankSlots,
   type Question,
@@ -195,6 +196,15 @@ export interface Readiness {
      */
     stopped: ReadThrough[];
     /**
+     * Yeses that no longer count: the words moved, or nothing recorded which words they were.
+     *
+     * ⛔ THE LAST THING IN THIS GATE THAT COULD BE TRUE FOREVER. Both derived layers carry
+     * `derived.from`; the human act carried nothing, so a person could read a feature, say they
+     * could build it, and have that stand after every sentence in it was rewritten — and a stale
+     * stamp looks exactly like a current one, which is why nobody found it by reading.
+     */
+    spent: ReadThrough[];
+    /**
      * ⛔ NOBODY HAS READ THIS, WHICH IS NOT THE SAME AS IT PASSING — and the distinction is the
      * whole reason this is a field rather than a filter.
      *
@@ -333,6 +343,25 @@ export function readinessOf(corpus: Corpus, ref: string): Readiness | { error: s
   const at = exchange ? `${scope}#${exchange}` : scope;
   const reads = buildableReads(corpus, at);
   const stopped = unbuildableReads(corpus, at);
+  /**
+   * ⛔ A YES THAT NO LONGER COUNTS IS NOT THE SAME AS NO YES, and collapsing them would hand
+   * somebody the wrong next step. "Nobody has read this" sends you to get it read; "peter read it
+   * and three sentences have moved since" sends you to tell peter what changed — which is the
+   * difference between a first review and a re-confirmation, and the reason `covered_text` exists.
+   */
+  const spent = readThroughsFor(corpus, at)
+    .filter((r) => r.buildable === true && (!r.of || r.stale))
+    /**
+     * ⛔ UNLESS SOMEBODY HAS SINCE READ IT AGAINST THE WORDS AS THEY NOW READ. The log is
+     * append-only, so every expired yes stays in it forever — reporting them all would mean a scope
+     * read four times carries three complaints about readings that have been superseded, and the
+     * verdict would get noisier every time somebody did the right thing.
+     *
+     * ⛔ NOT THE SAME AS A RECORDED NO, WHICH IS NEVER SUPERSEDED BY A LATER YES. A no named
+     * something that stopped a person; only another reading retracts it. A spent yes is not a
+     * finding at all — it is an absence of evidence, and fresh evidence fills it.
+     */
+    .filter((r) => !reads.some((current) => current.scope === r.scope));
   const blockers = stopped.flatMap((r) => r.blockedBy);
 
   const holeRefs = new Set<string>([...owed.map((q) => q.ref), ...blanks, ...blockers]);
@@ -439,12 +468,21 @@ export function readinessOf(corpus: Corpus, ref: string): Readiness | { error: s
     latest: reads[0] ?? null,
     stopped,
     /**
+     * Readings that said yes against words that have since moved, or against nothing recorded.
+     *
+     * ⛔ REPORTED SEPARATELY FROM `unread` BECAUSE IT ROUTES SOMEWHERE ELSE — see `spent`.
+     */
+    spent,
+    /**
      * ⛔ NEITHER ANSWER WAS GIVEN — not "there is no yes". A reading that said no makes `stopped`
      * non-empty and leaves `reads` empty, so a field meaning "no recorded yes" would be true
      * alongside it and `verdict` would print both *"X could not build from it"* and *"nobody has
      * read this"* about the same scope. Two sentences, contradicting, from one verdict.
+     *
+     * ⛔ A SPENT YES COUNTS AS HAVING BEEN READ, for the same reason: somebody did read it, and
+     * telling them nobody had would be false and would send them to the wrong act.
      */
-    unread: reads.length === 0 && stopped.length === 0,
+    unread: reads.length === 0 && stopped.length === 0 && spent.length === 0,
   };
   const ready =
     holes.length === 0 &&
@@ -509,7 +547,7 @@ function verdict(x: {
   unbuildable: TestRequirement[];
   untested: string[];
   openElsewhere: Nearby[];
-  read: { latest: ReadThrough | null; stopped: ReadThrough[]; unread: boolean };
+  read: { latest: ReadThrough | null; stopped: ReadThrough[]; spent: ReadThrough[]; unread: boolean };
   unserved: string[];
 }): string {
   const tests = `${n(x.requirements.length, "testing requirement")} to implement`;
@@ -548,6 +586,16 @@ function verdict(x: {
    * ⛔ AND THE OTHER DIRECTION, WHICH IS THE ONE THAT USED TO READ AS A PASS. An unread scope has
    * no failing state in the four counts — they are all empty on a corpus nobody has opened.
    */
+  /**
+   * ⛔ ITS OWN SENTENCE, NAMING WHO AND WHAT TO TELL THEM. "Get it read" is the wrong instruction
+   * for a scope somebody has already read — what is owed is showing them what moved.
+   */
+  for (const r of x.read.spent)
+    why.push(
+      r.of
+        ? `${r.by} read ${r.scope} end to end on ${r.at} and could build from it, and the words have moved since — ⛔ not a finding against it: show them what changed rather than asking again from scratch`
+        : `${r.by} read ${r.scope} end to end on ${r.at} and could build from it, and nothing recorded which words they read — so it cannot be said to be about these ones`
+    );
   if (x.read.unread)
     why.push(
       "nobody has read this end to end from a builder's seat — ⛔ not a finding against it, and not " +

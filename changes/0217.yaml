@@ -1,0 +1,14 @@
+id: "0217"
+said: let's fix read:true indefinitely for sure
+at: 2026-10-28
+kind: concept
+reaches:
+  model: covers_read
+  derive: readHashFor
+  surface: dspent
+  check: read-through-older-than-what-it-read
+  instruct: a read-through expires
+  pin: a yes stops counting the moment a sentence it covered is reworded
+waived:
+  generate: 'No generator writes or reads a read-through, and one that did would be the defect rather than the layer being reached: this is the one act in the model that only a person can perform, which is the whole of "the one signal nothing can compute". Software stamping it would be exactly what `via: agent` exists to keep distinguishable from consent. Verified by looking rather than assumed: `draw.ts`, `draw-write.ts`, `propose.ts`, `routes.ts`, `derive-states.ts` and `cli/commands/v2.ts` are the generate files and neither `covers_read` nor `readHashFor` appears in any of them. What a generator does produce from a read-through is the packet banner, which `compilePacket` already carried and which is the surface layer.'
+closed: 2026-10-28

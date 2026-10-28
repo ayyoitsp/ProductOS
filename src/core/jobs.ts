@@ -2385,6 +2385,19 @@ export const SHIMS: Shim[] = [
         "then a read-through recording whether somebody could build from it — `buildable: false` with those refs " +
         "as `blockedBy`, or `true` once they are answered. ⛔ The reviewer writes nothing and `ready` now requires " +
         "this, so a finding that stops here stops the gate too",
+      /**
+       * ⛔ A SESSION THAT DOES NOT KNOW THIS READS THE GATE RE-CLOSING AS THE TOOL LOSING A STAMP.
+       *
+       * Peter: *"let's fix read:true indefinitely for sure"*. A read-through now records the hash of
+       * every sentence it covered, so a reword expires it — the same way a criterion goes stale. The
+       * failure this prevents is a yes that stood after every sentence under it had been rewritten;
+       * the failure it introduces, if nobody is told, is somebody re-running `buildability` from
+       * scratch on a feature whose reader is one diff away from re-confirming.
+       */
+      "⛔ knowing a read-through expires: it is stamped against the words it covered, so rewording any " +
+        "of them makes the scope unready again and `check` says so as `read-through-older-than-what-it-read`. " +
+        "⛔ What is owed then is showing the reader WHAT MOVED, not another review — re-confirming is one " +
+        "glance at a diff, which is the whole reason the words read are recorded",
     ],
   },
   /**

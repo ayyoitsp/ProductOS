@@ -3451,6 +3451,27 @@ export const Verdict = z
      */
     covered_text: z.array(z.string()).optional(),
     covers_criteria: z.string().optional(),
+    /**
+     * What a read-through covered — the hash of every sentence in it, when it was read.
+     *
+     * ⛔ THE FIELD THAT STOPS `buildable: true` BEING TRUE FOREVER. A read-through is the one signal
+     * nothing can compute and it was the only thing in the gate recording no provenance: somebody
+     * read a feature, said they could build it, and that stood after every sentence in it was
+     * rewritten. Both derived layers already carry `derived.from` against exactly this; the human
+     * act did not, which made it the last laundering route in the model and the hardest to notice,
+     * because a stale stamp looks identical to a current one.
+     *
+     * ⛔ NOT `covers_slots`, WHICH IS ACCEPTANCE'S. That answers "has what this person agreed to
+     * moved", at one target. This answers "have the words somebody read end to end moved", over a
+     * whole subtree, and is computed by `readHashFor` rather than `coveredBy`. One field for two
+     * questions is how `covers_slots` and `covers_criteria` came to be two fields.
+     *
+     * Optional, because every read-through written before this exists without it, and a corpus must
+     * keep loading. ⛔ Absent does NOT satisfy the gate — a yes nothing can tie to particular words
+     * is not evidence about these ones — and `check` notes it rather than refusing, the same way an
+     * undated criterion is handled.
+     */
+    covers_read: z.string().optional(),
     // rule
     settles: z
       .string()

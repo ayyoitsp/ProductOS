@@ -744,7 +744,27 @@ function renderRecord(ds: Decision[]): string {
           ${d.alsoConsidered ? `<p class="dwhy"><span class="k">also considered</span> ${line(d.alsoConsidered)}</p>` : ""}
           ${d.replaced ? `<p class="dwhy"><span class="k">it used to say</span> ${line(d.replaced)}</p>` : ""}
           ${d.until ? `<p class="dwhy"><span class="k">back when</span> ${line(d.until)}</p>` : ""}
-          ${d.buildable === undefined ? "" : `<p class="dwhy">${d.buildable ? "could build from it" : "could NOT build from it"}${d.blockedBy?.length ? ` — stopped by ${d.blockedBy.map((b) => `<code>${esc(b)}</code>`).join(" ")}` : ""}</p>`}
+          ${
+            /**
+             * ⛔ A SPENT YES SAYS SO, OR THE PAGE RENDERS THE LAUNDERING `covers_read` CLOSED.
+             *
+             * A reading whose every sentence has since been rewritten used to show as "could build
+             * from it", byte-identical to one taken this morning — on the one surface Peter reviews
+             * on. The two spent states are named apart because they route apart: stale means show
+             * them what moved, unrecorded means nothing says what they read.
+             */
+            d.buildable === undefined
+              ? ""
+              : `<p class="dwhy">${
+                  d.buildable ? "could build from it" : "could NOT build from it"
+                }${d.blockedBy?.length ? ` — stopped by ${d.blockedBy.map((b) => `<code>${esc(b)}</code>`).join(" ")}` : ""}${
+                  d.spent === "stale"
+                    ? ' <span class="dspent">⛔ and the words have moved since, so it no longer counts towards readiness</span>'
+                    : d.spent === "unrecorded"
+                      ? ' <span class="dspent">⛔ and nothing records which words they read, so it cannot be said to be about these ones</span>'
+                      : ""
+                }</p>`
+          }
           ${d.note ? `<p class="dwhy">${line(d.note)}</p>` : ""}
         </li>`
         )
@@ -2076,9 +2096,23 @@ function featureHead(corpus: Corpus, scopeId: string, title: string, ctx: Ctx): 
     const tail = `${asks}${part ? ", in part" : ""}`;
     return ex ? `${plain(ex.title)}${tail ? ` — ${tail}` : ""}` : tail || "something nobody has written down";
   };
+  /**
+   * ⛔ NO HOLES AND STILL NOT READY IS A REAL STATE NOW, AND IT USED TO RENDER AS A COUNT OF ZERO.
+   *
+   * `ready` needs a reading that still stands against the words as they read. So a scope can have
+   * nothing undecided and not be ready — because nobody has read it, or because somebody did and it
+   * has been reworded since. The old branch printed "0 things here are undecided", which is true
+   * and tells a reader nothing about what to do.
+   */
   const says = verdict
     ? verdict.ready
-      ? `<p class="verdict ready"><b>Ready to build: yes.</b> Nothing in it is waiting on a decision.</p>`
+      ? `<p class="verdict ready"><b>Ready to build: yes.</b> Nothing in it is waiting on a decision, and somebody has read it end to end against these words.</p>`
+      : !verdict.holes.length
+        ? `<p class="verdict blocked"><b>Ready to build: no.</b> ${
+            verdict.read
+              ? "Somebody read this end to end and could build from it, and the words have moved since — ⛔ show them what changed rather than asking again from scratch."
+              : "Nothing in it is waiting on a decision, and nobody has read it end to end from a builder's seat — ⛔ which is not a finding against it, and not a pass either."
+          }</p>`
       : `<p class="verdict blocked"><b>Ready to build: no.</b> ${verdict.holes.length} thing${
           verdict.holes.length === 1 ? "" : "s"
         } here ${verdict.holes.length === 1 ? "is" : "are"} undecided, and anybody who fills ${
@@ -9870,6 +9904,8 @@ export const STYLE = `<style>
   .dsays { margin: .3rem 0; }
   .dwhy { margin: .2rem 0; color: var(--dim); font-size: .92rem; }
   .dwhy .k { display: inline; margin-right: .3rem; }
+  /** ⛔ A spent reading reads as a warning, not as dim prose — it is the opposite of what it sits beside. */
+  .dspent { display: inline; color: var(--warn, #b4541a); font-weight: 600; }
   a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
   .unlinked { color: var(--ink); border-bottom: 1px dotted var(--line); }
   nav.scopes { margin: 1.25rem 0 0; }

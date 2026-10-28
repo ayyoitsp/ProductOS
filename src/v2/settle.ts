@@ -35,6 +35,8 @@ import { gridFor } from "./grid.js";
 import { removals, refuseBecause } from "./write.js";
 
 import { confidenceOf, type Strength } from "./confidence.js";
+/** ⛔ The hashing home — `readHash` is the primitive, the grain is resolved here, once. */
+import { readHash } from "./stamp.js";
 
 export interface Question {
   ref: string;
@@ -1315,6 +1317,17 @@ export interface ReadThrough {
   by: string;
   at: string;
   /**
+   * The hash of everything they read, when they read it.
+   *
+   * ⛔ ABSENT MEANS NOTHING SAYS WHAT THEY READ, which is the state every read-through written
+   * before this was in — and it is treated the way an undated criterion is: it does not satisfy the
+   * gate, and `check` notes it rather than refusing. A refusal would fire on every corpus carrying
+   * an older reading at once, and this project has twice learned what happens to one of those.
+   */
+  of?: string;
+  /** ⛔ Whether the words have moved since. A stale yes is not a yes — see `buildableReads`. */
+  stale: boolean;
+  /**
    * Could they build from it, as it stood — ⛔ THREE STATES, AND `undefined` IS NOT A NO.
    *
    * The field is optional on `Verdict`, so a reading relayed without it, or written before it
@@ -1329,6 +1342,27 @@ export interface ReadThrough {
   note?: string;
 }
 
+/**
+ * The hash of what a read-through covered, for a ref at either grain — ⛔ ONE HOME, TWO CALLERS.
+ *
+ * `doRead` stamps it and `buildableReads` compares it. If those two resolved the grain differently —
+ * a feature read covering its descendants, say, against a hash taken over one scope — every read
+ * would be stale the moment it was written, which is exactly the shape the decomposer hit on
+ * `servesHash` and said so about: *"any offering with exactly one `serves` entry reads stale
+ * immediately."* So neither caller resolves anything; both ask this.
+ */
+export function readHashFor(corpus: Corpus, ref: string): string {
+  const [scopeId, exchange] = ref.split("#");
+  const scopes = exchange ? [scopeId!] : descendants(corpus, scopeId!);
+  const refs: string[] = [];
+  for (const id of scopes) {
+    const scope = corpus.scopes.find((s) => s.scope.id === id)?.scope;
+    if (!scope) continue;
+    for (const ex of scope.exchanges) if (!exchange || ex.id === exchange) refs.push(`${id}#${ex.id}`);
+  }
+  return readHash(corpus, refs);
+}
+
 /** The scope ids from one scope up to the root, itself included. */
 function ancestryOf(corpus: Corpus, scopeId: string): Set<string> {
   const out = new Set<string>([scopeId]);
@@ -1341,6 +1375,24 @@ function ancestryOf(corpus: Corpus, scopeId: string): Set<string> {
   return out;
 }
 
+/**
+ * Every read-through standing over one ref, newest first, at any buildability.
+ *
+ * ⛔ The only caller that wants ALL of them is `readinessOf`, which has to tell a spent yes from no
+ * yes at all. `buildableReads` and `unbuildableReads` are the two filtered answers.
+ */
+export function readThroughsFor(corpus: Corpus, ref: string): ReadThrough[] {
+  const [scopeId, exchange] = ref.split("#");
+  const ancestry = ancestryOf(corpus, scopeId!);
+  const under = new Set(descendants(corpus, scopeId!));
+  return readsIn(corpus).filter((r) => {
+    const [at, atExchange] = r.scope.split("#");
+    if (exchange && atExchange && !(at === scopeId && atExchange === exchange)) return false;
+    if (atExchange && !exchange) return under.has(at!);
+    return ancestry.has(at!) || under.has(at!);
+  });
+}
+
 const readsIn = (corpus: Corpus): ReadThrough[] =>
   corpus.verdicts
     .filter((v) => v.kind === "read" && v.scope)
@@ -1348,6 +1400,14 @@ const readsIn = (corpus: Corpus): ReadThrough[] =>
       scope: v.scope!,
       by: v.by,
       at: v.at,
+      of: v.covers_read,
+      /**
+       * ⛔ A READING WITH NO HASH IS NOT STALE — it is unprovenanced, which is a different thing and
+       * routes differently. Calling it stale would tell somebody their words had moved when nothing
+       * says they had; what is true is that nothing records what was read. `buildableReads` declines
+       * it either way, and `check` says which it is.
+       */
+      stale: Boolean(v.covers_read) && v.covers_read !== readHashFor(corpus, v.scope!),
       buildable: v.buildable,
       blockedBy: v.blocked_by ?? [],
       note: v.note,
@@ -1395,6 +1455,13 @@ export function buildableReads(corpus: Corpus, ref: string): ReadThrough[] {
   const ancestry = ancestryOf(corpus, scopeId!);
   return readsIn(corpus).filter((r) => {
     if (r.buildable !== true) return false;
+    /**
+     * ⛔ AND IT HAS TO BE CURRENT, which was the last laundering route left in the gate. A person
+     * read a feature, said they could build it, and that stood after every sentence in it was
+     * rewritten — the one thing in the model that could be true forever. `of` absent fails this
+     * too: a yes nothing can tie to any particular words is not evidence about these ones.
+     */
+    if (!r.of || r.stale) return false;
     const [at, atExchange] = r.scope.split("#");
     if (atExchange) return Boolean(exchange) && at === scopeId && atExchange === exchange;
     return ancestry.has(at!);
