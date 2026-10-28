@@ -48,6 +48,14 @@ const SLOTS = Number(process.env.PRODUCTOS_BROWSER_SLOTS ?? 3);
 const home = path.join(os.tmpdir(), "productos-browser-slots");
 
 /**
+ * How long a slot may exist with no pid file before it counts as abandoned rather than mid-claim.
+ *
+ * ⛔ Longer than the gap between `mkdirSync` and `writeFileSync` can plausibly be, which on a
+ * machine at load 500 is not microseconds — that is the whole reason this exists.
+ */
+const HALF_MADE_MS = 5000;
+
+/**
  * ⛔ A SLOT WHOSE OWNER IS GONE IS FREE, OR THE FIRST KILLED SUITE DEADLOCKS EVERY LATER ONE.
  *
  * `pkill -f "make deploy"` is how a deploy gets abandoned here, and it leaves Chrome-spawning
@@ -59,7 +67,30 @@ const ownerIsGone = (slot) => {
   try {
     pid = Number(fs.readFileSync(path.join(slot, "pid"), "utf-8").trim());
   } catch {
-    /** No pid file: a half-made slot. Treat it as abandoned. */
+    /**
+     * ⛔ A SLOT WITH NO PID IS NOT ABANDONED YET — IT IS PROBABLY BEING MADE RIGHT NOW.
+     *
+     * Claiming is two steps: `mkdirSync(slot)` then `writeFileSync(slot/pid)`. Between them the
+     * directory exists and has no pid, which is indistinguishable from a crash — so a second process
+     * reclaimed it, removed the directory, and the FIRST process's write landed on nothing:
+     *
+     *     ENOENT: no such file or directory, open '…/productos-browser-slots/slot-1/pid'
+     *       at takeABrowserSlot (browser-slots.mjs:126)
+     *
+     * That failed the gate on a menu test which had nothing to do with it, and it is a race in the
+     * cap itself rather than in anything the cap was protecting.
+     *
+     * ⛔ A GRACE PERIOD, NOT A LOCK. Two steps cannot be made atomic across processes with mkdir
+     * alone, so the reclaimer waits instead: a pid-less directory younger than this is somebody
+     * mid-claim, older than this is a crash between the two writes. Generous, because the cost of
+     * waiting is one extra loop and the cost of being wrong is somebody else's ENOENT.
+     */
+    try {
+      if (Date.now() - fs.statSync(slot).mtimeMs < HALF_MADE_MS) return false;
+    } catch {
+      /** It vanished while we looked: not ours to reclaim, and no longer held either. */
+      return true;
+    }
     return true;
   }
   if (!Number.isInteger(pid) || pid <= 0) return true;
@@ -123,7 +154,17 @@ export async function takeABrowserSlot({ waitMs = 90000, now = () => Date.now() 
           continue;
         }
       }
-      fs.writeFileSync(path.join(slot, "pid"), String(process.pid));
+      /**
+       * ⛔ AND LOSING THE RACE IS NOT AN ERROR. The grace period above makes this rare rather than
+       * impossible: a reclaimer can still decide between our mkdir and our write. Throwing ENOENT
+       * out of a test's `openPage` reports a defect in whatever file happened to be running, which
+       * is precisely how this surfaced — so the claim is simply abandoned and the loop goes on.
+       */
+      try {
+        fs.writeFileSync(path.join(slot, "pid"), String(process.pid));
+      } catch {
+        continue;
+      }
       let released = false;
       const release = () => {
         if (released) return;
