@@ -95,20 +95,49 @@ test("⛔ a slot whose owner is dead is reclaimed, or one killed suite deadlocks
   release();
 });
 
-test("⛔ a half-made slot with no pid file is not a slot held forever", async () => {
+test("⛔ a half-made slot is left alone while it is fresh, and reclaimed once it is stale", async () => {
+  /**
+   * ⛔ BOTH STATES, BECAUSE THE FIRST VERSION OF THIS ONLY HAD ONE AND THE ONE IT HAD WAS WRONG.
+   *
+   * It asserted that a pid-less directory is reclaimed IMMEDIATELY. Claiming is two steps —
+   * `mkdirSync(slot)` then `writeFileSync(slot/pid)` — so for a moment every legitimate claim looks
+   * exactly like a crash. Reclaiming instantly meant a second process removed a directory the first
+   * was still filling in, and the first process's write landed on nothing:
+   *
+   *     ENOENT: no such file or directory, open '…/productos-browser-slots/slot-1/pid'
+   *       at takeABrowserSlot (browser-slots.mjs:126)
+   *       at async openPage (chrome.mjs:196)
+   *
+   * It failed the deploy gate on a menu test that had nothing to do with it — a race in the CAP
+   * reported as a defect in whatever file was unlucky.
+   *
+   * So the reclaim waits out a grace period, and this pins the pair: fresh is somebody mid-claim and
+   * must be left alone; stale is a crash between the two writes and must be taken. One without the
+   * other is satisfied by an implementation that is wrong in the opposite direction.
+   */
   fs.mkdirSync(browserSlotHome, { recursive: true });
-  const broken = path.join(browserSlotHome, "slot-0");
-  fs.rmSync(broken, { recursive: true, force: true });
-  /** Created, then the process died before it could write its pid — a real window, however small. */
-  fs.mkdirSync(broken);
+  const slot = (i) => path.join(browserSlotHome, `slot-${i}`);
+  for (let i = 0; i < browserSlots; i++) fs.rmSync(slot(i), { recursive: true, force: true });
 
-  const release = await takeABrowserSlot({ waitMs: 3000 });
+  /** FRESH: made a moment ago, no pid yet. Taking it would be taking it from its owner. */
+  fs.mkdirSync(slot(0));
+  const first = await takeABrowserSlot({ waitMs: 3000 });
+  const tookTheFreshOne = fs.existsSync(path.join(slot(0), "pid"));
+  first();
+  assert.equal(tookTheFreshOne, false, "a slot somebody was still claiming was taken out from under them");
+
+  /** STALE: the same shape, aged past the grace period — a process that died between the two writes. */
+  for (let i = 0; i < browserSlots; i++) fs.rmSync(slot(i), { recursive: true, force: true });
+  fs.mkdirSync(slot(0));
+  const old = new Date(Date.now() - 60_000);
+  fs.utimesSync(slot(0), old, old);
+  const second = await takeABrowserSlot({ waitMs: 3000 });
   assert.equal(
-    fs.readFileSync(path.join(broken, "pid"), "utf-8").trim(),
+    fs.readFileSync(path.join(slot(0), "pid"), "utf-8").trim(),
     String(process.pid),
-    "a directory with no pid in it blocked the slot"
+    "an abandoned pid-less directory blocked the slot forever"
   );
-  release();
+  second();
 });
 
 test("⛔ waiting too long proceeds rather than failing the suite", async () => {
