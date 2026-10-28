@@ -264,6 +264,92 @@ export function derivedCapabilities(corpus: Corpus): DerivedCapability[] {
 }
 
 /**
+ * The capabilities answering one feature's promises, and whether a person has validated each.
+ *
+ * ⛔ WHAT PETER ASKED FOR, AND NOT WHAT I WAS BUILDING. I proposed deriving a cross-feature
+ * criterion — complete a task, then check the balance moved. He stopped it: *"the dependency is a
+ * capability dependency, and those should be validated"*, then *"we don't need to check the balance
+ * moved, we need to ensure the capability of 'ledger' and 'increment balance' has been validated by
+ * a human, but not more than that"*.
+ *
+ * The difference is the whole design. An integration test asserts two features agree at runtime,
+ * which is a thing to BUILD and belongs to whoever builds it. What the corpus owes is narrower and
+ * is the thing nothing else can supply: the part this promise leans on is one a person has read and
+ * put their name to. *"But not more than that"* is a boundary, so this reports exactly that and
+ * derives no test from an edge.
+ *
+ * ⛔ FOLLOWED THROUGH `serves`, which is how this model already reasons about a part's dependencies.
+ * The clock serves the ledger serves the money — so a promise leaning on the ledger leans on the
+ * clock, and `a-capability-serves-only-other-machinery` already walks exactly this chain. Stopping
+ * at the first hop would validate the part somebody looked at and nothing underneath it.
+ */
+export interface AnsweringPart {
+  /** `<subsystem>#offers#<id>` */
+  ref: string;
+  subsystem: string;
+  /** The promise it was reached from — ⛔ one of them: a part may answer several. */
+  answers: string;
+  /** Whether a person has agreed to this part as it now reads. */
+  validated: boolean;
+  /** Who, where somebody has. */
+  by?: string;
+  /** ⛔ Agreed once and changed since, which is not the same as never agreed. */
+  stale: boolean;
+}
+
+export function answeringParts(corpus: Corpus, scopeIds: readonly string[]): AnsweringPart[] {
+  /** Every part, by ref, so the chain can be walked without re-finding each hop. */
+  const parts = new Map<string, { subsystem: string; serves: readonly string[] }>();
+  for (const { subsystem } of corpus.subsystems)
+    for (const o of subsystem.offers)
+      parts.set(`${subsystem.id}#offers#${o.id}`, { subsystem: subsystem.id, serves: o.serves });
+
+  /** Which parts answer a given product ref, at any grain that ref might be named at. */
+  const answering = (at: string): string[] =>
+    [...parts].filter(([, p]) => p.serves.some((t) => at === t || at.startsWith(`${t}#`) || t.startsWith(`${at}#`)))
+      .map(([ref]) => ref);
+
+  const out: AnsweringPart[] = [];
+  for (const id of scopeIds) {
+    const scope = corpus.scopes.find((s) => s.scope.id === id)?.scope;
+    if (!scope) continue;
+    for (const ex of scope.exchanges) {
+      const ref = `${id}#${ex.id}`;
+      /**
+       * ⛔ PER BEHAVIOUR, NOT ACROSS THE WALK. One `seen` for the whole scope attributed a shared
+       * part to whichever behaviour reached it first, and `readinessOf` filters on `answers` — so
+       * asking about the second behaviour reported no parts at all. Driven: a ledger serving both
+       * `see-a-balance` and `record-earning`, with an unvalidated clock beneath it, came back clean
+       * for `record-earning` while blocking `see-a-balance`. A gate that answers differently
+       * depending on which sibling was walked first is worse than one that does not exist.
+       */
+      const seen = new Set<string>();
+      /** ⛔ Breadth-first down `serves`, so the clock under the ledger is reached. */
+      const queue = answering(ref).map((p) => ({ ref: p, answers: ref }));
+      for (let i = 0; i < queue.length; i++) {
+        const { ref: at, answers } = queue[i]!;
+        if (seen.has(at)) continue;
+        seen.add(at);
+        const part = parts.get(at);
+        if (!part) continue;
+        const stamp = stampFor(corpus, at);
+        out.push({
+          ref: at,
+          subsystem: part.subsystem,
+          answers,
+          validated: stamp.state === "accepted",
+          ...(stamp.state === "never" ? {} : { by: stamp.by }),
+          stale: stamp.state !== "accepted" && stamp.state !== "never",
+        });
+        /** Parts this one leans on, named in its own `serves`. */
+        for (const t of part.serves) if (parts.has(t)) queue.push({ ref: t, answers });
+      }
+    }
+  }
+  return out;
+}
+
+/**
  * Which statements no machinery says it serves — ⛔ THE TWIN OF `undemonstrated`, AND THE ONE THAT
  * WAS NEVER WRITTEN.
  *

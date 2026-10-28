@@ -499,9 +499,22 @@ function aimOf(corpus: Corpus, target: string): Refused | { kind: string } {
     aim.ref.kind !== "statement" &&
     aim.ref.kind !== "section" &&
     /** ⛔ And a feature's framing — a reason, a risk, a measure, an instrument. */
-    aim.ref.kind !== "card"
+    aim.ref.kind !== "card" &&
+    /**
+     * ⛔ AND A CAPABILITY, WHICH IS WHAT THIS GATE WAS LAST MISSING.
+     *
+     * Peter: *"the dependency is a capability dependency, and those should be validated"*, and
+     * *"we need to ensure the capability of 'ledger' and 'increment balance' has been validated by
+     * a human, but not more than that"*.
+     *
+     * This list is the whole reason no amount of reading could validate a part: `coveredBy` is
+     * never consulted, so the refusal fires before anything looks at whether the thing is hashable.
+     * The decomposer's instructions have said *"nothing agrees to one today"* since the layer
+     * shipped — that was a description of this condition, not a principle.
+     */
+    aim.ref.kind !== "capability"
   )
-    return no(`${target} is a ${aim.ref.kind} — an acceptance covers one behaviour, one whole exchange, one rule, one section of a product-wide document, or one card of a feature's framing`, [
+    return no(`${target} is a ${aim.ref.kind} — an acceptance covers one behaviour, one whole exchange, one rule, one section of a product-wide document, one card of a feature's framing, or one capability`, [
       aim.ref.kind === "case"
         ? `you are probably after the slot: ${target.split("#").slice(0, 3).join("#")}`
         : "name a behaviour as <scope>#<exchange>#<slot>, an exchange as <scope>#<exchange>, a rule by its id, or a section as <document>#<section>",

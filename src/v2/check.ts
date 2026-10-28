@@ -58,6 +58,7 @@ import {
   unservedIn,
   staleConclusions,
   typedConclusions,
+  answeringParts,
 } from "./demonstrate.js";
 import { carriedAreas } from "./subsystems.js";
 
@@ -4271,6 +4272,54 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
      * however many things that slot says; a slot saying nine things with one part against it is an
      * eighth mapped and read as done.
      */
+    /**
+     * ---- a part a promise leans on that nobody has put their name to ----
+     *
+     * ⛔ TENET ONE, ONE LEVEL DOWN. Peter: *"the dependency is a capability dependency, and those
+     * should be validated"*, and *"we need to ensure the capability of 'ledger' and 'increment
+     * balance' has been validated by a human, but not more than that"*.
+     *
+     * A promise can be agreed at the top and answered by machinery nobody has read, which is
+     * validation in name only. Until this landed there was no route to the thing at all: `aimOf` did
+     * not list a capability among what an acceptance may cover, and `capabilityLevel` answered
+     * `unaccepted` on all three branches.
+     *
+     * ⛔ ONE SUMMARY LINE WITH A COUNT, the shape every finding on this axis uses and for the reason
+     * `behaviours-no-subsystem-answers` records: a corpus that has just written its tree has every
+     * part unvalidated, and N identical notes is a report nobody reads.
+     *
+     * ⛔ AND STALE IS ITS OWN LINE. Agreed-and-changed-since routes to the person whose agreement the
+     * part outgrew; never-agreed routes to whoever has not seen it. One finding for both would send
+     * the first to a review they already did.
+     */
+    {
+      const parts = answeringParts(
+        corpus,
+        corpus.scopes.map(({ scope }) => scope.id)
+      );
+      const once = new Map(parts.map((p) => [p.ref, p]));
+      const never = [...once.values()].filter((p) => !p.validated && !p.stale);
+      const stale = [...once.values()].filter((p) => p.stale);
+      if (never.length)
+        add({
+          severity: "note",
+          kind: "a-part-nobody-has-validated",
+          where: `${never.length} of ${once.size}`,
+          what:
+            never.slice(0, 5).map((p) => p.ref).join(", ") +
+            (never.length > 5 ? `, +${never.length - 5} more` : ""),
+          fix: "have somebody read each and agree to it — ⛔ a promise agreed at the top and answered by machinery nobody has read is validated in name only, and `readiness` holds a build until this is empty",
+        });
+      if (stale.length)
+        add({
+          severity: "note",
+          kind: "a-part-agreed-and-changed-since",
+          where: `${stale.length} of ${once.size}`,
+          what: stale.map((p) => `${p.ref} — ${p.by}`).join(", "),
+          fix: "show them what moved and have them agree again. ⛔ Not from scratch: the stamp records the words it was taken against, so re-confirming is one glance at a diff",
+        });
+    }
+
     /**
      * ---- somebody concluded nothing had to be built, for words that have since moved ----
      *

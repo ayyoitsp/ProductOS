@@ -45,7 +45,7 @@ import {
   type Question,
   type ReadThrough,
 } from "./settle.js";
-import { demonstrationOf, unservedIn, type RequirementState } from "./demonstrate.js";
+import { demonstrationOf, unservedIn, answeringParts, type AnsweringPart, type RequirementState } from "./demonstrate.js";
 import { requirementHash } from "./stamp.js";
 import { resolveRef } from "./ref.js";
 
@@ -255,6 +255,27 @@ export interface Readiness {
    */
   unserved: string[];
   /**
+   * Parts this work leans on that no person has validated — ⛔ GATING, AND NOTHING MORE THAN THIS.
+   *
+   * Peter: *"the dependency is a capability dependency, and those should be validated"*, and
+   * *"we don't need to check the balance moved, we need to ensure the capability of 'ledger' and
+   * 'increment balance' has been validated by a human, but not more than that"*.
+   *
+   * ⛔ THE SECOND SENTENCE IS A BOUNDARY AND IT IS THE DESIGN. The obvious reading of a dependency
+   * between features is a cross-feature test — complete a task, then check the balance moved. That
+   * is a thing to BUILD, and it belongs to whoever builds it. What a corpus owes is narrower and is
+   * the thing nothing else can supply: the part this promise leans on is one a person has read and
+   * put their name to. So this reports exactly that, derives no criterion from an edge, and asserts
+   * nothing about runtime.
+   *
+   * ⛔ AND IT IS A GATE RATHER THAN A REPORT, for the reason `unserved` is: tenet one is that truth
+   * is human-validated, and a promise answered by machinery nobody has read is a promise validated
+   * at the top and unexamined one level down. Reaching an empty list needs nothing invented — a
+   * person reads the part and agrees — which is exactly what `needs_nothing` had to exist for before
+   * `unserved` could gate.
+   */
+  unvalidated: AnsweringPart[];
+  /**
    * Questions that reach this work without landing on any of its facts.
    *
    * ⛔ REPORTED AND NOT GATING, which is `awaiting`'s distinction and not one invented here. An
@@ -456,6 +477,14 @@ export function readinessOf(corpus: Corpus, ref: string): Readiness | { error: s
 
   /** ⛔ `unservedIn`'s answer, at the grain asked about — never recomputed from the tree here. */
   const unserved = unservedIn(corpus, scopes, exchange);
+  /**
+   * ⛔ `answeringParts`' answer, filtered to the grain, never re-walked. A second traversal of the
+   * `serves` chain here would be a third opinion about what a promise leans on — `check` already
+   * walks it for `a-capability-serves-only-other-machinery`.
+   */
+  const unvalidated = answeringParts(corpus, scopes)
+    .filter((p) => !exchange || p.answers === `${scope}#${exchange}`)
+    .filter((p) => !p.validated);
 
   const unbuildable = requirements.filter((r) => !BUILDABLE.includes(r.level));
   const counts = countLevels([...holes, ...unagreed, ...latitude, ...settled, ...requirements]);
@@ -495,6 +524,11 @@ export function readinessOf(corpus: Corpus, ref: string): Readiness | { error: s
      * `untested` now behaves like `untested`.
      */
     unserved.length === 0 &&
+    /**
+     * ⛔ A PERSON HAS READ EVERY PART THIS LEANS ON. Tenet one at one level down: a promise agreed
+     * at the top and answered by machinery nobody looked at is validated in name only.
+     */
+    unvalidated.length === 0 &&
     /** ⛔ A RECORDED YES IS REQUIRED, not merely the absence of a no — see `buildableReads`. */
     reads.length > 0 &&
     stopped.length === 0;
@@ -504,7 +538,7 @@ export function readinessOf(corpus: Corpus, ref: string): Readiness | { error: s
     grain,
     title,
     ready,
-    because: verdict({ title, ready, holes, unagreed, latitude, settled, requirements, unbuildable, untested, openElsewhere, read, unserved }),
+    because: verdict({ title, ready, holes, unagreed, latitude, settled, requirements, unbuildable, untested, openElsewhere, read, unserved, unvalidated }),
     counts,
     holes,
     unagreed,
@@ -515,6 +549,7 @@ export function readinessOf(corpus: Corpus, ref: string): Readiness | { error: s
     read,
     untested,
     unserved,
+    unvalidated,
     openElsewhere,
   };
 }
@@ -549,6 +584,7 @@ function verdict(x: {
   openElsewhere: Nearby[];
   read: { latest: ReadThrough | null; stopped: ReadThrough[]; spent: ReadThrough[]; unread: boolean };
   unserved: string[];
+  unvalidated: AnsweringPart[];
 }): string {
   const tests = `${n(x.requirements.length, "testing requirement")} to implement`;
   const extra = x.openElsewhere.length
@@ -639,6 +675,28 @@ function verdict(x: {
         x.unserved.length === 1 ? "it" : "them"
       } (${x.unserved.join(", ")}) — a decomposer owes the parts, or has to conclude that nothing needs building and say why`
     );
+  /**
+   * ⛔ STALE AND NEVER ARE SAID APART, because they route to different conversations: one is a
+   * person who has not seen this part, the other is a person whose agreement the part has outgrown.
+   */
+  if (x.unvalidated.length) {
+    const stale = x.unvalidated.filter((p) => p.stale);
+    const never = x.unvalidated.filter((p) => !p.stale);
+    if (never.length)
+      why.push(
+        `${n(never.length, "part")} of the system this leans on ${was(never.length, "has", "have")} nobody's name on ${
+          never.length === 1 ? "it" : "them"
+        } (${never.map((p) => p.ref).join(", ")}) — ⛔ a promise agreed at the top and answered by machinery nobody has read is validated in name only`
+      );
+    if (stale.length)
+      why.push(
+        `${n(stale.length, "part")} this leans on ${was(stale.length, "was", "were")} agreed and ${was(
+          stale.length,
+          "has",
+          "have"
+        )} changed since (${stale.map((p) => `${p.ref} — ${p.by}`).join(", ")}) — show them what moved`
+      );
+  }
   if (x.untested.length)
     why.push(
       `${n(x.untested.length, "claim")} with nothing that would show ${was(x.untested.length, "it", "them")} holding (${x.untested.join(", ")}) — a demonstrator owes the tests, not a person`

@@ -219,6 +219,55 @@ export function coveredBy(corpus: Corpus, target: string): Covered | null {
   }
 
   /**
+   * ⛔ A CAPABILITY IS AGREEABLE NOW, AND IT WAS NOT. The decomposer's instructions said so
+   * outright — *"Capabilities become agreeable by engineers later; nothing agrees to one today"* —
+   * and `capabilityLevel` returned `unaccepted` on all three of its branches, so no amount of
+   * reading could make one validated.
+   *
+   * Peter: *"the dependency is a capability dependency, and those should be validated"*, and
+   * *"we need to ensure the capability of 'ledger' and 'increment balance' has been validated by a
+   * human, but not more than that"*.
+   *
+   * ⛔ BEING COVERABLE IS WHAT MAKES IT ACCEPTABLE AT ALL, which is the rule this file applies to
+   * every other acceptable thing: a verdict against something nothing hashes could never go stale,
+   * and a permanent stamp is worse than no stamp.
+   *
+   * ⛔ TWO HASHES, AND THE SECOND IS THE SET IT SERVES RATHER THAN WHAT THOSE PROMISES SAY. The
+   * resolved-claims version of that question is already answered, by `derivedCapabilities.state`
+   * through `servesHash` — so hashing it again here would be a second answer to one question, and
+   * `demonstrate.ts` imports this file, so reaching for `servesHash` would also close a cycle. What
+   * acceptance breaks on is this part's own words changing, or the set of promises it answers
+   * changing. Both are things a person read.
+   */
+  {
+    const seg = target.split("#");
+    if (seg.length === 3 && seg[1] === "offers") {
+      const sub = corpus.subsystems.find((x) => x.subsystem.id === seg[0])?.subsystem;
+      const o = sub?.offers.find((x) => x.id === seg[2]);
+      if (sub && o)
+        return {
+          /**
+           * ⛔ `derived` excluded: a re-derivation by a role is not the part changing.
+           *
+           * ⛔ AND THE SUBSYSTEM'S IDENTITY IS IN IT, BECAUSE `reads` SHOWS IT. A person agreeing to
+           * this is shown *"The ledger — appends one movement…"*, so the name is part of what they
+           * read, and this file's whole argument is that somebody cannot have agreed to words they
+           * never saw. Its `does` is NOT in it and is not shown: rewording a subsystem's own
+           * description would otherwise drop the stamp on every capability under it.
+           */
+          slots: h(canon({ in: sub.id, named: sub.title, ...o, derived: undefined, serves: undefined })),
+          criteria: h(canon([...o.serves].sort())),
+          parts: ["does", "serves"],
+          criteriaCount: o.serves.length,
+          reads: [
+            `${norm(sub.title)} — ${norm(o.does)}`,
+            `  it exists for: ${o.serves.length ? o.serves.join(", ") : "⛔ nothing, which `check` refuses"}`,
+          ],
+        };
+    }
+  }
+
+  /**
    * ⛔ A SECTION OF A PRODUCT-WIDE DOCUMENT, AND ITS HASH IS THE WHOLE POINT — exactly as for a
    * happy path. An agreement to a goal has to break the moment the goal is reworded, or the
    * acceptance that every feature is judged against goes on standing for a sentence nobody read.

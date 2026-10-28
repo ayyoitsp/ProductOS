@@ -11256,6 +11256,24 @@ function renderSubsystems(
                   ? `<ul class="cap-terms">${(carried.get(o.id) ?? []).map((t) => `<li>${line(t)}</li>`).join("")}</ul>`
                   : ""
               }
+              ${
+                /**
+                 * ⛔ WHETHER A PERSON HAS PUT THEIR NAME TO THIS PART — and until now nobody could.
+                 *
+                 * Peter: *"uh, capabilities have no validation????"* They had none: `aimOf` did not
+                 * list a capability among what an acceptance may cover, and `capabilityLevel`
+                 * answered `unaccepted` on all three of its branches. `readinessOf` holds a build
+                 * on this now, so the page has to say which parts are waiting — otherwise the gate
+                 * refuses for a reason the one surface he reviews on does not show.
+                 *
+                 * ⛔ `renderState` IS REUSED RATHER THAN A SECOND BADGE WRITTEN. It reads the same
+                 * `stampFor` every gate reads, which is the reason it exists — three surfaces each
+                 * built their own accepted-set once, and the packet printed "accepted separately"
+                 * for rules with no verdict at all. A capability's two hashes mean it shows a
+                 * reworded part as not confirmed for free.
+                 */
+                renderState(corpus, `${s.id}#offers#${o.id}`)
+              }
             </li>`
               )
               .join("")}</ul>`

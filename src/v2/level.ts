@@ -688,6 +688,50 @@ function capabilityLevel(corpus: Corpus, ref: string): Level {
   const d = derivedCapabilities(corpus).find((x) => x.ref === ref);
   if (!d) return level(corpus, ref, "unaccepted", "written", "This part is not in the corpus any more");
   const der = d.offering.derived;
+
+  /**
+   * ⛔ A PERSON'S STAMP, ASKED FIRST — AND EVERY BRANCH OF THIS FUNCTION USED TO RETURN
+   * `unaccepted`.
+   *
+   * Peter: *"the dependency is a capability dependency, and those should be validated"*, and
+   * *"we need to ensure the capability of 'ledger' and 'increment balance' has been validated by a
+   * human, but not more than that"*.
+   *
+   * There was no route to it. The three branches below distinguish how well a ROLE worked the part
+   * out — current, stale, or nothing recorded — and all three answered `unaccepted`, so a human
+   * reading every capability in a corpus could not change a single level. The decomposer's own
+   * instructions said as much: *"Capabilities become agreeable by engineers later; nothing agrees
+   * to one today."* Later is now.
+   *
+   * ⛔ `stampFor` IS ASKED RATHER THAN THE VERDICT LOG READ, which is the whole of this project's
+   * acceptance machinery and not a shortcut: it grants `accepted` only while the hashes the person
+   * agreed against still match, so rewording a part or changing what it serves drops it back here
+   * on its own. A level that read the log directly would be a permanent stamp.
+   */
+  const stamp = stampFor(corpus, ref);
+  if (stamp.state === "accepted")
+    return level(corpus, ref, "accepted", "accepted-here", `${stamp.by} agreed to this part as it reads`);
+  /**
+   * ⛔ THE THREE STALE STATES ARE ONE ROUTE HERE, and the distinction they carry does not apply.
+   * On an exchange they say whether the claim moved, the criteria moved, or both — which tells a
+   * reviewer what to re-read. A part's two hashes are its own words and the set of promises it
+   * answers, so the useful sentence names which of THOSE moved rather than borrowing a vocabulary
+   * about claims and tests.
+   */
+  if (stamp.state !== "never")
+    return level(
+      corpus,
+      ref,
+      "unaccepted",
+      "stale-acceptance",
+      `${stamp.by} agreed to this part on ${stamp.at}, and ${
+        stamp.state === "criteria-changed"
+          ? "what it exists for has changed since"
+          : stamp.state === "claim-changed"
+            ? "what it does has been reworded since"
+            : "both what it does and what it exists for have changed since"
+      }`
+    );
   if (d.state === "stale" && der)
     return level(
       corpus,
@@ -696,13 +740,35 @@ function capabilityLevel(corpus: Corpus, ref: string): Level {
       "stale-derivation",
       `${der.by} worked this part out on ${der.at} from what it serves, and that truth has changed since`,
     );
+  /**
+   * ⛔ A PART WORKED OUT FROM A DRAFT IS NOT WORTH WHAT ONE WORKED OUT FROM AGREED TRUTH, AND BOTH
+   * READ `corroborated` UNTIL NOW.
+   *
+   * Peter: *"we need the same validation concepts for capabilities as for features, right? varying
+   * degrees of 'accepted'"*. The scale already reached this layer; one distinction in it did not —
+   * and it is the one a gate turns on. `corroborated` is inside `BUILDABLE`, so a part derived from
+   * promises nobody has agreed to was handed to a builder as established.
+   *
+   * ⛔ IT IS VERBATIM THE FAILURE `v2-how-established-is-this` PINS ONE LAYER ACROSS: *"a test for a
+   * draft passed the gate a builder applies."* The criteria layer separates `worked-out` from
+   * `worked-out-from-a-draft` for exactly this, and `derivedCapabilities.agreed` has computed the
+   * same fact here all along — documented *"reported, never required"* — with nothing reading it.
+   *
+   * ⛔ ASKED OF `agreed` RATHER THAN RE-DERIVED: it already checks every promise the part serves and
+   * resolves a `serves` pointing at another part through that part, so a second answer here would
+   * drift the first time layering changed.
+   */
   if (d.state === "current" && der)
     return level(
       corpus,
       ref,
       "unaccepted",
-      "worked-out",
-      `${der.by} worked this part out on ${der.at} from ${d.offering.serves.join(", ")}, which has not changed since`,
+      d.agreed ? "worked-out" : "worked-out-from-a-draft",
+      `${der.by} worked this part out on ${der.at} from ${d.offering.serves.join(", ")}, which ${
+        d.agreed
+          ? "has not changed since and is agreed"
+          : "has not changed since — ⛔ and nobody has agreed to it, so this part answers a draft"
+      }`,
     );
   return level(
     corpus,
