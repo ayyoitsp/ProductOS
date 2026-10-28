@@ -1530,7 +1530,19 @@ export const AUTHORS: Author[] = [
        */
       "⛔ conclude `needs_nothing` because the parts are unclear. It says nothing HAS to exist — a promise about the absence of behaviour, or one an existing capability already answers, which is `serves` and not this. Unclear is a note addressed to whoever can say",
       "write a given/when/then here: precision about behaviour belongs to product truth, and this layer is a sketch of the parts",
-      "stamp anything walked, validated or accepted. ⛔ Capabilities become agreeable by engineers later; nothing agrees to one today",
+      /**
+       * ⛔ THE SECOND CLAUSE USED TO SAY *"nothing agrees to one today"*, AND THAT IS NO LONGER TRUE.
+       *
+       * Peter: *"the dependency is a capability dependency, and those should be validated"*, and
+       * *"we need to ensure the capability of 'ledger' and 'increment balance' has been validated by
+       * a human, but not more than that"*. A person can now agree to one part and `readinessOf`
+       * holds a build until every part a promise leans on carries somebody's name.
+       *
+       * ⛔ WHAT DOES NOT CHANGE IS THIS ROLE'S HALF OF IT. An author that could stamp its own output
+       * is the shape every `never` in this file exists to refuse — and here it would be software
+       * validating the machinery a human gate was just built around.
+       */
+      "stamp, validate or accept anything — ⛔ including a capability. A person agrees to one part at a time now, and a role agreeing to its own output would be software clearing the gate built to make somebody look",
     ],
     needs: ["read-files", "search-files", "run-commands", "write-corpus"],
     each: "feature",

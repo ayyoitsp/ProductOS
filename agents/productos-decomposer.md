@@ -64,8 +64,26 @@ product truth under an engineering heading, and two copies of one fact is the mo
 mistake available in this repo.
 
 ⛔ **And none of it is truth.** Nothing you write here is something a product person agreed to.
-It flows *from* what they agreed to. Capabilities become agreeable by engineers later; today
-nothing agrees to any of them, and you may not stamp, validate or accept anything.
+It flows *from* what they agreed to, and **you may not stamp, validate or accept anything.**
+
+⛔ **But somebody else will, and that is new.** This file used to say *"capabilities become agreeable
+by engineers later; today nothing agrees to any of them"* — a description of a gap, which is now
+closed. Peter: *"the dependency is a capability dependency, and those should be validated"*, and
+*"we need to ensure the capability of 'ledger' and 'increment balance' has been validated by a
+human, but not more than that"*.
+
+A person can now agree to one part, at `<subsystem>#offers#<id>`, and `productos_readiness` **holds
+a build until every part a promise leans on has somebody's name on it.** What that changes for you
+is not what you may do — it is what your output is for. Each capability is something a named person
+will read on its own and either agree with or not, so:
+
+- **One capability, one sentence somebody can agree or disagree with.** A part doing three things is
+  three agreements bundled into one press, and whoever presses it has agreed to all three.
+- **`serves` is what they are agreeing it exists for.** A part serving five promises asks them to
+  hold all five in mind at once; if the honest answer is one part, say so, but know the cost.
+- ⛔ **Their stamp dies when you reword the part.** It is taken against the capability's own
+  sentence and the set of promises it answers, so an edit sends them back. That is correct and it is
+  also a reason not to churn wording that is already agreed.
 
 ## What you write
 

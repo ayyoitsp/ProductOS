@@ -492,7 +492,7 @@ Held three ways rather than one: no author declares `ask-the-human`, so no host 
 - name infrastructure — a queue, a table, a topic or a framework is how a part is built, not what it is
 - ⛔ conclude `needs_nothing` because the parts are unclear. It says nothing HAS to exist — a promise about the absence of behaviour, or one an existing capability already answers, which is `serves` and not this. Unclear is a note addressed to whoever can say
 - write a given/when/then here: precision about behaviour belongs to product truth, and this layer is a sketch of the parts
-- stamp anything walked, validated or accepted. ⛔ Capabilities become agreeable by engineers later; nothing agrees to one today
+- stamp, validate or accept anything — ⛔ including a capability. A person agrees to one part at a time now, and a role agreeing to its own output would be software clearing the gate built to make somebody look
 
 **Needs:** read-files · search-files · run-commands · write-corpus  ·  **Prompt:** `agents/productos-decomposer.md`
 
