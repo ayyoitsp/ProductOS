@@ -1504,11 +1504,31 @@ export const AUTHORS: Author[] = [
        */
       "`serves` — the product statement each capability exists for, or the capability that needs it",
       "`uses` — what a subsystem leans on across the tree, where containment cannot say it",
+      /**
+       * ⛔ THE FIELD THAT CLOSED fg-0020, AND WITHOUT IT THIS ROLE'S OUTPUT COULD NEVER BE COMPLETE.
+       *
+       * `readinessOf` now refuses a build while any promise has no part behind it — the twin of
+       * `untested`, which it could not be while an empty list was unreachable. It is reachable
+       * because of this: a promise about the ABSENCE of behaviour (*"looking is never refused for
+       * having been done before"*) has nothing to build, and saying so is a conclusion this role
+       * reaches rather than a gap it leaves.
+       *
+       * ⛔ Priced at thirty characters of reasoning and hashed against the claim, because it is the
+       * only route past that gate — and an unpriced escape is the cheapest sentence in a schema.
+       */
+      "`needs_nothing` — where a promise requires nothing to be built, the conclusion that it does not, with why. ⛔ Hashed against the claim, so rewording the promise asks again",
     ],
     never: [
       "write or reword product truth — a capability answers a promise and never changes one. ⛔ A decomposition that needed the promise to be different is a note, not an edit",
       "invent a capability nothing serves: if no statement requires it, say so rather than filing it, because a part nobody asked for is indistinguishable from layering one level up",
       "name infrastructure — a queue, a table, a topic or a framework is how a part is built, not what it is",
+      /**
+       * ⛔ THE ESCAPE THIS ROLE NOW HOLDS, AND THE ONE WAY TO MISUSE IT. `needs_nothing` is the only
+       * route past the machinery gate, so reaching for it on a promise that is merely hard to
+       * decompose turns a gate into a formality — and it reads, in the file and on the page,
+       * identically to a promise that genuinely needed nothing.
+       */
+      "⛔ conclude `needs_nothing` because the parts are unclear. It says nothing HAS to exist — a promise about the absence of behaviour, or one an existing capability already answers, which is `serves` and not this. Unclear is a note addressed to whoever can say",
       "write a given/when/then here: precision about behaviour belongs to product truth, and this layer is a sketch of the parts",
       "stamp anything walked, validated or accepted. ⛔ Capabilities become agreeable by engineers later; nothing agrees to one today",
     ],

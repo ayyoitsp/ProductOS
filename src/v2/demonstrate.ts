@@ -296,21 +296,83 @@ export function unserved(corpus: Corpus, scopeId: string, exchangeId: string, al
   const served = new Set<string>();
   for (const { subsystem } of corpus.subsystems)
     for (const o of subsystem.offers) for (const t of o.serves) served.add(t);
-  const covered = (at: string) =>
-    !all && [...served].some((t) => at === t || at.startsWith(`${t}#`) || t.startsWith(`${at}#`));
+  const covered = (at: string) => [...served].some((t) => at === t || at.startsWith(`${t}#`) || t.startsWith(`${at}#`));
+
+  /**
+   * ⛔ A CONCLUSION THAT NOTHING HAS TO BE BUILT, AND ONLY WHILE IT IS CURRENT — fg-0020.
+   *
+   * `needs_nothing` is how a promise that genuinely requires no machinery leaves this list, which
+   * is what the gap was: without it the list could never empty and so could never gate.
+   *
+   * ⛔ THE HASH IS THE WHOLE SAFETY. A conclusion that survived a reword would be the one way past
+   * this gate forever — conclude nothing is needed, then change what the promise says, and nothing
+   * ever asks again. So a conclusion counts only while `derived.from` still matches the claim it was
+   * reached against; a stale one leaves the promise unserved and `check` says which. ⛔ And an entry
+   * with no `derived` at all counts for nothing: somebody typed it, and a typed exemption from the
+   * only gate on this axis is not a conclusion anybody reached.
+   */
+  const concluded = new Set<string>();
+  for (const nn of ex.needs_nothing ?? []) {
+    if (!nn.derived) continue;
+    const at = nn.of ? `${ref}#${nn.slot}#${nn.of}` : `${ref}#${nn.slot}`;
+    if (nn.derived.from === claimHash(corpus, at)) concluded.add(at);
+  }
 
   const out: string[] = [];
+  /**
+   * ⛔ `all` BYPASSES BOTH, because it asks for the DENOMINATOR — every promise there is. Letting a
+   * conclusion shrink the bottom half of "n of m" would make concluding one promise look like
+   * backing it, which is the fraction-drift this already learned once from counting behaviours
+   * against statements.
+   */
+  const owed = (at: string) => all || (!covered(at) && !concluded.has(at));
   for (const slot of DEMONSTRABLE_SLOTS) {
     const fill = ex.slots[slot as SlotName];
     if (!owesDemonstration(slot as SlotName, fill)) continue;
     const said = statements(fill!.says);
     if (said.length > 1) {
-      for (const st of said) if (!covered(`${ref}#${slot}#${st.id}`)) out.push(`${ref}#${slot}#${st.id}`);
+      for (const st of said) if (owed(`${ref}#${slot}#${st.id}`)) out.push(`${ref}#${slot}#${st.id}`);
       continue;
     }
-    if (!covered(`${ref}#${slot}`)) out.push(`${ref}#${slot}`);
+    if (owed(`${ref}#${slot}`)) out.push(`${ref}#${slot}`);
   }
   return out;
+}
+
+/**
+ * Conclusions that nothing has to be built, which were reached against words that have since moved.
+ *
+ * ⛔ THE ONE STATE THIS FEATURE CAN FAIL IN SILENTLY, and it is the same failure a stale criterion
+ * is: the record looks settled and describes a sentence nobody is promising any more. Worse here,
+ * because the consequence is a promise that quietly stopped being asked about at all.
+ */
+export function staleConclusions(
+  corpus: Corpus,
+  scopeId: string,
+  exchangeId: string
+): Array<{ ref: string; by: string; at: string }> {
+  const scope = corpus.scopes.find((s) => s.scope.id === scopeId)?.scope;
+  const ex = scope?.exchanges.find((e) => e.id === exchangeId);
+  if (!scope || !ex) return [];
+  const ref = `${scopeId}#${exchangeId}`;
+  const out: Array<{ ref: string; by: string; at: string }> = [];
+  for (const nn of ex.needs_nothing ?? []) {
+    if (!nn.derived) continue;
+    const at = nn.of ? `${ref}#${nn.slot}#${nn.of}` : `${ref}#${nn.slot}`;
+    if (nn.derived.from !== claimHash(corpus, at)) out.push({ ref: at, by: nn.derived.by, at: nn.derived.at });
+  }
+  return out;
+}
+
+/** Conclusions nobody derived — typed by hand, and counting for nothing at the gate. */
+export function typedConclusions(corpus: Corpus, scopeId: string, exchangeId: string): string[] {
+  const scope = corpus.scopes.find((s) => s.scope.id === scopeId)?.scope;
+  const ex = scope?.exchanges.find((e) => e.id === exchangeId);
+  if (!scope || !ex) return [];
+  const ref = `${scopeId}#${exchangeId}`;
+  return (ex.needs_nothing ?? [])
+    .filter((nn) => !nn.derived)
+    .map((nn) => (nn.of ? `${ref}#${nn.slot}#${nn.of}` : `${ref}#${nn.slot}`));
 }
 
 /**

@@ -136,6 +136,71 @@ Prose below the frontmatter is for the design decision a reader would otherwise 
 *append-only is the whole design, because the figure is derived* — not for restating what the
 fields already say.
 
+### ⛔ A promise that needs nothing built — say so, because the gate now waits for you
+
+`productos_readiness` refuses a build while any promise has no part of the system behind it. That is
+new, and it is the twin of the rule about tests: nothing would show this holding → not ready;
+nothing makes this happen → not ready.
+
+It could not work that way until now, because **not every promise needs machinery**. Look at one:
+
+> *Looking is never refused for having been done before.*
+
+There is nothing to build for that. It is a promise about the absence of behaviour. A gate that
+demanded a part for it could only be cleared by inventing one — so the gate reported instead of
+blocking, and the gap was recorded rather than papered over.
+
+You close it. Where a promise genuinely requires nothing, conclude that, on the exchange beside its
+criteria:
+
+```yaml
+needs_nothing:
+  - slot: again
+    of: never-refused                      # the statement, where the slot says several things
+    because: >                             # ⛔ at least 30 characters, and arguable
+      A promise that nothing happens differently on a second look is satisfied by the
+      read path having no write in it. There is no part to add; adding one would be the
+      bug this sentence rules out.
+    derived:                               # ⛔ REQUIRED OF YOU, same as on a capability
+      by: decomposer
+      at: 2026-10-28
+      from: sha256:…                       # productos v2 claim "<the claim ref>"
+```
+
+⛔ **No `--serves` here.** This hashes ONE claim, not a set — the opposite of the capability case
+above, and for the same reason: the grain is the promise you concluded about, not a part's whole
+neighbourhood.
+
+```bash
+productos v2 claim "money#see-a-balance#again#never-refused"
+```
+
+⛔ **The hash is why this is safe to hand you.** A conclusion counts only while it matches the words
+it was reached against. Conclude nothing is needed, then let somebody reword the promise, and it is
+unanswered again and `check` refuses with `nothing-needed-for-words-that-moved`. Without that, this
+field would be a permanent way past the only check on this axis, for one line.
+
+⛔ **And one you write with no `derived` counts for nothing.** `check` says so as
+`nothing-needed-but-nobody-worked-it-out`, because a typed exemption is indistinguishable in the
+file from a conclusion somebody reached.
+
+### ⛔ Three answers, and only one of them is this one
+
+| what is true | what you write |
+| --- | --- |
+| a new part has to exist | a subsystem with an `offers` entry whose `serves` names the promise |
+| an **existing** part already answers it | add the promise to that capability's `serves` — ⛔ not this field |
+| nothing has to exist at all | `needs_nothing`, with why |
+| you cannot tell | ⛔ none of them. A note addressed to whoever can say |
+
+The second row is the one to get wrong, and it is wrong in the expensive direction: `needs_nothing`
+on a promise an existing capability answers tells every later reader that no machinery is involved
+in it, which is false and unfalsifiable from the record.
+
+The fourth is the one that matters most. `needs_nothing` is the only route past the gate, so
+reaching for it when the parts are merely unclear turns the gate into a formality — and it reads,
+in the file and on the page, exactly like a promise that genuinely needed nothing.
+
 ### ⛔ `serves` is the whole of this role, and it is required
 
 Peter: *"those should flow from the product design."* That sentence is this field. A capability

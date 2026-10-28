@@ -30,6 +30,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import fs from "node:fs";
 import { temp } from "./support/temp.mjs";
+import { answerTheMachineryAxis } from "./support/machinery.mjs";
 
 const { loadCorpus, resolveRules } = await import("../dist/v2/load.js");
 const { readinessOf } = await import("../dist/v2/readiness.js");
@@ -68,6 +69,14 @@ function settled(prefix) {
   return dir;
 }
 
+/**
+ * ⛔ THE MACHINERY AXIS IS ANSWERED FIRST, because `readinessOf` gates on it since fg-0020 closed.
+ * A promise with no part of the system behind it holds a build exactly as an untested claim does,
+ * and these fixtures reach `ready: true` — so each has to say what answers its promises, or that
+ * nothing has to be built for them. `answerTheMachineryAxis` does the second, which is the honest
+ * answer for the seed: it promises things like *"looking is never refused for having been done
+ * before"*, and there is nothing to build for that.
+ */
 /** The corpus, with the one requirement the seed is missing supplied in memory. */
 function corpusOf(dir) {
   const c = loadCorpus(dir);
@@ -151,6 +160,7 @@ test("unread, a recorded no, and a recorded yes are three different answers from
 
 test("a recorded yes is what makes it ready — and it names who, because that is the part nothing computed", () => {
   const dir = settled("v2build-yes-");
+  answerTheMachineryAxis(dir, EX);
   assert.equal(perform(dir, "read", { scope: EX, buildable: true }, { by: "peter", via: "page" }).ok, true);
 
   const r = ok(readinessOf(corpusOf(dir), EX));
@@ -193,6 +203,7 @@ test("a read-through that states no buildability satisfies neither gate", () => 
  */
 test("a yes reaches downward only; a no reaches in both directions", () => {
   const dir = settled("v2build-reach-");
+  answerTheMachineryAxis(dir, EX);
 
   /** The parent of `money`, read end to end — its yes stands over the behaviour below. */
   assert.equal(

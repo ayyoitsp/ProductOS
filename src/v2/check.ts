@@ -46,7 +46,13 @@ import { readConfig } from "../core/config.js";
 import path from "node:path";
 import { projectRootOf } from "../core/paths.js";
 import { wouldReach } from "./steers.js";
-import { demonstrations, derivedCapabilities, unservedIn } from "./demonstrate.js";
+import {
+  demonstrations,
+  derivedCapabilities,
+  unservedIn,
+  staleConclusions,
+  typedConclusions,
+} from "./demonstrate.js";
 import { carriedAreas } from "./subsystems.js";
 
 export type Severity = "refuse" | "note" | "shape";
@@ -4217,6 +4223,47 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
      * however many things that slot says; a slot saying nine things with one part against it is an
      * eighth mapped and read as done.
      */
+    /**
+     * ---- somebody concluded nothing had to be built, for words that have since moved ----
+     *
+     * ⛔ THE ONE WAY fg-0020's FIELD CAN FAIL SILENTLY, AND IT IS THE REASON IT CARRIES A HASH.
+     *
+     * `needs_nothing` is the only route past the machinery gate. Conclude nothing is needed, then
+     * reword the promise, and without the hash nothing ever asks again — a permanent bypass with a
+     * one-line cost. `unserved` already treats a stale conclusion as absent, so the gate is safe;
+     * what this adds is saying WHICH, because a promise that silently went back to being unanswered
+     * looks exactly like one nobody ever concluded anything about.
+     *
+     * ⛔ A refusal, unlike the finding below it. This is not a corpus that has not started — it is a
+     * record asserting something about a sentence that no longer exists, which is the same thing a
+     * stale acceptance is, and this project refuses those.
+     */
+    for (const { scope } of corpus.scopes)
+      for (const ex of scope.exchanges) {
+        for (const st of staleConclusions(corpus, scope.id, ex.id))
+          add({
+            severity: "refuse",
+            kind: "nothing-needed-for-words-that-moved",
+            where: st.ref,
+            what: `${st.by} concluded on ${st.at} that nothing had to be built for this, and the promise has been reworded since`,
+            fix: "work it out again against what it says now — ⛔ until then the promise counts as having no machinery behind it, which is what the gate reads",
+          });
+        /**
+         * ⛔ AND ONE NOBODY DERIVED COUNTS FOR NOTHING, SAID OUT LOUD. A typed exemption from the
+         * only gate on this axis is indistinguishable in the file from a conclusion somebody
+         * reached — the same reason `check` names the role for a hand-written criterion rather than
+         * reading absence as a human's judgement.
+         */
+        for (const ref of typedConclusions(corpus, scope.id, ex.id))
+          add({
+            severity: "note",
+            kind: "nothing-needed-but-nobody-worked-it-out",
+            where: ref,
+            what: "says nothing has to be built for this, and records nobody working that out",
+            fix: "have `decomposer` reach it, so it carries the words it was concluded against. ⛔ As it stands it counts for nothing at the gate — a typed exemption from the one check on this axis is not a conclusion",
+          });
+      }
+
     const ids = corpus.scopes.map(({ scope }) => scope.id);
     const unanswered = unservedIn(corpus, ids);
     const every = unservedIn(corpus, ids, undefined, true);

@@ -21,6 +21,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import fs from "node:fs";
 import { temp } from "./support/temp.mjs";
+import { concludeNothingNeeded } from "./support/machinery.mjs";
 
 const { loadCorpus, resolveRules } = await import("../dist/v2/load.js");
 const { readinessOf, groomingPrompt, BUILDABLE } = await import("../dist/v2/readiness.js");
@@ -116,6 +117,14 @@ test("an exchange with one question owed is not ready, and the question is the o
 });
 
 test("an exchange whose every fact is agreed is ready once every claim has a test, and nothing is left in any other list", () => {
+  /**
+   * ⛔ THE MACHINERY AXIS IS ANSWERED FIRST, because `readinessOf` gates on it since fg-0020 closed.
+   * A promise with no part of the system behind it holds a build exactly as an untested claim does,
+   * and these fixtures reach `ready: true` — so each has to say what answers its promises, or that
+   * nothing has to be built for them. `answerTheMachineryAxis` does the second, which is the honest
+   * answer for the seed: it promises things like *"looking is never refused for having been done
+   * before"*, and there is nothing to build for that.
+   */
   const corpus = seed("v2ready-yes-", agreeTo("money#see-a-balance"));
   const dir = corpus.at;
 
@@ -154,6 +163,8 @@ test("an exchange whose every fact is agreed is ready once every claim has a tes
    * and nobody has read the thing from a builder's seat. That was `ready: true` until this landed,
    * which is the whole of the second tenet going unchecked by the one field that claims to test it.
    */
+  concludeNothingNeeded(dir, ok(readinessOf(demonstrated(), "money#see-a-balance")).unserved);
+
   const unread = ok(readinessOf(demonstrated(), "money#see-a-balance"));
   assert.equal(unread.ready, false, "every fact agreed and nobody having read it read as ready to build");
   assert.equal(unread.read.unread, true);

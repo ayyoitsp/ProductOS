@@ -1,0 +1,14 @@
+id: "0216"
+said: let's merge all our changes so far, and let's implement fg0020
+at: 2026-10-28
+kind: concept
+reaches:
+  model: export const NeedsNothing
+  derive: staleConclusions
+  surface: Nothing has to be built for
+  check: nothing-needed-for-words-that-moved
+  instruct: needs_nothing
+  pin: rewording the promise un-concludes it, and check refuses the stale conclusion
+waived:
+  generate: "No generator writes or reads a conclusion about machinery, and one that did would be the defect rather than the layer being reached. `derived.by` on a `NeedsNothing` names an AUTHOR ROLE and `check` notes a typed one as counting for nothing at the gate — so software concluding that nothing has to be built is precisely the shape both of those exist to refuse: it is the only route past the one check on this axis, and a generator reaching it would hand that route to anything that runs. Verified by looking rather than assumed: `draw.ts`, `draw-write.ts`, `propose.ts`, `routes.ts`, `derive-states.ts` and `cli/commands/v2.ts` are the generate files and `needs_nothing` appears in none of them. What a generator does produce from this — the packet section a builder reads — is `compilePacket`, which is the surface layer and is reached."
+closed: 2026-10-28

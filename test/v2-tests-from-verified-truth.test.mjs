@@ -21,6 +21,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { temp } from "./support/temp.mjs";
+import { concludeNothingNeeded } from "./support/machinery.mjs";
 import { intentNamed, refuseIntent, incomplete } from "../dist/v2/intents.js";
 import { loadCorpus } from "../dist/v2/load.js";
 import { levelOf } from "../dist/v2/level.js";
@@ -138,6 +139,8 @@ test("⛔ the whole loop: not ready, a person agrees, the demonstrator fills the
    * holds, and nobody has read the thing from a builder's seat. That was the end of this loop until
    * this landed, and it is the second tenet the four counts cannot reach.
    */
+  concludeNothingNeeded(dir, readinessOf(loadCorpus(dir), EX).unserved);
+
   const unread = readinessOf(loadCorpus(dir), EX);
   assert.equal(unread.ready, false, "agreed and demonstrated, with nobody having read it, read as ready");
   assert.equal(unread.read.unread, true);
