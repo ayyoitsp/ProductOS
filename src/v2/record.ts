@@ -12,6 +12,8 @@
  * something a person reads.
  */
 import type { Corpus } from "./load.js";
+/** ⛔ The one home for what a read-through covered — see `readHashFor`. */
+import { readHashFor } from "./settle.js";
 import type { Verdict } from "./schema.js";
 
 export interface Decision {
@@ -43,12 +45,22 @@ export interface Decision {
   /** For a read-through. */
   buildable?: boolean;
   blockedBy?: string[];
+  /**
+   * Whether a `buildable: true` still stands against the words as they now read.
+   *
+   * ⛔ WITHOUT THIS THE PAGE RENDERED THE LAUNDERING. A reading whose sentences have all been
+   * rewritten showed as *"could build from it"*, indistinguishable from one taken this morning —
+   * which is the whole defect `covers_read` closed, left visible on the one surface Peter reviews
+   * on. `undefined` where there is nothing to say: a no never expires, and a reading from before
+   * the field existed is unprovenanced rather than stale.
+   */
+  spent?: "stale" | "unrecorded";
   note?: string;
 }
 
 const refOf = (v: Verdict): string => v.settles ?? v.target ?? v.scope ?? "";
 
-const asDecision = (v: Verdict): Decision => ({
+const asDecision = (corpus: Corpus) => (v: Verdict): Decision => ({
   act: v.kind,
   ref: refOf(v),
   by: v.by,
@@ -63,6 +75,13 @@ const asDecision = (v: Verdict): Decision => ({
   ...(v.until ? { until: v.until } : {}),
   ...(v.buildable === undefined ? {} : { buildable: v.buildable }),
   ...(v.blocked_by?.length ? { blockedBy: v.blocked_by } : {}),
+  ...(v.kind === "read" && v.buildable === true
+    ? !v.covers_read
+      ? { spent: "unrecorded" as const }
+      : v.covers_read !== readHashFor(corpus, v.scope!)
+        ? { spent: "stale" as const }
+        : {}
+    : {}),
   ...(v.note ? { note: v.note } : {}),
 });
 
@@ -76,7 +95,7 @@ const asDecision = (v: Verdict): Decision => ({
 export function decisionsOn(corpus: Corpus, ref: string): Decision[] {
   return corpus.verdicts
     .filter((v) => refOf(v) === ref)
-    .map(asDecision)
+    .map(asDecision(corpus))
     .sort((a, b) => a.at.localeCompare(b.at));
 }
 
@@ -93,7 +112,7 @@ export function decisionsUnder(corpus: Corpus, ref: string): Decision[] {
       const r = refOf(v);
       return r === ref || (r.startsWith(ref) && /^[#\s]/.test(r.slice(ref.length)));
     })
-    .map(asDecision)
+    .map(asDecision(corpus))
     .sort((a, b) => a.at.localeCompare(b.at));
 }
 

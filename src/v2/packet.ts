@@ -13,7 +13,7 @@
  */
 import { SLOTS, DEMONSTRABLE_SLOTS, owesDemonstration, type SlotName , statements, saysText, nothingHere} from "./schema.js";
 import { resolveRules, disputeIndex, vocabularyReach, resolveView, DOWNSTREAM_OF_ANSWER, answerIsUnknown, type Corpus } from "./load.js";
-import { descendants } from "./settle.js";
+import { descendants, unbuildableReads, buildableReads, readThroughsFor } from "./settle.js";
 import { existsOf } from "./load.js";
 import { stampFor, staleReason, requirementHash } from "./stamp.js";
 import { demonstrationOf } from "./demonstrate.js";
@@ -89,14 +89,48 @@ export interface Readiness {
   ready: boolean;
   /** `<exchange>#<slot>` for each, in the order the packet reports them. */
   holes: string[];
+  /**
+   * Whether anybody has recorded reading this end to end, at any verdict.
+   *
+   * ⛔ SO A RENDERER CAN TELL "NOBODY HAS READ IT" FROM "SOMEBODY DID AND IT NO LONGER COUNTS".
+   * Both are `ready: false` with an empty hole list, and they route to different people — get it
+   * read, versus show the reader what moved.
+   */
+  read: boolean;
 }
 
 export function readinessOf(corpus: Corpus, scopeId: string): Readiness | null {
   const under = descendants(corpus, scopeId);
   const each = under.map((id) => compileOne(corpus, id)).filter(Boolean) as Array<{ md: string; holes: string[] }>;
   if (!each.length) return null;
-  const holes = each.flatMap((x) => x.holes);
-  return { ready: holes.length === 0, holes };
+  /**
+   * ⛔ THE BANNER THIS PASS PRINTS IS PART OF THE VERDICT IT RETURNS. `compileOne` has pushed
+   * *"X read this end to end and could not build from it — nothing below outranks that"* to the
+   * top of the markdown since the act shipped, and this function then answered `ready: true` over
+   * the same scope, because its holes come from the traversal and a person's reading is not one.
+   *
+   * The page renders THIS verdict (`page.ts` imports it rather than `readiness.ts`, deliberately,
+   * so the page and the packet cannot disagree) — so the one surface Peter reviews on showed a
+   * green readiness above a packet whose first line was a human refusing it.
+   */
+  const stopped = unbuildableReads(corpus, scopeId);
+  /**
+   * ⛔ AND A CURRENT YES IS REQUIRED HERE TOO, WHICH IS THE SAME DISAGREEMENT ONE FIELD ALONG.
+   *
+   * This function and `readinessOf` in `readiness.ts` are two renderings of one verdict — the page
+   * imports this one so the page and the packet cannot differ. It learned to respect a recorded NO;
+   * it did not learn that a yes expires, so the page went on printing *"Ready to build: yes"* over a
+   * reading whose every sentence had been rewritten. That is the laundering `covers_read` closed,
+   * surviving on the one surface Peter reviews on.
+   *
+   * ⛔ Asked of the predicate rather than re-derived: `buildableReads` already declines a stale or
+   * unprovenanced yes, and a second opinion about what counts would be a third answer to a question
+   * this file's header says must have one.
+   */
+  const current = buildableReads(corpus, scopeId);
+  const read = readThroughsFor(corpus, scopeId).some((r) => r.buildable !== undefined);
+  const holes = [...each.flatMap((x) => x.holes), ...stopped.flatMap((r) => r.blockedBy)];
+  return { ready: holes.length === 0 && stopped.length === 0 && current.length > 0, holes, read };
 }
 
 function compileOne(corpus: Corpus, scopeId: string): { md: string; holes: string[] } | null {
@@ -159,12 +193,11 @@ function compileOne(corpus: Corpus, scopeId: string): { md: string; holes: strin
    * derive, and it outranks every finding below it. The packet used to compile clean over
    * a scope somebody had declared unbuildable.
    */
-  for (const v of corpus.verdicts) {
-    if (v.kind !== "read" || v.scope !== scopeId || v.buildable !== false) continue;
+  for (const r of unbuildableReads(corpus, scopeId)) {
     out.push(
-      `> ⛔ **${v.by} read this end to end on ${v.at} and could not build from it.**` +
-        (v.note ? ` "${v.note}"` : "") +
-        (v.blocked_by.length ? ` Stopped by: ${v.blocked_by.join(", ")}.` : "")
+      `> ⛔ **${r.by} read ${r.scope} end to end on ${r.at} and could not build from it.**` +
+        (r.note ? ` "${r.note}"` : "") +
+        (r.blockedBy.length ? ` Stopped by: ${r.blockedBy.join(", ")}.` : "")
     );
     out.push("> Nothing below outranks that. Find out what they hit before you start.");
     out.push("");
@@ -642,6 +675,34 @@ function compileOne(corpus: Corpus, scopeId: string): { md: string; holes: strin
      * at exactly the address its test was written against.
      */
     const cs = ex.criteria;
+    /**
+     * ⛔ WHAT WAS CONCLUDED TO NEED NOTHING BUILT, AND WHY — fg-0020, on the artefact a builder holds.
+     *
+     * This is the field's surface, and the packet is the right one: it is the only route past the
+     * machinery gate, so a builder handed a ready packet has to be able to see which promises were
+     * cleared that way and disagree. Rendered nowhere, it would be an exemption visible only to
+     * whoever wrote it — and `v2-no-dead-fields` refuses a field no surface reads for exactly that.
+     *
+     * ⛔ The reason is printed, never summarised. It is priced at thirty characters precisely so
+     * somebody can argue with it, and a packet that said only "nothing needed here" would throw
+     * away the one part that makes it arguable.
+     */
+    const nothing = ex.needs_nothing ?? [];
+    if (nothing.length) {
+      out.push("");
+      out.push(
+        `Nothing has to be built for ${
+          nothing.length === 1 ? "one of these" : `${nothing.length} of these`
+        }:`
+      );
+      for (const nn of nothing) {
+        const whose = nn.derived
+          ? `worked out by ${nn.derived.by} on ${nn.derived.at}`
+          : "⚠ typed by hand, so nothing says what it was concluded against — it counts for nothing at the gate";
+        out.push(`- *${nn.slot}${nn.of ? ` · ${nn.of}` : ""}* — ${nn.because.replace(/\s+/g, " ").trim()} *(${whose})*`);
+      }
+    }
+
     if (cs.length) {
       out.push("");
       out.push(`What must be demonstrated — ${cs.length} requirement${cs.length === 1 ? "" : "s"}:`);

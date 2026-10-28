@@ -530,8 +530,8 @@ suite-now:
 	@out=$$(npm test 2>&1); \
 	echo "$$out" | grep -E '^# (tests|pass|fail|skipped)' | sed 's/^/  /'; \
 	if ! echo "$$out" | grep -qE '^# fail 0$$' || echo "$$out" | grep -qE '^not ok'; then \
-		echo "✗ tests fail — not deploying. The failures:"; \
-		echo "$$out" | grep '^not ok' | head -10 | sed 's/^/    /'; exit 1; \
+		echo "✗ tests fail — not deploying. The failures, with their reasons:"; \
+		echo "$$out" | awk '/^not ok/{p=1} p{print} p && /^  \.\.\.[[:space:]]*$$/{p=0}' | head -60 | sed 's/^/    /'; exit 1; \
 	fi
 	@echo "  ✓ green at $$(git rev-parse --short HEAD) — pass this to deploy:"
 	@echo "      make deploy SUITE_VERIFIED=$$(git rev-parse HEAD)"

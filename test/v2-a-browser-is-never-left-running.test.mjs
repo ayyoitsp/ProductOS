@@ -202,3 +202,47 @@ test("⛔ an interrupted run reaps on its way out, because that is the run that 
   await new Promise((r) => kid.once("exit", r));
   assert.equal(await gone(tmp), 0, "processes survived an interrupted run — the hook did not reap");
 });
+
+test("⛔ a failed launch gives its slot back, or three of them deadlock the suite", async () => {
+  if (!browserOrSkip()) return;
+  /**
+   * ⛔ THE BUG THAT ONLY EXISTS IN THE MERGE OF TWO CORRECT CHANGES.
+   *
+   * The cap (`browser-slots.mjs`) takes a permit before the spawn and frees it in `close()`. The
+   * reaping above frees the PROCESS on the way out of a failed launch. Composed naively, a launch
+   * that throws reaps the process and keeps the permit forever — so at a cap of three, three failed
+   * launches leave every later browser test waiting on permits nobody holds.
+   *
+   * ⛔ A DEADLOCK IS THE LEAST DIAGNOSABLE FAILURE THERE IS: the suite simply stops, with no
+   * assertion to read. So it is pinned by COUNTING PERMITS rather than by waiting to see whether the
+   * next caller gets one — the slow version of this test would be indistinguishable from a hang.
+   */
+  const tmp = temp("reap-slot-");
+  const held = () => {
+    const home = path.join(tmp, "productos-browser-slots");
+    try {
+      return fs.readdirSync(home).length;
+    } catch {
+      return 0;
+    }
+  };
+  const fake = path.join(tmp, "fake-browser");
+  fs.writeFileSync(fake, "#!/bin/sh\nwhile :; do sleep 1; done\n");
+  fs.chmodSync(fake, 0o755);
+
+  const kid = spawn(
+    process.execPath,
+    [
+      "--input-type=module",
+      "-e",
+      `const { openPage } = await import("${HARNESS}");
+       try { await openPage("<p>x</p>", { exe: ${JSON.stringify(fake)} }); console.log("NO-THROW"); }
+       catch (e) { console.log("THREW"); }`,
+    ],
+    { stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, TMPDIR: tmp, PRODUCTOS_BROWSER_SLOTS: "1" } }
+  );
+  await waitForLine(kid, "THREW", 180000);
+  kid.kill("SIGKILL");
+  await settle(1500);
+  assert.equal(held(), 0, `${held()} permit(s) still held after a launch that threw — at a cap of 1 the next browser test waits forever`);
+});

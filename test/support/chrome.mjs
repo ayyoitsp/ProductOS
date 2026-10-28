@@ -20,6 +20,7 @@ import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { temp } from "./temp.mjs";
+import { takeABrowserSlot } from "./browser-slots.mjs";
 
 /**
  * Where a browser might be, in order of preference.
@@ -187,6 +188,13 @@ for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"]) {
 export async function openPage(html, { exe = findBrowser(), url, width, height } = {}) {
   if (!exe) throw new Error("no browser");
   /**
+   * ⛔ A SLOT BEFORE A BROWSER, AND THE REASON IS IN `browser-slots.mjs`. Fourteen files spawn Chrome
+   * and they sort into the same `node --test` batch because they are named for what they do — five
+   * browsers at one instant, which is where nine of one day's gate failures came from. Taken here
+   * rather than in each test, because a cap every caller has to remember is not a cap.
+   */
+  const releaseSlot = await takeABrowserSlot();
+  /**
    * ⛔ `temp()` RATHER THAN `mkdtempSync`, EVEN THOUGH THE TEARDOWN BELOW ALREADY REMOVES THIS. The
    * teardown is reached when a test finishes; the exit hook is reached when it throws, which is the
    * run that litters hardest. Both, because they cover different exits.
@@ -327,6 +335,11 @@ export async function openPage(html, { exe = findBrowser(), url, width, height }
       }
       alive.delete(killTree);
       killTree();
+      /**
+       * ⛔ FREED AS SOON AS THE BROWSER IS KILLED, not after the profile is tidied. The slot bounds
+       * CPU, and a directory removal with ten retries is not what the next test is waiting for.
+       */
+      releaseSlot();
       await new Promise((resolve) => {
         if (proc.exitCode !== null || proc.signalCode) return resolve();
         proc.once("exit", resolve);
@@ -352,6 +365,19 @@ export async function openPage(html, { exe = findBrowser(), url, width, height }
      */
     alive.delete(killTree);
     killTree();
+    /**
+     * ⛔ AND THE SLOT GOES BACK, which neither of the two changes this merges did on its own.
+     *
+     * The cap and the reaping were written in separate branches: one takes a slot before the spawn
+     * and frees it in `close()`, the other reaps on the way out of a failed launch. Composed
+     * naively, a launch that throws reaps the process and keeps the slot forever — so with the cap
+     * at three, three failed launches deadlock every browser test in the suite, waiting on permits
+     * nobody holds.
+     *
+     * Found by reading the merge rather than by running it: a deadlock surfaces as "the suite
+     * hangs", which is the least diagnosable failure there is.
+     */
+    releaseSlot();
     throw e;
   }
 }

@@ -27,13 +27,17 @@
 import fs from "node:fs";
 import { parseFrontmatter } from "../core/frontmatter.js";
 import YAML from "yaml";
-import { Scope, Rule, type SlotName , saysText, statements, type Authorship, type NoteVia } from "./schema.js";
+import { Scope, Rule, SLOTS, type SlotName , saysText, statements, type Authorship, type NoteVia } from "./schema.js";
 import { isHuman } from "./acts.js";
 import { loadCorpus, resolveRules, selectsFor, lineageOf, type Corpus } from "./load.js";
 import { resolveRef, HAPPY_PARTS } from "./ref.js";
+/** ⛔ `grid.ts` imports nothing from here, so this is not a cycle — checked before moving `blankSlots`. */
+import { gridFor } from "./grid.js";
 import { removals, refuseBecause } from "./write.js";
 
 import { confidenceOf, type Strength } from "./confidence.js";
+/** ⛔ The hashing home — `readHash` is the primitive, the grain is resolved here, once. */
+import { readHash } from "./stamp.js";
 
 export interface Question {
   ref: string;
@@ -1416,4 +1420,281 @@ export function withdraw(
   void by;
   void at;
   return { ok: true, file: entry.file, mode: agreed ? "withdrawn" : "deleted", was };
+}
+
+/**
+ * What a person said when they read a scope end to end — ⛔ THE ONE SIGNAL NOTHING CAN COMPUTE,
+ * AND NOW THERE IS ONE PLACE THAT ANSWERS FOR IT.
+ *
+ * Peter: *"buildability should be a part of readiness, should not introduce a new 'groomed'
+ * concept. don't know what we would use 'ready' for outside of buildability."*
+ *
+ * `Verdict kind: read` has carried `buildable` and `blocked_by` since the act shipped, and three
+ * surfaces read it by hand: `compilePacket` prints a banner (its own `readinessOf` did not),
+ * `check` raises a refusal, and the page renders it. `readinessOf` — the field a consumer asks
+ * before it starts work — consulted it nowhere, so a scope a human had read and declared
+ * unbuildable answered `ready: true`.
+ *
+ * ⛔ A FOURTH HAND-WRITTEN COPY OF THE PREDICATE IS HOW THREE AGREEING READERS BECOME FOUR
+ * DISAGREEING ONES — the warning `readiness.ts` opens with, about holes, reached by the same route
+ * one field along. So the predicate lives here, beside `questionsFor`, because the two answer
+ * halves of one question: what nobody has decided, and what somebody could not build from.
+ */
+export interface ReadThrough {
+  /** The scope they read. ⛔ May be an ancestor of the one being asked about. */
+  scope: string;
+  by: string;
+  at: string;
+  /**
+   * The hash of everything they read, when they read it.
+   *
+   * ⛔ ABSENT MEANS NOTHING SAYS WHAT THEY READ, which is the state every read-through written
+   * before this was in — and it is treated the way an undated criterion is: it does not satisfy the
+   * gate, and `check` notes it rather than refusing. A refusal would fire on every corpus carrying
+   * an older reading at once, and this project has twice learned what happens to one of those.
+   */
+  of?: string;
+  /** ⛔ Whether the words have moved since. A stale yes is not a yes — see `buildableReads`. */
+  stale: boolean;
+  /**
+   * Could they build from it, as it stood — ⛔ THREE STATES, AND `undefined` IS NOT A NO.
+   *
+   * The field is optional on `Verdict`, so a reading relayed without it, or written before it
+   * existed, states nothing about buildability. Collapsing that to `false` would make `check`
+   * refuse every such corpus — *"a refusal firing on all of them is one people switch off"* —
+   * and collapsing it to `true` would let the gate pass on exactly the records it cannot read.
+   * It counts as neither: a reading that did not answer the question has not answered it.
+   */
+  buildable?: boolean;
+  /** Slot refs that stopped them, where they said. */
+  blockedBy: string[];
+  note?: string;
+}
+
+/**
+ * The hash of what a read-through covered, for a ref at either grain — ⛔ ONE HOME, TWO CALLERS.
+ *
+ * `doRead` stamps it and `buildableReads` compares it. If those two resolved the grain differently —
+ * a feature read covering its descendants, say, against a hash taken over one scope — every read
+ * would be stale the moment it was written, which is exactly the shape the decomposer hit on
+ * `servesHash` and said so about: *"any offering with exactly one `serves` entry reads stale
+ * immediately."* So neither caller resolves anything; both ask this.
+ */
+export function readHashFor(corpus: Corpus, ref: string): string {
+  const [scopeId, exchange] = ref.split("#");
+  const scopes = exchange ? [scopeId!] : descendants(corpus, scopeId!);
+  const refs: string[] = [];
+  for (const id of scopes) {
+    const scope = corpus.scopes.find((s) => s.scope.id === id)?.scope;
+    if (!scope) continue;
+    for (const ex of scope.exchanges) if (!exchange || ex.id === exchange) refs.push(`${id}#${ex.id}`);
+  }
+  return readHash(corpus, refs);
+}
+
+/** The scope ids from one scope up to the root, itself included. */
+function ancestryOf(corpus: Corpus, scopeId: string): Set<string> {
+  const out = new Set<string>([scopeId]);
+  for (let id: string | undefined = scopeId; id; ) {
+    const parent: string | undefined = corpus.scopes.find((s) => s.scope.id === id)?.scope.in;
+    if (!parent || out.has(parent)) break;
+    out.add(parent);
+    id = parent;
+  }
+  return out;
+}
+
+/**
+ * Every read-through standing over one ref, newest first, at any buildability.
+ *
+ * ⛔ The only caller that wants ALL of them is `readinessOf`, which has to tell a spent yes from no
+ * yes at all. `buildableReads` and `unbuildableReads` are the two filtered answers.
+ */
+export function readThroughsFor(corpus: Corpus, ref: string): ReadThrough[] {
+  const [scopeId, exchange] = ref.split("#");
+  const ancestry = ancestryOf(corpus, scopeId!);
+  const under = new Set(descendants(corpus, scopeId!));
+  return readsIn(corpus).filter((r) => {
+    const [at, atExchange] = r.scope.split("#");
+    if (exchange && atExchange && !(at === scopeId && atExchange === exchange)) return false;
+    if (atExchange && !exchange) return under.has(at!);
+    return ancestry.has(at!) || under.has(at!);
+  });
+}
+
+const readsIn = (corpus: Corpus): ReadThrough[] =>
+  corpus.verdicts
+    .filter((v) => v.kind === "read" && v.scope)
+    .map((v) => ({
+      scope: v.scope!,
+      by: v.by,
+      at: v.at,
+      of: v.covers_read,
+      /**
+       * ⛔ A READING WITH NO HASH IS NOT STALE — it is unprovenanced, which is a different thing and
+       * routes differently. Calling it stale would tell somebody their words had moved when nothing
+       * says they had; what is true is that nothing records what was read. `buildableReads` declines
+       * it either way, and `check` says which it is.
+       */
+      stale: Boolean(v.covers_read) && v.covers_read !== readHashFor(corpus, v.scope!),
+      buildable: v.buildable,
+      blockedBy: v.blocked_by ?? [],
+      note: v.note,
+    }))
+    .sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
+
+/**
+ * The read-throughs that say a builder could not start — ⛔ A RECORDED NO, AND ONLY THAT.
+ *
+ * What `check` refuses on and what the packet banners. Both are claims ABOUT a person's statement,
+ * so both need the statement to exist: `=== false`, never `!== true`.
+ *
+ * ⛔ IT REACHES IN BOTH DIRECTIONS, WHICH `buildableReads` DELIBERATELY DOES NOT. A person who
+ * could not build a parent could not build its children — they read the subtree. And a person who
+ * could not build ONE behaviour has found something wrong with the feature containing it, so the
+ * feature is not startable either. A no is contagious in both directions; see the other one.
+ */
+export function unbuildableReads(corpus: Corpus, ref: string): ReadThrough[] {
+  const [scopeId, exchange] = ref.split("#");
+  const ancestry = ancestryOf(corpus, scopeId!);
+  const under = new Set(descendants(corpus, scopeId!));
+  return readsIn(corpus).filter((r) => {
+    if (r.buildable !== false) return false;
+    const [at, atExchange] = r.scope.split("#");
+    /** A no on a sibling behaviour is not a no on this one. */
+    if (exchange && atExchange && !(at === scopeId && atExchange === exchange)) return false;
+    return ancestry.has(at!) || under.has(at!);
+  });
+}
+
+/**
+ * The read-throughs that say a builder could start.
+ *
+ * ⛔ DOWNWARD ONLY, AND NEVER UP. A person who read a whole feature and could build it has said
+ * something about every behaviour in it; a person who read ONE behaviour has said nothing about its
+ * siblings, so their yes must not make the feature ready. Asked of a feature, a child's yes is not
+ * an answer — asked of the child, the parent's yes is.
+ *
+ * ⛔ AND IT IS A RECORDED YES, NOT THE ABSENCE OF A NO, which is the other half of the asymmetry:
+ * `readinessOf` withholds a pass until somebody says so, `check` stays quiet until somebody says
+ * otherwise. A reading that stated neither satisfies neither.
+ */
+export function buildableReads(corpus: Corpus, ref: string): ReadThrough[] {
+  const [scopeId, exchange] = ref.split("#");
+  const ancestry = ancestryOf(corpus, scopeId!);
+  return readsIn(corpus).filter((r) => {
+    if (r.buildable !== true) return false;
+    /**
+     * ⛔ AND IT HAS TO BE CURRENT, which was the last laundering route left in the gate. A person
+     * read a feature, said they could build it, and that stood after every sentence in it was
+     * rewritten — the one thing in the model that could be true forever. `of` absent fails this
+     * too: a yes nothing can tie to any particular words is not evidence about these ones.
+     */
+    if (!r.of || r.stale) return false;
+    const [at, atExchange] = r.scope.split("#");
+    if (atExchange) return Boolean(exchange) && at === scopeId && atExchange === exchange;
+    return ancestry.has(at!);
+  });
+}
+
+/**
+ * ⛔ MOVED HERE FROM `readiness.ts`, BECAUSE TWO SURFACES WERE ANSWERING IT AND ONLY ONE HAD IT.
+ *
+ * `doRead` refuses *"I could build from this"* over `questionsFor(scope)` with no filter at all —
+ * every question anywhere under the scope. `readinessOf` asks this function and reports a sibling
+ * exchange's question as `around it`, deliberately: *"a sentence it does not use, a slot it does not
+ * have, and an invitation to go and ask a person about neither."*
+ *
+ * Both are claims about what blocks one piece of work, and they disagreed. The cost was exact:
+ * `money#see-a-balance` has every slot agreed and every claim demonstrated, its sibling
+ * `record-spending` has two open questions — so readiness called it clear, and the act a person
+ * would use to record that they could build it was refused. With buildability inside the gate,
+ * that combination makes the exchange permanently unready. One function, both callers.
+ */
+/**
+ * Where one of the queue's questions stands relative to this work.
+ *
+ *   `on it`        it is about a fact of this work — a hole, and nothing here is buildable
+ *   `around it`    it reaches this work and lands on none of its facts — raise it, do not gate on it
+ *   `nowhere near` it is about some other behaviour, and this verdict is not the place for it
+ *
+ * ⛔ THE THIRD ONE MATTERS AS MUCH AS THE OTHER TWO. `questionsFor` is asked of a SCOPE, so asking
+ * about one behaviour returns its siblings' questions too. Reporting those as reaching the work would
+ * tell a grooming agent that `record-earning` is held up by a question about `record-spending` — a
+ * sentence it does not use, a slot it does not have, and an invitation to go and ask a person about
+ * neither.
+ *
+ * ⛔ AND FOR A RULE, `awaiting` DECIDES RATHER THAN THE SELECTOR. `openRuleQuestions` returns a rule
+ * for every scope it selects — right for a queue, because ruling it is work somebody owes — but an
+ * open rule supplies no sentence, so where the exchange already states the slot the local sentence is
+ * the answer and the rule is holding nothing open. `resolveRules` records `awaiting` only where the
+ * exchange says nothing itself, which is exactly the distinction, already drawn once.
+ */
+export type Where = "on it" | "around it" | "nowhere near";
+
+export function whereQuestionStands(corpus: Corpus, q: Question, scopes: string[], exchange?: string): Where {
+  const seg = q.ref.split("#");
+  /** A slot, one of its statements, or a named refusal case — a fact somebody can point at. */
+  if (seg.length >= 3) {
+    if (!scopes.includes(seg[0]!)) return "nowhere near";
+    return !exchange || seg[1] === exchange ? "on it" : "nowhere near";
+  }
+  /** A contested word, `<scope>#<word>` — scope-wide, and it blanks no slot. */
+  if (seg.length === 2) return scopes.includes(seg[0]!) ? "around it" : "nowhere near";
+  const { awaiting } = resolveRules(corpus);
+  for (const [ref, rules] of awaiting) {
+    if (!rules.some((r) => r.id === q.ref)) continue;
+    const at = ref.split("#");
+    if (!scopes.includes(at[0]!)) continue;
+    if (!exchange || at[1] === exchange) return "on it";
+  }
+  return "around it";
+}
+
+/**
+ * ⛔ MOVED HERE FOR THE REASON `whereQuestionStands` MOVED HERE, AND IT IS THE OTHER HALF OF THE
+ * SAME DEFECT.
+ *
+ * `questionsIn` opens each slot with `if (!fill) continue` — so a slot nobody has filled is not a
+ * question, and never was. That is right: nobody has been ASKED anything about it. But it meant the
+ * act's refusal and the gate's hole list were disjoint on exactly the purest case:
+ *
+ *     grid                    `·` — nobody has thought about this
+ *     readinessOf             a hole, so `ready: false`
+ *     questionsFor            nothing, so the act saw nothing
+ *     read --buildable true   ✓ recorded
+ *
+ * Driven on `money#see-a-balance` with `again` removed: one blank slot, zero questions, one hole,
+ * and the act accepted *"I read this end to end and could build from it"* over it. The gate still
+ * blocked, so no builder was handed it — but the corpus then held a person's stamp contradicting
+ * its own grid, and the act's whole stated reason is that *"'I read it and could build it' and 'we
+ * have not decided that' cannot both be true."* A slot nobody has thought about is that sentence's
+ * strongest case.
+ */
+/**
+ * Blank slots, taken from the grid rather than counted again.
+ *
+ * ⛔ THE GRID IS ASKED BECAUSE THE EXCLUSIONS ARE THE HARD PART, AND THERE ARE ALREADY THREE COPIES
+ * OF THEM. A slot with no fill is not automatically a hole: a `refuses` answered by a rule's shared
+ * named cases is answered, a slot downstream of an unruled `answer` is *"not a hole; not yours to
+ * fill"*, and a slot waiting on an open org-wide rule is a hole whose home is the RULE — reporting
+ * it per slot is what turned seven questions into 643 refusals. `check`, `compilePacket` and
+ * `gridFor` each carry those three, each with a ⛔ saying they must agree; a fourth copy here is how
+ * three agreeing implementations become four disagreeing ones.
+ *
+ * So the mark is read, and `·` is the one that means nobody has thought about it — *"a hole, not a
+ * silence"*, in the grid's own words.
+ */
+export const NOTHING_SAYS_THIS = "·";
+
+export function blankSlots(corpus: Corpus, scope: string, exchange?: string): string[] {
+  const g = gridFor(corpus, scope);
+  if (!g) return [];
+  const out: string[] = [];
+  for (const row of g.rows) {
+    if (exchange && row.exchange !== exchange) continue;
+    for (const slot of SLOTS as readonly SlotName[])
+      if (row.cells[slot]?.mark === NOTHING_SAYS_THIS) out.push(`${scope}#${row.exchange}#${slot}`);
+  }
+  return out;
 }

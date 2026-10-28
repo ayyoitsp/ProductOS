@@ -304,7 +304,7 @@ const findTool = tool(
  */
 const readinessTool = tool(
   "productos_readiness",
-  "Whether a feature or one behaviour can be built, as a field: ready yes/no and why, every claim with its level (accepted | derived | suggested | open), who wrote it, the questions nobody has answered, and the testing requirements with their ref and the hash of the words each was written from. Call it before starting work. Takes a scope or <scope>#<exchange> — not a ticket id.",
+  "Whether a feature or one behaviour can be built, as a field: ready yes/no and why, every claim with its level (accepted | strongly-supported | corroborated | one-source and below), who wrote it, the questions nobody has answered, the testing requirements with their ref and the hash of the words each was written from, whether a person read it end to end and could build from it, and the promises no part of the system answers yet. ⛔ `ready` needs a recorded read-through: unread is not a pass. ⛔ `unserved` is reported and never gating — a promise may genuinely need no new machinery and nothing can say so yet. Call it before starting work. Takes a scope or <scope>#<exchange> — not a ticket id.",
   AtDir.extend({ ref: z.string() }),
   (a, paths) => {
     const dir = dirOf(a, paths);

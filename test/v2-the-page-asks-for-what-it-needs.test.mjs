@@ -363,7 +363,12 @@ test("going away from a container and back shows exactly it, both times", { skip
      */
     const showing = `[...document.querySelectorAll("section.view")].filter((s) => !s.hidden).map((s) => s.dataset.view)`;
     const press = async (id) => {
-      await page.evaluate(`document.querySelector('nav.scopes a[data-goto="${id}"]').click()`);
+      /**
+       * ⛔ THE MENU IS NOT ONLY THE LISTS. A root child is a TAB now, and the tab carries the
+       * address — so a selector scoped to `nav.scopes` finds nothing for exactly the containers
+       * this test navigates between, and fails with `Cannot read properties of null`.
+       */
+      await page.evaluate(`(document.querySelector('.topframe [data-goto="${id}"]')).click()`);
       await page.waitFor(
         `(() => { const s = document.querySelector('section.view[data-view="${id}"]');
                   return document.readyState === "complete" && !!s && !s.hidden; })()`,

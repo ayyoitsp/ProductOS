@@ -1504,13 +1504,45 @@ export const AUTHORS: Author[] = [
        */
       "`serves` — the product statement each capability exists for, or the capability that needs it",
       "`uses` — what a subsystem leans on across the tree, where containment cannot say it",
+      /**
+       * ⛔ THE FIELD THAT CLOSED fg-0020, AND WITHOUT IT THIS ROLE'S OUTPUT COULD NEVER BE COMPLETE.
+       *
+       * `readinessOf` now refuses a build while any promise has no part behind it — the twin of
+       * `untested`, which it could not be while an empty list was unreachable. It is reachable
+       * because of this: a promise about the ABSENCE of behaviour (*"looking is never refused for
+       * having been done before"*) has nothing to build, and saying so is a conclusion this role
+       * reaches rather than a gap it leaves.
+       *
+       * ⛔ Priced at thirty characters of reasoning and hashed against the claim, because it is the
+       * only route past that gate — and an unpriced escape is the cheapest sentence in a schema.
+       */
+      "`needs_nothing` — where a promise requires nothing to be built, the conclusion that it does not, with why. ⛔ Hashed against the claim, so rewording the promise asks again",
     ],
     never: [
       "write or reword product truth — a capability answers a promise and never changes one. ⛔ A decomposition that needed the promise to be different is a note, not an edit",
       "invent a capability nothing serves: if no statement requires it, say so rather than filing it, because a part nobody asked for is indistinguishable from layering one level up",
       "name infrastructure — a queue, a table, a topic or a framework is how a part is built, not what it is",
+      /**
+       * ⛔ THE ESCAPE THIS ROLE NOW HOLDS, AND THE ONE WAY TO MISUSE IT. `needs_nothing` is the only
+       * route past the machinery gate, so reaching for it on a promise that is merely hard to
+       * decompose turns a gate into a formality — and it reads, in the file and on the page,
+       * identically to a promise that genuinely needed nothing.
+       */
+      "⛔ conclude `needs_nothing` because the parts are unclear. It says nothing HAS to exist — a promise about the absence of behaviour, or one an existing capability already answers, which is `serves` and not this. Unclear is a note addressed to whoever can say",
       "write a given/when/then here: precision about behaviour belongs to product truth, and this layer is a sketch of the parts",
-      "stamp anything walked, validated or accepted. ⛔ Capabilities become agreeable by engineers later; nothing agrees to one today",
+      /**
+       * ⛔ THE SECOND CLAUSE USED TO SAY *"nothing agrees to one today"*, AND THAT IS NO LONGER TRUE.
+       *
+       * Peter: *"the dependency is a capability dependency, and those should be validated"*, and
+       * *"we need to ensure the capability of 'ledger' and 'increment balance' has been validated by
+       * a human, but not more than that"*. A person can now agree to one part and `readinessOf`
+       * holds a build until every part a promise leans on carries somebody's name.
+       *
+       * ⛔ WHAT DOES NOT CHANGE IS THIS ROLE'S HALF OF IT. An author that could stamp its own output
+       * is the shape every `never` in this file exists to refuse — and here it would be software
+       * validating the machinery a human gate was just built around.
+       */
+      "stamp, validate or accept anything — ⛔ including a capability. A person agrees to one part at a time now, and a role agreeing to its own output would be software clearing the gate built to make somebody look",
     ],
     needs: ["read-files", "search-files", "run-commands", "write-corpus"],
     each: "feature",
@@ -2349,6 +2381,35 @@ export const SHIMS: Shim[] = [
       "⛔ checking somebody actually agreed before spawning either of these — the precondition is the whole point of the split",
       "deciding what to do with what comes back: a question the corpus must settle goes to the person, never to the builder",
       "every act of judgement — an engineer saying it is buildable is not somebody agreeing it is right",
+      /**
+       * ⛔ WHAT `buildability` FINDS HAS TO LAND, OR `ready` IS BACK TO MEASURING TIDINESS.
+       *
+       * Peter: *"buildability should be a part of readiness, should not introduce a new 'groomed'
+       * concept. don't know what we would use 'ready' for outside of buildability."*
+       *
+       * `readinessOf` now requires a recorded read-through and refuses while one says a builder
+       * could not start. The reviewer still writes nothing — it is a judge — so this session is the
+       * only thing between a finding and the gate. Dropping that step leaves a scope reading
+       * `ready: false / nobody has read this` forever, which is the honest state and not a useful
+       * one; recording a yes over findings nobody answered is the dishonest one.
+       */
+      "⛔ landing what `buildability` found: each gap it names becomes a question on the slot it belongs to, " +
+        "then a read-through recording whether somebody could build from it — `buildable: false` with those refs " +
+        "as `blockedBy`, or `true` once they are answered. ⛔ The reviewer writes nothing and `ready` now requires " +
+        "this, so a finding that stops here stops the gate too",
+      /**
+       * ⛔ A SESSION THAT DOES NOT KNOW THIS READS THE GATE RE-CLOSING AS THE TOOL LOSING A STAMP.
+       *
+       * Peter: *"let's fix read:true indefinitely for sure"*. A read-through now records the hash of
+       * every sentence it covered, so a reword expires it — the same way a criterion goes stale. The
+       * failure this prevents is a yes that stood after every sentence under it had been rewritten;
+       * the failure it introduces, if nobody is told, is somebody re-running `buildability` from
+       * scratch on a feature whose reader is one diff away from re-confirming.
+       */
+      "⛔ knowing a read-through expires: it is stamped against the words it covered, so rewording any " +
+        "of them makes the scope unready again and `check` says so as `read-through-older-than-what-it-read`. " +
+        "⛔ What is owed then is showing the reader WHAT MOVED, not another review — re-confirming is one " +
+        "glance at a diff, which is the whole reason the words read are recorded",
     ],
   },
   /**

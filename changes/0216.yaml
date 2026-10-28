@@ -1,22 +1,14 @@
 id: "0216"
-said: |-
-  we should probably have a glossary section that is 'top level'
-  [asked what happens when a feature redefines a glossary word] Refuse it
-  [asked whether a word used where no definition reaches is a check failure or a question]
-  A question for the interviewer
+said: let's merge all our changes so far, and let's implement fg0020
 at: 2026-10-28
 kind: concept
 reaches:
-  model: ""
-  derive: definedOutOfReach
-  generate: ""
-  surface: ""
-  check: redefines-a-glossary-word
-  instruct: ""
-  pin: a drifted word is asked about ONCE, at the product
+  model: export const NeedsNothing
+  derive: staleConclusions
+  surface: Nothing has to be built for
+  check: nothing-needed-for-words-that-moved
+  instruct: needs_nothing
+  pin: rewording the promise un-concludes it, and check refuses the stale conclusion
 waived:
-  model: '⛔ THE MECHANISM ALREADY EXISTED AND NOBODY HAD USED IT. `terms` live on a scope and `vocabularyReach` walks up `in:`, so a term on the PRODUCT ROOT already reaches everything beneath it — that IS a top-level glossary. Measured on his corpus: 0 terms at the top, 188 below, "deal" defined four separate times. What was missing was never a field; it was a check that makes the top-level home mean something and a question that notices when a word drifts.'
-  generate: Nothing generates a term. An author writes one, and which sense keeps a name is a person's decision — the framework's job is to notice the collision and ask, which is where this landed.
-  surface: "The worklist renders whatever `interviewFor` returns and `check` prints its own findings, so both halves reach a reader without a surface change. ⛔ The arguable part: nothing yet renders the glossary AS a glossary — a product page section listing the words that reach everything. That is a real piece of work and it is not this change."
-  instruct: ⛔ ARGUABLE AND RECORDED RATHER THAN CLAIMED. No role is told to put a word in the glossary, because the question this change adds is asked OF A PERSON — *"A question for the interviewer"* was his call, and the interviewer's brief already says to raise what a corpus leaves undecided. What a brief would need to say is what to do once somebody answers, and that act is a term write, which has no intent yet.
+  generate: "No generator writes or reads a conclusion about machinery, and one that did would be the defect rather than the layer being reached. `derived.by` on a `NeedsNothing` names an AUTHOR ROLE and `check` notes a typed one as counting for nothing at the gate — so software concluding that nothing has to be built is precisely the shape both of those exist to refuse: it is the only route past the one check on this axis, and a generator reaching it would hand that route to anything that runs. Verified by looking rather than assumed: `draw.ts`, `draw-write.ts`, `propose.ts`, `routes.ts`, `derive-states.ts` and `cli/commands/v2.ts` are the generate files and `needs_nothing` appears in none of them. What a generator does produce from this — the packet section a builder reads — is `compilePacket`, which is the surface layer and is reached."
 closed: 2026-10-28

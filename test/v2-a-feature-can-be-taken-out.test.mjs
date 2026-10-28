@@ -107,14 +107,24 @@ test("a withdrawn feature is not in the menu, and one that is kept still is", ()
 
   /** ⛔ A NON-ZERO FIRST: it has to be in the menu before being taken out, or the absence proves nothing. */
   assert.match(page(dir), new RegExp(`data-scope="${id}"`), "the feature was not in the menu to begin with");
-  /** ⛔ A sibling, NOT a descendant — a descendant goes with the cascade and would prove the opposite. */
-  const kept = "chores";
+  /**
+   * ⛔ A ROW THAT SURVIVES, AND IT HAS TO BE A ROW. `chores` is a root child, so it is a TAB, and a
+   * group lists its CHILDREN rather than itself — so asserting `data-scope="chores"` tests the menu
+   * model rather than the withdrawal, and reads as "withdrawing one feature emptied the menu" when
+   * nothing of the sort happened. `one-off-chores` is filed under it and really is a row.
+   *
+   * ⛔ Not a descendant of the withdrawn one, which would go with the cascade and prove the opposite.
+   */
+  const kept = "one-off-chores";
+  assert.match(page(dir), new RegExp(`data-scope="${kept}"`), "the control row is not in the menu to begin with");
 
   const r = withdraw(dir, id, "claude", "2026-10-26", "taken out", false);
   assert.ok(r.ok, r.ok ? "" : r.why);
   const after = page(dir);
   assert.doesNotMatch(after, new RegExp(`data-scope="${id}"`), "a withdrawn feature still has a row in the menu");
-  if (kept) assert.match(after, new RegExp(`data-scope="${kept}"`), "withdrawing one feature emptied the menu");
+  /** ⛔ And no tab either: a root child is a tab, so a withdrawal that left one is still in the menu. */
+  assert.doesNotMatch(after, new RegExp(`data-tab="${id}"`), "a withdrawn feature still has a tab");
+  assert.match(after, new RegExp(`data-scope="${kept}"`), "withdrawing one feature emptied the menu");
 });
 
 test("⛔ the act is reachable from the CLI, which it never was", () => {
