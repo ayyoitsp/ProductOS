@@ -595,13 +595,81 @@ function wordIndex(corpus: Corpus) {
  * layer along. A word is only worth asking about when MOST of its uses cannot see a definition:
  * that is still a count, and it is the shape of the one Peter found (11 uses, 2 reached).
  */
-function definedOutOfReach(corpus: Corpus): Array<{ word: string; where: string[]; users: number; reaches: number }> {
-  const { defined, spread } = wordIndex(corpus);
+/**
+ * Words the product's glossary defines that a feature defines again.
+ *
+ * ⛔ A QUESTION, NEVER A WALL — AND THAT IS A REVERSAL OF WHAT I SHIPPED. `check` refused this for
+ * about an hour. Peter: *"anyone should be able to redefine a gloassary word - why wouldn't thye?
+ * nothing should be refused of a human requesting to make changes. product os should be reindexing
+ * based off the feedback."*
+ *
+ * He is right about what a refusal DOES: it stops a corpus being handed over, so a person who
+ * changed a word of their own product truth was told their product had become unreviewable. The
+ * collision is real and worth surfacing; what was wrong was making it somebody's punishment rather
+ * than somebody's question.
+ *
+ * ⛔ AND IT CARRIES BOTH DEFINITIONS, because "this word is defined twice" without showing the two
+ * senses is a feeling. A person deciding needs to read them side by side — that is the whole of the
+ * decision, and anything less asks them to go and look it up.
+ */
+function glossaryCollisions(
+  corpus: Corpus
+): Array<{ word: string; scope: string; above: string; below: string; root: string }> {
+  const glossary = corpus.scopes.find((x) => !x.scope.in)?.scope;
+  if (!glossary) return [];
+  const out: Array<{ word: string; scope: string; above: string; below: string; root: string }> = [];
+  for (const { scope } of corpus.scopes) {
+    if (scope.id === glossary.id) continue;
+    for (const [word, term] of Object.entries(scope.terms ?? {})) {
+      const hit = Object.entries(glossary.terms ?? {}).find(([w]) => w.toLowerCase() === word.toLowerCase());
+      if (!hit) continue;
+      out.push({
+        word,
+        scope: scope.id,
+        above: plain(hit[1].means),
+        below: plain(term.means),
+        root: glossary.id,
+      });
+    }
+  }
+  return out;
+}
+
+function definedOutOfReach(
+  corpus: Corpus,
+  scopeId?: string
+): Array<{ word: string; where: string[]; users: number; reaches: number }> {
+  const { defined, spread, haystack } = wordIndex(corpus);
+  /**
+   * ⛔ SCOPED TO ONE FEATURE WHERE ASKED THAT WAY — and folding this to the product was my mistake.
+   *
+   * Asked per feature it summed to 950 across the corpus, so I folded it to the root. Peter:
+   * *"we should be able to start the interviewer on a feature, and have it fan out to the
+   * gloassary/capabilities that are needed to support the feature."*
+   *
+   * He is right and the 950 was a number nobody experiences. Nobody interviews 64 features at once;
+   * they interview ONE, and what that one needs is the words IT uses — seventeen on the feature we
+   * measured, which is the work of making that feature buildable rather than a corpus-wide audit
+   * nobody asked for. The sum across features was me optimising a total no person ever sees.
+   *
+   * ⛔ AND THE PRODUCT VIEW STAYS, because the sweep is a real thing somebody does deliberately.
+   * Same derivation, two grains: everything that has drifted, or everything this feature leans on.
+   */
+  const inReach = scopeId ? new Set(vocabularyOf(corpus, scopeId).map((x) => x.word.toLowerCase())) : null;
+  const here = scopeId ? haystack.get(scopeId) ?? "" : null;
+
   const out: Array<{ word: string; where: string[]; users: number; reaches: number }> = [];
   for (const [word, where] of defined) {
     const { users, reaches } = spread.get(word) ?? { users: [], reaches: 0 };
-    /** ⛔ Drifted: used in several places and reaching fewer than half of them. */
-    if (users.length < 3 || reaches * 2 >= users.length) continue;
+    if (scopeId) {
+      /** ⛔ Words THIS feature uses and cannot see a definition for. Its own words are fine. */
+      if (where.includes(scopeId)) continue;
+      if (inReach!.has(word)) continue;
+      if (!here!.includes(` ${word.replace(/[^a-z0-9]+/g, "-").replace(/-/g, " ")} `)) continue;
+    } else {
+      /** ⛔ Drifted: used in several places and reaching fewer than half of them. */
+      if (users.length < 3 || reaches * 2 >= users.length) continue;
+    }
     out.push({ word, where, users: users.length, reaches });
   }
   return out.sort((a, b) => b.users - a.users);
@@ -1654,7 +1722,7 @@ export function interviewFor(corpus: Corpus, scopeId: string, findings: Finding[
    * product or it does not; whose feature noticed is an accident of where somebody was reading.
    */
   const atProduct = !corpus.scopes.find((x) => x.scope.id === scopeId)?.scope.in;
-  const loose: Owed[] = (atProduct ? definedOutOfReach(corpus) : []).map((x) => ({
+  const loose: Owed[] = definedOutOfReach(corpus, atProduct ? undefined : scopeId).map((x) => ({
     ref: `${scopeId}#word:${x.word.replace(/[^a-z0-9]+/g, "-")}`,
     owes: "undefined-word" as const,
     asks: [
@@ -1663,13 +1731,27 @@ export function interviewFor(corpus: Corpus, scopeId: string, findings: Finding[
        * is the whole product, so the sentence said nothing. The arithmetic IS the context: where it
        * is defined, how far it travels, and how much of its use that covers.
        */
-      `"${x.word}" is defined in ${x.where.join(" and ")}, and used in ${x.users} places across the product.`,
-      `The definition reaches ${x.reaches === 0 ? "none of them" : x.reaches === 1 ? "one of them" : `${x.reaches} of them`}.`,
-      "Is it one thing?",
+      /**
+       * ⛔ TWO GRAINS, TWO VOICES. Started on a feature this is *"you use this word and cannot see
+       * what it means"*; started on the product it is *"this word has drifted across the corpus"*.
+       * The feature version read in the corpus voice first — *"used in 62 places across the
+       * product"* — which is true and is not what somebody interviewing one feature is asking.
+       */
+      ...(atProduct
+        ? [
+            `"${x.word}" is defined in ${x.where.join(" and ")}, and used in ${x.users} places across the product.`,
+            `The definition reaches ${x.reaches === 0 ? "none of them" : x.reaches === 1 ? "one of them" : `${x.reaches} of them`}.`,
+            "Is it one thing everywhere, or does some use of it mean something else?",
+          ]
+        : [
+            `This feature uses "${x.word}" and cannot see where it is defined.`,
+            `It is defined in ${x.where.join(" and ")}, and used in ${x.users} places across the product.`,
+            "Is that the same thing meant here?",
+          ]),
     ].join(" "),
     why: `it is defined in ${x.where.join(", ")}, which this feature does not reach — so nothing is holding what it means here`,
     shape:
-      "either the same thing, and the definition belongs somewhere both can see — the product's glossary — or a different thing, which needs its own name",
+      "either one thing, and it moves to the product's glossary where every feature reads it — or more than one, and the other senses need names of their own",
     fills: [`${scopeId}#word:${x.word.replace(/[^a-z0-9]+/g, "-")}`],
     candidates: [],
     about: {
@@ -1678,10 +1760,49 @@ export function interviewFor(corpus: Corpus, scopeId: string, findings: Finding[
       words: [],
       undefined_words: [],
     },
-    act: "a person says whether it is one thing — ⛔ nothing here guesses, because whether two uses mean the same is a reading and not a count",
+    /**
+     * ⛔ THE ACT EXISTS NOW, AND NAMING IT IS THE POINT. Peter: *"why can't an intent write a
+     * term?"* — nothing about it was impossible; a word simply had no address. `<scope>#term#<slug>`
+     * is one, so a question about a word ends in a press rather than in somebody opening a file.
+     */
+    act: `a person says whether it is one thing, and \`rule\` at the product's \`#term#${x.word.replace(/[^a-z0-9]+/g, "-")}\` moves it to the glossary — ⛔ nothing here guesses, because whether two uses mean the same is a reading and not a count`,
   }));
 
-  const owed = [...disputed, ...purpose, ...loose, ...[...folded, ...rest].sort((a, b) => b.fills.length - a.fills.length)];
+  /**
+   * ⛔ ASKED WHERE THE REDEFINITION IS, NOT AT THE PRODUCT — unlike the drift question. A word used
+   * far from its definition is one missing glossary entry, so it folds to the root; a feature that
+   * deliberately redefined a word is a decision somebody made HERE, and the person who made it is
+   * the person who can say whether it is the same thing.
+   */
+  const collisions: Owed[] = glossaryCollisions(corpus)
+    .filter((x) => ids.includes(x.scope))
+    .map((x) => ({
+      ref: `${x.scope}#word:${x.word.replace(/[^a-z0-9]+/g, "-")}`,
+      owes: "undefined-word" as const,
+      asks: [
+        `"${x.word}" is in the product's glossary and this feature defines it again.`,
+        `The glossary says: ${x.above}`,
+        `Here it says: ${x.below}`,
+        "Is that the same thing said differently, or a different thing that needs its own name?",
+      ].join(" "),
+      why: "one word meaning two things cannot be built from — a builder has to guess which sense each sentence meant",
+      shape:
+        "either the same thing, and one of the two definitions goes — or a different thing, which needs a name of its own",
+      fills: [`${x.scope}#word:${x.word.replace(/[^a-z0-9]+/g, "-")}`],
+      candidates: [],
+      about: {
+        feature: plain(title),
+        already: [
+          { asks: `what ${x.root} says it means`, says: x.above },
+          { asks: `what ${x.scope} says it means`, says: x.below },
+        ],
+        words: [],
+        undefined_words: [],
+      },
+      act: "a person says which it is — ⛔ nothing here guesses, because whether two definitions mean one thing is a reading and not a count",
+    }));
+
+  const owed = [...disputed, ...purpose, ...collisions, ...loose, ...[...folded, ...rest].sort((a, b) => b.fills.length - a.fills.length)];
   return {
     scope: scopeId,
     title,

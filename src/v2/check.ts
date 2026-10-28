@@ -325,15 +325,31 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
    * in it. Measured on a real corpus when this was written: **0 terms at the top, 188 defined
    * below, and "deal" — the product's central noun — defined four separate times.**
    *
-   * ⛔ WHAT THAT COSTS, AND IT IS THE REASON THIS IS A REFUSAL RATHER THAN A NOTE. "kind of deal"
-   * was used in 11 scopes and its definition reached 2 of them, so the phrase drifted into carrying
-   * two unrelated concepts — the lender's product (bridge, rehab, DSCR) and the kind of SYSTEM the
-   * deal lives in. Nothing noticed. Peter found it by reading one sentence, and his answer when
-   * asked what should happen was exactly this: *"Refuse it"*.
+   * ⛔ WHAT THAT COSTS. "kind of deal" was used in 11 scopes and its definition reached 2 of them,
+   * so the phrase drifted into carrying two unrelated concepts — the lender's product (bridge,
+   * rehab, DSCR) and the kind of SYSTEM the deal lives in. Nothing noticed; Peter found it by
+   * reading one sentence.
    *
-   * ⛔ IT REFUSES ONLY WHERE THE GLOSSARY ALREADY REACHES. Two scopes that cannot see each other may
-   * legitimately use one word for different things — that is what a local vocabulary is for. A scope
-   * redefining a word that is already in scope is a collision somebody has to have meant.
+   * ⛔ AND IT IS A FINDING, NOT A REFUSAL — I SHIPPED IT AS A REFUSAL AND HE REVERSED IT.
+   *
+   * Asked what should happen when a feature redefines a glossary word, he first said *"Refuse it"*.
+   * Shown the result, he corrected it with a principle much larger than this check:
+   *
+   *   *"anyone should be able to redefine a gloassary word - why wouldn't thye? nothing should be
+   *    refused of a human requesting to make changes. product os should be reindexing based off the
+   *    feedback."*
+   *
+   * He is right, and the reason is what `refuse` actually DOES: it stops a corpus being handed over.
+   * So a person who changes a word of their own product truth is told their product is now
+   * unreviewable — punished for authoring. Ambiguity is work somebody owes, not a wall in front of
+   * the person who owns the words.
+   *
+   * ⛔ THE DISTINCTION THAT SURVIVES: a refusal is right where the corpus cannot be READ — a
+   * reference resolving to nothing, a document that will not parse. Those are not decisions anybody
+   * made. A word meaning two things is a decision, and a decision gets a question.
+   *
+   * ⛔ IT STILL ONLY FIRES WHERE THE GLOSSARY ALREADY REACHES. Two scopes that cannot see each other
+   * may legitimately use one word for different things — that is what a local vocabulary is for.
    */
   const glossary = corpus.scopes.find((x) => !x.scope.in)?.scope;
   if (glossary) {
@@ -343,12 +359,13 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
         const above = Object.keys(glossary.terms ?? {}).find((w) => w.toLowerCase() === word.toLowerCase());
         if (!above) continue;
         add({
-          severity: "refuse",
+          severity: "note",
           kind: "redefines-a-glossary-word",
           where: `${scope.id} :: ${word}`,
           what:
             `"${word}" is in the product's glossary and this defines it again, so one word means two things ` +
-            `and nothing says which is meant where.`,
+            `and nothing says which is meant where. ⛔ Not a refusal — somebody decided this, and a decision ` +
+            `gets a question rather than a wall.`,
           fix:
             `If it is the same thing, drop the local definition and let the glossary carry it. If it is a different ` +
             `thing, give it its own name — a word that means two things cannot be built from, because the builder ` +

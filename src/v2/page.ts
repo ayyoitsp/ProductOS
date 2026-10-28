@@ -861,6 +861,48 @@ function partLabel(corpus: Corpus, scopeId: string, viewId: string, partId: stri
  * resolve to whichever copy came first — possibly the one inside a hidden view. Every fact has one
  * home; this is an index to those homes.
  */
+/**
+ * The words every feature shares, and the ones still stranded in one.
+ *
+ * ⛔ IT SHOWS WHAT IS MISSING BESIDE WHAT IS THERE, because a glossary with four words in it reads
+ * as a finished glossary. Peter decided terms belong to the product — *"One glossary,
+ * product-wide"* — against a corpus with **188 terms across 62 scopes and 0 at the top**. A page
+ * that rendered only the top would have shown an empty section and said nothing about why.
+ */
+function renderGlossary(corpus: Corpus): string {
+  const root = corpus.scopes.find((x) => !x.scope.in)?.scope;
+  const shared = Object.entries(root?.terms ?? {}).sort(([a], [b]) => a.localeCompare(b));
+
+  const elsewhere: Array<{ word: string; where: string; means: string }> = [];
+  for (const { scope } of corpus.scopes) {
+    if (!root || scope.id === root.id) continue;
+    for (const [word, t] of Object.entries(scope.terms ?? {}))
+      elsewhere.push({ word, where: scope.id, means: plain(t.means) });
+  }
+  elsewhere.sort((a, b) => a.word.localeCompare(b.word));
+
+  const list = (rows: Array<{ word: string; means: string; where?: string }>) =>
+    `<dl class="glossary">${rows
+      .map(
+        (r) =>
+          `<dt>${line(r.word)}${r.where ? ` <span class="quiet">${line(r.where)}</span>` : ""}</dt><dd>${line(r.means)}</dd>`
+      )
+      .join("")}</dl>`;
+
+  return (
+    `<h2>Glossary</h2>` +
+    (shared.length
+      ? `<p class="lede">Words every feature shares. A word here means one thing across the whole product.</p>` +
+        list(shared.map(([word, t]) => ({ word, means: plain(t.means) })))
+      : `<p class="lede">Nothing is defined for the whole product yet, so no word is held to one meaning anywhere.</p>`) +
+    (elsewhere.length
+      ? `<h3>Defined in one feature${elsewhere.length === 1 ? "" : `, ${elsewhere.length} of them`}</h3>` +
+        `<p class="lede">These reach only the features that can see where they are defined. A word used more widely than that is asked about in the queue, and ruling on it at the product moves it up here.</p>` +
+        list(elsewhere.slice(0, 200))
+      : "")
+  );
+}
+
 function renderScreenIndex(corpus: Corpus, ids: string[], ctx: Ctx): string {
   const rows = ids.flatMap((id) => {
     const sc = corpus.scopes.find((s) => s.scope.id === id)?.scope;
@@ -4127,6 +4169,12 @@ function renderNav(
    * tabs carried the digit alone. Same shape here, so hovering or reading with a screen reader
    * answers "twenty-one WHAT".
    */
+  /**
+   * ⛔ THE GLOSSARY IS THE ROOT'S OWN TERMS, which is what "top level" means in this model — a term
+   * on the product reaches every feature through `vocabularyReach`. Peter: *"it should go under the
+   * overview as a submenu item there."*
+   */
+  const glossaryWords = Object.keys(corpus.scopes.find((x) => !x.scope.in)?.scope.terms ?? {}).length;
   const pill = (n: number, says: string, quiet = true) =>
     ` <span class="pill${quiet ? " quiet" : ""}" title="${esc(`${n} ${says}`)}" aria-label="${esc(`${n} ${says}`)}">${n}</span>`;
   const OVERVIEW_STRIP =
@@ -4134,6 +4182,8 @@ function renderNav(
       open ? pill(open, open === 1 ? "question nobody has answered" : "questions nobody has answered", false) : ""
     }</button><button type="button" class="subtab" data-sub="screens">Screens${
       screens ? pill(screens, screens === 1 ? "screen drawn here" : "screens drawn here") : ""
+    }</button><button type="button" class="subtab" data-sub="glossary">Glossary${
+      glossaryWords ? pill(glossaryWords, glossaryWords === 1 ? "word every feature shares" : "words every feature shares") : ""
     }</button><button type="button" class="subtab" data-sub="about">${aboutLabel}</button>${charterTabs}</div>`;
 
   return (
@@ -4767,6 +4817,9 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
                renderGroupUx(corpus, scopeId, ctx)
              }
              ${renderScreenIndex(corpus, ids, ctx)}
+           </div>
+           <div class="sub-view" data-tabs="product" data-sub-view="glossary" data-ref="glossary" data-label="Glossary">
+             ${renderGlossary(corpus)}
            </div>
            <div class="sub-view" data-tabs="product" data-sub-view="about" data-ref="${esc(scopeId)}" data-label="Product Truth">
              <h2>${line(entry.scope.title || scopeId)}</h2>

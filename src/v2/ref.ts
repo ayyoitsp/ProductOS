@@ -47,6 +47,8 @@ export type Ref =
   | { kind: "scope"; id: string; scope: string }
   /** What a feature is for — the one thing agreed before anything in it. `<scope>#happy-path`. */
   | { kind: "happy-path"; id: string; scope: string; part?: HappyPart }
+  /** One defined word, as `<scope>#term:<slug>`. See the resolver branch for why it is prefixed. */
+  | { kind: "term"; id: string; scope: string; word: string }
   | { kind: "exchange"; id: string; scope: string; exchange: string }
   | { kind: "slot"; id: string; scope: string; exchange: string; slot: SlotName }
   | { kind: "case"; id: string; scope: string; exchange: string; slot: SlotName; name: string }
@@ -321,6 +323,44 @@ export function resolveRef(corpus: Corpus, raw: string): Resolved | { error: str
             : `"${part}" is not part of a happy path — one of ${HAPPY_PARTS.join(", ")}`,
       };
     return { ref: { kind: "happy-path", id: raw, scope: scopeId!, part: part as HappyPart }, unsettled: false };
+  }
+  /**
+   * ⛔ A WORD HAS AN ADDRESS NOW, AND THE REASON IT DID NOT IS WORTH KEEPING.
+   *
+   * `settle.ts` recorded the blocker plainly: *"the ref is `<scope>#<word>` and a multi-word term is
+   * not one kebab-case segment"*. True of that shape, and it made a whole class of act impossible —
+   * no intent could write a term, so when somebody answered *"yes, it is one thing"* the word could
+   * not be moved to the glossary. The question could be asked and the answer had nowhere to go,
+   * which is the same hole `#happy-path#<part>` was dug out of an hour earlier.
+   *
+   * ⛔ `<scope>#term#<slug>`, WHICH IS THE GRAMMAR THIS FILE ALREADY HAS. A bare slug would be
+   * ambiguous with an exchange — `money#spending` could be either, and a resolver that guesses is
+   * one that is sometimes silently wrong. I reached for `term:<slug>` first and it was refused by
+   * `REF_PATTERN`, correctly: a segment is kebab-case and a colon is not in it. The convention was
+   * already here in `<scope>#<exchange>#shows#<id>` — a bare word naming what the next segment is.
+   *
+   * ⛔ AND A SLUG COLLISION IS REFUSED RATHER THAN PICKED. "kind of deal" and "kind-of-deal" both
+   * slug to the same thing; choosing one would write a definition onto a word nobody named.
+   */
+  if (exId === "term" && parts.length === 3) {
+    const want = slotName!;
+    const slug = (w: string) => w.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+    const hits = Object.keys(scope.terms ?? {}).filter((w) => slug(w) === want);
+    if (hits.length > 1)
+      return { error: `"${want}" could be ${hits.map((w) => `"${w}"`).join(" or ")} in ${scopeId} — two words that read the same here` };
+    if (!hits.length) {
+      /**
+       * ⛔ A WORD THIS SCOPE DOES NOT DEFINE RESOLVES ONLY IF SOMEBODY DEFINED IT SOMEWHERE. That is
+       * the act the glossary needs — moving a word UP to the product, where it does not exist yet —
+       * and it is not an invitation to invent vocabulary from a typo. Writing a word nobody has
+       * used is authoring, and authoring has its own door.
+       */
+      const anywhere = corpus.scopes.find((x) => Object.keys(x.scope.terms ?? {}).some((w) => slug(w) === want));
+      if (!anywhere) return { error: `nothing defines a word that reads as "${want}" anywhere in this product` };
+      const word = Object.keys(anywhere.scope.terms ?? {}).find((w) => slug(w) === want)!;
+      return { ref: { kind: "term", id: raw, scope: scopeId!, word }, unsettled: false };
+    }
+    return { ref: { kind: "term", id: raw, scope: scopeId!, word: hits[0]! }, unsettled: false };
   }
   const ex = scope.exchanges.find((e) => e.id === exId);
   if (!ex) return { error: `no exchange "${exId}" in ${scopeId}` };

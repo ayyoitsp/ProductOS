@@ -1056,7 +1056,14 @@ function doRule(dir: string, o: RulePayload, consent: Consent): Outcome {
    * nobody's acceptance survives a correction they did not see.
    */
   const happyPart = target.ref.kind === "happy-path" && Boolean((target.ref as { part?: string }).part);
-  if (!target.unsettled && !onlyGovernance && !happyPart)
+  /**
+   * ⛔ A WORD HAS NO STANDING EITHER, SO THE SAME GATE LOCKED IT. Same shape as the happy path one
+   * line above: `unsettled` asks whether a question is open, a term has nowhere to hold one, and
+   * gating on it made every definition permanently unwritable. What the glossary work needs most
+   * is exactly this act — a word moved UP to the product, where it does not exist yet.
+   */
+  const aWord = target.ref.kind === "term";
+  if (!target.unsettled && !onlyGovernance && !happyPart && !aWord)
     return no(`nothing to rule on at ${o.slot} — ${nothingToDecide(target)}`);
 
   if (onlyGovernance) {
