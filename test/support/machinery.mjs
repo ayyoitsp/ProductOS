@@ -14,7 +14,7 @@ import fs from "node:fs";
 
 const { loadCorpus } = await import("../../dist/v2/load.js");
 const { claimHash } = await import("../../dist/v2/stamp.js");
-const { readinessOf } = await import("../../dist/v2/readiness.js");
+const { unservedIn } = await import("../../dist/v2/demonstrate.js");
 
 const BECAUSE = "Nothing has to exist for this; it is satisfied by the shape the rest of the behaviour already has.";
 
@@ -53,7 +53,20 @@ export function concludeNothingNeeded(dir, refs, { by = "decomposer", at = "2026
     const next = src.indexOf("\n  - id: ", start + marker.length);
     const end = next === -1 ? src.indexOf("\n---", start) : next;
     assert.notEqual(end, -1, `could not find the end of ${exchange}'s block`);
-    fs.writeFileSync(f, src.slice(0, end) + "\n    needs_nothing:\n" + lines.join("\n") + src.slice(end));
+
+    /**
+     * ⛔ REPLACES ANY BLOCK ALREADY THERE, because this is called twice in one fixture now.
+     *
+     * A reword stales the conclusions as well as the acceptances — that is the point of the hash —
+     * so re-answering the machinery axis after one is the honest loop. Appending a second
+     * `needs_nothing:` key produced `duplicated mapping key` and the corpus stopped loading, which
+     * surfaced as a fixture error two tests away from the cause.
+     */
+    const block = src.slice(start, end);
+    const had = block.indexOf("\n    needs_nothing:");
+    const kept = had === -1 ? block : block.slice(0, had);
+    const body = "\n    needs_nothing:\n" + lines.join("\n");
+    fs.writeFileSync(f, src.slice(0, start) + kept + body + src.slice(end));
   }
 
   /** ⛔ Parsed back, so a fixture writing unloadable YAML fails here rather than as a wrong answer. */
@@ -62,9 +75,17 @@ export function concludeNothingNeeded(dir, refs, { by = "decomposer", at = "2026
   return refs;
 }
 
-/** Conclude whatever `readinessOf` reports as unbacked, at whatever grain it was asked. */
+/**
+ * Conclude nothing-needed for EVERY promise under a ref, so calling it twice is a no-op.
+ *
+ * ⛔ IT TAKES THE WHOLE SET, NOT THE UNSERVED ONES, AND THAT IS NOT A SHORTCUT. `concludeNothingNeeded`
+ * replaces the block it finds, so passing only what is currently unserved deleted the conclusions
+ * that were still current — which is the shape a fixture hits the moment a reword stales one of
+ * several. Caught by `reading it again after the reword makes it ready`, which went from four
+ * unbacked promises to three and said so.
+ */
 export function answerTheMachineryAxis(dir, ref) {
-  const r = readinessOf(loadCorpus(dir), ref);
-  assert.ok(!("error" in r), `readiness refused: ${r.error}`);
-  return concludeNothingNeeded(dir, r.unserved);
+  const [scope, exchange] = ref.split("#");
+  const every = unservedIn(loadCorpus(dir), [scope], exchange, true);
+  return concludeNothingNeeded(dir, every);
 }
