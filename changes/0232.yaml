@@ -1,0 +1,15 @@
+id: "0232"
+said: |-
+  [deploy session, probing the consent fix] The third is the one I cannot account for: 200 with
+  no note written and no question withdrawn. Either `probe: true` discards it, or a dispute with
+  no `via` takes a path that reports success and does nothing.
+at: 2026-10-29
+kind: derivation
+reaches:
+  derive: if (n.probe) continue
+  surface: a probe cannot withdraw a question
+  check: ""
+  pin: a probe cannot withdraw a question — counted nowhere and taking one off a queue are opposites
+waived:
+  check: "`v2 check` reads a corpus as it stands, and a probe that disputes no longer does anything to one — it is inert on load and refused at the door. ⛔ The arguable part: a check COULD report probes carrying `disputes` that are already on disk, since they read as handled and take nothing off. Nothing is known to have written one, so that is a sweep for a corpus that turns out to have them rather than work to do now."
+closed: 2026-10-29

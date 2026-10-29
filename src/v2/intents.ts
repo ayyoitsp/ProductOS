@@ -324,6 +324,26 @@ export const INTENTS: Intent[] = [
     ],
     run: (a, body) => {
       /**
+       * ⛔ A PROBE CANNOT DISPUTE, AND THE TWO WORDS SAY WHY. A probe is "counted nowhere and shown
+       * on no surface a person reviews"; a dispute TAKES SOMEBODY'S QUESTION OFF THEIR QUEUE. One
+       * of those claims to be invisible and the other changes what a person is asked, so a note
+       * claiming both hides a question with nothing on any surface to say it happened.
+       *
+       * It could: measured on a seed corpus, a probe carrying `disputes` took answerable questions
+       * from 3 to 2. `questionsFor` now ignores probes, so anything already written is inert — this
+       * refuses the next one, where the caller can still be told why.
+       */
+      if (body.probe === true && body.disputes === true)
+        return {
+          ok: false,
+          why: "a probe cannot withdraw a question — it is counted nowhere, and this would take one off somebody's queue with nothing to show for it",
+          detail: [
+            "drop `probe` if the rejection is real: a dispute is a judgement and belongs on the record",
+            "or drop `disputes` if you are checking that writing works — an ordinary probe note is still a real write through the whole path",
+          ],
+        };
+
+      /**
        * ⛔ THE DEFAULT IS WHAT THE CALLER IS, never what reads best. A browser press is a person on
        * a page; anything else is software, and `agent` is the honest word for it.
        *

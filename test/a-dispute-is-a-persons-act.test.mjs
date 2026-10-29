@@ -337,3 +337,46 @@ test("⛔ a dispute pointed at nothing is reported, and one pointed at a real qu
   /** ⛔ Every finding names a fix an author can act on — see `framework-not-just-output`. */
   assert.ok(found.fix, "the finding says what is wrong and not what to do");
 });
+
+test("⛔ a probe cannot withdraw a question — counted nowhere and taking one off a queue are opposites", () => {
+  /**
+   * ⛔ FOUND BY A DEPLOY SESSION PROBING THE CONSENT FIX AND NOT BEING ABLE TO ACCOUNT FOR WHAT IT
+   * SAW: a 200 with nothing visible written. The note WAS written — `probe: true` means "counted
+   * nowhere and shown on no surface a person reviews" — and the invisibility hid the effect rather
+   * than there being no effect.
+   *
+   * Measured before the fix, on a seed corpus: a probe carrying `disputes: true` took answerable
+   * questions from 3 to 2. A question vanished from somebody's queue with nothing on any surface
+   * to say why.
+   *
+   * ⛔ TWO PLACES, DELIBERATELY. The door refuses the next one, where a caller can be told. The
+   * derivation ignores any already on disk — a refusal at the SHAPE would stop a corpus that
+   * carries one from loading at all, which is the model area's rule about not making a field
+   * required on the day it lands, wearing its other face.
+   */
+  const dir = oneQuestion();
+  const before = offered(dir);
+
+  const refused = file(dir, BROWSER, { probe: true, disputes: true });
+  assert.equal(refused.ok, false, "a probe was allowed to withdraw a question");
+  assert.match(refused.why, /counted nowhere/);
+  /** ⛔ Both ways out named, or a caller has a refusal and no move. */
+  assert.match(refused.detail.join(" "), /drop `probe`/);
+  assert.match(refused.detail.join(" "), /drop `disputes`/);
+
+  assert.deepEqual(offered(dir), before, "a refused probe changed what is offered");
+});
+
+test("⛔ and an ordinary probe is still a real write — the refusal is about disputing, not probing", () => {
+  /**
+   * ⛔ THE NON-REFUSAL. "A probe was refused" on its own is also what breaking probes entirely
+   * produces, and a probe is a deliberate feature: *"it is still a real write through the whole
+   * path, which is the point of it."*
+   */
+  const dir = oneQuestion();
+  const before = offered(dir);
+
+  const ok = file(dir, BROWSER, { probe: true });
+  assert.ok(ok.ok, `an ordinary probe note was refused: ${ok.why ?? ""}`);
+  assert.deepEqual(offered(dir), before, "an ordinary probe withdrew a question");
+});

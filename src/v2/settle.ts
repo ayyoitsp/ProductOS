@@ -240,6 +240,22 @@ export function questionsFor(corpus: Corpus, scopeId: string): Question[] {
   for (const n of corpus.notes) {
     if (n.state !== "open" || !n.about || n.disputes !== true) continue;
     /**
+     * ⛔ A PROBE CANNOT WITHDRAW A QUESTION, AND IT COULD. A probe is defined at the door as
+     * *"counted nowhere and shown on no surface a person reviews"* — so a probe that disputes takes
+     * somebody's question off their queue INVISIBLY, and nobody can see why it vanished.
+     *
+     * Measured on a seed corpus: a `probe: true` note carrying `disputes: true` took answerable
+     * questions from 3 to 2. Found because a deploy session probing the consent fix got a 200 with
+     * nothing visible written and could not account for it — the note was written, and it was the
+     * invisibility that hid the effect rather than the effect not happening.
+     *
+     * ⛔ HERE RATHER THAN IN THE SCHEMA, because a refusal at the shape would stop any corpus that
+     * already carries one from LOADING — the model area's own rule about not making a field
+     * required on the day it lands, in its other form. This makes existing ones inert; the door
+     * refuses new ones.
+     */
+    if (n.probe) continue;
+    /**
      * ⛔ `?? "agent"`, AND IT USED TO BE `?? "page"` — a missing `via` was read as a person.
      *
      * The same mistake `rule` refuses in the other direction, where the comment reads *"It is not
