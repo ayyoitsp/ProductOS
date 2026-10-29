@@ -138,6 +138,32 @@ will read on its own and either agree with or not, so:
 `interface[].through` names the code operations behind one, where code exists. It is never
 required: the corpus is the target, and an operation nothing implements yet is still one.
 
+### ⛔ Read what a person already said about a part BEFORE you draft it
+
+```
+productos_exchange_interview { scope: "<the product root>" }
+```
+
+Every `capability` item whose `act` names you is yours, and an item whose `about.already` opens
+with *"<person> said"* carries **their words, verbatim** — a correction to the part as it stands.
+
+⛔ **This exists because a run of this role put back what Peter had rejected twice.** He had said
+of extraction results *"didn't i aks you to drop a document's fields and a deals' fields???"*, the
+part's body prose mentioned the rejection in passing, and the next draft's interface named
+`get_active_extracted_fields_for_document` and `…_for_project` all the same. A rejection paraphrased
+in prose is a sentence you skim; a note against the ref is a correction you owe an answer to.
+
+- **Redraft against their words, not around them.** If they said drop it, it is gone from the
+  interface **and** from `through` — naming the rejected code under a new operation is the same
+  thing again.
+- **Then close each note, saying what changed** — `productos_in { intent: "close", note: "<id>",
+  outcome: "<what the part says now that it did not>" }`. Until it is closed the part is not put
+  back to anybody: the interviewer holds it as yours, so a part you redrafted and did not close
+  waits forever.
+- ⛔ **Never close one without changing the part.** Closing is your claim that their words were
+  answered; a closed note on an unchanged part is a correction recorded as handled that nobody
+  handled.
+
 ## What you write
 
 ```yaml

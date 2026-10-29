@@ -51,7 +51,7 @@ import { answeringParts } from "./demonstrate.js";
 import { descendants, questionsFor, rulingAct, type Question } from "./settle.js";
 import { stampFor } from "./stamp.js";
 import { vocabularyReach } from "./load.js";
-import { POLICY_SLOTS, SLOT_ASKED, SLOT_ASKS_SHORT, SLOTS, statements, type SlotName } from "./schema.js";
+import { isHuman, POLICY_SLOTS, SLOT_ASKED, SLOT_ASKS_SHORT, SLOTS, statements, type NoteVia, type SlotName } from "./schema.js";
 
 const plain = (x: unknown): string => String(x ?? "").replace(/\s+/g, " ").trim();
 
@@ -1307,9 +1307,15 @@ function leanedOn(corpus: Corpus, scopeId: string, scopeIds: string[]): Owed[] {
   return confirmableFirst(out);
 }
 
-/** ⛔ Confirmable first: a part written out in full is one press, a gap is somebody else's work. */
+/**
+ * ⛔ Confirmable first: a part written out in full is one press, a gap is somebody else's work.
+ *
+ * ⛔ BY WHOSE MOVE IT IS, NOT BY THE WORDING. This matched "nothing yet says" in `asks`, so a part
+ * sent back by a person's correction — worded differently, and just as much the decomposer's —
+ * sorted among the ones a person can press.
+ */
 const confirmableFirst = (xs: Owed[]): Owed[] =>
-  xs.sort((a, b) => Number(/nothing yet says/.test(a.asks)) - Number(/nothing yet says/.test(b.asks)));
+  xs.sort((a, b) => Number(a.act?.startsWith("`decomposer`") ?? false) - Number(b.act?.startsWith("`decomposer`") ?? false));
 
 /**
  * One part, put to a person — ⛔ THE ONE SHAPE BOTH GRAINS SHARE, so a part asked from a feature and
@@ -1325,6 +1331,18 @@ const confirmableFirst = (xs: Owed[]): Owed[] =>
  * ⛔ AND AGREED-THEN-REWORDED IS ITS OWN QUESTION. The stamp records the words it was taken against,
  * so the person who agreed is asked whether it still holds — one glance at what moved, not a review
  * from scratch.
+ *
+ * ⛔ AND A PART SOMEBODY HAS SAID IS WRONG IS NEVER OFFERED FOR ONE PRESS. Testing this on a real
+ * corpus: Peter's two corrections to a part — *"didn't i aks you to drop a document's fields and a
+ * deals' fields???"* — were filed against it, and the next run still asked him to agree to it in one
+ * press, with the getters he had rejected in its interface. The feature half has had this since
+ * `disputed`; a part did not.
+ *
+ * Any open note from a person, about the part or anything inside it, makes it the decomposer's: it
+ * redrafts against their words, closes the note saying what changed, and only then does the part come
+ * back as one press. ⛔ Not `disputes: true` — that flag withdraws a QUESTION, and a note on a part is
+ * a correction to its wording. Nothing reads the sentence to tell which kind of note it is; that a
+ * person left one is the whole signal.
  */
 function capabilityItem(
   corpus: Corpus,
@@ -1340,6 +1358,38 @@ function capabilityItem(
   const missing = [...(o.interface?.length ? [] : ["what it is asked"]), ...(o.guarantees?.length ? [] : ["what it guarantees"])];
   const name = plain(s.title);
   const some = from ? from.leaning.slice(0, 6) : [];
+  /** What a person has said about this part and nobody has answered by redrafting it. */
+  const said = corpus.notes.filter(
+    (n) => n.state === "open" && (n.about === ref || n.about.startsWith(`${ref}#`)) && isHuman((n.via ?? "agent") as NoteVia)
+  );
+  if (said.length) {
+    const who = [...new Set(said.map((n) => n.by))].join(" and ");
+    return {
+      ref,
+      owes: "capability" as const,
+      asks: [from ? `${from.feature} relies on ${name}.` : "", `${who} said ${from ? "it" : name} is not right yet, and it has not been redrafted.`]
+        .filter(Boolean)
+        .join(" "),
+      why: `asking ${who} to agree to it again as it stands would put back in front of them what they already corrected`,
+      shape:
+        "the part redrafted against their words — ⛔ an author's work, and not a question for the person who already said what is wrong",
+      fills: [ref],
+      candidates: [],
+      about: {
+        feature: from ? from.feature : name,
+        purpose: plain(s.does),
+        already: [
+          ...said.map((n) => ({ asks: `${n.by} said`, says: plain(n.says) })),
+          { asks: "what it does", says: plain(o.does) },
+          ...(o.interface ?? []).map((i) => ({ asks: "asked of it", says: plain(i.operation) })),
+          ...(o.guarantees ?? []).map((g) => ({ asks: "it guarantees", says: plain(g) })),
+        ],
+        words: [],
+        undefined_words: [],
+      },
+      act: `\`decomposer\` redrafts it against what ${who} said, then closes ${said.map((n) => n.id).join(", ")} saying what changed — then it comes back here as one press`,
+    };
+  }
   return {
     ref,
     owes: "capability" as const,
