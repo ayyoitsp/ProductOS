@@ -1,14 +1,9 @@
 id: "0229"
-said: Do both w an agent
+said: the body said *how could this field be read* and the page printed the asterisks — fix those and get it merged
 at: 2026-10-29
-kind: derivation
+kind: surface
 reaches:
-  derive: ""
-  surface: EXCHANGE_READ_TOOLS.some
-  check: ""
-  pin: ""
-waived:
-  derive: "Nothing is computed differently. The same acts run against the same corpus; what changed is which directory the request is handed to run them in. ⛔ `src/v2/store/mcp.ts` is a SURFACE file — I filed this under derive first, which is the same mistake as calling `todo.ts` a generator two days ago: a door is a surface however much machinery sits behind it."
-  check: "`v2 check` reads a corpus as it stands. This is about which temp directory a request is handed while it runs, which no corpus can show."
-  pin: "⛔ THE HONEST GAP, AND IT IS THE WHOLE RISK OF THIS CHANGE. The defect is concurrency-dependent: two MCP calls overlapping on one project. A sequential test passes either way, which is exactly why it survived. The evidence is a measurement on the built module — two MCP-style calls came back with the SAME directory while a mutating call got its own — and that is weaker than a test that fails. A test would need two real MCP calls interleaved against one store, which is worth writing and is not written."
+  surface: EMPHASIS IS HERE BECAUSE THE ALTERNATIVE IS NOT
+  pin: emphasis renders, bold still wins, and a lone asterisk is left alone
+waived: {}
 closed: 2026-10-29

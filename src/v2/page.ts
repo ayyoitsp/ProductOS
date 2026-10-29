@@ -781,9 +781,21 @@ function renderRecord(ds: Decision[]): string {
  * is, where the boundary sits, who works here. A page of behaviours with no framing asks somebody to
  * review sentences about a thing nobody has described to them.
  *
- * ⛔ Deliberately not a markdown renderer. Paragraphs, bold, inline code, and a heading dropped
- * because the title is already on screen — anything more and this becomes a parser nobody asked
- * for, with its own bugs, inside a tool about not inventing things.
+ * ⛔ Deliberately not a markdown renderer. Paragraphs, bold, emphasis, inline code, and a heading
+ * dropped because the title is already on screen — anything more and this becomes a parser nobody
+ * asked for, with its own bugs, inside a tool about not inventing things.
+ *
+ * ⛔ EMPHASIS IS HERE BECAUSE THE ALTERNATIVE IS NOT "NO EMPHASIS", IT IS ASTERISKS ON THE PAGE.
+ * Peter, reading a live subsystem: the body said `*how could this field be read*` and the product
+ * showed him exactly that, asterisks and all. Bold was already handled, so every author writes the
+ * other half of the same notation and the page prints the markup at a reviewer. The narrow set is
+ * the point — this stays four rules, not a parser — but a notation that is half-handled is worse
+ * than one that is not handled at all.
+ *
+ * ⛔ AFTER BOLD, AND NEVER INSIDE IT. `**x**` is matched first and its output contains no asterisk,
+ * so the emphasis rule cannot see the pair it already consumed; running them the other way round
+ * turns `**x**` into `<em>*x</em>*`. The rule also refuses a space after the opening marker, so a
+ * sentence with a lone `*` in it is left alone rather than swallowing the rest of the paragraph.
  */
 function renderProse(body: string): string {
   const text = body.trim();
@@ -795,6 +807,7 @@ function renderProse(body: string): string {
     .map((b) =>
       esc(b.replace(/\s+/g, " "))
         .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+        .replace(/\*(?!\s)([^*\n]+?)(?<!\s)\*/g, "<em>$1</em>")
         .replace(/`([^`]+)`/g, "<code>$1</code>")
     );
   return paras.length ? `<div class="prose">${paras.map((b) => `<p>${b}</p>`).join("")}</div>` : "";
@@ -11092,6 +11105,9 @@ export const STYLE = `<style>
   .subsys > header h3 { margin: 0; font-size: 1rem; }
   .subsys > header code { font-family: ui-monospace, Menlo, monospace; font-size: .72rem; color: var(--dim); }
   .subsys-does { margin: .35rem 0; }
+  .subsys-prose { margin: .5rem 0 .75rem; color: var(--ink); }
+  .subsys-prose p { margin: .4rem 0; }
+  .subsys-prose h2, .subsys-prose h3 { font-size: .95rem; margin: .7rem 0 .2rem; }
   .subsys-uses, .subsys-groups { margin: .35rem 0; font-size: .85rem; color: var(--dim); }
   .cap-list { margin: .5rem 0 0; padding-left: 1.1rem; }
   .cap-list li { margin: .4rem 0; }
@@ -11320,6 +11336,28 @@ function renderSubsystems(
     }
     return out;
   };
+  /**
+   * ⛔ THE BODY IS WRITTEN AND NOTHING RENDERED IT. Peter, having agreed thirty sentences about one
+   * subsystem and then read its page: *"that's it for extraction?"*, then *"why doesn't it render
+   * the documet body? let's get this FIXED"*.
+   *
+   * `carriedFor` above reads this same body — but only from `## Carried from the earlier capability
+   * tree`, and only the bullet lines under its `###` headings. Everything else was dropped in
+   * silence: an author's own prose, and the migration's own introduction. A scope has always
+   * rendered its body through `renderProse`; a subsystem had no such call, so the one place a
+   * capability's reasoning can live was invisible on the one surface anybody reviews.
+   *
+   * ⛔ AND THE CARRIED SECTION IS CUT OUT RATHER THAN RENDERED TWICE. It is already read back beside
+   * the capability it belongs to, which is the whole point of `carriedFor`; printing it here as
+   * well would put the same sentence on the page in two places, which is the thing this project
+   * keeps paying for.
+   */
+  const proseOf = (sid: string): string => {
+    const body = corpus.subsystems.find((x) => x.subsystem.id === sid)?.body ?? "";
+    const cut = body.indexOf("## Carried from the earlier capability tree");
+    const prose = (cut < 0 ? body : body.slice(0, cut)).trim();
+    return prose ? `<div class="subsys-prose">${renderProse(prose)}</div>` : "";
+  };
   /** Who leans on a part: the features that say they rest on it, and the parts that use it. */
   const reliedOnBy = (sid: string): string[] => [
     ...corpus.scopes
@@ -11344,6 +11382,7 @@ function renderSubsystems(
           : ""
       }
       ${relied.length ? `<p class="subsys-relied">relied on by ${relied.join(", ")}</p>` : ""}
+      ${proseOf(s.id)}
       ${
         s.offers.length
           ? `<ul class="cap-list">${s.offers
