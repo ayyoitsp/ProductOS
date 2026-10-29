@@ -20,7 +20,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { checkCorpus } from "./check.js";
 import { loadCorpus, type Corpus } from "./load.js";
-import { Verdict, statements, authorshipOf, type SlotName, type Authorship } from "./schema.js";
+import { Verdict, statements, authorshipOf, isHuman, type SlotName, type Authorship } from "./schema.js";
 import { gateFor, sentencesIn } from "./grid.js";
 import { coveredBy, stampFor, staleReason } from "./stamp.js";
 import {
@@ -71,29 +71,18 @@ export type Via = "page" | "question" | "chat" | "cli" | "agent";
 export const VIA: readonly Via[] = ["page", "question", "chat", "cli", "agent"] as const;
 
 /**
- * Every way a PERSON did something, named — ⛔ POSITIVELY, BECAUSE THE NEGATIVE BROKE THE MOMENT
- * THERE WAS A SECOND NON-HUMAN VALUE.
+ * ⛔ THE HUMAN SET MOVED TO `schema.ts`, AND THIS RE-EXPORT IS THE WHOLE OF THE CHANGE HERE.
  *
- * This was `via !== "agent"`, which is correct for the five values consent has and silently wrong
- * for anything added beside them. `Note.via` now carries `review` — a judge found it and a session
- * wrote it down, so nobody asked for it at all — and under the negative reading `review` counted as
- * HUMAN. `mayRecord` would then have refused a token filing a finding, on the grounds that it was
- * claiming a person did something.
+ * `BY_A_PERSON` and `isHuman` were defined in this file and every gate asks them from here. They
+ * now live beside `NOTE_VIA`, which is the other half of the vocabulary they span, because the
+ * SCHEMA needed the same predicate: `Note.disputes` withdraws a question from somebody's worklist,
+ * so "could a person have said this" stopped being only a gate question and became a shape one.
  *
- * ⛔ SO THE SET IS THE LIST, and a value added to either vocabulary without being added here is a
- * type error rather than a guess. A reviewer's finding and software's default are the two things
- * nobody pressed; everything else is somebody at a page, a question, a chat or a terminal.
+ * ⛔ AND IT IS A MOVE RATHER THAN A COPY. Writing `z.enum(["page","question","chat","cli"])` into
+ * the refinement would have been one line and two sources of truth for the one predicate every
+ * consent decision in this codebase is made of.
  */
-const BY_A_PERSON = ["page", "question", "chat", "cli"] as const;
-
-/**
- * ⛔ WHAT A PERSON DID, as opposed to what something decided on their behalf. Every gate asks this
- * rather than asking whether a record exists.
- *
- * ⛔ TAKES EITHER VOCABULARY. Consent and a filed request ask the same question of a principal —
- * did a person do this — over two value sets that overlap but are not equal. See `NOTE_VIA`.
- */
-export const isHuman = (via: Via | "review"): boolean => (BY_A_PERSON as readonly string[]).includes(via);
+export { isHuman };
 
 export type Act = "accept" | "rule" | "read" | "waive" | "defer" | "withdraw";
 

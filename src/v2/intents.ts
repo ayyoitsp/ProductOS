@@ -326,6 +326,13 @@ export const INTENTS: Intent[] = [
       /**
        * ⛔ THE DEFAULT IS WHAT THE CALLER IS, never what reads best. A browser press is a person on
        * a page; anything else is software, and `agent` is the honest word for it.
+       *
+       * ⛔ AND IT IS ONLY AS HONEST AS `principalFrom`. This line is right and it produced
+       * `via: page` for an agent's token, because `PRODUCTOS_AUTH=off` used to return `browser` for
+       * every request that reached it — so the default read the caller correctly and the caller had
+       * been misdescribed one layer down. Fixed where the fact lives, not by hardening this: a
+       * default of `agent` here would have made a real page press claim to be software, which is
+       * the same loss of information with the sign flipped. See `principalFrom`.
        */
       /** ⛔ `NOTE_VIA`, not `VIA` — a request is not consent, and two of its answers are not ways
        *  anybody could have agreed. See `NOTE_VIA` for what the door refused when this read `VIA`. */
@@ -367,17 +374,31 @@ export const INTENTS: Intent[] = [
        * free: the instance saw it happen, so there is nothing to relay. Anything else asserting a
        * human `via` is speaking for somebody who is not here, and that is exactly what `relay` is.
        */
-      const forged = isHuman(via)
-        ? watchedAPerson(a.who.kind)
-          ? null
-          : mayRelay(a.who)
-        : mayRecord(a.who, via);
+      const watched = watchedAPerson(a.who.kind);
+      const forged = isHuman(via) ? (watched ? null : mayRelay(a.who)) : mayRecord(a.who, via);
       if (forged) return forged;
       return fileNote(a.dir, {
         about: str(body.about),
         says: str(body.says),
         by: str(body.by) || a.pressing,
         via,
+        /**
+         * ⛔ WHO CARRIED IT, DERIVED HERE AND NEVER TAKEN FROM THE BODY.
+         *
+         * A human `via` reached this line one of two ways and they are not the same claim: the
+         * instance watched the press, or `mayRelay` let something automated speak for somebody who
+         * is not here. Only the second has a courier, and until now nothing wrote it down — so a
+         * request Peter typed on a page and a request a model filed in his name were identical on
+         * disk, which is survivable for a message and not for one that withdraws a question.
+         *
+         * ⛔ THE SAME RULE `Consent.relayedBy` OBEYS: `by` and `via` stay the PRESSER's, and this
+         * names the courier beside them. What is trustworthy about the record and what is taken on
+         * somebody's word, in the record rather than in a memory.
+         *
+         * ⛔ AND IT IS THE PRINCIPAL'S ACTOR, not a field. A courier that names itself is not a
+         * courier anybody can audit — it is one more string a caller chose.
+         */
+        ...(isHuman(via) && !watched ? { relayedBy: a.who.actor } : {}),
         at: new Date().toISOString().slice(0, 10),
         /** ⛔ Only ever true where somebody said so. An inferred probe is a request discarded. */
         ...(body.probe === true ? { probe: true as const } : {}),

@@ -72,7 +72,7 @@ export interface Question {
    * — the page derives its own list from here, so the fix did not exist on the surface Peter
    * actually works on. He had rejected one of them three times.
    */
-  disputed?: { note: string; said: string; by: string };
+  disputed?: { note: string; said: string; by: string; relayedBy?: string };
   /** What it costs to guess wrong, where the standing says. */
   cost?: string;
   owed?: string;
@@ -236,11 +236,33 @@ export function questionsFor(corpus: Corpus, scopeId: string): Question[] {
    * unclear is a finding to act on; a person saying it is nonsense withdraws the question. See
    * `Note.disputes` for why nothing reads the sentence to tell them apart.
    */
-  const objected = new Map<string, { note: string; said: string; by: string }>();
+  const objected = new Map<string, { note: string; said: string; by: string; relayedBy?: string }>();
   for (const n of corpus.notes) {
     if (n.state !== "open" || !n.about || n.disputes !== true) continue;
-    if (!isHuman((n.via ?? "page") as NoteVia)) continue;
-    if (!objected.has(n.about)) objected.set(n.about, { note: n.id, said: n.says, by: n.by });
+    /**
+     * ⛔ `?? "agent"`, AND IT USED TO BE `?? "page"` — a missing `via` was read as a person.
+     *
+     * The same mistake `rule` refuses in the other direction, where the comment reads *"It is not
+     * defaulted to the account this runs as: that is who owns the machine, never who is driving."*
+     * A default here is a claim about a record that does not make the claim itself, and the only
+     * safe direction for that is the one that asserts nothing: absent is never somebody.
+     *
+     * ⛔ UNREACHABLE TODAY AND KEPT ANYWAY. `Note.via` is a required enum, so a loaded note always
+     * has one. The value of this clause is what it says about intent to whoever makes it optional.
+     */
+    if (!isHuman((n.via ?? "agent") as NoteVia)) continue;
+    if (!objected.has(n.about))
+      objected.set(n.about, {
+        note: n.id,
+        said: n.says,
+        by: n.by,
+        /**
+         * ⛔ CARRIED, BECAUSE A QUESTION COMES OFF THE WORKLIST EITHER WAY AND THEY ARE NOT THE
+         * SAME CLAIM. A press the instance watched is its own record; a relay is somebody's word,
+         * and the surface that hides the question has to be able to say which it had.
+         */
+        ...(n.relayed_by ? { relayedBy: n.relayed_by } : {}),
+      });
   }
 
   /**

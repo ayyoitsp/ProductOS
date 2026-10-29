@@ -60,16 +60,31 @@ test("with auth off, a request with nothing on it is a signed-in person", async 
   for (const via of HUMAN_VIA) assert.equal(mayRecord(p, via), null, `cannot record ${via}`);
 });
 
-test("with auth off, a bearer token is not treated as a token", async () => {
+test("with auth off, a bearer token is still a token — and still holds everything", async () => {
   const { db } = await twoOwners();
   const env = { PRODUCTOS_AUTH: "off" };
   /**
-   * ⛔ Checked BEFORE the bearer branch. An unrecognised token would otherwise come back as a
-   * principal holding no scopes, which behaves exactly like auth still being on — the switch would
-   * appear not to work for the one caller most likely to be testing it.
+   * ⛔ THIS TEST USED TO ASSERT THE OPPOSITE, AND THAT WAS THE CONSENT HOLE.
+   *
+   * It read *"a bearer token is not treated as a token"* and required `kind: "browser"`, on the
+   * reasoning that an unrecognised credential would otherwise come back holding no scopes — which
+   * behaves exactly like auth still being on, for the one caller most likely to be testing the
+   * switch. The reasoning is right about the symptom and wrong about the cure: it threw away the
+   * single fact the instance had about the caller, and every consent decision is made of that fact.
+   *
+   * What it cost: an agent filing a note through `/api/v2/in` with no `via` had it recorded as
+   * `via: page`, because the door defaults `via` from the principal's kind — so `disputes: true`
+   * from a model took a question off a person's worklist as though that person had rejected it. See
+   * `test/a-dispute-is-a-persons-act.test.mjs`.
+   *
+   * ⛔ BOTH HALVES NOW HOLD. The kind is honest, and the switch still gets out of the way: the
+   * token holds every scope there is, so nothing about auth off is secretly a permissions change.
    */
   const p = await principalFrom(db, { authorization: "Bearer whatever" }, undefined, env);
-  assert.equal(p.kind, "browser", "a token still came back as a token with auth off");
+  assert.equal(p.kind, "token", "auth off is calling a credential a person again");
+  assert.deepEqual([...p.scopes].sort(), ["author", "read", "relay"], "auth off left a token unable to work");
+  /** ⛔ And it may not mint consent, which is the whole of what `kind` decides. */
+  for (const via of HUMAN_VIA) assert.ok(mayRecord(p, via), `a token recorded ${via} with auth off`);
 });
 
 test("with auth off, every project is reachable; with it on, only your own", async () => {

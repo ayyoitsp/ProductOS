@@ -1,0 +1,13 @@
+id: "0231"
+said: 'I sent no `via`; the door recorded `via: "page"`, which `isHuman` counts as a person. Harmless here (no `disputes`, and `by: productos-interviewer`), but it means an agent filing `disputes: true` through this HTTP door would withdraw a question from the worklist as though a person had rejected it — `questionsFor` gates that on `isHuman(n.via)`, not on `by`. Worth a look at `watchedAPerson` for a token coming in over `/api/v2/in`.'
+at: 2026-10-29
+kind: concept
+reaches:
+  model: relayed_by
+  derive: principalFrom
+  generate: "cannot dispute a question"
+  surface: "Carried in by"
+  check: a-rejection-that-withdraws-nothing
+  instruct: "A dispute is somebody else's act"
+  pin: "a courier may carry a rejection"
+waived: {}

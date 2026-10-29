@@ -3870,6 +3870,40 @@ export const NOT_A_DOCUMENT: Record<string, string> = {
 export const NOTE_VIA = ["page", "question", "chat", "cli", "agent", "review"] as const;
 export type NoteVia = (typeof NOTE_VIA)[number];
 
+/**
+ * Every way a PERSON did something, named — ⛔ POSITIVELY, BECAUSE THE NEGATIVE BROKE THE MOMENT
+ * THERE WAS A SECOND NON-HUMAN VALUE.
+ *
+ * This was `via !== "agent"`, which is correct for the five values consent has and silently wrong
+ * for anything added beside them. `Note.via` carries `review` — a judge found it and a session
+ * wrote it down, so nobody asked for it at all — and under the negative reading `review` counted as
+ * HUMAN. `mayRecord` would then have refused a token filing a finding, on the grounds that it was
+ * claiming a person did something.
+ *
+ * ⛔ SO THE SET IS THE LIST, and a value added to either vocabulary without being added here is a
+ * type error rather than a guess. A reviewer's finding and software's default are the two things
+ * nobody pressed; everything else is somebody at a page, a question, a chat or a terminal.
+ *
+ * ⛔ IT LIVES HERE, BESIDE `NOTE_VIA`, AND IT USED TO LIVE IN `acts.ts` — which re-exports it, so
+ * every caller is unchanged. It moved because the SCHEMA needs it: `Note.disputes` is the one note
+ * field with a consequence, so "could a person have said this" became a shape question and not
+ * only a gate question. A second copy of this list under `z.enum([…])` is the defect
+ * `src/core/jobs.ts` names as recurring — two implementations of one predicate, diverging by a
+ * clause nobody notices.
+ */
+export const BY_A_PERSON = ["page", "question", "chat", "cli"] as const;
+
+/**
+ * ⛔ WHAT A PERSON DID, as opposed to what something decided on their behalf. Every gate asks this
+ * rather than asking whether a record exists.
+ *
+ * ⛔ TAKES EITHER VOCABULARY. Consent and a filed request ask the same question of a principal —
+ * did a person do this — over two value sets that overlap but are not equal: `VIA` is a subset of
+ * `NOTE_VIA`, so one parameter type covers both and a value added to only one of them is a type
+ * error here.
+ */
+export const isHuman = (via: NoteVia): boolean => (BY_A_PERSON as readonly string[]).includes(via);
+
 export const Note = z
   .object({
     id: z.string().min(1),
@@ -3957,6 +3991,33 @@ export const Note = z
      */
     disputes: z.boolean().optional(),
     /**
+     * ⛔ WHO CARRIED THIS, WHEN THE INSTANCE DID NOT WATCH IT ARRIVE — the same field `Verdict`
+     * has, for the same reason, on the one kind of note that has a CONSEQUENCE.
+     *
+     * A note's `via` says where the request came from and its `by` says whose request it is, and a
+     * session relaying what somebody said in a chat window is exactly what a session is for. What
+     * was missing is the other half of that sentence: nothing recorded that the courier was
+     * automated, so a request a person typed on a page and a request a model carried in their name
+     * were byte-identical on disk.
+     *
+     * That is survivable while a note is only a message. `disputes: true` makes it an act — the
+     * question comes off the worklist — so the distinction `Verdict.relayed_by` exists for arrived
+     * here too, and it arrived through the hole:
+     *
+     *     an interviewer agent, on its own write: "I sent no `via`; the door recorded
+     *     `via: "page"`, which `isHuman` counts as a person … an agent filing `disputes: true`
+     *     through this HTTP door would withdraw a question from the worklist as though a person had
+     *     rejected it."
+     *
+     * Present means: somebody really said this, and the instance has a courier's word for it rather
+     * than its own record of a press. Absent means the instance watched it happen.
+     *
+     * ⛔ DERIVED FROM THE PRINCIPAL, NEVER TAKEN FROM THE CALLER — the rule `wroteBy` already
+     * states about `hand`: a field a caller can type is a second gate enforced nowhere, reachable
+     * by anything that can spell. The door sets it; `mayRelay` is what decides whether it may.
+     */
+    relayed_by: z.string().min(1).optional(),
+    /**
      * ⛔ WHAT KIND OF THING IS BEING ASKED FOR — the corpus, or the framework that produced it.
      *
      * Peter: *"if i tag pos: {blah blah} in the message, that indicates a framework issue and to
@@ -4030,6 +4091,39 @@ export const Note = z
         path: ["assumed"],
         message:
           "a review finding has to say what somebody would assume if nobody answered it — that is the risk, and without it this is a worry rather than a finding",
+      });
+    /**
+     * ⛔ A DISPUTE IS SOMETHING A PERSON DID, AND THE SHAPE SAYS SO.
+     *
+     * `disputes: true` is the one thing a note DOES rather than asks: the question comes off the
+     * worklist, on every surface, and `interviewFor` turns it into work for an author instead of a
+     * question for anybody. So it is an act, and an act needs somebody to have performed it.
+     *
+     * `via: agent` is software's default and satisfies no gate; `via: review` is a judge's finding
+     * and its own comment already says *"a judge's `review` note must never suppress a question: a
+     * reviewer saying a question is unclear is a finding to act on, and a person saying it is
+     * nonsense is the question being withdrawn."* Both combinations are incoherent rather than
+     * merely ungated — nobody is being quoted — so they are refused at the shape, which is the one
+     * layer every writer goes through: the door, the CLI, a carried-in row, and a hand-typed file.
+     *
+     * ⛔ WHY IT IS HERE AND NOT ONLY AT THE DOOR. The reader-side guard in `questionsFor` is
+     * `isHuman(n.via)`, and a guard is the thing a later surface forgets: `interviewFor` computed
+     * its own map of disputed refs once already and the PAGE went on offering both disputed
+     * questions. A combination refused at the shape cannot reach a reader to be mis-read.
+     *
+     * ⛔ AND IT IS NOT THE CONSENT CHECK. Whether this PRINCIPAL could have been the person is
+     * `mayRelay` / `watchedAPerson`, asked at the door where the principal exists. Bytes on disk
+     * know nothing about who sent them; what they can say is whether the record is self-consistent.
+     */
+    if (n.disputes && !isHuman(n.via))
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["disputes"],
+        message: `a note from \`${n.via}\` cannot dispute a question — that withdraws it from somebody's worklist, and ${
+          n.via === "review"
+            ? "a reviewer finding a question unclear is a finding to act on, not a rejection: file it without `disputes` and say what would be assumed"
+            : "nobody asked for it, so there is nobody whose rejection this would be: file it without `disputes`, as software's own request"
+        }`,
       });
     /** ⛔ And the converse: nobody but a reviewer is in a position to say what a builder would assume. */
     if (n.assumed && n.via !== "review")

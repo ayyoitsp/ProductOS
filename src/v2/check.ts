@@ -5118,6 +5118,40 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
       fix: "file the note back under that id, or accept that this event will never settle — a cursor cannot advance past work it cannot see finished",
     });
   }
+  /**
+   * ⛔ A REJECTION THAT WITHDRAWS NOTHING, and it is the only one of these that is silent in the
+   * direction nobody checks.
+   *
+   * `disputes: true` is the one thing a note DOES rather than asks: the ref it names stops being
+   * offered, everywhere. So a dispute whose `about` resolves to nothing has recorded somebody
+   * rejecting a question and taken no question off any worklist — and it READS as handled, because
+   * the note is there, in their words, with the flag set. The question goes on being asked.
+   *
+   * ⛔ IT IS THE SAME FAMILY `check` ALREADY REFUSES — a `depends_on` that resolves to nothing — and
+   * it is a `note` rather than a refusal because the corpus is not malformed: somebody typed a ref
+   * that moved, or disputed a grain that has since been settled, and only a person can say which.
+   *
+   * ⛔ AND IT IS WHY THE SHAPE RULE IS NOT ENOUGH. `Note` refuses `disputes` from a `via` nobody
+   * could have said it through, which is a claim about the record being self-consistent. Whether
+   * the thing it withdraws exists is a claim about the corpus, and nothing could ask it.
+   */
+  for (const n of corpus.notes) {
+    if (n.state !== "open" || n.disputes !== true) continue;
+    /**
+     * ⛔ `"error" in r`, NOT TRUTHINESS. `resolveRef` returns `{ error }` for a ref that resolves to
+     * nothing, so `if (resolveRef(…)) continue` is true for every ref there is — a guard that
+     * skipped everything and reported zero, which is also what a corpus with no stray disputes
+     * produces. Measured by filing one and watching the finding not appear.
+     */
+    if (!("error" in resolveRef(corpus, n.about))) continue;
+    add({
+      severity: "note",
+      kind: "a-rejection-that-withdraws-nothing",
+      where: n.id,
+      what: `${n.by} rejected "${n.about}" and nothing in the corpus answers to that ref — so the question they rejected is still being offered, while this note reads as though it had been taken off`,
+      fix: `point it at the ref that is actually being asked — "productos v2 decide <scope>" lists them — or close it with an outcome saying the question it rejected is gone`,
+    });
+  }
   for (const n of corpus.notes) {
     if (n.state !== "open" || !n.claimed_by || !n.claimed_until) continue;
     if (n.claimed_until > nowIso) continue;

@@ -67,6 +67,14 @@ const asYaml = (n: NoteT): string =>
      * question somebody rejected comes back as answerable with nothing recording that they did.
      */
     ...(n.disputes ? [`    disputes: true`] : []),
+    /**
+     * ⛔ THE SIXTH PLACE, AND THE FOUR COMMENTS ABOVE ARE THE REASON THIS LINE WAS WRITTEN FIRST.
+     *
+     * `relayed_by` is what makes a relayed note tellable from a press, which is the whole point of
+     * recording it — so dropping it here would leave the two byte-identical on disk, which is the
+     * state this field was added to end.
+     */
+    ...(n.relayed_by ? [`    relayed_by: ${JSON.stringify(n.relayed_by)}`] : []),
     ...(n.outcome ? [`    outcome: ${JSON.stringify(n.outcome)}`] : []),
     /** ⛔ Every reply kept, in order. A thread with the middle removed is a thread that lies. */
     ...(n.replies?.length
@@ -119,6 +127,12 @@ export interface Filing {
   assumed?: string;
   /** ⛔ This note withdraws what it is about rather than answering it. See `Note.disputes`. */
   disputes?: boolean;
+  /**
+   * Who carried it, when the instance did not watch it arrive — ⛔ DERIVED FROM THE PRINCIPAL BY
+   * THE DOOR, never sent by a caller. See `Note.relayed_by`, and `Consent.relayedBy`, which is the
+   * same field on a verdict for the same reason.
+   */
+  relayedBy?: string;
 }
 
 /**
@@ -173,6 +187,12 @@ export function fileNote(dir: string, f: Filing): Filed | NotFiled {
      * one note on disk, which is the other half of that rule.
      */
     ...(f.disputes === true ? { disputes: true as const } : {}),
+    /**
+     * ⛔ THE COURIER, WHERE THERE WAS ONE. Absent means the instance watched this arrive; present
+     * means a person said it and something automated carried it in. Nothing downstream could tell
+     * those apart before, which is survivable for a message and not for `disputes`.
+     */
+    ...(f.relayedBy?.trim() ? { relayed_by: f.relayedBy.trim() } : {}),
   };
   const parsed = Note.safeParse(candidate);
   if (!parsed.success)

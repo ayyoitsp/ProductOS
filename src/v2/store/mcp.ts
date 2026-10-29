@@ -29,7 +29,7 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import type { ProductosPaths } from "../../core/paths.js";
-import { RETIRED_ACT_TOOLS, exchangeTools, type McpTool } from "../../mcp/v2-tools.js";
+import { RETIRED_ACT_TOOLS, EXCHANGE_READ_TOOLS, exchangeTools, type McpTool } from "../../mcp/v2-tools.js";
 import { mayRecord, type Principal } from "../identity.js";
 import type { Via } from "../acts.js";
 import { type Db, isRefusal, type ProjectStore, storeFor } from "./access.js";
@@ -136,7 +136,30 @@ function serverFor(store: ProjectStore, who: Principal): Server {
     const tool = exchangeTools.find((t) => t.name === req.params.name);
     if (!tool) throw new Error(`unknown tool: ${req.params.name}`);
 
-    const { dir, documents: before, logHad } = await materializeProject(store);
+    /**
+     * ⛔ THE MCP ROUTE GAVE EVERY CALL THE SHARED READ CACHE, INCLUDING THE WRITING ONES.
+     *
+     * `instanceRoute` computes `mutating` from `takesTheWriteLock` and passes it; this called
+     * `materializeProject(store)` with no flag, so it always got `false`. `materializeProject`'s own
+     * comment is about exactly this: *"a request that writes into a SHARED directory would have its
+     * writes read as somebody else's. A mutating request therefore still gets its own."*
+     *
+     * Measured on the built module: two MCP-style calls on one project came back with the SAME
+     * directory, while a mutating call got its own — and the `finally` below `rmSync`s the parent,
+     * so one call deletes a directory the read cache still points at and a concurrent page request
+     * may still be reading.
+     *
+     * ⛔ AND THE TEST IS `EXCHANGE_READ_TOOLS`, WHICH ALREADY EXISTED. I added an `onlyReads` flag
+     * to `McpTool` first — a second home for a fact this file already imports the answer to.
+     * `exchangeTools` is literally `[...EXCHANGE_READ_TOOLS, ...ACT, ...LOOP, ...DOOR]`, so
+     * membership in that list IS the question, and it is a list somebody already maintains.
+     *
+     * ⛔ ABSENCE MEANS IT MAY WRITE, which is the safe direction and is what makes this correct on
+     * the day it lands: a reader mistaken for a writer costs one temp directory, a writer mistaken
+     * for a reader corrupts. A new tool is safe by default and gets faster by being declared.
+     */
+    const onlyReads = EXCHANGE_READ_TOOLS.some((t) => t.name === tool.name);
+    const { dir, documents: before, logHad } = await materializeProject(store, !onlyReads);
     try {
       const guarded = guardArgs(tool, req.params.arguments, who, dir);
       if ("ok" in guarded) {

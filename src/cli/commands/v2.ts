@@ -21,7 +21,7 @@ import { compilePacket } from "../../v2/packet.js";
 import { questionsFor, descendants } from "../../v2/settle.js";
 import { perform, preview, payloadFrom, optionText, VIA, type Act, type Via, type Outcome, type Refused } from "../../v2/acts.js";
 import { fileNote, closeNote, replyToNote } from "../../v2/notes.js";
-import { mayRecord, principalAtTheShell } from "../../v2/identity.js";
+import { mayRecord, principalAtTheShell, watchedAPerson } from "../../v2/identity.js";
 import { snapshotStyle, styleOf, styleDrift, styleAt, wearTheme } from "../../v2/appcss.js";
 import { watchCorpus } from "../../v2/watch.js";
 import { inbox } from "../../v2/inbox.js";
@@ -3637,14 +3637,36 @@ export function v2Command(): Command {
      */
     .option("--probe", "a session checking that writing works — counted in no waiting total, shown on no surface a person reviews")
     /**
+     * ⛔ THE ONE THING A NOTE DOES RATHER THAN ASKS, AND THE CLI COULD NOT SAY IT.
+     *
+     * `disputes: true` takes the question off the worklist, and the field was reachable only by a
+     * caller that types JSON at `/api/v2/in` — so the act reserved for a PERSON was available to
+     * software and to nobody else. A person's own terminal is the other place they can stand.
+     *
+     * ⛔ AND IT IS THE ONLY GATED FLAG ON THIS COMMAND, DELIBERATELY. Filing an ordinary note from
+     * a session is the designed path — CLAUDE.md drives the queue through these verbs, and a
+     * session carrying what Peter said in chat is exactly what a session is for. Withdrawing a
+     * question is not: it is his act, so this one flag asks who is holding the shell, the same way
+     * `consentFrom` does for an act. See `Note.disputes`.
+     */
+    .option("--disputes", "this note says the question should not be asked as it stands — ⛔ withdraws it from the worklist, so only from a terminal a person is at")
+    /**
      * ⛔ NO `--at` HERE. The parent declares it; declaring it again is what made the value vanish.
      * `optsWithGlobals` reads it whichever side of the verb it was typed.
      */
-    .action(async (says: string, o: { about: string; by: string; via?: string; on?: string; id?: string; probe?: boolean }, self: Command) => {
+    .action(async (says: string, o: { about: string; by: string; via?: string; on?: string; id?: string; probe?: boolean; disputes?: boolean }, self: Command) => {
       const g = self.optsWithGlobals() as { at?: string; token?: string };
       if (looksLikeInstance(g.at)) {
         try {
-          const r = (await remoteNote(instanceOf(g.at!, g.token), o.about, says, o.by)) as Outcome | Refused;
+          /**
+           * ⛔ BOTH FLAGS CARRIED. This sent neither, so against an instance `--via` was the door's
+           * default and `--disputes` was dropped in silence — see `note` in `client.ts`. The door
+           * is where they are decided, and a request that never arrived cannot be refused.
+           */
+          const r = (await remoteNote(instanceOf(g.at!, g.token), o.about, says, o.by, {
+            via: o.via,
+            disputes: o.disputes === true,
+          })) as Outcome | Refused;
           return report(r);
         } catch (e) {
           console.error(pc.red("✗"), e instanceof Error ? e.message : String(e));
@@ -3656,6 +3678,28 @@ export function v2Command(): Command {
         console.error(pc.dim(`  ${VIA.join(" · ")}`));
         process.exit(1);
       }
+      /**
+       * ⛔ WHO IS HOLDING THIS SHELL — asked only for `--disputes`, and it is the same decision
+       * `consentFrom` makes, not a third one. `watchedAPerson` is what the door asks of a browser
+       * press; `principalAtTheShell` is the sibling that answers it about a terminal.
+       *
+       * ⛔ AND THERE IS NO ESCAPE HATCH HERE EITHER. The exit is that the person runs this in their
+       * own terminal, or presses it on the page — a flag saying "a person really is here" is the
+       * switch the agent sets.
+       */
+      if (o.disputes === true) {
+        const shell = principalAtTheShell();
+        if (!watchedAPerson(shell.kind)) {
+          console.error(
+            pc.red("✗"),
+            `${shell.actor} cannot dispute a question — that withdraws it from somebody's worklist, and nothing here can be shown to have pressed it`
+          );
+          if (shell.because) console.error(pc.dim(`    ${shell.because}`));
+          console.error(pc.dim("    file the note without --disputes: their words are still carried, and the question stays until a person withdraws it"));
+          console.error(pc.dim("    if a person really rejected it, they run this in their own terminal or press it on the page"));
+          process.exit(1);
+        }
+      }
       const r = fileNote(at(self.optsWithGlobals()), {
         about: o.about,
         says,
@@ -3664,6 +3708,8 @@ export function v2Command(): Command {
         at: o.on ?? new Date().toISOString().slice(0, 10),
         id: o.id,
         probe: o.probe === true,
+        /** ⛔ Only where it was typed. See the flag, and `Note.disputes`. */
+        ...(o.disputes === true ? { disputes: true } : {}),
       });
       if (!r.ok) {
         console.error(pc.red("✗"), r.why);

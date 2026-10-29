@@ -5294,6 +5294,17 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
                      <header><span class="kind">disputed</span>${copyRef(q.ref)}</header>
                      <h3>${line(String(q.asks).split("\n")[0] ?? "")}</h3>
                      <p class="said"><strong>${esc(q.disputed!.by)} said:</strong> ${line(q.disputed!.said)}</p>
+                     ${
+                       /**
+                        * ⛔ WHO CARRIED IT, WHERE SOMETHING DID — because this question is hidden
+                        * from the answerable list on the strength of it, and a relay is somebody's
+                        * word rather than a press this instance watched. Absent means it was
+                        * pressed here, so the line appears only when there is a courier to name.
+                        */
+                       q.disputed!.relayedBy
+                         ? `<p class="carried">Carried in by ${esc(q.disputed!.relayedBy!)} — nobody pressed this here, so it is ${esc(q.disputed!.by)}'s rejection on a courier's word.</p>`
+                         : ""
+                     }
                    </article>`
                  )
                  .join("")}
