@@ -549,6 +549,8 @@ function unitsIn(corpus: Corpus): Unit[] {
         says: o.does,
         fields: [
           ...own("what it says", o.does),
+          ...(o.interface ?? []).flatMap((i) => own("what it says", i.operation)),
+          ...(o.guarantees ?? []).flatMap((g) => own("what it says", g)),
           ...own("its own id", o.id),
           ...around(`${subsystem.title} ${subsystem.id}`),
         ],

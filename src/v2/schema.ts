@@ -3200,6 +3200,50 @@ export const Capability = z
      */
     serves: z.array(z.string().regex(REF_PATTERN, REF_MESSAGE)).default([]),
     /**
+     * What a consumer can ask of this part — the operations somebody outside it calls, in words,
+     * with the code operations that answer each where code exists.
+     *
+     * ⛔ EXTERNAL ONLY. Peter, on two OAuth steps listed as operations: *"ok, so externally, it's
+     * just part of connecting, right? why is it exposed here?"* — which became the rule for the
+     * whole review: *"external interfaces only"*. A step that leaked out because a flow was
+     * interrupted is part of the operation it interrupts, not an operation of its own.
+     *
+     * ⛔ OPTIONAL AND NEVER DEFAULTED, and that is about every agreement already given. The stamp
+     * hashes this object; a default would add `interface: []` to every capability in every corpus
+     * and silently drop every person's name from every part on the day this lands.
+     */
+    interface: z
+      .array(
+        z
+          .object({
+            /** What a consumer asks for, in words — "connect a mailbox", "read an email with its attachments". */
+            operation: z.string().min(3, "an operation nobody can read is not an interface"),
+            /** The code operations that answer it, where code exists. Never required: truth is the target. */
+            through: z.array(z.string().min(1)).optional(),
+          })
+          .strict()
+      )
+      .optional(),
+    /**
+     * What this part's machinery guarantees, whoever uses it — sentences a build could fail.
+     *
+     * Peter: *"the brief is too thin"*, after walking a real codebase against its capabilities and
+     * finding ten of thirty-three leaves promising nothing at all. A name and a `does` sentence is
+     * what an engineer is asked to put their name to; this is what they are actually agreeing to.
+     *
+     * ⛔ THE TEST THAT KEEPS TWO COPIES OF ONE FACT OUT: a capability guarantees what the machinery
+     * does REGARDLESS OF WHO USES IT; a product promises what a person gets. If it varies by lender,
+     * or a product gets to choose it, it is not a guarantee. Peter, on two of mine: *"hmm, that's
+     * not really capability, right? that's a product decision"*.
+     *
+     * ⛔ STILL NOT SLOTS. A guarantee is a sentence, not an eight-slot promise; no given/when/then
+     * lives here. Agreeing to the part agrees to its guarantees together — the stamp hashes them, so
+     * rewording one sends the part back for agreement.
+     *
+     * Optional and never defaulted, for the reason on `interface`.
+     */
+    guarantees: z.array(z.string().min(10, "a guarantee nobody can read is not a guarantee")).optional(),
+    /**
      * What this was worked out from, and when — the same shape `Criterion.derived` carries, and
      * for the same reason.
      *
