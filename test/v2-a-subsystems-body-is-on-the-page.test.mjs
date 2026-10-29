@@ -72,3 +72,28 @@ test("prose above a carried section renders, and the carried line still appears 
   const seen = html.split(CARRIED_LINE).length - 1;
   assert.equal(seen, 1, `the carried line is on the page exactly once, saw ${seen}`);
 });
+
+/**
+ * ⛔ AND THE NOTATION AN AUTHOR WRITES IS NOT PRINTED AT A REVIEWER.
+ *
+ * Peter, reading the live page: the body said `*how could this field be read*` and the product
+ * showed him exactly that, asterisks and all. Bold was handled and emphasis was not, so every
+ * author writing the other half of one notation got markup on the page.
+ *
+ * Three distinguishable outcomes, because "emphasis renders" passes on a page with no asterisks in
+ * it at all:
+ *
+ *     *one word*     -> <em>, and no asterisk survives
+ *     **one word**   -> <strong>, NOT <em>*one word</em>*
+ *     a lone *       -> left exactly as written, swallowing nothing
+ */
+test("emphasis renders, bold still wins, and a lone asterisk is left alone", () => {
+  const html = page("Three areas: *how could this field be read*, and **not** what a figure means. A column width of 8 * 4 is fine.");
+  assert.match(html, /<em>how could this field be read<\/em>/, "single asterisks become emphasis");
+  assert.match(html, /<strong>not<\/strong>/, "double asterisks still become bold");
+  assert.doesNotMatch(html, /<em>\*/, "bold is never re-read as emphasis around a leftover asterisk");
+  const prose = html.slice(html.indexOf('class="subsys-prose"'));
+  const body = prose.slice(0, prose.indexOf("</div>"));
+  assert.ok(body.includes("8 * 4"), "a lone asterisk between spaces is left exactly as written");
+  assert.equal(body.split("*").length - 1, 1, "the only asterisk left on the page is that lone one");
+});

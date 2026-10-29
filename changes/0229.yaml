@@ -1,0 +1,9 @@
+id: "0229"
+said: the body said *how could this field be read* and the page printed the asterisks — fix those and get it merged
+at: 2026-10-29
+kind: surface
+reaches:
+  surface: EMPHASIS IS HERE BECAUSE THE ALTERNATIVE IS NOT
+  pin: emphasis renders, bold still wins, and a lone asterisk is left alone
+waived: {}
+closed: 2026-10-29

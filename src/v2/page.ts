@@ -781,9 +781,21 @@ function renderRecord(ds: Decision[]): string {
  * is, where the boundary sits, who works here. A page of behaviours with no framing asks somebody to
  * review sentences about a thing nobody has described to them.
  *
- * ⛔ Deliberately not a markdown renderer. Paragraphs, bold, inline code, and a heading dropped
- * because the title is already on screen — anything more and this becomes a parser nobody asked
- * for, with its own bugs, inside a tool about not inventing things.
+ * ⛔ Deliberately not a markdown renderer. Paragraphs, bold, emphasis, inline code, and a heading
+ * dropped because the title is already on screen — anything more and this becomes a parser nobody
+ * asked for, with its own bugs, inside a tool about not inventing things.
+ *
+ * ⛔ EMPHASIS IS HERE BECAUSE THE ALTERNATIVE IS NOT "NO EMPHASIS", IT IS ASTERISKS ON THE PAGE.
+ * Peter, reading a live subsystem: the body said `*how could this field be read*` and the product
+ * showed him exactly that, asterisks and all. Bold was already handled, so every author writes the
+ * other half of the same notation and the page prints the markup at a reviewer. The narrow set is
+ * the point — this stays four rules, not a parser — but a notation that is half-handled is worse
+ * than one that is not handled at all.
+ *
+ * ⛔ AFTER BOLD, AND NEVER INSIDE IT. `**x**` is matched first and its output contains no asterisk,
+ * so the emphasis rule cannot see the pair it already consumed; running them the other way round
+ * turns `**x**` into `<em>*x</em>*`. The rule also refuses a space after the opening marker, so a
+ * sentence with a lone `*` in it is left alone rather than swallowing the rest of the paragraph.
  */
 function renderProse(body: string): string {
   const text = body.trim();
@@ -795,6 +807,7 @@ function renderProse(body: string): string {
     .map((b) =>
       esc(b.replace(/\s+/g, " "))
         .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+        .replace(/\*(?!\s)([^*\n]+?)(?<!\s)\*/g, "<em>$1</em>")
         .replace(/`([^`]+)`/g, "<code>$1</code>")
     );
   return paras.length ? `<div class="prose">${paras.map((b) => `<p>${b}</p>`).join("")}</div>` : "";
