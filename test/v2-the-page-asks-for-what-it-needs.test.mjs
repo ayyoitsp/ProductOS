@@ -229,7 +229,7 @@ test("pressing a feature in the menu lands on its own page, drawing and all", { 
     assert.ok(!alreadyHere, "the root's page already holds thing-4, so this proves nothing about navigating to it");
 
     /** The ordinary way in: press the thing in the menu. */
-    await page.evaluate(`document.querySelector('nav.scopes a[data-goto="thing-4"]').click()`);
+    await page.evaluate(`document.querySelector('.topframe [data-goto="thing-4"]').click()`);
     await page.waitFor(landed, "the feature's own page to arrive");
 
     /**

@@ -192,7 +192,7 @@ test("⛔ in a real browser: a reload puts you back on a tab, not on Overview", 
         return v && v.dataset.view;
       };
       /* A tab exists to be restored to, and it has no menu row — the old path's blind spot. */
-      const hasRow = !!document.querySelector('nav.scopes a[data-goto="prototype"]');
+      const hasRow = !!document.querySelector('.topframe [data-goto="prototype"]');
 
       window.showView('prototype');
       const afterSwitch = shown();

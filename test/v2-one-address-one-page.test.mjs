@@ -286,15 +286,24 @@ test("in the mode the page ships, a tab naming a scope goes there", { skip }, as
   try {
     await page.waitFor(`document.readyState === "complete" && document.querySelectorAll("[data-tab]").length > 0`, "the tab row", ARRIVAL);
 
-    /** ⛔ Non-vacuous on two counts: this really is top mode, and the tree really is unusable in it. */
+    /**
+     * ⛔ NON-VACUOUS, BUT NOT THE WAY IT USED TO BE. This asserted that the tree is UNUSABLE in top
+     * mode — true when one shared tree hid behind a chevron, and the scaffolding for "so the tab is
+     * the only way through". Each tab group now carries its own items and pressing the tab shows
+     * them, so the tree is reachable in top mode by design and that assertion would now be
+     * demanding the bug back.
+     *
+     * What still has to hold for the test below to mean anything: this really is top mode, and the
+     * tab really is a link rather than a button with no address.
+     */
     const mode = await page.evaluate(`(() => ({
       nav: document.documentElement.getAttribute("data-nav"),
-      treeLinks: document.querySelectorAll("nav.scopes a[data-goto]").length,
-      treeLinksWithBoxes: [...document.querySelectorAll("nav.scopes a[data-goto]")].filter((a) => a.getClientRects().length).length,
+      scopeTabs: document.querySelectorAll(".topframe .tab[data-goto]").length,
+      tabsWithBoxes: [...document.querySelectorAll(".topframe .tab[data-goto]")].filter((a) => a.getClientRects().length).length,
     }))()`);
     assert.notEqual(mode.nav, "left", "this is not the shipped mode, so it does not measure the shipped navigation");
-    assert.ok(mode.treeLinks > 0, "there are no tree links at all, so their being unreachable proves nothing");
-    assert.equal(mode.treeLinksWithBoxes, 0, "the tree is reachable in top mode, so the tabs are not the only way through");
+    assert.ok(mode.scopeTabs > 0, "no tab names a scope, so a tab going anywhere proves nothing");
+    assert.equal(mode.tabsWithBoxes, mode.scopeTabs, "a scope tab is laid out nowhere, so nothing could press it");
 
     /** The tab for a scope this document does not hold — which is every scope tab now. */
     const tab = await page.evaluate(`(() => {
@@ -436,7 +445,7 @@ for (const target of ["leaf", "middle", "sibling"]) {
       assert.ok(!alreadyHere, `the root's page already holds ${target}, so pressing it exercises no navigation`);
 
       const before = await first.evaluate("location.pathname");
-      await first.evaluate(`document.querySelector('nav.scopes a[data-goto="${target}"]').click()`);
+      await first.evaluate(`document.querySelector('.topframe [data-goto="${target}"]').click()`);
       await settle(first, target);
       viaMenu = await first.evaluate(looking);
       urlFromMenu = await first.evaluate("location.href");
@@ -466,7 +475,7 @@ for (const target of ["leaf", "middle", "sibling"]) {
 
       /* ── the menu says where they are, and is open to it ──────────────────── */
       const menu = await cold.evaluate(`(() => {
-        const row = document.querySelector('nav.scopes a[data-goto="${target}"]');
+        const row = document.querySelector('.topframe [data-goto="${target}"]');
         if (!row) return { found: false };
         /* ⛔ ANCESTORS ONLY. The row's OWN li carries no "open" when it holds nothing — a leaf has
            nothing to expand — so including it reported every leaf as sitting in a shut container. */
@@ -487,7 +496,7 @@ for (const target of ["leaf", "middle", "sibling"]) {
       /* ── and the menu still moves them, with the address following ────────── */
       const other = target === "sibling" ? "leaf" : "sibling";
       const was = await cold.evaluate("location.pathname");
-      await cold.evaluate(`document.querySelector('nav.scopes a[data-goto="${other}"]').click()`);
+      await cold.evaluate(`document.querySelector('.topframe [data-goto="${other}"]').click()`);
       await settle(cold, other);
       const moved = await cold.evaluate(looking);
       assert.notEqual(moved.path, was, `pressing ${other} after a cold arrival left the address at ${moved.path}`);
