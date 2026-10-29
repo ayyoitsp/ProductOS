@@ -1,9 +1,13 @@
 id: "0227"
-said: why doesn't it render the documet body? let's get this FIXED
-at: 2026-10-29
-kind: surface
+said: uhm, ok, fix it and land it when ready
+at: 2026-10-28
+kind: derivation
 reaches:
-  surface: proseOf
-  pin: an author's own prose is on the page
-waived: {}
-closed: 2026-10-29
+  derive: droppedFrom
+  surface: ""
+  check: ""
+  pin: a ruling that drops the agreed statements is refused
+waived:
+  surface: 'Nothing on a surface changes: the refusal already printed through every door that calls `settle`, and this makes it FIRE where it previously did not. ⛔ The arguable part, and it is real: the page beside those buttons prints *"The other statements above stand; picking one does not remove them."* That sentence was TRUE for a press, which was already refused, and false for a directly-written sentence, which was not. It is true in both cases now, so the page needed no edit — but it was promising something the code did not enforce, and nothing on the page said so.'
+  check: "`v2 check` reads a corpus as it stands; this is a guard on the act that CHANGES one. A check could report slots whose options cannot be pressed — four of them exist on `pl-start-a-deal` today — and that is a real piece of work recorded here rather than claimed: the draft-time guard stops new ones and repairs none of the four."
+closed: 2026-10-28
