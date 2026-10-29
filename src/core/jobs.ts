@@ -1544,7 +1544,13 @@ export const AUTHORS: Author[] = [
        */
       "stamp, validate or accept anything — ⛔ including a capability. A person agrees to one part at a time now, and a role agreeing to its own output would be software clearing the gate built to make somebody look",
     ],
-    needs: ["read-files", "search-files", "run-commands", "write-corpus"],
+    /**
+     * ⛔ `ask-the-corpus`, because a person's correction to a part reaches it through the interview.
+     * Without it the brief's instruction to read what a person already said about a part is
+     * unrunnable — and a run of this role put back the getters Peter had rejected twice, having had
+     * only body prose to go on.
+     */
+    needs: ["read-files", "search-files", "run-commands", "write-corpus", "ask-the-corpus"],
     each: "feature",
     authors: true,
     prompt: "agents/productos-decomposer.md",

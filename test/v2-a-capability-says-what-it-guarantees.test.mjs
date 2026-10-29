@@ -128,6 +128,41 @@ test("check names a part that guarantees nothing, as a note and only that part",
   assert.equal(found[0].severity, "note", "every part predating the field would be refused");
 });
 
+/**
+ * ⛔ A PART A PERSON CORRECTED IS NEVER PUT BACK FOR ONE PRESS UNTIL SOMEBODY REDRAFTS IT.
+ *
+ * Found driving the interviewer on staging: Peter's two corrections to `read-results` were filed
+ * against it, and the next run still asked him to agree to it in one press, with the getters he had
+ * rejected in its interface.
+ */
+const { fileNote, closeNote } = await import("../dist/v2/notes.js");
+const SAID = "didn't i aks you to drop a document's fields and a deals' fields???";
+
+test("a part somebody corrected goes to the decomposer with their words, and comes back once the note is answered", () => {
+  const dir = corpus("v2cap-g-corrected-");
+  const before = capabilityItems(dir).find((o) => o.ref === LEDGER);
+  assert.match(before.act, /^a person agrees/, "the fixture's part was not pressable to begin with");
+
+  const filed = fileNote(dir, { about: `${LEDGER}#guarantees`, says: SAID, by: "peter", via: "chat", at: "2026-10-29" });
+  assert.equal(filed.ok, true, filed.why);
+
+  const held = capabilityItems(dir).find((o) => o.ref === LEDGER);
+  assert.match(held.act, /^`decomposer` redrafts/, "a part with a person's correction against it was offered for one press");
+  assert.match(held.act, new RegExp(filed.note.id), "the act does not name the note that has to be answered");
+  assert.deepEqual(held.about.already[0], { asks: "peter said", says: SAID }, "the decomposer is not shown their words");
+  /** Pressable parts lead, so the held one sorts after the clock only if the clock were pressable — it is a gap. */
+  assert.equal(capabilityItems(dir).filter((o) => o.act.startsWith("a person")).length, 0);
+
+  /** ⛔ A note from software is not a person saying it is wrong. */
+  const dir2 = corpus("v2cap-g-review-");
+  fileNote(dir2, { about: LEDGER, says: "this guarantee reads oddly", by: "productos-architect", via: "review", at: "2026-10-29" });
+  assert.match(capabilityItems(dir2).find((o) => o.ref === LEDGER).act, /^a person agrees/, "a judge's note held a part from the person");
+
+  const closed = closeNote(dir, filed.note.id, "dropped the per-document and per-deal getters from the interface");
+  assert.equal(closed.ok, true, closed.why);
+  assert.match(capabilityItems(dir).find((o) => o.ref === LEDGER).act, /^a person agrees/, "an answered correction kept the part from the person");
+});
+
 const { skip, exe } = browserOrSkip();
 
 test("the page shows what a part is asked and what it guarantees", { skip }, async () => {

@@ -1,0 +1,13 @@
+id: "0234"
+said: |-
+  [shown, after driving the interviewer on staging: (1) a part he had left corrections against was still offered for one-press agreement; (2) the decomposer's draft put back the per-document and per-deal getters he had rejected twice, because his rejection only reached it as body prose] 1 & 2 - yeah, let's fix
+at: 2026-10-29
+kind: derivation
+reaches:
+  derive: "has not been redrafted"
+  surface: ""
+  check: ""
+  pin: "a part somebody corrected goes to the decomposer"
+waived:
+  surface: nothing new is drawn — the page lists interview items through `interviewFor`, so the held part reads as the decomposer's there with no change to the page
+  check: an open correction on a part is not a defect in the corpus, it is work in flight; the interview is where it is owed, and refusing it at check would block handover for having listened

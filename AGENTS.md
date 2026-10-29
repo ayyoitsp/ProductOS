@@ -494,7 +494,7 @@ Held three ways rather than one: no author declares `ask-the-human`, so no host 
 - write a given/when/then here: precision about behaviour belongs to product truth, and this layer is a sketch of the parts
 - stamp, validate or accept anything — ⛔ including a capability. A person agrees to one part at a time now, and a role agreeing to its own output would be software clearing the gate built to make somebody look
 
-**Needs:** read-files · search-files · run-commands · write-corpus  ·  **Prompt:** `agents/productos-decomposer.md`
+**Needs:** read-files · search-files · run-commands · write-corpus · ask-the-corpus  ·  **Prompt:** `agents/productos-decomposer.md`
 
 ### `demonstrator`
 
