@@ -1503,7 +1503,15 @@ export function interviewFor(corpus: Corpus, scopeId: string, findings: Finding[
         ref: q.ref,
         owes: "disputed",
         asks: `${no.by} has said this question makes no sense, and it has not been fixed: "${plain(no.said)}"`,
-        why: `it was asked anyway, and rewording it is not the fix — ${no.by} is disputing what it is about`,
+        /**
+         * ⛔ AND WHETHER ANYBODY HERE WATCHED THEM SAY IT. A dispute takes the question off the
+         * worklist either way, so the author reading this has to know whether the instance has its
+         * own record of a press or a courier's word for one — `Note.relayed_by`. Absent means
+         * pressed here, which is why the clause only appears when there is somebody to name.
+         */
+        why: `it was asked anyway, and rewording it is not the fix — ${no.by} is disputing what it is about${
+          no.relayedBy ? `, carried in by ${no.relayedBy} rather than pressed here` : ""
+        }`,
         shape:
           "either withdraw the options and ask something that matches what actually happens, or establish that the thing the question is about is real — ⛔ an author's work, and not a question for the person who already rejected it",
         fills: [q.ref],

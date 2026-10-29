@@ -283,6 +283,30 @@ objection and an ANSWER, and reading the sentence to tell them apart is a guess 
 clothes. Marking an answer as a dispute hides a decision somebody made; missing a dispute puts the
 question back in front of the person who rejected it, which is what happened here.
 
+⛔ **A dispute is somebody else's act, and you are the courier — say whose it is.** `disputes: true`
+is the one thing a note DOES rather than asks: the question leaves the worklist. So it needs a
+person behind it, named in `by`, and a `via` that is a way a PERSON said something —
+
+```
+intent: note
+about: <the ref the question is on>
+says: "<their words, verbatim>"
+by: peter
+via: chat
+disputes: true
+```
+
+- `via: agent` or `via: review` with `disputes: true` is **refused** — software's own default and a
+  judge's finding are the two things nobody asked for, so there is no rejection for them to carry.
+  A reviewer who finds a question unclear files it *without* `disputes`, with `assumed`.
+- Your token needs **`relay`** to file one at all, and the note records **`relayed_by`** — your
+  name, derived from the credential and never from a field you send. The surfaces then say *"carried
+  in by … rather than pressed here"*, because a press the instance watched and your word for one are
+  not the same claim.
+- ⛔ **Never invent one.** A question you think is badly premised is *your* finding: file it `via:
+  review` with `assumed`. A dispute you file with nobody's words behind it withdraws a question from
+  a person's queue as though they had rejected it, which is exactly what this door was closed for.
+
 ### ⛔ An option nobody can pick comes off the table — `withdraw`
 
 ```

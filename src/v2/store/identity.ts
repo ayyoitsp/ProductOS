@@ -190,8 +190,12 @@ export async function revokeToken(db: Db, tokenId: string): Promise<void> {
  *
  * ⛔ WHAT IT COSTS, SAID WHERE IT IS SWITCHED ON: every verdict written while this is set is one
  * NOBODY CAN PROVE A HUMAN MADE. `mayRecord` gates consent on being a browser session the instance
- * issued, and this hands that out to anything that connects. That is acceptable on a laptop and is
- * the whole of tenet 1 on anything else.
+ * issued, and this hands that out to any request with no credential on it. That is acceptable on a
+ * laptop and is the whole of tenet 1 on anything else.
+ *
+ * ⛔ AND IT STOPS THERE. A request that DOES carry a credential is still a token — see
+ * `principalFrom`, and the note that withdrew a question from somebody's worklist because this
+ * switch used to call an agent's token a browser.
  *
  * ⛔ AND IT IS NOT A DEFAULT, NOT A FALLBACK, AND NOT INFERRED. One exact value of one variable, so
  * it cannot be arrived at by a misconfiguration — a half-set environment leaves auth ON.
@@ -205,25 +209,54 @@ export async function principalFrom(
   session?: string,
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<HostedPrincipal | null> {
+  const auth = String(headers.authorization ?? "");
+  const bearer = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
+
   /**
-   * ⛔ BEFORE THE BEARER CHECK, because with auth off a token is pointless and an unrecognised one
-   * would otherwise come back as a principal that can do nothing — which looks exactly like auth
-   * still being on.
+   * ⛔ BEFORE THE TOKEN LOOKUP, because with auth off an unrecognised credential would otherwise
+   * come back holding nothing — which looks exactly like auth still being on, for the one caller
+   * most likely to be testing the switch.
+   *
+   * ⛔ AND IT STILL DOES NOT MAKE A TOKEN A PERSON. This used to return `kind: "browser"` for every
+   * request including one carrying a `Bearer`, which threw away the single fact the instance had
+   * about the caller — and that fact is what every consent decision is made of. What it cost:
+   *
+   *     POST /p/<project>/api/v2/in  { intent: "note", disputes: true }   on an agent's token
+   *       → principal `browser` → the note's `via` defaulted to `page` → `isHuman` → the question
+   *         came off a person's worklist as though that person had rejected it, with nothing in the
+   *         record saying an agent did it.
+   *
+   * Found by an interviewer agent reading its own write back: *"I sent no `via`; the door recorded
+   * `via: "page"`, which `isHuman` counts as a person."* A caller's `via` is a claim about how
+   * consent was obtained and the gate already knows that; a principal's `kind` is what the instance
+   * KNOWS, and inventing a person there defeats the gate before it is asked.
+   *
+   * ⛔ SO AUTH OFF GETS OUT OF THE WAY WITHOUT LYING. It is a sign-in switch, not a consent switch:
+   * nothing is in the way of a request that carries no credential (that is the documented cost
+   * below), and a request that carries one is still automated — generously scoped, so the switch
+   * does its job, and never a press.
    */
   if (authIsOff(env)) {
-    const account = await accountFor(db, env.PRODUCTOS_SINGLE_ACCOUNT?.trim() || "nobody@auth-is-off");
+    const actor = env.PRODUCTOS_SINGLE_ACCOUNT?.trim() || "nobody@auth-is-off";
+    const account = await accountFor(db, actor);
+    if (bearer)
+      return {
+        kind: "token",
+        actor: "a token, with auth off",
+        account,
+        reach: [],
+        /** ⛔ Everything a token can hold, so the switch is not secretly a permissions change. */
+        scopes: ["read", "author", "relay"],
+      };
     return {
       kind: "browser",
-      actor: env.PRODUCTOS_SINGLE_ACCOUNT?.trim() || "nobody@auth-is-off",
+      actor,
       account,
       session: "auth-is-off",
       reach: [],
       scopes: ["read", "author"],
     };
   }
-
-  const auth = String(headers.authorization ?? "");
-  const bearer = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
 
   if (bearer) {
     const [row] = await db

@@ -218,8 +218,26 @@ export const carry = (
   a: { act: Act; ref: string; by: string; via: Via } & Record<string, unknown>
 ): Promise<Outcome> => say_(i, "carry", a);
 
-export const note = (i: Instance, about: string, says: string, by?: string): Promise<Outcome> =>
-  say_(i, "note", { about, says, by });
+/**
+ * ⛔ `via` AND `disputes` ARE CARRIED, OR THE REMOTE PATH IS A DIFFERENT COMMAND.
+ *
+ * `v2 notes add` takes both and this sent neither, so against an instance — which is the only
+ * corpus Peter reviews — `--via chat` became the door's default and `--disputes` was dropped in
+ * silence. A flag accepted and discarded is the exact failure `probe` and `assumed` each had once:
+ * reported as recorded, absent from the record.
+ *
+ * ⛔ AND THE DOOR STILL DECIDES. Sending them does not mean they are granted: the request arrives on
+ * a token, so a human `via` needs `relay` and `disputes` needs a `via` a person could have said it
+ * through. Carrying the fields means the refusal is about what was asked for, rather than about a
+ * request nobody sent.
+ */
+export const note = (
+  i: Instance,
+  about: string,
+  says: string,
+  by?: string,
+  more?: { via?: string; disputes?: boolean },
+): Promise<Outcome> => say_(i, "note", { about, says, by, ...(more?.via ? { via: more.via } : {}), ...(more?.disputes ? { disputes: true } : {}) });
 
 /**
  * Every document an instance holds, as the map `memoryStore` and `heldPages` eat.
