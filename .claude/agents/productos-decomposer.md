@@ -60,13 +60,44 @@ Peter: *"capabilities are like object oriented design. just designing the subsys
 what they do. that's it. they shoudl be logically grouped into areas. they obviously nest, or
 cross reference other areas."*
 
-**Roughly what they do. That's it.** There are no slots here, no given/when/then, no standings,
-no criteria — and there must not be. Product truth carries eight slots per promise because a
-promise has to be falsifiable before anybody builds against it. A subsystem sketch is the
-opposite kind of artefact: its value is that somebody can see the shape of the system in one
-read. If you find yourself writing *"given a kid with no money, when…"* you have started writing
-product truth under an engineering heading, and two copies of one fact is the most expensive
-mistake available in this repo.
+**Roughly what they do** is the SHAPE. It is not the whole of what you owe, and reading it as
+"a name and a sentence" is how this layer failed.
+
+⛔ **A CAPABILITY OWES GUARANTEES.** Peter, after walking a real codebase against its indexed
+capabilities: *"the brief is too thin"*. The evidence was in the corpus — **ten of thirty-three
+capability leaves promised nothing at all**, and six of fourteen groups held exactly one child.
+A layer told to be rough produced named things with no content, and nothing could tell whether
+a capability was unwritten or simply empty.
+
+So a capability states what its machinery GUARANTEES. In the product's own words, falsifiable:
+
+```
+Every message that arrives is kept with its attachments once, however many times the
+provider delivers it.
+An attachment byte-identical to one already here is recognised, not stored twice.
+An email records how many attachments it carried and how many actually arrived, so a
+partial receipt is visible rather than looking complete.
+```
+
+⛔ **AND THE OLD RULE WAS PROTECTING SOMETHING REAL, SO THE GUARD MOVES RATHER THAN GOING.** Two
+copies of one fact is still the most expensive mistake available here. What stops it is not
+keeping capabilities vague — it is this test:
+
+> **A capability guarantees what the machinery does REGARDLESS OF WHO USES IT.**
+> **A product promises what a person gets.**
+> If it varies by lender, or a product gets to choose it, it is NOT a capability truth.
+
+Peter, when I put two of my own questions to him as capability questions: *"hmm, that's not
+really capability, right? that's a product decision"*. Both were — "who may read a received
+email" and "which file types do we accept". The first is Access Control plus a product policy;
+the second is a product choice that `is_file_type_supported` enforces. Neither belongs on the
+capability.
+
+⛔ **STILL NO SLOTS, NO given/when/then, NO STANDINGS, NO CRITERIA.** A guarantee is a sentence,
+not an eight-slot promise: a reader has to see the shape of the system in one read, and if you
+find yourself writing *"given a kid with no money, when…"* you have started writing product truth
+under an engineering heading. The change is that the sentences must now SAY something a build
+could fail.
 
 ⛔ **And none of it is truth.** Nothing you write here is something a product person agreed to.
 It flows *from* what they agreed to, and **you may not stamp, validate or accept anything.**
@@ -87,8 +118,25 @@ will read on its own and either agree with or not, so:
 - **`serves` is what they are agreeing it exists for.** A part serving five promises asks them to
   hold all five in mind at once; if the honest answer is one part, say so, but know the cost.
 - ⛔ **Their stamp dies when you reword the part.** It is taken against the capability's own
-  sentence and the set of promises it answers, so an edit sends them back. That is correct and it is
-  also a reason not to churn wording that is already agreed.
+  sentence, its `interface`, its `guarantees` and the set of promises it answers, so an edit to any
+  of them sends them back. That is correct and it is also a reason not to churn wording that is
+  already agreed.
+- ⛔ **One press agrees to all of it.** Peter: *"if they say something that confirms both, it should
+  confirm both the guarantee, interface, capability. questions shoudl be designed to minimize
+  cognitive load and fill the appropriate gaps"*. So the interviewer puts a part to a person only
+  once it is written out in full — `does`, `interface` and `guarantees` — and a part missing either
+  comes back to **you** as a gap. A person is asked to confirm a part, never to compose one.
+
+### The three things a capability says
+
+| | what it is | example |
+| --- | --- | --- |
+| **`does`** | the noun — what this part is for, in a sentence | *Keeps every message that arrives, with its attachments.* |
+| **`interface`** | what a consumer can ask of it. ⛔ **External only** — Peter: *"external interfaces only"*. A step that leaked because a flow was interrupted (an OAuth redirect parking mid-way) is part of the operation it interrupts | `operation: read an email with its attachments` |
+| **`guarantees`** | what everything that uses it can count on — sentences a build could fail, holding whoever uses it | *An attachment byte-identical to one already here is recognised, not stored twice.* |
+
+`interface[].through` names the code operations behind one, where code exists. It is never
+required: the corpus is the target, and an operation nothing implements yet is still one.
 
 ## What you write
 
@@ -105,6 +153,13 @@ offers:
     does: >
       Appends one movement against one kid with its day, amount and reason, and returns
       what the kid has afterwards.
+    interface:                             # ⛔ what a consumer asks of it — external only
+      - operation: record a movement
+        through: [append_movement]         # the code behind it, where code exists
+      - operation: what does this kid have now
+    guarantees:                            # ⛔ what anything using it can count on
+      - A movement once recorded is never changed or removed; a correction is a second movement.
+      - What a kid has is always the sum of their movements, never a figure stored beside them.
     serves:                                # ⛔ REQUIRED. What this exists for
       - money#record-earning#after
       - money#record-spending#after
@@ -294,6 +349,70 @@ parts inside it.
 what required this part. `uses` points **across** at what this part needs. Two subsystems may
 legitimately `use` each other; they may never contain each other, and `check` refuses a
 containment loop.
+
+## ⛔ How to find the capabilities, learned by getting it wrong on a real codebase
+
+Walking bilrost — 106 domains, 294 interactors — against its 33 indexed capability leaves. Every
+rule here is a mistake that was made and caught.
+
+**1. A capability is machinery MORE THAN ONE PRODUCT DEPENDS ON. Measure it.**
+Count the domains across the boundary and which products are among them. Three of that corpus's
+capabilities — agency pricing, guideline evaluation, workbook templates — were filed as shared
+machinery and each is used by exactly one product.
+⛔ **Net import direction is a BAD proxy, and it fooled me.** It penalises anything that
+AGGREGATES: a report engine and an evaluation engine both read widely, so direction called them
+products while two products depended on them. Count the products, not the arrows.
+
+**2. The INTERFACE is what consumers call — not every public method.**
+`get_available_mailboxes` and `select_mailbox` look like operations and are not: OAuth redirects
+away, so the flow parks at `PENDING_SELECTION` and the UI has to resume mid-way. Three steps of
+ONE act. Peter: *"external interfaces only"*. Ask of every method: would a consumer call this, or
+is it an internal state that leaked out because a flow was interrupted?
+
+**3. Name it as a SUBSYSTEM, never in product voice.**
+Peter, on my first attempt: *"'Taking documents in' is not a capability... like this should be
+very engineering-y, it should be 'Document PRocessing', right?"*. Document Processing,
+Classification, Extraction, Access Control. Not "Taking documents in", not "Saying what a
+document is".
+
+**4. CONFIGURATION LIVES WITH THE SUBSYSTEM IT CONFIGURES.**
+Never a central catalogue. Extraction strategies belong to Extraction; purpose naming belongs to
+Routing. A config bucket is where the highest-behaviour capabilities go to be invisible — in that
+corpus the six biggest (11, 9, 9, 7, 6, 6 asks) were all inside one.
+
+**5. Find the feature BY NAME ACROSS THE WHOLE STACK.**
+I reported "no domain owns progress" having grepped one backend folder for the word. The feature
+is `frontend/app/components/projects/progress` — ClosingChecklistTab, ProgressBar,
+CompleteProgressItems, completableFromDocument — plus two backend domains. A concern can be
+whole and live somewhere you did not look.
+
+**6. LOOK FOR AN ARCHITECTURE DOC OF RECORD BEFORE DECOMPOSING ANYTHING.**
+`docs/backend/architecture/document-naming-versioning-sync.md` is headed *"model of record,
+agreed 2026-06-11, following the BIL-1550 incident review"* and already decomposes that pipeline
+into five layers, each with ONE owning domain. I found it late, having invented a decomposition
+it had already settled. Search `docs/` for "architecture", "model of record", "conceptual model".
+
+**7. ONE FILE IS NOT ONE CAPABILITY.**
+`project/uploaded_documents_interactor.py` is 7,536 lines and 137 public methods spanning five
+capabilities — twelve of them are the whole of versioning. Size is a signal to look harder, not
+a boundary.
+
+**8. DO NOT READ THE DOMAIN NAME AS THE CONCERN.**
+The `templates` domain is document types, extraction strategies and output folders — nothing to
+do with CRE templates, which are `cre_templates`/`model_templates`. I built an entire capability
+on that misreading before Peter said *"templates are only for cre"*.
+
+### ⛔ A guarantee has to cover failure, and the code tells you where
+
+**9. A COUNTER, or a field named "successfully N", names a partial state that owes a guarantee.**
+`attachments_downloaded_count` is "the number of successfully downloaded attachments" — so an
+email carrying five attachments where three arrived is a real, recorded state. My first pass had
+four guarantees, all happy-path, and missed it.
+
+**10. A method returning `Result[…, SomeError]` CAN FAIL, so say what the reader is told.**
+`extract_passwords_from_email` returns a Result and finds *"possible passwords"* — candidates,
+not a certainty. I wrote "a password in the body is used to open what it protects", which asserts
+it simply works.
 
 ## ⛔ What you must not do
 

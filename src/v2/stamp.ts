@@ -257,10 +257,17 @@ export function coveredBy(corpus: Corpus, target: string): Covered | null {
            */
           slots: h(canon({ in: sub.id, named: sub.title, ...o, derived: undefined, serves: undefined })),
           criteria: h(canon([...o.serves].sort())),
-          parts: ["does", "serves"],
+          parts: ["does", ...(o.interface ? ["interface"] : []), ...(o.guarantees ? ["guarantees"] : []), "serves"],
           criteriaCount: o.serves.length,
+          /**
+           * ⛔ THE INTERFACE AND THE GUARANTEES ARE READ, because they are hashed — `...o` above puts
+           * both in `slots`. A part whose stamp breaks when a guarantee is reworded has to have
+           * shown that guarantee to the person who stamped it.
+           */
           reads: [
             `${norm(sub.title)} — ${norm(o.does)}`,
+            ...(o.interface ?? []).map((i) => `  asked: ${norm(i.operation)}${i.through?.length ? ` (${i.through.join(", ")})` : ""}`),
+            ...(o.guarantees ?? []).map((g) => `  guarantees: ${norm(g)}`),
             `  it exists for: ${o.serves.length ? o.serves.join(", ") : "⛔ nothing, which `check` refuses"}`,
           ],
         };
