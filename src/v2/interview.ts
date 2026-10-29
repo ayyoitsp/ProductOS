@@ -47,6 +47,7 @@ import type { Finding } from "./check.js";
 import { actsFor, gridFor } from "./grid.js";
 import { ANALYSES } from "./analyse.js";
 import { capabilityTree } from "./subsystems.js";
+import { answeringParts } from "./demonstrate.js";
 import { descendants, questionsFor, rulingAct, type Question } from "./settle.js";
 import { stampFor } from "./stamp.js";
 import { vocabularyReach } from "./load.js";
@@ -217,6 +218,14 @@ export type Owes =
    * of `accept` at the part agrees to all of it — the stamp hashes all three, which is what makes
    * one press honest. Where the interface or the guarantees are missing, the gap goes to the
    * decomposer first: a person is asked to confirm a part, never to compose one.
+   *
+   * ⛔ TWO GRAINS, ONE KIND — the same split `undefined-word` makes. At the product root it is every
+   * part nobody has agreed to. Started on a feature it is the parts THAT FEATURE leans on, which is
+   * the other half of Peter's ask: *"we should be able to start the interviewer on a feature, and
+   * have it fan out to the gloassary/capabilities that are needed to support the feature."*
+   * `unserved` only speaks when NOTHING serves a feature, so before this a feature leaning on
+   * thirteen unagreed parts — `map-the-statement`, on staging — was asked about none of them, while
+   * `readinessOf` held its build on all thirteen.
    */
   | "capability";
 
@@ -1247,16 +1256,10 @@ function parts(corpus: Corpus, scopeId: string): Owed[] {
 }
 
 /**
- * Parts nobody has agreed to — ⛔ AT THE ROOT, like `parts`, because a subsystem serves many
- * features and asking it per feature asks it once for every feature it serves.
- *
- * ⛔ ONE ITEM PER PART, CARRYING ALL THREE. What it does, what it is asked and what it guarantees
- * are read together and agreed together; splitting them would ask a person three times about one
- * thing — the load this file exists to remove.
- *
- * ⛔ A PART WITH A GAP IS NOT PUT TO A PERSON AS A BLANK. Missing guarantees or a missing interface
- * is drafting work, and it is the decomposer's — the item says what is missing and who owes it, so
- * the person is only ever asked to confirm something written out in full.
+ * Parts nobody has agreed to — ⛔ AT THE ROOT, EVERY ONE OF THEM: the sweep somebody does on
+ * purpose. Started on a feature, `leanedOn` asks only the parts that feature rests on, and that is
+ * the grain a person interviewing one feature meets — the two never run on the same scope, so no
+ * part is asked twice in one interview. The item itself is `capabilityItem`'s, at both grains.
  */
 function capabilities(corpus: Corpus, scopeId: string): Owed[] {
   if (corpus.scopes.find((x) => x.scope.id === scopeId)?.scope.in) return [];
@@ -1265,40 +1268,130 @@ function capabilities(corpus: Corpus, scopeId: string): Owed[] {
     for (const o of s.offers) {
       const ref = `${s.id}#offers#${o.id}`;
       if (stampFor(corpus, ref).state === "accepted") continue;
-      const missing = [...(o.interface?.length ? [] : ["what it is asked"]), ...(o.guarantees?.length ? [] : ["what it guarantees"])];
-      const name = plain(s.title);
-      out.push({
-        ref,
-        owes: "capability" as const,
-        asks: missing.length
-          ? `${name} offers this, and nothing yet says ${missing.join(" or ")}.`
-          : `${name}: is this what it does, and can everything that uses it count on these?`,
-        why: missing.length
-          ? `a person agreeing to a part is agreeing to what it guarantees, and there is nothing here to agree to yet`
-          : `a build leaning on this part is held until somebody has put their name to it`,
-        shape:
-          "one agreement covering what it does, what it is asked and what it guarantees — ⛔ a guarantee holds whoever uses the part; one that varies by lender or that a product chooses is a product decision, not a guarantee",
-        fills: [ref],
-        candidates: [],
-        about: {
-          feature: name,
-          purpose: plain(s.does),
-          already: [
-            { asks: "what it does", says: plain(o.does) },
-            ...(o.interface ?? []).map((i) => ({ asks: "asked of it", says: plain(i.operation) })),
-            ...(o.guarantees ?? []).map((g) => ({ asks: "it guarantees", says: plain(g) })),
-            ...(o.serves.length ? [{ asks: "it exists for", says: o.serves.join(" · ") }] : []),
-          ],
-          words: [],
-          undefined_words: [],
-        },
-        act: missing.length
-          ? `\`decomposer\` writes ${missing.join(" and ")} from the code and the promises it serves — then it comes back here to be confirmed`
-          : `a person agrees in one press — \`accept ${ref}\` covers what it does, its interface and its guarantees together; any change to one sends it back`,
-      });
+      const item = capabilityItem(corpus, ref);
+      if (item) out.push(item);
     }
-  /** ⛔ Confirmable first: a part written out in full is one press, a gap is somebody else's work. */
-  return out.sort((a, b) => Number(/nothing yet says/.test(a.asks)) - Number(/nothing yet says/.test(b.asks)));
+  return confirmableFirst(out);
+}
+
+/**
+ * The parts ONE FEATURE leans on that nobody has agreed to — ⛔ THE FAN-OUT, see the `capability`
+ * kind. The root asks every part through `capabilities`; this is the feature's grain, and never runs
+ * at the root, where it would ask the same parts a second time.
+ *
+ * ⛔ `answeringParts` IS THE ONE HOME, CALLED RATHER THAN RE-WALKED. `readinessOf` and `check` both
+ * read it — so the interview asks about exactly the parts that hold this feature's build, followed
+ * down `serves` the same way. A fourth opinion about what a promise leans on is how they stop agreeing.
+ *
+ * ⛔ ONE QUESTION PER PART, NOT PER BEHAVIOUR. Thirteen behaviours leaning on one part are one thing
+ * to read and one press to agree — the behaviours are the context, not the count.
+ */
+function leanedOn(corpus: Corpus, scopeId: string, scopeIds: string[]): Owed[] {
+  if (!corpus.scopes.find((x) => x.scope.id === scopeId)?.scope.in) return [];
+  const byRef = new Map<string, Set<string>>();
+  for (const p of answeringParts(corpus, scopeIds)) {
+    if (p.validated) continue;
+    byRef.set(p.ref, (byRef.get(p.ref) ?? new Set()).add(p.answers));
+  }
+  const behaviour = (ref: string): string => {
+    const [sid, eid] = ref.split("#");
+    const ex = corpus.scopes.find((x) => x.scope.id === sid)?.scope.exchanges.find((e) => e.id === eid);
+    return plain(ex?.title || eid || ref);
+  };
+  const feature = plain(corpus.scopes.find((x) => x.scope.id === scopeId)?.scope.title || scopeId);
+  const out: Owed[] = [];
+  for (const [ref, answers] of byRef) {
+    const item = capabilityItem(corpus, ref, { feature, leaning: [...answers].map(behaviour) });
+    if (item) out.push(item);
+  }
+  return confirmableFirst(out);
+}
+
+/** ⛔ Confirmable first: a part written out in full is one press, a gap is somebody else's work. */
+const confirmableFirst = (xs: Owed[]): Owed[] =>
+  xs.sort((a, b) => Number(/nothing yet says/.test(a.asks)) - Number(/nothing yet says/.test(b.asks)));
+
+/**
+ * One part, put to a person — ⛔ THE ONE SHAPE BOTH GRAINS SHARE, so a part asked from a feature and
+ * the same part asked at the root are the same item with more or less context around it.
+ *
+ * ⛔ ONE ITEM CARRYING ALL THREE. What it does, what it is asked and what it guarantees are read
+ * together and agreed together; splitting them would ask a person three times about one thing.
+ *
+ * ⛔ A PART WITH A GAP IS NOT PUT TO A PERSON AS A BLANK. Missing guarantees or a missing interface is
+ * drafting work, and it is the decomposer's — the item says what is missing and who owes it, so the
+ * person is only ever asked to confirm something written out in full.
+ *
+ * ⛔ AND AGREED-THEN-REWORDED IS ITS OWN QUESTION. The stamp records the words it was taken against,
+ * so the person who agreed is asked whether it still holds — one glance at what moved, not a review
+ * from scratch.
+ */
+function capabilityItem(
+  corpus: Corpus,
+  ref: string,
+  from?: { feature: string; leaning: string[] }
+): Owed | null {
+  const [sid, , cid] = ref.split("#");
+  const s = corpus.subsystems.find((x) => x.subsystem.id === sid)?.subsystem;
+  const o = s?.offers.find((x) => x.id === cid);
+  if (!s || !o) return null;
+  const stamp = stampFor(corpus, ref);
+  const stale = stamp.state !== "accepted" && stamp.state !== "never";
+  const missing = [...(o.interface?.length ? [] : ["what it is asked"]), ...(o.guarantees?.length ? [] : ["what it guarantees"])];
+  const name = plain(s.title);
+  const some = from ? from.leaning.slice(0, 6) : [];
+  return {
+    ref,
+    owes: "capability" as const,
+    asks: [
+      from ? `${from.feature} relies on ${name}.` : "",
+      missing.length
+        ? `${from ? "It" : name} offers this, and nothing yet says ${missing.join(" or ")}.`
+        : stale
+          ? `${stamp.by ?? "Somebody"} agreed to it, and it has changed since. Is it still right?`
+          : from
+            ? "Is this what it does, and can this feature count on what it guarantees?"
+            : `${name}: is this what it does, and can everything that uses it count on these?`,
+    ]
+      .filter(Boolean)
+      .join(" "),
+    why: missing.length
+      ? `a person agreeing to a part is agreeing to what it guarantees, and there is nothing here to agree to yet`
+      : from
+        ? `${from.leaning.length} behaviour${from.leaning.length === 1 ? "" : "s"} here lean${from.leaning.length === 1 ? "s" : ""} on it, and a build is held until somebody has put their name to every part a promise rests on`
+        : `a build leaning on this part is held until somebody has put their name to it`,
+    shape:
+      "one agreement covering what it does, what it is asked and what it guarantees — ⛔ a guarantee holds whoever uses the part; one that varies by lender or that a product chooses is a product decision, not a guarantee",
+    fills: [ref],
+    candidates: [],
+    about: {
+      feature: from ? from.feature : name,
+      purpose: plain(s.does),
+      already: [
+        { asks: "what it does", says: plain(o.does) },
+        ...(o.interface ?? []).map((i) => ({ asks: "asked of it", says: plain(i.operation) })),
+        ...(o.guarantees ?? []).map((g) => ({ asks: "it guarantees", says: plain(g) })),
+        ...(from
+          ? [
+              {
+                asks: "what here leans on it",
+                says: some.join(" · "),
+                ...(from.leaning.length > some.length ? { more: from.leaning.length - some.length } : {}),
+              },
+            ]
+          : o.serves.length
+            ? [{ asks: "it exists for", says: o.serves.join(" · ") }]
+            : []),
+      ],
+      words: [],
+      undefined_words: [],
+    },
+    act: missing.length
+      ? `\`decomposer\` writes ${missing.join(" and ")} from the code and the promises it serves — then it comes back here to be confirmed`
+      : stale
+        ? `a person agrees to it again — \`accept ${ref}\`; the stamp records the words it was taken against, so this is one glance at what moved`
+        : `a person agrees in one press — \`accept ${ref}\` covers what it does, its interface and its guarantees together; any change to one sends it back`,
+  };
 }
 
 /** Screens with nothing drawn. ⛔ The UX half, and a drawing is not a sentence — see `shape`. */
@@ -1753,6 +1846,7 @@ export function interviewFor(corpus: Corpus, scopeId: string, findings: Finding[
     ...parts(corpus, scopeId),
     ...capabilities(corpus, scopeId),
     ...unserved(corpus, ids),
+    ...leanedOn(corpus, scopeId, ids),
     ...found(corpus, ids),
     ...blanks(corpus, ids, title, spokenFor),
     ...undrawn(corpus, ids),

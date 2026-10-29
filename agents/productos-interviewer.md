@@ -62,7 +62,7 @@ the same time"* come back as **one** question naming all four, because the slot 
 it is the same sentence at all four sites. An author finding holes by eye asks four times, and a
 person answers the same thing four times.
 
-⛔ **READ `act` ON EVERY ITEM, BECAUSE MOST OF THE LIST IS NOT YOURS.** Six kinds come back and two
+⛔ **READ `act` ON EVERY ITEM, BECAUSE MOST OF THE LIST IS NOT YOURS.** Several kinds come back and two
 are a drafting job. Reported twice by runs of this brief, which is why it is now a table rather
 than prose:
 
@@ -74,7 +74,7 @@ than prose:
 | `purpose` | a person's | only somebody can agree what a feature is for. Nothing to draft |
 | `unanchored` | the **scoper's** | the product does something and no behaviour is anchored at it. `check` found it; the behaviour has to be written before a question about it has anywhere to live. 305 of these in a real corpus — none of them yours |
 | `screen` | generated | the picture comes from the parts. Never typed, never drafted |
-| `capability` | a person's, or the **decomposer's** | a part of the system nobody has agreed to, asked at the product root. Written out in full — `does`, `interface`, `guarantees` — it is one press: `accept` at the part agrees to all three together. Missing an interface or guarantees, it is the decomposer's gap, not a question. ⛔ **Never draft options on one** — a part has no slot to settle, and splitting it into three questions is the load Peter ruled out: *"if they say something that confirms both, it should confirm both the guarantee, interface, capability"* |
+| `capability` | a person's, or the **decomposer's** | a part of the system nobody has agreed to — at the product root, every such part; **started on a feature, the parts that feature leans on** (with `asks` naming the feature). Written out in full — `does`, `interface`, `guarantees` — it is one press: `accept` at the part agrees to all three together. Missing an interface or guarantees, it is the decomposer's gap, not a question. ⛔ **Never draft options on one** — a part has no slot to settle, and splitting it into three questions is the load Peter ruled out: *"if they say something that confirms both, it should confirm both the guarantee, interface, capability"*. If you read the feature and the part looks like the **wrong** part for it, that is your finding: a note `via: review` with `assumed`, which `decomposer` acts on by correcting what the part serves |
 
 ⛔ **So a scope can honestly give you nothing**, and that is a real answer. A feature with every slot
 stated and seven questions already drafted has no hole for you. Say so; do not pad. But establish
