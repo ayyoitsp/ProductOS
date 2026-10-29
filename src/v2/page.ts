@@ -2021,6 +2021,42 @@ function renderUnasked(corpus: Corpus, scopeId: string, ctx: Ctx): string {
     </div>`;
 }
 
+/**
+ * The parts this feature leans on that nobody has checked — ⛔ THE INTERVIEW'S `part` FAN-OUT, ON
+ * THE PAGE HE REVIEWS ON.
+ *
+ * Peter: *"we should be able to start the interviewer on a feature, and have it fan out to the
+ * gloassary/capabilities that are needed to support the feature."* `readinessOf` already holds a
+ * build on these; without this the feature page said nothing about why, and the only place the
+ * agreement can be pressed is the part's own row in the capability tree — so each one links there.
+ *
+ * ⛔ THE INTERVIEW'S OWN WORDS, NOT A SECOND DERIVATION. `answeringParts` is walked once, in
+ * `interviewFor`; this renders what that returned.
+ */
+function renderUnchecked(corpus: Corpus, scopeId: string, ctx: Ctx): string {
+  const parts = (interviewFor(corpus, scopeId)?.owed ?? []).filter((o) => o.owes === "part");
+  if (!parts.length) return "";
+  const at = subsystemAddressIn(ctx.base, subsystemTrailsOf(corpus));
+  return `
+    <div class="unasked unchecked">
+      <h3>Parts this relies on that nobody has checked</h3>
+      <p class="lede">${parts.length} part${parts.length === 1 ? "" : "s"} of the system ${parts.length === 1 ? "answers" : "answer"}
+      what this promises, and nobody has put their name to ${parts.length === 1 ? "it" : "them"}. Nothing here can be built
+      until somebody has.</p>
+      <ul class="unasked-list">
+        ${parts
+          .map(
+            (o) => `
+          <li data-ref="${esc(o.ref)}">
+            <p class="u-asks">${line(o.asks)}</p>
+            <p class="u-why">${line(o.why)} — <a href="${esc(at(o.ref.split("#")[0]!))}">check it in the capability tree</a></p>
+          </li>`
+          )
+          .join("")}
+      </ul>
+    </div>`;
+}
+
 function renderWorklist(
   corpus: Corpus,
   grids: Grid[],
@@ -4781,7 +4817,8 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
                        * things a reviewer can act on come first.
                        */
                       renderUnasked(corpus, scopeId, ctx)
-                    }`
+                    }
+                    ${renderUnchecked(corpus, scopeId, ctx)}`
                  : /**
                     * ⛔ "NOTHING IS UNDECIDED" IS TRUE AND MISLEADING WHEN NOTHING IS WRITTEN.
                     *
@@ -4813,7 +4850,8 @@ export function renderScopePage(corpus: Corpus, scopeId: string, opts: PageOptio
                        * would actually be asked, which is the form a reviewer can judge.
                        */
                       renderUnasked(corpus, scopeId, ctx)
-                    }`
+                    }
+                    ${renderUnchecked(corpus, scopeId, ctx)}`
              }
            </div>
            <div class="sub-view" data-tabs="product" data-sub-view="screens" data-ref="screens" data-label="Screens">

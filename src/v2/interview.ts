@@ -47,6 +47,7 @@ import type { Finding } from "./check.js";
 import { actsFor, gridFor } from "./grid.js";
 import { ANALYSES } from "./analyse.js";
 import { capabilityTree } from "./subsystems.js";
+import { answeringParts } from "./demonstrate.js";
 import { descendants, questionsFor, rulingAct, type Question } from "./settle.js";
 import { vocabularyReach } from "./load.js";
 import { POLICY_SLOTS, SLOT_ASKED, SLOT_ASKS_SHORT, SLOTS, statements, type SlotName } from "./schema.js";
@@ -204,7 +205,29 @@ export type Owes =
    * So: no capabilities → one `parts` question for the product. Capabilities → this, per feature,
    * naming the parts that exist so somebody is choosing among them rather than inventing more.
    */
-  | "unserved";
+  | "unserved"
+  /**
+   * A part this feature leans on that nobody has put their name to — ⛔ THE FAN-OUT TO
+   * CAPABILITIES, AND THE HALF OF THE ASK THAT WAS NEVER STARTED.
+   *
+   * Peter: *"we should be able to start the interviewer on a feature, and have it fan out to the
+   * gloassary/capabilities that are needed to support the feature."* The glossary half landed as
+   * `undefined-word`. The capability half was reported as "partly there" because `unserved` already
+   * existed — but `unserved` only speaks when NOTHING serves a feature, and goes quiet the moment
+   * one part serves one behaviour.
+   *
+   * ⛔ MEASURED ON STAGING BEFORE THIS EXISTED: all 50 capabilities authored, none validated, and
+   * `map-the-statement` leaning on 13 of them — while the interviewer, started on that feature, said
+   * nothing about any. `readinessOf` was already holding the build on exactly those 13, so the gate
+   * refused for a reason the one tool meant to clear it never asked about.
+   *
+   * ⛔ `answeringParts` IS THE ONE HOME, CALLED RATHER THAN RE-WALKED. `readiness.ts` and `check.ts`
+   * both read it; a fourth opinion about what a promise leans on is how the three stop agreeing.
+   *
+   * ⛔ ONE QUESTION PER PART, NOT PER BEHAVIOUR. Thirteen behaviours leaning on one part are one
+   * thing to read and one press to agree — the behaviours are the context, not the count.
+   */
+  | "part";
 
 export interface Owed {
   /**
@@ -1131,6 +1154,84 @@ function unserved(corpus: Corpus, scopeIds: string[]): Owed[] {
 }
 
 /**
+ * The parts a feature leans on that nobody has validated — ⛔ SEE THE `part` KIND.
+ *
+ * ⛔ NO CANDIDATES, AND THAT IS THE SHAPE OF THE ACT RATHER THAN A GAP IN IT. A capability carries no
+ * slots, so there is no sentence to choose between; what is owed is a person reading one part and
+ * putting their name to it — the acceptance #251 made possible at `<subsystem>#offers#<id>`. Peter,
+ * on what that validation is: *"we need to ensure the capability of 'ledger' and 'increment
+ * balance' has been validated by a human, but not more than that"*. So this asks exactly that and
+ * drafts nothing.
+ */
+function unvalidated(corpus: Corpus, scopeIds: string[]): Owed[] {
+  const byRef = new Map<string, { stale: boolean; by?: string; answers: Set<string> }>();
+  for (const p of answeringParts(corpus, scopeIds)) {
+    if (p.validated) continue;
+    const at = byRef.get(p.ref) ?? { stale: p.stale, ...(p.by ? { by: p.by } : {}), answers: new Set<string>() };
+    at.answers.add(p.answers);
+    byRef.set(p.ref, at);
+  }
+
+  const behaviour = (ref: string): string => {
+    const [sid, eid] = ref.split("#");
+    const ex = corpus.scopes.find((x) => x.scope.id === sid)?.scope.exchanges.find((e) => e.id === eid);
+    return plain(ex?.title || eid || ref);
+  };
+
+  return [...byRef].map(([ref, p]) => {
+    const [sid, , cid] = ref.split("#");
+    const sub = corpus.subsystems.find((x) => x.subsystem.id === sid)?.subsystem;
+    const cap = sub?.offers.find((o) => o.id === cid);
+    const part = plain(sub?.title || sid);
+    const feature = plain(corpus.scopes.find((x) => x.scope.id === scopeIds[0])?.scope.title || scopeIds[0]);
+    const leaning = [...p.answers].map(behaviour);
+    const some = leaning.slice(0, 6);
+    return {
+      ref,
+      owes: "part" as const,
+      /**
+       * ⛔ THE PART'S OWN SENTENCE, THEN THE QUESTION. Nothing here describes the machinery in the
+       * interviewer's words — `does` is what the part says about itself, and the person agreeing is
+       * agreeing to exactly that sentence, which is what the stamp hashes.
+       */
+      asks: [
+        `${feature} relies on ${part}, which says: ${plain(cap?.does)}`,
+        p.stale
+          ? `${p.by ?? "Somebody"} agreed to it, and it has changed since. Is it still right?`
+          : "Nobody has checked it. Is that what it does?",
+      ].join(" "),
+      why: `${leaning.length} behaviour${leaning.length === 1 ? "" : "s"} here lean${leaning.length === 1 ? "s" : ""} on it, and a build is held until somebody has put their name to every part a promise rests on`,
+      shape:
+        "agreed as it reads — or, where it is wrong or the wrong part for this feature, a note saying which, so the part or what it serves is corrected before anybody agrees",
+      fills: [ref],
+      candidates: [],
+      about: {
+        feature,
+        already: [
+          { asks: "what the part says it does", says: plain(cap?.does) },
+          { asks: "part of", says: `${part} — ${plain(sub?.does)}` },
+          {
+            asks: "what here leans on it",
+            says: some.join(" · "),
+            ...(leaning.length > some.length ? { more: leaning.length - some.length } : {}),
+          },
+        ],
+        words: [],
+        undefined_words: [],
+      },
+      /**
+       * ⛔ A PERSON'S PRESS, AND THE WRONG-PART ANSWER IS NOT ONE. Agreeing is the acceptance on the
+       * page; saying the part is wrong is a note, and fixing it is the decomposer's — `serves` is
+       * the mapping, and an interviewer that rewrote it would be deciding what the person was asked.
+       */
+      act: p.stale
+        ? "a person agrees to it again on the page — ⛔ the stamp records the words it was taken against, so this is one glance at what moved"
+        : "a person agrees to this part on the page — ⛔ nobody else can; if it is the wrong part, they say so in a note and `decomposer` corrects what it serves",
+    };
+  });
+}
+
+/**
  * The subsystem tree, where nothing says what parts the product has.
  *
  * ⛔ AT THE ROOT ONLY. A feature cannot answer "what are this product's parts" and asking it there
@@ -1683,6 +1784,7 @@ export function interviewFor(corpus: Corpus, scopeId: string, findings: Finding[
   const rest = [
     ...parts(corpus, scopeId),
     ...unserved(corpus, ids),
+    ...unvalidated(corpus, ids),
     ...found(corpus, ids),
     ...blanks(corpus, ids, title, spokenFor),
     ...undrawn(corpus, ids),

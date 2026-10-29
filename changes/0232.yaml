@@ -1,0 +1,11 @@
+id: "0232"
+said: we should be able to start the interviewer on a feature, and have it fan out to the gloassary/capabilities that are needed to support the feature.
+at: 2026-10-29
+kind: derivation
+reaches:
+  derive: "function unvalidated(corpus: Corpus, scopeIds: string[]): Owed[]"
+  surface: "function renderUnchecked(corpus: Corpus, scopeId: string, ctx: Ctx)"
+  check: a-part-nobody-has-validated
+  instruct: "| `part` | a person's |"
+  pin: a part agreed and reworded since is asked again
+waived: {}

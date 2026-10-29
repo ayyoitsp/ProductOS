@@ -67,7 +67,7 @@ the same time"* come back as **one** question naming all four, because the slot 
 it is the same sentence at all four sites. An author finding holes by eye asks four times, and a
 person answers the same thing four times.
 
-⛔ **READ `act` ON EVERY ITEM, BECAUSE MOST OF THE LIST IS NOT YOURS.** Six kinds come back and two
+⛔ **READ `act` ON EVERY ITEM, BECAUSE MOST OF THE LIST IS NOT YOURS.** Several kinds come back and two
 are a drafting job. Reported twice by runs of this brief, which is why it is now a table rather
 than prose:
 
@@ -79,6 +79,7 @@ than prose:
 | `purpose` | a person's | only somebody can agree what a feature is for. Nothing to draft |
 | `unanchored` | the **scoper's** | the product does something and no behaviour is anchored at it. `check` found it; the behaviour has to be written before a question about it has anywhere to live. 305 of these in a real corpus — none of them yours |
 | `screen` | generated | the picture comes from the parts. Never typed, never drafted |
+| `part` | a person's | a part of the system this feature leans on that nobody has put their name to. `asks` carries the part's own sentence. ⛔ **Nothing to draft** — a capability has no slot, so there are no options; agreeing is a press on its row in the capability tree. If you read the feature and the part looks like the **wrong** part for it, that is your finding: a note `via: review` with `assumed`, which `decomposer` acts on by correcting what the part serves. Never `ask` on a `#offers#` ref |
 
 ⛔ **So a scope can honestly give you nothing**, and that is a real answer. A feature with every slot
 stated and seven questions already drafted has no hole for you. Say so; do not pad. But establish
