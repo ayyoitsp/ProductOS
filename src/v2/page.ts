@@ -11113,6 +11113,9 @@ export const STYLE = `<style>
   .cap-list li { margin: .4rem 0; }
   .cap-does { display: block; }
   .cap-serves { display: block; font-size: .85rem; color: var(--dim); }
+  .cap-interface, .cap-guarantees { margin: .3rem 0 0; padding-left: 1rem; font-size: .9rem; }
+  .cap-interface code { font-size: .8rem; color: var(--dim); }
+  .cap-label { display: block; margin-top: .3rem; font-size: .78rem; color: var(--dim); text-transform: uppercase; letter-spacing: .04em; }
   .subsys-relied { margin: .35rem 0; font-size: .85rem; color: var(--dim); }
   .cap-terms { margin: .3rem 0 0; padding-left: 1rem; font-size: .82rem; color: var(--dim); }
   .cap-up { font-style: italic; }
@@ -11391,6 +11394,24 @@ function renderSubsystems(
             <li class="contract" data-ref="${esc(`${s.id}#offers#${o.id}`)}">
               <code class="creq">${esc(`${s.id}#offers#${o.id}`)}</code>
               <span class="cap-does">${line(o.does)}</span>
+              ${
+                /**
+                 * ⛔ WHAT A PERSON AGREES TO WHEN THEY AGREE TO THE PART, so it is on the page beside
+                 * the agreement. Peter: *"if they say something that confirms both, it should confirm
+                 * both the guarantee, interface, capability"* — one press covers all three, which is
+                 * only honest if all three are in front of whoever presses.
+                 */
+                o.interface?.length
+                  ? `<span class="cap-label">asked of it</span><ul class="cap-interface">${o.interface
+                      .map((i) => `<li>${line(i.operation)}${i.through?.length ? ` <code>${esc(i.through.join(" · "))}</code>` : ""}</li>`)
+                      .join("")}</ul>`
+                  : ""
+              }
+              ${
+                o.guarantees?.length
+                  ? `<span class="cap-label">guarantees</span><ul class="cap-guarantees">${o.guarantees.map((g) => `<li>${line(g)}</li>`).join("")}</ul>`
+                  : ""
+              }
               ${
                 o.serves.length
                   ? `<span class="cap-serves">for ${o.serves.map(servedText).join(", ")}</span>`

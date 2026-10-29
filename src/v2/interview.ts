@@ -48,6 +48,7 @@ import { actsFor, gridFor } from "./grid.js";
 import { ANALYSES } from "./analyse.js";
 import { capabilityTree } from "./subsystems.js";
 import { descendants, questionsFor, rulingAct, type Question } from "./settle.js";
+import { stampFor } from "./stamp.js";
 import { vocabularyReach } from "./load.js";
 import { POLICY_SLOTS, SLOT_ASKED, SLOT_ASKS_SHORT, SLOTS, statements, type SlotName } from "./schema.js";
 
@@ -204,7 +205,20 @@ export type Owes =
    * So: no capabilities → one `parts` question for the product. Capabilities → this, per feature,
    * naming the parts that exist so somebody is choosing among them rather than inventing more.
    */
-  | "unserved";
+  | "unserved"
+  /**
+   * A part nobody has put their name to — ⛔ ASKED AS ONE THING, NOT THREE.
+   *
+   * Peter: *"a core philosophy of productos is to limit the user's cognitive load. if they say
+   * something that confirms both, it should confirm both the guarantee, interface, capability.
+   * questions shoudl be designed to minimize cognitive load and fill the appropriate gaps"*.
+   *
+   * So the question carries what it does, what it is asked, and what it guarantees, and one press
+   * of `accept` at the part agrees to all of it — the stamp hashes all three, which is what makes
+   * one press honest. Where the interface or the guarantees are missing, the gap goes to the
+   * decomposer first: a person is asked to confirm a part, never to compose one.
+   */
+  | "capability";
 
 export interface Owed {
   /**
@@ -1232,6 +1246,61 @@ function parts(corpus: Corpus, scopeId: string): Owed[] {
   ];
 }
 
+/**
+ * Parts nobody has agreed to — ⛔ AT THE ROOT, like `parts`, because a subsystem serves many
+ * features and asking it per feature asks it once for every feature it serves.
+ *
+ * ⛔ ONE ITEM PER PART, CARRYING ALL THREE. What it does, what it is asked and what it guarantees
+ * are read together and agreed together; splitting them would ask a person three times about one
+ * thing — the load this file exists to remove.
+ *
+ * ⛔ A PART WITH A GAP IS NOT PUT TO A PERSON AS A BLANK. Missing guarantees or a missing interface
+ * is drafting work, and it is the decomposer's — the item says what is missing and who owes it, so
+ * the person is only ever asked to confirm something written out in full.
+ */
+function capabilities(corpus: Corpus, scopeId: string): Owed[] {
+  if (corpus.scopes.find((x) => x.scope.id === scopeId)?.scope.in) return [];
+  const out: Owed[] = [];
+  for (const { subsystem: s } of corpus.subsystems)
+    for (const o of s.offers) {
+      const ref = `${s.id}#offers#${o.id}`;
+      if (stampFor(corpus, ref).state === "accepted") continue;
+      const missing = [...(o.interface?.length ? [] : ["what it is asked"]), ...(o.guarantees?.length ? [] : ["what it guarantees"])];
+      const name = plain(s.title);
+      out.push({
+        ref,
+        owes: "capability" as const,
+        asks: missing.length
+          ? `${name} offers this, and nothing yet says ${missing.join(" or ")}.`
+          : `${name}: is this what it does, and can everything that uses it count on these?`,
+        why: missing.length
+          ? `a person agreeing to a part is agreeing to what it guarantees, and there is nothing here to agree to yet`
+          : `a build leaning on this part is held until somebody has put their name to it`,
+        shape:
+          "one agreement covering what it does, what it is asked and what it guarantees — ⛔ a guarantee holds whoever uses the part; one that varies by lender or that a product chooses is a product decision, not a guarantee",
+        fills: [ref],
+        candidates: [],
+        about: {
+          feature: name,
+          purpose: plain(s.does),
+          already: [
+            { asks: "what it does", says: plain(o.does) },
+            ...(o.interface ?? []).map((i) => ({ asks: "asked of it", says: plain(i.operation) })),
+            ...(o.guarantees ?? []).map((g) => ({ asks: "it guarantees", says: plain(g) })),
+            ...(o.serves.length ? [{ asks: "it exists for", says: o.serves.join(" · ") }] : []),
+          ],
+          words: [],
+          undefined_words: [],
+        },
+        act: missing.length
+          ? `\`decomposer\` writes ${missing.join(" and ")} from the code and the promises it serves — then it comes back here to be confirmed`
+          : `a person agrees in one press — \`accept ${ref}\` covers what it does, its interface and its guarantees together; any change to one sends it back`,
+      });
+    }
+  /** ⛔ Confirmable first: a part written out in full is one press, a gap is somebody else's work. */
+  return out.sort((a, b) => Number(/nothing yet says/.test(a.asks)) - Number(/nothing yet says/.test(b.asks)));
+}
+
 /** Screens with nothing drawn. ⛔ The UX half, and a drawing is not a sentence — see `shape`. */
 function undrawn(corpus: Corpus, scopeIds: string[]): Owed[] {
   const out: Owed[] = [];
@@ -1682,6 +1751,7 @@ export function interviewFor(corpus: Corpus, scopeId: string, findings: Finding[
   }
   const rest = [
     ...parts(corpus, scopeId),
+    ...capabilities(corpus, scopeId),
     ...unserved(corpus, ids),
     ...found(corpus, ids),
     ...blanks(corpus, ids, title, spokenFor),

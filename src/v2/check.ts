@@ -4214,6 +4214,20 @@ export function checkCorpus(root: string): { corpus: Corpus; findings: Finding[]
 
       for (const o of cap.offers) {
         const ref = `${cap.id}#offers#${o.id}`;
+        /**
+         * ⛔ A NOTE, NEVER A REFUSAL — every part in every corpus predates the field, and refusing
+         * them all would bury the refusals that matter. But a part with no guarantees is one a person
+         * cannot be asked to confirm: there is nothing in it to agree to beyond a name. Peter: *"the
+         * brief is too thin"*.
+         */
+        if (!o.guarantees?.length)
+          add({
+            severity: "note",
+            kind: "a-capability-that-guarantees-nothing",
+            where: ref,
+            what: "says what it does and nothing that anything using it can count on",
+            fix: "write what its machinery guarantees, whoever uses it — sentences a build could fail. Until then the interview hands it to the decomposer rather than asking anybody to agree to it",
+          });
         if (!o.serves.length)
           add({
             severity: "refuse",

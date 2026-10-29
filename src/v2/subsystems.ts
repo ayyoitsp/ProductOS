@@ -140,6 +140,8 @@ export function capabilityTree(corpus: Corpus): CapabilityTree {
         ref,
         id: o.id,
         does: o.does,
+        interface: o.interface ?? [],
+        guarantees: o.guarantees ?? [],
         serves: o.serves,
         state: parts.find((p) => p.ref === ref)?.state ?? "authored",
       };

@@ -1,0 +1,14 @@
+id: "0232"
+said: a core philosophy of productos is to limit the user's cognitive load.  if they say something that confirms both, it should confirm both the guarantee, interface, capability. questions shoudl be designed to minimize cognitive load and fill the appropriate gaps
+at: 2026-10-29
+kind: concept
+reaches:
+  model: "guarantees: z.array"
+  derive: "function capabilities(corpus: Corpus, scopeId: string)"
+  generate: ""
+  surface: cap-guarantees
+  check: a-capability-that-guarantees-nothing
+  instruct: "One press agrees to all of it"
+  pin: "one press agrees to what a part does"
+waived:
+  generate: no code generates a capability — the decomposer writes them, and what it is told to write is the instruct layer. Conversion from the older tree carries no guarantees because that tree never had any; inventing them there would be software writing what a person is about to agree to
