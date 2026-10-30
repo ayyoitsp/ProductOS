@@ -18,7 +18,7 @@
  * an absent one has to be handled at the route. Asserted in `test/v2-store-identity.test.mjs`.
  */
 import crypto from "node:crypto";
-import { and, eq, gt, isNull, sql } from "drizzle-orm";
+import { and, eq, gt, isNull, or, sql } from "drizzle-orm";
 import type { Principal, TokenScope } from "../identity.js";
 import { TOKEN_SCOPES } from "../identity.js";
 import type { Db } from "./access.js";
@@ -114,13 +114,23 @@ export async function redeemLogin(
   await db.update(loginCodes).set({ usedAt: new Date() }).where(eq(loginCodes.id, row.id));
 
   const account = await accountFor(db, normalized);
+  return { session: await startSession(db, account, sessionDays * 24), account };
+}
+
+/**
+ * A browser session for an account somebody just proved they hold.
+ *
+ * ⛔ THE ONLY WRITER OF A SESSION ROW BESIDES THE LOCAL CASE, because a session row is what
+ * `principalFrom` turns into `kind: "browser"` — the one principal `mayRecord` lets record a press.
+ */
+export async function startSession(db: Db, account: string, hours: number): Promise<string> {
   const session = id("sess");
   await db.insert(sessions).values({
     id: session,
     accountId: account,
-    expiresAt: new Date(Date.now() + sessionDays * 86_400_000),
+    expiresAt: new Date(Date.now() + hours * 3_600_000),
   });
-  return { session, account };
+  return session;
 }
 
 export async function endSession(db: Db, session: string): Promise<void> {
@@ -140,7 +150,7 @@ export async function endSession(db: Db, session: string): Promise<void> {
  */
 export async function issueToken(
   db: Db,
-  opts: { account: string; actor: string; scopes: string[]; reach?: string[] },
+  opts: { account: string; actor: string; scopes: string[]; reach?: string[]; expiresAt?: Date; grantId?: string },
 ): Promise<{ token: string; id: string }> {
   const raw = crypto.randomBytes(32).toString("hex");
   const tokenId = id("tok");
@@ -154,6 +164,8 @@ export async function issueToken(
     actor: opts.actor,
     scopes,
     reach: opts.reach ?? [],
+    expiresAt: opts.expiresAt,
+    grantId: opts.grantId,
   });
   return { token: raw, id: tokenId };
 }
@@ -268,7 +280,14 @@ export async function principalFrom(
         reach: tokens.reach,
       })
       .from(tokens)
-      .where(and(eq(tokens.hash, hashToken(bearer)), isNull(tokens.revokedAt)));
+      .where(
+        and(
+          eq(tokens.hash, hashToken(bearer)),
+          isNull(tokens.revokedAt),
+          /** ⛔ An OAuth token past its hour is a token nobody holds — Claude renews it, nobody extends it. */
+          or(isNull(tokens.expiresAt), gt(tokens.expiresAt, new Date())),
+        ),
+      );
 
     if (!row) {
       return { kind: "token", actor: "an unrecognised token", account: "", reach: [], scopes: [] };

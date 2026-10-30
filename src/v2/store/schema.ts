@@ -117,6 +117,14 @@ export const tokens = pgTable("tokens", {
   /** So a forgotten token is visible rather than merely still valid. */
   lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
   revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  /**
+   * ⛔ ABSENT ON A TOKEN A PERSON MINTED, PRESENT ON ONE CLAUDE WAS ISSUED OVER OAUTH. A pasted
+   * token is revoked by hand; an OAuth one lives an hour and is renewed through its grant, which is
+   * where somebody leaving the organization is noticed.
+   */
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
+  /** The OAuth grant that issued it, so revoking it on the page ends the grant too. */
+  grantId: text("grant_id"),
 }, (t) => [uniqueIndex("token_hash_idx").on(t.hash)]);
 
 /**
@@ -148,6 +156,92 @@ export const sessions = pgTable("sessions", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
 }, (t) => [index("session_account_idx").on(t.accountId)]);
+
+// ---------------------------------------------------------------------------
+// Signing in through the organization's own provider, and Claude connecting over OAuth
+// ---------------------------------------------------------------------------
+
+/**
+ * Who an account is at the organization's identity provider.
+ *
+ * ⛔ KEYED BY ISSUER AND SUBJECT, NOT BY EMAIL. An email is what an account is called here; the
+ * subject is what the provider promises never to reassign. A second provider user arriving with an
+ * address an account already holds is refused rather than handed that account.
+ *
+ * `refresh` is the provider's own refresh token, encrypted with `PRODUCTOS_SECRET`. It is held for
+ * one reason: renewing Claude's access asks the provider whether this person still exists there, so
+ * removing somebody from Google Workspace reaches Claude within the hour instead of never.
+ */
+export const providerLinks = pgTable("provider_links", {
+  issuer: text("issuer").notNull(),
+  subject: text("subject").notNull(),
+  accountId: text("account_id").notNull().references(() => accounts.id),
+  refresh: text("refresh"),
+  checkedAt: timestamp("checked_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [primaryKey({ columns: [t.issuer, t.subject] }), index("provider_link_account_idx").on(t.accountId)]);
+
+/** One round trip to the provider, so the callback can prove it answers the request this instance made. */
+export const signInRequests = pgTable("sign_in_requests", {
+  state: text("state").primaryKey(),
+  verifier: text("verifier").notNull(),
+  nonce: text("nonce").notNull(),
+  next: text("next").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+});
+
+/**
+ * A client that registered itself (RFC 7591). ⛔ Public clients only: PKCE is the proof, and a
+ * secret handed to anything that asks would be a secret everybody has.
+ *
+ * A client identified by a metadata URL is not stored here — its document is read when it asks.
+ */
+export const oauthClients = pgTable("oauth_clients", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  redirectUris: text("redirect_uris").array().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** ⛔ Hashed, single use, minutes long. A code is a promise that the person behind it just agreed. */
+export const oauthCodes = pgTable("oauth_codes", {
+  hash: text("hash").primaryKey(),
+  clientId: text("client_id").notNull(),
+  clientName: text("client_name").notNull(),
+  redirectUri: text("redirect_uri").notNull(),
+  challenge: text("challenge").notNull(),
+  accountId: text("account_id").notNull().references(() => accounts.id),
+  scopes: tokenScope("scopes").array().notNull(),
+  reach: text("reach").array().notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  usedAt: timestamp("used_at", { withTimezone: true }),
+});
+
+/**
+ * What a person agreed Claude may hold: renewed by refresh token, one row per renewal.
+ *
+ * ⛔ ROTATED, AND A RETIRED ONE COMING BACK ENDS THE FAMILY. A refresh token is used once; if an old
+ * one is presented again somebody copied it, and every grant descended from the same consent is
+ * revoked rather than guessing which copy is the real client.
+ */
+export const oauthGrants = pgTable("oauth_grants", {
+  id: text("id").primaryKey(),
+  family: text("family").notNull(),
+  hash: text("hash").notNull(),
+  clientId: text("client_id").notNull(),
+  clientName: text("client_name").notNull(),
+  accountId: text("account_id").notNull().references(() => accounts.id),
+  scopes: tokenScope("scopes").array().notNull(),
+  reach: text("reach").array().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  /** ⛔ The family's end, fixed at consent and carried through every renewal. */
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  usedAt: timestamp("used_at", { withTimezone: true }),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+}, (t) => [
+  uniqueIndex("oauth_grant_hash_idx").on(t.hash),
+  index("oauth_grant_family_idx").on(t.family),
+  index("oauth_grant_account_idx").on(t.accountId),
+]);
 
 /**
  * The one log, two readers — the page streams it, a session reads it as an inbox with a cursor.

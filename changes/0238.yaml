@@ -1,0 +1,45 @@
+id: "0238"
+said: ok, assume this is a service an organization would choose to deploy on their own - is there a better path?
+at: 2026-10-30
+kind: surface
+reaches:
+  surface: export async function oauthRoute(
+  pin: Claude starts from a 401 and ends holding a token that reaches this project and records nothing
+waived: {}
+closed: 2026-10-30
+
+# ⛔ APPENDED AFTER `change close`, which drops comments.
+#
+# The question came after "let's set up clerk as our first class auth surface?" and
+# "bilrost uses clerk - any way to utilize their integration?". Then: *"so this would work
+# with google sso?"* and *"so this will support mcp also?"*. The answer to all three is the
+# same shape, and it is why Clerk is not a dependency:
+#
+#   · SIGN-IN IS PLAIN OIDC against whatever the organization runs — Google Workspace,
+#     Okta, Entra, Keycloak, or Clerk as one more issuer. The provider proves an address;
+#     the instance writes the session, because a session row is the only thing `mayRecord`
+#     turns into a person.
+#   · THE INSTANCE IS ITS OWN OAUTH SERVER FOR CLAUDE. Enterprise providers rarely let an
+#     unknown client register itself, so Claude registers here — by its metadata URL or
+#     dynamically — and what it gets is a row in `tokens` like any other: one project,
+#     an hour, `kind: "token"`, refused every verdict.
+#   · LEAVING IS NOTICED AT RENEWAL. Each hourly refresh asks the provider with its own
+#     refresh token (sealed with PRODUCTOS_SECRET); `invalid_grant` ends every token,
+#     grant and session the account holds — the pasted CI token included. An unreachable
+#     provider is a 503, never a revocation.
+#
+# ⛔ SIXTEEN DEFECTS PUT BACK, EACH ONE RED. Verified-email, one-subject-per-account, the
+# callback's state, Google's `hd`, `next`, the 401's header, PKCE, consent-needs-a-person,
+# the Origin check, reach, refresh replay (two guards — only red with both removed, since
+# the atomic spend catches what the early check misses), expiry, page revoke, asking the
+# provider, ending pasted tokens, and pages redirecting.
+#
+# ⛔ AND `make rebuild` NEVER DELIVERED A NEW DEPENDENCY. The dev stack keeps node_modules
+# in an anonymous volume that compose carries across a recreate, so the rebuilt image's
+# `openid-client` was hidden behind the old directory: ERR_MODULE_NOT_FOUND after a rebuild
+# that said it succeeded. `--renew-anon-volumes` now.
+#
+# ⛔ NOT YET DRIVEN WITH THE REAL CLAUDE. Every step Claude takes is exercised here by a
+# client that behaves as Claude does, against a real OIDC provider on 127.0.0.1. Connecting
+# claude.ai and Claude Code to a deployed instance with a real provider is the acceptance
+# check, and it needs an OAuth client registered at that provider.

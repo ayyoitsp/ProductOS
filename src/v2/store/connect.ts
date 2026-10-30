@@ -22,10 +22,11 @@
  * revoke — can show it again.
  */
 import http from "node:http";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, gt, isNull, or } from "drizzle-orm";
 import { TOKEN_SCOPES } from "../identity.js";
 import { type Db, isRefusal, storeFor } from "./access.js";
 import { issueToken, principalFrom, revokeToken } from "./identity.js";
+import { endGrantOf } from "./oauth.js";
 import { tokens } from "./schema.js";
 import { cookieOf } from "./instance.js";
 
@@ -96,7 +97,13 @@ export async function connectRoute(
         lastUsedAt: tokens.lastUsedAt,
       })
       .from(tokens)
-      .where(and(eq(tokens.accountId, who.account), isNull(tokens.revokedAt)));
+      .where(
+        and(
+          eq(tokens.accountId, who.account),
+          isNull(tokens.revokedAt),
+          or(isNull(tokens.expiresAt), gt(tokens.expiresAt, new Date())),
+        ),
+      );
     return json({
       ok: true,
       tokens: rows
@@ -129,13 +136,15 @@ export async function connectRoute(
      * same 404 as a token that does not exist, for the reason `unreachable` gives in `access.ts`.
      */
     const [row] = await opts.db
-      .select({ id: tokens.id, reach: tokens.reach })
+      .select({ id: tokens.id, reach: tokens.reach, grantId: tokens.grantId })
       .from(tokens)
       .where(and(eq(tokens.id, addressed.token), eq(tokens.accountId, who.account)));
     if (!row || row.reach.length !== 1 || row.reach[0] !== addressed.project) {
       return json({ ok: false, why: `no token here that you can revoke: ${addressed.token}` }, 404);
     }
     await revokeToken(opts.db, row.id);
+    /** ⛔ Claude's token renews itself; revoking only the hour it holds would last an hour. */
+    await endGrantOf(opts.db, row.grantId);
     return json({ ok: true, revoked: row.id });
   }
 

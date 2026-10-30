@@ -110,6 +110,16 @@ services:
       PORT: "4100"
       PRODUCTOS_SINGLE_ACCOUNT: ${PRODUCTOS_SINGLE_ACCOUNT:-me@localhost}
       PRODUCTOS_AUTH: ${PRODUCTOS_AUTH:-}
+      # ⛔ Signing in through the organization's own provider (Google Workspace, Okta, Entra ID,
+      #    Keycloak, Clerk). Unset means no sign-in route — see .env.example for each one.
+      PRODUCTOS_PUBLIC_URL: ${PRODUCTOS_PUBLIC_URL:-}
+      PRODUCTOS_OIDC_ISSUER: ${PRODUCTOS_OIDC_ISSUER:-}
+      PRODUCTOS_OIDC_CLIENT_ID: ${PRODUCTOS_OIDC_CLIENT_ID:-}
+      PRODUCTOS_OIDC_CLIENT_SECRET: ${PRODUCTOS_OIDC_CLIENT_SECRET:-}
+      PRODUCTOS_OIDC_SCOPES: ${PRODUCTOS_OIDC_SCOPES:-}
+      PRODUCTOS_OIDC_TRUST_EMAIL: ${PRODUCTOS_OIDC_TRUST_EMAIL:-}
+      PRODUCTOS_ALLOWED_DOMAINS: ${PRODUCTOS_ALLOWED_DOMAINS:-}
+      PRODUCTOS_SECRET: ${PRODUCTOS_SECRET:-}
     ports:
       - "${PORT:?set by make — use `make up`}:4100"
     depends_on:

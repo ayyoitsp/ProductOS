@@ -578,6 +578,13 @@ export const AREAS: Area[] = [
       "src/v2/store/mcp.ts",
       /** ⛔ How a project's owner connects Claude Code to it — the token the MCP endpoint asks for. */
       "src/v2/store/connect.ts",
+      /**
+       * ⛔ WHO GETS IN, AND HOW CLAUDE CONNECTS. Signing in through the organization's provider and
+       * the OAuth server Claude registers with are both where a request arrives — filed beside the
+       * token route they extend, so a reviewer asked "can somebody outside reach this" is sent here.
+       */
+      "src/v2/store/sign-in.ts",
+      "src/v2/store/oauth.ts",
       "src/v2/store/choose.ts",
       "src/cli/commands/hosted.ts",
       "src/v2/packet.ts",

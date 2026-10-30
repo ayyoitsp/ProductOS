@@ -645,9 +645,14 @@ logs:
 # carries a BUILT dist/, so a source change is invisible until the image is rebuilt.
 # ⛔ KEPT, AND NARROWED TO WHAT IT IS NOW FOR: a dependency change. A source change needs nothing
 # — the watcher has already picked it up. `make up REBUILD=1` is the same thing on the way up.
+# ⛔ `--renew-anon-volumes`, OR A NEW DEPENDENCY NEVER ARRIVES. The dev stack keeps
+# `/app/node_modules` in an anonymous volume, and compose carries anonymous volumes
+# over when it recreates a container — so the rebuilt image's node_modules was hidden
+# behind the old one, and adding `openid-client` booted as ERR_MODULE_NOT_FOUND after
+# a rebuild that reported success.
 rebuild: dev-guard
 	$(DEV) build --no-cache productos
-	$(DEV) up -d productos
+	$(DEV) up -d --renew-anon-volumes productos
 	@sleep 2
 	@docker compose logs --tail 15 productos
 

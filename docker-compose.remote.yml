@@ -60,9 +60,19 @@ services:
       #    it would put a customer's corpus in a log.
       PRODUCTOS_DB_DEBUG: ${PRODUCTOS_DB_DEBUG:-}
       # ⛔ `off` treats every request as a signed-in person and makes every project
-      #    reachable. There is no sign-in route yet, so this is how the page is used
-      #    until there is one. Verdicts written while it is set are not provably human.
+      #    reachable. Verdicts written while it is set are not provably human — unset it
+      #    once the provider below is configured.
       PRODUCTOS_AUTH: ${PRODUCTOS_AUTH:-}
+      # ⛔ Signing in through the organization's own provider (Google Workspace, Okta, Entra ID,
+      #    Keycloak, Clerk). Unset means no sign-in route — see .env.example for each one.
+      PRODUCTOS_PUBLIC_URL: ${PRODUCTOS_PUBLIC_URL:-}
+      PRODUCTOS_OIDC_ISSUER: ${PRODUCTOS_OIDC_ISSUER:-}
+      PRODUCTOS_OIDC_CLIENT_ID: ${PRODUCTOS_OIDC_CLIENT_ID:-}
+      PRODUCTOS_OIDC_CLIENT_SECRET: ${PRODUCTOS_OIDC_CLIENT_SECRET:-}
+      PRODUCTOS_OIDC_SCOPES: ${PRODUCTOS_OIDC_SCOPES:-}
+      PRODUCTOS_OIDC_TRUST_EMAIL: ${PRODUCTOS_OIDC_TRUST_EMAIL:-}
+      PRODUCTOS_ALLOWED_DOMAINS: ${PRODUCTOS_ALLOWED_DOMAINS:-}
+      PRODUCTOS_SECRET: ${PRODUCTOS_SECRET:-}
     ports:
       # ⛔ Overridable but defaulted, which is the opposite of the dev stack's `:?` — and deliberately
       #    so. A dev stack has no business guessing an identity; staging has exactly one, and 4100 is

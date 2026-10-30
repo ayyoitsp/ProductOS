@@ -17,6 +17,7 @@ import { eq, inArray, isNull, and, sql } from "drizzle-orm";
 import { STYLE } from "../page.js";
 import { type Db, storeFor } from "./access.js";
 import { authIsOff, principalFrom } from "./identity.js";
+import { sendToSignIn } from "./sign-in.js";
 import { documents, projects } from "./schema.js";
 
 const esc = (s: string): string =>
@@ -153,6 +154,7 @@ export async function chooseRoute(
   );
 
   if (!who) {
+    if (sendToSignIn(req, res)) return true;
     /** ⛔ The same refusal the rest of the instance gives — a list is not a public page. */
     res.writeHead(401, { "content-type": "application/json" });
     res.end(

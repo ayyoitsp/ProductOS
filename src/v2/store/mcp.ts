@@ -34,6 +34,8 @@ import { mayRecord, type Principal } from "../identity.js";
 import type { Via } from "../acts.js";
 import { type Db, isRefusal, type ProjectStore, storeFor } from "./access.js";
 import { principalFrom } from "./identity.js";
+import { wwwAuthenticate } from "./oauth.js";
+import { publicOrigin } from "./sign-in.js";
 import { materializeProject, writeBack } from "./instance.js";
 
 const MCP_PATH = /^\/p\/(?!\.\.?(?:\/|$))([A-Za-z0-9_.:@+-]{1,200})\/mcp\/?$/;
@@ -264,13 +266,22 @@ export async function projectMcpRoute(
     req.headers as Record<string, string | undefined>,
     opts.localSession,
   );
-  if (!who) {
+  /**
+   * ⛔ A 401 THAT SAYS WHERE TO GO. `WWW-Authenticate` is the only part of this response an OAuth
+   * client reads: it names the resource metadata, which names this instance as the authorization
+   * server — and that is how claude.ai finds the consent page. The body is for the person with curl.
+   *
+   * ⛔ AND A TOKEN NOBODY HOLDS IS A 401 TOO, not the empty-handed principal `principalFrom` gives
+   * it — an expired OAuth token has to read as expired, or Claude never renews it.
+   */
+  if (!who || (who.kind === "token" && !who.account)) {
+    res.setHeader("www-authenticate", wwwAuthenticate(publicOrigin(req), projectId, Boolean(who)));
     return json(
       {
         ok: false,
-        why: "this MCP endpoint needs a credential",
+        why: who ? "that token is unknown, revoked or expired" : "this MCP endpoint needs a credential",
         detail: [
-          "press Connect Claude Code on the project's page for a token, and send it as `Authorization: Bearer <token>`",
+          "connect from Claude and approve it, or press Connect Claude Code on the project's page for a token and send it as `Authorization: Bearer <token>`",
         ],
       },
       401,

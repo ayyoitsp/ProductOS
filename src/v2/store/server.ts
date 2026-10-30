@@ -30,6 +30,8 @@ import { projectMcpRoute } from "./mcp.js";
 import { connectRoute } from "./connect.js";
 import { chooseRoute } from "./choose.js";
 import { authIsOff, singleAccount } from "./identity.js";
+import { oauthRoute } from "./oauth.js";
+import { signInConfigFromEnv, signInRoute } from "./sign-in.js";
 
 export interface HostedConfig {
   databaseUrl: string;
@@ -373,6 +375,29 @@ export async function startHosted(
    * on until somebody else finds the port — and by then every verdict in it is unprovable. A banner
    * nobody can miss is the only honest way to run in this state.
    */
+  /**
+   * ⛔ READ AT BOOT SO A HALF-SET PROVIDER STOPS THE INSTANCE HERE, not on the first person to try
+   * signing in. And said, with what it will cost if `PRODUCTOS_PUBLIC_URL` is missing.
+   */
+  const provider = signInConfigFromEnv();
+  if (provider) {
+    process.stderr.write(
+      `[productos] sign-in through ${provider.issuer}` +
+        (provider.allowedDomains.length ? ` for ${provider.allowedDomains.join(", ")}` : " for any verified address") +
+        "\n",
+    );
+    if (!process.env.PRODUCTOS_PUBLIC_URL?.trim()) {
+      process.stderr.write(
+        "[productos] ⚠ PRODUCTOS_PUBLIC_URL is not set: redirects and the OAuth issuer will be built from each request's Host header\n",
+      );
+    }
+    if (!process.env.PRODUCTOS_SECRET?.trim()) {
+      process.stderr.write(
+        "[productos] ⚠ PRODUCTOS_SECRET is not set: the provider is never asked again after sign-in, so Claude's access lasts 7 days per approval\n",
+      );
+    }
+  }
+
   if (authIsOff()) {
     process.stderr.write(
       "\n[productos] ⛔ AUTH IS OFF (PRODUCTOS_AUTH=off)\n" +
@@ -444,6 +469,10 @@ export async function startHosted(
         );
         return;
       }
+
+      /** Signing in through the organization's provider, and Claude's OAuth — neither needs a session to reach. */
+      if (await signInRoute(req, res, pathname, { db })) return;
+      if (await oauthRoute(req, res, pathname, { db, localSession })) return;
 
       /** The root: which product are you looking at. ⛔ Claims only `/` and `/projects`. */
       if (await chooseRoute(req, res, pathname, { db, localSession })) return;

@@ -31,6 +31,7 @@ import { PRESENCE_MS } from "../presence.js";
 import { v2Route } from "../serve.js";
 import { type Db, isRefusal, type ProjectStore, type StoredEvent, storeFor, type Fingerprint } from "./access.js";
 import { principalFrom } from "./identity.js";
+import { cookieOf, sendToSignIn } from "./sign-in.js";
 import { projects } from "./schema.js";
 import { eq } from "drizzle-orm";
 
@@ -49,15 +50,8 @@ const json = (res: http.ServerResponse, body: unknown, status = 200): void => {
   res.end(JSON.stringify(body, null, 2));
 };
 
-const COOKIE = "productos_session";
-export const cookieOf = (req: http.IncomingMessage): string | undefined => {
-  const raw = String(req.headers.cookie ?? "");
-  const hit = raw
-    .split(";")
-    .map((c) => c.trim().split("="))
-    .find(([k]) => k === COOKIE)?.[1];
-  return hit ? decodeURIComponent(hit) : undefined;
-};
+/** ⛔ Kept importable from here; the cookie itself is `sign-in.ts`'s, which is the code that sets it. */
+export { cookieOf } from "./sign-in.js";
 
 /**
  * `/p/<project-id>/<rest>` — ⛔ the project is in the path, never in a tool argument or a body.
@@ -717,6 +711,8 @@ export async function instanceRoute(
    * the instance cannot account for would sail straight through `mayRecord`.
    */
   if (!who) {
+    /** ⛔ A person opening a page is sent to sign in; anything else keeps the 401 it can act on. */
+    if (sendToSignIn(req, res)) return true;
     return (
       json(
         res,
