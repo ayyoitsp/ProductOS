@@ -35,6 +35,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { CORPUS_DIRS, loadCorpus } from "./load.js";
 import { append } from "./log.js";
+import { stampFor, whatChangedSince } from "./stamp.js";
 import { writePrototypes, writeWithin, diskPages, writeHoldsFor } from "./draw-write.js";
 import { walkOf } from "./walk.js";
 import { axesOf, answersOf, HANDS, NOTE_VIA, type Hand, type NoteVia } from "./schema.js";
@@ -508,8 +509,55 @@ export const INTENTS: Intent[] = [
         };
       if (!says.trim()) return { ok: false, why: "a document with nothing in it is a deletion — say what it should hold" };
       const full = path.join(a.dir, key);
+      const was = fs.existsSync(full) ? fs.readFileSync(full, "utf-8") : null;
+      const held = approvedNow(a.dir);
       fs.mkdirSync(path.dirname(full), { recursive: true });
       fs.writeFileSync(full, says);
+      /**
+       * ⛔ WHAT A PERSON APPROVED KEEPS ITS WORDS — AN AUTHOR ADDS BESIDE IT, IT DOES NOT REWRITE IT.
+       *
+       * Peter, on two parts he had approved coming back to him reworded: *"why would something i
+       * approved have the words change? that shouldn't happen - decomposer should leave those as is,
+       * and create new truths about them if necesary"*. And before that: *"why is it even checking if
+       * things hold - should hold unless something indicates it might not be true"*.
+       *
+       * The decomposer rewrote `strategy-groups` and `tabular-strategy` the day after he approved
+       * them, nobody had said either was wrong, and the stamp — correctly — stopped counting words he
+       * never saw. So he was asked again about things he had settled. The stamp is right; the write
+       * was the defect, and a brief saying "leave it" is prose an author can miss, so it is refused
+       * here, at the one door an author's document comes through.
+       *
+       * ⛔ THE ONE WAY THROUGH IS A PERSON SAYING IT IS WRONG. An open note from a person about the
+       * thing (or anything inside it) is "something indicates it might not be true" — the redraft is
+       * the answer to them, and #261 sends it back to them as one approval.
+       */
+      /**
+       * ⛔ ADDING TO IT IS NOT CHANGING IT. A part approved before it had guarantees gets them from
+       * the decomposer — that is the "new truths about them" — and the approved sentences are still
+       * there word for word. The stamp still stops counting, because nobody has seen the additions;
+       * the interview asks about the additions alone. What is refused is an approved sentence that
+       * is no longer there. A verdict too old to say what it covered is held strictly.
+       */
+      const after = approvedNow(a.dir);
+      const now = loadCorpus(a.dir);
+      const lost = [...held].filter((ref) => {
+        if (after.has(ref) || aPersonSaidItIsWrong(a.dir, ref)) return false;
+        const moved = whatChangedSince(now, ref);
+        return !moved || moved.gone.length > 0;
+      });
+      if (lost.length) {
+        if (was === null) fs.rmSync(full);
+        else fs.writeFileSync(full, was);
+        return {
+          ok: false,
+          why: `${key} changes or removes what a person approved, and nobody has said it is wrong — nothing was written`,
+          detail: [
+            ...lost.flatMap((ref) => [`approved: ${ref}`, ...(whatChangedSince(now, ref)?.gone ?? []).map((l) => `  would no longer say: ${l.trim()}`)]),
+            "⛔ leave approved wording exactly as it is; anything new is added beside it — a new operation, guarantee, part or statement",
+            "if it may no longer be true, file a note against it saying why, and redraft only once a person agrees it is wrong",
+          ],
+        };
+      }
       /**
        * ⛔ IT ANNOUNCES, because `writeBack` deliberately synthesizes nothing: "a write path that
        * moves a document and says nothing is a gap in THAT path". Without this a role could rewrite
@@ -1345,3 +1393,17 @@ function gateRefuses(intent: Intent, a: Asking, body: Record<string, unknown>): 
 
 /** What an unknown intent is told, so a caller never has to read this file to find the list. */
 export const theIntents = (): string[] => INTENTS.map((i) => i.name);
+
+/** Every ref a person's approval currently stands on, in the corpus at `dir`. */
+function approvedNow(dir: string): Set<string> {
+  const corpus = loadCorpus(dir);
+  const targets = new Set(corpus.verdicts.flatMap((v) => (v.kind === "accept" && v.via !== "agent" && v.target ? [v.target] : [])));
+  return new Set([...targets].filter((t) => stampFor(corpus, t).state === "accepted"));
+}
+
+/** Whether a person has an open note against `ref`, or anything inside it. */
+function aPersonSaidItIsWrong(dir: string, ref: string): boolean {
+  return loadCorpus(dir).notes.some(
+    (n) => n.state === "open" && (n.about === ref || n.about.startsWith(`${ref}#`)) && isHuman((n.via ?? "agent") as NoteVia)
+  );
+}

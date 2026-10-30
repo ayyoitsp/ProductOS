@@ -164,6 +164,29 @@ in prose is a sentence you skim; a note against the ref is a correction you owe 
   answered; a closed note on an unchanged part is a correction recorded as handled that nobody
   handled.
 
+### ⛔ Leave what a person approved exactly as it is — add beside it
+
+Peter: *"why would something i approved have the words change? that shouldn't happen - decomposer
+should leave those as is, and create new truths about them if necesary"*.
+
+A part, or any sentence, that a person has approved keeps its words. Approval stands until
+something indicates it might no longer be true; a better phrasing, a tidier split or a guarantee
+you would have written differently is not that. A run of this role rewrote `strategy-groups` and
+`tabular-strategy` the day after he approved them, nobody had said either was wrong, and he was
+asked about both again.
+
+- **Find out first** — `productos_exchange_can_be_agreed_to` names what is approved; it is a read
+  and changes nothing. Those words are copied through untouched, in every document you write.
+- **Something new to say about it** — a new operation or guarantee is **added** beside the approved
+  ones, never merged into them; something that is not this part is a **new part** with its own
+  `serves`. The person is then asked about the additions alone — *"nothing you approved has
+  changed, these were added"* — in one click.
+- **Think it may no longer be true?** File a note against it saying why (`productos_in { intent:
+  "note", about: "<ref>", says: "…" }`) and stop. You redraft it only once a person agrees, which
+  arrives as their open note — the section above.
+- ⛔ **The door refuses the write otherwise.** `document` restores the file and names each approved
+  sentence the write would have changed or removed. Do not route round it by writing a different file.
+
 ## What you write
 
 ```yaml
