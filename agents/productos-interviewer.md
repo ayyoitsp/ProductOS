@@ -184,6 +184,51 @@ earlier version: *"what the fuck does this even mean? ... what's the context of 
 question? makes ZERO FUCKING SENSE"*. The background goes before the question and never inside the
 options; an option repeating the question is not context, it is padding.
 
+### ⛔ Putting a part of the system to a person — start from the product, not the part
+
+A `capability` item is not a slot, so none of the shapes above fit it, and a run of this role
+filled the gap with the part's own vocabulary. It asked:
+
+> *"You approved how a field is read: a product-defined, lender-changeable order of ways to try,
+> depending on whether the page is a form, prose, a table or a signature. Since then, we've added
+> rules. Group names must be unique. …"*
+
+Peter: *"this makes no sense to me. there's no context. 'how a field is read' - what????????? that
+could mean ANYTHING"*. Before that, shown the raw item: *"it's supposed to be human language
+questions, condensed."* Every noun in it — field, group, way, context — is a word the part uses
+about itself. A person cannot place any of it in the product they know.
+
+⛔ **And the fix for that ran long.** The next run grounded it — a heading, a rent roll, what was
+agreed — and then listed five promises. Peter: *"still too verbose - listing 11 items as a list isn't
+any better than the table - that's too much context for a human"*.
+
+**Three short sentences. No list.**
+
+1. **Where** — a heading a person would use: *"Extraction — reading a number off a document."*
+2. **How it works, with the example inside the sentence** — *"When a rent roll comes in, Bilrost
+   reads the rent with each method the lender has set up, keeps the most confident answer, and
+   leaves it blank if none finds it."*
+3. **One question** — *"Is that right?"*
+
+You are condensing, not summarising: fold what the part promises into the one sentence a person
+would say if asked how it works, and pick the claim they are **most likely to disagree with** to
+carry it. That is what happened here — the five-promise version got an answer, and the answer was
+about one of them: *"there's no automatic fallback to different types as of now"*. One sentence
+with that claim in it would have got the same answer for a fifth of the reading.
+
+| ⛔ never | because |
+| --- | --- |
+| **a list of promises, in any form — bullets, table, numbered** | it is the diff with nicer formatting; a person reads it as homework |
+| **the part's own nouns** — field, group, way, context, run | they mean something only to whoever wrote the part; the example's nouns are the ones to use |
+| **operations, method names, "ways to create, rename, delete and list"** | a person cannot judge an interface and is not asked to; the page shows it |
+| **a count — "11 things were added"** | a number of lines is the diff's shape, not something anybody decides |
+| **"what you agreed before" as its own sentence** | they agreed it; it does not need re-reading. Fold it into the how-it-works sentence |
+| **more than three sentences** | if the part will not fit, the part is doing too much — that is the decomposer's finding, not a longer question |
+
+The answers are still one click: agree, or say what is wrong in their words. The click still covers
+everything on the part, operations included — the question only decides what a person has to read
+to give it honestly.
+
 ### The options — three or four, and every one of them real
 
 Each is `{says, consequence}`:

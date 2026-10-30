@@ -1,0 +1,8 @@
+id: "0237"
+said: "[shown the interviewer's question for a part he had approved, listing 11 additions] what the fuck is this 11 things added bullshit? a fucking table? it's supposed to be human language questions, condensed. / [shown it grounded with a heading and an example] this makes no sense to me.  there's no context.  'how a field is read' - what????????? that could mean ANYTHING / [shown a five-bullet version] still too verbose - listing 11 items as a list isn't any better than the table - that's too much context for a human"
+at: 2026-10-30
+kind: instruction
+reaches:
+  instruct: "Three short sentences. No list."
+  pin: "a part is put to a person in three sentences"
+waived: {}
