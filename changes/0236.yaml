@@ -1,0 +1,11 @@
+id: "0236"
+said: "[shown: two parts he approved on 2026-10-29 had been reworded by the decomposer and were back in front of him; three one-click approvals sat behind 25 word questions] why is it even checking if things hold - should hold unless something indicates it might not be true... wtf? / why would something i approved have the words change? that shouldn't happen - decomposer should leave those as is, and create new truths about them if necesary / yes. fix them all"
+at: 2026-10-30
+kind: derivation
+reaches:
+  derive: "A PART WRITTEN OUT IN FULL COMES RIGHT AFTER THE PURPOSE"
+  surface: "held_back"
+  check: ""
+  pin: "rewording an approved part is refused"
+waived:
+  check: the refusal happens at the write, so an approved part reworded by an author cannot reach a corpus for check to find; the stamp already reports one that was reworded before this landed

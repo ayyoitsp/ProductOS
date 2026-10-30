@@ -2097,14 +2097,19 @@ export function v2Command(): Command {
         .map((id) => interviewFor(corpus, id, findings))
         .filter((x): x is NonNullable<typeof x> => Boolean(x && x.owed.length));
 
+      /**
+       * ⛔ `held_back` SAYS HOW MANY MORE THERE ARE. Without it four questions read as all of them: a
+       * session reading this against staging reported "printed 4, there are 35" as a defect, and the
+       * three one-click approvals it was looking for were among the 31 it never saw.
+       */
       if (o.json) {
         console.log(
           JSON.stringify(
             scopeId
               ? rounds[0]
-                ? { ...rounds[0], owed: rounds[0].owed.slice(0, take) }
-                : { scope: scopeId, owed: [], closes: 0 }
-              : rounds.map((r) => ({ ...r, owed: r.owed.slice(0, take) })),
+                ? { ...rounds[0], owed: rounds[0].owed.slice(0, take), held_back: Math.max(0, rounds[0].owed.length - take) }
+                : { scope: scopeId, owed: [], closes: 0, held_back: 0 }
+              : rounds.map((r) => ({ ...r, owed: r.owed.slice(0, take), held_back: Math.max(0, r.owed.length - take) })),
             null,
             2
           )

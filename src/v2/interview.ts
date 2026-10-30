@@ -49,7 +49,7 @@ import { ANALYSES } from "./analyse.js";
 import { capabilityTree } from "./subsystems.js";
 import { answeringParts } from "./demonstrate.js";
 import { descendants, questionsFor, rulingAct, type Question } from "./settle.js";
-import { stampFor } from "./stamp.js";
+import { stampFor, whatChangedSince } from "./stamp.js";
 import { vocabularyReach } from "./load.js";
 import { isHuman, POLICY_SLOTS, SLOT_ASKED, SLOT_ASKS_SHORT, SLOTS, statements, type NoteVia, type SlotName } from "./schema.js";
 
@@ -1390,6 +1390,45 @@ function capabilityItem(
       act: `\`decomposer\` redrafts it against what ${who} said, then closes ${said.map((n) => n.id).join(", ")} saying what changed — then it comes back here as one press`,
     };
   }
+  /**
+   * ⛔ ADDED TO, NOT CHANGED — SO ONLY THE ADDITIONS ARE ASKED.
+   *
+   * Peter, shown two parts he had approved coming back to him: *"why is it even checking if things
+   * hold - should hold unless something indicates it might not be true"*. Every word he approved was
+   * still there; the decomposer had added what each is asked and what it guarantees, which did not
+   * exist when he approved them. Putting the whole part back in front of him re-asks what he already
+   * settled. So he is shown what arrived, and one click agrees to it.
+   */
+  const moved = stale && !missing.length ? whatChangedSince(corpus, ref) : null;
+  if (moved && !moved.gone.length && moved.arrived.length) {
+    const label = (l: string): { asks: string; says: string } => {
+      const m = /^(asked|guarantees|it exists for):\s*(.*)$/.exec(l.trim());
+      if (!m) return { asks: "added", says: plain(l.trim()) };
+      return { asks: m[1] === "asked" ? "added — asked of it" : m[1] === "guarantees" ? "added — it guarantees" : "added — it exists for", says: plain(m[2]!) };
+    };
+    return {
+      ref,
+      owes: "capability" as const,
+      asks: [
+        from ? `${from.feature} relies on ${name}.` : "",
+        `${moved.by} approved ${from ? "it" : name} on ${moved.at}, and nothing in it has changed since — ${moved.arrived.length === 1 ? "one thing was" : `${moved.arrived.length} things were`} added. Do ${moved.arrived.length === 1 ? "it" : "they"} hold?`,
+      ]
+        .filter(Boolean)
+        .join(" "),
+      why: "what was approved still stands word for word; only what was added has not been seen",
+      shape: "one agreement to what was added — ⛔ what was approved before is not asked again",
+      fills: [ref],
+      candidates: [],
+      about: {
+        feature: from ? from.feature : name,
+        purpose: plain(s.does),
+        already: [{ asks: `what ${moved.by} approved`, says: plain(o.does) }, ...moved.arrived.map(label)],
+        words: [],
+        undefined_words: [],
+      },
+      act: `a person agrees to what was added in one press — \`accept ${ref}\`; nothing they approved before has changed`,
+    };
+  }
   return {
     ref,
     owes: "capability" as const,
@@ -2024,7 +2063,19 @@ export function interviewFor(corpus: Corpus, scopeId: string, findings: Finding[
       act: "a person says which it is — ⛔ nothing here guesses, because whether two definitions mean one thing is a reading and not a count",
     }));
 
-  const owed = [...disputed, ...purpose, ...collisions, ...loose, ...[...folded, ...rest].sort((a, b) => b.fills.length - a.fills.length)];
+  /**
+   * ⛔ A PART WRITTEN OUT IN FULL COMES RIGHT AFTER THE PURPOSE — IT IS ONE CLICK.
+   *
+   * Driven on staging: the three parts "Checking what was read off a document" relies on, each
+   * agreeable in one approval, came 33rd to 35th — behind 25 questions about whether a word means
+   * the same thing here as elsewhere — and `--take 4` never reached them. Peter: *"a core philosophy
+   * of productos is to limit the user's cognitive load"*. Sorting by what one answer closes buried
+   * them, because a part fills one ref however much it settles. Ones still owed to the decomposer
+   * stay where they were: they are not a person's to answer.
+   */
+  const oneClick = rest.filter((o) => o.owes === "capability" && o.act?.startsWith("a person agrees"));
+  const others = rest.filter((o) => !oneClick.includes(o));
+  const owed = [...disputed, ...purpose, ...oneClick, ...collisions, ...loose, ...[...folded, ...others].sort((a, b) => b.fills.length - a.fills.length)];
   return {
     scope: scopeId,
     title,
